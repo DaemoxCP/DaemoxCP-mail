@@ -4,76 +4,75 @@ import java.time.Duration;
 import org.mail_panel.util.Shell;
 
 /**
- * Lo standard input dei comandi dell'updater.
+ * The standard input of the updater's commands.
  *
- * Ogni comando dell'area aggiornamenti passa da {@code Shell} (le letture: pkg query, pkg
- * lock, service status) o da {@code UpdateManager.runLogged} (i lavori lunghi: pkg
- * upgrade, freebsd-update install). Con la pipe predefinita di ProcessBuilder il figlio che
- * legge non riceve ne' dati ne' EOF: resta fermo fino al timeout, che qui vale 1800 o 3600
- * secondi, e nel frattempo il turno dei pacchetti e' preso e ogni altra operazione viene
- * rifiutata. Misurato sulla VM FreeBSD 15.1 il 23/10/2026: 8102 ms su un timeout di 8s,
- * exit -1; con /dev/null 3 ms.
+ * Every command of the updates area goes through {@code Shell} (the reads: pkg query, pkg lock,
+ * service status) or {@code UpdateManager.runLogged} (the long jobs: pkg upgrade, freebsd-update
+ * install). With ProcessBuilder's default pipe a child that reads gets neither data nor EOF: it
+ * waits until the timeout, which here is 1800 or 3600 seconds, and meanwhile the package turn is
+ * taken and every other operation is refused. Measured on the FreeBSD 15.1 VM on 23/10/2026:
+ * 8102 ms on an 8 s timeout, exit -1; with /dev/null 3 ms.
  *
- * Le prove sono scritte per FALLIRE senza la correzione: un'attesa fino al timeout si vede
- * sia nell'esito (exit -1, timedOut) sia nel tempo trascorso.
+ * The checks are written to FAIL without the fix: a wait until the timeout shows both in the
+ * outcome (exit -1, timedOut) and in the elapsed time.
  */
 public class ChildStdinTest {
 
     private static int failures = 0;
 
-    /** Timeout dei comandi di prova: abbastanza lungo perche' l'attesa si distingua dal lavoro. */
+    /** Timeout of the test commands: long enough for a wait to stand out from work. */
     private static final int TIMEOUT = 8;
 
-    /** Oltre questo un comando banale non e' lento, sta aspettando. */
+    /** Beyond this a trivial command is not slow, it is waiting. */
     private static final long IMMEDIATE_MS = 4000;
 
     public static void main(String[] args) throws Exception {
 
-        // --- 1. Shell.runShell: un comando che legge da stdin ---
+        // --- 1. Shell.runShell: a command that reads from stdin ---
         long t = System.currentTimeMillis();
-        Shell.Result r = Shell.runShell(Duration.ofSeconds(TIMEOUT), "read x; echo \"letto [$x]\"");
+        Shell.Result r = Shell.runShell(Duration.ofSeconds(TIMEOUT), "read x; echo \"read [$x]\"");
         long duration = System.currentTimeMillis() - t;
-        check("runShell: il comando che legge non aspetta (" + duration + " ms)", duration < IMMEDIATE_MS);
-        check("runShell: nessun timeout", !r.timedOut());
-        check("runShell: uscita 0, non -1", r.exitCode() == 0);
-        check("runShell: il comando e' arrivato in fondo", r.outputTrim().contains("letto []"));
+        check("runShell: the command that reads does not wait (" + duration + " ms)", duration < IMMEDIATE_MS);
+        check("runShell: no timeout", !r.timedOut());
+        check("runShell: exit 0, not -1", r.exitCode() == 0);
+        check("runShell: the command reached its end", r.outputTrim().contains("read []"));
 
-        // --- 2. Shell.run, la forma con argomenti separati: stesso codice, esito dichiarato ---
+        // --- 2. Shell.run, the form with separate arguments: same code, declared outcome ---
         t = System.currentTimeMillis();
-        r = Shell.run(Duration.ofSeconds(TIMEOUT), "sh", "-c", "read x; echo \"letto [$x]\"");
+        r = Shell.run(Duration.ofSeconds(TIMEOUT), "sh", "-c", "read x; echo \"read [$x]\"");
         duration = System.currentTimeMillis() - t;
-        check("run: il comando che legge non aspetta (" + duration + " ms)", duration < IMMEDIATE_MS);
-        check("run: uscita 0 e nessun timeout", r.exitCode() == 0 && !r.timedOut());
+        check("run: the command that reads does not wait (" + duration + " ms)", duration < IMMEDIATE_MS);
+        check("run: exit 0 and no timeout", r.exitCode() == 0 && !r.timedOut());
 
-        // --- 3. runLogged, la via dei lavori lunghi ---
-        UpdateManager.Job job = new UpdateManager.Job("prova-stdin", "prova");
+        // --- 3. runLogged, the way of the long jobs ---
+        UpdateManager.Job job = new UpdateManager.Job("stdin-test", "test");
         t = System.currentTimeMillis();
-        int exitCode = UpdateManager.runLogged(job, "read x; echo \"letto [$x]\"", TIMEOUT);
+        int exitCode = UpdateManager.runLogged(job, "read x; echo \"read [$x]\"", TIMEOUT);
         duration = System.currentTimeMillis() - t;
         String log = job.toJson().optString("consoleLog", "");
-        check("runLogged: il comando che legge non aspetta (" + duration + " ms)", duration < IMMEDIATE_MS);
-        check("runLogged: uscita 0, non un processo ucciso", exitCode == 0);
-        check("runLogged: nel log del lavoro non c'e' nessun timeout",
+        check("runLogged: the command that reads does not wait (" + duration + " ms)", duration < IMMEDIATE_MS);
+        check("runLogged: exit 0, not a killed process", exitCode == 0);
+        check("runLogged: there is no timeout in the job's log",
              !log.contains("TIMEOUT") && !log.toLowerCase().contains("timeout"));
-        check("runLogged: l'output del comando e' nel log", log.contains("letto []"));
+        check("runLogged: the command's output is in the log", log.contains("read []"));
 
-        // --- 4. Un comando che NON legge si comporta come prima ---
-        r = Shell.runShell(Duration.ofSeconds(TIMEOUT), "echo ciao; echo errore >&2");
-        check("un comando normale resta normale: uscita 0",
+        // --- 4. A command that does NOT read behaves as before ---
+        r = Shell.runShell(Duration.ofSeconds(TIMEOUT), "echo hello; echo failure >&2");
+        check("an ordinary command stays ordinary: exit 0",
              r.exitCode() == 0 && !r.timedOut());
-        check("un comando normale resta normale: stdout e stderr uniti",
-             r.outputTrim().contains("ciao") && r.outputTrim().contains("errore"));
+        check("an ordinary command stays ordinary: stdout and stderr joined",
+             r.outputTrim().contains("hello") && r.outputTrim().contains("failure"));
 
-        // --- 5. EOF non diventa un si' silenzioso ---
-        // Chi controlla l'esito della lettura se ne accorge e puo' fallire: questa prova
-        // esiste perche' chi aggiunge un comando che chiede qualcosa sappia che /dev/null
-        // toglie l'attesa, non trasforma il prompt in un errore. Un comando che NON
-        // controlla prosegue con il valore vuoto (caso 1: uscita 0).
+        // --- 5. EOF does not become a silent yes ---
+        // A command that checks the outcome of its read notices and can fail: this check exists
+        // so that whoever adds a command that asks something knows that /dev/null removes the
+        // wait, it does not turn the prompt into an error. A command that does NOT check goes on
+        // with the empty value (case 1: exit 0).
         r = Shell.runShell(Duration.ofSeconds(TIMEOUT), "if read x; then exit 0; else exit 7; fi");
-        check("una lettura con esito controllato fallisce subito invece di aspettare",
+        check("a read whose outcome is checked fails at once instead of waiting",
              r.exitCode() == 7 && !r.timedOut());
 
-        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 

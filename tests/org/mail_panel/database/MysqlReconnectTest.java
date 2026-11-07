@@ -19,23 +19,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Il pannello acceso si ricollega a MySQL con la password che c'e' ADESSO nel file dei segreti, non
- * con quella che aveva all'avvio. Reperto 156: una reinstallazione completa dal menu cambia la
- * password dell'utente MySQL del pannello e riavvia MySQL; il servizio --web acceso perdeva la
- * connessione e riprovava per sempre con la vecchia («Access denied»).
+ * The running panel reconnects to MySQL with the password that is in the secrets file NOW, not with
+ * the one it had at start. Reperto 156: a full reinstallation from the menu changes the password of
+ * the panel's MySQL user and restarts MySQL; the running --web service lost the connection and
+ * retried forever with the old one ("Access denied").
  *
- * Con MySQL vero e un utente di prova (e2e_reconnect, col suo database, tolti alla fine):
- *  1. un processo «servizio» entra in MySQL come entrano il servizio e i comandi da console
- *     (Main.connectFromConfig), e resta acceso;
- *  2. come fa la reinstallazione: la password dell'utente cambia in MySQL (da root), le sue
- *     connessioni cadono (KILL, come quando MySQL riparte), e un altro processo («menu») scrive la
- *     password nuova nel file dei segreti;
- *  3. il «servizio» usa di nuovo il database: deve essere dentro, come e2e_reconnect.
- * Poi lo stesso senza la password nuova nel file: il servizio NON entra (la password la decide il
- * file dei segreti, non un'altra fonte), e appena il file la ha, entra.
+ * With real MySQL and a test user (e2e_reconnect, with its database, removed at the end):
+ *  1. a "service" process gets into MySQL the way the service and the console commands do
+ *     (Main.connectFromConfig), and stays on;
+ *  2. as the reinstallation does: the user's password changes in MySQL (as root), its connections
+ *     drop (KILL, as when MySQL restarts), and another process ("menu") writes the new password to
+ *     the secrets file;
+ *  3. the "service" uses the database again: it must be in, as e2e_reconnect.
+ * Then the same without the new password in the file: the service does NOT get in (the secrets
+ * file decides the password, not another source), and as soon as the file has it, it gets in.
  *
- * Root di MySQL: con la password del file dei segreti vero, o senza se root entra senza (i server
- * installati dalla versione dell'11/10). Si accende solo con -De2e.vm=yes, da root, MySQL acceso:
+ * MySQL root: with the password of the real secrets file, or without one if root gets in without
+ * (the servers installed by the 11/10 version). It runs only with -De2e.vm=yes, as root, MySQL on:
  *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.MysqlReconnectTest
  */
 public class MysqlReconnectTest {
@@ -54,7 +54,7 @@ public class MysqlReconnectTest {
     public static void main(String[] args) throws Exception {
         if (args.length > 0) { child(args); return; }
         if (!"yes".equals(System.getProperty("e2e.vm"))) {
-            System.out.println("SALTATA: serve -De2e.vm=yes (VM FreeBSD, root, MySQL acceso).");
+            System.out.println("SKIPPED: it needs -De2e.vm=yes (FreeBSD VM, root, MySQL on).");
             System.exit(0);
         }
         base = Files.createTempDirectory("mysql-reconnect");
@@ -65,39 +65,39 @@ public class MysqlReconnectTest {
             String a = "E2eRecA" + System.nanoTime() % 1_000_000_000L;
             String b = "E2eRecB" + System.nanoTime() % 1_000_000_000L;
             String c = "E2eRecC" + System.nanoTime() % 1_000_000_000L;
-            check("utente di prova creato", rootSql("DROP USER IF EXISTS '" + USER + "'@'localhost', '" + USER + "'@'127.0.0.1';"
+            check("test user created", rootSql("DROP USER IF EXISTS '" + USER + "'@'localhost', '" + USER + "'@'127.0.0.1';"
                     + "CREATE DATABASE IF NOT EXISTS " + DB + ";"
                     + "CREATE USER '" + USER + "'@'localhost' IDENTIFIED BY '" + a + "';"
                     + "CREATE USER '" + USER + "'@'127.0.0.1' IDENTIFIED BY '" + a + "';"
                     + "GRANT ALL PRIVILEGES ON " + DB + ".* TO '" + USER + "'@'localhost', '" + USER + "'@'127.0.0.1';"));
-            check("il pannello di prova ha la password di adesso", run("setup", a).code == 0);
+            check("the test panel has the current password", run("setup", a).code == 0);
 
-            System.out.println("\n== La reinstallazione cambia la password mentre il servizio e' acceso ==");
+            System.out.println("\n== The reinstallation changes the password while the service is on ==");
             Process service = start("service");
             BufferedReader out = new BufferedReader(new InputStreamReader(service.getInputStream(), StandardCharsets.UTF_8));
-            check("il servizio e' entrato in MySQL", waitFor(out, "CONNECTED"));
-            check("MySQL: password nuova, connessioni cadute", rootSql(alter(b)) && killAll());
-            check("il menu scrive la password nuova nel file dei segreti", run("write-secret", b).code == 0);
+            check("the service got into MySQL", waitFor(out, "CONNECTED"));
+            check("MySQL: new password, connections dropped", rootSql(alter(b)) && killAll());
+            check("the menu writes the new password to the secrets file", run("write-secret", b).code == 0);
             say(service, "use");
             String line = waitLine(out, "USE ");
-            check("il servizio usa di nuovo il database ed e' dentro, come " + USER, line != null && line.startsWith("USE ok " + USER + "@"));
+            check("the service uses the database again and is in, as " + USER, line != null && line.startsWith("USE ok " + USER + "@"));
 
-            System.out.println("\n== MySQL cambia, il file dei segreti non ancora (la reinstallazione non ha ancora deciso) ==");
-            check("MySQL: un'altra password, connessioni cadute", rootSql(alter(c)) && killAll());
+            System.out.println("\n== MySQL changes, the secrets file not yet (the reinstallation has not decided yet) ==");
+            check("MySQL: another password, connections dropped", rootSql(alter(c)) && killAll());
             say(service, "use");
             line = waitLine(out, "USE ");
-            check("il servizio NON entra con una password che il file non ha", line != null && line.startsWith("USE refused"));
-            check("il menu scrive la password nel file", run("write-secret", c).code == 0);
+            check("the service does NOT get in with a password the file does not have", line != null && line.startsWith("USE refused"));
+            check("the menu writes the password to the file", run("write-secret", c).code == 0);
             say(service, "use");
             line = waitLine(out, "USE ");
-            check("adesso il servizio entra", line != null && line.startsWith("USE ok " + USER + "@"));
+            check("now the service gets in", line != null && line.startsWith("USE ok " + USER + "@"));
             say(service, "quit");
             service.waitFor();
         } finally {
             rootSql("DROP USER IF EXISTS '" + USER + "'@'localhost', '" + USER + "'@'127.0.0.1'; DROP DATABASE IF EXISTS " + DB + ";");
             removeTree(base);
         }
-        System.out.println(failed == 0 ? "\nTutte le prove passate." : "\n" + failed + " prove FALLITE.");
+        System.out.println(failed == 0 ? "\nAll checks passed." : "\n" + failed + " checks FAILED.");
         System.exit(failed == 0 ? 0 : 1);
     }
 
@@ -106,7 +106,7 @@ public class MysqlReconnectTest {
              + "ALTER USER '" + USER + "'@'127.0.0.1' IDENTIFIED BY '" + p + "';";
     }
 
-    /** Tutte le connessioni dell'utente di prova cadono, come quando MySQL riparte. */
+    /** All the test user's connections drop, as when MySQL restarts. */
     static boolean killAll() throws Exception {
         Process p = new ProcessBuilder("mysql", "--defaults-extra-file=" + rootCnf, "-N", "-e",
                 "SELECT id FROM information_schema.processlist WHERE user = '" + USER + "'").redirectErrorStream(true).start();
@@ -117,7 +117,7 @@ public class MysqlReconnectTest {
         return sql.length() == 0 || rootSql(sql.toString());
     }
 
-    // ---------------------------------------------------------------- i processi del pannello
+    // ---------------------------------------------------------------- the panel's processes
 
     static void child(String[] a) throws Exception {
         Main.dbManager = new dataBaseManager();
@@ -137,7 +137,7 @@ public class MysqlReconnectTest {
                 BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
                 String cmd;
                 while ((cmd = in.readLine()) != null && !cmd.equals("quit")) {
-                    // Come i gestori del pannello: getConnection(), che si ricollega se serve.
+                    // Like the panel's handlers: getConnection(), which reconnects if needed.
                     String result;
                     try {
                         Connection c = Main.mailDatabase.getConnection();

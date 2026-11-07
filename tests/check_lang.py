@@ -1,32 +1,30 @@
 #!/usr/bin/env python3
-"""I file di lingua sono testo, e dentro si sono infilati dei nomi del CODICE.
+"""The language files are text, and names of the CODE slipped into them.
 
-Una rinomina r26 fatta a testo (bloccati -> lockedPackages, sbloccati ->
-unlockedPackages, eseguibile -> runnable, misurato -> measured, haConflitti ->
-hasConflicts) ha colpito anche src/main/resources/lang/it.json, e nessuno se n'e'
-accorto: il pannello scriveva in pagina "Verranno unlockedPackages postfix-mysql" e
-"Il piano non e' runnable". Il compilatore non vede dentro un JSON, e nessuna prova
-leggeva quei testi. Trentotto occorrenze, trovate per caso guardando l'uscita di un
-aggiornamento guidato.
+An r26 rename made on the text (bloccati -> lockedPackages, sbloccati -> unlockedPackages,
+eseguibile -> runnable, misurato -> measured, haConflitti -> hasConflicts) also hit
+src/main/resources/lang/it.json, and nobody noticed: the panel wrote on the page "Verranno
+unlockedPackages postfix-mysql" and "Il piano non e' runnable". The compiler does not see inside
+a JSON, and no test read those texts. Thirty-eight occurrences, found by chance looking at the
+output of a guided update.
 
-Quattro controlli, tre generali e uno esplicito:
+Four checks, three general and one explicit:
 
-  1. le due lingue hanno le STESSE chiavi. Una chiave aggiunta su un lato solo
-     e' una riga che in un'altra lingua non esiste.
-  2. i segnaposto {cosi} combaciano chiave per chiave. E' lo stesso difetto di r26
-     ("un nome che viaggia fra due parti"): rinominato su un lato, l'interpolazione
-     non sostituisce piu' niente e il testo mostra la graffa all'utente.
-  3. nessun token camelCase nei testi, fuori dai segnaposto, tranne una whitelist
-     corta e motivata. E' la parte generale: i nomi del codice sono quasi sempre
-     camelCase, quindi questa prende anche quelli che verranno.
-  4. in it.json, nessuna parola da una lista esplicita di nomi inglesi del codice
-     che ci sono finiti davvero. Questa NON e' una rete generale — e' una lista, e
-     il suo limite va detto: non c'e' nessun dizionario qui, quindi una parola
-     inglese minuscola nuova non la prende nessuno. La lista cresce quando se ne
-     trova una.
+  1. the two languages have the SAME keys. A key added on one side only is a line that does not
+     exist in the other language.
+  2. the {placeholders} match key by key. It is the same defect as r26 ("a name that travels
+     between two parts"): renamed on one side, the interpolation no longer replaces anything and
+     the text shows the brace to the user.
+  3. no camelCase token in the texts, outside the placeholders, except a short and motivated
+     whitelist. It is the general part: the code's names are almost always camelCase, so this
+     catches the future ones too.
+  4. in it.json, no word from an explicit list of English code names that really ended up
+     there. This is NOT a general net — it is a list, and its limit must be said: there is no
+     dictionary here, so a new lowercase English word is caught by nobody. The list grows when
+     one is found.
 
-Si lancia dalla radice del progetto:  python3 tests/check_lang.py
-Gira sul Mac: legge due file del repository e non tocca il sistema.
+Run from the project root:  python3 tests/check_lang.py
+It runs on the Mac: it reads two files of the repository and does not touch the system.
 """
 import json
 import re
@@ -37,10 +35,10 @@ root = sys.argv[1] if len(sys.argv) > 1 else "."
 IT = os.path.join(root, "src/main/resources/lang/it.json")
 EN = os.path.join(root, "src/main/resources/lang/en.json")
 
-# camelCase legittimi, misurati il 23/10/2026. Ognuno ha un motivo:
-#  - nomi di prodotto scritti come li scrive chi li fa
-#  - segnaposto scritti a mano nei testi, dove NN sta per un numero di versione
-#  - direttive di configurazione di fail2ban, citate perche' l'utente le ritrova nel file
+# Legitimate camelCase, measured on 23/10/2026. Each has a reason:
+#  - product names written as their makers write them
+#  - placeholders written by hand in the texts, where NN stands for a version number
+#  - fail2ban configuration directives, quoted because the user finds them in the file
 ALLOWED_CAMEL = {
     "iPhone", "iPad", "macOS", "iOS",
     "phpNN", "mysqlNN", "py3NN",
@@ -48,8 +46,8 @@ ALLOWED_CAMEL = {
     "nAtteso", "nTrovato", "nAttendi", "nExpected", "nFound", "nWait",
 }
 
-# Nomi del codice che in un testo italiano non ci vanno mai. Accanto, la parola che
-# il testo deve usare: serve a chi corregge, e dice che non e' un divieto astratto.
+# Code names that never belong in an Italian text. Next to each, the Italian word the text must
+# use: it helps whoever fixes it, and says it is not an abstract ban.
 ENGLISH_BANNED_IN_ITALIAN = {
     "runnable": "eseguibile",
     "measured": "misurato",
@@ -63,7 +61,7 @@ PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
 def text_without_placeholders(v):
-    """Il testo come lo legge una persona: i {segnaposto} non sono testo."""
+    """The text as a person reads it: the {placeholders} are not text."""
     return PLACEHOLDER.sub(" ", v)
 
 
@@ -75,15 +73,15 @@ def load(path):
 it, en = load(IT), load(EN)
 failures = []
 
-# --- 1. le stesse chiavi ---
+# --- 1. the same keys ---
 only_it, only_en = sorted(set(it) - set(en)), sorted(set(en) - set(it))
-print(f"  chiavi: it {len(it)}, en {len(en)}")
+print(f"  keys: it {len(it)}, en {len(en)}")
 for k in only_it[:10]:
-    failures.append(f"chiave solo in it.json: {k}")
+    failures.append(f"key only in it.json: {k}")
 for k in only_en[:10]:
-    failures.append(f"chiave solo in en.json: {k}")
+    failures.append(f"key only in en.json: {k}")
 
-# --- 2. i segnaposto combaciano ---
+# --- 2. the placeholders match ---
 different = 0
 for k in sorted(set(it) & set(en)):
     a, b = it[k], en[k]
@@ -92,10 +90,10 @@ for k in sorted(set(it) & set(en)):
     pa, pb = set(PLACEHOLDER.findall(a)), set(PLACEHOLDER.findall(b))
     if pa != pb:
         different += 1
-        failures.append(f"segnaposto diversi su {k}: solo it {sorted(pa - pb)}, solo en {sorted(pb - pa)}")
-print(f"  chiavi con segnaposto diversi fra le due lingue: {different}")
+        failures.append(f"different placeholders on {k}: only it {sorted(pa - pb)}, only en {sorted(pb - pa)}")
+print(f"  keys with different placeholders between the two languages: {different}")
 
-# --- 3. camelCase nei testi ---
+# --- 3. camelCase in the texts ---
 camel = {}
 for label, d in (("it", it), ("en", en)):
     for k, v in d.items():
@@ -105,11 +103,11 @@ for label, d in (("it", it), ("en", en)):
             if tok in ALLOWED_CAMEL:
                 continue
             camel.setdefault((label, tok), []).append(k)
-print(f"  token camelCase non ammessi nei testi: {len(camel)}")
+print(f"  camelCase tokens not allowed in the texts: {len(camel)}")
 for (label, tok), key_list in sorted(camel.items()):
-    failures.append(f"camelCase in {label}.json: {tok} ({len(key_list)} chiavi, es. {key_list[0]})")
+    failures.append(f"camelCase in {label}.json: {tok} ({len(key_list)} keys, e.g. {key_list[0]})")
 
-# --- 4. parole inglesi del codice nei testi italiani ---
+# --- 4. English code words in the Italian texts ---
 english = {}
 for k, v in it.items():
     if not isinstance(v, str):
@@ -118,21 +116,20 @@ for k, v in it.items():
     for word, instead in ENGLISH_BANNED_IN_ITALIAN.items():
         if re.search(r"\b" + re.escape(word) + r"\b", source_text):
             english.setdefault(word, []).append(k)
-print(f"  parole inglesi del codice nei testi italiani: {len(english)}")
+print(f"  English code words in the Italian texts: {len(english)}")
 for word, key_list in sorted(english.items()):
-    failures.append(f'in it.json c\'e\' "{word}" (si dice "{ENGLISH_BANNED_IN_ITALIAN[word]}"): '
-                  f"{len(key_list)} chiavi, es. {key_list[0]}")
+    failures.append(f'it.json has "{word}" (the word is "{ENGLISH_BANNED_IN_ITALIAN[word]}"): '
+                  f"{len(key_list)} keys, e.g. {key_list[0]}")
 
-# --- 5. e nemmeno le prove da browser devono ASPETTARSI il testo rotto ---
+# --- 5. and the browser tests must not EXPECT the broken text either ---
 #
-# Il testo rotto aveva un consumatore: tests/packages-browser-test.js cercava
-# "3 lockedPackages" nella pagina, quindi la prova sarebbe diventata rossa correggendo
-# l'italiano — o, peggio, sarebbe rimasta verde su un testo sbagliato. Un nome che viaggia
-# fra due parti si cambia su tutte le parti nello stesso passaggio (r26), e le prove sono
-# una di quelle parti.
-# Solo dentro le STRINGHE: in quei file "measured: true" e "unlockedPackages: ['nginx']"
-# sono chiavi JSON del server simulato — cioe' i nomi veri del contratto, che li' ci vanno.
-# Guardando tutto il file, la rete li segnalava: due falsi positivi, visti e tolti.
+# The broken text had a consumer: tests/packages-browser-test.js looked for "3 lockedPackages" in
+# the page, so the test would have turned red when the Italian was fixed — or, worse, it would
+# have stayed green on a wrong text. A name that travels between two parts is changed on all the
+# parts in the same pass (r26), and the tests are one of those parts.
+# Only inside the STRINGS: in those files "measured: true" and "unlockedPackages: ['nginx']" are
+# JSON keys of the simulated server — that is the real names of the contract, which belong there.
+# Looking at the whole file, the net reported them: two false positives, seen and removed.
 import glob
 LITERAL = re.compile(r"""'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*\"""" + '"' + r"""|`(?:[^`\\]|\\.)*`""")
 test_sources = {}
@@ -142,23 +139,23 @@ for f in sorted(glob.glob(os.path.join(root, "tests/*.js"))):
     for word in ENGLISH_BANNED_IN_ITALIAN:
         if re.search(r"\b" + re.escape(word) + r"\b", strings):
             test_sources.setdefault(word, []).append(os.path.basename(f))
-print(f"  parole del codice attese dalle prove da browser: {len(test_sources)}")
+print(f"  code words expected by the browser tests: {len(test_sources)}")
 for word, files in sorted(test_sources.items()):
-    failures.append(f'una prova si aspetta "{word}" nel testo (si dice '
+    failures.append(f'a test expects "{word}" in the text (the word is '
                   f'"{ENGLISH_BANNED_IN_ITALIAN[word]}"): {", ".join(files)}')
 
-# --- 6. i segnaposto che il TESTO chiede devono essere quelli che il CODICE passa ---
+# --- 6. the placeholders the TEXT asks for must be those the CODE passes ---
 #
-# Terzo lato ancora: `I18n.tr("chiave", Map.of("reason", ...))` contro un testo che dice
-# {motivo}. L'interpolazione non sostituisce niente e l'utente legge la graffa. Misurato il
-# 23/10/2026 eseguendo la manutenzione completa sulla VM: nel log compariva
-# «dovecot -> TRATTENUTO: {motivo}». Sette chiavi, tutte dalla stessa rinomina a meta'
-# (motivo -> reason, uscita -> output) con i file di lingua rimasti indietro. Il controllo 2
-# non le vedeva: it.json e en.json dicevano {motivo} TUTTI E DUE, quindi fra loro combaciavano.
+# A third side again: `I18n.tr("key", Map.of("reason", ...))` against a text saying {motivo}.
+# The interpolation replaces nothing and the user reads the brace. Measured on 23/10/2026 running
+# the full maintenance on the VM: the log showed "dovecot -> TRATTENUTO: {motivo}". Seven keys,
+# all from the same half-done rename (motivo -> reason, uscita -> output) with the language files
+# left behind. Check 2 did not see them: it.json and en.json BOTH said {motivo}, so they matched
+# each other.
 #
-# Il parser dei siti di chiamata prende le stringhe vicine alla chiave, quindi l'insieme dei
-# nomi passati e' piu' largo del vero: l'approssimazione sta dalla parte che NON inventa
-# guasti, e ogni segnaposto segnalato qui non e' passato da nessuna parte.
+# The call-site parser takes the strings near the key, so the set of names passed is wider than
+# the truth: the approximation is on the side that does NOT make up faults, and every placeholder
+# reported here is passed from nowhere.
 import glob
 
 sites = {}
@@ -179,16 +176,16 @@ for key, passed in sorted(sites.items()):
     missing = sorted(expected - passed)
     if missing:
         without += 1
-        failures.append(f'il testo di {key} chiede {missing} e il codice non li passa '
-                      f"(passa {sorted(passed)[:6]}): l'utente leggerebbe la graffa")
-print(f"  testi che chiedono un segnaposto che il codice non passa: {without}")
+        failures.append(f'the text of {key} asks for {missing} and the code does not pass them '
+                      f"(it passes {sorted(passed)[:6]}): the user would read the brace")
+print(f"  texts asking for a placeholder the code does not pass: {without}")
 
-# --- 7. e lo stesso nel JavaScript: t('chiave', { nome: ... }) ---
+# --- 7. and the same in the JavaScript: t('key', { name: ... }) ---
 #
-# Il controllo 6 guarda i Map.of del Java. La pagina passa i segnaposto con un oggetto, e una
-# rinomina delle chiavi JSON fatta a testo li cambierebbe come se fossero chiavi della risposta:
-# t('ad.reportsToFwd', { address: ... }) con il testo che chiede {indirizzo}. Si guardano le
-# chiavi di primo livello dell'oggetto, e devono stare fra i segnaposto del testo (tn ha anche n).
+# Check 6 looks at the Java Map.of. The page passes the placeholders with an object, and a rename
+# of the JSON keys made on the text would change them as if they were keys of the response:
+# t('ad.reportsToFwd', { address: ... }) with the text asking for {indirizzo}. The object's
+# top-level keys are looked at, and they must be among the text's placeholders (tn also has n).
 JS_CALL = re.compile(r"""\b(t|tn|tNodes)\(\s*\\?['"]([A-Za-z0-9_.\-]+)\\?['"]\s*,\s*(?:[^,{}()'"]+,\s*)?\{""")
 js_sources = glob.glob(os.path.join(root, "src/main/resources/pages/*.js")) + \
               glob.glob(os.path.join(root, "src/main/java/**/*.java"), recursive=True)
@@ -212,17 +209,17 @@ for f in js_sources:
         requested = set(PLACEHOLDER.findall(it[key])) | ({"n"} if function == "tn" else set())
         for label in sorted(passed - requested):
             js_different += 1
-            failures.append(f"{os.path.basename(f)}: {function}('{key}') passa {{{label}}}, il testo chiede {sorted(requested)}")
-print(f"  chiamate del JavaScript con segnaposto: {js_calls}, con nomi che il testo non chiede: {js_different}")
+            failures.append(f"{os.path.basename(f)}: {function}('{key}') passes {{{label}}}, the text asks for {sorted(requested)}")
+print(f"  JavaScript calls with placeholders: {js_calls}, with names the text does not ask for: {js_different}")
 
-# --- 8. ogni chiave che il codice usa esiste ---
+# --- 8. every key the code uses exists ---
 #
-# Il contrario del controllo 1: una chiave rinominata nel file di lingua e non nel codice (o il
-# contrario) fa comparire in pagina il NOME della chiave, senza errori. Si cercano le chiavi
-# letterali di I18n.tr, t/tn/tNodes, {{t:...}} e data-i18n, e devono esistere (per tn bastano
-# chiave.one e chiave.other). Quelle costruite con un prefisso + valore non si possono
-# controllare qui, e si contano. Nel Java le righe di commento non contano: un commento puo'
-# citare {{t:chiave}} come esempio.
+# The opposite of check 1: a key renamed in the language file and not in the code (or the other
+# way round) makes the key's NAME appear on the page, without errors. The literal keys of
+# I18n.tr, t/tn/tNodes, {{t:...}} and data-i18n are looked for, and they must exist (for tn,
+# key.one and key.other are enough). Those built with a prefix + value cannot be checked here,
+# and they are counted. In the Java the comment lines do not count: a comment can quote
+# {{t:key}} as an example.
 USES = [
     re.compile(r"""\bI18n\.tr(?:In)?\(\s*(?:[^,()"]+,\s*)?"([A-Za-z][\w.\-]*)\""""),
     re.compile(r"""\b(?:t|tn|tNodes)\(\s*\\?['"]([A-Za-z][\w.\-]*)\\?['"]"""),
@@ -245,22 +242,22 @@ for f in glob.glob(os.path.join(root, "src/main/java/**/*.java"), recursive=True
         built |= set(rx.findall(source_text))
 absent = sorted(k for k in used if k not in it and not (k + ".one" in it and k + ".other" in it)
                  and not k.endswith(".") and not any(k.startswith(p) for p in built))
-print(f"  chiavi usate dal codice: {len(used)}, che i file di lingua non hanno: {len(absent)}"
-      f"   (costruite con un prefisso, non controllabili: {len(built)})")
+print(f"  keys used by the code: {len(used)}, which the language files do not have: {len(absent)}"
+      f"   (built with a prefix, not checkable: {len(built)})")
 for k in absent[:20]:
-    failures.append(f"il codice usa la chiave {k}, che non c'e' nei file di lingua ({used[k]})")
-# --- 9. le tabelle codice -> testo leggono codici che qualcuno produce ---
+    failures.append(f"the code uses the key {k}, which is not in the language files ({used[k]})")
+# --- 9. the code -> text tables read codes somebody produces ---
 #
-# La pagina traduce un codice del server con una tabella: ({ consistent: t('up.eConsistent'),
-# absent: t('up.eMissing') })[v] || v. Se il codice cambia nel server e non nella tabella, la
-# pagina mostra il codice grezzo al posto del testo, senza errori. Misurato il 24/10/2026: la
-# rinomina dei codici aveva cambiato "coerente" -> "consistent" nel server e lasciato la tabella
-# con coerente, quindi un italiano leggeva «consistent». Una tabella e' un oggetto letterale con
-# almeno due voci, tutte del tipo  chiave: t('...'). Ogni chiave deve comparire come stringa
-# letterale altrove nel codice (Java o JavaScript, fuori dalle tabelle stesse), oppure come
-# costante di enum (name() la manda fuori col suo nome).
+# The page translates a server code with a table: ({ consistent: t('up.eConsistent'),
+# absent: t('up.eMissing') })[v] || v. If the code changes in the server and not in the table, the
+# page shows the raw code instead of the text, without errors. Measured on 24/10/2026: the rename
+# of the codes had changed "coerente" -> "consistent" in the server and left the table with
+# coerente, so an Italian read "consistent". A table is an object literal with at least two
+# entries, all of the kind  key: t('...'). Every key must appear as a string literal elsewhere in
+# the code (Java or JavaScript, outside the tables themselves), or as an enum constant (name()
+# sends it out with its name).
 def code_tables(text):
-    """Le tabelle (inizio, fine, chiavi) in un testo, cercate a mano: niente parser qui."""
+    """The tables (start, end, keys) in a text, searched by hand: no parser here."""
     out = []
     entry = re.compile(r"""\s*(?:'([^'\n]+)'|"([^"\n]+)"|([A-Za-z_$][\w$]*))\s*:\s*t\(\s*\\?'[\w.\-]+\\?'\s*\)\s*(,|\})""")
     for m in re.finditer(r"\{", text):
@@ -275,14 +272,14 @@ def code_tables(text):
                 break
     return out
 def is_lookup(text, start, end):
-    """Usata con [codice]: ({...})[v], oppure const NOME = {...} e poi NOME[...]. Un oggetto
-    { title: t(...), desc: t(...) } e' una scheda di testi, non una tabella, e non conta."""
+    """Used with [code]: ({...})[v], or const NAME = {...} and then NAME[...]. An object
+    { title: t(...), desc: t(...) } is a card of texts, not a table, and does not count."""
     if re.match(r"\s*\)?\s*\[", text[end:end + 20]): return True
     name = re.search(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*$", text[max(0, start - 80):start])
     return bool(name and re.search(r"(?<![\w$.])" + re.escape(name.group(1)) + r"\s*\[", text[end:]))
 def java_without_comments(src):
-    """Il Java senza commenti, letto carattere per carattere: una regex /\\*.*?\\*/ prende per
-    commento anche "/usr/local/*" dentro una stringa, e si mangia il codice fino al primo */."""
+    """The Java without comments, read character by character: a regex /\\*.*?\\*/ takes for a
+    comment also "/usr/local/*" inside a string, and eats the code up to the first */."""
     out, i, n = [], 0, len(src)
     while i < n:
         if src.startswith('"""', i):
@@ -320,18 +317,18 @@ for f in code_files:
     produced |= set(re.findall(r'"((?:\\.|[^"\\\n])*)"', text))
     produced |= set(re.findall(r"'((?:\\.|[^'\\\n])*)'", text))
 def is_produced(k):
-    # una chiave composta come "postfix:stop" (servizio + azione) si guarda per parti
+    # a composite key like "postfix:stop" (service + action) is looked at by parts
     return all(p in produced or p in enum_names for p in k.split(":"))
 orphans = [(f, line, k) for f, line, keys in tables for k in keys if not is_produced(k)]
-print(f"  tabelle codice -> testo: {len(tables)}, con {sum(len(k) for _, _, k in tables)} codici;"
-      f" codici che nessuno produce: {len(orphans)}")
+print(f"  code -> text tables: {len(tables)}, with {sum(len(k) for _, _, k in tables)} codes;"
+      f" codes nobody produces: {len(orphans)}")
 for f, line, k in orphans[:20]:
-    failures.append(f"la tabella in {f}:{line} traduce il codice \"{k}\", che il codice non produce da nessuna parte")
+    failures.append(f"the table in {f}:{line} translates the code \"{k}\", which the code produces nowhere")
 
 if failures:
     print()
     for g in failures:
         print(f"    NO  {g}")
-    print(f"\n{len(failures)} GUASTI")
+    print(f"\n{len(failures)} FAULTS")
     sys.exit(1)
-print("\nTUTTO OK")
+print("\nALL OK")

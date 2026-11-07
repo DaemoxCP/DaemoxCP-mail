@@ -15,23 +15,23 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Le email del pannello consegnate davvero: dal sendmail di Postfix fino alla casella.
+ * The panel's emails delivered for real: from Postfix's sendmail to the mailbox.
  *
- * Manda a una casella di prova del server il rapporto (in italiano, "su richiesta") e le tre
- * email dei codici (in inglese), con le stesse funzioni che usa il pannello: sendNow e il
- * Mailer di LoginCodes. Poi le cerca nella Maildir per Message-ID e guarda il messaggio COME
- * E' ARRIVATO, dopo Postfix, il milter e Dovecot:
- *  - il mittente visualizzato, l'oggetto decodificato, le intestazioni della busta;
- *  - la firma DKIM, se il dominio del mittente ne ha una;
+ * It sends to a test mailbox on the server the report (in Italian, "on request") and the three
+ * code emails (in English), with the same functions the panel uses: sendNow and the Mailer of
+ * LoginCodes. Then it looks for them in the Maildir by Message-ID and checks the message AS IT
+ * ARRIVED, after Postfix, the milter and Dovecot:
+ *  - the displayed sender, the decoded subject, the envelope headers;
+ *  - the DKIM signature, if the sender's domain has one;
  *  - le due parti, testo e HTML, decodificate.
- * Lascia una copia di ogni messaggio in -Dpanelmail.copies=<cartella>, per aprirla in un
- * programma di posta.
+ * It leaves a copy of every message in -Dpanelmail.copies=<folder>, to open it in a mail
+ * program.
  *
- * Tocca il sistema (manda posta vera), quindi parte solo con -De2e.vm=yes:
+ * It touches the system (it sends real mail), so it only runs with -De2e.vm=yes:
  *   java -De2e.vm=yes -Dpanelmail.to=alice@rehearsal.test \
  *        -Dpanelmail.maildir=/var/vmail/rehearsal.test/alice -Dpanelmail.copies=/var/tmp/panel-emails/copies \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelMailE2ETest
- * Il rapporto raccoglie i dati veri (pkg, servizi, spazio): ci mette un paio di minuti.
+ * The report gathers the real data (pkg, services, space): it takes a couple of minutes.
  */
 public class PanelMailE2ETest {
 
@@ -49,23 +49,23 @@ public class PanelMailE2ETest {
         String server = PanelMail.serverName();
         System.out.println("server " + server + ", recipient " + to);
 
-        // --- il rapporto, in italiano, dal pulsante del pannello ---
+        // --- the report, in Italian, from the panel's button ---
         I18n.setCurrent("it");
         JSONObject r;
         try { r = PeriodicReport.sendNow(to, false); }
         finally { I18n.clearCurrent(); }
         System.out.println("report: " + r.optString("note", r.optString("error")));
-        check("rapporto: consegnato", r.optBoolean("success") && !r.optBoolean("warning"));
+        check("report: delivered", r.optBoolean("success") && !r.optBoolean("warning"));
         String reportId = messageId(r.optString("output"));
         Path report = waitFor(maildir, reportId);
-        check("rapporto: arrivato nella casella", report != null);
+        check("report: arrived in the mailbox", report != null);
         if (report != null) {
             String raw = Files.readString(report, StandardCharsets.ISO_8859_1);
             Files.writeString(copies.resolve("report-it.eml"), raw, StandardCharsets.ISO_8859_1);
-            arrived("rapporto", raw, server, "it", r.optString("subject"));
+            arrived("report", raw, server, "it", r.optString("subject"));
         }
 
-        // --- i tre codici, in inglese, con il Mailer del pannello ---
+        // --- the three codes, in English, with the panel's Mailer ---
         for (CodeMail.Kind kind : CodeMail.Kind.values()) {
             PanelMail.Message m = CodeMail.message(kind, "en", server, "482913", 10, "192.168.1.1", ZonedDateTime.now());
             long before = System.currentTimeMillis();
@@ -74,19 +74,19 @@ public class PanelMailE2ETest {
             catch (Exception e) { sent = false; System.out.println("  " + e.getMessage()); }
             check(kind + ": Postfix l'ha accettato", sent);
             Path got = waitForSubject(maildir, m.subject(), before);
-            check(kind + ": arrivato nella casella", got != null);
+            check(kind + ": arrived in the mailbox", got != null);
             if (got == null) continue;
             String raw = Files.readString(got, StandardCharsets.ISO_8859_1);
             Files.writeString(copies.resolve("code-" + kind.name().toLowerCase() + "-en.eml"), raw, StandardCharsets.ISO_8859_1);
             arrived(kind.toString(), raw, server, "en", m.subject());
-            check(kind + ": il codice nel testo arrivato", PanelMailTest.qpDecode(part(raw, "text/plain")).contains("482913"));
+            check(kind + ": the code in the text that arrived", PanelMailTest.qpDecode(part(raw, "text/plain")).contains("482913"));
         }
 
         System.out.println("\n" + passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
 
-    /** Il messaggio come e' arrivato: busta, firma, parti. */
+    /** The message as it arrived: envelope, signature, parts. */
     static void arrived(String name, String raw, String server, String lang, String subject) {
         String head = raw.substring(0, Math.max(0, raw.indexOf("\r\n\r\n") >= 0 ? raw.indexOf("\r\n\r\n") : raw.indexOf("\n\n")))
                 .replace("\r\n", "\n");
@@ -95,9 +95,9 @@ public class PanelMailE2ETest {
         System.out.println("  " + name + " From: " + from);
         System.out.println("  " + name + " Subject: " + decode(header(unfolded, "Subject")));
         String expectedName = PanelMail.senderName(lang, server);
-        check(name + ": il mittente visualizzato e' \"" + expectedName + "\"",
+        check(name + ": the displayed sender is \"" + expectedName + "\"",
                 from != null && (from.startsWith("\"" + expectedName + "\"") || decode(from).startsWith(expectedName)));
-        check(name + ": l'oggetto arrivato e' quello composto", subject.equals(decode(header(unfolded, "Subject"))));
+        check(name + ": the subject that arrived is the one composed", subject.equals(decode(header(unfolded, "Subject"))));
         check(name + ": Date, Message-ID, Content-Language, Auto-Submitted",
                 header(unfolded, "Date") != null && header(unfolded, "Message-ID") != null
                 && lang.equals(header(unfolded, "Content-Language")) && "auto-generated".equals(header(unfolded, "Auto-Submitted")));
@@ -105,8 +105,8 @@ public class PanelMailE2ETest {
         System.out.println("  " + name + " DKIM-Signature: " + (dkim == null ? "(none)" : dkim.replaceAll("b=[^;]*", "b=...").substring(0, Math.min(90, dkim.length()))));
         String text = PanelMailTest.qpDecode(part(raw, "text/plain"));
         String html = PanelMailTest.qpDecode(part(raw, "text/html"));
-        check(name + ": la parte di testo c'e' e dice il server", text.contains(server));
-        check(name + ": la parte HTML c'e', con la lingua", html.contains("<html lang=\"" + lang + "\">") && html.contains(PanelMail.esc(server)));
+        check(name + ": the text part is there and names the server", text.contains(server));
+        check(name + ": the HTML part is there, with the language", html.contains("<html lang=\"" + lang + "\">") && html.contains(PanelMail.esc(server)));
     }
 
     static String header(String unfolded, String name) {
@@ -115,7 +115,7 @@ public class PanelMailE2ETest {
         return null;
     }
 
-    /** Le parole codificate RFC 2047 (B) di un'intestazione, riunite; il resto com'e'. */
+    /** The RFC 2047 (B) encoded words of a header, joined; the rest as it is. */
     static String decode(String h) {
         if (h == null) return null;
         Matcher m = Pattern.compile("=\\?UTF-8\\?B\\?([A-Za-z0-9+/=]*)\\?=(\\s+(?==\\?))?").matcher(h);
@@ -126,7 +126,7 @@ public class PanelMailE2ETest {
         return out.toString();
     }
 
-    /** Il corpo (ancora in quoted-printable) della parte con quel tipo. */
+    /** The body (still in quoted-printable) of the part with that type. */
     static String part(String raw, String type) {
         String r = raw.replace("\r\n", "\n");
         int i = r.indexOf("Content-Type: " + type);

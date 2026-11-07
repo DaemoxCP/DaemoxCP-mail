@@ -7,10 +7,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Il controllo degli utenti dei servizi (ServiceUsers.examine) su uscite di ps scritte qui: quella
- * della VM prima della migrazione (nginx e il pool www con lo stesso utente), quella dopo, e un
- * guasto piantato per ogni avviso, con i casi che NON devono avvisare (i processi di Postfix e
- * Dovecot che stanno da root per come sono fatti). Non chiama niente: si lancia ovunque.
+ * The check of the users that run the services (ServiceUsers.examine) on ps outputs written here: the VM's
+ * before the migration (nginx and the www pool with the same user), the one after, and a fault
+ * planted for every warning, with the cases that must NOT warn (the Postfix and Dovecot processes
+ * that run as root by design). It calls nothing: it runs anywhere.
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ServiceUsersTest
  */
 public class ServiceUsersTest {
@@ -19,11 +19,11 @@ public class ServiceUsersTest {
     static final PrintStream OUT = System.out;
 
     static void check(String what, boolean ok) {
-        OUT.println((ok ? "  OK   " : "  FALLITO ") + what);
+        OUT.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
-    /** ps -axww -o user= -o pid= -o ppid= -o command= sulla VM, il 31/10/2026, prima della migrazione. */
+    /** ps -axww -o user= -o pid= -o ppid= -o command= on the VM, on 31/10/2026, before the migration. */
     static final String BEFORE = """
             root    12174     1 /usr/local/bin/python3.12 /usr/local/bin/fail2ban-server --async -b -s /var/run/fail2ban/fail2ban.sock
             unbound 19144     1 /usr/sbin/local-unbound -c /var/unbound/unbound.conf
@@ -64,52 +64,52 @@ public class ServiceUsersTest {
     }
 
     public static void main(String[] args) {
-        OUT.println("== Prima: nginx e Roundcube con lo stesso utente");
+        OUT.println("== Before: nginx and Roundcube with the same user");
         ServiceUsers.Findings f = ex(BEFORE, POOL_BEFORE, "", false);
         f.problems().forEach(p -> OUT.println("     " + p.logText()));
-        check("www diviso fra nginx e il pool www", f.problems().stream().anyMatch(p -> "shared".equals(p.code()) && "www".equals(p.user())
+        check("www shared between nginx and the www pool", f.problems().stream().anyMatch(p -> "shared".equals(p.code()) && "www".equals(p.user())
                 && p.detail().contains("nginx") && p.detail().contains("php-fpm pool www")));
-        check("il pool www configurato con l'utente di nginx", f.problems().stream().anyMatch(p -> "poolShared".equals(p.code()) && "www".equals(p.service())));
-        check("nessun avviso di root: i processi da root sono quelli che ne hanno bisogno", f.problems().stream().noneMatch(p -> "root".equals(p.code())));
-        check("gli utenti letti: mysql, redis, clamav, rspamd, unbound, postfix, dovecot",
+        check("the www pool configured with nginx's user", f.problems().stream().anyMatch(p -> "poolShared".equals(p.code()) && "www".equals(p.service())));
+        check("no root warning: the processes running as root are the ones that need it", f.problems().stream().noneMatch(p -> "root".equals(p.code())));
+        check("the users read: mysql, redis, clamav, rspamd, unbound, postfix, dovecot",
                 f.services().get("mysql").users.equals(java.util.Set.of("mysql")) && f.services().get("clamav").users.equals(java.util.Set.of("clamav"))
                 && f.services().get("postfix").users.containsAll(List.of("root", "postfix")) && f.services().get("unbound").users.equals(java.util.Set.of("unbound")));
 
-        OUT.println("\n== Dopo: Roundcube col suo utente");
+        OUT.println("\n== After: Roundcube with its own user");
         f = ex(AFTER, POOL_AFTER, "", false);
-        check("nessun avviso (" + codes(f) + ")", f.problems().isEmpty());
-        check("il pool roundcube gira come roundcube", f.services().get("php-fpm pool roundcube").users.equals(java.util.Set.of("roundcube")));
-        check("i due pool letti dai file, www senza pool", f.pools().size() == 1 && "roundcube".equals(f.pools().get(0)[1]));
+        check("no warning (" + codes(f) + ")", f.problems().isEmpty());
+        check("the roundcube pool runs as roundcube", f.services().get("php-fpm pool roundcube").users.equals(java.util.Set.of("roundcube")));
+        check("the pools read from the files, www without a pool", f.pools().size() == 1 && "roundcube".equals(f.pools().get(0)[1]));
 
-        OUT.println("\n== I guasti piantati: ognuno il suo avviso");
+        OUT.println("\n== The planted faults: each its own warning");
         f = ex(AFTER.replace("mysql   26927", "root    26927"), POOL_AFTER, "", false);
-        check("mysqld da root: avviso root su mysql (" + codes(f) + ")", codes(f).equals("root:mysql"));
+        check("mysqld as root: root warning on mysql (" + codes(f) + ")", codes(f).equals("root:mysql"));
         f = ex(AFTER.replace("postfix 64955 64913 pickup", "root    64955 64913 pickup"), POOL_AFTER, "", false);
-        check("pickup di Postfix da root: avviso (" + codes(f) + ")", codes(f).equals("root:postfix"));
+        check("Postfix's pickup as root: warning (" + codes(f) + ")", codes(f).equals("root:postfix"));
         f = ex(AFTER + "root    64999 64913 local -t unix\nroot    65001 59971 dovecot/auth\n", POOL_AFTER, "", false);
-        check("local di Postfix e auth di Dovecot da root: nessun avviso, e' come sono fatti (" + codes(f) + ")", f.problems().isEmpty());
+        check("Postfix's local and Dovecot's auth as root: no warning, that is how they are built (" + codes(f) + ")", f.problems().isEmpty());
         f = ex(AFTER + "root    65003 59971 dovecot/imap\n", POOL_AFTER, "", false);
-        check("un imap di Dovecot da root: avviso (" + codes(f) + ")", codes(f).equals("root:dovecot"));
+        check("a Dovecot imap as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER.replace("www     37741 36807 nginx: worker", "root    37741 36807 nginx: worker"), POOL_AFTER, "", false);
-        check("un worker di nginx da root: avviso (" + codes(f) + ")", codes(f).contains("root:nginx"));
+        check("an nginx worker as root: warning (" + codes(f) + ")", codes(f).contains("root:nginx"));
         f = ex(AFTER.replace("redis   40133", "clamav  40133"), POOL_AFTER, "", false);
-        check("redis con l'utente di clamav: avviso di utente diviso (" + codes(f) + ")", codes(f).equals("shared:clamav, redis"));
+        check("redis with clamav's user: shared user warning (" + codes(f) + ")", codes(f).equals("shared:clamav, redis"));
         f = ex(AFTER, Map.of(Path.of("/x/root.conf"), "[evil]\nuser = root\nlisten = /tmp/e.sock\n"), "", false);
-        check("un pool configurato da root, anche senza processi (" + codes(f) + ")", codes(f).equals("poolRoot:evil"));
+        check("a pool configured as root, even without processes (" + codes(f) + ")", codes(f).equals("poolRoot:evil"));
         f = ex(AFTER, POOL_AFTER, "25 0 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null\n", false);
-        check("acme.sh nel cron di root (" + codes(f) + ")", codes(f).equals("acmeRoot:acme.sh"));
+        check("acme.sh in root's cron (" + codes(f) + ")", codes(f).equals("acmeRoot:acme.sh"));
         f = ex(AFTER, POOL_AFTER, "", true);
-        check("acme.sh ancora in /root (" + codes(f) + ")", codes(f).equals("acmeRoot:acme.sh"));
+        check("acme.sh still in /root (" + codes(f) + ")", codes(f).equals("acmeRoot:acme.sh"));
         f = ex(AFTER, POOL_AFTER, "# 25 0 * * * acme.sh --cron\n", false);
-        check("un commento nel cron non e' un avviso", f.problems().isEmpty());
+        check("a comment in the cron is not a warning", f.problems().isEmpty());
 
-        OUT.println("\n== L'uscita di ps");
-        check("una riga per processo, coi campi", ServiceUsers.processes(BEFORE).size() == BEFORE.strip().split("\n").length
+        OUT.println("\n== The ps output");
+        check("one line per process, with the fields", ServiceUsers.processes(BEFORE).size() == BEFORE.strip().split("\n").length
                 && ServiceUsers.processes("www 1 2 php-fpm: pool www (php-fpm)").get(0).ppid() == 2);
-        check("gli utenti di ogni pool", ServiceUsers.poolUsers(AFTER).equals(Map.of("roundcube", java.util.Set.of("roundcube"))));
+        check("the users of every pool", ServiceUsers.poolUsers(AFTER).equals(Map.of("roundcube", java.util.Set.of("roundcube"))));
 
         OUT.println();
-        OUT.println(failed == 0 ? "TUTTO OK" : "FALLITE: " + failed);
+        OUT.println(failed == 0 ? "ALL OK" : "FAILED: " + failed);
         if (failed > 0) System.exit(1);
     }
 }

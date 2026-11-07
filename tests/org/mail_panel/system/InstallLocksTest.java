@@ -10,32 +10,31 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * La reinstallazione completa con i pacchetti protetti (InstallLocks), con un pkg finto.
+ * The full reinstallation with the protected packages (InstallLocks), with a fake pkg.
  *
- * Il pkg vero non sa dare i guasti che contano qui: uno sblocco che dice di si' e non sblocca,
- * una lettura delle protezioni che non risponde, una riprotezione che fallisce. Con il finto si
- * provano tutti, e per ognuno si guarda la stessa cosa che conta sulla macchina: se lo script
- * puo' partire, che cosa resta protetto, se l'elenco su disco si chiude o resta, se il turno si
- * libera. L'elenco, il record del lavoro e il lock del turno stanno in una cartella di prova,
- * non in /var/db.
+ * The real pkg cannot give the faults that matter here: an unlock that says yes and does not
+ * unlock, a read of the locks that does not answer, a relock that fails. With the fake one they are
+ * all tested, and for each the same thing that matters on the machine is looked at: whether the
+ * script can start, what stays protected, whether the list on disk closes or stays, whether the turn
+ * is freed. The list, the job record and the turn's lock live in a test folder, not in /var/db.
  *
- * Il caso vero (il pannello acceso, 39 protetti, la reinstallazione dal menu) lo prova
- * MenuReinstall sulla VM; questa prova gira ovunque, ma va lanciata sulla VM come le altre.
+ * The real case (the panel running, 39 protected, the reinstallation from the menu) is tested by
+ * MenuReinstall on the VM; this test runs anywhere, but it must be run on the VM like the others.
  */
 public class InstallLocksTest {
 
     private static int failed = 0;
 
-    /** pkg finto: chi e' protetto, chi e' installato, e i guasti da piantare. */
+    /** Fake pkg: who is protected, who is installed, and the faults to plant. */
     static final class FakePkg implements InstallLocks.Pkg {
-        final Map<String, Boolean> locked = new LinkedHashMap<>();   // nome -> protetto
+        final Map<String, Boolean> locked = new LinkedHashMap<>();   // name -> protected
         final Set<String> installed = new TreeSet<>();
         final List<String> calls = new ArrayList<>();
-        Set<String> unlockLies = Set.of();      // pkg unlock dice si', ma resta protetto
-        Set<String> lockFails = Set.of();       // pkg lock fallisce
-        int lockListNullFrom = Integer.MAX_VALUE; // dalla n-esima lettura, pkg non risponde
-        Runnable onFirstRead = null;            // qualcosa che succede durante la prima lettura
-        String explodeAt = null;                // pkg esplode sbloccando questo pacchetto
+        Set<String> unlockLies = Set.of();      // pkg unlock says yes, but it stays protected
+        Set<String> lockFails = Set.of();       // pkg lock fails
+        int lockListNullFrom = Integer.MAX_VALUE; // from the n-th read, pkg does not answer
+        Runnable onFirstRead = null;            // something that happens during the first read
+        String explodeAt = null;                // pkg blows up unlocking this package
         boolean stateExistedAtFirstUnlock = false;
         int reads = 0;
 
@@ -59,7 +58,7 @@ public class InstallLocksTest {
                 calls.add("unlocked-once");
                 stateExistedAtFirstUnlock = PackageQueue.statePresent();
             }
-            if (n.equals(explodeAt)) throw new IllegalStateException("prova: pkg esplode su " + n);
+            if (n.equals(explodeAt)) throw new IllegalStateException("test: pkg blows up on " + n);
             if (unlockLies.contains(n)) return true;
             if (!locked.containsKey(n)) return false;
             locked.put(n, false);
@@ -83,143 +82,143 @@ public class InstallLocksTest {
         PackageQueue.turnLock = d.resolve("package-turn.lock");
         Path list = PackageQueue.list;
 
-        System.out.println("== Nessun pacchetto protetto ==");
+        System.out.println("== No protected package ==");
         FakePkg p = new FakePkg();
-        InstallLocks.Start s = InstallLocks.prepare("prova", p);
-        check("parte", s.refusal() == null && s.held() != null);
-        check("non sblocca niente e non scrive l'elenco", p.unlockCalls() == 0 && !Files.exists(list));
-        check("tiene il turno", PackageQueue.holder() != null);
+        InstallLocks.Start s = InstallLocks.prepare("test", p);
+        check("it starts", s.refusal() == null && s.held() != null);
+        check("it unlocks nothing and does not write the list", p.unlockCalls() == 0 && !Files.exists(list));
+        check("it holds the turn", PackageQueue.holder() != null);
         InstallLocks.finish(s.held(), p, false);
-        check("alla fine il turno e' libero", PackageQueue.holder() == null);
+        check("at the end the turn is free", PackageQueue.holder() == null);
 
-        System.out.println("\n== Tre protetti, tutto bene ==");
+        System.out.println("\n== Three protected, all well ==");
         p = new FakePkg().with("mysql84-server", "dovecot-mysql", "nginx");
-        s = InstallLocks.prepare("prova", p);
-        check("parte", s.refusal() == null && s.held() != null);
-        check("l'elenco era su disco PRIMA del primo sblocco", p.stateExistedAtFirstUnlock);
-        check("l'elenco nomina i tre pacchetti, senza versione",
+        s = InstallLocks.prepare("test", p);
+        check("it starts", s.refusal() == null && s.held() != null);
+        check("the list was on disk BEFORE the first unlock", p.stateExistedAtFirstUnlock);
+        check("the list names the three packages, without version",
                 Files.readString(list).equals("dovecot-mysql\nmysql84-server\nnginx\n"));
-        check("tutti e tre sbloccati", p.lockedCount() == 0);
-        // Accanto all'elenco, chi l'ha scritto: se questo processo muore, l'avviso dell'avvio
-        // (PackageRecovery) dice che si e' interrotta la reinstallazione, non "un lavoro".
-        check("il record del lavoro dice quale e da quale processo",
-                "prova".equals(PackageQueue.jobRecord().optString("description"))
+        check("all three unlocked", p.lockedCount() == 0);
+        // Next to the list, whoever wrote it: if this process dies, the start notice
+        // (PackageRecovery) says the reinstallation was interrupted, not "a job".
+        check("the job record says which job and from which process",
+                "test".equals(PackageQueue.jobRecord().optString("description"))
                 && PackageQueue.jobRecord().optLong("pid") == ProcessHandle.current().pid()
                 && !PackageQueue.jobRecord().optBoolean("expectsRestart"));
-        check("il rapporto dice quanti e dove sta l'elenco",
+        check("the report says how many and where the list is",
                 s.report().contains("3") && s.report().contains(list.toString()));
-        check("un altro lavoro non prende il turno", PackageQueue.take("other", "altro") != null);
-        // Lo script ha reinstallato i pacchetti: vanno riprotetti tutti, l'elenco si chiude.
+        check("another job does not take the turn", PackageQueue.take("other", "other") != null);
+        // The script reinstalled the packages: all must be locked again, the list closes.
         String back = InstallLocks.finish(s.held(), p, false);
-        check("riprotetti tutti e tre", p.lockedCount() == 3);
-        check("l'elenco e' chiuso", !Files.exists(list));
-        check("e il record del lavoro con lui", !Files.exists(PackageQueue.jobRecordPath()));
-        check("il turno e' libero", PackageQueue.holder() == null);
-        check("il rapporto dice 3 di nuovo protetti", back.contains("3"));
-        check("una seconda chiusura non fa niente", InstallLocks.finish(s.held(), p, false).isEmpty());
+        check("all three locked again", p.lockedCount() == 3);
+        check("the list is closed", !Files.exists(list));
+        check("and the job record with it", !Files.exists(PackageQueue.jobRecordPath()));
+        check("the turn is free", PackageQueue.holder() == null);
+        check("the report says 3 protected again", back.contains("3"));
+        check("a second close does nothing", InstallLocks.finish(s.held(), p, false).isEmpty());
 
-        System.out.println("\n== Lo script ha tolto un pacchetto ==");
+        System.out.println("\n== The script removed a package ==");
         p = new FakePkg().with("mysql84-server", "dovecot");
-        s = InstallLocks.prepare("prova", p);
+        s = InstallLocks.prepare("test", p);
         p.installed.remove("dovecot");
         p.locked.remove("dovecot");
         back = InstallLocks.finish(s.held(), p, false);
-        check("l'altro e' di nuovo protetto", p.locked.get("mysql84-server"));
-        check("l'elenco si chiude lo stesso (come il ripristino all'avvio)", !Files.exists(list));
-        check("e il rapporto nomina quello sparito", back.contains("dovecot"));
+        check("the other one is protected again", p.locked.get("mysql84-server"));
+        check("the list closes all the same (like the restore at start)", !Files.exists(list));
+        check("and the report names the one that vanished", back.contains("dovecot"));
 
-        System.out.println("\n== Una riprotezione fallisce ==");
+        System.out.println("\n== A relock fails ==");
         p = new FakePkg().with("mysql84-server", "nginx");
-        s = InstallLocks.prepare("prova", p);
+        s = InstallLocks.prepare("test", p);
         p.lockFails = Set.of("nginx");
         back = InstallLocks.finish(s.held(), p, false);
-        check("l'elenco RESTA, cosi' il prossimo avvio riprova", Files.exists(list));
-        check("il rapporto nomina nginx come non protetto", back.contains("nginx") && back.contains(list.toString()));
-        check("il turno si libera comunque", PackageQueue.holder() == null);
+        check("the list STAYS, so the next start tries again", Files.exists(list));
+        check("the report names nginx as not protected", back.contains("nginx") && back.contains(list.toString()));
+        check("the turn is freed anyway", PackageQueue.holder() == null);
         Files.delete(list);
 
-        System.out.println("\n== Dopo lo script pkg non risponde ==");
+        System.out.println("\n== After the script pkg does not answer ==");
         p = new FakePkg().with("mysql84-server");
-        s = InstallLocks.prepare("prova", p);
+        s = InstallLocks.prepare("test", p);
         p.lockListNullFrom = p.reads + 1;
         back = InstallLocks.finish(s.held(), p, false);
-        check("non si sa se e' protetto: l'elenco resta", Files.exists(list));
-        check("e il rapporto lo dice", back.contains(list.toString()));
-        check("il turno si libera", PackageQueue.holder() == null);
+        check("it is not known whether it is protected: the list stays", Files.exists(list));
+        check("and the report says so", back.contains(list.toString()));
+        check("the turn is freed", PackageQueue.holder() == null);
         Files.delete(list);
 
-        System.out.println("\n== Uno sblocco dice si' e non sblocca ==");
+        System.out.println("\n== An unlock says yes and does not unlock ==");
         p = new FakePkg().with("mysql84-server", "nginx", "redis");
         p.unlockLies = Set.of("mysql84-server");
-        s = InstallLocks.prepare("prova", p);
-        check("NON parte", s.refusal() != null && s.held() == null);
-        check("il rifiuto nomina il pacchetto rimasto protetto", s.refusal().contains("mysql84-server"));
-        check("gli altri sono di nuovo protetti: come prima", p.lockedCount() == 3);
-        check("l'elenco e' chiuso", !Files.exists(list));
-        check("il turno e' libero", PackageQueue.holder() == null);
+        s = InstallLocks.prepare("test", p);
+        check("it does NOT start", s.refusal() != null && s.held() == null);
+        check("the refusal names the package left protected", s.refusal().contains("mysql84-server"));
+        check("the others are protected again: as before", p.lockedCount() == 3);
+        check("the list is closed", !Files.exists(list));
+        check("the turn is free", PackageQueue.holder() == null);
 
-        System.out.println("\n== pkg non dice chi e' protetto ==");
+        System.out.println("\n== pkg does not say who is protected ==");
         p = new FakePkg().with("mysql84-server");
         p.lockListNullFrom = 1;
-        s = InstallLocks.prepare("prova", p);
-        check("NON parte", s.refusal() != null && s.held() == null);
-        check("non ha sbloccato niente e non ha scritto l'elenco", p.unlockCalls() == 0 && !Files.exists(list));
-        check("il turno e' libero", PackageQueue.holder() == null);
+        s = InstallLocks.prepare("test", p);
+        check("it does NOT start", s.refusal() != null && s.held() == null);
+        check("it unlocked nothing and did not write the list", p.unlockCalls() == 0 && !Files.exists(list));
+        check("the turn is free", PackageQueue.holder() == null);
 
-        System.out.println("\n== Dopo lo sblocco pkg non risponde ==");
+        System.out.println("\n== After the unlock pkg does not answer ==");
         p = new FakePkg().with("mysql84-server", "nginx");
         p.lockListNullFrom = 2;
-        s = InstallLocks.prepare("prova", p);
-        check("NON parte: non si sa se lo sblocco e' riuscito", s.refusal() != null && s.held() == null);
-        check("ha provato a riproteggere entrambi", p.calls.contains("lock mysql84-server") && p.calls.contains("lock nginx"));
-        check("e, senza poterlo verificare, l'elenco resta per il prossimo avvio", Files.exists(list));
-        check("il turno e' libero", PackageQueue.holder() == null);
+        s = InstallLocks.prepare("test", p);
+        check("it does NOT start: it is not known whether the unlock succeeded", s.refusal() != null && s.held() == null);
+        check("it tried to lock both again", p.calls.contains("lock mysql84-server") && p.calls.contains("lock nginx"));
+        check("and, without being able to check it, the list stays for the next start", Files.exists(list));
+        check("the turn is free", PackageQueue.holder() == null);
         Files.delete(list);
 
-        System.out.println("\n== L'elenco non si puo' scrivere ==");
-        // Compare l'elenco di un altro lavoro mentre si leggono le protezioni: writeState lo
-        // rifiuta (CREATE_NEW), e allora non si deve sbloccare niente.
+        System.out.println("\n== The list cannot be written ==");
+        // Another job's list appears while the locks are read: writeState refuses it (CREATE_NEW),
+        // and then nothing must be unlocked.
         p = new FakePkg().with("mysql84-server", "nginx");
         p.onFirstRead = () -> {
             try { Files.writeString(list, "kafka\n"); } catch (Exception e) { throw new RuntimeException(e); }
         };
-        s = InstallLocks.prepare("prova", p);
-        check("NON parte", s.refusal() != null && s.held() == null);
-        check("non ha sbloccato niente", p.unlockCalls() == 0 && p.lockedCount() == 2);
-        check("l'elenco dell'altro e' intatto", Files.readString(list).equals("kafka\n"));
-        check("il turno e' libero", PackageQueue.holder() == null);
+        s = InstallLocks.prepare("test", p);
+        check("it does NOT start", s.refusal() != null && s.held() == null);
+        check("it unlocked nothing", p.unlockCalls() == 0 && p.lockedCount() == 2);
+        check("the other one's list is untouched", Files.readString(list).equals("kafka\n"));
+        check("the turn is free", PackageQueue.holder() == null);
         Files.delete(list);
 
-        System.out.println("\n== pkg esplode a meta' sblocco ==");
+        System.out.println("\n== pkg blows up halfway through the unlock ==");
         p = new FakePkg().with("mysql84-server", "nginx");
-        p.explodeAt = "nginx";   // il secondo in ordine: mysql84-server e' gia' sbloccato
-        s = InstallLocks.prepare("prova", p);
-        check("NON parte", s.refusal() != null && s.held() == null);
-        check("il primo era stato sbloccato davvero", p.calls.contains("unlock mysql84-server"));
-        check("ha riprotetto quello che c'era", p.lockedCount() == 2);
-        check("l'elenco e' chiuso", !Files.exists(list));
-        check("il turno e' libero", PackageQueue.holder() == null);
+        p.explodeAt = "nginx";   // the second in order: mysql84-server is already unlocked
+        s = InstallLocks.prepare("test", p);
+        check("it does NOT start", s.refusal() != null && s.held() == null);
+        check("the first one had really been unlocked", p.calls.contains("unlock mysql84-server"));
+        check("it locked again what was there", p.lockedCount() == 2);
+        check("the list is closed", !Files.exists(list));
+        check("the turn is free", PackageQueue.holder() == null);
 
-        System.out.println("\n== Il turno e' gia' preso ==");
-        check("un altro lavoro prende il turno", PackageQueue.take("maint", "manutenzione") == null);
+        System.out.println("\n== The turn is already taken ==");
+        check("another job takes the turn", PackageQueue.take("maint", "maintenance") == null);
         p = new FakePkg().with("mysql84-server");
-        s = InstallLocks.prepare("prova", p);
-        check("NON parte, e dice chi lo tiene", s.refusal() != null && s.refusal().contains("manutenzione"));
-        check("e non ha chiesto niente a pkg", p.calls.isEmpty());
+        s = InstallLocks.prepare("test", p);
+        check("it does NOT start, and it says who holds it", s.refusal() != null && s.refusal().contains("maintenance"));
+        check("and it asked pkg nothing", p.calls.isEmpty());
         PackageQueue.release("maint");
 
-        System.out.println("\n== C'e' l'elenco di un lavoro interrotto ==");
+        System.out.println("\n== There is the list of an interrupted job ==");
         Files.writeString(list, "kafka\n");
         p = new FakePkg().with("mysql84-server");
-        s = InstallLocks.prepare("prova", p);
-        check("NON parte", s.refusal() != null && s.held() == null);
-        check("e non ha chiesto niente a pkg", p.calls.isEmpty());
+        s = InstallLocks.prepare("test", p);
+        check("it does NOT start", s.refusal() != null && s.held() == null);
+        check("and it asked pkg nothing", p.calls.isEmpty());
         Files.delete(list);
 
         Files.deleteIfExists(PackageQueue.turnLock);
         Files.deleteIfExists(PackageQueue.jobRecordPath());
         Files.delete(d);
-        System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
+        System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         System.exit(failed == 0 ? 0 : 1);
     }
 

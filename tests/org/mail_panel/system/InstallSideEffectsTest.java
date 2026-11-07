@@ -13,18 +13,17 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Il meccanismo che confronta la configurazione e gli indirizzi in ascolto prima e dopo un
- * aggiornamento, provato da solo: su una cartella temporanea, con l'uscita vera di
- * {@code sockstat} e di {@code pkg query} presa sulla VM FreeBSD 15.1 il 24/10/2026.
+ * The mechanism that compares the configuration and the listening addresses before and after an
+ * update, tested on its own: on a temporary folder, with the real output of {@code sockstat} and of
+ * {@code pkg query} taken on the FreeBSD 15.1 VM on 24/10/2026.
  *
- * Questa prova dice che il confronto distingue le cose giuste. Che i tre lavori lo usino
- * davvero lo dice {@link InstallScriptDriftTest}, che fa girare i lavori veri e fallisce con
- * il jar senza la correzione.
+ * This test says the comparison tells the right things apart. That the three jobs really use it is
+ * said by {@link InstallScriptDriftTest}, which runs the real jobs and fails with the jar without
+ * the fix.
  *
- * Le due direzioni, come per i servizi caduti: ogni guasto vero deve dare l'allarme, e
- * cio' che pkg fa per mestiere (sostituire i propri file, rimettere il predefinito nuovo al
- * posto di quello mai toccato) non deve darlo. Un allarme che suona a ogni aggiornamento
- * insegna a ignorarlo.
+ * Both directions, as for the fallen services: every real fault must raise the alarm, and what pkg
+ * does by trade (replacing its own files, putting the new default in place of one never touched)
+ * must not. An alarm that rings at every update teaches people to ignore it.
  */
 public class InstallSideEffectsTest {
 
@@ -38,25 +37,25 @@ public class InstallSideEffectsTest {
         lines();
         owners();
         listening();
-        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 
-    // ===== la configurazione, su una cartella vera =====
+    // ===== the configuration, on a real folder =====
     private static void configuration() throws Exception {
         Path d = Files.createTempDirectory("side-effects");
         try {
             Path etc = Files.createDirectories(d.resolve("etc/postfix"));
             Path other = Files.createDirectories(d.resolve("etc/other"));
-            // Il main.cf di un amministratore: diverso dal suo esempio, di nessun pacchetto.
+            // An administrator's main.cf: different from its sample, owned by no package.
             write(etc.resolve("main.cf"), "myhostname = mx.example.org\ninet_interfaces = all\n", "rw-r--r--");
-            write(etc.resolve("main.cf.sample"), "# esempio\n", "rw-r--r--");
+            write(etc.resolve("main.cf.sample"), "# example\n", "rw-r--r--");
             write(etc.resolve("master.cf"), "smtp      inet  n       -       n       -       -       smtpd\n", "rw-r--r--");
-            // Una mappa MySQL: password dentro, leggibile solo da root e dal gruppo.
-            write(etc.resolve("mysql-virtual.cf"), "user = postfix\npassword = vecchia-segreta\nhosts = 127.0.0.1\n", "rw-r-----");
-            // Un file del pacchetto: lo sostituisce pkg, e' l'aggiornamento stesso.
+            // A MySQL map: password inside, readable only by root and the group.
+            write(etc.resolve("mysql-virtual.cf"), "user = postfix\npassword = old-secret\nhosts = 127.0.0.1\n", "rw-r-----");
+            // A file of the package: pkg replaces it, it is the update itself.
             write(etc.resolve("main.cf.default"), "compatibility_level = 3.6\n", "rw-r--r--");
-            // Il predefinito mai toccato: identico al suo esempio.
+            // The default never touched: identical to its sample.
             write(other.resolve("other.conf"), "port = 1\n", "rw-r--r--");
             write(other.resolve("other.conf.sample"), "port = 1\n", "rw-r--r--");
             write(etc.resolve("old.cf"), "x = 1\n", "rw-r--r--");
@@ -64,7 +63,7 @@ public class InstallSideEffectsTest {
             write(etc.resolve("order.cf"), "a = 1\nb = 2\n", "rw-r--r--");
             write(etc.resolve("untouched.cf"), "z = 3\n", "rw-r--r--");
             write(etc.resolve("comments-perms.cf"), "w = 4\n", "rw-r-----");
-            // Un file di un ALTRO pacchetto, che il lavoro non ha toccato.
+            // A file of ANOTHER package, which the job did not touch.
             write(other.resolve("dovecot-owned.conf"), "protocols = imap\n", "rw-r--r--");
 
             Map<String, String> owners = new TreeMap<>();
@@ -77,84 +76,84 @@ public class InstallSideEffectsTest {
             InstallSideEffects.ConfigSnapshot before =
                     InstallSideEffects.configSnapshot(List.of(d.resolve("etc")), List.of(), owners);
 
-            // Il reperto 42: lo script aggiunge una riga a main.cf.
+            // Reperto 42: the script adds a line to main.cf.
             append(etc.resolve("main.cf"), "inet_protocols = ipv4\n");
-            // E quattro voci commentate a master.cf.
+            // And four commented entries to master.cf.
             append(etc.resolve("master.cf"), "#postscreen inet  n       -       n       -       1       postscreen\n#tlsproxy  unix  -       -       n       -       0       tlsproxy\n");
-            write(etc.resolve("mysql-virtual.cf"), "user = postfix\npassword = nuova-segreta\nhosts = 127.0.0.1\n", "rw-r-----");
+            write(etc.resolve("mysql-virtual.cf"), "user = postfix\npassword = new-secret\nhosts = 127.0.0.1\n", "rw-r-----");
             write(etc.resolve("main.cf.default"), "compatibility_level = 3.11\n", "rw-r--r--");
             write(other.resolve("other.conf"), "port = 2\n", "rw-r--r--");
             write(other.resolve("other.conf.sample"), "port = 2\n", "rw-r--r--");
-            write(etc.resolve("created.cf"), "nuovo = 1\n", "rw-r--r--");
+            write(etc.resolve("created.cf"), "fresh = 1\n", "rw-r--r--");
             Files.delete(etc.resolve("old.cf"));
             Files.setPosixFilePermissions(etc.resolve("perms.cf"), PosixFilePermissions.fromString("rw-r--r--"));
             write(etc.resolve("order.cf"), "b = 2\na = 1\n", "rw-r--r--");
             write(other.resolve("dovecot-owned.conf"), "protocols = imap pop3\n", "rw-r--r--");
-            write(etc.resolve("comments-perms.cf"), "w = 4\n# nuovo commento\n", "rw-rw-rw-");
+            write(etc.resolve("comments-perms.cf"), "w = 4\n# new comment\n", "rw-rw-rw-");
 
             InstallSideEffects.ConfigSnapshot after =
                     InstallSideEffects.configSnapshot(List.of(d.resolve("etc")), List.of(), owners);
             JSONArray c = InstallSideEffects.configChanges(before, after, changed);
 
             JSONObject mainCf = find(c, etc.resolve("main.cf"));
-            check("main.cf cambiato da uno script: allarme", mainCf != null && mainCf.getBoolean("alarm")
+            check("main.cf changed by a script: alarm", mainCf != null && mainCf.getBoolean("alarm")
                     && "script".equals(mainCf.getString("kind")) && "changed".equals(mainCf.getString("happened")));
-            check("  e la riga aggiunta si vede", mainCf != null && mainCf.optJSONArray("addedLines") != null
+            check("  and the added line shows", mainCf != null && mainCf.optJSONArray("addedLines") != null
                     && mainCf.getJSONArray("addedLines").toList().contains("inet_protocols = ipv4"));
-            check("  e nessuna riga tolta", mainCf != null && mainCf.optInt("removedCount", -1) == 0);
+            check("  and no line removed", mainCf != null && mainCf.optInt("removedCount", -1) == 0);
 
             JSONObject master = find(c, etc.resolve("master.cf"));
-            check("master.cf con sole righe di commento: detto, ma senza allarme", master != null
+            check("master.cf with comment lines only: said, but without an alarm", master != null
                     && "commentsOnly".equals(master.getString("kind")) && !master.getBoolean("alarm"));
-            check("  e le righe si vedono lo stesso", master != null && master.optInt("addedCount") == 2);
+            check("  and the lines show all the same", master != null && master.optInt("addedCount") == 2);
 
             JSONObject secret = find(c, etc.resolve("mysql-virtual.cf"));
-            check("una mappa con la password cambiata: allarme", secret != null && secret.getBoolean("alarm"));
-            check("  ma il contenuto non si mostra", secret != null && "notWorldReadable".equals(secret.optString("hidden"))
+            check("a map with the password changed: alarm", secret != null && secret.getBoolean("alarm"));
+            check("  but the content is not shown", secret != null && "notWorldReadable".equals(secret.optString("hidden"))
                     && !secret.has("addedLines") && !secret.has("removedLines"));
-            check("  e nessuna delle due password compare da nessuna parte",
-                    !c.toString().contains("vecchia-segreta") && !c.toString().contains("nuova-segreta"));
+            check("  and neither password shows up anywhere",
+                    !c.toString().contains("old-secret") && !c.toString().contains("new-secret"));
 
             JSONObject packageFile = find(c, etc.resolve("main.cf.default"));
-            check("un file del pacchetto aggiornato: e' l'aggiornamento, niente allarme",
+            check("a package file updated: it is the update, no alarm",
                     packageFile != null && "package".equals(packageFile.getString("kind")) && !packageFile.getBoolean("alarm"));
 
             JSONObject newDefault = find(c, other.resolve("other.conf"));
-            check("il predefinito mai toccato, diventato il predefinito nuovo: niente allarme",
+            check("the default never touched, now the new default: no alarm",
                     newDefault != null && "newDefault".equals(newDefault.getString("kind")) && !newDefault.getBoolean("alarm"));
 
             JSONObject created = find(c, etc.resolve("created.cf"));
-            check("un file creato che non e' di nessuno: allarme", created != null && created.getBoolean("alarm")
+            check("a created file that belongs to nobody: alarm", created != null && created.getBoolean("alarm")
                     && "created".equals(created.getString("happened")));
             JSONObject removed = find(c, etc.resolve("old.cf"));
-            check("un file di configurazione tolto: allarme", removed != null && removed.getBoolean("alarm")
+            check("a configuration file removed: alarm", removed != null && removed.getBoolean("alarm")
                     && "removed".equals(removed.getString("happened")));
             JSONObject perms = find(c, etc.resolve("perms.cf"));
-            check("stesso contenuto, permessi cambiati: allarme, con il prima e il dopo", perms != null
+            check("same content, permissions changed: alarm, with before and after", perms != null
                     && perms.getBoolean("alarm") && "permissions".equals(perms.getString("happened"))
                     && perms.optString("permissionsFrom").startsWith("rw-------")
                     && perms.optString("permissionsTo").startsWith("rw-r--r--"));
             JSONObject order = find(c, etc.resolve("order.cf"));
-            check("stesse righe in un altro ordine: allarme, e lo dice", order != null && order.getBoolean("alarm")
+            check("same lines in another order: alarm, and it says so", order != null && order.getBoolean("alarm")
                     && "sameLines".equals(order.optString("hidden")));
             JSONObject foreign = find(c, other.resolve("dovecot-owned.conf"));
-            check("un file di un pacchetto che il lavoro NON ha cambiato: allarme", foreign != null
+            check("a file of a package the job did NOT change: alarm", foreign != null
                     && foreign.getBoolean("alarm") && "dovecot".equals(foreign.getString("owner")));
             JSONObject commentsPerms = find(c, etc.resolve("comments-perms.cf"));
-            check("solo commenti, ma con i permessi cambiati: allarme", commentsPerms != null
+            check("comments only, but with the permissions changed: alarm", commentsPerms != null
                     && commentsPerms.getBoolean("alarm") && "script".equals(commentsPerms.getString("kind")));
-            check("un file non toccato non compare", find(c, etc.resolve("untouched.cf")) == null);
-            check("e nemmeno il .sample del pacchetto, che e' suo", find(c, etc.resolve("main.cf.sample")) == null);
+            check("an untouched file does not show up", find(c, etc.resolve("untouched.cf")) == null);
+            check("and neither does the package's .sample, which is its own", find(c, etc.resolve("main.cf.sample")) == null);
 
-            // --- e nessun cambiamento: niente da dire ---
+            // --- and no change: nothing to say ---
             InstallSideEffects.ConfigSnapshot again =
                     InstallSideEffects.configSnapshot(List.of(d.resolve("etc")), List.of(), owners);
-            check("due fotografie uguali: nessun cambiamento",
+            check("two identical pictures: no change",
                     InstallSideEffects.configChanges(after, again, changed).isEmpty());
 
-            // --- la cartella del pannello non si guarda ---
-            check("la cartella del pannello e' esclusa", InstallSideEffects.excluded("/usr/local/etc/mail-panel/firewall.json"));
-            check("  ma solo lei, non un nome che le somiglia", !InstallSideEffects.excluded("/usr/local/etc/mail-panel2/x"));
+            // --- the panel's folder is not looked at ---
+            check("the panel's folder is excluded", InstallSideEffects.excluded("/usr/local/etc/mail-panel/firewall.json"));
+            check("  but only it, not a name that resembles it", !InstallSideEffects.excluded("/usr/local/etc/mail-panel2/x"));
         } finally {
             try (var s = Files.walk(d)) {
                 s.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
@@ -162,9 +161,9 @@ public class InstallSideEffectsTest {
         }
     }
 
-    // ===== /etc: utenti, file rigenerati, resolv.conf =====
-    // Fotografie costruite a mano con i percorsi veri di /etc: le regole dipendono dal percorso,
-    // e su una cartella temporanea /etc/passwd non c'e'.
+    // ===== /etc: users, regenerated files, resolv.conf =====
+    // Pictures built by hand with the real /etc paths: the rules depend on the path, and on a
+    // temporary folder there is no /etc/passwd.
     private static void etc() {
         Map<String, InstallSideEffects.FileState> b = new TreeMap<>(), a = new TreeMap<>();
         String pw = "root:*:0:0:Charlie &:/root:/bin/sh\npostfix:*:125:125:Postfix:/var/spool/postfix:/usr/sbin/nologin\n";
@@ -173,8 +172,8 @@ public class InstallSideEffectsTest {
         put(b, "/etc/master.passwd", "root:$6$x:0:0::0:0:Charlie &:/root:/bin/sh\n", false);
         put(a, "/etc/master.passwd", "root:$6$x:0:0::0:0:Charlie &:/root:/bin/sh\ndriftprobe:*:1001:1001::0:0:drift probe:/nonexistent:/usr/sbin/nologin\n", false);
         put(b, "/etc/group", "wheel:*:0:root\n", true);
-        put(a, "/etc/group", "wheel:*:0:root,driftprobe\n", true);       // un utente esistente toccato
-        put(b, "/etc/pwd.db", "\u0000uno", true);   put(a, "/etc/pwd.db", "\u0000due", true);
+        put(a, "/etc/group", "wheel:*:0:root,driftprobe\n", true);       // an existing user touched
+        put(b, "/etc/pwd.db", "\u0000one", true);   put(a, "/etc/pwd.db", "\u0000two", true);
         put(b, "/etc/aliases", "root: admin\n", true); put(a, "/etc/aliases", "root: admin\n", true);
         put(b, "/etc/aliases.db", "\u0000a", true);  put(a, "/etc/aliases.db", "\u0000b", true);
         put(b, "/etc/ssl/certs/0179095f.0", "certA", true); put(a, "/etc/ssl/certs/0179095f.0", "certB", true);
@@ -183,39 +182,39 @@ public class InstallSideEffectsTest {
         JSONArray c = InstallSideEffects.configChanges(new InstallSideEffects.ConfigSnapshot(b, Map.of()),
                 new InstallSideEffects.ConfigSnapshot(a, Map.of()), Set.of());
         JSONObject passwd = find(c, "/etc/passwd"), master = find(c, "/etc/master.passwd"), group = find(c, "/etc/group");
-        check("/etc/passwd con un utente aggiunto: si dice, senza allarme", passwd != null
+        check("/etc/passwd with a user added: said, without an alarm", passwd != null
                 && "accounts".equals(passwd.getString("kind")) && !passwd.getBoolean("alarm")
                 && passwd.getJSONArray("addedLines").toList().toString().contains("driftprobe"));
-        check("/etc/master.passwd uguale, ma senza mostrarlo", master != null && "accounts".equals(master.getString("kind"))
+        check("/etc/master.passwd the same, but without showing it", master != null && "accounts".equals(master.getString("kind"))
                 && "notWorldReadable".equals(master.optString("hidden")) && !c.toString().contains("$6$x"));
-        check("/etc/group con un utente esistente toccato: allarme", group != null && group.getBoolean("alarm"));
-        check("/etc/pwd.db, ricavato da master.passwd: niente allarme", "derived".equals(kindOf(c, "/etc/pwd.db")));
-        check("/etc/aliases.db accanto ad aliases: niente allarme", "derived".equals(kindOf(c, "/etc/aliases.db")));
-        check("i certificati rigenerati da certctl: niente allarme", "derived".equals(kindOf(c, "/etc/ssl/certs/0179095f.0")));
-        check("un .db senza la sua fonte: allarme", "script".equals(kindOf(c, "/etc/orphan.db")));
-        check("/etc/periodic.conf creato: allarme", "script".equals(kindOf(c, "/etc/periodic.conf")));
-        check("tutta /etc e il caricatore sono fra le radici", InstallSideEffects.CONFIG_ROOTS.contains("/etc")
+        check("/etc/group with an existing user touched: alarm", group != null && group.getBoolean("alarm"));
+        check("/etc/pwd.db, derived from master.passwd: no alarm", "derived".equals(kindOf(c, "/etc/pwd.db")));
+        check("/etc/aliases.db next to aliases: no alarm", "derived".equals(kindOf(c, "/etc/aliases.db")));
+        check("the certificates regenerated by certctl: no alarm", "derived".equals(kindOf(c, "/etc/ssl/certs/0179095f.0")));
+        check("a .db without its source: alarm", "script".equals(kindOf(c, "/etc/orphan.db")));
+        check("/etc/periodic.conf created: alarm", "script".equals(kindOf(c, "/etc/periodic.conf")));
+        check("all of /etc and the loader are among the roots", InstallSideEffects.CONFIG_ROOTS.contains("/etc")
                 && InstallSideEffects.CONFIG_ROOTS.contains("/boot/loader.conf"));
-        check("/etc/resolv.conf no: lo riscrive dhclient", InstallSideEffects.excluded("/etc/resolv.conf")
+        check("/etc/resolv.conf not: dhclient rewrites it", InstallSideEffects.excluded("/etc/resolv.conf")
                 && !InstallSideEffects.excluded("/etc/resolv.conf.d/x") && !InstallSideEffects.excluded("/etc/rc.conf"));
     }
 
-    // ===== sasldb2.db: si confrontano gli utenti, non i byte =====
-    // Con i database veri, fatti da saslpasswd2 come li fa lo script di cyrus-sasl: crea
-    // l'utente cyrus e lo toglie. Serve cyrus-sasl, quindi gira solo dove c'e'.
+    // ===== sasldb2.db: the users are compared, not the bytes =====
+    // With real databases, made by saslpasswd2 as the cyrus-sasl script makes them: it creates the
+    // cyrus user and removes it. It needs cyrus-sasl, so it runs only where that is installed.
     private static void sasl() throws Exception {
         if (org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(10), "command -v saslpasswd2").exitCode() != 0) {
-            System.out.println("  --   SALTATA: sasldb2.db, qui non c'e' saslpasswd2 (cyrus-sasl): gira sulla VM");
+            System.out.println("  --   SKIPPED: sasldb2.db, saslpasswd2 (cyrus-sasl) is not here: it runs on the VM");
             return;
         }
         Path d = Files.createTempDirectory("sasl");
         try {
-            // saslpasswd2 aggiunge ".db" al nome che gli si da'.
-            byte[] empty1 = emptySasldb(d.resolve("uno")), empty2 = emptySasldb(d.resolve("due"));
+            // saslpasswd2 adds ".db" to the name it is given.
+            byte[] empty1 = emptySasldb(d.resolve("one")), empty2 = emptySasldb(d.resolve("two"));
             org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(10),
-                    "echo x | saslpasswd2 -p -f " + d.resolve("utente") + " -c probeuser");
-            byte[] withUser = Files.readAllBytes(d.resolve("utente.db"));
-            check("due database vuoti ricreati hanno byte diversi (se no la prova non prova niente)",
+                    "echo x | saslpasswd2 -p -f " + d.resolve("user") + " -c probeuser");
+            byte[] withUser = Files.readAllBytes(d.resolve("user.db"));
+            check("two empty databases created again have different bytes (otherwise the test proves nothing)",
                     !java.util.Arrays.equals(empty1, empty2));
             String path = "/usr/local/etc/sasldb2.db";
             Map<String, InstallSideEffects.FileState> b = new TreeMap<>(), a = new TreeMap<>(), u = new TreeMap<>();
@@ -224,35 +223,35 @@ public class InstallSideEffectsTest {
             u.put(path, new InstallSideEffects.FileState("x3", "rw-r----- cyrus:mail", false, withUser));
             JSONArray same = InstallSideEffects.configChanges(new InstallSideEffects.ConfigSnapshot(b, Map.of()),
                     new InstallSideEffects.ConfigSnapshot(a, Map.of()), Set.of());
-            check("sasldb2.db ricreato vuoto com'era: si dice, senza allarme",
+            check("sasldb2.db created again empty as it was: said, without an alarm",
                     "rebuilt".equals(kindOf(same, path)) && !find(same, path).getBoolean("alarm"));
             JSONArray added = InstallSideEffects.configChanges(new InstallSideEffects.ConfigSnapshot(b, Map.of()),
                     new InstallSideEffects.ConfigSnapshot(u, Map.of()), Set.of());
-            check("sasldb2.db con un utente in piu': allarme", "script".equals(kindOf(added, path)));
-            check("gli utenti si leggono, mai le password: «utente@dominio: attributo»",
+            check("sasldb2.db with one more user: alarm", "script".equals(kindOf(added, path)));
+            check("the users are read, never the passwords: 'user@domain: attribute'",
                     String.valueOf(InstallSideEffects.saslUsers(withUser)).matches("(?s)probeuser@\\S+: \\w+.*"));
-            check("un database vuoto da' zero utenti, non «non letto»", "".equals(InstallSideEffects.saslUsers(empty1)));
-            check("un file che non e' un database SASL: non letto, quindi niente «stessi utenti»",
-                    InstallSideEffects.saslUsers("non sono un database".getBytes()) == null);
+            check("an empty database gives zero users, not 'not read'", "".equals(InstallSideEffects.saslUsers(empty1)));
+            check("a file that is not a SASL database: not read, so no 'same users'",
+                    InstallSideEffects.saslUsers("not a database".getBytes()) == null);
         } finally {
             try (var st = Files.walk(d)) { st.sorted(java.util.Comparator.reverseOrder()).forEach(x -> x.toFile().delete()); }
         }
     }
 
-    /** Come lo script di cyrus-sasl: crea l'utente cyrus e lo toglie. {@code base} senza ".db". */
+    /** Like the cyrus-sasl script: it creates the cyrus user and removes it. {@code base} without ".db". */
     private static byte[] emptySasldb(Path base) throws Exception {
         org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(10),
                 "echo test | saslpasswd2 -p -f " + base + " -c cyrus && saslpasswd2 -f " + base + " -d cyrus");
         return Files.readAllBytes(Path.of(base + ".db"));
     }
 
-    // ===== la versione di prima, messa da parte =====
+    // ===== the version of before, set aside =====
     private static void savedCopies() throws Exception {
         Path d = Files.createTempDirectory("saved");
         try {
             Path src = Files.createDirectories(d.resolve("live/postfix"));
             write(src.resolve("main.cf"), "inet_protocols = all\n", "rw-r--r--");
-            write(src.resolve("mysql.cf"), "password = segreta\n", "rw-r-----");
+            write(src.resolve("mysql.cf"), "password = secret\n", "rw-r-----");
             InstallSideEffects.ConfigSnapshot before =
                     InstallSideEffects.configSnapshot(List.of(d.resolve("live")), List.of(), Map.of());
             Map<String, InstallSideEffects.FileState> big = new TreeMap<>(before.files());
@@ -263,23 +262,23 @@ public class InstallSideEffectsTest {
             Map<String, String> r = InstallSideEffects.saveBefore(withBig,
                     List.of(mainCf, mysqlCf, "/nowhere/new.cf", "/nowhere/huge.cf"), backups);
             Path copy = Path.of(r.get(mainCf));
-            check("la copia di main.cf c'e', col percorso intero sotto la cartella", Files.exists(copy)
+            check("the copy of main.cf is there, with the whole path under the folder", Files.exists(copy)
                     && copy.toString().equals(backups + mainCf));
-            check("  con il contenuto di prima", Files.readString(copy).equals("inet_protocols = all\n"));
-            check("  e gli stessi permessi, cosi' cp -p la rimette com'era",
+            check("  with the content of before", Files.readString(copy).equals("inet_protocols = all\n"));
+            check("  and the same permissions, so cp -p puts it back as it was",
                     PosixFilePermissions.toString(Files.getPosixFilePermissions(copy)).equals("rw-r--r--")
                     && PosixFilePermissions.toString(Files.getPosixFilePermissions(Path.of(r.get(mysqlCf)))).equals("rw-r-----"));
-            check("la cartella delle copie la legge solo il proprietario",
+            check("the copies' folder is readable by the owner only",
                     PosixFilePermissions.toString(Files.getPosixFilePermissions(backups)).equals("rwx------"));
-            check("un file che prima non c'era: niente copia, e lo dice", "created".equals(r.get("/nowhere/new.cf")));
-            check("un file troppo grande per tenerne il contenuto: lo dice", "tooLarge".equals(r.get("/nowhere/huge.cf")));
+            check("a file that was not there before: no copy, and it says so", "created".equals(r.get("/nowhere/new.cf")));
+            check("a file too large to keep its content: it says so", "tooLarge".equals(r.get("/nowhere/huge.cf")));
 
             for (String n : new String[]{"20261020T080000Z", "20261021T080000Z", "20261022T080000Z", "20261023T080000Z"})
                 Files.createDirectories(d.resolve("backups/" + n + "/x"));
             InstallSideEffects.pruneBefore(d.resolve("backups"), 2);
             List<String> left;
             try (var st = Files.list(d.resolve("backups"))) { left = st.map(x -> x.getFileName().toString()).sorted().toList(); }
-            check("se ne tengono le ultime, e si tolgono le piu' vecchie: " + left,
+            check("the latest ones are kept, and the oldest are removed: " + left,
                     left.equals(List.of("20261023T080000Z", "20261024T090000Z")));
         } finally {
             try (var s = Files.walk(d)) {
@@ -305,43 +304,43 @@ public class InstallSideEffectsTest {
         return null;
     }
 
-    // ===== le righe =====
+    // ===== the lines =====
     private static void lines() {
         List<List<String>> d = InstallSideEffects.lineDiff("a\nb\nc\n", "a\nc\nd\n");
-        check("diff: tolta b, aggiunta d", d.get(0).equals(List.of("b")) && d.get(1).equals(List.of("d")));
+        check("diff: b removed, d added", d.get(0).equals(List.of("b")) && d.get(1).equals(List.of("d")));
         d = InstallSideEffects.lineDiff("a\n", "a");
-        check("diff: l'a capo finale non e' una riga", d.get(0).isEmpty() && d.get(1).isEmpty());
+        check("diff: the final newline is not a line", d.get(0).isEmpty() && d.get(1).isEmpty());
         d = InstallSideEffects.lineDiff("x\nx\n", "x\n");
-        check("diff: una riga doppia diventata singola si vede", d.get(0).equals(List.of("x")) && d.get(1).isEmpty());
-        check("commenti: # e ; e righe vuote", InstallSideEffects.allComments(List.of("#a", "  ; b", "", "   ")));
-        check("commenti: una direttiva non lo e'", !InstallSideEffects.allComments(List.of("#a", "inet_protocols = ipv4")));
-        check("testo: un byte zero no", !InstallSideEffects.isText(new byte[]{'a', 0, 'b'}));
+        check("diff: a double line turned single shows", d.get(0).equals(List.of("x")) && d.get(1).isEmpty());
+        check("comments: # and ; and empty lines", InstallSideEffects.allComments(List.of("#a", "  ; b", "", "   ")));
+        check("comments: a directive is not one", !InstallSideEffects.allComments(List.of("#a", "inet_protocols = ipv4")));
+        check("text: a zero byte is not", !InstallSideEffects.isText(new byte[]{'a', 0, 'b'}));
     }
 
-    // ===== di chi sono i file =====
+    // ===== whose files they are =====
     private static void owners() {
         String query = "postfix-mysql\t/usr/local/etc/postfix/main.cf.sample\n"
                 + "postfix-mysql\t/usr/local/sbin/postfix\n"
                 + "roundcube-php84\t/usr/local/www/roundcube/config/config.inc.php.sample\n"
                 + "roundcube-php84\t/usr/local/www/roundcube/config/defaults.inc.php\n"
                 + "roundcube-php84\t/usr/local/www/roundcube/index.php\n"
-                + "nome sbagliato!\t/usr/local/etc/x\n";
+                + "bad name!\t/usr/local/etc/x\n";
         Map<String, String> o = InstallSideEffects.owners(query, InstallSideEffects.CONFIG_ROOTS);
-        check("proprietari: un file sotto /usr/local/etc c'e'", "postfix-mysql".equals(o.get("/usr/local/etc/postfix/main.cf.sample")));
-        check("  un binario fuori dalle radici no", !o.containsKey("/usr/local/sbin/postfix"));
-        check("  il .sample di Roundcube fuori da /usr/local/etc si'", o.containsKey("/usr/local/www/roundcube/config/config.inc.php.sample"));
-        check("  e anche il file del pacchetto accanto, se no darebbe l'allarme a ogni aggiornamento",
+        check("owners: a file under /usr/local/etc is there", "postfix-mysql".equals(o.get("/usr/local/etc/postfix/main.cf.sample")));
+        check("  a binary outside the roots is not", !o.containsKey("/usr/local/sbin/postfix"));
+        check("  Roundcube's .sample outside /usr/local/etc is", o.containsKey("/usr/local/www/roundcube/config/config.inc.php.sample"));
+        check("  and so is the package's file next to it, otherwise every update would raise the alarm",
                 "roundcube-php84".equals(o.get("/usr/local/www/roundcube/config/defaults.inc.php")));
-        check("  ma non il resto di Roundcube", !o.containsKey("/usr/local/www/roundcube/index.php"));
-        check("  un nome di pacchetto non valido si scarta", !o.containsKey("/usr/local/etc/x"));
+        check("  but not the rest of Roundcube", !o.containsKey("/usr/local/www/roundcube/index.php"));
+        check("  an invalid package name is discarded", !o.containsKey("/usr/local/etc/x"));
         List<Path> dirs = InstallSideEffects.sampleDirsOutside(o, InstallSideEffects.CONFIG_ROOTS);
-        check("cartelle da guardare fuori dalle radici: solo quella della configurazione di Roundcube",
+        check("folders to look at outside the roots: only Roundcube's configuration one",
                 dirs.size() == 1 && dirs.get(0).toString().equals("/usr/local/www/roundcube/config"));
     }
 
-    // ===== gli indirizzi in ascolto =====
+    // ===== the listening addresses =====
     private static void listening() {
-        // Righe vere della VM, 24/10/2026, con le udp di rspamd in mezzo.
+        // Real lines from the VM, 24/10/2026, with rspamd's udp ones in between.
         String before = String.join("\n",
                 "root   java       90871  9 tcp46 *:2096                *:*",
                 "root   master     90660 13 tcp4  *:25                  *:*",
@@ -354,24 +353,24 @@ public class InstallSideEffectsTest {
                 "rspamd rspamd-4.1 28334 15 tcp4  127.0.0.1:11333       *:*",
                 "redis  redis-serv 34997  7 tcp6  [::1]:6379            *:*");
         Map<String, String> p = InstallSideEffects.parseSockstat(before);
-        check("sockstat: otto indirizzi TCP distinti (2096, 25 e 587 in v4 e v6, 8443, 11333, 6379)", p.size() == 8);
-        check("  i processi di nginx contano una volta", p.containsKey("tcp4 *:8443"));
-        check("  le udp no", p.keySet().stream().noneMatch(k -> k.startsWith("udp")));
-        check("  tcp46 si'", "java".equals(p.get("tcp46 *:2096")));
+        check("sockstat: eight distinct TCP addresses (2096, 25 and 587 on v4 and v6, 8443, 11333, 6379)", p.size() == 8);
+        check("  nginx's processes count once", p.containsKey("tcp4 *:8443"));
+        check("  the udp ones do not", p.keySet().stream().noneMatch(k -> k.startsWith("udp")));
+        check("  tcp46 does", "java".equals(p.get("tcp46 *:2096")));
 
-        // Il reperto 42 dopo il riavvio: postfix ripartito con un altro pid, senza IPv6.
+        // Reperto 42 after the restart: postfix started again with another pid, without IPv6.
         String after = before.replace("90660", "91234")
                 .replace("root   master     91234 14 tcp6  *:25                  *:*\n", "")
                 .replace("root   master     91234 19 tcp6  *:587                 *:*\n", "")
                 + "\nroot   nginx      45720  7 tcp4  *:80                  *:*";
         JSONObject cmp = InstallSideEffects.compareListening(p, InstallSideEffects.parseSockstat(after));
         JSONArray lost = cmp.getJSONArray("lost");
-        check("persi tcp6 *:25 e tcp6 *:587, e il pid cambiato non conta", lost.length() == 2
+        check("lost tcp6 *:25 and tcp6 *:587, and the changed pid does not count", lost.length() == 2
                 && lost.toString().contains("tcp6 *:25") && lost.toString().contains("tcp6 *:587"));
-        check("  con il nome del processo", lost.getJSONObject(0).getString("command").equals("master"));
-        check("comparso tcp4 *:80", cmp.getJSONArray("gained").length() == 1
+        check("  with the process name", lost.getJSONObject(0).getString("command").equals("master"));
+        check("appeared tcp4 *:80", cmp.getJSONArray("gained").length() == 1
                 && cmp.getJSONArray("gained").getJSONObject(0).getString("address").equals("tcp4 *:80"));
-        check("stessi indirizzi con altri pid: niente perso, niente comparso",
+        check("same addresses with other pids: nothing lost, nothing appeared",
                 InstallSideEffects.compareListening(p, InstallSideEffects.parseSockstat(before.replace("90660", "1"))).getJSONArray("lost").isEmpty());
     }
 

@@ -34,7 +34,7 @@ import java.util.concurrent.Executors;
  * unknown job, an action that does not exist, a confirmation that is missing).
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RolesTest
  */
 public class RolesTest {
@@ -87,11 +87,11 @@ public class RolesTest {
         Path audit = dir.resolve("audit.log");
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
+        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
         check("connected to MySQL", db.connect());
-        // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.
-        // Scritta prima che le tabelle esistessero, non si salvava e il pannello
-        // scriveva nel registro vero.
+        // The schema BEFORE the entry, and the entry read back: see TestSessions.auditLogTo.
+        // Written before the tables existed, it was not saved and the panel wrote to the real
+        // log.
         TestSessions.auditLogTo(db, audit);
         Main.mailDatabase = db;
         Main.mysqlAvailable = true;
@@ -163,9 +163,9 @@ public class RolesTest {
         Set<String> pub = new HashSet<>();
         routes.forEach((p, a) -> { if (a.kind() == Access.Kind.PUBLIC) pub.add(p); });
         check("public: only sign-in, setup, static files, dictionary, language, logout, autoconfig, MTA-STS and the webmail's own",
-                // /assets/ (reperto 178): gli script e gli stili delle pagine come file. E' pubblica come
-                // /vendor, ma il gestore da' quelli delle pagine protette solo a chi e' entrato
-                // (lo prova LoginRoutesTest).
+                // /assets/ (reperto 178): the pages' scripts and styles as files. It is public like
+                // /vendor, but the handler gives those of the protected pages only to whoever signed
+                // in (LoginRoutesTest checks it).
                 pub.equals(Set.of("/autoconfig", "/mta-sts", "/fa", "/vendor", "/i18n/", "/assets/", "/api/language", "/", "/index", "/api/login",
                         "/setup", "/api/logout", org.mail_panel.integration.WebmailPasswordConfig.PATH, "/api/internal/mailbox-vault")));
         StringBuilder mismatch = new StringBuilder();
@@ -233,7 +233,7 @@ public class RolesTest {
         check("admin cannot open Administrators", send("GET", "/admins", null, admin).statusCode() == 403);
         check("admin cannot export the vault key", refused(send("POST", "/api/admins", "{\"action\":\"vault_backup_key\"}", admin)));
         check("admin cannot change the firewall", refused(send("POST", "/api/firewall", "{\"action\":\"apply\"}", admin)));
-        // Il pulsante «torna al server di prima della reinstallazione» (ReinstallReturn, reperto 170).
+        // The "back to the server before the reinstallation" button (ReinstallReturn, reperto 170).
         check("viewer cannot go back to the server before a reinstallation", refused(send("POST", "/api/updates",
                 "{\"action\":\"reinstall_way_back\",\"name\":\"reinstall-before-2000-01-01-000000\",\"confirm\":\"GO BACK\"}", viewer)));
         check("admin cannot either (system.manage is superadmin's)", refused(send("POST", "/api/updates",

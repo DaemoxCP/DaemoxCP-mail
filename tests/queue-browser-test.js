@@ -21,6 +21,9 @@ const csp = require('./browser-csp');
 const pages = process.argv[2];
 const shots = process.argv[3];
 const resources = path.join(__dirname, '..', 'src', 'main', 'resources');
+// The Italian page is checked against the texts of it.json, never written here.
+const IT = JSON.parse(fs.readFileSync(path.join(resources, 'lang', 'it.json'), 'utf8'));
+const fill = (text, values) => text.replace(/\{([A-Za-z0-9_]+)\}/g, (all, k) => (k in values ? String(values[k]) : all));
 const BASE = 'http://panel.test';
 let failed = 0;
 function check(what, ok) {
@@ -83,15 +86,15 @@ async function serve(route) {
         if (body.csrf_token !== 'csrf-test') return route.fulfill({ status: 403, contentType: 'application/json', body: '{"success":false,"error":"csrf"}' });
         if (body.action === 'remove') {
             queue = queue.filter(m => m.id !== body.id);
-            return json({ success: true, message: 'Messaggio ' + body.id + ' eliminato dalla coda.' });
+            return json({ success: true, message: 'Message ' + body.id + ' removed from the queue.' });
         }
         if (body.action === 'purge_permfails' && !body.ids) {
             const perm = queue.filter(m => m.permanent);
-            return json({ success: true, preview: true, count: perm.length, messages: perm, message: perm.length + ' messaggio con rifiuto definitivo.' });
+            return json({ success: true, preview: true, count: perm.length, messages: perm, message: perm.length + ' message with a permanent rejection.' });
         }
         if (body.action === 'purge_permfails') {
             queue = queue.filter(m => !(m.permanent && body.ids.includes(m.id)));
-            return json({ success: true, message: '1 messaggio con errore permanente eliminato.' });
+            return json({ success: true, message: '1 message with a permanent error removed.' });
         }
         return json({ success: true, message: 'ok ' + body.action });
     }
@@ -120,28 +123,30 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     console.log('\n== In Italian ==');
     await page.goto(BASE + '/queue');
     await page.waitForSelector('#queueBody tr td code');
-    check('title and intro in Italian', (await text(page, 'h2')) === 'Coda di posta' && (await text(page, '#main p.text-muted')).startsWith('I messaggi che Postfix'));
+    check('title and intro in Italian', (await text(page, 'h2')) === IT['que.title'] && (await text(page, '#main p.text-muted')) === IT['que.intro']);
     check('counters from total/active/deferred/hold: 3, 1, 2, 0', await text(page, '#statTotal') === '3' && await text(page, '#statActive') === '1'
         && await text(page, '#statDeferred') === '2' && await text(page, '#statHold') === '0');
-    check('the permanent failures under Deferred', (await text(page, '#statPermanent')) === 'di cui 1 con errore permanente');
+    check('the permanent failures under Deferred', (await text(page, '#statPermanent')) === fill(IT['que.permanentOf.one'], { n: 1 }));
     check('Release disabled with nothing held, the others enabled', await page.isDisabled('#releaseBtn') && !(await page.isDisabled('#holdBtn'))
         && !(await page.isDisabled('#purgeBtn')) && !(await page.isDisabled('#flushBtn')));
     const headers = await page.$$eval('#queueTable thead th', e => e.map(x => x.textContent.trim()));
-    check('column headers: ' + headers.join(', '), JSON.stringify(headers) === JSON.stringify(['ID', 'Stato', 'Mittente', 'Destinatari', 'Dimensione', 'Arrivo', 'Motivo del rinvio', 'Azioni']));
-    check('states translated', (await page.$$eval('.queue-state', e => e.map(x => x.textContent))).join('|') === 'Rinviato|Rinviato|In consegna');
+    check('column headers: ' + headers.join(', '), JSON.stringify(headers) === JSON.stringify(['que.colId', 'que.colState', 'que.colFrom', 'que.colTo',
+        'que.colSize', 'que.colArrival', 'que.colError', 'home.colActions'].map(k => IT[k])));
+    check('states translated', (await page.$$eval('.queue-state', e => e.map(x => x.textContent))).join('|')
+        === [IT['que.state.deferred'], IT['que.state.deferred'], IT['que.state.active']].join('|'));
     check('the state badge has its color class', await page.locator('.queue-state.state-deferred').count() === 2 && await page.locator('.queue-state.state-active').count() === 1);
-    check('the empty sender explained', (await page.textContent('#queueBody')).includes('(vuoto: avviso di mancata consegna)'));
+    check('the empty sender explained', (await page.textContent('#queueBody')).includes(IT['que.nullSender']));
     check('arrival in the page language and local time (12:00 in Rome)', (await page.textContent('#queueBody')).includes('10/10/2025, 12:00:00'));
     check('the sender with HTML in it shown as text, nothing run', (await page.textContent('#queueBody')).includes('<img src=x onerror=')
         && await page.locator('#queueBody img').count() === 0 && await page.evaluate(() => window.__xss === undefined));
-    check('the row buttons have a name', await page.getAttribute('[data-queue-remove="3A1F2B4C5D"]', 'aria-label') === 'Elimina il messaggio 3A1F2B4C5D');
+    check('the row buttons have a name', await page.getAttribute('[data-queue-remove="3A1F2B4C5D"]', 'aria-label') === fill(IT['que.removeOf'], { id: '3A1F2B4C5D' }));
 
     console.log('\n== The details ==');
     await page.click('[data-queue-view="4Nq8Zk1yQPz9Lm2"]');
     await page.waitForSelector('#messageModal.show');
     const details = await page.textContent('#messageDetails');
-    check('headers, envelope, recipients and text in the window', details.includes('Intestazioni') && details.includes('Busta')
-        && details.includes('b@example.net') && details.includes('second line') && details.includes('(troncato)'));
+    check('headers, envelope, recipients and text in the window', details.includes(IT['que.headers']) && details.includes(IT['que.envelope'])
+        && details.includes('b@example.net') && details.includes('second line') && details.includes(IT['que.truncated']));
     check('subject, From and body with HTML: text, nothing run', details.includes('<script>window.__xss=2</script>')
         && await page.locator('#messageDetails img, #messageDetails script').count() === 0 && await page.evaluate(() => window.__xss === undefined));
     if (shots) await page.screenshot({ path: path.join(shots, 'queue-details.png') });
@@ -159,7 +164,7 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     check('confirmed: remove with the ID and the CSRF token', posts.length === 1 && posts[0].action === 'remove'
         && posts[0].id === '5B2C3D4E6F' && posts[0].csrf_token === 'csrf-test');
     await page.waitForFunction(() => document.querySelectorAll('#queueBody tr').length === 2);
-    check('the answer in the message area, the list read again', (await text(page, '#queueMsg')) === 'Messaggio 5B2C3D4E6F eliminato dalla coda.');
+    check('the answer in the message area, the list read again', (await text(page, '#queueMsg')) === 'Message 5B2C3D4E6F removed from the queue.');
 
     console.log('\n== Deleting the permanent failures ==');
     answer = '7';
@@ -167,7 +172,7 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     await page.waitForSelector('#queueMsg .alert-warning');
     const prompt = dialogs[dialogs.length - 1];
     check('the prompt lists the recipient and the reason, and asks for the number', prompt.type === 'prompt'
-        && prompt.message.includes('gone@example.com') && prompt.message.includes('550 5.1.1') && prompt.message.includes('Scrivi 1 per eliminarlo'));
+        && prompt.message.includes('gone@example.com') && prompt.message.includes('550 5.1.1') && prompt.message.includes(fill(IT['que.typeCount.one'], { n: 1 })));
     check('a wrong number: only the preview was sent', posts.length === 2 && !posts[1].ids && posts[1].csrf_token === 'csrf-test');
     answer = '1';
     await page.click('#purgeBtn');

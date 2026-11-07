@@ -1,104 +1,107 @@
 package org.mail_panel.system;
 
+import org.mail_panel.i18n.I18n;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Un servizio che non era attivo nemmeno prima non e' un servizio caduto.
+ * A service that was not running before either is not a service that fell.
  *
- * Quattro lavori chiudevano con un quadro dei servizi, e tre di loro contavano come guasto
- * QUALUNQUE servizio non attivo in quel momento, senza sapere come stava prima.
+ * Four jobs ended with a picture of the services, and three of them counted as a failure ANY
+ * service not running at that moment, without knowing how it was before.
  *
- * Misurato sulla VM FreeBSD 15.1 il 23/10/2026: un aggiornamento guidato di nginx riuscito
- * in ogni passo — piano rispettato (firma 24ddf05e8623c1d2), nginx 1.30.5_2,3 -> 1.30.6,3,
- * configurazione accettata, servizio riavviato con il pid cambiato (68238 -> 16297),
- * vulnerabilita' richieste, pacchetto riprotetto — e' finito in "error" con "Aggiornamento
- * eseguito, ma un servizio non e' ripartito come doveva". I due servizi: local_unbound, che
- * su quella macchina non e' nemmeno abilitato, e ntpd, che non parte da prima.
+ * Measured on the FreeBSD 15.1 VM on 23/10/2026: a guided update of nginx that succeeded at every
+ * step — plan respected (signature 24ddf05e8623c1d2), nginx 1.30.5_2,3 -> 1.30.6,3, configuration
+ * accepted, service restarted with a new pid (68238 -> 16297), vulnerabilities queried, package
+ * protected again — ended in "error" with "Update done, but a service did not come back as it
+ * should". The two services: local_unbound, which is not even enabled on that machine, and ntpd,
+ * which has not been starting since before.
  *
- * Un allarme che suona sempre insegna a ignorarlo, e quando suona per davvero non lo
- * distingue nessuno. Per questo le prove qui sotto misurano le DUE direzioni: che un guasto
- * vero venga ancora preso, e che un servizio fermo da prima non lo diventi.
+ * An alarm that always rings teaches people to ignore it, and when it rings for real nobody tells
+ * it apart. That is why the checks below measure BOTH directions: that a real failure is still
+ * caught, and that a service stopped since before does not become one.
+ *
+ * The panel's messages are read in English (I18n.setCurrent): outside a request it writes Italian.
  */
 public class ServiceFallTest {
 
     private static int failures = 0;
 
     public static void main(String[] args) {
+        I18n.setCurrent("en");
 
-        // --- Il caso misurato sulla VM: 13 servizi, due fermi da prima ---
+        // --- The case measured on the VM: 13 services, two stopped since before ---
         Map<String, Boolean> before = vmServices(), now = vmServices();
-        UpdateManager.Job j = new UpdateManager.Job("prova", "prova");
+        UpdateManager.Job j = new UpdateManager.Job("test", "test");
         boolean fallen = UpdateManager.fallenServices(j, before, now);
         String log = j.toJson().optString("consoleLog", "");
-        check("la macchina della misura: nessun servizio e' caduto", !fallen);
-        check("  local_unbound compare comunque nel quadro", log.contains("local_unbound"));
-        check("  e ntpd anche", log.contains("ntpd"));
-        check("  nessun allarme nel log", !log.toUpperCase().contains("ALLARME")
-                                      && !log.toUpperCase().contains("ALARM"));
+        check("the measured machine: no service fell", !fallen);
+        check("  local_unbound still appears in the picture", log.contains("local_unbound"));
+        check("  and ntpd too", log.contains("ntpd"));
+        check("  no alarm in the log", !log.toUpperCase().contains("ALARM"));
 
-        // --- Un guasto vero si vede ancora: era attivo, adesso no ---
+        // --- A real failure is still seen: it was running, now it is not ---
         Map<String, Boolean> afterFault = vmServices();
         afterFault.put("dovecot", false);
-        UpdateManager.Job j2 = new UpdateManager.Job("prova2", "prova");
-        check("un servizio che era attivo e adesso no: caduto",
+        UpdateManager.Job j2 = new UpdateManager.Job("test2", "test");
+        check("a service that was running and now is not: fallen",
              UpdateManager.fallenServices(j2, before, afterFault));
         String log2 = j2.toJson().optString("consoleLog", "");
-        check("  e il log lo nomina", log2.contains("dovecot"));
-        check("  con un allarme", log2.toUpperCase().contains("ALLARME") || log2.toUpperCase().contains("ALARM"));
+        check("  and the log names it", log2.contains("dovecot"));
+        check("  with an alarm", log2.toUpperCase().contains("ALARM"));
 
-        // --- Un servizio che l'aggiornamento ha ACCESO non e' un guasto ---
+        // --- A service the update STARTED is not a failure ---
         Map<String, Boolean> turnedOn = vmServices();
         turnedOn.put("ntpd", true);
-        UpdateManager.Job j3 = new UpdateManager.Job("prova3", "prova");
-        check("un servizio che prima era fermo e adesso e' attivo: nessun guasto",
+        UpdateManager.Job j3 = new UpdateManager.Job("test3", "test");
+        check("a service stopped before and running now: no failure",
              !UpdateManager.fallenServices(j3, before, turnedOn));
-        check("  e non si dice che non era attivo nemmeno prima, perche' adesso lo e'",
-             !j3.toJson().optString("consoleLog", "").contains("ntpd: attivo (")
-             && !j3.toJson().optString("consoleLog", "").contains("ntpd: running ("));
+        check("  and it does not say it was not running before either, because now it is",
+             !j3.toJson().optString("consoleLog", "").contains("ntpd: running ("));
 
-        // --- Un servizio SPARITO (il pacchetto se n'e' andato) mentre era attivo ---
+        // --- A service that VANISHED (the package went away) while it was running ---
         Map<String, Boolean> vanished = vmServices();
         vanished.remove("rspamd");
-        UpdateManager.Job j4 = new UpdateManager.Job("prova4", "prova");
-        check("un servizio attivo che non esiste piu': caduto",
+        UpdateManager.Job j4 = new UpdateManager.Job("test4", "test");
+        check("a running service that no longer exists: fallen",
              UpdateManager.fallenServices(j4, before, vanished));
-        check("  e il log lo nomina", j4.toJson().optString("consoleLog", "").contains("rspamd"));
+        check("  and the log names it", j4.toJson().optString("consoleLog", "").contains("rspamd"));
 
-        // --- Un servizio comparso adesso si vede nel quadro ---
+        // --- A service that appeared now shows in the picture ---
         Map<String, Boolean> appeared = vmServices();
         appeared.put("opendkim", true);
-        UpdateManager.Job j5 = new UpdateManager.Job("prova5", "prova");
-        check("un servizio comparso con l'aggiornamento non e' un guasto",
+        UpdateManager.Job j5 = new UpdateManager.Job("test5", "test");
+        check("a service that appeared with the update is not a failure",
              !UpdateManager.fallenServices(j5, before, appeared));
-        check("  ma compare nel quadro", j5.toJson().optString("consoleLog", "").contains("opendkim"));
+        check("  but it shows in the picture", j5.toJson().optString("consoleLog", "").contains("opendkim"));
 
-        // --- Tutto attivo prima e dopo ---
+        // --- Everything running before and after ---
         Map<String, Boolean> all = new LinkedHashMap<>();
         all.put("postfix", true); all.put("dovecot", true);
-        UpdateManager.Job j6 = new UpdateManager.Job("prova6", "prova");
-        check("tutto attivo prima e dopo: nessun guasto",
+        UpdateManager.Job j6 = new UpdateManager.Job("test6", "test");
+        check("everything running before and after: no failure",
              !UpdateManager.fallenServices(j6, all, new LinkedHashMap<>(all)));
 
-        // --- Nessuno stato di partenza: non si inventa un guasto ---
-        // Succede se servicesState() non ha trovato nessuno script rc.d. Senza un "prima" non
-        // si puo' dire che qualcosa e' caduto, e dire di si' sarebbe un allarme inventato.
-        UpdateManager.Job j7 = new UpdateManager.Job("prova7", "prova");
-        check("senza stato di partenza non si dichiara nessun guasto",
+        // --- No starting state: no failure is made up ---
+        // It happens if servicesState() found no rc.d script. Without a "before" nothing can be
+        // said to have fallen, and saying so would be an invented alarm.
+        UpdateManager.Job j7 = new UpdateManager.Job("test7", "test");
+        check("without a starting state no failure is declared",
              !UpdateManager.fallenServices(j7, new LinkedHashMap<>(), vmServices()));
 
-        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 
-    /** I servizi della VM come li ha visti la misura del 23/10/2026. */
+    /** The VM's services as the measurement of 23/10/2026 saw them. */
     private static Map<String, Boolean> vmServices() {
         Map<String, Boolean> m = new LinkedHashMap<>();
         for (String s : new String[]{"postfix", "dovecot", "rspamd", "redis", "clamav_clamd",
                                      "clamav_freshclam", "mysql-server", "nginx", "php_fpm",
                                      "fail2ban", "pf"}) m.put(s, true);
-        m.put("local_unbound", false);   // non e' nemmeno abilitato su quella macchina
-        m.put("ntpd", false);            // abilitato ma non parte, da prima dell'aggiornamento
+        m.put("local_unbound", false);   // not even enabled on that machine
+        m.put("ntpd", false);            // enabled but not starting, since before the update
         return m;
     }
 

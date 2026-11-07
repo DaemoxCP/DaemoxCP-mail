@@ -16,15 +16,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Il ramo dei pacchetti (PkgBranch): leggerlo e cambiarlo.
+ * The package branch (PkgBranch): reading it and changing it.
  *
- * Il sistema finto fa quello che fa pkg (libpkg/pkg_config.c, letto il 03/10/2026): parte da
- * /etc/pkg/FreeBSD.conf di FreeBSD 15.0 RELEASE (quarterly, moduli con la versione minore,
- * FreeBSD-base spento), poi legge i *.conf di /usr/local/etc/pkg/repos in ordine alfabetico, e
- * ogni blocco sovrascrive i campi del repository con lo stesso nome; ${ABI} e ${VERSION_MINOR}
- * si espandono. pkg -vv lo stampa come print_repository. Cosi' il cambio di ramo e i suoi
- * ripristini si provano contro le regole vere: il file del pannello che vince perche' e'
- * l'ultimo, un file dell'utente letto dopo che vince lui, un catalogo che non si scarica.
+ * The fake system does what pkg does (libpkg/pkg_config.c, read on 03/10/2026): it starts from
+ * /etc/pkg/FreeBSD.conf of FreeBSD 15.0 RELEASE (quarterly, modules with the minor version,
+ * FreeBSD-base off), then reads the *.conf files of /usr/local/etc/pkg/repos in alphabetical order,
+ * and every block overwrites the fields of the repository with the same name; ${ABI} and
+ * ${VERSION_MINOR} expand. pkg -vv prints it like print_repository. So the branch change and its
+ * restores are tested against the real rules: the panel's file that wins because it is the last,
+ * a user's file read after it that wins, a catalog that does not download.
+ *
+ * The panel's messages are read in English (I18n.setCurrent): outside a request it writes Italian.
  *
  * Uso: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PkgBranchTest
  */
@@ -33,7 +35,7 @@ public class PkgBranchTest {
     static int failed = 0;
 
     static void real(String what, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
@@ -61,11 +63,11 @@ public class PkgBranchTest {
             }
             """;
 
-    /** Un FreeBSD finto, con la configurazione di pkg in memoria. */
+    /** A fake FreeBSD, with pkg's configuration in memory. */
     static class FakeSystem implements PkgBranch.SystemAccess {
         String stock = STOCK;
-        final TreeMap<String, String> folder = new TreeMap<>();   // nome -> contenuto, in ordine come scandir
-        String unreachable = null;                               // un pezzo di indirizzo che "pkg update" non scarica
+        final TreeMap<String, String> folder = new TreeMap<>();   // name -> content, in order like scandir
+        String unreachable = null;                               // a piece of address "pkg update" does not download
         boolean pkgBroken = false, brokenWrite = false;
         final List<String> log = new ArrayList<>();
         int updates = 0;
@@ -75,7 +77,7 @@ public class PkgBranchTest {
                 + "php84-8.4.14                >   succeeds index (remote has 8.4.13)\n"
                 + "curl-8.16.0                 <   needs updating (remote has 8.16.0_1)\n";
 
-        /** Le regole di pkg_config.c: ogni blocco sovrascrive i campi che nomina. */
+        /** The rules of pkg_config.c: every block overwrites the fields it names. */
         Map<String, Map<String, String>> config() {
             Map<String, Map<String, String>> repos = new LinkedHashMap<>();
             join(repos, stock);
@@ -84,12 +86,12 @@ public class PkgBranchTest {
         }
 
         static void join(Map<String, Map<String, String>> repos, String text) {
-            // Le graffe di ${ABI} non chiudono il blocco: si mettono da parte prima di dividerlo.
+            // The braces of ${ABI} do not close the block: they are set aside before splitting it.
             text = text.replaceAll("\\$\\{(\\w+)\\}", "\u0001$1\u0002");
             Matcher b = Pattern.compile("(?m)^\\s*([A-Za-z0-9._-]+)\\s*:\\s*\\{([^}]*)\\}").matcher(text);
             while (b.find()) {
                 Map<String, String> r = repos.computeIfAbsent(b.group(1), k -> new LinkedHashMap<>(Map.of("enabled", "yes", "priority", "0")));
-                r.put("priority", "0");   // add_repo: un blocco senza priority la rimette a 0
+                r.put("priority", "0");   // add_repo: a block without priority puts it back to 0
                 Matcher c = Pattern.compile("(\\w+)\\s*:\\s*(\"[^\"]*\"|[\\w-]+)").matcher(b.group(2));
                 while (c.find()) r.put(c.group(1), c.group(2).replace("\"", "").replaceAll("\u0001(\\w+)\u0002", "\\${$1}"));
             }
@@ -154,25 +156,26 @@ public class PkgBranchTest {
     static PkgBranch.LineSink logInto(FakeSystem f) { return f.log::add; }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("\n== Leggere i repository da pkg -vv ==");
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        System.out.println("\n== Reading the repositories from pkg -vv ==");
         FakeSystem f = new FakeSystem();
         JSONObject st = PkgBranch.state(f);
-        real("FreeBSD 15 di serie: ramo quarterly", st.getBoolean("success") && st.getString("branch").equals("quarterly"));
+        real("stock FreeBSD 15: quarterly branch", st.getBoolean("success") && st.getString("branch").equals("quarterly"));
         JSONArray rep = st.getJSONArray("repository");
-        real("tre repository: pacchetti, moduli del kernel, sistema base (spento)", rep.length() == 3
+        real("three repositories: packages, kernel modules, base system (off)", rep.length() == 3
                 && rep.getJSONObject(0).getString("type").equals("packages") && rep.getJSONObject(1).getString("type").equals("modules")
                 && rep.getJSONObject(2).getString("type").equals("base") && !rep.getJSONObject(2).getBoolean("enabled"));
-        real("si puo' cambiare, verso latest", st.getBoolean("changeable") && st.getJSONArray("destination").toList().equals(List.of("latest")));
-        real("nessun file del pannello", !st.getBoolean("panelOwnedFile"));
+        real("it can be changed, towards latest", st.getBoolean("changeable") && st.getJSONArray("destination").toList().equals(List.of("latest")));
+        real("no panel file", !st.getBoolean("panelOwnedFile"));
         PkgBranch.Repo k = PkgBranch.classify("FreeBSD-ports-kmods", "pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/kmods_quarterly_0", true, 0, null);
-        real("i moduli con la versione minore: kmods_latest_${VERSION_MINOR}",
+        real("the modules with the minor version: kmods_latest_${VERSION_MINOR}",
                 PkgBranch.address(k, "latest").equals("pkg+https://pkg.FreeBSD.org/${ABI}/kmods_latest_${VERSION_MINOR}"));
         PkgBranch.Repo ks = PkgBranch.classify("FreeBSD-ports-kmods", "pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/kmods_quarterly", true, 0, null);
-        real("su -STABLE i moduli senza versione minore: kmods_latest",
+        real("on -STABLE the modules without the minor version: kmods_latest",
                 PkgBranch.address(ks, "latest").equals("pkg+https://pkg.FreeBSD.org/${ABI}/kmods_latest"));
         PkgBranch.Repo old = PkgBranch.classify("FreeBSD", "pkg+http://pkg.FreeBSD.org/FreeBSD:14:amd64/latest", true, 0, null);
-        real("FreeBSD 14 (repository \"FreeBSD\", http): pacchetti, ramo latest", old.type().equals("packages") && old.branch().equals("latest"));
-        real("un mirror o un repository proprio non e' ufficiale",
+        real("FreeBSD 14 (\"FreeBSD\" repository, http): packages, latest branch", old.type().equals("packages") && old.branch().equals("latest"));
+        real("a mirror or an own repository is not official",
                 PkgBranch.classify("poudriere", "file:///usr/local/poudriere/data/packages/15amd64-default", true, 0, null).type().equals("external")
                 && PkgBranch.classify("FreeBSD-ports", "pkg+https://mirror.example.org/FreeBSD:15:amd64/quarterly", true, 0, null).type().equals("external"));
 
@@ -180,93 +183,93 @@ public class PkgBranchTest {
         own.folder.put("FreeBSD.conf", "FreeBSD-ports: { enabled: no }\nFreeBSD-ports-kmods: { enabled: no }\n");
         own.folder.put("poudriere.conf", "poudriere: { url: \"file:///usr/local/poudriere/data/packages/15amd64-default\" }\n");
         st = PkgBranch.state(own);
-        real("pacchetti da un repository proprio: non si cambia, e si dice perche'", st.getString("branch").equals("none")
-                && !st.getBoolean("changeable") && st.getString("reason").contains("repository che usi"));
+        real("packages from an own repository: it is not changed, and it says why", st.getString("branch").equals("none")
+                && !st.getBoolean("changeable") && st.getString("reason").contains("repository you use"));
 
         FakeSystem mixed = new FakeSystem();
         mixed.folder.put("FreeBSD.conf", "FreeBSD-ports: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/latest\" }\n");
         st = PkgBranch.state(mixed);
-        real("pacchetti latest e moduli quarterly: \"misti\", e si puo' allineare a tutti e due",
+        real("latest packages and quarterly modules: \"mixed\", and it can be aligned to both",
                 st.getString("branch").equals("mixed") && st.getJSONArray("destination").length() == 2);
 
         FakeSystem base = new FakeSystem();
         base.folder.put("FreeBSD.conf", "FreeBSD-base: { enabled: yes }\n");
         st = PkgBranch.state(base);
-        real("FreeBSD-base acceso: lo si dice, e resta fuori", st.optString("base").contains("non lo tocca"));
+        real("FreeBSD-base on: it is said, and it stays out", st.optString("base").contains("does not touch it"));
 
         FakeSystem pr = new FakeSystem();
         pr.pkgBroken = true;
-        real("pkg che non risponde: lo si dice, niente ramo inventato", !PkgBranch.state(pr).getBoolean("success"));
+        real("pkg not answering: it is said, no branch made up", !PkgBranch.state(pr).getBoolean("success"));
 
-        System.out.println("\n== Anteprima ==");
+        System.out.println("\n== Preview ==");
         f = new FakeSystem();
         JSONObject an = PkgBranch.preview(f, "latest");
-        real("verso latest: possibile, con i due indirizzi nuovi", an.getBoolean("possible") && an.getJSONArray("changes").length() == 2
+        real("towards latest: possible, with the two new addresses", an.getBoolean("possible") && an.getJSONArray("changes").length() == 2
                 && an.getJSONArray("changes").getJSONObject(0).getString("to").equals("pkg+https://pkg.FreeBSD.org/${ABI}/latest"));
-        real("il file che scriverebbe, con le variabili di pkg (non l'ABI di oggi)", an.getString("content").contains(
+        real("the file it would write, with pkg's variables (not today's ABI)", an.getString("content").contains(
                 "FreeBSD-ports-kmods: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/kmods_latest_${VERSION_MINOR}\" }")
                 && !an.getString("content").contains("FreeBSD:15"));
-        real("FreeBSD-base non compare nel file", !an.getString("content").contains("FreeBSD-base"));
-        real("dice che non aggiorna nessun pacchetto", an.getJSONArray("warnings").getString(0).startsWith("Non si aggiorna nessun pacchetto"));
-        real("dice come si torna indietro anche al primo cambio, col file da cancellare: " + an.optString("howToReturn"),
+        real("FreeBSD-base does not appear in the file", !an.getString("content").contains("FreeBSD-base"));
+        real("it says it updates no package", an.getJSONArray("warnings").getString(0).startsWith("No package is updated"));
+        real("it says how to go back even at the first change, with the file to delete: " + an.optString("howToReturn"),
                 an.optString("howToReturn").contains("quarterly") && an.optString("howToReturn").contains("zz-panel-branch.conf"));
-        real("verso il ramo in cui si e' gia': no", !PkgBranch.preview(f, "quarterly").getBoolean("possible"));
-        real("un ramo inventato: no", !PkgBranch.preview(f, "weekly").getBoolean("success"));
-        real("l'anteprima non tocca niente", f.folder.isEmpty() && f.updates == 0);
+        real("towards the branch it is already on: no", !PkgBranch.preview(f, "quarterly").getBoolean("possible"));
+        real("a made-up branch: no", !PkgBranch.preview(f, "weekly").getBoolean("success"));
+        real("the preview touches nothing", f.folder.isEmpty() && f.updates == 0);
         FakeSystem priority = new FakeSystem();
         priority.folder.put("FreeBSD.conf", "FreeBSD-ports: { priority: 5, ip_version: 4 }\n");
-        real("una priority e un ip_version diversi da quelli di serie si riscrivono uguali (un blocco li azzererebbe)",
+        real("a priority and an ip_version different from the stock ones are rewritten the same (a block would reset them)",
                 PkgBranch.preview(priority, "latest").getString("content").contains("latest\", priority: 5, ip_version: 4 }"));
 
-        System.out.println("\n== Cambiare: quarterly -> latest ==");
+        System.out.println("\n== Changing: quarterly -> latest ==");
         f = new FakeSystem();
         String imp = PkgBranch.state(f).getString("fingerprint");
         JSONObject r = PkgBranch.change(f, logInto(f), "latest", imp);
-        real("riuscito: " + r.optString("messageText", r.optString("error")), r.getBoolean("success") && r.getString("branch").equals("latest"));
-        real("pkg ora vede latest, anche per i moduli", f.seenBranch().equals("latest"));
-        real("il file del pannello c'e', con la marca", f.folder.get("zz-panel-branch.conf").startsWith(PkgBranch.MARK));
-        real("catalogo scaricato una volta", f.updates == 1);
-        real("conta gli aggiornabili dal catalogo nuovo (2), senza aggiornarli", r.getInt("updatable") == 2
-                && r.getString("messageText").contains("Nessun pacchetto è stato cambiato"));
+        real("succeeded: " + r.optString("messageText", r.optString("error")), r.getBoolean("success") && r.getString("branch").equals("latest"));
+        real("pkg now sees latest, for the modules too", f.seenBranch().equals("latest"));
+        real("the panel's file is there, with the mark", f.folder.get("zz-panel-branch.conf").startsWith(PkgBranch.MARK));
+        real("catalog downloaded once", f.updates == 1);
+        real("it counts the upgradable ones from the new catalog (2), without upgrading them", r.getInt("updatable") == 2
+                && r.getString("messageText").contains("No package was changed"));
 
-        System.out.println("\n== Cambiare: latest -> quarterly (il file del pannello si toglie) ==");
+        System.out.println("\n== Changing: latest -> quarterly (the panel's file is removed) ==");
         imp = PkgBranch.state(f).getString("fingerprint");
         r = PkgBranch.change(f, logInto(f), "quarterly", imp);
-        real("riuscito", r.getBoolean("success") && f.seenBranch().equals("quarterly"));
-        real("di serie e' gia' quarterly: il file del pannello e' tolto, non riscritto", !f.folder.containsKey("zz-panel-branch.conf"));
-        real("i pacchetti piu' nuovi del ramo sono detti, e restano come sono: " + r.getJSONArray("mostRecent"),
-                r.getJSONArray("mostRecent").length() == 2 && r.getString("messageText").contains("restano come sono"));
+        real("succeeded", r.getBoolean("success") && f.seenBranch().equals("quarterly"));
+        real("stock is already quarterly: the panel's file is removed, not rewritten", !f.folder.containsKey("zz-panel-branch.conf"));
+        real("the packages newer than the branch are named, and stay as they are: " + r.getJSONArray("mostRecent"),
+                r.getJSONArray("mostRecent").length() == 2 && r.getString("messageText").contains("stay as they are"));
 
-        System.out.println("\n== Il file dell'utente non si tocca ==");
+        System.out.println("\n== The user's file is not touched ==");
         FakeSystem u = new FakeSystem();
         String its = "FreeBSD-ports: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/latest\" }\nFreeBSD-ports-kmods: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/kmods_latest_${VERSION_MINOR}\" }\n";
         u.folder.put("FreeBSD.conf", its);
         imp = PkgBranch.state(u).getString("fingerprint");
         r = PkgBranch.change(u, logInto(u), "quarterly", imp);
-        real("latest dal suo FreeBSD.conf -> quarterly: riuscito con un file del pannello, letto dopo il suo", r.getBoolean("success")
+        real("latest from their FreeBSD.conf -> quarterly: succeeded with a panel file, read after theirs", r.getBoolean("success")
                 && u.seenBranch().equals("quarterly") && u.folder.get("zz-panel-branch.conf").contains("/quarterly\""));
-        real("il suo FreeBSD.conf e' intatto", its.equals(u.folder.get("FreeBSD.conf")));
+        real("their FreeBSD.conf is untouched", its.equals(u.folder.get("FreeBSD.conf")));
 
-        System.out.println("\n== Quando non riesce, torna tutto com'era ==");
+        System.out.println("\n== When it does not succeed, everything goes back as it was ==");
         FakeSystem after = new FakeSystem();
-        after.folder.put("zzz-mio.conf", "FreeBSD-ports: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/quarterly\" }\n");
+        after.folder.put("zzz-mine.conf", "FreeBSD-ports: { url: \"pkg+https://pkg.FreeBSD.org/${ABI}/quarterly\" }\n");
         imp = PkgBranch.state(after).getString("fingerprint");
-        real("l'anteprima avverte del file letto dopo", PkgBranch.preview(after, "latest").getJSONArray("warnings").toString().contains("zzz-mio.conf"));
+        real("the preview warns about the file read after", PkgBranch.preview(after, "latest").getJSONArray("warnings").toString().contains("zzz-mine.conf"));
         r = PkgBranch.change(after, logInto(after), "latest", imp);
-        real("un file letto dopo quello del pannello rimette quarterly: rifiutato, e lo nomina — " + r.optString("error"),
-                !r.getBoolean("success") && r.getString("error").contains("zzz-mio.conf"));
-        real("il file del pannello non e' rimasto, il catalogo non si e' scaricato", !after.folder.containsKey("zz-panel-branch.conf")
+        real("a file read after the panel's puts quarterly back: refused, and it names it — " + r.optString("error"),
+                !r.getBoolean("success") && r.getString("error").contains("zzz-mine.conf"));
+        real("the panel's file did not stay, the catalog was not downloaded", !after.folder.containsKey("zz-panel-branch.conf")
                 && after.updates == 0 && after.seenBranch().equals("quarterly"));
 
         FakeSystem network = new FakeSystem();
         network.unreachable = "kmods_latest";
         imp = PkgBranch.state(network).getString("fingerprint");
         r = PkgBranch.change(network, logInto(network), "latest", imp);
-        real("il catalogo dei moduli latest non si scarica: rifiutato — " + r.optString("error"),
-                !r.getBoolean("success") && r.getString("error").contains("non si scarica"));
-        real("la configurazione e' tornata quarterly e il file del pannello non c'e'", network.seenBranch().equals("quarterly")
+        real("the catalog of the latest modules does not download: refused — " + r.optString("error"),
+                !r.getBoolean("success") && r.getString("error").contains("does not download"));
+        real("the configuration went back to quarterly and the panel's file is not there", network.seenBranch().equals("quarterly")
                 && !network.folder.containsKey("zz-panel-branch.conf"));
-        real("nel registro c'e' l'errore di pkg", String.join("\n", network.log).contains("Not Found"));
+        real("the log has pkg's error", String.join("\n", network.log).contains("Not Found"));
 
         FakeSystem alreadyLatest = new FakeSystem();
         alreadyLatest.folder.put("zz-panel-branch.conf", PkgBranch.content(PkgBranch.repository(new FakeSystem().pkgVv()), "latest", alreadyLatest.now()));
@@ -274,43 +277,43 @@ public class PkgBranchTest {
         alreadyLatest.unreachable = "/quarterly";
         imp = PkgBranch.state(alreadyLatest).getString("fingerprint");
         r = PkgBranch.change(alreadyLatest, logInto(alreadyLatest), "quarterly", imp);
-        real("latest (dal pannello) -> quarterly che non si scarica: il file del pannello torna, identico", !r.getBoolean("success")
+        real("latest (from the panel) -> quarterly that does not download: the panel's file comes back, identical", !r.getBoolean("success")
                 && beforeFault.equals(alreadyLatest.folder.get("zz-panel-branch.conf")) && alreadyLatest.seenBranch().equals("latest"));
 
         FakeSystem ro = new FakeSystem();
         ro.brokenWrite = true;
         imp = PkgBranch.state(ro).getString("fingerprint");
         r = PkgBranch.change(ro, logInto(ro), "latest", imp);
-        real("cartella non scrivibile: errore detto, niente scaricato", !r.getBoolean("success") && r.getString("error").contains("Read-only")
+        real("folder not writable: error said, nothing downloaded", !r.getBoolean("success") && r.getString("error").contains("Read-only")
                 && ro.updates == 0);
 
-        System.out.println("\n== L'fingerprint: si cambia solo cio' che si e' visto ==");
+        System.out.println("\n== The fingerprint: only what was seen is changed ==");
         FakeSystem changed = new FakeSystem();
         imp = PkgBranch.state(changed).getString("fingerprint");
         changed.folder.put("FreeBSD.conf", "FreeBSD-ports-kmods: { enabled: no }\n");
         r = PkgBranch.change(changed, logInto(changed), "latest", imp);
-        real("la configurazione cambia dopo l'anteprima: rifiutato senza toccare niente", !r.getBoolean("success")
-                && r.getString("error").contains("dopo l'anteprima") && !changed.folder.containsKey("zz-panel-branch.conf"));
+        real("the configuration changes after the preview: refused without touching anything", !r.getBoolean("success")
+                && r.getString("error").contains("after the preview") && !changed.folder.containsKey("zz-panel-branch.conf"));
 
-        System.out.println("\n== Il file vero, su disco ==");
-        Path dir = Files.createTempDirectory("ramo-prova");
+        System.out.println("\n== The real file, on disk ==");
+        Path dir = Files.createTempDirectory("branch-test");
         PkgBranch.SystemAccess real = PkgBranch.real();
         Path p = dir.resolve("zz-panel-branch.conf");
-        real.write(p, "prova\n");
-        real("scritto, con i permessi rw-r--r--, senza file temporanei rimasti", "prova\n".equals(real.read(p))
+        real.write(p, "test\n");
+        real("written, with rw-r--r-- permissions, no temporary files left", "test\n".equals(real.read(p))
                 && java.nio.file.attribute.PosixFilePermissions.toString(Files.getPosixFilePermissions(p)).equals("rw-r--r--")
                 && real.fileConf(dir).equals(List.of("zz-panel-branch.conf")) && Files.list(dir).count() == 1);
         Files.writeString(dir.resolve("FreeBSD.conf"), "x");
         Files.writeString(dir.resolve("FreeBSD.conf.before"), "x");
-        Files.writeString(dir.resolve(".nascosto.conf"), "x");
-        real("i .conf come li legge pkg: in ordine, senza nascosti e altre estensioni: " + real.fileConf(dir),
+        Files.writeString(dir.resolve(".hidden.conf"), "x");
+        real("the .conf files as pkg reads them: in order, without hidden ones and other extensions: " + real.fileConf(dir),
                 real.fileConf(dir).equals(List.of("FreeBSD.conf", "zz-panel-branch.conf")));
         real.delete(p);
-        real("eliminato", real.read(p) == null);
+        real("deleted", real.read(p) == null);
         try (var s = Files.list(dir)) { s.forEach(x -> x.toFile().delete()); }
         Files.delete(dir);
 
-        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         System.exit(failed == 0 ? 0 : 1);
     }
 }

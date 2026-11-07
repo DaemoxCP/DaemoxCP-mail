@@ -6,21 +6,23 @@ import java.util.List;
 import org.json.JSONObject;
 
 /**
- * La traccia dei blocchi sulla macchina: perche' quei pacchetti sono bloccati, e come si
- * liberano se il pannello non c'e' piu'.
+ * The trace of the locks on the machine: why those packages are locked, and how they are freed if
+ * the panel is no longer there.
  *
- * Il blocco non scade e nessuno lo toglie allo spegnimento: e' la regola, ed e' giusta
- * finche' il pannello c'e'. Se il pannello viene disinstallato, o semplicemente non riparte,
- * quei pacchetti restano bloccati per sempre — e un pacchetto bloccato non riceve nemmeno le
- * correzioni di sicurezza.
+ * The lock does not expire and nobody removes it at shutdown: it is the rule, and it is right as
+ * long as the panel is there. If the panel is uninstalled, or simply does not start again, those
+ * packages stay locked forever — and a locked package does not even get the security fixes.
  *
- * Misurato sulla VM FreeBSD 15.1 il 23/10/2026, con 40 pacchetti bloccati dal pannello:
- * `pkg upgrade` nomina i bloccati in una riga di passaggio, NON li mette nel riepilogo e
- * termina con uscita ZERO. Dal sistema non si capiva ne' chi li avesse bloccati, ne' perche',
- * ne' come liberarli: `pkg lock -l` elenca i nomi e basta.
+ * Measured on the FreeBSD 15.1 VM on 23/10/2026, with 40 packages locked by the panel:
+ * `pkg upgrade` names the locked ones in a passing line, does NOT put them in the summary and ends
+ * with exit ZERO. From the system one could not tell who had locked them, nor why, nor how to free
+ * them: `pkg lock -l` lists the names and nothing else.
  *
- * Qui si prova che la spiegazione c'e', che dice le cose che servono, e che non resta
- * indietro rispetto allo stato vero.
+ * Here it is tested that the explanation is there, that it says the things that are needed, and
+ * that it does not fall behind the real state.
+ *
+ * The note itself is written in Italian by the panel (UpdateManager.lockNoteText, not from the
+ * language files): the few Italian words below are that output under test, not the test's text.
  */
 public class LockTraceTest {
 
@@ -28,39 +30,39 @@ public class LockTraceTest {
 
     public static void main(String[] args) throws Exception {
 
-        // ===== 1. Il testo della nota dice tutto quello che serve =====
+        // ===== 1. The note's text says everything that is needed =====
         String note = UpdateManager.lockNoteText(
                 List.of("dovecot", "nginx", "postfix-mysql"), "2026-10-23T01:00:00Z");
-        check("la nota elenca i pacchetti bloccati",
+        check("the note lists the locked packages",
              note.contains("dovecot") && note.contains("nginx") && note.contains("postfix-mysql"));
-        check("dice quando e' stata scritta, in UTC", note.contains("2026-10-23T01:00:00Z")
+        check("it says when it was written, in UTC", note.contains("2026-10-23T01:00:00Z")
                 && note.contains("UTC"));
-        check("dice il comando esatto che li libera", note.contains(UpdateManager.UNLOCK_ALL_COMMAND));
-        check("dice che un pacchetto bloccato non riceve le correzioni di sicurezza",
+        check("it says the exact command that frees them", note.contains(UpdateManager.UNLOCK_ALL_COMMAND));
+        check("it says a locked package does not get the security fixes",
              note.toLowerCase().contains("sicurezza"));
-        check("dice che pkg upgrade li salta uscendo con codice 0",
+        check("it says pkg upgrade skips them exiting with code 0",
              note.contains("codice 0") || note.contains("code 0"));
-        check("rimanda al pannello per aggiornarli", note.contains("Aggiornamenti"));
-        check("dice come si libera uno solo", note.contains("pkg unlock -y"));
-        check("e dove si legge lo stato vero", note.contains("pkg lock -l"));
-        check("avvisa di non modificarla a mano", note.toLowerCase().contains("non modificare"));
+        check("it points to the panel to update them", note.contains("Aggiornamenti"));
+        check("it says how to free a single one", note.contains("pkg unlock -y"));
+        check("and where the real state is read", note.contains("pkg lock -l"));
+        check("it warns not to edit it by hand", note.toLowerCase().contains("non modificare"));
 
-        // Una nota senza pacchetti non deve sembrare un elenco vuoto per sbaglio.
-        check("con nessun pacchetto bloccato lo dice",
+        // A note without packages must not look like an empty list by mistake.
+        check("with no locked package it says so",
              UpdateManager.lockNoteText(List.of(), "2026-10-23T01:00:00Z").contains("nessun pacchetto"));
 
-        // ===== 2. La scrittura: atomica, e non resta indietro =====
-        Path d = Files.createTempDirectory("prova-nota-blocchi");
+        // ===== 2. The writing: atomic, and it does not fall behind =====
+        Path d = Files.createTempDirectory("lock-note-test");
         Path f = d.resolve("locked-packages.txt");
         Path original = UpdateManager.lockNotePath;
         UpdateManager.lockNotePath = f;
         try {
             if (!hasPkg()) {
-                skip("la scrittura della nota: pkg non c'e' su questa macchina");
+                skip("writing the note: pkg is not on this machine");
             } else {
                 UpdateManager.writeLockNote();
-                // Quanti pacchetti DELLO STACK sono bloccati: e' il conto che fa
-                // packagesStatus, cioe' esattamente quello che la nota deve elencare.
+                // How many packages OF THE STACK are locked: it is the count packagesStatus makes,
+                // that is exactly what the note must list.
                 JSONObject state = UpdateManager.packagesStatus();
                 int lockedCount = state.optInt("lockedCount");
                 java.util.List<String> reallyLocked = new java.util.ArrayList<>();
@@ -69,16 +71,16 @@ public class LockTraceTest {
                     if (lines.getJSONObject(i).optBoolean("locked"))
                         reallyLocked.add(lines.getJSONObject(i).getString("name"));
                 if (lockedCount == 0) {
-                    check("senza pacchetti bloccati la nota non esiste", !Files.exists(f));
-                    skip("il contenuto della nota: su questa macchina non c'e' nessun blocco");
+                    check("without locked packages the note does not exist", !Files.exists(f));
+                    skip("the note's content: on this machine there is no lock");
                 } else {
-                    check("la nota viene scritta", Files.exists(f));
+                    check("the note is written", Files.exists(f));
                     String written = Files.exists(f) ? Files.readString(f) : "";
                     final String text = written;
-                    check("e contiene i pacchetti bloccati davvero ("
+                    check("and it contains the really locked packages ("
                          + reallyLocked.size() + ")", reallyLocked.stream().allMatch(text::contains));
-                    check("e il comando per liberarli", written.contains(UpdateManager.UNLOCK_ALL_COMMAND));
-                    check("nessun file temporaneo rimasto indietro",
+                    check("and the command to free them", written.contains(UpdateManager.UNLOCK_ALL_COMMAND));
+                    check("no temporary file left behind",
                          !Files.exists(f.resolveSibling(f.getFileName() + ".tmp")));
                 }
             }
@@ -87,75 +89,75 @@ public class LockTraceTest {
             try { Files.deleteIfExists(f); Files.deleteIfExists(d); } catch (Exception ignored) { }
         }
 
-        // ===== 3. L'avviso dove si toglie il pannello di mezzo =====
+        // ===== 3. The warning where the panel is taken out of the way =====
         if (!hasPkg()) {
-            skip("l'avviso sui blocchi che restano: pkg non c'e' su questa macchina");
-            skip("l'avviso nella rimozione dell'avvio automatico: pkg non c'e'");
+            skip("the warning about the locks that stay: pkg is not on this machine");
+            skip("the warning in the removal of the automatic start: pkg is not there");
         } else {
             String warning = UpdateManager.locksStayWarning();
             int howMany = UpdateManager.packagesStatus().optInt("lockedCount");
             if (howMany == 0) {
-                check("senza blocchi non si avvisa di niente", warning.isEmpty());
-                skip("il contenuto dell'avviso: su questa macchina non c'e' nessun blocco");
+                check("without locks nothing is warned about", warning.isEmpty());
+                skip("the warning's content: on this machine there is no lock");
             } else {
-                check("l'avviso c'e' quando ci sono blocchi", !warning.isEmpty());
-                check("  dice quanti sono", warning.contains(String.valueOf(howMany)));
-                check("  dice il comando che li libera", warning.contains(UpdateManager.UNLOCK_ALL_COMMAND));
-                check("  e dove sta scritto il perche'", warning.contains(UpdateManager.LOCK_NOTE));
+                check("the warning is there when there are locks", !warning.isEmpty());
+                check("  it says how many there are", warning.contains(String.valueOf(howMany)));
+                check("  it says the command that frees them", warning.contains(UpdateManager.UNLOCK_ALL_COMMAND));
+                check("  and where the why is written", warning.contains(UpdateManager.LOCK_NOTE));
 
-                // La rimozione dell'avvio automatico lo ripete: e' il momento in cui la
-                // domanda "e i blocchi?" si pone da se'. In sola lettura (esegui = false).
+                // The removal of the automatic start repeats it: it is the moment when the question
+                // "and the locks?" comes up by itself. Read only (execute = false).
                 JSONObject rc = UpdateManager.removePanelRcScript(false);
-                check("la rimozione dell'avvio automatico avvisa dei blocchi",
+                check("the removal of the automatic start warns about the locks",
                      rc.optString("note").contains(UpdateManager.UNLOCK_ALL_COMMAND)
                      || rc.optString("locksStay").contains(UpdateManager.UNLOCK_ALL_COMMAND));
-                check("  e non ha eseguito niente", !rc.optBoolean("executed", false));
+                check("  and it executed nothing", !rc.optBoolean("executed", false));
             }
         }
 
-        // ===== 4. Il cartello nel database di pkg =====
-        // Una riga di comando si prova eseguendola: il valore contiene spazi, un percorso e
-        // un trattino, e in questo progetto un apice dentro un testo e' gia' passato intatto
-        // attraverso un here-document per rompere piu' in la'.
-        check("un nome non conforme non produce nessun comando",
+        // ===== 4. The mark in pkg's database =====
+        // A command line is tested by running it: the value contains spaces, a path and a dash, and
+        // in this project a quote inside a text has already gone through a here-document intact to
+        // break further on.
+        check("a non-conforming name produces no command",
              UpdateManager.markCommand("ngi nx; rm -rf /") == null);
         String cmd = UpdateManager.markCommand("nginx");
-        check("il comando nomina la chiave e il pacchetto",
+        check("the command names the key and the package",
              cmd != null && cmd.contains(UpdateManager.MARK_KEY) && cmd.contains(" nginx "));
-        check("  e rimanda alla nota e al comando di sblocco",
+        check("  and points to the note and to the unlock command",
              cmd != null && cmd.contains(UpdateManager.LOCK_NOTE) && cmd.contains(UpdateManager.UNLOCK_ALL_COMMAND));
 
         if (!hasPkg()) {
-            skip("l'annotazione su pkg vero: pkg non c'e' su questa macchina");
+            skip("the annotation on real pkg: pkg is not on this machine");
         } else {
             String target = firstInstalled();
             if (target == null) {
-                skip("l'annotazione su pkg vero: nessun pacchetto installato");
+                skip("the annotation on real pkg: no package installed");
             } else {
                 boolean executed = org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(30),
                         UpdateManager.markCommand(target)).success();
                 String readBack = org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(30),
                         "pkg info -A " + target).output();
-                // Si rimette com'era, qualunque sia l'esito.
+                // It is put back as it was, whatever the outcome.
                 org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(30),
                         "pkg annotate -y -D " + target + " " + UpdateManager.MARK_KEY);
-                check("il comando di annotazione viene eseguito da pkg su " + target, executed);
-                check("  e pkg info -A la mostra", readBack.contains(UpdateManager.MARK_KEY));
-                check("  col rimando alla nota", readBack.contains(UpdateManager.LOCK_NOTE));
+                check("the annotation command is run by pkg on " + target, executed);
+                check("  and pkg info -A shows it", readBack.contains(UpdateManager.MARK_KEY));
+                check("  with the pointer to the note", readBack.contains(UpdateManager.LOCK_NOTE));
                 String after = org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(30),
                         "pkg info -A " + target).output();
-                check("  e si puo' togliere, quindi la prova non lascia tracce",
+                check("  and it can be removed, so the test leaves no trace",
                      !after.contains(UpdateManager.MARK_KEY));
             }
         }
 
         System.out.println();
-        if (skipped > 0) System.out.println(skipped + " PROVE SALTATE (lo dicono sopra)");
-        System.out.println(failures == 0 ? "TUTTO OK" : failures + " PROVE FALLITE");
+        if (skipped > 0) System.out.println(skipped + " CHECKS SKIPPED (they say so above)");
+        System.out.println(failures == 0 ? "ALL OK" : failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 
-    /** Un pacchetto installato qualunque, su cui provare l'annotazione. */
+    /** Any installed package, to try the annotation on. */
     private static String firstInstalled() {
         for (String n : PackagePlan.installed().keySet()) return n;
         return null;
@@ -172,7 +174,7 @@ public class LockTraceTest {
     }
 
     private static void skip(String name) {
-        System.out.println("  --   SALTATA: " + name);
+        System.out.println("  --   SKIPPED: " + name);
         skipped++;
     }
 }

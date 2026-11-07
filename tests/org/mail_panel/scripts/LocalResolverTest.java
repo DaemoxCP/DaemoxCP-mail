@@ -10,27 +10,27 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Il risolutore DNS ricorsivo locale per rspamd (LocalResolverScript), e lo script «timezone»
- * che non deve disfarlo.
+ * The local recursive DNS resolver for rspamd (LocalResolverScript), and the "timezone" script that
+ * must not undo it.
  *
- * Il difetto, misurato sulla VM FreeBSD 15.1 il 29/10/2026 con rspamc e il dominio di prova di
- * Spamhaus: con il DNS che il pannello imposta (1.1.1.1) rspamd riceve DBL_BLOCKED_OPENRESOLVER,
- * cioe' le liste di Spamhaus non funzionano; con il DNS della VM, 5 secondi di attesa per ogni
- * messaggio. Con local_unbound ricorsivo, la risposta giusta.
+ * The defect, measured on the FreeBSD 15.1 VM on 29/10/2026 with rspamc and Spamhaus's test
+ * domain: with the DNS the panel sets (1.1.1.1) rspamd gets DBL_BLOCKED_OPENRESOLVER, that is
+ * Spamhaus's lists do not work; with the VM's DNS, 5 seconds of waiting for every message. With a
+ * recursive local_unbound, the right answer.
  *
- * Quello che si prova qui:
- *  - che i tre script che installano rspamd contengano il pezzo PRIMA di avviarlo (rspamd legge
- *    resolv.conf all'avvio), e che le installazioni complete mettano dig (bind-tools);
- *  - il pezzo eseguito in una cartella finta, con sysrc, service e drill sostituiti da finti che
- *    registrano le chiamate: la prima volta fa il setup, ripetuto non lo rifa', un local_unbound
- *    che inoltra lo rifa' ricorsivo, Spamhaus che rifiuta e' un avviso, e un risolutore che non
- *    risponde rimette il DNS ESATTAMENTE com'era — perche' un server di posta senza DNS non
- *    consegna niente;
- *  - lo script «timezone», che scriveva 1.1.1.1 in resolv.conf: con il risolutore locale acceso
- *    non tocca niente, senza fa quello che faceva prima.
- * Il risolutore vero, su una macchina vera, lo misura l'installazione da pulito (reperti).
+ * What is tested here:
+ *  - that the three scripts installing rspamd contain the piece BEFORE starting it (rspamd reads
+ *    resolv.conf at start), and that the full installations put in dig (bind-tools);
+ *  - the piece run in a fake folder, with sysrc, service and drill replaced by fakes that record
+ *    the calls: the first time it does the setup, repeated it does not do it again, a forwarding
+ *    local_unbound is made recursive again, Spamhaus refusing is a warning, and a resolver that
+ *    does not answer puts the DNS back EXACTLY as it was — because a mail server without DNS
+ *    delivers nothing;
+ *  - the "timezone" script, which wrote 1.1.1.1 into resolv.conf: with the local resolver on it
+ *    touches nothing, without it it does what it did before.
+ * The real resolver, on a real machine, is measured by the installation from scratch (reperti).
  *
- * Si lancia sulla VM, come le altre prove degli script:
+ * It runs on the VM, like the other script tests:
  *   javac -cp &lt;dir&gt;/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/scripts/LocalResolverTest.java
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.LocalResolverTest
  */
@@ -40,14 +40,14 @@ public class LocalResolverTest {
     static final PrintStream OUT = System.out;
 
     static void check(String what, boolean ok) {
-        OUT.println((ok ? "  OK   " : "  FALLITO ") + what);
+        OUT.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
     public static void main(String[] args) throws Exception {
         Path home = Files.createTempDirectory("local-resolver");
 
-        OUT.println("\n== Gli script che installano rspamd ==");
+        OUT.println("\n== The scripts that install rspamd ==");
         Map<String, String> scripts = new LinkedHashMap<>();
         scripts.put("FullMailServerScript", new FullMailServerScript().getScriptContent());
         scripts.put("RspamdScript", new RspamdScript().getScriptContent());
@@ -55,118 +55,118 @@ public class LocalResolverTest {
         for (Map.Entry<String, String> e : scripts.entrySet()) {
             int piece = e.getValue().indexOf(LocalResolverScript.SHELL);
             int start = e.getValue().lastIndexOf("service rspamd start");
-            check(e.getKey() + ": contiene il pezzo, intero, prima di avviare rspamd",
+            check(e.getKey() + ": contains the piece, whole, before starting rspamd",
                     piece >= 0 && start > piece);
         }
         for (String name : List.of("FullMailServerScript", "FullMailStackScript"))
-            check(name + ": installa dig (dns/bind-tools)", scripts.get(name).contains("pkg install -y dns/bind-tools")
+            check(name + ": installs dig (dns/bind-tools)", scripts.get(name).contains("pkg install -y dns/bind-tools")
                     || scripts.get(name).contains("install_packages dns/bind-tools"));
-        check("l'installazione completa verifica il risolutore alla fine",
+        check("the full installation checks the resolver at the end",
                 scripts.get("FullMailServerScript").contains("Local DNS resolver does NOT answer for Spamhaus"));
 
-        OUT.println("\n== Il pezzo eseguito in una cartella finta ==");
+        OUT.println("\n== The piece run in a fake folder ==");
         Sandbox s = new Sandbox(home.resolve("piece"));
         String piece = LocalResolverScript.SHELL;
-        // /tmp/ per primo: le cartelle finte stanno anch'esse sotto /tmp, e una sostituzione fatta
-        // dopo riscriverebbe i loro percorsi.
+        // /tmp/ first: the fake folders are under /tmp too, and a replacement made afterwards would
+        // rewrite their paths.
         Map<String, String> replacements = new LinkedHashMap<>();
         replacements.put("/tmp/", s.tmp + "/");
         replacements.put("/etc/resolvconf.conf", s.resolvconf.toString());
         replacements.put("/etc/resolv.conf", s.resolv.toString());
         replacements.put("/var/unbound/", s.unbound + "/");
         for (Map.Entry<String, String> r : replacements.entrySet()) {
-            check("il pezzo nomina " + r.getKey(), piece.contains(r.getKey()));
+            check("the piece names " + r.getKey(), piece.contains(r.getKey()));
             piece = piece.replace(r.getKey(), r.getValue());
         }
-        check("dopo la sostituzione non nomina piu' nessun percorso del sistema",
+        check("after the replacement it no longer names any system path",
                 !piece.contains("/etc/") && !piece.contains("/var/") && !piece.contains("mktemp /tmp/mail-panel"));
         Path pieceFile = home.resolve("local-resolver.sh");
         Files.writeString(pieceFile, piece, StandardCharsets.UTF_8);
 
         final String original = "# Generated by resolvconf\nsearch home\nnameserver 192.168.1.1\n";
 
-        OUT.println("\n-- 1. macchina appena installata, il risolutore risponde --");
+        OUT.println("\n-- 1. freshly installed machine, the resolver answers --");
         s.reset(original, null, "ok");
         Run r1 = s.run(pieceFile);
-        check("fa il setup (non c'e' ancora una configurazione)", s.calls().contains("service local_unbound setup"));
-        check("e lo avvia", s.calls().contains("service local_unbound start"));
-        check("local_unbound_enable=YES e local_unbound_forwarders=none (ricorsivo, senza inoltro)",
+        check("it does the setup (there is no configuration yet)", s.calls().contains("service local_unbound setup"));
+        check("and it starts it", s.calls().contains("service local_unbound start"));
+        check("local_unbound_enable=YES and local_unbound_forwarders=none (recursive, no forwarding)",
                 "YES".equals(s.rc("local_unbound_enable")) && "none".equals(s.rc("local_unbound_forwarders")));
-        check("resolv.conf punta a 127.0.0.1", Files.readString(s.resolv).contains("nameserver 127.0.0.1"));
-        check("e lo dice", r1.out.contains("Spamhaus answers"));
-        // Senza, da ricorsivo le inverse degli indirizzi privati vanno su Internet e non tornano:
-        // ogni login ssh dalla LAN impiegava 30 secondi (misurato sulla VM).
+        check("resolv.conf points to 127.0.0.1", Files.readString(s.resolv).contains("nameserver 127.0.0.1"));
+        check("and it says so", r1.out.contains("Spamhaus answers"));
+        // Without it, when recursive, the reverse lookups of private addresses go to the Internet and
+        // do not come back: every ssh login from the LAN took 30 seconds (measured on the VM).
         Path lanZones = s.unbound.resolve("conf.d/mail-panel.conf");
         String lanZonesText = Files.exists(lanZones) ? Files.readString(lanZones) : "";
-        check("le zone inverse private si risolvono qui (unblock-lan-zones: no in conf.d)",
+        check("the private reverse zones are resolved here (unblock-lan-zones: no in conf.d)",
                 lanZonesText.startsWith("server:\n") && lanZonesText.contains("\tunblock-lan-zones: no\n")
                         && lanZonesText.contains("\tinsecure-lan-zones: no\n"));
-        check("non lascia copie temporanee", s.leftovers() == 0);
+        check("it leaves no temporary copies", s.leftovers() == 0);
 
-        OUT.println("\n-- 2. di nuovo, uguale --");
+        OUT.println("\n-- 2. again, the same --");
         String resolvAfter1 = Files.readString(s.resolv);
         s.clearCalls();
         Run r2 = s.run(pieceFile);
-        check("non rifa' il setup", !s.calls().contains("service local_unbound setup"));
-        check("riavvia soltanto", s.calls().contains("service local_unbound restart"));
-        check("resolv.conf identico", resolvAfter1.equals(Files.readString(s.resolv)));
-        check("e il file in conf.d identico, non ripetuto", Files.exists(lanZones)
+        check("it does not do the setup again", !s.calls().contains("service local_unbound setup"));
+        check("it only restarts", s.calls().contains("service local_unbound restart"));
+        check("resolv.conf identical", resolvAfter1.equals(Files.readString(s.resolv)));
+        check("and the file in conf.d identical, not repeated", Files.exists(lanZones)
                 && lanZonesText.equals(Files.readString(lanZones)));
-        check("e risponde come la prima volta", r2.out.contains("Spamhaus answers"));
+        check("and it answers like the first time", r2.out.contains("Spamhaus answers"));
 
-        OUT.println("\n-- 3. un local_unbound che inoltra (il predefinito di FreeBSD) --");
+        OUT.println("\n-- 3. a forwarding local_unbound (FreeBSD's default) --");
         Files.writeString(s.unbound.resolve("forward.conf"), "forward-zone:\n\tname: .\n\tforward-addr: 1.1.1.1\n");
         s.clearCalls();
         s.run(pieceFile);
-        check("lo rifa' ricorsivo (setup)", s.calls().contains("service local_unbound setup"));
-        check("e l'inoltro non c'e' piu'", !Files.exists(s.unbound.resolve("forward.conf")));
+        check("it makes it recursive again (setup)", s.calls().contains("service local_unbound setup"));
+        check("and the forwarding is no longer there", !Files.exists(s.unbound.resolve("forward.conf")));
 
-        OUT.println("\n-- 4. il risolutore risponde, ma Spamhaus rifiuta --");
+        OUT.println("\n-- 4. the resolver answers, but Spamhaus refuses --");
         s.reset(original, null, "blocked");
         Run r4 = s.run(pieceFile);
-        check("e' un avviso", r4.out.contains("WARNING") && r4.out.contains("Spamhaus"));
-        check("e il DNS resta sul risolutore locale (risponde: toglierlo non servirebbe)",
+        check("it is a warning", r4.out.contains("WARNING") && r4.out.contains("Spamhaus"));
+        check("and the DNS stays on the local resolver (it answers: removing it would not help)",
                 Files.readString(s.resolv).contains("nameserver 127.0.0.1") && "YES".equals(s.rc("local_unbound_enable")));
 
-        OUT.println("\n-- 5. il risolutore non risponde --");
+        OUT.println("\n-- 5. the resolver does not answer --");
         s.reset(original, null, "dead");
         Run r5 = s.run(pieceFile);
-        check("e' un errore, e lo dice", r5.out.contains("ERROR") && r5.out.contains("put back"));
-        check("resolv.conf torna ESATTAMENTE com'era", original.equals(Files.readString(s.resolv)));
-        check("resolvconf.conf, che non c'era, non c'e'", !Files.exists(s.resolvconf));
-        check("local_unbound fermato e spento come prima (NO)",
+        check("it is an error, and it says so", r5.out.contains("ERROR") && r5.out.contains("put back"));
+        check("resolv.conf goes back EXACTLY as it was", original.equals(Files.readString(s.resolv)));
+        check("resolvconf.conf, which was not there, is not there", !Files.exists(s.resolvconf));
+        check("local_unbound stopped and off as before (NO)",
                 s.calls().contains("service local_unbound stop") && "NO".equals(s.rc("local_unbound_enable")));
-        check("non lascia copie temporanee", s.leftovers() == 0);
+        check("it leaves no temporary copies", s.leftovers() == 0);
 
-        OUT.println("\n-- 6. il risolutore non risponde, e c'era un resolvconf.conf --");
-        String ownResolvconf = "# scritto dall'amministratore\nname_servers=\"10.0.0.53\"\n";
+        OUT.println("\n-- 6. the resolver does not answer, and there was a resolvconf.conf --");
+        String ownResolvconf = "# written by the administrator\nname_servers=\"10.0.0.53\"\n";
         s.reset(original, ownResolvconf, "dead");
         s.run(pieceFile);
-        check("resolvconf.conf torna quello di prima", Files.exists(s.resolvconf)
+        check("resolvconf.conf goes back to the old one", Files.exists(s.resolvconf)
                 && ownResolvconf.equals(Files.readString(s.resolvconf)));
 
-        OUT.println("\n-- 7. il risolutore risponde solo al terzo tentativo (cache fredda) --");
+        OUT.println("\n-- 7. the resolver answers only at the third try (cold cache) --");
         s.reset(original, null, "late");
         Run r7 = s.run(pieceFile);
-        check("aspetta e lo trova: niente avviso, niente errore", r7.out.contains("Spamhaus answers")
+        check("it waits and finds it: no warning, no error", r7.out.contains("Spamhaus answers")
                 && !r7.out.contains("WARNING") && !r7.out.contains("ERROR"));
-        check("e il DNS resta sul risolutore locale, non torna indietro",
+        check("and the DNS stays on the local resolver, it does not go back",
                 Files.readString(s.resolv).contains("nameserver 127.0.0.1") && "YES".equals(s.rc("local_unbound_enable")));
-        check("ha davvero riprovato (almeno tre domande)",
+        check("it really tried again (at least three questions)",
                 s.calls().split("drill ", -1).length - 1 >= 3);
 
-        OUT.println("\n== Lo script «timezone» ==");
+        OUT.println("\n== The \"timezone\" script ==");
         String timezone = new SetTimeOnSystem().getScriptContent();
         String start = "echo \"[5/5] Configuring DNS settings (Cloudflare)...\"";
         String end = "echo \"=== Configuration Complete ===\"";
         int a = timezone.indexOf(start), b = timezone.indexOf(end);
-        check("ha la sua parte sul DNS", a >= 0 && b > a);
+        check("it has its DNS part", a >= 0 && b > a);
         if (a >= 0 && b > a) {
             Sandbox t = new Sandbox(home.resolve("timezone"));
             Path dhclient = t.dir.resolve("dhclient.conf");
             String block = timezone.substring(a, b) + "echo \"DNS: $DNS_SUMMARY\"\n";
             block = block.replace("/etc/resolv.conf", t.resolv.toString()).replace("/etc/dhclient.conf", dhclient.toString());
-            check("dopo la sostituzione non nomina piu' /etc", !block.contains("/etc/"));
+            check("after the replacement it no longer names /etc", !block.contains("/etc/"));
             Path blockFile = home.resolve("timezone-dns.sh");
             Files.writeString(blockFile, block, StandardCharsets.UTF_8);
 
@@ -174,27 +174,27 @@ public class LocalResolverTest {
             t.reset(local, null, "ok");
             Files.writeString(t.rcConf, "local_unbound_enable=\"YES\"\n");
             Run tz1 = t.run(blockFile);
-            check("con il risolutore locale acceso non tocca resolv.conf",
+            check("with the local resolver on it does not touch resolv.conf",
                     local.equals(Files.readString(t.resolv)) && tz1.out.contains("left as"));
-            check("e non tocca dhclient.conf", !Files.exists(dhclient));
+            check("and it does not touch dhclient.conf", !Files.exists(dhclient));
 
             t.reset(original, null, "ok");
             Run tz2 = t.run(blockFile);
-            check("senza risolutore locale fa quello che faceva prima (1.1.1.1)",
+            check("without a local resolver it does what it did before (1.1.1.1)",
                     Files.readString(t.resolv).contains("nameserver 1.1.1.1") && tz2.out.contains("1.1.1.1"));
-            check("e scrive dhclient.conf come prima", Files.exists(dhclient)
+            check("and it writes dhclient.conf as before", Files.exists(dhclient)
                     && Files.readString(dhclient).contains("supersede domain-name-servers 1.1.1.1, 1.0.0.1;"));
         }
 
-        OUT.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        OUT.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         System.exit(failed == 0 ? 0 : 1);
     }
 
     record Run(int code, String out) {}
 
     /**
-     * Una macchina finta: resolv.conf, resolvconf.conf, /var/unbound, /tmp e rc.conf in una
-     * cartella, e sysrc, service, drill finti davanti nel PATH. Le chiamate finiscono in "calls".
+     * A fake machine: resolv.conf, resolvconf.conf, /var/unbound, /tmp and rc.conf in a folder, and
+     * fake sysrc, service, drill in front in the PATH. The calls end up in "calls".
      */
     static final class Sandbox {
         final Path dir, bin, state, unbound, tmp, resolv, resolvconf, rcConf;
@@ -239,7 +239,7 @@ public class LocalResolverTest {
                 #!/bin/sh
                 echo "drill $*" >> "$STATE/calls"
                 mode=$(cat "$STATE/drill-mode")
-                # late: le prime due domande falliscono, poi risponde (la cache fredda dopo un riavvio)
+                # late: the first two questions fail, then it answers (the cold cache after a restart)
                 if [ "$mode" = "late" ]; then
                     n=$(( $(cat "$STATE/drill-count" 2>/dev/null || echo 0) + 1 ))
                     echo "$n" > "$STATE/drill-count"
@@ -255,7 +255,7 @@ public class LocalResolverTest {
                 """);
         }
 
-        /** Una macchina nuova: resolv.conf, resolvconf.conf (o nessuno), il modo del risolutore. */
+        /** A new machine: resolv.conf, resolvconf.conf (or none), the resolver's mode. */
         void reset(String resolvContent, String resolvconfContent, String drillMode) throws Exception {
             for (Path p : List.of(resolvconf, rcConf, state.resolve("running"), state.resolve("calls"), state.resolve("drill-count"),
                     unbound.resolve("unbound.conf"), unbound.resolve("forward.conf")))

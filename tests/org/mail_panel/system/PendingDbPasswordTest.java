@@ -8,12 +8,12 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Le decisioni di PendingDbPassword, con un MySQL finto: un insieme di password che accetta, e un
- * interruttore per «non risponde». Nessun file vero: il file di Postfix sta in una cartella
- * temporanea (PendingDbPassword.postfixMap).
+ * PendingDbPassword's decisions, with a fake MySQL: a set of passwords it accepts, and a switch for
+ * "does not answer". No real file: the Postfix file lives in a temporary folder
+ * (PendingDbPassword.postfixMap).
  *
- * La regola che si prova: la password del pannello cambia SOLO in una che MySQL ha accettato davanti
- * a noi, e una password in attesa si butta solo quando MySQL ha detto di no.
+ * The rule under test: the panel's password changes ONLY into one MySQL accepted in front of us,
+ * and a pending password is thrown away only when MySQL said no.
  *
  * Uso: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PendingDbPasswordTest
  */
@@ -26,7 +26,7 @@ public class PendingDbPasswordTest {
         if (!ok) failed++;
     }
 
-    /** Le password del pannello, in memoria. */
+    /** The panel's passwords, in memory. */
     static final class FakeStore implements PendingDbPassword.Store {
         String current = "", pending = "";
         int adopts = 0;
@@ -35,12 +35,12 @@ public class PendingDbPasswordTest {
         public void adopt(String p) { current = p; adopts++; }
         public String pending() { return pending; }
         public void setPending(String p) {
-            if (pendingWriteFails) throw new IllegalStateException("prova: file dei segreti non scrivibile");
+            if (pendingWriteFails) throw new IllegalStateException("test: secrets file not writable");
             pending = p == null ? "" : p;
         }
     }
 
-    /** MySQL finto: accetta le password dell'insieme, o non risponde affatto. */
+    /** Fake MySQL: it accepts the passwords of the set, or does not answer at all. */
     static final class FakeMysql implements PendingDbPassword.Probe {
         final Set<String> accepts = new HashSet<>();
         boolean answers = true;
@@ -57,7 +57,7 @@ public class PendingDbPasswordTest {
     static Path map;
 
     static void postfix(String user, String password) throws Exception {
-        Files.writeString(map, "# scritto dallo script\nuser = " + user + "\npassword = " + password
+        Files.writeString(map, "# written by the script\nuser = " + user + "\npassword = " + password
                 + "\nhosts = 127.0.0.1\ndbname = mailserver\nquery = SELECT domain FROM domains WHERE domain='%s' AND active=1\n");
     }
 
@@ -71,169 +71,169 @@ public class PendingDbPasswordTest {
         PendingDbPassword.postfixMap = map;
         final String U = "mailpanel";
 
-        System.out.println("== Lo script esce prima della fase 3 (Roundcube, parametro, turno, pacchetti) ==");
+        System.out.println("== The script exits before phase 3 (Roundcube, parameter, turn, packages) ==");
         FakeStore s = new FakeStore();
-        s.current = "Vecchia1";
-        FakeMysql m = new FakeMysql().knows("Vecchia1");
+        s.current = "Old1";
+        FakeMysql m = new FakeMysql().knows("Old1");
         PendingDbPassword.Prepared pr = PendingDbPassword.prepare(s, m, U);
-        check("prima dello script la password del pannello NON cambia", s.current.equals("Vecchia1") && s.adopts == 0);
-        check("la nuova e' in attesa, ed e' quella data allo script", !pr.password().isEmpty() && pr.password().equals(s.pending));
-        check("la nuova e' diversa dalla vecchia, 24 lettere e cifre", !pr.password().equals("Vecchia1") && pr.password().matches("[A-Za-z0-9]{24}"));
+        check("before the script the panel's password does NOT change", s.current.equals("Old1") && s.adopts == 0);
+        check("the new one is pending, and it is the one given to the script", !pr.password().isEmpty() && pr.password().equals(s.pending));
+        check("the new one differs from the old one, 24 letters and digits", !pr.password().equals("Old1") && pr.password().matches("[A-Za-z0-9]{24}"));
         PendingDbPassword.Result r = PendingDbPassword.settle(s, m, U);
-        check("MySQL non la conosce: si tiene la vecchia", r.outcome() == PendingDbPassword.Outcome.OLD_KEPT && s.current.equals("Vecchia1"));
-        check("e la nuova si butta", s.pending.isEmpty());
-        check("il messaggio lo dice", !r.message().isEmpty());
+        check("MySQL does not know it: the old one is kept", r.outcome() == PendingDbPassword.Outcome.OLD_KEPT && s.current.equals("Old1"));
+        check("and the new one is thrown away", s.pending.isEmpty());
+        check("the message says so", !r.message().isEmpty());
 
-        System.out.println("\n== Lo script fallisce DOPO la fase 3, o riesce ==");
+        System.out.println("\n== The script fails AFTER phase 3, or succeeds ==");
         s = new FakeStore();
-        s.current = "Vecchia1";
-        m = new FakeMysql().knows("Vecchia1");
+        s.current = "Old1";
+        m = new FakeMysql().knows("Old1");
         pr = PendingDbPassword.prepare(s, m, U);
         m.accepts.clear();
-        m.knows(pr.password());                       // lo script l'ha data a MySQL
+        m.knows(pr.password());                       // the script gave it to MySQL
         r = PendingDbPassword.settle(s, m, U);
-        check("MySQL accetta la nuova: adesso e' quella del pannello", r.outcome() == PendingDbPassword.Outcome.NEW_ADOPTED && s.current.equals(pr.password()));
-        check("l'attesa e' tolta", s.pending.isEmpty());
+        check("MySQL accepts the new one: now it is the panel's", r.outcome() == PendingDbPassword.Outcome.NEW_ADOPTED && s.current.equals(pr.password()));
+        check("the pending one is removed", s.pending.isEmpty());
 
-        System.out.println("\n== MySQL non risponde dopo lo script ==");
+        System.out.println("\n== MySQL does not answer after the script ==");
         s = new FakeStore();
-        s.current = "Vecchia1";
-        m = new FakeMysql().knows("Vecchia1");
+        s.current = "Old1";
+        m = new FakeMysql().knows("Old1");
         pr = PendingDbPassword.prepare(s, m, U);
         m.answers = false;
         r = PendingDbPassword.settle(s, m, U);
-        check("non si decide", r.outcome() == PendingDbPassword.Outcome.UNDECIDED);
-        check("la password del pannello resta quella di prima", s.current.equals("Vecchia1") && s.adopts == 0);
-        check("la nuova resta in attesa", s.pending.equals(pr.password()));
+        check("it is not decided", r.outcome() == PendingDbPassword.Outcome.UNDECIDED);
+        check("the panel's password stays the old one", s.current.equals("Old1") && s.adopts == 0);
+        check("the new one stays pending", s.pending.equals(pr.password()));
 
-        System.out.println("\n== Un'installazione dopo, con MySQL ancora muto: riusa quella in attesa ==");
+        System.out.println("\n== A later installation, with MySQL still silent: it reuses the pending one ==");
         String left = s.pending;
         pr = PendingDbPassword.prepare(s, m, U);
-        check("allo script va di nuovo quella in attesa, non una nuova", pr.password().equals(left) && s.pending.equals(left));
-        check("e lo dice", !pr.note().isEmpty());
-        check("la password del pannello non cambia", s.current.equals("Vecchia1"));
+        check("the script gets the pending one again, not a new one", pr.password().equals(left) && s.pending.equals(left));
+        check("and it says so", !pr.note().isEmpty());
+        check("the panel's password does not change", s.current.equals("Old1"));
 
-        System.out.println("\n== Un'installazione dopo, e MySQL conosce quella rimasta in attesa ==");
+        System.out.println("\n== A later installation, and MySQL knows the one left pending ==");
         s = new FakeStore();
-        s.current = "Vecchia1";
-        s.pending = "Rimasta1";
-        m = new FakeMysql().knows("Rimasta1");
+        s.current = "Old1";
+        s.pending = "Leftover1";
+        m = new FakeMysql().knows("Leftover1");
         pr = PendingDbPassword.prepare(s, m, U);
-        check("quella rimasta diventa del pannello prima di tutto", s.current.equals("Rimasta1"));
-        check("e allo script ne va una nuova, in attesa", !pr.password().equals("Rimasta1") && s.pending.equals(pr.password()));
+        check("the one left becomes the panel's before anything else", s.current.equals("Leftover1"));
+        check("and the script gets a new one, pending", !pr.password().equals("Leftover1") && s.pending.equals(pr.password()));
 
-        System.out.println("\n== Un'installazione dopo, e MySQL non conosce quella rimasta ==");
+        System.out.println("\n== A later installation, and MySQL does not know the one left ==");
         s = new FakeStore();
-        s.current = "Vecchia1";
-        s.pending = "Rimasta1";
-        m = new FakeMysql().knows("Vecchia1");
+        s.current = "Old1";
+        s.pending = "Leftover1";
+        m = new FakeMysql().knows("Old1");
         pr = PendingDbPassword.prepare(s, m, U);
-        check("si tiene la vecchia", s.current.equals("Vecchia1"));
-        check("la rimasta e' buttata, allo script una nuova", !pr.password().equals("Rimasta1") && s.pending.equals(pr.password()));
+        check("the old one is kept", s.current.equals("Old1"));
+        check("the one left is thrown away, the script gets a new one", !pr.password().equals("Leftover1") && s.pending.equals(pr.password()));
 
-        System.out.println("\n== La password in attesa non si scrive ==");
+        System.out.println("\n== The pending password cannot be written ==");
         s = new FakeStore();
-        s.current = "Vecchia1";
+        s.current = "Old1";
         s.pendingWriteFails = true;
         boolean refused = false;
-        try { PendingDbPassword.prepare(s, new FakeMysql().knows("Vecchia1"), U); }
+        try { PendingDbPassword.prepare(s, new FakeMysql().knows("Old1"), U); }
         catch (IllegalStateException e) { refused = true; }
-        check("prepare si rifiuta (lo script non deve partire)", refused);
-        check("la password del pannello non cambia", s.current.equals("Vecchia1") && s.adopts == 0);
+        check("prepare refuses (the script must not start)", refused);
+        check("the panel's password does not change", s.current.equals("Old1") && s.adopts == 0);
 
-        System.out.println("\n== Arresto fra l'adozione e la pulizia: le due uguali ==");
+        System.out.println("\n== Stop between the adoption and the cleanup: the two are equal ==");
         s = new FakeStore();
-        s.current = "Nuova1";
-        s.pending = "Nuova1";
-        r = PendingDbPassword.settle(s, new FakeMysql().knows("Nuova1"), U);
-        check("si chiude senza cambiare niente", r.outcome() == PendingDbPassword.Outcome.NEW_ADOPTED && s.current.equals("Nuova1") && s.pending.isEmpty());
+        s.current = "New1";
+        s.pending = "New1";
+        r = PendingDbPassword.settle(s, new FakeMysql().knows("New1"), U);
+        check("it closes without changing anything", r.outcome() == PendingDbPassword.Outcome.NEW_ADOPTED && s.current.equals("New1") && s.pending.isEmpty());
 
-        System.out.println("\n== MySQL rifiuta tutte e due, nessuna copia di Postfix ==");
+        System.out.println("\n== MySQL refuses both, no Postfix copy ==");
         noPostfix();
         s = new FakeStore();
-        s.current = "Vecchia1";
-        s.pending = "Nuova1";
-        r = PendingDbPassword.settle(s, new FakeMysql().knows("Altra1"), U);
-        check("nessuna accettata", r.outcome() == PendingDbPassword.Outcome.NONE_ACCEPTED);
-        check("la password del pannello non cambia", s.current.equals("Vecchia1") && s.adopts == 0);
-        check("la nuova, rifiutata da MySQL, si butta", s.pending.isEmpty());
+        s.current = "Old1";
+        s.pending = "New1";
+        r = PendingDbPassword.settle(s, new FakeMysql().knows("Other1"), U);
+        check("none accepted", r.outcome() == PendingDbPassword.Outcome.NONE_ACCEPTED);
+        check("the panel's password does not change", s.current.equals("Old1") && s.adopts == 0);
+        check("the new one, refused by MySQL, is thrown away", s.pending.isEmpty());
 
-        System.out.println("\n== MySQL rifiuta tutte e due, e accetta quella di Postfix ==");
+        System.out.println("\n== MySQL refuses both, and accepts Postfix's ==");
         postfix(U, "Postfix1");
         s = new FakeStore();
-        s.current = "Vecchia1";
-        s.pending = "Nuova1";
+        s.current = "Old1";
+        s.pending = "New1";
         r = PendingDbPassword.settle(s, new FakeMysql().knows("Postfix1"), U);
-        check("quella di Postfix diventa del pannello", r.outcome() == PendingDbPassword.Outcome.COPY_ADOPTED && s.current.equals("Postfix1"));
-        check("l'attesa e' tolta", s.pending.isEmpty());
+        check("Postfix's becomes the panel's", r.outcome() == PendingDbPassword.Outcome.COPY_ADOPTED && s.current.equals("Postfix1"));
+        check("the pending one is removed", s.pending.isEmpty());
 
-        System.out.println("\n== Server rotto dalla versione di prima: niente in attesa, password rifiutata ==");
+        System.out.println("\n== Server broken by the old version: nothing pending, password refused ==");
         postfix(U, "Postfix1");
         s = new FakeStore();
-        s.current = "Rotta1";
+        s.current = "Broken1";
         m = new FakeMysql().knows("Postfix1");
         r = PendingDbPassword.settle(s, m, U);
-        check("si adotta quella di Postfix, che MySQL accetta", r.outcome() == PendingDbPassword.Outcome.COPY_ADOPTED && s.current.equals("Postfix1"));
-        check("e il messaggio nomina il file", r.message().contains(map.toString()));
+        check("Postfix's, which MySQL accepts, is adopted", r.outcome() == PendingDbPassword.Outcome.COPY_ADOPTED && s.current.equals("Postfix1"));
+        check("and the message names the file", r.message().contains(map.toString()));
 
-        System.out.println("\n== Copia di Postfix rifiutata anche lei ==");
+        System.out.println("\n== Postfix's copy refused too ==");
         postfix(U, "Postfix1");
         s = new FakeStore();
-        s.current = "Rotta1";
-        r = PendingDbPassword.settle(s, new FakeMysql().knows("Altra1"), U);
-        check("nessuna accettata, niente cambia", r.outcome() == PendingDbPassword.Outcome.NONE_ACCEPTED && s.current.equals("Rotta1") && s.adopts == 0);
+        s.current = "Broken1";
+        r = PendingDbPassword.settle(s, new FakeMysql().knows("Other1"), U);
+        check("none accepted, nothing changes", r.outcome() == PendingDbPassword.Outcome.NONE_ACCEPTED && s.current.equals("Broken1") && s.adopts == 0);
 
-        System.out.println("\n== Copia di Postfix di un altro utente ==");
-        postfix("altroutente", "Postfix1");
+        System.out.println("\n== Postfix's copy of another user ==");
+        postfix("otheruser", "Postfix1");
         s = new FakeStore();
-        s.current = "Rotta1";
+        s.current = "Broken1";
         m = new FakeMysql().knows("Postfix1");
         r = PendingDbPassword.settle(s, m, U);
-        check("non si guarda nemmeno", r.outcome() == PendingDbPassword.Outcome.NONE_ACCEPTED && s.current.equals("Rotta1") && !m.asked.contains("Postfix1"));
+        check("it is not even looked at", r.outcome() == PendingDbPassword.Outcome.NONE_ACCEPTED && s.current.equals("Broken1") && !m.asked.contains("Postfix1"));
 
-        System.out.println("\n== Il caso di sempre: niente in attesa, password accettata ==");
+        System.out.println("\n== The usual case: nothing pending, password accepted ==");
         postfix(U, "Postfix1");
         s = new FakeStore();
-        s.current = "Buona1";
-        m = new FakeMysql().knows("Buona1", "Postfix1");
+        s.current = "Good1";
+        m = new FakeMysql().knows("Good1", "Postfix1");
         r = PendingDbPassword.settle(s, m, U);
-        check("niente da fare, niente cambia", r.outcome() == PendingDbPassword.Outcome.NOTHING_TO_DO && s.current.equals("Buona1") && s.adopts == 0);
-        check("una domanda sola a MySQL", m.asked.equals(List.of("Buona1")));
-        check("niente da dire", r.message().isEmpty());
+        check("nothing to do, nothing changes", r.outcome() == PendingDbPassword.Outcome.NOTHING_TO_DO && s.current.equals("Good1") && s.adopts == 0);
+        check("a single question to MySQL", m.asked.equals(List.of("Good1")));
+        check("nothing to say", r.message().isEmpty());
 
-        System.out.println("\n== Pannello mai installato ==");
+        System.out.println("\n== Panel never installed ==");
         s = new FakeStore();
         m = new FakeMysql();
         r = PendingDbPassword.settle(s, m, U);
-        check("niente da fare, MySQL non interrogato", r.outcome() == PendingDbPassword.Outcome.NOTHING_TO_DO && m.asked.isEmpty());
+        check("nothing to do, MySQL not asked", r.outcome() == PendingDbPassword.Outcome.NOTHING_TO_DO && m.asked.isEmpty());
 
-        System.out.println("\n== Niente in attesa, MySQL muto ==");
+        System.out.println("\n== Nothing pending, MySQL silent ==");
         s = new FakeStore();
-        s.current = "Buona1";
+        s.current = "Good1";
         m = new FakeMysql();
         m.answers = false;
         r = PendingDbPassword.settle(s, m, U);
-        check("non si cambia niente", r.outcome() == PendingDbPassword.Outcome.NOTHING_TO_DO && s.current.equals("Buona1") && s.adopts == 0);
+        check("nothing is changed", r.outcome() == PendingDbPassword.Outcome.NOTHING_TO_DO && s.current.equals("Good1") && s.adopts == 0);
 
-        System.out.println("\n== MySQL muto sulla vecchia dopo aver rifiutato la nuova ==");
+        System.out.println("\n== MySQL silent on the old one after refusing the new one ==");
         s = new FakeStore();
-        s.current = "Vecchia1";
-        s.pending = "Nuova1";
-        PendingDbPassword.Probe flaky = p -> p.equals("Nuova1") ? PendingDbPassword.Answer.REJECTED : PendingDbPassword.Answer.NO_ANSWER;
+        s.current = "Old1";
+        s.pending = "New1";
+        PendingDbPassword.Probe flaky = p -> p.equals("New1") ? PendingDbPassword.Answer.REJECTED : PendingDbPassword.Answer.NO_ANSWER;
         r = PendingDbPassword.settle(s, flaky, U);
-        check("non si decide: la nuova resta in attesa", r.outcome() == PendingDbPassword.Outcome.UNDECIDED && s.pending.equals("Nuova1") && s.current.equals("Vecchia1"));
+        check("it is not decided: the new one stays pending", r.outcome() == PendingDbPassword.Outcome.UNDECIDED && s.pending.equals("New1") && s.current.equals("Old1"));
 
-        System.out.println("\n== Il file di Postfix ==");
-        Files.writeString(map, "user=mailpanel\npassword=  Spazi1  \n#password = Commento\n");
-        check("valori senza spazi intorno, commenti saltati", PendingDbPassword.postfixCopy("mailpanel").equals("Spazi1"));
-        Files.writeString(map, "password = Senzautente\n");
-        check("senza utente: niente", PendingDbPassword.postfixCopy("mailpanel").isEmpty());
+        System.out.println("\n== The Postfix file ==");
+        Files.writeString(map, "user=mailpanel\npassword=  Spaces1  \n#password = Comment\n");
+        check("values without spaces around, comments skipped", PendingDbPassword.postfixCopy("mailpanel").equals("Spaces1"));
+        Files.writeString(map, "password = Withoutuser\n");
+        check("without a user: nothing", PendingDbPassword.postfixCopy("mailpanel").isEmpty());
         noPostfix();
-        check("senza file: niente", PendingDbPassword.postfixCopy("mailpanel").isEmpty());
+        check("without a file: nothing", PendingDbPassword.postfixCopy("mailpanel").isEmpty());
 
         Files.deleteIfExists(map);
         Files.deleteIfExists(d);
-        System.out.println(failed == 0 ? "\nTutte le prove passate." : "\n" + failed + " prove FALLITE.");
+        System.out.println(failed == 0 ? "\nAll checks passed." : "\n" + failed + " checks FAILED.");
         System.exit(failed == 0 ? 0 : 1);
     }
 }

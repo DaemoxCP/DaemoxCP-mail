@@ -1,13 +1,14 @@
-// L'avviso della reinstallazione interrotta nella pagina Aggiornamenti, in Chromium, col server
-// simulato (reperto 170): il pulsante «Torna al server di prima della reinstallazione» c'e' solo per la
-// reinstallazione con la sua via di ritorno; chiede conferma; manda azione, nome e conferma; dice
-// l'esito e il riavvio; un rifiuto del server si legge; annullare non manda niente; il nome si
-// mostra come testo (non come HTML). La funzione vera la provano ReinstallReturnE2ETest e RolesTest.
+// The notice of the interrupted reinstallation in the Updates page, in Chromium, with the simulated
+// server (reperto 170), on the English page: the "Go back to the server before the reinstallation"
+// button is there only for the reinstallation with its way back; it asks for confirmation; it sends
+// action, name and confirmation; it says the outcome and the restart; a refusal from the server can
+// be read; cancelling sends nothing; the name is shown as text (not as HTML). The real function is
+// tested by ReinstallReturnE2ETest and RolesTest.
 //
-// Uso (dalla radice del progetto, dopo mvn package):
+// Usage (from the project root, after mvn package):
 //   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java \
 //     && java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator $D >/dev/null
-//   NODE_PATH=$(npm root -g) node tests/way-back-browser-test.js $D [cartella-per-le-foto]
+//   NODE_PATH=$(npm root -g) node tests/way-back-browser-test.js $D [screenshot-folder]
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -16,10 +17,10 @@ const csp = require('./browser-csp');
 const pageList = process.argv[2];
 const photos = process.argv[3];
 const resourceList = path.join(__dirname, '..', 'src', 'main', 'resources');
-const BASE = 'http://pannello.test';
+const BASE = 'http://panel.test';
 let failedOnes = 0;
 function real(whatItem, ok) {
-    console.log((ok ? '  OK   ' : '  FALLITO ') + whatItem);
+    console.log((ok ? '  OK   ' : '  FAILED ') + whatItem);
     if (!ok) failedOnes++;
 }
 
@@ -34,7 +35,7 @@ async function served(route) {
     const req = route.request();
     const p = new URL(req.url()).pathname;
     if (p === '/updates') {
-        const html = fs.readFileSync(path.join(pageList, 'updates.html'), 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-prova');
+        const html = fs.readFileSync(path.join(pageList, 'updates.en.html'), 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-test');
         return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html, headers: csp.headers(pageList) });
     }
     if (p.startsWith('/assets/')) return csp.asset(route, pageList, p);
@@ -55,14 +56,14 @@ async function served(route) {
     }
 }
 
-// L'avviso deve comparire al caricamento, anche se altre richieste lente (branch_status,
-// packages_overview) partono prima: la guardia di updApi lo respingeva senza chiedere (reperto 176).
+// The notice must appear at load time, even if other slow requests (branch_status,
+// packages_overview) start first: updApi's guard turned it away without asking (reperto 176).
 async function open(page) {
     await page.goto(BASE + '/updates');
     const shown = await page.waitForFunction(() => document.getElementById('upd-interrupted')
         && document.getElementById('upd-interrupted').innerHTML.length > 0, null, { timeout: 10000 }).then(() => true, () => false);
-    real('l\'avviso compare al caricamento della pagina', shown);
-    if (!shown) { console.log('\n' + failedOnes + ' CONTROLLI FALLITI'); process.exit(1); }
+    real('the notice appears when the page loads', shown);
+    if (!shown) { console.log('\n' + failedOnes + ' CHECKS FAILED'); process.exit(1); }
 }
 
 (async () => {
@@ -75,65 +76,65 @@ async function open(page) {
     csp.watch(page, errorList);
     page.on('console', m => { if (m.type() === 'error') errorList.push(m.text()); });
 
-    console.log('\n== Un lavoro qualunque interrotto: nessun pulsante per tornare indietro ==');
-    notice = { description: 'aggiornamento di nginx', text: 'Un lavoro non è arrivato in fondo.' };
+    console.log('\n== Any job interrupted: no button to go back ==');
+    notice = { description: 'nginx update', text: 'A job did not reach the end.' };
     await open(page);
-    real('l\'avviso c\'e\'', (await page.textContent('#upd-interrupted')).includes('Un lavoro non è arrivato in fondo'));
-    real('nessun pulsante per tornare indietro', await page.locator('#upd-way-back-btn').count() === 0);
+    real('the notice is there', (await page.textContent('#upd-interrupted')).includes('A job did not reach the end'));
+    real('no button to go back', await page.locator('#upd-way-back-btn').count() === 0);
 
-    console.log('\n== La reinstallazione interrotta, con la sua via di ritorno ==');
+    console.log('\n== The interrupted reinstallation, with its way back ==');
     notice = { description: 'complete mail server installation', reinstall: true, wayBack: WAY_BACK,
-               text: 'Era la reinstallazione completa del server di posta.' };
+               text: 'It was the full reinstallation of the mail server.' };
     await open(page);
     const btn = page.locator('#upd-way-back-btn');
-    real('il pulsante c\'e\', col nome della via di ritorno', await btn.count() === 1 && (await btn.textContent()).includes(WAY_BACK));
+    real('the button is there, with the name of the way back', await btn.count() === 1 && (await btn.textContent()).includes(WAY_BACK));
 
-    console.log('\n== Annullare la conferma non manda niente ==');
+    console.log('\n== Cancelling the confirmation sends nothing ==');
     let asked = '';
     page.once('dialog', d => { asked = d.message(); d.dismiss(); });
     const before = requests.filter(r => r.body && r.body.action === 'reinstall_way_back').length;
     await btn.click();
     await page.waitForTimeout(300);
-    real('chiede conferma, col nome', asked.includes(WAY_BACK));
-    real('e annullando non manda la richiesta', requests.filter(r => r.body && r.body.action === 'reinstall_way_back').length === before);
+    real('it asks for confirmation, with the name', asked.includes(WAY_BACK));
+    real('and cancelling does not send the request', requests.filter(r => r.body && r.body.action === 'reinstall_way_back').length === before);
 
-    console.log('\n== Confermare: la richiesta e l\'esito ==');
-    wayBackAnswer = { success: true, name: WAY_BACK, merged: 3, note: 'Al prossimo riavvio il server è quello di prima.',
-                      log: ['3 file di posta arrivati dopo copiati dentro.'], reboot: { success: true } };
+    console.log('\n== Confirming: the request and the outcome ==');
+    wayBackAnswer = { success: true, name: WAY_BACK, merged: 3, note: 'At the next restart the server is the one from before.',
+                      log: ['3 mail files that arrived later copied inside.'], reboot: { success: true } };
     page.once('dialog', d => d.accept());
     await btn.click();
     await page.waitForSelector('#upd-interrupted .alert-success');
     const sent = requests.filter(r => r.body && r.body.action === 'reinstall_way_back').pop();
-    real('manda azione, nome e conferma', sent && sent.body.name === WAY_BACK && sent.body.confirm === 'GO BACK');
+    real('it sends action, name and confirmation', sent && sent.body.name === WAY_BACK && sent.body.confirm === 'GO BACK');
     const done = await page.textContent('#upd-interrupted');
-    real('dice l\'esito, i file aggiunti e il riavvio', done.includes('Al prossimo riavvio il server è quello di prima')
-        && done.includes('3 file di posta') && done.includes('si riavvia fra un minuto'));
+    real('it says the outcome, the files added and the restart', done.includes('At the next restart the server is the one from before')
+        && done.includes('3 mail files') && done.includes('restarts in one minute'));
     if (photos) await page.screenshot({ path: path.join(photos, 'way-back-done.png'), fullPage: true });
 
-    console.log('\n== Il server rifiuta ==');
+    console.log('\n== The server refuses ==');
     await open(page);
-    wayBackAnswer = { success: false, error: 'Il boot environment non c\'è più: non ho fatto niente.' };
+    wayBackAnswer = { success: false, error: 'The boot environment is no longer there: I did nothing.' };
     page.once('dialog', d => d.accept());
     await page.locator('#upd-way-back-btn').click();
     await page.waitForSelector('#upd-interrupted .alert-danger');
-    real('il rifiuto si legge', (await page.textContent('#upd-interrupted .alert-danger')).includes('non c\'è più'));
+    real('the refusal can be read', (await page.textContent('#upd-interrupted .alert-danger')).includes('no longer there'));
 
-    console.log('\n== Il riavvio non si puo\' programmare ==');
+    console.log('\n== The restart cannot be scheduled ==');
     await open(page);
-    wayBackAnswer = { success: true, note: 'Pronto.', log: [], reboot: { success: false } };
+    wayBackAnswer = { success: true, note: 'Ready.', log: [], reboot: { success: false } };
     page.once('dialog', d => d.accept());
     await page.locator('#upd-way-back-btn').click();
     await page.waitForSelector('#upd-interrupted .alert-success');
-    real('dice di riavviare a mano', (await page.textContent('#upd-interrupted')).includes('shutdown -r now'));
+    real('it says to restart by hand', (await page.textContent('#upd-interrupted')).includes('shutdown -r now'));
 
-    console.log('\n== Un nome con dell\'HTML si mostra come testo ==');
+    console.log('\n== A name with HTML in it is shown as text ==');
     notice = { reinstall: true, wayBack: WAY_BACK + '<img src=x onerror="window.injectedRan=1">', text: 'x' };
     await open(page);
     await page.waitForTimeout(300);
-    real('nessun codice eseguito dal nome', await page.evaluate(() => window.injectedRan === undefined));
+    real('no code run from the name', await page.evaluate(() => window.injectedRan === undefined));
 
-    real('nessun errore nella pagina' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
+    real('no error in the page' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
     await browser.close();
-    console.log(failedOnes === 0 ? '\nTUTTO VERDE' : '\n' + failedOnes + ' CONTROLLI FALLITI');
+    console.log(failedOnes === 0 ? '\nALL GREEN' : '\n' + failedOnes + ' CHECKS FAILED');
     process.exit(failedOnes === 0 ? 0 : 1);
 })();

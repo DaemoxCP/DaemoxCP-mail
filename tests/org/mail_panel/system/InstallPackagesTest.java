@@ -14,40 +14,39 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * L'installazione completa installa davvero i pacchetti che chiede, e si ferma se pkg ne
- * toglie uno.
+ * The full installation really installs the packages it asks for, and stops if pkg removes one.
  *
- * Il difetto, misurato il 24/10/2026 su FreeBSD 15.1 con un'installazione da zero col jar di
+ * The defect, measured on 24/10/2026 on FreeBSD 15.1 with an installation from scratch with the jar of
  * main (reperto 52):
  *
  *   pkg install -y dovecot-mysql dovecot-pigeonhole
  *   - dovecot-2.3.21.1_3 conflicts with dovecot-mysql-2.3.21.1_3 on /usr/local/bin/doveadm
  *   Cannot solve problem using SAT solver, trying another plan
- *   New packages to be INSTALLED: dovecot, dovecot-pigeonhole          (codice d'uscita 0)
+ *   New packages to be INSTALLED: dovecot, dovecot-pigeonhole          (exit code 0)
  *   [SUCCESS] Complete Mail Server Installation completed successfully!
  *
- * e poi, alla prima casella: «auth: Fatal: Support not compiled in for passdb driver 'sql'».
- * Nessun login IMAP, e la 587 chiusa («no SASL authentication mechanisms»).
+ * and then, at the first mailbox: "auth: Fatal: Support not compiled in for passdb driver 'sql'".
+ * No IMAP login, and 587 closed ("no SASL authentication mechanisms").
  *
- * Tre parti, perche' sono tre cose diverse e ognuna puo' sbagliare da sola:
+ * Three parts, because they are three different things and each can go wrong alone:
  *
- *  A. il testo dello script: chiede il Dovecot con MySQL e il Pigeonhole COSTRUITO per lui,
- *     e ogni pacchetto passa dalla funzione che controlla;
- *  B. la funzione si comporta come dice: si fanno girare le righe vere dello script contro un
- *     pkg finto che fa la cosa misurata (toglie un pacchetto chiesto ed esce con 0), e lo
- *     script deve fermarsi LI', non arrivare in fondo. Il pkg finto e' l'unico modo di
- *     provare il ramo «pkg mente» senza aspettare che il risolutore lo rifaccia;
- *  C. il risolutore VERO, sul catalogo vero: per ogni riga dello script si chiede a pkg il
- *     piano come su una macchina appena installata (database dei pacchetti vuoto, in una
- *     copia) e coi pacchetti gia' scaricati, perche' i conflitti sui file pkg li vede solo
- *     dopo averli scaricati (reperto 14). Ogni pacchetto chiesto deve stare nel piano finale.
- *     Scarica ~180 MB in una cartella temporanea: si accende con -De2e.vm=yes, da root, su
- *     FreeBSD; non installa niente e non tocca il database vero di pkg.
+ *  A. the script's text: it asks for Dovecot with MySQL and the Pigeonhole BUILT for it, and every
+ *     package goes through the function that checks;
+ *  B. the function behaves as it says: the real lines of the script are run against a fake pkg that
+ *     does the measured thing (it removes a requested package and exits with 0), and the script must
+ *     stop THERE, not reach the end. The fake pkg is the only way to test the "pkg lies" branch
+ *     without waiting for the solver to do it again;
+ *  C. the REAL solver, on the real catalog: for every line of the script pkg is asked for the plan
+ *     as on a freshly installed machine (empty package database, in a copy) and with the packages
+ *     already downloaded, because pkg sees the conflicts on files only after downloading them
+ *     (reperto 14). Every requested package must be in the final plan. It downloads ~180 MB into a
+ *     temporary folder: it is switched on with -De2e.vm=yes, as root, on FreeBSD; it installs
+ *     nothing and does not touch pkg's real database.
  *
- * Piu' una parte D sulle etichette dell'updater, perche' l'installazione adesso mette
- * dovecot-mysql e dovecot-pigeonhole-mysql invece dei pacchetti senza sapore.
+ * Plus a part D on the updater's labels, because the installation now puts dovecot-mysql and
+ * dovecot-pigeonhole-mysql instead of the packages without flavour.
  *
- * Uso, sulla VM:
+ * Usage, on the VM:
  *   java -cp "tests:freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallPackagesTest
  *   java -De2e.vm=yes -cp "tests:freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallPackagesTest
  */
@@ -56,7 +55,7 @@ public class InstallPackagesTest {
     static int failures = 0, skipped = 0;
 
     static void check(String what, boolean ok) {
-        System.out.println((ok ? "  OK       " : "  FALLITO  ") + what);
+        System.out.println((ok ? "  OK       " : "  FAILED   ") + what);
         if (!ok) failures++;
     }
 
@@ -68,43 +67,43 @@ public class InstallPackagesTest {
         functionBehaviour(script);
         if ("yes".equals(System.getProperty("e2e.vm"))) {
             if (onFreeBsdAsRoot()) realSolver(lines);
-            else { skipped++; System.out.println("\n  SALTATA  parte C: serve FreeBSD e root"); }
+            else { skipped++; System.out.println("\n  SKIPPED  part C: it needs FreeBSD and root"); }
         } else {
             skipped++;
-            System.out.println("\n  SALTATA  parte C: scarica ~180 MB, si accende con -De2e.vm=yes (FreeBSD, root)");
+            System.out.println("\n  SKIPPED  part C: it downloads ~180 MB, it is switched on with -De2e.vm=yes (FreeBSD, root)");
         }
         updaterLabels();
 
-        System.out.println(failures == 0 ? "\nTUTTO OK" + (skipped > 0 ? " (" + skipped + " parti saltate, dette sopra)" : "")
-                                         : "\n" + failures + " PROVE FALLITE");
+        System.out.println(failures == 0 ? "\nALL OK" + (skipped > 0 ? " (" + skipped + " parts skipped, said above)" : "")
+                                         : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 
     // ------------------------------------------------------------------ A
 
     static void scriptText(String script, List<List<String>> lines) {
-        System.out.println("\n== A. Il testo dello script ==");
+        System.out.println("\n== A. The script's text ==");
         Set<String> asked = new LinkedHashSet<>();
         for (List<String> l : lines) asked.addAll(l);
-        System.out.println("  righe d'installazione trovate: " + lines.size() + ", pacchetti chiesti: " + asked.size());
+        System.out.println("  installation lines found: " + lines.size() + ", packages requested: " + asked.size());
 
-        check("chiede dovecot-mysql (l'autenticazione delle caselle sta in MySQL)", asked.contains("dovecot-mysql"));
-        check("chiede dovecot-pigeonhole-mysql, il Sieve costruito per dovecot-mysql",
+        check("it asks for dovecot-mysql (the mailbox authentication is in MySQL)", asked.contains("dovecot-mysql"));
+        check("it asks for dovecot-pigeonhole-mysql, the Sieve built for dovecot-mysql",
                 asked.contains("dovecot-pigeonhole-mysql"));
-        check("non chiede dovecot-pigeonhole, che dipende da \"dovecot\" senza MySQL", !asked.contains("dovecot-pigeonhole"));
-        check("non chiede \"dovecot\" senza sapore", !asked.contains("dovecot"));
-        check("dovecot-mysql e il suo Pigeonhole stanno sulla STESSA riga (un solo piano, un solo controllo)",
+        check("it does not ask for dovecot-pigeonhole, which depends on \"dovecot\" without MySQL", !asked.contains("dovecot-pigeonhole"));
+        check("it does not ask for \"dovecot\" without flavour", !asked.contains("dovecot"));
+        check("dovecot-mysql and its Pigeonhole are on the SAME line (a single plan, a single check)",
                 lines.stream().anyMatch(l -> l.contains("dovecot-mysql") && l.contains("dovecot-pigeonhole-mysql")));
 
         int def = script.indexOf("\ninstall_packages() {");
         int firstUse = script.indexOf("\ninstall_packages ");
-        check("la funzione install_packages e' definita", def >= 0);
-        check("ed e' definita prima del suo primo uso", def >= 0 && firstUse > def);
-        check("la funzione controlla ogni pacchetto con pkg info -e",
+        check("the install_packages function is defined", def >= 0);
+        check("and it is defined before its first use", def >= 0 && firstUse > def);
+        check("the function checks every package with pkg info -e",
                 functionText(script).contains("pkg info -e \"$pkg_wanted\""));
 
-        // Nessun "pkg install" fuori dalla funzione: uno nudo e' un pacchetto che puo' mancare
-        // senza che nessuno se ne accorga.
+        // No "pkg install" outside the function: a bare one is a package that can be missing without
+        // anybody noticing.
         List<String> bare = new ArrayList<>();
         String fn = functionText(script);
         String outside = fn.isEmpty() ? script : script.replace(fn, "");
@@ -113,29 +112,28 @@ public class InstallPackagesTest {
             if (t.startsWith("#")) continue;
             if (t.matches(".*\\bpkg\\s+install\\b.*")) bare.add(t);
         }
-        check("nessun \"pkg install\" fuori da install_packages" + (bare.isEmpty() ? "" : ": " + bare), bare.isEmpty());
+        check("no \"pkg install\" outside install_packages" + (bare.isEmpty() ? "" : ": " + bare), bare.isEmpty());
 
         List<String> swallowed = new ArrayList<>();
         for (String l : script.split("\n")) {
             String t = l.trim();
             if (t.startsWith("install_packages ") && (t.contains("|| true") || t.contains("2>/dev/null"))) swallowed.add(t);
         }
-        check("nessuna riga d'installazione ne nasconde l'esito (|| true, 2>/dev/null)"
+        check("no installation line hides its outcome (|| true, 2>/dev/null)"
                 + (swallowed.isEmpty() ? "" : ": " + swallowed), swallowed.isEmpty());
     }
 
     // ------------------------------------------------------------------ B
 
-    /** Le righe vere dello script contro un pkg finto che toglie un pacchetto ed esce con 0. */
+    /** The script's real lines against a fake pkg that removes a package and exits with 0. */
     static void functionBehaviour(String script) throws Exception {
-        System.out.println("\n== B. La funzione, con un pkg che toglie un pacchetto in silenzio ==");
+        System.out.println("\n== B. The function, with a pkg that silently removes a package ==");
         Path dir = Files.createTempDirectory("install-packages-test");
         try {
             Files.createDirectories(dir.resolve("bin"));
-            // Il pkg finto. "install -y A B C": registra come installati tutti tranne quelli in
-            // FAKE_DROP, scrive la riga del risolutore se ne toglie uno, ed esce con FAKE_RC
-            // (0 se non detto): e' esattamente quello che ha fatto il pkg vero. "info -e X":
-            // 0 solo se X e' stato registrato.
+            // The fake pkg. "install -y A B C": it records as installed all but those in FAKE_DROP,
+            // writes the solver's line if it removes one, and exits with FAKE_RC (0 if not given): it
+            // is exactly what the real pkg did. "info -e X": 0 only if X was recorded.
             Path fakePkg = dir.resolve("bin/pkg");
             Files.writeString(fakePkg, """
                     #!/bin/sh
@@ -158,11 +156,11 @@ public class InstallPackagesTest {
                     """, StandardCharsets.UTF_8);
             fakePkg.toFile().setExecutable(true);
 
-            // Il banco: la funzione com'e' nello script, poi le righe d'installazione com'e'
-            // nello script e nello stesso ordine, poi un segno che dice «sono arrivato in fondo».
-            // Le righe si prendono sia nella forma nuova (install_packages) sia in quella vecchia
-            // (pkg install -y), cosi' lo stesso banco misura anche lo script di prima.
-            // Il "pkg install" DENTRO la funzione non e' una riga dello script: si guarda fuori.
+            // The bench: the function as it is in the script, then the installation lines as they
+            // are in the script and in the same order, then a mark that says "I reached the end".
+            // The lines are taken both in the new form (install_packages) and in the old one (pkg
+            // install -y), so the same bench measures the old script too. The "pkg install" INSIDE
+            // the function is not a line of the script: it looks outside.
             StringBuilder bench = new StringBuilder("RED=''\nNC=''\n");
             String fn = functionText(script);
             bench.append(fn).append('\n');
@@ -175,34 +173,34 @@ public class InstallPackagesTest {
 
             List<List<String>> lines = installLines(script);
             Run all = run(dir, "", "0");
-            check("con pkg onesto: arriva in fondo", all.out.contains("REACHED-THE-END"));
-            check("con pkg onesto: esce con 0", all.code == 0);
-            check("con pkg onesto: il banco ha fatto tutte le " + lines.size() + " righe dello script",
+            check("with an honest pkg: it reaches the end", all.out.contains("REACHED-THE-END"));
+            check("with an honest pkg: it exits with 0", all.code == 0);
+            check("with an honest pkg: the bench ran all the " + lines.size() + " lines of the script",
                     all.asked.size() == lines.size() && lines.size() > 0);
 
-            // Si toglie, uno alla volta, ciascun pacchetto della riga di Dovecot com'e' nello
-            // script: il risolutore vero ha tolto ora l'uno ora l'altro.
+            // Each package of the Dovecot line as it is in the script is removed, one at a time: the
+            // real solver removed now one, now the other.
             List<String> dovecotLine = lines.stream().filter(l -> l.contains("dovecot-mysql")).findFirst().orElse(List.of());
-            check("lo script ha una riga con dovecot-mysql " + dovecotLine, !dovecotLine.isEmpty());
+            check("the script has a line with dovecot-mysql " + dovecotLine, !dovecotLine.isEmpty());
             for (String drop : dovecotLine) {
                 Run r = run(dir, drop, "0");
-                check("pkg toglie " + drop + " ed esce con 0: lo script NON arriva in fondo",
+                check("pkg removes " + drop + " and exits with 0: the script does NOT reach the end",
                         !r.out.contains("REACHED-THE-END"));
-                check("pkg toglie " + drop + ": lo script esce diverso da 0", r.code != 0);
-                check("pkg toglie " + drop + ": il messaggio lo nomina",
+                check("pkg removes " + drop + ": the script exits other than 0", r.code != 0);
+                check("pkg removes " + drop + ": the message names it",
                         r.out.contains("NOT installed: " + drop) || r.out.matches("(?s).*NOT installed:.* " + drop + "\\b.*"));
-                check("pkg toglie " + drop + ": si ferma sulla riga di Dovecot, la riga dopo (rspamd) non parte",
+                check("pkg removes " + drop + ": it stops on the Dovecot line, the line after (rspamd) does not start",
                         r.asked.stream().noneMatch(a -> a.contains("rspamd")));
             }
 
             Run last = run(dir, "php84-gd", "0");
-            check("anche sull'ULTIMA riga (php84-gd tolto) non arriva in fondo", !last.out.contains("REACHED-THE-END"));
-            check("e lo dice", last.out.contains("php84-gd") && last.out.contains("NOT installed"));
+            check("on the LAST line too (php84-gd removed) it does not reach the end", !last.out.contains("REACHED-THE-END"));
+            check("and it says so", last.out.contains("php84-gd") && last.out.contains("NOT installed"));
 
             Run fails = run(dir, "", "1");
-            check("pkg esce con 1 anche senza togliere niente: lo script si ferma",
+            check("pkg exits with 1 even without removing anything: the script stops",
                     !fails.out.contains("REACHED-THE-END") && fails.code != 0);
-            check("e dice il codice d'uscita di pkg", fails.out.contains("pkg exit code: 1"));
+            check("and it says pkg's exit code", fails.out.contains("pkg exit code: 1"));
         } finally {
             Shell.runShell(Duration.ofSeconds(30), "rm -rf '" + dir + "'");
         }
@@ -223,28 +221,28 @@ public class InstallPackagesTest {
 
     // ------------------------------------------------------------------ C
 
-    /** Il piano di pkg come su una macchina appena installata, riga per riga e tutto insieme. */
+    /** pkg's plan as on a freshly installed machine, line by line and all together. */
     static void realSolver(List<List<String>> lines) {
-        System.out.println("\n== C. Il risolutore vero di pkg, sul catalogo vero ==");
+        System.out.println("\n== C. pkg's real solver, on the real catalog ==");
         String db = sh("pkg config PKG_DBDIR 2>/dev/null", 30).trim();
         if (!db.matches("/[A-Za-z0-9._/-]{1,200}")) db = "/var/db/pkg";
         String tmp = sh("mktemp -d /var/tmp/install-packages-test.XXXXXX", 30).trim();
         if (!tmp.matches("/var/tmp/install-packages-test\\.[A-Za-z0-9]{6,}")) {
-            check("cartella temporanea creata (" + tmp + ")", false);
+            check("temporary folder created (" + tmp + ")", false);
             return;
         }
         try {
-            // Una copia del database di pkg: il catalogo com'e', e i pacchetti installati tolti
-            // tutti tranne pkg stesso. E' la macchina appena installata, vista dal risolutore.
-            // Lo svuotamento tocca solo la copia: PKG_DBDIR punta li'.
+            // A copy of pkg's database: the catalog as it is, and the installed packages all removed
+            // except pkg itself. It is the freshly installed machine, as the solver sees it. The
+            // emptying touches only the copy: PKG_DBDIR points there.
             Shell.Result cp = Shell.runShell(Duration.ofSeconds(300),
                     "cp -Rp " + db + "/repos " + tmp + "/ && cp -p " + db + "/local.sqlite " + tmp + "/ && mkdir " + tmp + "/cache 2>&1");
-            check("copia del catalogo e del database", cp.success());
+            check("copy of the catalog and of the database", cp.success());
             String p = "pkg -o PKG_DBDIR=" + tmp + " -o PKG_CACHEDIR=" + tmp + "/cache";
             Shell.Result empty = Shell.runShell(Duration.ofSeconds(60),
                     "printf 'PRAGMA foreign_keys=ON;\\nDELETE FROM packages WHERE name <> \\047pkg\\047;\\nSELECT count(*) FROM packages;\\n' | "
                             + p + " shell 2>&1");
-            check("nella copia resta installato solo pkg (" + empty.outputTrim() + ")", empty.outputTrim().equals("1"));
+            check("in the copy only pkg stays installed (" + empty.outputTrim() + ")", empty.outputTrim().equals("1"));
 
             List<List<String>> plans = new ArrayList<>(lines);
             List<String> together = new ArrayList<>();
@@ -253,12 +251,12 @@ public class InstallPackagesTest {
 
             for (int i = 0; i < plans.size(); i++) {
                 List<String> asked = plans.get(i);
-                String label = i < lines.size() ? "riga " + (i + 1) + " " + asked : "tutte le righe insieme (" + asked.size() + " pacchetti)";
+                String label = i < lines.size() ? "line " + (i + 1) + " " + asked : "all the lines together (" + asked.size() + " packages)";
                 String list = String.join(" ", asked);
-                // Prima si scaricano: senza i file pkg non vede i conflitti fra pacchetti.
+                // First they are downloaded: without the files pkg does not see the conflicts between packages.
                 Shell.Result f = Shell.runShell(Duration.ofSeconds(900), p + " fetch -d -U -y " + list + " 2>&1");
                 if (!f.success()) {
-                    check(label + ": pkg fetch riuscito", false);
+                    check(label + ": pkg fetch succeeded", false);
                     System.out.println(indent(tail(f.outputTrim(), 15)));
                     continue;
                 }
@@ -269,8 +267,8 @@ public class InstallPackagesTest {
                     String name = a.contains("/") ? sh(p + " rquery -U %n " + a + " 2>/dev/null", 60).trim() : a;
                     if (!planned.contains(name)) missing.add(a);
                 }
-                check(label + ": nel piano c'e' ogni pacchetto chiesto"
-                        + (missing.isEmpty() ? "" : " -- MANCANO " + missing), missing.isEmpty() && !planned.isEmpty());
+                check(label + ": the plan has every requested package"
+                        + (missing.isEmpty() ? "" : " -- MISSING " + missing), missing.isEmpty() && !planned.isEmpty());
                 if (plan.output().contains("Cannot solve problem")) {
                     for (String l : plan.output().split("\n"))
                         if (l.contains("conflicts with") || l.contains("Cannot solve")) System.out.println("           pkg: " + l.trim());
@@ -281,7 +279,7 @@ public class InstallPackagesTest {
         }
     }
 
-    /** I nomi dell'ULTIMO elenco «New packages to be INSTALLED»: dopo un ripiego, quello vale. */
+    /** The names of the LAST "New packages to be INSTALLED" list: after a fallback, that one counts. */
     static Set<String> lastInstallBlock(String out) {
         Set<String> names = new LinkedHashSet<>();
         int at = out.lastIndexOf("New packages to be INSTALLED:");
@@ -299,31 +297,31 @@ public class InstallPackagesTest {
     // ------------------------------------------------------------------ D
 
     static void updaterLabels() throws Exception {
-        System.out.println("\n== D. L'updater riconosce i pacchetti coi sapori ==");
+        System.out.println("\n== D. The updater recognises the packages with flavours ==");
         Method role = UpdateManager.class.getDeclaredMethod("roleOf", String.class);
         role.setAccessible(true);
         Object dovecot = role.invoke(null, "dovecot");
-        check("dovecot-mysql ha lo stesso ruolo di dovecot (" + dovecot + ")",
+        check("dovecot-mysql has the same role as dovecot (" + dovecot + ")",
                 dovecot != null && dovecot.equals(role.invoke(null, "dovecot-mysql")));
-        check("dovecot24-mysql anche", dovecot != null && dovecot.equals(role.invoke(null, "dovecot24-mysql")));
+        check("dovecot24-mysql too", dovecot != null && dovecot.equals(role.invoke(null, "dovecot24-mysql")));
         Object sieve = role.invoke(null, "dovecot-pigeonhole");
-        check("dovecot-pigeonhole-mysql ha il ruolo di Sieve (" + sieve + ")",
+        check("dovecot-pigeonhole-mysql has the role of Sieve (" + sieve + ")",
                 sieve != null && sieve.equals(role.invoke(null, "dovecot-pigeonhole-mysql")));
 
         Method services = UpdateManager.class.getDeclaredMethod("directServices", String.class);
         services.setAccessible(true);
-        check("aggiornare dovecot-mysql riavvia dovecot", List.of("dovecot").equals(services.invoke(null, "dovecot-mysql")));
-        check("aggiornare dovecot-pigeonhole-mysql riavvia dovecot",
+        check("updating dovecot-mysql restarts dovecot", List.of("dovecot").equals(services.invoke(null, "dovecot-mysql")));
+        check("updating dovecot-pigeonhole-mysql restarts dovecot",
                 List.of("dovecot").equals(services.invoke(null, "dovecot-pigeonhole-mysql")));
 
         String family = UpdateManager.familyOf("dovecot-mysql");
-        check("dovecot-mysql e dovecot-pigeonhole-mysql si muovono insieme (stessa famiglia)",
+        check("dovecot-mysql and dovecot-pigeonhole-mysql move together (same family)",
                 family != null && family.equals(UpdateManager.familyOf("dovecot-pigeonhole-mysql")));
     }
 
-    // ------------------------------------------------------------------ attrezzi
+    // ------------------------------------------------------------------ tools
 
-    /** Le righe d'installazione dello script, ognuna come elenco di pacchetti. */
+    /** The script's installation lines, each as a list of packages. */
     static List<List<String>> installLines(String script) {
         List<List<String>> out = new ArrayList<>();
         for (String l : script.split("\n")) {
@@ -342,7 +340,7 @@ public class InstallPackagesTest {
         return out;
     }
 
-    /** Il testo della funzione install_packages com'e' nello script, o "" se non c'e'. */
+    /** The text of the install_packages function as it is in the script, or "" if it is not there. */
     static String functionText(String script) {
         int a = script.indexOf("install_packages() {");
         if (a < 0) return "";

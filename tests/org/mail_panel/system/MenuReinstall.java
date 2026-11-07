@@ -5,32 +5,32 @@ import org.mail_panel.scripts.FullMailServerScript;
 import org.mail_panel.sqli.dataBaseManager;
 
 /**
- * Il conduttore della reinstallazione completa dal menu, su un server dove il pannello e' gia'
- * partito (e quindi i pacchetti dello stack sono protetti): fa quello che fa la voce del menu
- * dopo la finestra del nome, cioe' ReinstallJob.runFromMenu, la stessa funzione: la reinstallazione
- * staccata (Main --reinstall sotto daemon(8)) e il suo registro seguito fino all'esito. Il menu a schermo
- * vuole un terminale e una persona che digita; questo no.
+ * The driver of the full reinstallation from the menu, on a server where the panel has already
+ * started (so the stack packages are protected): it does what the menu item does after the name
+ * window, that is ReinstallJob.runFromMenu, the same function: the detached reinstallation
+ * (Main --reinstall under daemon(8)) and its log followed until the outcome. The on-screen menu
+ * wants a terminal and a person typing; this does not.
  *
- * Non prepara niente: usa la configurazione che c'e' nella cartella del pannello (SQLite, i
- * segreti in /usr/local/etc/mail-panel), come la usa il menu. Quindi ferma la posta, svuota
- * /var/vmail, cambia la password di MySQL del pannello: SOLO su un clone di un boot environment,
- * da una COPIA della cartella del pannello se questa sta fuori dal boot environment (/home).
+ * It prepares nothing: it uses the configuration in the panel's folder (SQLite, the secrets in
+ * /usr/local/etc/mail-panel), as the menu does. So it stops mail, empties /var/vmail, changes the
+ * panel's MySQL password: ONLY on a clone of a boot environment, from a COPY of the panel's folder
+ * if that is outside the boot environment (/home).
  *
- * Uso (dalla cartella del pannello, come root):
+ * Usage (from the panel's folder, as root):
  *   java -cp "tests:freebsd-mail-panel-1.0.jar" org.mail_panel.system.MenuReinstall [hostname]
- * Senza hostname usa quello salvato, come la finestra del menu che lo propone.
+ * Without a hostname it uses the saved one, like the menu window that proposes it.
  */
 public class MenuReinstall {
 
     public static void main(String[] args) throws Exception {
-        // Gli stessi preparativi che fa Main all'avvio prima del menu.
+        // The same preparations Main does at start before the menu.
         Main.createDirectoryIfNotExists("./install_scripts/");
         Main.dbManager = new dataBaseManager();
         Main.dbManager.ensureMailHostnameColumn();
         Main.dbManager.ensureSslChainColumn();
         Main.dbManager.ensureRoundcubeColumns();
         Main.dbManager.ensurePostfixColumn();
-        // Il menu riscrive gli script a ogni avvio (generateInstallScripts).
+        // The menu writes the scripts again at every start (generateInstallScripts).
         new FullMailServerScript().write_file();
 
         String saved = Main.dbManager.getMailHostname();
@@ -39,10 +39,10 @@ public class MenuReinstall {
             System.out.println("No mail hostname saved and none given: nothing done.");
             System.exit(2);
         }
-        System.out.println("=== reinstallazione dal menu, hostname " + host + ", pid " + ProcessHandle.current().pid() + " ===");
-        // Come la voce del menu: staccata (ReinstallJob), e la si segue fino all'esito.
+        System.out.println("=== reinstallation from the menu, hostname " + host + ", pid " + ProcessHandle.current().pid() + " ===");
+        // Like the menu item: detached (ReinstallJob), and followed until the outcome.
         boolean ok = ReinstallJob.runFromMenu(host.trim(), System.out);
-        System.out.println("=== esito: " + (ok ? "riuscita" : "FALLITA") + " ===");
+        System.out.println("=== outcome: " + (ok ? "succeeded" : "FAILED") + " ===");
         System.exit(ok ? 0 : 1);
     }
 }

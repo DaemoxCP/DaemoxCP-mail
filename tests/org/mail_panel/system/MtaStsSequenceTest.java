@@ -8,14 +8,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * I pezzi nati dall'unificazione delle due sequenze: il filtro per dominio e la traduzione
- * dell'esito nelle righe della pagina DNS.
+ * The pieces born from merging the two sequences: the filter by domain and the translation of the
+ * outcome into the rows of the DNS page.
  */
 public class MtaStsSequenceTest {
 
     static int failed = 0;
     static void require(String what, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
@@ -29,71 +29,71 @@ public class MtaStsSequenceTest {
         List<MailDatabase.Domain> allItems = new ArrayList<>();
         for (String s : new String[]{"domain-d.test", "domain-b.test", "domain-a.test"}) allItems.add(dom(s));
 
-        System.out.println("\n== filtra(): il filtro per dominio ==");
-        require("null vuol dire tutti", MtaStsSetup.filter(allItems, null).size() == 3);
-        require("un nome preciso ne lascia uno", MtaStsSetup.filter(allItems, "domain-d.test").size() == 1);
-        require("le maiuscole non contano",
+        System.out.println("\n== filter(): the filter by domain ==");
+        require("null means all", MtaStsSetup.filter(allItems, null).size() == 3);
+        require("an exact name leaves one", MtaStsSetup.filter(allItems, "domain-d.test").size() == 1);
+        require("upper case does not matter",
                 MtaStsSetup.filter(allItems, "DoMaIn-D.TeSt").size() == 1);
-        // Se il confronto fosse "contiene", "ake.net" pescherebbe domain-d.test e la sequenza
-        // lavorerebbe su un dominio che nessuno ha chiesto.
-        require("il confronto e' esatto, non 'contiene'",
+        // If the comparison were "contains", "ake.net" would catch domain-d.test and the sequence
+        // would work on a domain nobody asked for.
+        require("the comparison is exact, not 'contains'",
                 MtaStsSetup.filter(allItems, "ake.net").isEmpty());
-        require("un dominio che non esiste da lista VUOTA (e' la guardia del falso successo)",
-                MtaStsSetup.filter(allItems, "nonesiste.invalid").isEmpty());
-        require("una lista nulla non fa esplodere niente",
+        require("a domain that does not exist gives an EMPTY list (it is the guard against a false success)",
+                MtaStsSetup.filter(allItems, "doesnotexist.invalid").isEmpty());
+        require("a null list blows nothing up",
                 MtaStsSetup.filter(null, "x.it").isEmpty());
 
-        System.out.println("\n== comeVoci(): l'esito tradotto per la pagina DNS ==");
+        System.out.println("\n== asEntries(): the outcome translated for the DNS page ==");
         JSONObject outcome = new JSONObject()
             .put("success", true)
             .put("steps", new JSONArray()
-                .put(new JSONObject().put("key", "include").put("title", "Riga di include")
-                        .put("ok", true).put("messageText", "era gia' a posto"))
+                .put(new JSONObject().put("key", "include").put("title", "Include line")
+                        .put("ok", true).put("messageText", "it was already in place"))
                 .put(new JSONObject().put("key", "cname").put("title", "CNAME mta-sts")
                         .put("detail", new JSONArray()
                             .put(new JSONObject().put("domain", "domain-d.test").put("ok", true)
-                                    .put("messageText", "Record CNAME creato"))))
-                .put(new JSONObject().put("key", "txt").put("title", "Prova e record TXT")
+                                    .put("messageText", "CNAME record created"))))
+                .put(new JSONObject().put("key", "txt").put("title", "Policy and TXT record")
                         .put("detail", new JSONArray()
                             .put(new JSONObject().put("domain", "a.it").put("ok", true).put("messageText", "ok"))
                             .put(new JSONObject().put("domain", "b.it").put("ok", false)
-                                    .put("messageText", "la politica non risponde ancora")))));
+                                    .put("messageText", "the policy does not answer yet")))));
 
         JSONArray v = MtaStsSetup.asEntries(outcome);
-        require("tre passi diventano tre righe", v.length() == 3);
-        require("il passo semplice conserva titolo ed esito",
-                v.getJSONObject(0).getString("title").equals("Riga di include")
+        require("three steps become three rows", v.length() == 3);
+        require("the simple step keeps title and outcome",
+                v.getJSONObject(0).getString("title").equals("Include line")
                 && v.getJSONObject(0).getBoolean("ok"));
-        require("un passo per dominio tutto riuscito e' verde", v.getJSONObject(1).getBoolean("ok"));
-        require("il dominio compare nel messaggio",
+        require("a per-domain step all successful is green", v.getJSONObject(1).getBoolean("ok"));
+        require("the domain appears in the message",
                 v.getJSONObject(1).getString("messageText").contains("domain-d.test"));
-        // La riga rossa e' l'unica che spiega: se una sola fallisce, il passo NON e' verde.
-        require("basta una riga fallita perche' il passo non sia verde",
+        // The red row is the only one that explains: if a single one fails, the step is NOT green.
+        require("one failed row is enough for the step not to be green",
                 !v.getJSONObject(2).getBoolean("ok"));
-        require("nel messaggio ci sono ENTRAMBE le righe, non solo la prima",
+        require("the message has BOTH rows, not only the first",
                 v.getJSONObject(2).getString("messageText").contains("a.it")
                 && v.getJSONObject(2).getString("messageText").contains("b.it"));
 
-        System.out.println("\n== comeVoci(): una sequenza interrotta non sparisce ==");
+        System.out.println("\n== asEntries(): an interrupted sequence does not vanish ==");
         JSONObject broken = new JSONObject().put("success", false)
-            .put("error", "Senza la 443 configurata la politica non puo' rispondere: mi fermo.")
+            .put("error", "Without 443 configured the policy cannot answer: stopping.")
             .put("steps", new JSONArray()
-                .put(new JSONObject().put("title", "Riga di include").put("ok", true)
+                .put(new JSONObject().put("title", "Include line").put("ok", true)
                         .put("messageText", "done")));
         JSONArray vr = MtaStsSetup.asEntries(broken);
-        require("i passi gia' fatti restano", vr.length() == 2);
-        // Un elenco di passi riusciti che si interrompe senza dire perche' somiglia a un successo.
-        require("in fondo c'e' la riga rossa che dice perche' si e' fermata",
+        require("the steps already done stay", vr.length() == 2);
+        // A list of successful steps that stops without saying why looks like a success.
+        require("at the end there is the red row that says why it stopped",
                 !vr.getJSONObject(1).getBoolean("ok")
                 && vr.getJSONObject(1).getString("messageText").contains("443"));
 
-        System.out.println("\n== comeVoci(): un passo per dominio VUOTO non e' un successo ==");
+        System.out.println("\n== asEntries(): an EMPTY per-domain step is not a success ==");
         JSONArray vv = MtaStsSetup.asEntries(new JSONObject().put("success", true)
             .put("steps", new JSONArray().put(new JSONObject().put("title", "CNAME")
                     .put("detail", new JSONArray()))));
-        require("nessuna riga esaminata non puo' valere verde", !vv.getJSONObject(0).getBoolean("ok"));
+        require("no row examined cannot count as green", !vv.getJSONObject(0).getBoolean("ok"));
 
-        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         if (failed > 0) System.exit(1);
     }
 }

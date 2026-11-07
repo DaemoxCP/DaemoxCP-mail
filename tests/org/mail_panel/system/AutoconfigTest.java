@@ -1,37 +1,37 @@
 package org.mail_panel.system;
 
-/** Il verdetto della scheda Autoconfig: la riga che dichiarava non servito un file servito. */
+/** The Autoconfig card's verdict: the row that declared a served file not served. */
 public class AutoconfigTest {
 
     static int failed = 0;
     static void require(String what, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
     public static void main(String[] a) {
-        System.out.println("\n== pronto(elencoLetto, esaminati, funzionanti) ==");
+        System.out.println("\n== ready(listRead, examined, working) ==");
 
-        require("cinque domini su cinque: pronto",
+        require("five domains out of five: ready",
                 Autoconfig.ready(true, 5, 5));
-        require("quattro su cinque NON basta: un dominio resta da configurare a mano",
+        require("four out of five is NOT enough: a domain is left to configure by hand",
                 !Autoconfig.ready(true, 5, 4));
-        require("zero su cinque: non pronto",
+        require("zero out of five: not ready",
                 !Autoconfig.ready(true, 5, 0));
 
-        // "0 == 0" e' vero, e senza la condizione esaminati>0 il pannello direbbe verde
-        // proprio quando non ha guardato niente. E' il falso verde piu' silenzioso.
-        require("ZERO domini provati non e' verde, anche se 0 su 0 'tornano'",
+        // "0 == 0" is true, and without the condition examined>0 the panel would say green
+        // exactly when it looked at nothing. It is the quietest false green.
+        require("ZERO domains tried is not green, even if 0 out of 0 'add up'",
                 !Autoconfig.ready(true, 0, 0));
 
-        // Se l'elenco dei domini non si e' potuto leggere, non e' stato provato nulla:
-        // "non ho controllato" non e' "va bene".
-        require("elenco non letto: non pronto, qualunque cosa dicano i conteggi",
+        // If the list of domains could not be read, nothing was tried: "I did not check" is
+        // not "it is fine".
+        require("list not read: not ready, whatever the counts say",
                 !Autoconfig.ready(false, 5, 5));
-        require("elenco non letto e zero prove: non pronto",
+        require("list not read and zero tries: not ready",
                 !Autoconfig.ready(false, 0, 0));
 
-        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         if (failed > 0) System.exit(1);
     }
 }

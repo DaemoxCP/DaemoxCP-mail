@@ -5,25 +5,27 @@ import org.mail_panel.util.Shell;
 import java.util.List;
 
 /**
- * Prova la logica che il piano MTA-STS usa per decidere, con i casi veri del server.
- * Non prova che il codice compili: prova che dica il vero.
+ * Tests the logic the MTA-STS plan uses to decide, with the server's real cases. It does not test
+ * that the code compiles: it tests that it tells the truth.
  *
- * La lettura del record TXT si prova in due modi. Il significato di ogni uscita di dig, con
- * uscite vere registrate (piu' varianti costruite su di loro): vale ovunque, anche senza rete.
- * Poi il DNS vero: se da qui si raggiunge si esigono i fatti veri (su domain-d.test il record
- * c'e', un SERVFAIL non e' "assente"), altrimenti si esige che la lettura dica NON_CHIESTO e
- * mai un ASSENTE inventato. Prima la prova dava per scontato il DNS e falliva su ogni macchina
- * che non ce l'aveva, con la lettura che rispondeva il giusto.
+ * Reading the TXT record is tested in two ways. The meaning of every dig output, with real recorded
+ * outputs (plus variants built on them): it holds everywhere, even without a network. Then the real
+ * DNS: if it can be reached from here the real facts are required (on domain-d.test the record is
+ * there, a SERVFAIL is not "absent"), otherwise the reading is required to say NOT_ASKED and never a
+ * made-up ABSENT. Before, the test took the DNS for granted and failed on every machine that did not
+ * have it, while the reading answered right.
  *
- * Due record v=STSv1 sullo stesso nome valgono zero per i mittenti (RFC 8461 §3.1): la
- * lettura deve dire TROPPI, e il passo del record nel piano non deve risultare fatto.
+ * Two v=STSv1 records on the same name are worth zero for senders (RFC 8461 §3.1): the reading must
+ * say TOO_MANY, and the record step in the plan must not show as done.
+ *
+ * The panel's texts are read in English (I18n.setCurrent): outside a request it writes Italian.
  */
 public class MtaStsTest {
 
     static int failed = 0;
 
     static void require(String what, boolean condition) {
-        System.out.println((condition ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((condition ? "  OK   " : "  FAILED ") + what);
         if (!condition) failed++;
     }
 
@@ -33,7 +35,7 @@ public class MtaStsTest {
                 l.outcome == outcome && l.content.equals(content));
     }
 
-    /** Lo stato della risposta di dig per un TXT (NOERROR, NXDOMAIN, SERVFAIL...), o "". */
+    /** The state of dig's answer for a TXT (NOERROR, NXDOMAIN, SERVFAIL...), or "". */
     static String digState(String name) {
         try {
             ProcessBuilder pb = new ProcessBuilder("dig", "+noall", "+comments", "+time=3", "+tries=1", "TXT", name);
@@ -49,7 +51,7 @@ public class MtaStsTest {
         }
     }
 
-    /** Da qui dig arriva a un DNS? Si chiede chi serve la radice, con poca pazienza. */
+    /** Does dig reach a DNS from here? It asks who serves the root, with little patience. */
     static boolean digAnswers() {
         try {
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", "+time=3", "+tries=1", ".", "NS");
@@ -59,15 +61,15 @@ public class MtaStsTest {
             String out = new String(p.getInputStream().readAllBytes()).trim();
             return p.waitFor() == 0 && !out.isEmpty();
         } catch (Exception e) {
-            return false;   // dig che non c'e'
+            return false;   // dig not there
         }
     }
 
-    /** Il passo "txt" fra quelli che testAndTxtSteps() restituisce. */
+    /** The "txt" step among those testAndTxtSteps() returns. */
     static MtaStsSetup.Step txtStep(List<MtaStsSetup.TxtReview> reviews, String expected) {
         for (MtaStsSetup.Step p : MtaStsSetup.testAndTxtSteps(reviews, expected))
             if ("txt".equals(p.key)) return p;
-        throw new IllegalStateException("manca il passo txt");
+        throw new IllegalStateException("the txt step is missing");
     }
 
     static MtaStsSetup.NameReview e(String d, MtaStsSetup.NameState s, String m,
@@ -77,168 +79,169 @@ public class MtaStsTest {
 
     public static void main(String[] a) throws Exception {
 
-        System.out.println("\n== ripartisci(): il caso vero di domain-d.test ==");
-        // Nella zona non c'e' mta-sts.domain-d.test; risponde il jolly *.domain-d.test, proxato.
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        System.out.println("\n== split(): the real case of domain-d.test ==");
+        // mta-sts.domain-d.test is not in the zone; the wildcard *.domain-d.test answers, proxied.
         var rip = MtaStsSetup.split(List.of(
-                e("domain-d.test", MtaStsSetup.NameState.ABSENT, "nella zona non c'e'", true, true, false)));
-        require("il dominio finisce fra gli assenti", rip.absent.size() == 1);
-        require("e ANCHE fra quelli che passano dal proxy (era il falso verde)", rip.proxied.size() == 1);
-        require("il piano sa che il proxy viene da un jolly", rip.proxyFromWildcard);
-        require("la riga del proxy nomina il jolly", rip.proxied.get(0).contains("*.domain-d.test"));
+                e("domain-d.test", MtaStsSetup.NameState.ABSENT, "not in the zone", true, true, false)));
+        require("the domain ends up among the absent ones", rip.absent.size() == 1);
+        require("and ALSO among those that go through the proxy (it was the false green)", rip.proxied.size() == 1);
+        require("the plan knows the proxy comes from a wildcard", rip.proxyFromWildcard);
+        require("the proxy line names the wildcard", rip.proxied.get(0).contains("*.domain-d.test"));
 
-        System.out.println("\n== ripartisci(): record insieme SBAGLIATO e PROXATO ==");
-        // Prima finiva nel solo conto del proxy, perche' il motivo conteneva "Cloudflare":
-        // il passo dei CNAME dichiarava "tutti presenti e giusti" un record che puntava altrove.
+        System.out.println("\n== split(): a record both WRONG and PROXIED ==");
+        // Before, it ended up only in the proxy count, because the reason contained "Cloudflare": the
+        // CNAME step declared "all present and right" a record that pointed elsewhere.
         rip = MtaStsSetup.split(List.of(
                 e("x.it", MtaStsSetup.NameState.TO_FIX,
-                  "punta a \"altro.host\" invece che a \"mail.domain-b.test\"; passa da Cloudflare",
+                  "points to \"other.host\" instead of \"mail.domain-b.test\"; goes through Cloudflare",
                   true, true, true)));
-        require("compare fra gli storti", rip.crooked.size() == 1);
-        require("compare ANCHE fra i proxati", rip.proxied.size() == 1);
-        require("il proxy non viene da un jolly", !rip.proxyFromWildcard);
+        require("it appears among the crooked ones", rip.crooked.size() == 1);
+        require("it ALSO appears among the proxied ones", rip.proxied.size() == 1);
+        require("the proxy does not come from a wildcard", !rip.proxyFromWildcard);
 
-        System.out.println("\n== ripartisci(): record giusto ma proxato ==");
+        System.out.println("\n== split(): right record but proxied ==");
         rip = MtaStsSetup.split(List.of(
-                e("y.it", MtaStsSetup.NameState.TO_FIX, "passa da Cloudflare", true, true, false)));
-        require("non e' storto", rip.crooked.isEmpty());
-        require("e' proxato", rip.proxied.size() == 1);
+                e("y.it", MtaStsSetup.NameState.TO_FIX, "goes through Cloudflare", true, true, false)));
+        require("it is not crooked", rip.crooked.isEmpty());
+        require("it is proxied", rip.proxied.size() == 1);
 
-        System.out.println("\n== ripartisci(): cieco, propagazione, tutto a posto ==");
+        System.out.println("\n== split(): blind, propagating, all in place ==");
         rip = MtaStsSetup.split(List.of(
-                e("c.it", MtaStsSetup.NameState.BLIND, "zona non visibile", false, false, false),
-                e("p.it", MtaStsSetup.NameState.RIGHT, "punta dritto", false, false, false),
-                e("ok.it", MtaStsSetup.NameState.RIGHT, "punta dritto", true, false, false)));
-        require("il cieco resta cieco", rip.blind.size() == 1);
-        require("il giusto che non risolve ancora e' in propagazione", rip.propagating.size() == 1);
-        require("il giusto che risolve non compare da nessuna parte",
+                e("c.it", MtaStsSetup.NameState.BLIND, "zone not visible", false, false, false),
+                e("p.it", MtaStsSetup.NameState.RIGHT, "points straight", false, false, false),
+                e("ok.it", MtaStsSetup.NameState.RIGHT, "points straight", true, false, false)));
+        require("the blind one stays blind", rip.blind.size() == 1);
+        require("the right one that does not resolve yet is propagating", rip.propagating.size() == 1);
+        require("the right one that resolves appears nowhere",
                 rip.absent.isEmpty() && rip.crooked.isEmpty() && rip.proxied.isEmpty());
 
-        System.out.println("\n== interpretaTxt(): cosa vuol dire ogni uscita di dig ==");
-        // Uscite VERE di "dig +noall +comments +answer TXT _mta-sts.<dominio>", registrate il
-        // 2/10/2026 con BIND 9.18 e il resolver 8.8.8.8 (che convalida DNSSEC).
+        System.out.println("\n== parseTxt(): what every dig output means ==");
+        // REAL outputs of "dig +noall +comments +answer TXT _mta-sts.<domain>", recorded on 2/10/2026
+        // with BIND 9.18 and the resolver 8.8.8.8 (which validates DNSSEC).
         String domainD = ";; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 32535\n;; flags: qr rd ra ad; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1\n\n;; OPT PSEUDOSECTION:\n; EDNS: version: 0, flags:; udp: 512\n;; ANSWER SECTION:\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; id=0fec393151a7c577266a\"\n\n";
         String servfail = ";; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: SERVFAIL, id: 37005\n;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1\n\n;; OPT PSEUDOSECTION:\n; EDNS: version: 0, flags:; udp: 512\n; EDE: 9 (DNSKEY Missing): (No DNSKEY matches DS RRs of dnssec-failed.org)\n";
         String nxdomain = ";; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 2902\n;; flags: qr rd ra ad; QUERY: 1, ANSWER: 0, AUTHORITY: 1, ADDITIONAL: 1\n\n;; OPT PSEUDOSECTION:\n; EDNS: version: 0, flags:; udp: 512\n";
         String withoutTxt = ";; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 19074\n;; flags: qr rd ra ad; QUERY: 1, ANSWER: 0, AUTHORITY: 1, ADDITIONAL: 1\n\n;; OPT PSEUDOSECTION:\n; EDNS: version: 0, flags:; udp: 512\n";
         String unreachable = ";; communications error to 192.0.2.1#53: connection refused\n;; no servers could be reached\n";
-        randomBytes("domain-d.test, record pubblicato", 0, domainD,
+        randomBytes("domain-d.test, record published", 0, domainD,
                 MtaStsSetup.TxtOutcome.PRESENT, "v=STSv1; id=0fec393151a7c577266a");
-        randomBytes("dnssec-failed.org, SERVFAIL: il DNS non dice che cosa c'e'", 0, servfail,
+        randomBytes("dnssec-failed.org, SERVFAIL: the DNS does not say what is there", 0, servfail,
                 MtaStsSetup.TxtOutcome.NOT_ASKED, "");
-        randomBytes("nome inesistente (NXDOMAIN)", 0, nxdomain, MtaStsSetup.TxtOutcome.ABSENT, "");
-        randomBytes("example.com, il nome c'e' ma senza TXT", 0, withoutTxt, MtaStsSetup.TxtOutcome.ABSENT, "");
-        randomBytes("DNS che non risponde (dig esce con 9)", 9, unreachable, MtaStsSetup.TxtOutcome.NOT_ASKED, "");
-        // Il piano scrive il perche' accanto al dominio: un SERVFAIL si cerca nella zona, un
-        // DNS che non risponde nella rete di questo server.
+        randomBytes("non-existent name (NXDOMAIN)", 0, nxdomain, MtaStsSetup.TxtOutcome.ABSENT, "");
+        randomBytes("example.com, the name is there but without TXT", 0, withoutTxt, MtaStsSetup.TxtOutcome.ABSENT, "");
+        randomBytes("DNS not answering (dig exits with 9)", 9, unreachable, MtaStsSetup.TxtOutcome.NOT_ASKED, "");
+        // The plan writes the why next to the domain: a SERVFAIL is looked for in the zone, a DNS
+        // that does not answer in this server's network.
         String why = MtaStsSetup.parseTxt(0, servfail).reason;
-        require("il piano dice che il DNS ha risposto SERVFAIL: \"" + why + "\"", why.contains("SERVFAIL"));
+        require("the plan says the DNS answered SERVFAIL: \"" + why + "\"", why.contains("SERVFAIL"));
         why = MtaStsSetup.parseTxt(9, unreachable).reason;
-        require("e che nessun DNS ha risposto: \"" + why + "\"", why.equals("nessun DNS risponde"));
-        // Varianti costruite sulla risposta vera di domain-d.test.
+        require("and that no DNS answered: \"" + why + "\"", why.equals("no DNS answers"));
+        // Variants built on domain-d.test's real answer.
         String line = "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; id=0fec393151a7c577266a\"";
-        randomBytes("record spezzato in due stringhe", 0,
+        randomBytes("record split into two strings", 0,
                 domainD.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; \" \"id=0fec393151a7c577266a\""),
                 MtaStsSetup.TxtOutcome.PRESENT, "v=STSv1; id=0fec393151a7c577266a");
-        randomBytes("accanto a un altro TXT sullo stesso nome", 0,
+        randomBytes("next to another TXT on the same name", 0,
                 domainD.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\"\n" + line),
                 MtaStsSetup.TxtOutcome.PRESENT, "v=STSv1; id=0fec393151a7c577266a");
-        randomBytes("dietro un CNAME", 0,
+        randomBytes("behind a CNAME", 0,
                 domainD.replace(line, "_mta-sts.domain-d.test.\t300\tIN\tCNAME\t_mta-sts.other.net.\n_mta-sts.other.net.\t300\tIN\tTXT\t\"v=STSv1; id=7\""),
                 MtaStsSetup.TxtOutcome.PRESENT, "v=STSv1; id=7");
-        randomBytes("maiuscole", 0, domainD.replace("v=STSv1; id=0fec393151a7c577266a", "V=STSV1; id=2"),
+        randomBytes("upper case", 0, domainD.replace("v=STSv1; id=0fec393151a7c577266a", "V=STSV1; id=2"),
                 MtaStsSetup.TxtOutcome.PRESENT, "V=STSV1; id=2");
-        randomBytes("solo altri TXT", 0, domainD.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\""),
+        randomBytes("only other TXT records", 0, domainD.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\""),
                 MtaStsSetup.TxtOutcome.ABSENT, "");
         randomBytes("REFUSED", 0, servfail.replace("SERVFAIL", "REFUSED"), MtaStsSetup.TxtOutcome.NOT_ASKED, "");
-        randomBytes("uscita senza lo stato della risposta", 0, "qualcosa che non e' dig\n", MtaStsSetup.TxtOutcome.NOT_ASKED, "");
-        // Con "dig +short" (com'era) SERVFAIL e NXDOMAIN stampano la stessa cosa, cioe' niente:
-        // per questo la lettura chiede lo stato della risposta.
-        randomBytes("l'uscita di dig +short di un SERVFAIL non basta a dire ASSENTE", 0, "", MtaStsSetup.TxtOutcome.NOT_ASKED, "");
+        randomBytes("output without the answer's state", 0, "something that is not dig\n", MtaStsSetup.TxtOutcome.NOT_ASKED, "");
+        // With "dig +short" (as it was) SERVFAIL and NXDOMAIN print the same thing, that is nothing:
+        // that is why the reading asks for the answer's state.
+        randomBytes("the dig +short output of a SERVFAIL is not enough to say ABSENT", 0, "", MtaStsSetup.TxtOutcome.NOT_ASKED, "");
 
-        System.out.println("\n== interpretaTxt(): due record v=STSv1 sullo stesso nome ==");
-        // Per i mittenti valgono zero (RFC 8461 §3.1). Prima la lettura prendeva il primo e
-        // diceva PRESENTE: qui il primo e' proprio quello giusto, il caso piu' ingannevole.
+        System.out.println("\n== parseTxt(): two v=STSv1 records on the same name ==");
+        // For senders they are worth zero (RFC 8461 §3.1). Before, the reading took the first and said
+        // PRESENT: here the first is exactly the right one, the most deceiving case.
         String old = "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; id=1700000000000\"";
-        String due = domainD.replace(line, line + "\n" + old);
-        randomBytes("il giusto e uno con l'id vecchio", 0, due, MtaStsSetup.TxtOutcome.TOO_MANY, "");
-        MtaStsSetup.TxtReading l2 = MtaStsSetup.parseTxt(0, due);
-        require("e li riporta tutti e due: " + l2.values,
+        String two = domainD.replace(line, line + "\n" + old);
+        randomBytes("the right one and one with the old id", 0, two, MtaStsSetup.TxtOutcome.TOO_MANY, "");
+        MtaStsSetup.TxtReading l2 = MtaStsSetup.parseTxt(0, two);
+        require("and it reports both: " + l2.values,
                 l2.values.equals(List.of("v=STSv1; id=0fec393151a7c577266a", "v=STSv1; id=1700000000000")));
-        randomBytes("uno scritto in maiuscolo (mailauth lo conta)", 0,
+        randomBytes("one written in upper case (mailauth counts it)", 0,
                 domainD.replace(line, line + "\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"V=STSV1; id=2\""),
                 MtaStsSetup.TxtOutcome.TOO_MANY, "");
-        randomBytes("due record e un TXT che non c'entra", 0,
+        randomBytes("two records and a TXT that has nothing to do with it", 0,
                 domainD.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\"\n"
                         + line + "\n" + old),
                 MtaStsSetup.TxtOutcome.TOO_MANY, "");
-        randomBytes("stesso testo, ma due record (uno spezzato): sono due", 0,
+        randomBytes("same text, but two records (one split): they are two", 0,
                 domainD.replace(line, line + "\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; \" \"id=0fec393151a7c577266a\""),
                 MtaStsSetup.TxtOutcome.TOO_MANY, "");
-        randomBytes("due record dietro un CNAME", 0,
+        randomBytes("two records behind a CNAME", 0,
                 domainD.replace(line, "_mta-sts.domain-d.test.\t300\tIN\tCNAME\t_mta-sts.other.net.\n"
                         + "_mta-sts.other.net.\t300\tIN\tTXT\t\"v=STSv1; id=7\"\n"
                         + "_mta-sts.other.net.\t300\tIN\tTXT\t\"v=STSv1; id=8\""),
                 MtaStsSetup.TxtOutcome.TOO_MANY, "");
 
-        System.out.println("\n== passiProvaETxt(): il passo del record nel piano ==");
+        System.out.println("\n== testAndTxtSteps(): the record step in the plan ==");
         String expected = "v=STSv1; id=0fec393151a7c577266a";
         MtaStsSetup.TxtReading one = MtaStsSetup.parseTxt(0, domainD);
         MtaStsSetup.Step p = txtStep(List.of(
                 new MtaStsSetup.TxtReview("domain-d.test", true, one)), expected);
-        require("un record giusto e la politica che risponde: fatto (" + p.detail + ")", "done".equals(p.state));
+        require("a right record and the policy answering: done (" + p.detail + ")", "done".equals(p.state));
         p = txtStep(List.of(new MtaStsSetup.TxtReview("domain-d.test", true, l2)), expected);
-        require("due record, anche col primo giusto: NON fatto -> " + p.state + " (" + p.detail + ")",
+        require("two records, even with the first right: NOT done -> " + p.state + " (" + p.detail + ")",
                 "todo".equals(p.state));
-        require("il dettaglio nomina tutti e due i record",
+        require("the detail names both records",
                 p.detail.contains("id=0fec393151a7c577266a") && p.detail.contains("id=1700000000000"));
-        require("e il motivo dice perche' conta", p.reason != null && p.reason.contains("RFC 8461"));
+        require("and the reason says why it matters", p.reason != null && p.reason.contains("RFC 8461"));
         p = txtStep(List.of(new MtaStsSetup.TxtReview("domain-d.test", true, l2),
                              new MtaStsSetup.TxtReview("domain-a.test", true, one)), expected);
-        require("un dominio a posto non copre quello con due record: " + p.state, "todo".equals(p.state));
+        require("a domain in place does not cover the one with two records: " + p.state, "todo".equals(p.state));
         p = txtStep(List.of(new MtaStsSetup.TxtReview("domain-d.test", false, l2)), expected);
-        require("due record e la politica che non risponde: segnalati come non mantenuti (" + p.detail + ")",
-                "todo".equals(p.state) && p.detail.contains("NON mantenuto"));
+        require("two records and the policy not answering: reported as not kept (" + p.detail + ")",
+                "todo".equals(p.state) && p.detail.contains("NOT kept"));
         p = txtStep(List.of(new MtaStsSetup.TxtReview("domain-d.test", true,
                 MtaStsSetup.parseTxt(0, servfail))), expected);
-        require("un SERVFAIL resta incerto, col motivo (" + p.detail + ")",
+        require("a SERVFAIL stays uncertain, with the reason (" + p.detail + ")",
                 "uncertain".equals(p.state) && p.detail.contains("SERVFAIL"));
 
-        System.out.println("\n== leggiTxt(): il DNS vero, sui domini veri ==");
+        System.out.println("\n== readTxt(): the real DNS, on the real domains ==");
         if (digAnswers()) {
             for (String d : new String[]{"domain-d.test", "domain-a.test", "domain-b.test",
-                                         "nome-che-non-esiste-99887.invalid"}) {
+                                         "name-that-does-not-exist-99887.invalid"}) {
                 MtaStsSetup.TxtReading l = MtaStsSetup.readTxt(d);
                 System.out.println("  " + d + " -> " + l.outcome + "  \"" + l.content + "\"");
                 if (d.equals("domain-d.test")) {
-                    require("su domain-d.test il TXT viene VISTO (prima il piano non ci arrivava)",
+                    require("on domain-d.test the TXT is SEEN (before, the plan did not get there)",
                             l.outcome == MtaStsSetup.TxtOutcome.PRESENT);
-                    require("e se ne legge il contenuto", l.content.startsWith("v=STSv1"));
+                    require("and its content is read", l.content.startsWith("v=STSv1"));
                 }
                 if (d.endsWith(".invalid"))
-                    require("un nome inesistente e' ASSENTE, non NON_CHIESTO",
+                    require("a non-existent name is ABSENT, not NOT_ASKED",
                             l.outcome == MtaStsSetup.TxtOutcome.ABSENT);
             }
-            // dnssec-failed.org ha il DNSSEC rotto apposta: un resolver che lo convalida risponde
-            // SERVFAIL. Se questo lo fa, la lettura deve dire NON_CHIESTO, non ASSENTE.
+            // dnssec-failed.org has a deliberately broken DNSSEC: a validating resolver answers
+            // SERVFAIL. If this one does, the reading must say NOT_ASKED, not ABSENT.
             if (digState("_mta-sts.dnssec-failed.org").equals("SERVFAIL")) {
                 MtaStsSetup.TxtReading l = MtaStsSetup.readTxt("dnssec-failed.org");
                 System.out.println("  dnssec-failed.org -> " + l.outcome + " (" + l.reason + ")");
-                require("un SERVFAIL e' NON_CHIESTO, non ASSENTE", l.outcome == MtaStsSetup.TxtOutcome.NOT_ASKED);
+                require("a SERVFAIL is NOT_ASKED, not ABSENT", l.outcome == MtaStsSetup.TxtOutcome.NOT_ASKED);
             } else {
-                System.out.println("  (il resolver di questa macchina non convalida DNSSEC: SERVFAIL provato solo qui sopra)");
+                System.out.println("  (this machine's resolver does not validate DNSSEC: SERVFAIL tested only above)");
             }
         } else {
-            // dig assente o rete chiusa: non si e' chiesto niente a nessuno, e la lettura deve
-            // dirlo. Un ASSENTE qui farebbe proporre di pubblicare un record che forse c'e' gia'.
-            System.out.println("  da qui dig non arriva a un DNS: la lettura deve dire NON_CHIESTO");
-            for (String d : new String[]{"domain-d.test", "nome-che-non-esiste-99887.invalid"}) {
+            // dig missing or network closed: nobody was asked anything, and the reading must say so.
+            // An ABSENT here would make it propose publishing a record that may already be there.
+            System.out.println("  from here dig does not reach a DNS: the reading must say NOT_ASKED");
+            for (String d : new String[]{"domain-d.test", "name-that-does-not-exist-99887.invalid"}) {
                 MtaStsSetup.TxtReading l = MtaStsSetup.readTxt(d);
-                require(d + " -> " + l.outcome + ", non ASSENTE ne' PRESENTE",
+                require(d + " -> " + l.outcome + ", neither ABSENT nor PRESENT",
                         l.outcome == MtaStsSetup.TxtOutcome.NOT_ASKED);
             }
         }
 
-        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         if (failed > 0) System.exit(1);
     }
 }

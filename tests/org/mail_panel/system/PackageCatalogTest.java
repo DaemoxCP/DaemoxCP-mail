@@ -11,26 +11,28 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Prova la data del catalogo dei pacchetti (PkgCatalog) e la riga che ne fa il rapporto.
+ * Tests the date of the package catalog (PkgCatalog) and the report's line about it.
  *
- * Lavora su una cartella di pkg costruita qui, con la disposizione di FreeBSD 15 e le date
- * decise dalla prova: dove sta il catalogo e che data ha lo dice il sorgente di pkg
- * (libpkg/repo/binary/common.c: "repos/%s/db"; update.c: la data e' quella del server).
- * L'uscita di pkg -vv ha la forma esatta di print_repository() in src/utils.c.
+ * It works on a pkg folder built here, with the FreeBSD 15 layout and dates decided by the test:
+ * where the catalog lives and what date it has is said by pkg's source
+ * (libpkg/repo/binary/common.c: "repos/%s/db"; update.c: the date is the server's).
+ * The output of pkg -vv has the exact shape of print_repository() in src/utils.c.
  *
- * Il caso che l'ha motivata: Home e rapporto dicevano "eta' sconosciuta" perche' guardavano
- * /var/db/pkg/repo-FreeBSD.sqlite. In fondo la prova mostra che su FreeBSD 15 quel file non c'e'.
+ * The case that prompted it: Home and the report said "age unknown" because they looked at
+ * /var/db/pkg/repo-FreeBSD.sqlite. At the end the test shows that on FreeBSD 15 that file is not there.
+ *
+ * The panel's texts are read in English (I18n.setCurrent): outside a request it writes Italian.
  */
 public class PackageCatalogTest {
 
     static int failed = 0;
 
     static void require(String what, boolean condition) {
-        System.out.println((condition ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((condition ? "  OK   " : "  FAILED ") + what);
         if (!condition) failed++;
     }
 
-    static final long NOW = 1_790_000_000L;   // un istante fisso: le eta' non dipendono dal giorno della prova
+    static final long NOW = 1_790_000_000L;   // a fixed instant: the ages do not depend on the day of the test
 
     static void file(Path p, long hoursAgo) throws Exception {
         Files.createDirectories(p.getParent());
@@ -38,7 +40,7 @@ public class PackageCatalogTest {
         Files.setLastModifiedTime(p, FileTime.from(Instant.ofEpochSecond(NOW - hoursAgo * 3600)));
     }
 
-    /** Un repository come lo stampa "pkg -vv" (print_repository con pad). */
+    /** A repository as "pkg -vv" prints it (print_repository with pad). */
     static String block(String name, String url, String enabled) {
         return "  " + name + ": { \n"
              + "    url             : \"" + url + "\",\n"
@@ -59,7 +61,8 @@ public class PackageCatalogTest {
             + block("FreeBSD-base", "pkg+https://pkg.FreeBSD.org/FreeBSD:15:aarch64/base_release_1", "no");
 
     public static void main(String[] a) throws Exception {
-        Path root = Files.createTempDirectory("prova-catalogo");
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        Path root = Files.createTempDirectory("catalog-test");
         try {
             tests(root);
         } finally {
@@ -67,21 +70,21 @@ public class PackageCatalogTest {
                 s.sorted((x, y) -> y.compareTo(x)).forEach(p -> p.toFile().delete());
             }
         }
-        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         if (failed > 0) System.exit(1);
     }
 
     static void tests(Path root) throws Exception {
-        System.out.println("\n== pkg -vv: quali repository sono accesi ==");
+        System.out.println("\n== pkg -vv: which repositories are enabled ==");
         List<String> enabledOnes = PkgCatalog.enabledOnes(PKG_VV);
-        require("accesi FreeBSD-ports e FreeBSD-ports-kmods (anche \"yes (overridden by pkg)\"): " + enabledOnes,
+        require("enabled FreeBSD-ports and FreeBSD-ports-kmods (also \"yes (overridden by pkg)\"): " + enabledOnes,
                 List.of("FreeBSD-ports", "FreeBSD-ports-kmods").equals(enabledOnes));
-        require("un'uscita senza repository e' \"non so\" (null), non \"nessuno\"",
-                PkgCatalog.enabledOnes("pkg: errore qualsiasi\n") == null);
-        require("repository tutti spenti: elenco vuoto, non null",
+        require("an output without repositories is \"I don't know\" (null), not \"none\"",
+                PkgCatalog.enabledOnes("pkg: some error\n") == null);
+        require("repositories all disabled: empty list, not null",
                 PkgCatalog.enabledOnes("Repositories:\n" + block("FreeBSD-ports", "x", "no")).isEmpty());
 
-        System.out.println("\n== FreeBSD 15: due accesi, uno spento, il vecchio FreeBSD, local.sqlite ==");
+        System.out.println("\n== FreeBSD 15: two enabled, one disabled, the old FreeBSD, local.sqlite ==");
         Path pkg = root.resolve("db1");
         file(pkg.resolve("repos/FreeBSD-ports/db"), 26);
         file(pkg.resolve("repos/FreeBSD-ports-kmods/db"), 50);
@@ -89,66 +92,66 @@ public class PackageCatalogTest {
         file(pkg.resolve("repos/FreeBSD/db"), 24 * 400);
         file(pkg.resolve("local.sqlite"), 0);
         JSONObject c = PkgCatalog.data(pkg.toString(), enabledOnes, NOW);
-        require("vale il piu' vecchio fra gli accesi: " + c.optString("oldest") + ", " + c.optLong("days") + " giorni",
+        require("the oldest among the enabled ones counts: " + c.optString("oldest") + ", " + c.optLong("days") + " days",
                 "FreeBSD-ports-kmods".equals(c.optString("oldest")) && c.optLong("days") == 2 && c.optLong("hours") == 50);
-        require("solo i due accesi", c.getJSONArray("repository").length() == 2);
+        require("only the two enabled ones", c.getJSONArray("repository").length() == 2);
         String note = PkgCatalog.note(c);
-        System.out.println("  nota: " + note);
-        require("la nota ha le due date, \"ieri\" e \"2 giorni fa\"", note.contains("FreeBSD-ports il ")
-                && note.contains("(ieri)") && note.contains("(2 giorni fa)"));
-        require("e dice che e' la data del server", note.contains("non dell'ultimo controllo"));
+        System.out.println("  note: " + note);
+        require("the note has the two dates, \"yesterday\" and \"2 days ago\"", note.contains("FreeBSD-ports on ")
+                && note.contains("(yesterday)") && note.contains("(2 days ago)"));
+        require("and it says it is the server's date", note.contains("not of the last check"));
 
-        System.out.println("\n== un acceso senza catalogo; nessun catalogo; repository tutti spenti ==");
+        System.out.println("\n== an enabled one without a catalog; no catalog; repositories all disabled ==");
         Path pkg2 = root.resolve("db2");
         file(pkg2.resolve("repos/FreeBSD-ports/db"), 3);
         c = PkgCatalog.data(pkg2.toString(), enabledOnes, NOW);
-        require("oggi, e FreeBSD-ports-kmods fra i mancanti", c.optLong("days") == 0
+        require("today, and FreeBSD-ports-kmods among the missing", c.optLong("days") == 0
                 && c.getJSONArray("missing").toList().equals(List.of("FreeBSD-ports-kmods")));
-        require("la nota lo dice", PkgCatalog.note(c).contains("Il repository FreeBSD-ports-kmods è acceso ma non ha"));
+        require("the note says so", PkgCatalog.note(c).contains("The repository FreeBSD-ports-kmods is enabled but has no"));
         Path pkg3 = root.resolve("db3");
         Files.createDirectories(pkg3);
         c = PkgCatalog.data(pkg3.toString(), enabledOnes, NOW);
         note = PkgCatalog.note(c);
-        require("nessun catalogo: giorni -1, e la nota dice dove ha guardato: " + note,
+        require("no catalog: days -1, and the note says where it looked: " + note,
                 c.optLong("days") == -1 && note.contains("repos/FreeBSD-ports/db"));
         c = PkgCatalog.data(pkg.toString(), List.of(), NOW);
-        require("tutti spenti: lo dice, invece di \"non so\": " + PkgCatalog.note(c),
-                PkgCatalog.note(c).startsWith("Nessun repository di pkg è acceso"));
+        require("all disabled: it says so, instead of \"I don't know\": " + PkgCatalog.note(c),
+                PkgCatalog.note(c).startsWith("No pkg repository is enabled"));
 
-        System.out.println("\n== pkg vecchio, pkg -vv muto, nome strano, orologio indietro ==");
+        System.out.println("\n== old pkg, silent pkg -vv, odd name, clock behind ==");
         Path pkg4 = root.resolve("db4");
         file(pkg4.resolve("repo-FreeBSD.sqlite"), 30);
         c = PkgCatalog.data(pkg4.toString(), List.of("FreeBSD"), NOW);
-        require("repo-<nome>.sqlite ancora riconosciuto", c.optString("file").endsWith("repo-FreeBSD.sqlite"));
+        require("repo-<name>.sqlite still recognised", c.optString("file").endsWith("repo-FreeBSD.sqlite"));
         c = PkgCatalog.data(pkg.toString(), null, NOW);
-        require("senza pkg -vv si prendono i cataloghi che ci sono (4)", c.getJSONArray("repository").length() == 4);
+        require("without pkg -vv the catalogs that are there are taken (4)", c.getJSONArray("repository").length() == 4);
         c = PkgCatalog.data(pkg.toString(), List.of("../../etc"), NOW);
-        require("un nome con ../ non finisce in un percorso", c.getJSONArray("repository").getJSONObject(0).has("error"));
+        require("a name with ../ does not end up in a path", c.getJSONArray("repository").getJSONObject(0).has("error"));
         Path pkg5 = root.resolve("db5");
         file(pkg5.resolve("repos/FreeBSD-ports/db"), -2);
         c = PkgCatalog.data(pkg5.toString(), List.of("FreeBSD-ports"), NOW);
-        require("data nel futuro: oggi, non un'eta' negativa", c.optLong("days") == 0);
+        require("date in the future: today, not a negative age", c.optLong("days") == 0);
 
-        System.out.println("\n== il rapporto ==");
+        System.out.println("\n== the report ==");
         c = PkgCatalog.data(pkg.toString(), enabledOnes, NOW);
         c.put("note", PkgCatalog.note(c));
-        PanelMail.Message report = ReportMail.message(new ReportMail.Context("it", "mail.esempio.it", "admin@esempio.it",
+        PanelMail.Message report = ReportMail.message(new ReportMail.Context("en", "mail.example.org", "admin@example.org",
                 true, "weekly", java.time.ZonedDateTime.now()), new JSONObject()
                 .put("catalog", c).put("catalogDays", c.optLong("days")).put("catalogDate", c.optString("data"))
                 .put("refreshedCatalog", true).put("vulnDbDays", 0));
-        // Nel testo le righe vanno a capo a 72 colonne: si cerca nel testo con gli spazi ridotti a uno.
+        // In the text the lines wrap at 72 columns: it is searched with the spaces reduced to one.
         String t = report.text().replaceAll("\\s+", " ");
-        int at = t.indexOf("Catalogo dei pacchetti: pubblicato 2 giorni fa (");
-        System.out.println("  " + (at < 0 ? "(manca la riga del catalogo)" : t.substring(at, Math.min(t.length(), at + 90))));
-        require("il rapporto dice quando e' stato pubblicato, e che e' stato controllato adesso",
-                at >= 0 && t.indexOf("controllato adesso", at) > at && t.indexOf("controllato adesso", at) - at < 100);
-        require("e con due repository aggiunge la frase intera", t.contains("I conteggi sono freschi quanto il più vecchio"));
-        require("niente piu' \"eta' sconosciuta\" per il catalogo", !t.contains("Catalogo dei pacchetti: età sconosciuta")
-                && !t.contains("data di pubblicazione sconosciuta"));
-        require("anche l'HTML lo dice", report.html().contains("pubblicato 2 giorni fa (") && report.html().contains("controllato adesso"));
+        int at = t.indexOf("Package catalog: published 2 days ago (");
+        System.out.println("  " + (at < 0 ? "(the catalog line is missing)" : t.substring(at, Math.min(t.length(), at + 90))));
+        require("the report says when it was published, and that it was checked just now",
+                at >= 0 && t.indexOf("checked just now", at) > at && t.indexOf("checked just now", at) - at < 100);
+        require("and with two repositories it adds the whole sentence", t.contains("The counts are as fresh as the oldest"));
+        require("no more \"age unknown\" for the catalog", !t.contains("Package catalog: age unknown")
+                && !t.contains("publication date unknown"));
+        require("the HTML says it too", report.html().contains("published 2 days ago (") && report.html().contains("checked just now"));
 
-        System.out.println("\n== dove guardava prima ==");
-        require("su FreeBSD 15 /var/db/pkg/repo-FreeBSD.sqlite non c'e': di qui \"eta' sconosciuta\"",
+        System.out.println("\n== where it looked before ==");
+        require("on FreeBSD 15 /var/db/pkg/repo-FreeBSD.sqlite is not there: hence \"age unknown\"",
                 !Files.exists(pkg.resolve("repo-FreeBSD.sqlite")));
     }
 }

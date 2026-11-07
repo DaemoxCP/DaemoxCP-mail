@@ -47,7 +47,7 @@ import java.util.concurrent.Executors;
  *    go away, the panel block is written once, and the file is not readable by other users.
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.MailboxPasswordTest
  */
 public class MailboxPasswordTest {
@@ -117,11 +117,11 @@ public class MailboxPasswordTest {
 
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(mysqlPort), System.getProperty("mysql.database", "mailpanel_prova"));
+        db.setConnection("127.0.0.1", Integer.parseInt(mysqlPort), System.getProperty("mysql.database", "mailpanel_test"));
         check("connected to MySQL", db.connect());
-        // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.
-        // Scritta prima che le tabelle esistessero, non si salvava e il pannello
-        // scriveva nel registro vero.
+        // The schema BEFORE the entry, and the entry read back: see TestSessions.auditLogTo.
+        // Written before the tables existed, it was not saved and the panel wrote to the real
+        // log.
         TestSessions.auditLogTo(db, audit);
         Main.mysqlAvailable = true;
         Main.setupRequired = false;
@@ -135,13 +135,13 @@ public class MailboxPasswordTest {
         int domainId = db.addDomain(domain, "test");
 
         System.out.println("\n== Hash and copy together ==");
-        String first = "Prima-Password-2026";
+        String first = "First-Password-2026";
         String email = "anna@" + domain;
         int id = db.addMailbox(domainId, email, first, "Anna", 512);
         check("the new mailbox has a bcrypt hash", id > 0 && column("password", id).startsWith("$2a$"));
         check("and the encrypted copy of the same password", first.equals(copyOf(id)));
-        check("the hash matches the right password only", db.mailboxPasswordMatches(id, first) && !db.mailboxPasswordMatches(id, "Altra-Password-2026"));
-        String second = "Seconda-Password-2026";
+        check("the hash matches the right password only", db.mailboxPasswordMatches(id, first) && !db.mailboxPasswordMatches(id, "Other-Password-2026"));
+        String second = "Second-Password-2026";
         db.updateMailboxPassword(id, second);
         check("a change rewrites both", db.mailboxPasswordMatches(id, second) && second.equals(copyOf(id)));
 
@@ -152,14 +152,14 @@ public class MailboxPasswordTest {
         active.set(PasswordVault.getInstance(), new javax.crypto.spec.SecretKeySpec(new byte[5], "AES"));
         boolean refused = false;
         try {
-            db.addMailbox(domainId, "nocopy@" + domain, "Senza-Copia-2026", "", 512);
+            db.addMailbox(domainId, "nocopy@" + domain, "Without-Copy-2026", "", 512);
         } catch (java.sql.SQLException e) {
             refused = true;
         }
         check("vault broken: the new mailbox is refused", refused && db.getMailboxByEmail("nocopy@" + domain) == null);
         refused = false;
         try {
-            db.updateMailboxPassword(id, "Terza-Password-2026");
+            db.updateMailboxPassword(id, "Third-Password-2026");
         } catch (java.sql.SQLException e) {
             refused = true;
         }
@@ -167,7 +167,7 @@ public class MailboxPasswordTest {
         check("vault broken: the change is refused and the old password stays", refused && db.mailboxPasswordMatches(id, second) && second.equals(copyOf(id)));
 
         System.out.println("\n== Passwords the panel did not write ==");
-        String clear = "Scritta-Dalla-Webmail-1";
+        String clear = "Written-By-Webmail-1";
         setColumn("password", id, clear);
         check("clear text in the column (old webmail plugin): it still matches", db.mailboxPasswordMatches(id, clear) && !db.mailboxPasswordMatches(id, "x" + clear));
         String y = "$2y$" + BCrypt.hashpw(second, BCrypt.gensalt(10)).substring(4);
@@ -177,23 +177,23 @@ public class MailboxPasswordTest {
         check("an unknown scheme: never a match", !db.mailboxPasswordMatches(id, second));
 
         System.out.println("\n== Repair of clear-text rows ==");
-        String bobPass = "Password-Di-Bob-2026";
+        String bobPass = "Password-Of-Bob-2026";
         int bob = db.addMailbox(domainId, "bob@" + domain, bobPass, "Bob", 512);
-        setColumn("password", bob, "In-Chiaro-Bob-2026");
+        setColumn("password", bob, "Plain-Text-Bob-2026");
         setColumn("password_encrypted", bob, null);
         setColumn("password", id, BCrypt.hashpw(second, BCrypt.gensalt(10)));
         int repaired = db.repairPlaintextMailboxPasswords();
         check("one row repaired (" + repaired + ")", repaired == 1);
         check("now a bcrypt hash of the same password, with its copy", column("password", bob).startsWith("$2a$")
-                && db.mailboxPasswordMatches(bob, "In-Chiaro-Bob-2026") && "In-Chiaro-Bob-2026".equals(copyOf(bob)));
+                && db.mailboxPasswordMatches(bob, "Plain-Text-Bob-2026") && "Plain-Text-Bob-2026".equals(copyOf(bob)));
         check("the other rows untouched", db.mailboxPasswordMatches(id, second) && second.equals(copyOf(id)));
         check("a second run finds nothing", db.repairPlaintextMailboxPasswords() == 0);
 
         System.out.println("\n== Filling a missing copy ==");
         setColumn("password_encrypted", bob, null);
-        check("wrong password: no copy", !db.fillMissingVaultCopy(bob, "Sbagliata-2026-xx") && column("password_encrypted", bob) == null);
-        check("right password: the copy is written", db.fillMissingVaultCopy(bob, "In-Chiaro-Bob-2026") && "In-Chiaro-Bob-2026".equals(copyOf(bob)));
-        check("already the same copy: nothing written", !db.fillMissingVaultCopy(bob, "In-Chiaro-Bob-2026"));
+        check("wrong password: no copy", !db.fillMissingVaultCopy(bob, "Wrong-Password-2026-xx") && column("password_encrypted", bob) == null);
+        check("right password: the copy is written", db.fillMissingVaultCopy(bob, "Plain-Text-Bob-2026") && "Plain-Text-Bob-2026".equals(copyOf(bob)));
+        check("already the same copy: nothing written", !db.fillMissingVaultCopy(bob, "Plain-Text-Bob-2026"));
 
         // The real server
         Process cert = new ProcessBuilder("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
@@ -201,14 +201,14 @@ public class MailboxPasswordTest {
                 .redirectErrorStream(true).start();
         cert.getInputStream().readAllBytes();
         check("test certificate", cert.waitFor() == 0);
-        setColumn("password", bob, "Di-Nuovo-In-Chiaro-26");
+        setColumn("password", bob, "Plain-Text-Again-26");
         SSLMailServer srv = new SSLMailServer(0, Files.readString(dir.resolve("c.pem")), Files.readString(dir.resolve("k.pem")));
         // What start() runs after the managers (initializeManagers needs the real services)
         java.lang.reflect.Method repair = SSLMailServer.class.getDeclaredMethod("repairPlaintextMailboxPasswords");
         repair.setAccessible(true);
         repair.invoke(srv);
         check("the startup repair fixes a clear-text row", column("password", bob).startsWith("$2a$")
-                && "Di-Nuovo-In-Chiaro-26".equals(copyOf(bob)));
+                && "Plain-Text-Again-26".equals(copyOf(bob)));
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);
         HttpsServer https = (HttpsServer) f.get(srv);
@@ -237,7 +237,7 @@ public class MailboxPasswordTest {
             check("the copy that matches the hash is shown", r.optBoolean("success") && second.equals(r.optString("password")));
             check("without the session token: refused", send("POST", "/api/mailboxes", "{\"action\":\"reveal_password\",\"id\":" + id + "}", json,
                     "Cookie", session).statusCode() == 403);
-            setColumn("password", id, BCrypt.hashpw("Cambiata-Altrove-2026", BCrypt.gensalt(10)));
+            setColumn("password", id, BCrypt.hashpw("Changed-Elsewhere-2026", BCrypt.gensalt(10)));
             r = reveal.apply(id);
             check("hash changed elsewhere: no password, the stale-copy message", !r.optBoolean("success") && !r.has("password")
                     && r.optString("error").contains("no longer the mailbox password"));
@@ -254,44 +254,44 @@ public class MailboxPasswordTest {
             String type = "application/x-www-form-urlencoded";
             String key = PanelSecrets.webmailKey();
             String path = WebmailPasswordConfig.PATH;
-            String change = form("user", email, "curpass", second, "newpass", "Dalla-Webmail-2026");
+            String change = form("user", email, "curpass", second, "newpass", "From-Webmail-2026");
             check("without the key: 404", send("POST", path, change, type).statusCode() == 404);
             check("a wrong key: 404", send("POST", path, change, type, "X-MailPanel-Key", key.substring(1) + "A").statusCode() == 404);
             check("through a proxy (X-Forwarded-For): 404", send("POST", path, change, type, "X-MailPanel-Key", key,
                     "X-Forwarded-For", "203.0.113.9").statusCode() == 404);
             check("GET with the key: 405", send("GET", path, null, type, "X-MailPanel-Key", key).statusCode() == 405);
             check("nothing changed so far", db.mailboxPasswordMatches(id, second));
-            HttpResponse<String> wrong = send("POST", path, form("user", email, "curpass", "Non-E-Questa-2026", "newpass", "Dalla-Webmail-2026"), type, "X-MailPanel-Key", key);
+            HttpResponse<String> wrong = send("POST", path, form("user", email, "curpass", "Not-This-One-2026", "newpass", "From-Webmail-2026"), type, "X-MailPanel-Key", key);
             check("wrong current password: 403, unchanged", wrong.statusCode() == 403 && db.mailboxPasswordMatches(id, second));
             HttpResponse<String> weak = send("POST", path, form("user", email, "curpass", second, "newpass", "corta"), type, "X-MailPanel-Key", key);
             check("new password outside the rule: 400, unchanged", weak.statusCode() == 400 && db.mailboxPasswordMatches(id, second));
-            check("accented letters: 400", send("POST", path, form("user", email, "curpass", second, "newpass", "Password-città-2026"), type,
+            check("accented letters: 400", send("POST", path, form("user", email, "curpass", second, "newpass", "Password-café-2026"), type,
                     "X-MailPanel-Key", key).statusCode() == 400);
-            check("a repeated field: 400", send("POST", path, change + "&newpass=Altra-Ancora-2026", type, "X-MailPanel-Key", key).statusCode() == 400);
+            check("a repeated field: 400", send("POST", path, change + "&newpass=Yet-Another-2026", type, "X-MailPanel-Key", key).statusCode() == 400);
             HttpResponse<String> ok = send("POST", path, change, type, "X-MailPanel-Key", key);
             check("the right one: 200 ok (what Roundcube expects)", ok.statusCode() == 200 && ok.body().equals("ok"));
-            check("hash and copy are the new password", db.mailboxPasswordMatches(id, "Dalla-Webmail-2026") && "Dalla-Webmail-2026".equals(copyOf(id)));
+            check("hash and copy are the new password", db.mailboxPasswordMatches(id, "From-Webmail-2026") && "From-Webmail-2026".equals(copyOf(id)));
             r = reveal.apply(id);
-            check("and the panel shows it", r.optBoolean("success") && "Dalla-Webmail-2026".equals(r.optString("password")));
+            check("and the panel shows it", r.optBoolean("success") && "From-Webmail-2026".equals(r.optString("password")));
             String log = Files.exists(audit) ? Files.readString(audit) : "";
             check("audit: the change is there, no password", log.contains("WEBMAIL_PASSWORD_CHANGED") && log.contains("WEBMAIL_PASSWORD_CHANGE_REFUSED")
-                    && !log.contains("Dalla-Webmail-2026") && !log.contains(second) && !log.contains("Non-E-Questa-2026"));
-            for (int i = 0; i < 6; i++) send("POST", path, form("user", "bob@" + domain, "curpass", "Tentativo-" + i + "-2026", "newpass", "Nuova-Di-Bob-2026"), type, "X-MailPanel-Key", key);
-            HttpResponse<String> limited = send("POST", path, form("user", "bob@" + domain, "curpass", "Di-Nuovo-In-Chiaro-26", "newpass", "Nuova-Di-Bob-2026"), type, "X-MailPanel-Key", key);
-            check("after 5 wrong current passwords: 429 even for the right one", limited.statusCode() == 429 && db.mailboxPasswordMatches(bob, "Di-Nuovo-In-Chiaro-26"));
+                    && !log.contains("From-Webmail-2026") && !log.contains(second) && !log.contains("Not-This-One-2026"));
+            for (int i = 0; i < 6; i++) send("POST", path, form("user", "bob@" + domain, "curpass", "Attempt-" + i + "-2026", "newpass", "Bobs-New-One-2026"), type, "X-MailPanel-Key", key);
+            HttpResponse<String> limited = send("POST", path, form("user", "bob@" + domain, "curpass", "Plain-Text-Again-26", "newpass", "Bobs-New-One-2026"), type, "X-MailPanel-Key", key);
+            check("after 5 wrong current passwords: 429 even for the right one", limited.statusCode() == 429 && db.mailboxPasswordMatches(bob, "Plain-Text-Again-26"));
             srv.webmail.resetLimits();
 
             System.out.println("\n== /api/internal/mailbox-vault (after a webmail login) ==");
             setColumn("password_encrypted", bob, null);
-            check("without the key: 404", send("POST", "/api/internal/mailbox-vault", form("user", "bob@" + domain, "pass", "Di-Nuovo-In-Chiaro-26"), type).statusCode() == 404);
-            check("a wrong password: 200 but no copy", send("POST", "/api/internal/mailbox-vault", form("user", "bob@" + domain, "pass", "Sbagliata-2026-xyz"), type,
+            check("without the key: 404", send("POST", "/api/internal/mailbox-vault", form("user", "bob@" + domain, "pass", "Plain-Text-Again-26"), type).statusCode() == 404);
+            check("a wrong password: 200 but no copy", send("POST", "/api/internal/mailbox-vault", form("user", "bob@" + domain, "pass", "Wrong-One-2026-xyz"), type,
                     "X-MailPanel-Key", key).statusCode() == 200 && column("password_encrypted", bob) == null);
-            check("the right password: the copy is stored", send("POST", "/api/internal/mailbox-vault", form("user", "bob@" + domain, "pass", "Di-Nuovo-In-Chiaro-26"), type,
-                    "X-MailPanel-Key", key).statusCode() == 200 && "Di-Nuovo-In-Chiaro-26".equals(copyOf(bob)));
-            check("an unknown mailbox: 200, nothing to do", send("POST", "/api/internal/mailbox-vault", form("user", "nobody@" + domain, "pass", "Qualcosa-2026-xx"), type,
+            check("the right password: the copy is stored", send("POST", "/api/internal/mailbox-vault", form("user", "bob@" + domain, "pass", "Plain-Text-Again-26"), type,
+                    "X-MailPanel-Key", key).statusCode() == 200 && "Plain-Text-Again-26".equals(copyOf(bob)));
+            check("an unknown mailbox: 200, nothing to do", send("POST", "/api/internal/mailbox-vault", form("user", "nobody@" + domain, "pass", "Something-2026-xx"), type,
                     "X-MailPanel-Key", key).statusCode() == 200);
             check("audit: copy stored, no password", Files.readString(audit).contains("MAILBOX_PASSWORD_COPY_STORED")
-                    && !Files.readString(audit).contains("Di-Nuovo-In-Chiaro-26"));
+                    && !Files.readString(audit).contains("Plain-Text-Again-26"));
 
             String rc = System.getProperty("roundcube.dir");
             if (rc == null) {
@@ -305,7 +305,7 @@ public class MailboxPasswordTest {
                 Files.writeString(plugin, org.mail_panel.integration.RoundcubeSsoManager.generatePluginPhp());
                 setColumn("password_encrypted", id, null);
                 Process php = new ProcessBuilder("php", "tests/webmail-roundcube-test.php", rc, config.toString(), plugin.toString(),
-                        email, "Dalla-Webmail-2026", "Da-Roundcube-Vero-2026", base + "/api/internal/mailbox-vault", key)
+                        email, "From-Webmail-2026", "Real-Roundcube-2026", base + "/api/internal/mailbox-vault", key)
                         .redirectErrorStream(true).start();
                 String out = new String(php.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
                 int exit = php.waitFor();
@@ -313,17 +313,17 @@ public class MailboxPasswordTest {
                 check("php ran the driver and the hook", exit == 0 && out.contains("hook_unreachable:done"));
                 check("the panel's block selects httpapi (the old sql line is gone)", out.contains("driver:httpapi"));
                 check("a wrong current password: PASSWORD_ERROR (2), unchanged", out.contains("wrong_current:2") && !db.mailboxPasswordMatches(id, "Another-New-2026"));
-                check("the change: PASSWORD_SUCCESS (0), hash is the new password", out.contains("change:0") && db.mailboxPasswordMatches(id, "Da-Roundcube-Vero-2026"));
-                check("the copy too (written by the change, then confirmed by the login hook)", "Da-Roundcube-Vero-2026".equals(copyOf(id)));
+                check("the change: PASSWORD_SUCCESS (0), hash is the new password", out.contains("change:0") && db.mailboxPasswordMatches(id, "Real-Roundcube-2026"));
+                check("the copy too (written by the change, then confirmed by the login hook)", "Real-Roundcube-2026".equals(copyOf(id)));
                 check("panel unreachable: the login goes on, one line in the log without the password",
-                        out.contains("log:mailpanel_sso: the mail panel did not answer") && !out.contains("Da-Roundcube-Vero-2026"));
+                        out.contains("log:mailpanel_sso: the mail panel did not answer") && !out.contains("Real-Roundcube-2026"));
                 setColumn("password_encrypted", id, null);
                 Process again = new ProcessBuilder("php", "tests/webmail-roundcube-test.php", rc, config.toString(), plugin.toString(),
-                        email, "Da-Roundcube-Vero-2026", "Da-Roundcube-Vero-2026", base + "/api/internal/mailbox-vault", key)
+                        email, "Real-Roundcube-2026", "Real-Roundcube-2026", base + "/api/internal/mailbox-vault", key)
                         .redirectErrorStream(true).start();
                 again.getInputStream().readAllBytes();
                 again.waitFor();
-                check("a missing copy is filled by the login hook alone", "Da-Roundcube-Vero-2026".equals(copyOf(id)));
+                check("a missing copy is filled by the login hook alone", "Real-Roundcube-2026".equals(copyOf(id)));
             }
         } finally {
             https.stop(0);

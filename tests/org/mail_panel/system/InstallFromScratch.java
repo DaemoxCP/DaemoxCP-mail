@@ -11,19 +11,19 @@ import java.nio.file.Path;
 import java.util.Map;
 
 /**
- * Il conduttore dell'installazione completa, per provarla su una macchina pulita senza
- * passare dal menu a schermo (che vuole un terminale e una persona che digita).
+ * The driver of the full installation, to try it on a clean machine without going through the
+ * on-screen menu (which wants a terminal and a person typing).
  *
- * Fa gli stessi passi di Main.installMailServer, con le stesse chiamate: configurazione in
- * SQLite, le due password dal generatore del pannello, lo script scritto da
- * FullMailServerScript, e l'avvio con Main.executeScriptWithSecrets, cioe' proprio la
- * funzione che il pannello usa. L'elenco degli argomenti e' l'unico pezzo ricopiato, ed e'
- * quello che MysqlRootPasswordTest confronta con lo script.
+ * It takes the same steps as Main.installMailServer, with the same calls: configuration in SQLite,
+ * the two passwords from the panel's generator, the script written by FullMailServerScript, and the
+ * start with Main.executeScriptWithSecrets, that is the very function the panel uses. The list of
+ * arguments is the only piece copied, and it is the one MysqlRootPasswordTest compares with the
+ * script.
  *
- * Tutto quello che il pannello stampa finisce anche in un file, cosi' dopo si puo' cercare
- * dentro se per caso c'e' una password.
+ * Everything the panel prints also ends up in a file, so afterwards one can search it for a
+ * password that might be there.
  *
- * Uso (dalla cartella del pannello, come root, su una macchina senza altro):
+ * Usage (from the panel's folder, as root, on a machine with nothing else):
  *   java -cp "tests:freebsd-mail-panel-1.0.jar" \
  *        org.mail_panel.system.InstallFromScratch mail.test.local webmail.test.local 8443
  */
@@ -34,8 +34,8 @@ public class InstallFromScratch {
         String roundcubeDomain = args.length > 1 ? args[1] : "webmail.test.local";
         String roundcubePort = args.length > 2 ? args[2] : "8443";
 
-        // Gli stessi preparativi che fa Main all'avvio (Main.java, intorno a riga 350 e 374):
-        // le cartelle e le colonne aggiunte dalle versioni successive.
+        // The same preparations Main makes at start (Main.java, around lines 350 and 374):
+        // the folders and the columns added by later versions.
         Main.createDirectoryIfNotExists("./database/");
         Main.createDirectoryIfNotExists("./install_scripts/");
 
@@ -57,22 +57,22 @@ public class InstallFromScratch {
         String mysqlRootPassword = PanelSecrets.ensureMysqlRootPassword();
         String roundcubeDbPassword = PanelSecrets.ensureRoundcubeDbPassword();
 
-        // Le password si scrivono QUI, in due file leggibili solo da root, perche' chi guarda
-        // l'esito deve poterle confrontare con quello che e' finito in MySQL. Nel pannello
-        // vero stanno solo nel file dei segreti.
+        // The passwords are written HERE, in two files only root can read, because whoever looks at
+        // the outcome must be able to compare them with what ended up in MySQL. In the real panel
+        // they live only in the secrets file.
         write(Path.of("installed-mysql-password"), mysqlPassword);
         write(Path.of("installed-mysql-root-password"), mysqlRootPassword);
 
         new FullMailServerScript().write_file();
 
-        System.out.println("=== installazione, hostname " + mailHostname + " ===");
+        System.out.println("=== installation, hostname " + mailHostname + " ===");
         boolean ok = Main.executeScriptWithSecrets("./install_scripts/install_mail_server.sh",
                 "Complete Mail Server Installation",
                 Map.of("MYSQL_PASSWORD", mysqlPassword, "MYSQL_ROOT_PASSWORD", mysqlRootPassword,
                        "ROUNDCUBE_DB_PASSWORD", roundcubeDbPassword),
                 mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname,
                 roundcubeDomain, roundcubePort, "", "", "");
-        System.out.println("=== esito: " + (ok ? "riuscita" : "FALLITA") + " ===");
+        System.out.println("=== outcome: " + (ok ? "succeeded" : "FAILED") + " ===");
         System.exit(ok ? 0 : 1);
     }
 

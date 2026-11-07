@@ -11,30 +11,30 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * I nomi italiani che le versioni di prima hanno lasciato sui server stanno SOLO nel file di dati
- * legacy-names.json (scelta del committente, 30/10/2026): il codice li chiede a LegacyNames e non
- * li scrive mai.
+ * The Italian names that the older versions left on the servers live ONLY in the data file
+ * legacy-names.json (the committente's choice, 30/10/2026): the code asks LegacyNames for them and
+ * never writes them.
  *
- * Prima parte: il file si legge dal jar, ha tutte le sezioni che il codice chiede, e ogni coppia
- * va da un nome a un altro. Seconda parte: nessun nome vecchio compare nei sorgenti, fuori dai
- * commenti. Un nome a forma di nome (con trattini, punti, barre, due punti o spazi:
- * "mailpanel-pubblico", "servizi.txt") non deve comparire in nessuna riga di codice, blocchi di
- * testo compresi, ne' del pannello ne' delle prove. Una parola semplice ("attivo") non deve
- * essere una stringa intera nel codice del pannello: nelle prove la stessa parola puo' servire ad
- * altro (english-pages-browser-test.js ha un elenco di parole italiane apposta, per scovarle).
+ * First part: the file is read from the jar, it has every section the code asks for, and every pair
+ * goes from one name to another. Second part: no old name appears in the sources, outside the
+ * comments. A name shaped like a name (with dashes, dots, slashes, colons or spaces:
+ * "mailpanel-pubblico", "servizi.txt") must not appear in any line of code, text blocks included,
+ * of the panel or of the tests. A plain word ("attivo") must not be a whole string in the panel's
+ * code: in the tests the same word may serve another purpose (english-pages-browser-test.js has a
+ * list of Italian words on purpose, to catch them).
  *
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LegacyNamesTest &lt;radice dei sorgenti&gt;
+ *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LegacyNamesTest &lt;source root&gt;
  */
 public class LegacyNamesTest {
 
     static int failed = 0;
 
     static void check(String what, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
-    /** Le sezioni che il codice chiede: se ne manca una, quella migrazione non fa niente. */
+    /** The sections the code asks for: if one is missing, that migration does nothing. */
     static final String[] SECTIONS = {"files", "vmailFolders", "publicSurface", "publicFolder", "bootEnvironmentPrefix",
             "jumpKeys", "jumpStepKeys", "jumpAsks", "jumpPhases", "inventoryFiles", "inventoryServiceStates",
             "javaScriptOutcomes", "reportFrequencies", "reportFailedPrefix",
@@ -47,7 +47,7 @@ public class LegacyNamesTest {
         return n;
     }
 
-    /** Le due configurazioni di Dovecot come le scrive lo script (config23 e config24 sono private). */
+    /** Dovecot's two configurations as the script writes them (config23 and config24 are private). */
     static String dovecotScripts() throws Exception {
         StringBuilder b = new StringBuilder();
         for (String m : new String[]{"config23", "config24"}) {
@@ -59,7 +59,7 @@ public class LegacyNamesTest {
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("\n== Il file di dati ==");
+        System.out.println("\n== The data file ==");
         List<String> oldNames = new ArrayList<>();
         for (String section : SECTIONS) {
             List<String[]> p = LegacyNames.pairs(section);
@@ -70,17 +70,17 @@ public class LegacyNamesTest {
                 unique &= seen.add(x[0]);
                 oldNames.add(x[0]);
             }
-            check(section + ": " + p.size() + " coppie, ognuna da un nome vecchio a uno diverso, senza doppioni",
+            check(section + ": " + p.size() + " pairs, each from an old name to a different one, no duplicates",
                     !p.isEmpty() && distinct && unique);
         }
-        check("current(): un nome vecchio diventa quello di adesso, un nome di adesso resta",
+        check("current(): an old name becomes today's, a name of today stays",
                 "awaiting-restart".equals(LegacyNames.current("jumpPhases", LegacyNames.oldNamesOf("jumpPhases", "awaiting-restart").get(0)))
                         && "finished".equals(LegacyNames.current("jumpPhases", "finished")));
-        check("una sezione che non c'e' e' vuota, non un errore", LegacyNames.pairs("does-not-exist").isEmpty());
+        check("a section that is not there is empty, not an error", LegacyNames.pairs("does-not-exist").isEmpty());
 
-        System.out.println("\n== Chi lo usa ==");
+        System.out.println("\n== Who uses it ==");
         String oldBe = LegacyNames.oldNamesOf("bootEnvironmentPrefix", UpdateManager.BE_PREFIX).get(0);
-        check("un boot environment col prefisso di prima e' ancora del pannello",
+        check("a boot environment with the old prefix still belongs to the panel",
                 UpdateManager.panelBootEnvironment(oldBe + "151-20261020-101010")
                         && UpdateManager.panelBootEnvironment(UpdateManager.BE_PREFIX + "151-20261030-101010")
                         && !UpdateManager.panelBootEnvironment("15.1-RELEASE_2026-10-30_101010")
@@ -88,46 +88,46 @@ public class LegacyNamesTest {
         String list = "default\tNR\t/\t2G\t2026-10-01 10:00\n"
                 + UpdateManager.BE_PREFIX + "151-20261030-101010\t-\t-\t1G\t2026-10-30 10:10\n"
                 + oldBe + "151-20261020-101010\t-\t-\t1G\t2026-10-20 10:10\n";
-        check("la via di ritorno piu' recente e' quella col prefisso di adesso, anche se in ordine viene prima",
+        check("the most recent way back is the one with today's prefix, even if it comes first in the list",
                 (UpdateManager.BE_PREFIX + "151-20261030-101010").equals(UpdateManager.lastPanelBootEnvironment(list)));
-        check("  e senza quella, l'ultima col prefisso di prima",
+        check("  and without it, the last one with the old prefix",
                 (oldBe + "151-20261020-101010").equals(UpdateManager.lastPanelBootEnvironment(
                         "default\tNR\t/\t2G\t2026-10-01 10:00\n" + oldBe + "151-20261020-101010\t-\t-\t1G\t2026-10-20 10:10\n")));
         String cat = UpdateManager.inventoryCat("/var/db/mailpanel/system/x", "services.txt");
-        check("l'inventario si legge col nome di adesso e poi con quello di prima: " + cat,
+        check("the inventory is read with today's name and then with the old one: " + cat,
                 cat.startsWith("cat /var/db/mailpanel/system/x/services.txt 2>/dev/null || cat /var/db/mailpanel/system/x/")
                         && cat.contains(LegacyNames.oldNamesOf("inventoryFiles", "services.txt").get(0)));
 
-        // Le firme: chi rilegge riconosce quella di adesso e quelle di prima, e le righe di prima
-        // diventano esattamente quelle che il codice scrive oggi.
+        // The signatures: whoever reads back recognises today's and the old ones, and the old lines
+        // become exactly the ones the code writes today.
         List<String> oldSignatures = LegacyNames.oldNamesOf(PanelMarker.SIGNATURE, PanelMarker.WRITTEN);
         boolean recognized = PanelMarker.writtenByPanel("# " + PanelMarker.WRITTEN + "\n");
         for (String o : oldSignatures) recognized &= PanelMarker.writtenByPanel("# " + o + ".\n[x]\n");
-        check("la firma del pannello, di adesso e di prima (" + oldSignatures.size() + "), si riconosce; un file senza no",
-                !oldSignatures.isEmpty() && recognized && !PanelMarker.writtenByPanel("# il mio file\n[x]\n"));
+        check("the panel's signature, today's and the old ones (" + oldSignatures.size() + "), is recognised; a file without it is not",
+                !oldSignatures.isEmpty() && recognized && !PanelMarker.writtenByPanel("# my file\n[x]\n"));
         boolean same = true;
         for (String o : oldSignatures)
             for (String now : List.of(WebProtection.configuration("/c", "/k"), WebProtection.filter(), WebProtection.jail()))
                 same &= now.contains(PanelMarker.WRITTEN)
                         && PanelMarker.current(now.replace(PanelMarker.WRITTEN, o), PanelMarker.SIGNATURE).equals(now);
-        check("i tre file della 443 con una firma di prima tornano identici a quelli di oggi", same);
-        check("  ma solo nei commenti: una riga che non e' un commento resta com'era",
+        check("the three files of the 443 with an old signature come back identical to today's", same);
+        check("  but only in the comments: a line that is not a comment stays as it was",
                 PanelMarker.current("x = " + oldSignatures.get(0) + "\n", PanelMarker.SIGNATURE).contains(oldSignatures.get(0)));
-        check("la nota dei blocchi e il file del ramo hanno la firma di adesso",
+        check("the locks note and the branch file have today's signature",
                 UpdateManager.lockNoteText(List.of("nginx"), "2026-10-30T01:00:00Z").startsWith("# " + PanelMarker.WRITTEN)
                         && PkgBranch.MARK.equals("# " + PanelMarker.WRITTEN));
         String dovecotOld = LegacyNames.oldNamesOf(PanelMarker.DOVECOT, org.mail_panel.scripts.DovecotConfig.SIGNATURE).get(0);
         String options = UpdateManager.dovecotSignatureOptions();
-        check("la manutenzione cerca in dovecot.conf la firma di adesso e quella di prima: " + options,
+        check("maintenance looks in dovecot.conf for today's signature and the old one: " + options,
                 options.contains("-e '" + org.mail_panel.scripts.DovecotConfig.SIGNATURE + "'") && options.contains("-e '" + dovecotOld + "'"));
-        check("il generatore di Dovecot scrive la firma di adesso, nelle due versioni",
+        check("the Dovecot generator writes today's signature, in both versions",
                 countOf(dovecotScripts(), "— " + org.mail_panel.scripts.DovecotConfig.SIGNATURE + "\n") == 2);
         String autoconfigOld = LegacyNames.oldNamesOf("autoconfigMarker", Autoconfig.MARKER).get(0);
-        check("il blocco di autoconfig si riconosce col marcatore di adesso e con quello di prima",
+        check("the autoconfig block is recognised with today's marker and with the old one",
                 Autoconfig.hasBlock("server {\n" + Autoconfig.MARKER + "\n") && Autoconfig.hasBlock("server {\n    " + autoconfigOld + "\n")
                         && !Autoconfig.hasBlock("server {\n    location / {}\n"));
 
-        System.out.println("\n== Nei sorgenti, fuori dal file di dati ==");
+        System.out.println("\n== In the sources, outside the data file ==");
         Path root = Path.of(args.length > 0 ? args[0] : ".");
         List<Path> files = new ArrayList<>();
         for (String dir : new String[]{"src/main/java", "src/main/resources/pages", "tests"}) {
@@ -137,7 +137,7 @@ public class LegacyNamesTest {
                 s.filter(p -> p.toString().endsWith(".java") || p.toString().endsWith(".js")).forEach(files::add);
             }
         }
-        check("trovati i sorgenti in " + root.toAbsolutePath() + " (" + files.size() + " file)", files.size() > 100);
+        check("sources found in " + root.toAbsolutePath() + " (" + files.size() + " files)", files.size() > 100);
         Pattern literal = Pattern.compile("\"((?:[^\"\\\\\\n]|\\\\.)*)\"|'((?:[^'\\\\\\n]|\\\\.)*)'");
         List<String> found = new ArrayList<>();
         for (Path f : files) {
@@ -161,9 +161,9 @@ public class LegacyNamesTest {
             }
         }
         found.stream().limit(15).forEach(x -> System.out.println("        " + x));
-        check("nessuno dei " + oldNames.size() + " nomi di prima e' scritto nel codice", found.isEmpty());
+        check("none of the " + oldNames.size() + " old names is written in the code", found.isEmpty());
 
-        System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
+        System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);
     }
 }

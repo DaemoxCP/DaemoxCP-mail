@@ -16,30 +16,30 @@ import java.util.List;
 import java.util.Properties;
 
 /**
- * Il corpo vero dell'installazione completa (Main.installOnTurn) con MySQL vero, e al posto di
- * install_mail_server.sh uno script piantato che esce prima di MySQL, dopo, o uccide il pannello a
- * meta'. Dopo ogni giro: il pannello entra ancora in MySQL? (Main.connectFromConfig, lo stesso
- * collegamento dei comandi da console.)
+ * The real body of the full installation (Main.installOnTurn) with real MySQL, and in place of
+ * install_mail_server.sh a planted script that exits before MySQL, after, or kills the panel
+ * halfway. After every round: does the panel still get into MySQL? (Main.connectFromConfig, the same
+ * connection as the console commands.)
  *
- * Reperto 156: prima di questa correzione la password nuova diventava del pannello PRIMA dello
- * script, e ogni uscita anticipata lo lasciava con una password che MySQL rifiuta.
+ * Reperto 156: before this fix the new password became the panel's BEFORE the script, and every
+ * early exit left it with a password MySQL refuses.
  *
- * Non tocca la configurazione del pannello vero: ogni giro ha una cartella sua (SQLite, file dei
- * segreti con -Dmailpanel.secrets.dir, turno dei pacchetti, copia di Postfix) e un utente MySQL di
- * prova, e2e_pending, col suo database; l'utente del pannello vero non si tocca. Per root di MySQL la
- * prova scrive un file di credenziali (600) con la password del file dei segreti vero
- * (/usr/local/etc/mail-panel), o vuota se root entra senza (come sui server installati dalla versione
- * dell'11/10, misurato sul banco rehearsal-after-pr91): lo script piantato lo usa, come lo script vero
- * usa il suo, per cambiare la password. Alla fine utente e database di prova si tolgono.
+ * It does not touch the real panel's configuration: every round has a folder of its own (SQLite,
+ * secrets file with -Dmailpanel.secrets.dir, package turn, Postfix copy) and a test MySQL user,
+ * e2e_pending, with its database; the real panel's user is not touched. For MySQL's root the test
+ * writes a credentials file (600) with the password of the real secrets file
+ * (/usr/local/etc/mail-panel), or empty if root gets in without (as on the servers installed by the
+ * 11/10 version, measured on the rehearsal-after-pr91 bench): the planted script uses it, as the
+ * real script uses its own, to change the password. At the end the test user and database are removed.
  *
- * Si accende solo con -De2e.vm=yes, da root, su FreeBSD con MySQL acceso (la VM di prova):
+ * It runs only with -De2e.vm=yes, as root, on FreeBSD with MySQL on (the test VM):
  *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PendingDbPasswordE2ETest
  */
 public class PendingDbPasswordE2ETest {
 
     static final String USER = "e2e_pending";
     static final String DB = "e2e_pending";
-    static final String DEAD_PORT = "1";        // niente ascolta: MySQL «non risponde»
+    static final String DEAD_PORT = "1";        // nothing listens: MySQL "does not answer"
 
     static int failed = 0;
     static Path base;
@@ -56,11 +56,11 @@ public class PendingDbPasswordE2ETest {
         if (args.length > 0 && args[0].equals("child")) { child(args); return; }
 
         if (!"yes".equals(System.getProperty("e2e.vm"))) {
-            System.out.println("SALTATA: serve -De2e.vm=yes (VM FreeBSD, root, MySQL acceso).");
+            System.out.println("SKIPPED: it needs -De2e.vm=yes (FreeBSD VM, root, MySQL on).");
             System.exit(0);
         }
         if (!System.getProperty("os.name").toLowerCase().contains("freebsd") || !"root".equals(System.getProperty("user.name"))) {
-            System.out.println("FALLITA: -De2e.vm=yes vuole FreeBSD e root.");
+            System.out.println("FAILED: -De2e.vm=yes wants FreeBSD and root.");
             System.exit(1);
         }
         rootPassword = PanelSecrets.text(PanelSecrets.MYSQL_ROOT_PASSWORD);
@@ -69,176 +69,176 @@ public class PendingDbPasswordE2ETest {
         Files.writeString(rootCnf, "[client]\nuser=root\npassword=\"" + rootPassword + "\"\n");
         Files.setPosixFilePermissions(rootCnf, PosixFilePermissions.fromString("rw-------"));
         if (!rootSql("SELECT 1")) {
-            System.out.println("FALLITA: root non entra in MySQL ne' con la password del file dei segreti ne' senza.");
+            System.out.println("FAILED: root gets into MySQL neither with the secrets file's password nor without.");
             System.exit(1);
         }
-        System.out.println("root di MySQL: " + (rootPassword.isEmpty() ? "senza password" : "con la password del file dei segreti"));
+        System.out.println("MySQL root: " + (rootPassword.isEmpty() ? "without a password" : "with the secrets file's password"));
 
-        String c = "E2eVecchia" + word(10);
+        String c = "E2eOld" + word(10);
         if (!rootSql("DROP USER IF EXISTS '" + USER + "'@'localhost', '" + USER + "'@'127.0.0.1';"
                 + "CREATE DATABASE IF NOT EXISTS " + DB + ";"
                 + "CREATE USER '" + USER + "'@'localhost' IDENTIFIED BY '" + c + "';"
                 + "CREATE USER '" + USER + "'@'127.0.0.1' IDENTIFIED BY '" + c + "';"
                 + "GRANT ALL PRIVILEGES ON " + DB + ".* TO '" + USER + "'@'localhost';"
                 + "GRANT ALL PRIVILEGES ON " + DB + ".* TO '" + USER + "'@'127.0.0.1';")) {
-            System.out.println("FALLITA: non riesco a creare l'utente MySQL di prova.");
+            System.out.println("FAILED: I cannot create the test MySQL user.");
             System.exit(1);
         }
         try {
             scenarios();
         } finally {
             rootSql("DROP USER IF EXISTS '" + USER + "'@'localhost', '" + USER + "'@'127.0.0.1'; DROP DATABASE IF EXISTS " + DB + ";");
-            removeTree(base);      // dentro ci sono i file dei segreti di prova e le credenziali di root
+            removeTree(base);      // inside are the test secrets files and root's credentials
         }
-        System.out.println(failed == 0 ? "\nTutte le prove passate." : "\n" + failed + " prove FALLITE.");
+        System.out.println(failed == 0 ? "\nAll checks passed." : "\n" + failed + " checks FAILED.");
         System.exit(failed == 0 ? 0 : 1);
     }
 
     static void scenarios() throws Exception {
         PendingDbPassword.Probe mysql = PendingDbPassword.mysqlProbe("127.0.0.1", "3306", USER);
 
-        System.out.println("== E1. Lo script esce prima di MySQL (come per Roundcube non configurato) ==");
+        System.out.println("== E1. The script exits before MySQL (as for an unconfigured Roundcube) ==");
         String c = fresh();
         Path d = round("e1", c, "3306");
         Run r = child(d, "install", "early");
-        check("l'installazione dice di non essere riuscita", r.out.contains("RESULT installOnTurn=false"));
-        check("il messaggio dice che si tiene la password di prima", r.out.contains("keeps the previous one"));
-        check("la password del pannello e' quella di prima", c.equals(current(d)));
-        check("nessuna password in attesa", pending(d).isEmpty());
-        check("MySQL accetta ancora quella del pannello", mysql.ask(current(d)) == PendingDbPassword.Answer.ACCEPTED);
-        check("il pannello entra in MySQL", connects(d));
+        check("the installation says it did not succeed", r.out.contains("RESULT installOnTurn=false"));
+        check("the message says the old password is kept", r.out.contains("keeps the previous one"));
+        check("the panel's password is the old one", c.equals(current(d)));
+        check("no pending password", pending(d).isEmpty());
+        check("MySQL still accepts the panel's", mysql.ask(current(d)) == PendingDbPassword.Answer.ACCEPTED);
+        check("the panel gets into MySQL", connects(d));
 
-        System.out.println("\n== E2. Lo script fallisce DOPO aver dato la password a MySQL ==");
+        System.out.println("\n== E2. The script fails AFTER giving MySQL the password ==");
         c = fresh();
         d = round("e2", c, "3306");
         r = child(d, "install", "late");
-        check("l'installazione dice di non essere riuscita", r.out.contains("RESULT installOnTurn=false"));
-        check("la password del pannello e' quella nuova", !current(d).isEmpty() && !c.equals(current(d)));
-        check("nessuna password in attesa", pending(d).isEmpty());
-        check("MySQL la accetta", mysql.ask(current(d)) == PendingDbPassword.Answer.ACCEPTED);
-        check("il pannello entra in MySQL", connects(d));
+        check("the installation says it did not succeed", r.out.contains("RESULT installOnTurn=false"));
+        check("the panel's password is the new one", !current(d).isEmpty() && !c.equals(current(d)));
+        check("no pending password", pending(d).isEmpty());
+        check("MySQL accepts it", mysql.ask(current(d)) == PendingDbPassword.Answer.ACCEPTED);
+        check("the panel gets into MySQL", connects(d));
 
-        System.out.println("\n== E3. Lo script riesce ==");
+        System.out.println("\n== E3. The script succeeds ==");
         c = fresh();
         d = round("e3", c, "3306");
         r = child(d, "install", "ok");
-        check("l'installazione e' riuscita", r.out.contains("RESULT installOnTurn=true"));
-        check("la password del pannello e' quella nuova", !current(d).isEmpty() && !c.equals(current(d)));
-        check("nessuna password in attesa", pending(d).isEmpty());
-        check("il pannello entra in MySQL", connects(d));
+        check("the installation succeeded", r.out.contains("RESULT installOnTurn=true"));
+        check("the panel's password is the new one", !current(d).isEmpty() && !c.equals(current(d)));
+        check("no pending password", pending(d).isEmpty());
+        check("the panel gets into MySQL", connects(d));
 
-        System.out.println("\n== E4. Il pannello muore dopo che MySQL ha la password nuova ==");
+        System.out.println("\n== E4. The panel dies after MySQL has the new password ==");
         c = fresh();
         d = round("e4", c, "3306");
         r = child(d, "install", "kill-after");
-        check("il pannello e' morto davvero (kill -9, nessun esito)", r.code == 137 && !r.out.contains("RESULT"));
+        check("the panel really died (kill -9, no outcome)", r.code == 137 && !r.out.contains("RESULT"));
         String p = pending(d);
-        check("sul disco: quella di prima e quella nuova in attesa", c.equals(current(d)) && !p.isEmpty() && !p.equals(c));
-        check("MySQL conosce la nuova, non la vecchia", mysql.ask(p) == PendingDbPassword.Answer.ACCEPTED
+        check("on disk: the old one and the new one pending", c.equals(current(d)) && !p.isEmpty() && !p.equals(c));
+        check("MySQL knows the new one, not the old one", mysql.ask(p) == PendingDbPassword.Answer.ACCEPTED
                 && mysql.ask(c) == PendingDbPassword.Answer.REJECTED);
         r = child(d, "startup");
-        check("all'avvio la nuova diventa del pannello", r.out.contains("OUTCOME NEW_ADOPTED") && p.equals(current(d)) && pending(d).isEmpty());
-        check("il pannello entra in MySQL", connects(d));
+        check("at start the new one becomes the panel's", r.out.contains("OUTCOME NEW_ADOPTED") && p.equals(current(d)) && pending(d).isEmpty());
+        check("the panel gets into MySQL", connects(d));
 
-        System.out.println("\n== E5. Il pannello muore prima che lo script arrivi a MySQL ==");
+        System.out.println("\n== E5. The panel dies before the script reaches MySQL ==");
         c = fresh();
         d = round("e5", c, "3306");
         r = child(d, "install", "kill-before");
-        check("il pannello e' morto davvero", r.code == 137 && !r.out.contains("RESULT"));
-        check("sul disco: quella di prima e una nuova in attesa", c.equals(current(d)) && !pending(d).isEmpty());
+        check("the panel really died", r.code == 137 && !r.out.contains("RESULT"));
+        check("on disk: the old one and a new one pending", c.equals(current(d)) && !pending(d).isEmpty());
         r = child(d, "startup");
-        check("all'avvio si tiene quella di prima e si butta la nuova", r.out.contains("OUTCOME OLD_KEPT") && c.equals(current(d)) && pending(d).isEmpty());
-        check("il pannello entra in MySQL", connects(d));
+        check("at start the old one is kept and the new one thrown away", r.out.contains("OUTCOME OLD_KEPT") && c.equals(current(d)) && pending(d).isEmpty());
+        check("the panel gets into MySQL", connects(d));
 
-        System.out.println("\n== E6. Dopo lo script MySQL non risponde al pannello ==");
+        System.out.println("\n== E6. After the script MySQL does not answer the panel ==");
         c = fresh();
         d = round("e6", c, DEAD_PORT);
         r = child(d, "install", "late");
         p = pending(d);
-        check("non si decide: quella di prima resta, la nuova in attesa", r.out.contains("RESULT installOnTurn=false")
+        check("it is not decided: the old one stays, the new one pending", r.out.contains("RESULT installOnTurn=false")
                 && c.equals(current(d)) && !p.isEmpty() && !p.equals(c));
-        check("e lo dice", r.out.contains("does not answer"));
-        check("MySQL (lo script ci e' arrivato) conosce la nuova", mysql.ask(p) == PendingDbPassword.Answer.ACCEPTED);
+        check("and it says so", r.out.contains("does not answer"));
+        check("MySQL (the script got there) knows the new one", mysql.ask(p) == PendingDbPassword.Answer.ACCEPTED);
         child(d, "port", "3306");
         r = child(d, "startup");
-        check("quando MySQL risponde, all'avvio la nuova diventa del pannello", r.out.contains("OUTCOME NEW_ADOPTED") && p.equals(current(d)) && pending(d).isEmpty());
-        check("il pannello entra in MySQL", connects(d));
+        check("when MySQL answers, at start the new one becomes the panel's", r.out.contains("OUTCOME NEW_ADOPTED") && p.equals(current(d)) && pending(d).isEmpty());
+        check("the panel gets into MySQL", connects(d));
 
-        System.out.println("\n== E7. Due installazioni con MySQL muto: la seconda riusa quella in attesa ==");
+        System.out.println("\n== E7. Two installations with MySQL silent: the second reuses the pending one ==");
         c = fresh();
         d = round("e7", c, DEAD_PORT);
         child(d, "install", "late");
         String first = pending(d);
-        check("dopo la prima: MySQL conosce quella in attesa", !first.isEmpty() && mysql.ask(first) == PendingDbPassword.Answer.ACCEPTED);
+        check("after the first: MySQL knows the pending one", !first.isEmpty() && mysql.ask(first) == PendingDbPassword.Answer.ACCEPTED);
         r = child(d, "install", "early");
-        check("dopo la seconda (uscita prima di MySQL): in attesa c'e' ancora la stessa", first.equals(pending(d)) && c.equals(current(d)));
-        check("e lo dice", r.out.contains("gives MySQL that one again"));
+        check("after the second (exit before MySQL): the same one is still pending", first.equals(pending(d)) && c.equals(current(d)));
+        check("and it says so", r.out.contains("gives MySQL that one again"));
         child(d, "port", "3306");
         r = child(d, "startup");
-        check("all'avvio diventa del pannello", r.out.contains("OUTCOME NEW_ADOPTED") && first.equals(current(d)));
-        check("il pannello entra in MySQL", connects(d));
+        check("at start it becomes the panel's", r.out.contains("OUTCOME NEW_ADOPTED") && first.equals(current(d)));
+        check("the panel gets into MySQL", connects(d));
 
-        System.out.println("\n== E8. All'avvio il turno dei pacchetti lo tiene un altro processo ==");
+        System.out.println("\n== E8. At start another process holds the package turn ==");
         c = fresh();
         d = round("e8", c, "3306");
         child(d, "install", "kill-after");
         p = pending(d);
         PackageQueue.list = d.resolve("maintenance-locks");
         PackageQueue.turnLock = d.resolve("package-turn.lock");
-        check("qui prendo il turno (come un'installazione in corso)", PackageQueue.take("e2e-holder", "installazione di prova") == null);
+        check("here I take the turn (like an installation in progress)", PackageQueue.take("e2e-holder", "test installation") == null);
         r = child(d, "startup");
-        check("l'avvio non decide e non tocca niente", r.out.contains("OUTCOME NOT_NOW") && c.equals(current(d)) && p.equals(pending(d)));
-        check("e dice chi tiene il turno", r.out.contains("installazione di prova"));
+        check("the start decides nothing and touches nothing", r.out.contains("OUTCOME NOT_NOW") && c.equals(current(d)) && p.equals(pending(d)));
+        check("and it says who holds the turn", r.out.contains("test installation"));
         PackageQueue.release("e2e-holder");
         r = child(d, "startup");
-        check("rilasciato il turno, il prossimo avvio decide", r.out.contains("OUTCOME NEW_ADOPTED") && p.equals(current(d)));
-        check("il pannello entra in MySQL", connects(d));
+        check("with the turn released, the next start decides", r.out.contains("OUTCOME NEW_ADOPTED") && p.equals(current(d)));
+        check("the panel gets into MySQL", connects(d));
 
-        System.out.println("\n== E9. Server rotto dalla versione di prima: MySQL rifiuta la password del pannello ==");
+        System.out.println("\n== E9. Server broken by the old version: MySQL refuses the panel's password ==");
         c = fresh();
-        String broken = "E2eRotta" + word(10);
-        d = round("e9", broken, "3306");     // MySQL ha c, il pannello broken
-        check("prima: il pannello NON entra", !connects(d));
+        String broken = "E2eBroken" + word(10);
+        d = round("e9", broken, "3306");     // MySQL has c, the panel broken
+        check("before: the panel does NOT get in", !connects(d));
         r = child(d, "startup");
-        check("senza copia di Postfix: non cambia niente", r.out.contains("OUTCOME NONE_ACCEPTED") && broken.equals(current(d)));
+        check("without a Postfix copy: nothing changes", r.out.contains("OUTCOME NONE_ACCEPTED") && broken.equals(current(d)));
         Files.writeString(d.resolve("mysql-virtual-domains.cf"), "user = " + USER + "\npassword = " + c
                 + "\nhosts = 127.0.0.1\ndbname = " + DB + "\nquery = SELECT 1\n");
         r = child(d, "startup");
-        check("con la copia di Postfix che MySQL accetta: diventa del pannello", r.out.contains("OUTCOME COPY_ADOPTED") && c.equals(current(d)));
-        check("il pannello entra in MySQL", connects(d));
+        check("with the Postfix copy MySQL accepts: it becomes the panel's", r.out.contains("OUTCOME COPY_ADOPTED") && c.equals(current(d)));
+        check("the panel gets into MySQL", connects(d));
         r = child(d, "startup");
-        check("l'avvio dopo non fa niente", r.out.contains("OUTCOME NOTHING_TO_DO") && c.equals(current(d)));
+        check("the start after does nothing", r.out.contains("OUTCOME NOTHING_TO_DO") && c.equals(current(d)));
 
-        System.out.println("\n== E10. La password nuova non si puo' tenere in attesa ==");
+        System.out.println("\n== E10. The new password cannot be kept pending ==");
         c = fresh();
         d = round("e10", c, "3306");
         Path blocker = d.resolve("secrets").resolve("panel-secrets.properties.tmp");
         Files.createDirectories(blocker);
-        Files.writeString(blocker.resolve("x"), "il file dei segreti non si riscrive");
+        Files.writeString(blocker.resolve("x"), "the secrets file cannot be rewritten");
         r = child(d, "install", "ok");
-        check("l'installazione non parte", r.out.contains("RESULT installOnTurn=false") && r.out.contains("STOPPED"));
-        check("lo script NON e' partito", !Files.exists(d.resolve("script-ran")));
-        check("MySQL ha ancora quella di prima", mysql.ask(c) == PendingDbPassword.Answer.ACCEPTED);
-        check("il pannello entra in MySQL", connects(d));
+        check("the installation does not start", r.out.contains("RESULT installOnTurn=false") && r.out.contains("STOPPED"));
+        check("the script did NOT start", !Files.exists(d.resolve("script-ran")));
+        check("MySQL still has the old one", mysql.ask(c) == PendingDbPassword.Answer.ACCEPTED);
+        check("the panel gets into MySQL", connects(d));
     }
 
-    // ---------------------------------------------------------------- un giro
+    // ---------------------------------------------------------------- a round
 
-    /** La password di prova di MySQL rimessa a 'c', e una cartella nuova col pannello che ha 'current'. */
+    /** The test MySQL password set back to 'c', and a new folder with the panel having 'current'. */
     static Path round(String name, String current, String port) throws Exception {
         Path d = base.resolve(name);
         Files.createDirectories(d);
         Run r = child(d, "setup", current, port);
-        if (r.code != 0) throw new IllegalStateException("preparazione del giro " + name + " fallita");
+        if (r.code != 0) throw new IllegalStateException("preparation of round " + name + " failed");
         return d;
     }
 
-    /** Una password nuova per MySQL, e MySQL rimesso su quella. */
+    /** A new password for MySQL, and MySQL set back to it. */
     static String fresh() throws Exception {
-        String c = "E2eVecchia" + word(10);
+        String c = "E2eOld" + word(10);
         if (!rootSql("ALTER USER '" + USER + "'@'localhost' IDENTIFIED BY '" + c + "';"
                 + "ALTER USER '" + USER + "'@'127.0.0.1' IDENTIFIED BY '" + c + "';"))
-            throw new IllegalStateException("non riesco a rimettere la password di prova");
+            throw new IllegalStateException("I cannot set the test password back");
         return c;
     }
 
@@ -279,7 +279,7 @@ public class PendingDbPasswordE2ETest {
                 PendingDbPasswordE2ETest.class.getName(), "child"));
         cmd.addAll(List.of(step));
         ProcessBuilder pb = new ProcessBuilder(cmd).directory(d.toFile()).redirectErrorStream(true);
-        pb.environment().put("E2E_ROOT_CNF", rootCnf.toString());   // lo eredita lo script piantato
+        pb.environment().put("E2E_ROOT_CNF", rootCnf.toString());   // the planted script inherits it
         pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
         Process pr = pb.start();
         String out = new String(pr.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -306,9 +306,9 @@ public class PendingDbPasswordE2ETest {
         return code == 0;
     }
 
-    // ---------------------------------------------------------------- il processo del pannello
+    // ---------------------------------------------------------------- the panel's process
 
-    /** Lo script piantato al posto di install_mail_server.sh. */
+    /** The script planted in place of install_mail_server.sh. */
     static String plantedScript(String kind) {
         String setPassword = """
                 mysql --defaults-extra-file="$E2E_ROOT_CNF" -e "ALTER USER '$USER3'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD'; ALTER USER '$USER3'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';" || exit 9
@@ -322,7 +322,7 @@ public class PendingDbPasswordE2ETest {
             case "kill-before" -> "kill -9 $PPID\nsleep 3\nexit 0\n";
             default -> throw new IllegalArgumentException(kind);
         };
-        return "#!/bin/sh\n# prova: piantato al posto di install_mail_server.sh\ntouch ./script-ran\nUSER3=\"$3\"\n" + body;
+        return "#!/bin/sh\n# test: planted in place of install_mail_server.sh\ntouch ./script-ran\nUSER3=\"$3\"\n" + body;
     }
 
     static void child(String[] a) throws Exception {
@@ -352,7 +352,7 @@ public class PendingDbPasswordE2ETest {
                 Files.createDirectories(cwd.resolve("install_scripts"));
                 Files.writeString(cwd.resolve("install_scripts/install_mail_server.sh"), plantedScript(a[2]));
                 Files.deleteIfExists(cwd.resolve("script-ran"));
-                String refusal = PackageQueue.take("reinstall", "installazione di prova");
+                String refusal = PackageQueue.take("reinstall", "test installation");
                 if (refusal != null) { System.out.println("TURN " + refusal); System.exit(1); }
                 boolean ok;
                 try {

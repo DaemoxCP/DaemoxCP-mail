@@ -46,10 +46,10 @@ public class ConfigSecretsTest {
                     ConfigSecretsTest.class.getName(), "child")
                     .directory(dir.toFile()).inheritIO().start();
             int code = child.waitFor();
-            // Dentro ci sono un database e un file dei segreti di prova: in /tmp, fuori dai boot
-            // environment, restavano dopo ogni giro (reperto 162).
+            // Inside are a test database and a test secrets file: in /tmp, outside the boot
+            // environments, they stayed after every run (reperto 162).
             try (var walk = Files.walk(dir)) {
-                for (Path q : walk.sorted((x, y) -> y.compareTo(x)).toList()) Files.deleteIfExists(q);   // prima i figli
+                for (Path q : walk.sorted((x, y) -> y.compareTo(x)).toList()) Files.deleteIfExists(q);   // children first
             }
             System.exit(code);
         }
@@ -61,14 +61,14 @@ public class ConfigSecretsTest {
         dataBaseManager old = new dataBaseManager();
         old.create_tables();
         old.insert_data_default();
-        setColumns(old, "Vecchia-Password-Mysql", key);
-        check("before: both values in SQLite", "Vecchia-Password-Mysql".equals(column(old, "mysql_password")) && key.equals(column(old, "mail_panel_ssl_cert_key")));
+        setColumns(old, "Old-Mysql-Password", key);
+        check("before: both values in SQLite", "Old-Mysql-Password".equals(column(old, "mysql_password")) && key.equals(column(old, "mail_panel_ssl_cert_key")));
 
         dataBaseManager db = new dataBaseManager();      // the first start of the new version
         check("after the start: the columns are empty", column(db, "mysql_password").isEmpty() && column(db, "mail_panel_ssl_cert_key").isEmpty());
-        check("the values are in the secrets file", "Vecchia-Password-Mysql".equals(PanelSecrets.text(PanelSecrets.MYSQL_PASSWORD))
+        check("the values are in the secrets file", "Old-Mysql-Password".equals(PanelSecrets.text(PanelSecrets.MYSQL_PASSWORD))
                 && key.equals(PanelSecrets.text(PanelSecrets.PANEL_TLS_KEY)));
-        check("the accessors give them back (the PEM byte for byte)", "Vecchia-Password-Mysql".equals(db.mysqlPassword()) && key.equals(db.panelTlsKey()));
+        check("the accessors give them back (the PEM byte for byte)", "Old-Mysql-Password".equals(db.mysqlPassword()) && key.equals(db.panelTlsKey()));
         check("the secrets file is 600, its folder 700", "rw-------".equals(perms(secrets.resolve("panel-secrets.properties")))
                 && "rwx------".equals(perms(secrets)));
         check("database/ is 700, mail_panel.db 600", "rwx------".equals(perms(Path.of("database")))
@@ -76,8 +76,8 @@ public class ConfigSecretsTest {
         check("a second start moves nothing", db.migrateSecrets() == 0);
 
         System.out.println("\n== What the panel saves goes to the file ==");
-        db.update_mysql_config("127.0.0.1", "3306", "mailpanel", "Nuova-Password-Mysql", "mailserver");
-        check("installation: the new MySQL password in the file, not in SQLite", "Nuova-Password-Mysql".equals(db.mysqlPassword())
+        db.update_mysql_config("127.0.0.1", "3306", "mailpanel", "New-Mysql-Password", "mailserver");
+        check("installation: the new MySQL password in the file, not in SQLite", "New-Mysql-Password".equals(db.mysqlPassword())
                 && column(db, "mysql_password").isEmpty() && "mailpanel".equals(column(db, "mysql_user")));
         db.updateMySQLPassword("Cambiata-Password-Mysql");
         check("password change: the same", "Cambiata-Password-Mysql".equals(db.mysqlPassword()) && column(db, "mysql_password").isEmpty());
@@ -87,9 +87,9 @@ public class ConfigSecretsTest {
                 && column(db, "mail_panel_ssl_cert_key").isEmpty() && column(db, "mail_panel_ssl_cert").contains("BEGIN CERTIFICATE"));
 
         System.out.println("\n== An older version wrote a column after the move ==");
-        setColumns(db, "Scritta-Da-Versione-Vecchia", "");
+        setColumns(db, "Written-By-Old-Version", "");
         new dataBaseManager();
-        check("at the next start the column wins and moves to the file", "Scritta-Da-Versione-Vecchia".equals(db.mysqlPassword())
+        check("at the next start the column wins and moves to the file", "Written-By-Old-Version".equals(db.mysqlPassword())
                 && column(db, "mysql_password").isEmpty() && key2.equals(db.panelTlsKey()));
 
         System.out.println("\n== Secrets file not writable ==");
@@ -101,16 +101,16 @@ public class ConfigSecretsTest {
         Method reset = PanelSecrets.class.getDeclaredMethod("reset");
         reset.setAccessible(true);
         reset.invoke(null);
-        db.updateMySQLPassword("Resta-In-Sqlite-2026");
-        check("the value stays in SQLite and is still read", "Resta-In-Sqlite-2026".equals(column(db, "mysql_password"))
-                && "Resta-In-Sqlite-2026".equals(db.mysqlPassword()));
-        check("and the start leaves it there instead of losing it", db.migrateSecrets() == 0 && "Resta-In-Sqlite-2026".equals(column(db, "mysql_password")));
+        db.updateMySQLPassword("Stays-In-Sqlite-2026");
+        check("the value stays in SQLite and is still read", "Stays-In-Sqlite-2026".equals(column(db, "mysql_password"))
+                && "Stays-In-Sqlite-2026".equals(db.mysqlPassword()));
+        check("and the start leaves it there instead of losing it", db.migrateSecrets() == 0 && "Stays-In-Sqlite-2026".equals(column(db, "mysql_password")));
         dirField.set(null, realDir);
         reset.invoke(null);
         check("a readable file with an older value does not hide the newer one in SQLite",
-                !"Resta-In-Sqlite-2026".equals(PanelSecrets.text(PanelSecrets.MYSQL_PASSWORD)) && "Resta-In-Sqlite-2026".equals(db.mysqlPassword()));
+                !"Stays-In-Sqlite-2026".equals(PanelSecrets.text(PanelSecrets.MYSQL_PASSWORD)) && "Stays-In-Sqlite-2026".equals(db.mysqlPassword()));
         check("once the file is writable again, the next start moves it", db.migrateSecrets() == 1
-                && "Resta-In-Sqlite-2026".equals(PanelSecrets.text(PanelSecrets.MYSQL_PASSWORD)) && column(db, "mysql_password").isEmpty());
+                && "Stays-In-Sqlite-2026".equals(PanelSecrets.text(PanelSecrets.MYSQL_PASSWORD)) && column(db, "mysql_password").isEmpty());
 
         System.out.println(failed == 0 ? "\nAll checks passed." : "\n" + failed + " checks FAILED.");
         System.exit(failed == 0 ? 0 : 1);

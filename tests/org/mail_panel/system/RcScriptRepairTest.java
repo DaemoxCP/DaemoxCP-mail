@@ -9,10 +9,11 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * RcScriptRepair: lo script di avvio scritto dal pannello, coi file dai nomi di prima, in una
- * cartella temporanea. Lo script e' quello vero del server di posta del committente (letto il
- * 31/10/2026, scritto dalla versione dell'11/10), con la firma e il log presi dal codice e dal file
- * di dati invece che scritti qui. sh -n e' quello vero: c'e' su macOS e su FreeBSD.
+ * RcScriptRepair: the start script written by the panel, with the files under their old names, in a
+ * temporary folder. The script is the real one of the committente's mail server (read on
+ * 31/10/2026, written by the 11/10 version, its comments put into English here), with the signature
+ * and the log taken from the code and from the data file instead of written here. sh -n is the real
+ * one: it is on macOS and on FreeBSD.
  *
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RcScriptRepairTest
  */
@@ -29,8 +30,8 @@ public class RcScriptRepairTest {
     static final String OLD_LOG = LegacyNames.oldNamesOf("files", NEW_LOG).get(0);
 
     /**
-     * Lo script del server, con @LOG@ al posto del percorso del log e @MARKER@ al posto della firma.
-     * Segnaposto che nello script non compaiono: «LOG» c'e' anche in «REQUIRE: LOGIN».
+     * The server's script, with @LOG@ in place of the log path and @MARKER@ in place of the signature.
+     * Placeholders that do not appear in the script: "LOG" is also in "REQUIRE: LOGIN".
      */
     static final String SERVER_SCRIPT = """
             #!/bin/sh
@@ -39,11 +40,11 @@ public class RcScriptRepairTest {
             # REQUIRE: LOGIN
             # KEYWORD: shutdown
             #
-            # @MARKER@. Avvia il pannello in
-            # modalita' solo-web (--web): niente menu a schermo, nessun terminale richiesto.
-            # Per riavere il menu: service mailpanel stop, poi lancialo a mano senza --web.
+            # @MARKER@. Starts the panel in
+            # web-only mode (--web): no on-screen menu, no terminal needed.
+            # To get the menu back: service mailpanel stop, then start it by hand without --web.
             #
-            # Abilitazione:  sysrc mailpanel_enable=YES
+            # Enabling:  sysrc mailpanel_enable=YES
 
             . /etc/rc.subr
 
@@ -68,14 +69,14 @@ public class RcScriptRepairTest {
             mailpanel_start()
             {
             	if [ -f "${pidfile}" ] && kill -0 "$(cat "${pidfile}")" 2>/dev/null; then
-            		echo "${name}: gia' in esecuzione (pid $(cat ${pidfile}))"
+            		echo "${name}: already running (pid $(cat ${pidfile}))"
             		return 1
             	fi
             	mkdir -p "$(dirname "${mailpanel_log}")"
             	if [ -f "${mailpanel_log}" ] && [ $(stat -f %z "${mailpanel_log}") -gt 10485760 ]; then
             		mv "${mailpanel_log}" "${mailpanel_log}.1"
             	fi
-            	echo "Avvio ${name} (solo web). Registro: ${mailpanel_log}"
+            	echo "Starting ${name} (web only). Log: ${mailpanel_log}"
             	/usr/sbin/daemon -f -o "${mailpanel_log}" -p "${pidfile}" -t "${name}" \\
             		/bin/sh -c "cd '${mailpanel_dir}' && exec '${mailpanel_java}' ${mailpanel_opts} -jar '${mailpanel_jar}' --web"
             }
@@ -89,7 +90,7 @@ public class RcScriptRepairTest {
             """;
 
     static String script(String log, boolean ours) {
-        return SERVER_SCRIPT.replace("@MARKER@", ours ? RcScriptRepair.MARKER : "Scritto a mano").replace("@LOG@", log);
+        return SERVER_SCRIPT.replace("@MARKER@", ours ? RcScriptRepair.MARKER : "Written by hand").replace("@LOG@", log);
     }
 
     static final Function<Path, Shell.Result> SH_N = f -> Shell.run(java.time.Duration.ofSeconds(30), "sh", "-n", f.toString());
@@ -100,42 +101,42 @@ public class RcScriptRepairTest {
 
     public static void main(String[] args) throws Exception {
         List<String[]> pairs = LegacyNames.pairs("files");
-        check("il file di dati da' un nome di prima per il log (" + OLD_LOG + ")", !OLD_LOG.equals(NEW_LOG) && OLD_LOG.endsWith(".log"));
-        check("lo script del server passa sh -n, com'e'", SH_N.apply(write(script(OLD_LOG, true))).success());
+        check("the data file gives an old name for the log (" + OLD_LOG + ")", !OLD_LOG.equals(NEW_LOG) && OLD_LOG.endsWith(".log"));
+        check("the server's script passes sh -n, as it is", SH_N.apply(write(script(OLD_LOG, true))).success());
 
-        System.out.println("\n== Lo script del server ==");
+        System.out.println("\n== The server's script ==");
         Path dir = Files.createTempDirectory("rc-script-repair");
         Path rc = dir.resolve("mailpanel");
         Files.writeString(rc, script(OLD_LOG, true));
         Files.setPosixFilePermissions(rc, PosixFilePermissions.fromString("r-xr-xr-x"));
         RcScriptRepair.Report r = RcScriptRepair.repair(rc, pairs, SH_N);
         System.out.println("        -> " + r.outcome() + ": " + r.detail());
-        check("riparato: DONE", r.outcome() == RcScriptRepair.Outcome.DONE);
-        check("  il log adesso ha il nome nuovo, e nient'altro e' cambiato",
+        check("repaired: DONE", r.outcome() == RcScriptRepair.Outcome.DONE);
+        check("  the log now has the new name, and nothing else changed",
                 Files.readString(rc).equals(script(NEW_LOG, true)));
-        check("  coi permessi di prima (r-xr-xr-x)",
+        check("  with the old permissions (r-xr-xr-x)",
                 PosixFilePermissions.toString(Files.getPosixFilePermissions(rc)).equals("r-xr-xr-x"));
-        check("  e nessun file accanto", List.of(dir.toFile().list()).equals(List.of("mailpanel")));
-        check("  e lo script riparato passa sh -n", SH_N.apply(rc).success());
+        check("  and no file next to it", List.of(dir.toFile().list()).equals(List.of("mailpanel")));
+        check("  and the repaired script passes sh -n", SH_N.apply(rc).success());
 
-        System.out.println("\n== Il secondo avvio ==");
+        System.out.println("\n== The second start ==");
         checks = 0;
         r = RcScriptRepair.repair(rc, pairs, COUNTING_SH_N);
-        check("niente da fare, senza nemmeno sh -n", r.outcome() == RcScriptRepair.Outcome.NOTHING && checks == 0
+        check("nothing to do, not even sh -n", r.outcome() == RcScriptRepair.Outcome.NOTHING && checks == 0
                 && Files.readString(rc).equals(script(NEW_LOG, true)));
 
-        System.out.println("\n== Cose che non si toccano ==");
+        System.out.println("\n== Things that are not touched ==");
         Path theirs = dir.resolve("theirs");
         Files.writeString(theirs, script(OLD_LOG, false));
         r = RcScriptRepair.repair(theirs, pairs, SH_N);
-        check("uno script col nome vecchio ma senza la firma del pannello: NOT_OURS, com'era",
+        check("a script with the old name but without the panel's signature: NOT_OURS, as it was",
                 r.outcome() == RcScriptRepair.Outcome.NOT_OURS && Files.readString(theirs).equals(script(OLD_LOG, false)));
 
         Path broken = dir.resolve("broken");
         String brokenText = script(OLD_LOG, true).replace("run_rc_command \"$1\"", "run_rc_command \"$1");
         Files.writeString(broken, brokenText);
         r = RcScriptRepair.repair(broken, pairs, SH_N);
-        check("uno script che sh -n rifiuta: REFUSED, com'era, e nessun file accanto",
+        check("a script sh -n refuses: REFUSED, as it was, and no file next to it",
                 r.outcome() == RcScriptRepair.Outcome.REFUSED && Files.readString(broken).equals(brokenText)
                         && !Files.exists(dir.resolve(".broken.panel-new")));
 
@@ -143,25 +144,25 @@ public class RcScriptRepairTest {
         String longerText = script(OLD_LOG + "s", true);
         Files.writeString(longer, longerText);
         r = RcScriptRepair.repair(longer, pairs, SH_N);
-        check("un percorso che comincia col nome vecchio ma e' un altro file: NOTHING",
+        check("a path that starts with the old name but is another file: NOTHING",
                 r.outcome() == RcScriptRepair.Outcome.NOTHING && Files.readString(longer).equals(longerText));
 
         Path mixed = dir.resolve("mixed");
-        String extra = "# " + OLD_LOG + "s: un altro file, non il log\n";
+        String extra = "# " + OLD_LOG + "s: another file, not the log\n";
         Files.writeString(mixed, script(OLD_LOG, true) + extra);
         r = RcScriptRepair.repair(mixed, pairs, SH_N);
-        check("col log e un percorso piu' lungo che comincia uguale: cambia solo il log",
+        check("with the log and a longer path that starts the same: only the log changes",
                 r.outcome() == RcScriptRepair.Outcome.DONE && Files.readString(mixed).equals(script(NEW_LOG, true) + extra));
 
         r = RcScriptRepair.repair(dir.resolve("missing"), pairs, SH_N);
-        check("nessuno script: NOTHING", r.outcome() == RcScriptRepair.Outcome.NOTHING);
+        check("no script: NOTHING", r.outcome() == RcScriptRepair.Outcome.NOTHING);
 
-        System.out.println("\n== Lo script che scrive il pannello oggi ==");
-        check("ha la firma che RcScriptRepair riconosce, e il log col nome nuovo",
+        System.out.println("\n== The script the panel writes today ==");
+        check("it has the signature RcScriptRepair recognises, at the start of its comment",
                 Files.readString(Path.of("src/main/java/org/mail_panel/system/UpdateManager.java"))
-                        .contains("+ \"# \" + RcScriptRepair.MARKER + \". Avvia il pannello in\\n\""));
+                        .contains("+ \"# \" + RcScriptRepair.MARKER + \". "));
 
-        System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
+        System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);
     }
 

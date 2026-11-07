@@ -8,31 +8,31 @@ import java.security.SecureRandom;
 import java.util.regex.Pattern;
 
 /**
- * Il generatore di password e la regola che il pannello applica alle password delle caselle.
+ * The password generator and the rule the panel applies to mailbox passwords.
  *
- * Il generatore aveva simboli suoi: con "Tutti i caratteri" metteva anche < > / ~ e l'apice
- * inverso, che isValidPassword rifiuta. La password proposta dal pannello veniva respinta dal
- * pannello stesso ("Password non valida" creando una casella, avviso e niente cambio
- * modificandola). Qui si generano migliaia di password per ogni tipo e combinazione e si
- * pretende che passino tutte, e si controlla che la regola sia rimasta quella di prima.
+ * The generator had symbols of its own: with "All characters" it also put < > / ~ and the
+ * backtick, which isValidPassword rejects. The password proposed by the panel was rejected by the
+ * panel itself ("Invalid password" when creating a mailbox, a warning and no change when editing
+ * it). Here thousands of passwords are generated for every kind and combination and all of them
+ * must pass, and the rule is checked to be the same as before.
  */
 public class PasswordGeneratorTest {
 
     static int failed = 0;
     static void require(String what, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
     public static void main(String[] a) throws Exception {
-        // La chiave non serve a generare: niente getInstance(), che leggerebbe o creerebbe
+        // The key is not needed to generate: no getInstance(), which would read or create
         // /usr/local/etc/mail-panel/master.key.
         var constructor = PasswordVault.class.getDeclaredConstructor(SecretKey.class);
         constructor.setAccessible(true);
         PasswordVault vault = constructor.newInstance(new SecretKeySpec(new byte[32], "AES"));
 
-        System.out.println("\n== ogni password generata passa la regola del pannello ==");
-        String[] kinds = { "easy_to_say", "easy_to_read", "all_chars", "sconosciuto", null };
+        System.out.println("\n== every generated password passes the panel's rule ==");
+        String[] kinds = { "easy_to_say", "easy_to_read", "all_chars", "unknown", null };
         int[] lengths = { 12, 20, 64, 128 };
         for (String type : kinds) {
             int generate = 0, rejected = 0, wrongLength = 0, missingSet = 0;
@@ -53,23 +53,23 @@ public class PasswordGeneratorTest {
                     }
                 }
             }
-            require(String.format("%-13s %6d password: %d respinte, %d di lunghezza sbagliata, %d senza un insieme scelto",
+            require(String.format("%-13s %6d passwords: %d rejected, %d of the wrong length, %d without a chosen set",
                     type, generate, rejected, wrongLength, missingSet),
                     rejected == 0 && wrongLength == 0 && missingSet == 0);
         }
 
-        System.out.println("\n== lunghezza fuori dai limiti: si riporta dentro (minimo delle caselle: 12) ==");
-        require("3 diventa 12", vault.generatePassword(3, "all_chars", true, true, true, true).length() == 12);
-        require("8 (il vecchio minimo del generatore) diventa 12", vault.generatePassword(8, "easy_to_read", true, true, true, true).length() == 12);
-        require("500 diventa 128", vault.generatePassword(500, "all_chars", true, true, true, true).length() == 128);
+        System.out.println("\n== length outside the limits: brought back inside (mailbox minimum: 12) ==");
+        require("3 becomes 12", vault.generatePassword(3, "all_chars", true, true, true, true).length() == 12);
+        require("8 (the generator's old minimum) becomes 12", vault.generatePassword(8, "easy_to_read", true, true, true, true).length() == 12);
+        require("500 becomes 128", vault.generatePassword(500, "all_chars", true, true, true, true).length() == 128);
 
-        System.out.println("\n== la stima dell'entropia usa gli stessi insiemi del generatore ==");
-        require("all_chars, tutto: 26+26+10+24 = 86", PasswordVault.poolSize("all_chars", true, true, true, true) == 86);
-        require("easy_to_read, tutto: 24+24+8+21 = 77", PasswordVault.poolSize("easy_to_read", true, true, true, true) == 77);
-        require("easy_to_say ignora cifre e simboli: 52", PasswordVault.poolSize("easy_to_say", true, true, true, true) == 52);
-        require("nessuna scelta: si ripiega su tutto (86)", PasswordVault.poolSize("all_chars", false, false, false, false) == 86);
+        System.out.println("\n== the entropy estimate uses the same sets as the generator ==");
+        require("all_chars, everything: 26+26+10+24 = 86", PasswordVault.poolSize("all_chars", true, true, true, true) == 86);
+        require("easy_to_read, everything: 24+24+8+21 = 77", PasswordVault.poolSize("easy_to_read", true, true, true, true) == 77);
+        require("easy_to_say ignores digits and symbols: 52", PasswordVault.poolSize("easy_to_say", true, true, true, true) == 52);
+        require("no choice: it falls back on everything (86)", PasswordVault.poolSize("all_chars", false, false, false, false) == 86);
 
-        System.out.println("\n== la regola non e' cambiata: stessa risposta della vecchia espressione ==");
+        System.out.println("\n== the rule has not changed: same answer as the old expression ==");
         Pattern old = Pattern.compile("^[a-zA-Z0-9!@#$%^&*()_+\\-=\\[\\]{}|;:,.?]{4,128}$");
         int different = 0;
         for (char c = 0x20; c < 0x7F; c++) {
@@ -80,40 +80,40 @@ public class PasswordGeneratorTest {
             String s = "Abc1" + c;
             if (old.matcher(s).matches() != SecurityUtils.isValidPassword(s)) different++;
         }
-        require("ogni carattere ASCII stampabile, accenti, tab, a capo, spazio unificatore: " + different + " differenze", different == 0);
-        require("3 caratteri no, 4 si'", !SecurityUtils.isValidPassword("Ab1") && SecurityUtils.isValidPassword("Ab1!"));
-        require("128 caratteri si', 129 no", SecurityUtils.isValidPassword("a".repeat(128)) && !SecurityUtils.isValidPassword("a".repeat(129)));
-        require("la classe per la pagina e' quella attesa",
+        require("every printable ASCII character, accents, tab, newline, non-breaking space: " + different + " differences", different == 0);
+        require("3 characters no, 4 yes", !SecurityUtils.isValidPassword("Ab1") && SecurityUtils.isValidPassword("Ab1!"));
+        require("128 characters yes, 129 no", SecurityUtils.isValidPassword("a".repeat(128)) && !SecurityUtils.isValidPassword("a".repeat(129)));
+        require("the class for the page is the expected one",
                 SecurityUtils.PASSWORD_CHARACTERS.equals("[a-zA-Z0-9!@#$%\\^&*()_+\\-=\\[\\]{}|;:,.?]"));
 
-        System.out.println("\n== password delle caselle: almeno 12 caratteri, stessi caratteri dell'admin ==");
-        require("11 caratteri no, 12 si'", !SecurityUtils.isValidMailboxPassword("Ab1!Ab1!Ab1") && SecurityUtils.isValidMailboxPassword("Ab1!Ab1!Ab1!"));
-        require("128 si', 129 no", SecurityUtils.isValidMailboxPassword("a".repeat(128)) && !SecurityUtils.isValidMailboxPassword("a".repeat(129)));
+        System.out.println("\n== mailbox passwords: at least 12 characters, the same characters as the admin's ==");
+        require("11 characters no, 12 yes", !SecurityUtils.isValidMailboxPassword("Ab1!Ab1!Ab1") && SecurityUtils.isValidMailboxPassword("Ab1!Ab1!Ab1!"));
+        require("128 yes, 129 no", SecurityUtils.isValidMailboxPassword("a".repeat(128)) && !SecurityUtils.isValidMailboxPassword("a".repeat(129)));
         require("null no", !SecurityUtils.isValidMailboxPassword(null));
         int differentMailbox = 0;
         for (char c = 0x20; c < 0x7F; c++) {
             String s = String.valueOf(c).repeat(12);
             if (old.matcher(s).matches() != SecurityUtils.isValidMailboxPassword(s)) differentMailbox++;
         }
-        require("a 12 caratteri accetta esattamente i caratteri di prima: " + differentMailbox + " differenze", differentMailbox == 0);
-        require("il login dell'admin non cambia: 4 caratteri restano validi", SecurityUtils.isValidPassword("Ab1!"));
+        require("at 12 characters it accepts exactly the old characters: " + differentMailbox + " differences", differentMailbox == 0);
+        require("the admin's login does not change: 4 characters stay valid", SecurityUtils.isValidPassword("Ab1!"));
 
-        System.out.println("\n== e con i simboli di prima il pannello rifiutava la propria proposta ==");
+        System.out.println("\n== and with the old symbols the panel refused its own proposal ==");
         String oldSymbols = "!@#$%^&*()_-+=[]{}|;:,.<>?/~`";
         String oldPool = "abcdefghijklmnopqrstuvwxyz" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "0123456789" + oldSymbols;
         SecureRandom random = new SecureRandom();
         int tests = 10000, refused = 0;
         for (int i = 0; i < tests; i++) {
-            // Come il vecchio generatore: un simbolo garantito, il resto dal pool intero.
+            // Like the old generator: one guaranteed symbol, the rest from the whole pool.
             StringBuilder sb = new StringBuilder();
             sb.append(oldSymbols.charAt(random.nextInt(oldSymbols.length())));
             for (int k = 1; k < 20; k++) sb.append(oldPool.charAt(random.nextInt(oldPool.length())));
             if (!SecurityUtils.isValidPassword(sb.toString())) refused++;
         }
-        require(String.format("vecchio \"Tutti i caratteri\", 20 caratteri: rifiutate %.0f%% (se un giorno passano, la prova non distingue piu')",
+        require(String.format("old \"All characters\", 20 characters: %.0f%% refused (if one day they pass, the test no longer tells them apart)",
                 100.0 * refused / tests), refused > tests / 2);
 
-        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         if (failed > 0) System.exit(1);
     }
 }

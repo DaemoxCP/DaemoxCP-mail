@@ -10,23 +10,23 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Il php.ini che l'installazione scrive, misurato facendolo leggere a PHP.
+ * The php.ini the installation writes, measured by having PHP read it.
  *
- * Il pacchetto php84 non installa nessun php.ini: in /usr/local/etc ci sono solo i campioni
- * php.ini-production e php.ini-development. Senza quel file PHP parte sui valori compilati
- * dentro, e php-fpm non se ne lamenta. Misurato su FreeBSD 15.1 con php84-8.4.26, senza
- * php.ini: upload_max_filesize 2M, post_max_size 8M, display_errors ACCESO, log_errors
- * SPENTO, expose_php acceso, session.save_path vuoto (cioe' /tmp).
+ * The php84 package installs no php.ini: in /usr/local/etc there are only the samples
+ * php.ini-production and php.ini-development. Without that file PHP starts on the values compiled
+ * in, and php-fpm does not complain. Measured on FreeBSD 15.1 with php84-8.4.26, without
+ * php.ini: upload_max_filesize 2M, post_max_size 8M, display_errors ON, log_errors
+ * OFF, expose_php on, session.save_path empty (that is /tmp).
  *
- * Quello che va provato qui, e che leggere il file non direbbe:
- *  - che PHP quel file lo accetta e che i valori diventano davvero quelli. Un refuso in una
- *    direttiva PHP non lo segnala: la ignora e tiene il predefinito. Quindi non si guarda il
- *    testo, si lancia "php -c" e si legge ini_get;
- *  - che il limite di caricamento e quello di Postfix sono d'accordo. Sono due numeri in due
- *    punti dello stesso script (r26): se PHP sta sotto, l'allegato viene rifiutato prima che
- *    Postfix dica la sua, e il messaggio che l'utente legge parla della cosa sbagliata.
+ * What must be tested here, and that reading the file would not tell:
+ *  - that PHP accepts that file and the values really become those. PHP does not report a typo in
+ *    a directive: it ignores it and keeps the default. So the text is not looked at, "php -c" is
+ *    run and ini_get is read;
+ *  - that the upload limit and Postfix's agree. They are two numbers in two places of the same
+ *    script (r26): if PHP is lower, the attachment is refused before Postfix has its say, and the
+ *    message the user reads talks about the wrong thing.
  *
- * Si lancia sulla VM, dove php c'e':
+ * It runs on the VM, where php is:
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PhpIniTest
  */
 public class PhpIniTest {
@@ -35,7 +35,7 @@ public class PhpIniTest {
     static final PrintStream OUT = System.out;
 
     static void check(String what, boolean ok) {
-        OUT.println((ok ? "  OK   " : "  FALLITO ") + what);
+        OUT.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
@@ -43,25 +43,25 @@ public class PhpIniTest {
         Path home = Files.createTempDirectory("php-ini");
         String script = new FullMailServerScript().getScriptContent();
 
-        OUT.println("\n== Lo script scrive un php.ini ==");
+        OUT.println("\n== The script writes a php.ini ==");
         String ini = between(script, "cat > /usr/local/etc/php.ini << 'PHPINIEOF'\n", "\nPHPINIEOF\n");
-        check("c'e' un blocco php.ini nello script", ini != null && !ini.isBlank());
-        if (ini == null) { OUT.println("\n" + (++failed) + " CONTROLLI FALLITI"); System.exit(1); }
-        check("e lo script si ferma se non riesce a scriverlo",
+        check("there is a php.ini block in the script", ini != null && !ini.isBlank());
+        if (ini == null) { OUT.println("\n" + (++failed) + " CHECKS FAILED"); System.exit(1); }
+        check("and the script stops if it cannot write it",
                 script.contains("if [ ! -f /usr/local/etc/php.ini ]"));
-        // Di roundcube, non piu' di www: la webmail ha il suo utente (RoundcubeUser).
-        check("la cartella delle sessioni la crea, 700 e di roundcube",
+        // Roundcube's, no longer www's: the webmail has its own user (RoundcubeUser).
+        check("it creates the sessions folder, 700 and roundcube's",
                 script.contains("mkdir -p /var/db/mailpanel/php_sessions")
                         && script.contains("chown -R roundcube:roundcube /var/db/mailpanel/php_sessions; chmod 700 /var/db/mailpanel/php_sessions")
                         && !script.contains("chown www:www /var/db/mailpanel/php_sessions"));
-        check("il registro degli errori esiste e ruota",
+        check("the error log exists and rotates",
                 script.contains("touch /var/log/php_errors.log")
                         && script.contains("/usr/local/etc/newsyslog.conf.d/php-errors.conf"));
 
-        OUT.println("\n== PHP lo legge, e i valori diventano quelli ==");
+        OUT.println("\n== PHP reads it, and the values become those ==");
         if (!onPath("php")) {
-            check("php c'e' (questa prova va lanciata sulla VM, non sul Mac)", false);
-            OUT.println("\n" + failed + " CONTROLLI FALLITI");
+            check("php is there (this test must be run on the VM, not on the Mac)", false);
+            OUT.println("\n" + failed + " CHECKS FAILED");
             System.exit(1);
         }
         Path iniFile = home.resolve("php.ini");
@@ -70,45 +70,45 @@ public class PhpIniTest {
         for (Map.Entry<String, String> e : got.entrySet())
             OUT.println(String.format("  %-26s [%s]", e.getKey(), e.getValue()));
 
-        check("date.timezone e' UTC (r13)", "UTC".equals(got.get("date.timezone")));
-        check("expose_php spento (r19: la versione di PHP non si annuncia)",
+        check("date.timezone is UTC (r13)", "UTC".equals(got.get("date.timezone")));
+        check("expose_php off (r19: the PHP version is not announced)",
                 "".equals(got.get("expose_php")) || "0".equals(got.get("expose_php")));
-        check("display_errors spento, log_errors acceso (r19: all'utente niente, nel registro tutto)",
+        check("display_errors off, log_errors on (r19: nothing to the user, everything in the log)",
                 ("".equals(got.get("display_errors")) || "0".equals(got.get("display_errors")))
                         && "1".equals(got.get("log_errors")));
-        check("il registro degli errori ha un percorso, fuori dalla document root",
+        check("the error log has a path, outside the document root",
                 got.get("error_log") != null && got.get("error_log").startsWith("/var/log/"));
-        check("allow_url_include spento",
+        check("allow_url_include off",
                 "".equals(got.get("allow_url_include")) || "0".equals(got.get("allow_url_include")));
-        // Se l'estensione session non c'e', TUTTE le sue direttive tornano vuote e i due
-        // controlli qui sotto cadrebbero dicendo la cosa sbagliata: non "php.ini e' scritto
-        // male" ma "manca php84-session". Succede davvero, perche' su FreeBSD session e' un
-        // pacchetto a parte -- lo installa questo stesso script, ma non il solo php84.
-        check("l'estensione session c'e' (senza, i controlli qui sotto non distinguono niente:"
+        // If the session extension is missing, ALL its directives come back empty and the two checks
+        // below would fall saying the wrong thing: not "php.ini is badly written" but "php84-session
+        // is missing". It really happens, because on FreeBSD session is a separate package -- this
+        // same script installs it, but php84 alone does not.
+        check("the session extension is there (without it, the checks below tell nothing apart:"
                 + " pkg install -y php84-session)", !"".equals(got.get("session.save_path")));
-        check("le sessioni NON stanno in /tmp",
+        check("the sessions are NOT in /tmp",
                 got.get("session.save_path") != null && !got.get("session.save_path").isEmpty()
                         && !got.get("session.save_path").startsWith("/tmp"));
-        check("il cookie di sessione e' HttpOnly, Secure e strict mode",
+        check("the session cookie is HttpOnly, Secure and strict mode",
                 "1".equals(got.get("session.cookie_httponly"))
                         && "1".equals(got.get("session.cookie_secure"))
                         && "1".equals(got.get("session.use_strict_mode")));
 
-        OUT.println("\n== Il limite di PHP e quello di Postfix sono d'accordo ==");
+        OUT.println("\n== PHP's limit and Postfix's agree ==");
         long upload = bytes(got.get("upload_max_filesize"));
         long post = bytes(got.get("post_max_size"));
         long memory = bytes(got.get("memory_limit"));
         long postfix = postfixMessageSizeLimit(script);
         OUT.println("  upload_max_filesize " + upload + "  post_max_size " + post
                 + "  memory_limit " + memory + "  message_size_limit " + postfix);
-        check("Postfix dichiara un limite in questo stesso script", postfix > 0);
-        check("PHP non e' piu' stretto di Postfix: " + upload + " >= " + postfix, upload >= postfix);
-        check("post_max_size sta sopra upload_max_filesize (nella richiesta c'e' anche il resto)",
+        check("Postfix declares a limit in this same script", postfix > 0);
+        check("PHP is not stricter than Postfix: " + upload + " >= " + postfix, upload >= postfix);
+        check("post_max_size is above upload_max_filesize (the request also carries the rest)",
                 post > upload);
-        check("memory_limit sta sopra post_max_size", memory > post);
-        check("e non e' piu' il predefinito da 2M che si trova senza php.ini", upload > 2L * 1024 * 1024);
+        check("memory_limit is above post_max_size", memory > post);
+        check("and it is no longer the 2M default one gets without php.ini", upload > 2L * 1024 * 1024);
 
-        OUT.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        OUT.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         System.exit(failed == 0 ? 0 : 1);
     }
 
@@ -119,7 +119,7 @@ public class PhpIniTest {
         "session.use_strict_mode",
     };
 
-    /** I valori che PHP ha davvero dopo aver letto quel file. */
+    /** The values PHP really has after reading that file. */
     static Map<String, String> effective(Path iniFile) throws Exception {
         StringBuilder php = new StringBuilder();
         for (String k : WANTED) php.append("echo \"").append(k).append("=\", ini_get(\"").append(k).append("\"), \"\\n\";");
@@ -136,12 +136,12 @@ public class PhpIniTest {
         }
         if (got.size() < WANTED.length) {
             OUT.println(out);
-            throw new IllegalStateException("php non ha risposto per tutte le direttive");
+            throw new IllegalStateException("php did not answer for all the directives");
         }
         return got;
     }
 
-    /** Il message_size_limit che lo script scrive in main.cf di Postfix. */
+    /** The message_size_limit the script writes in Postfix's main.cf. */
     static long postfixMessageSizeLimit(String script) {
         for (String line : script.split("\n")) {
             String t = line.trim();
@@ -153,7 +153,7 @@ public class PhpIniTest {
         return -1;
     }
 
-    /** "50M" -> 52428800, come li legge PHP. */
+    /** "50M" -> 52428800, as PHP reads them. */
     static long bytes(String shorthand) {
         if (shorthand == null || shorthand.isEmpty()) return -1;
         String s = shorthand.trim();

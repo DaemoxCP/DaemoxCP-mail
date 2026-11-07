@@ -14,17 +14,17 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * La superficie pubblica passa da "mailpanel-pubblico" a "mailpanel-public" sui server gia'
- * installati (PublicSurfaceRename.migrate), in cartelle temporanee e con un nginx e un fail2ban
- * finti. Il fail2ban finto fa come quello vero: tiene i ban in un database per nome di jail, e a
- * ogni reload attiva le jail che trova in jail.d riprendendo dal database i ban di ciascuna. Una
- * jail col nome nuovo ritrova i ban solo se lo stato nel database e' passato a lei. Conta anche
- * i ban dati a mano (le righe «Ban» che la jail recidive conta): una rinomina non ne deve dare.
- * Con la superficie si sposta la cartella dei suoi file (mta-sts.txt), che il file di nginx cita
- * per percorso: sul server vero, il 31/10/2026, quel percorso restava quello vecchio.
- * L'effetto su nginx, fail2ban e pf veri lo misura la prova sulla VM (reperti).
+ * The public surface moves from "mailpanel-pubblico" to "mailpanel-public" on the servers already
+ * installed (PublicSurfaceRename.migrate), in temporary folders and with a fake nginx and fail2ban.
+ * The fake fail2ban does what the real one does: it keeps the bans in a database by jail name, and at
+ * every reload it activates the jails it finds in jail.d taking back each one's bans from the
+ * database. A jail with the new name finds its bans again only if the state in the database moved
+ * to it. It also counts the bans given by hand (the "Ban" lines the recidive jail counts): a rename
+ * must give none. With the surface the folder of its files moves too (mta-sts.txt), which the nginx
+ * file quotes by path: on the real server, on 31/10/2026, that path stayed the old one. The effect
+ * on the real nginx, fail2ban and pf is measured by the test on the VM (reperti).
  *
- * Si lancia ovunque (non chiama niente):
+ * It runs anywhere (it calls nothing):
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PublicSurfaceRenameTest
  */
 public class PublicSurfaceRenameTest {
@@ -33,34 +33,34 @@ public class PublicSurfaceRenameTest {
     static final PrintStream OUT = System.out;
 
     static void check(String what, boolean ok) {
-        OUT.println((ok ? "  OK   " : "  FALLITO ") + what);
+        OUT.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
-    /** Il nome di prima, dal file di dati: la prova non lo scrive. */
+    /** The old name, from the data file: the test does not write it. */
     static final String OLD = LegacyNames.single("publicSurface");
     static final String NEW = "mailpanel-public";
     static final String CERT = "/usr/local/etc/ssl/mail/fullchain.pem";
     static final String KEY = "/usr/local/etc/ssl/mail/privkey.pem";
 
     /**
-     * Le firme di prima, dal file di dati: la piu' lunga ("... di posta") stava in filtro e jail,
-     * la piu' corta nel file di nginx.
+     * The old signatures, from the data file: the longer one ("... di posta") was in filter and
+     * jail, the shorter one in the nginx file.
      */
     static final List<String> OLD_SIGNATURES = LegacyNames.oldNamesOf("panelSignature", PanelMarker.WRITTEN);
     static String signedBefore(String content, String signature) { return content.replace(PanelMarker.WRITTEN, signature); }
 
     /**
-     * I tre file come li scriveva main prima della rinomina: quelli di oggi col nome e la firma di
-     * ieri, e il file di nginx con la cartella dei file pubblici di ieri (folder).
+     * The three files as main wrote them before the rename: today's with yesterday's name and
+     * signature, and the nginx file with yesterday's public files folder (folder).
      */
     static String oldConf(Path folder) {
         return signedBefore(WebProtection.configuration(CERT, KEY), OLD_SIGNATURES.get(OLD_SIGNATURES.size() - 1))
                 .replace(NEW, OLD).replace(WebProtection.PUBLIC_DIR, folder.toString());
     }
-    /** Il file di nginx di oggi, con la cartella dei file pubblici data. */
+    /** Today's nginx file, with the given public files folder. */
     static String conf(Path folder) { return WebProtection.configuration(CERT, KEY).replace(WebProtection.PUBLIC_DIR, folder.toString()); }
-    /** Il nome della cartella dei file pubblici di prima, dal file di dati. */
+    /** The name of the old public files folder, from the data file. */
     static final String OLD_FOLDER = Path.of(LegacyNames.single("publicFolder")).getFileName().toString();
     static String oldFilter() { return signedBefore(WebProtection.filter(), OLD_SIGNATURES.get(0)).replace(NEW, OLD); }
     static String oldJail() { return signedBefore(WebProtection.jail(), OLD_SIGNATURES.get(0)).replace(NEW, OLD); }
@@ -71,9 +71,9 @@ public class PublicSurfaceRenameTest {
         boolean nginxRunning = true, f2bRunning = true;
         boolean nginxTestFails, f2bReloadFails, f2bIgnoresNewJail, databaseFails;
         int foldersCalls, nginxTests, nginxReloads, f2bReloads, manualBans, stateMoves;
-        /** Le jail attive, con i loro ban. */
+        /** The active jails, with their bans. */
         final Map<String, List<String>> jails = new LinkedHashMap<>();
-        /** Il database di fail2ban: i ban per nome di jail, e la posizione nel log. */
+        /** fail2ban's database: the bans by jail name, and the position in the log. */
         final Map<String, List<String>> database = new LinkedHashMap<>();
         final Map<String, String> logOf = new LinkedHashMap<>();
 
@@ -95,7 +95,7 @@ public class PublicSurfaceRenameTest {
                 for (Path p : s.toList()) {
                     String n = p.getFileName().toString().replace(".conf", "");
                     if (f2bIgnoresNewJail && n.equals(NEW)) continue;
-                    // Ogni jail che parte riprende dal database i suoi ban, e solo i suoi.
+                    // Every jail that starts takes back its bans from the database, and only its own.
                     jails.put(n, database.computeIfAbsent(n, k -> new ArrayList<>()));
                 }
             } catch (Exception e) { return ko(e.toString()); }
@@ -114,14 +114,14 @@ public class PublicSurfaceRenameTest {
             return true;
         }
 
-        /** Un ban dato a mano: nel fail2ban vero scrive una riga «Ban» che recidive conta. */
+        /** A ban given by hand: in the real fail2ban it writes a "Ban" line recidive counts. */
         void manualBan(String jail, String ip) {
             manualBans++;
             database.computeIfAbsent(jail, k -> new ArrayList<>()).add(ip);
         }
     }
 
-    /** Un server installato con main prima della rinomina, in una cartella temporanea. */
+    /** A server installed with main before the rename, in a temporary folder. */
     static final class Server {
         final Path root, f2b, jailD, filterD, logs, confD, sites, oldFolder, newFolder;
         final PublicSurfaceRename.Places places;
@@ -139,7 +139,7 @@ public class PublicSurfaceRenameTest {
             newFolder = root.resolve("db").resolve(Path.of(WebProtection.PUBLIC_DIR).getFileName().toString());
             places = new PublicSurfaceRename.Places(f2b, logs, confD, oldFolder, newFolder);
             sv = new FakeServices(jailD, List.of(confD.toString()));
-            // Le cose degli altri che non devono muoversi.
+            // Other people's things that must not move.
             Files.writeString(logs.resolve("access.log"), "webmail\n");
             Files.writeString(jailD.resolve("postfix-sasl.conf"), "[postfix-sasl]\n");
             if (withConf) {
@@ -161,7 +161,7 @@ public class PublicSurfaceRenameTest {
                 sv.database.put(OLD, new ArrayList<>(List.of("203.0.113.7", "198.51.100.9")));
                 sv.logOf.put(OLD, logs.resolve(OLD + "-access.log").toString());
             }
-            sv.fail2banReload();   // fail2ban acceso con la jail vecchia e i suoi due ban
+            sv.fail2banReload();   // fail2ban running with the old jail and its two bans
             sv.f2bReloads = 0;
         }
 
@@ -173,7 +173,7 @@ public class PublicSurfaceRenameTest {
 
         String read(Path p) throws Exception { return Files.exists(p) ? Files.readString(p) : null; }
 
-        /** Tutti i file sotto la radice col loro contenuto: per dire "non e' cambiato niente". */
+        /** All the files under the root with their content: to say "nothing changed". */
         Map<String, String> snapshot() throws Exception {
             Map<String, String> m = new LinkedHashMap<>();
             try (Stream<Path> s = Files.walk(root)) {
@@ -185,121 +185,121 @@ public class PublicSurfaceRenameTest {
     }
 
     public static void main(String[] args) throws Exception {
-        OUT.println("\n== I nomi ==");
-        // Per riflessione: javac copia le costanti dentro questa classe, e il confronto diretto
-        // guarderebbe i nomi di quando la prova e' stata compilata, non quelli del jar.
+        OUT.println("\n== The names ==");
+        // By reflection: javac copies the constants into this class, and the direct comparison would
+        // look at the names of when the test was compiled, not those of the jar.
         String oldName = (String) PublicSurfaceRename.class.getDeclaredField("OLD_NAME").get(null);
         String newName = (String) WebProtection.class.getDeclaredField("NAME").get(null);
-        check("il nome vecchio viene dal file di dati e il nuovo e' diverso",
+        check("the old name comes from the data file and the new one is different",
                 !oldName.isEmpty() && oldName.equals(OLD) && newName.equals(NEW) && !oldName.equals(newName));
-        check("il codice di oggi non scrive piu' il nome vecchio (configurazione, filtro, jail), ne' la cartella di prima",
+        check("today's code no longer writes the old name (configuration, filter, jail), nor the old folder",
                 !WebProtection.configuration(CERT, KEY).contains(OLD) && !WebProtection.jail().contains(OLD)
                         && !WebProtection.filter().contains(OLD) && !WebProtection.ACCESS_LOG.contains(OLD)
                         && !WebProtection.configuration(CERT, KEY).contains(LegacyNames.single("publicFolder"))
                         && WebProtection.configuration(CERT, KEY).contains(WebProtection.PUBLIC_DIR + "/mta-sts.txt"));
-        check("la jail di oggi: sezione, filtro, log e ancora pf col nome nuovo",
+        check("today's jail: section, filter, log and pf anchor with the new name",
                 WebProtection.jail().contains("[" + NEW + "]") && WebProtection.jail().contains("filter   = " + NEW + "\n")
                         && WebProtection.jail().contains("logpath  = /var/log/nginx/" + NEW + "-access.log")
                         && WebProtection.jail().contains("action   = pf[name=" + NEW + ", port=\"http,https\"]"));
-        check("il file del database si legge da \"fail2ban-client get dbfile\"",
+        check("the database file is read from \"fail2ban-client get dbfile\"",
                 "/var/db/fail2ban/fail2ban.sqlite3".equals(PublicSurfaceRename.fail2banDatabase(
                         "Current database file is:\n`- /var/db/fail2ban/fail2ban.sqlite3\n"))
                         && PublicSurfaceRename.fail2banDatabase("Database currently disabled") == null);
-        check("i tre file di main hanno la firma di prima, e il pannello la riconosce",
+        check("main's three files have the old signature, and the panel recognises it",
                 OLD_SIGNATURES.size() == 2 && !oldConf(Path.of("/x")).contains(PanelMarker.WRITTEN) && !oldJail().contains(PanelMarker.WRITTEN)
                         && !oldFilter().contains(PanelMarker.WRITTEN) && PanelMarker.writtenByPanel(oldConf(Path.of("/x")))
                         && PanelMarker.writtenByPanel(oldFilter()) && PanelMarker.writtenByPanel(oldJail()));
-        check("la riga di fail2ban-client status si legge",
+        check("the fail2ban-client status line is read",
                 PublicSurfaceRename.bannedFrom("|- Actions\n   |- Currently banned:\t2\n   |- Total banned:\t46\n"
                         + "   `- Banned IP list:\t203.0.113.7 198.51.100.9\n").equals(List.of("203.0.113.7", "198.51.100.9"))
                         && PublicSurfaceRename.bannedFrom("   `- Banned IP list:\t\n").isEmpty());
 
-        OUT.println("\n== Un server installato con main: si sposta tutto ==");
+        OUT.println("\n== A server installed with main: everything moves ==");
         Server s = new Server(true, true, true);
         PublicSurfaceRename.Report r = s.run();
-        check("esito DONE", r.outcome() == PublicSurfaceRename.Outcome.DONE);
-        check("nginx: il file nuovo e' quello che scrive il pannello oggi, con la cartella nuova; il vecchio non c'e' piu'",
+        check("outcome DONE", r.outcome() == PublicSurfaceRename.Outcome.DONE);
+        check("nginx: the new file is the one the panel writes today, with the new folder; the old one is gone",
                 conf(s.newFolder).equals(s.read(s.confD.resolve(NEW + ".conf")))
                         && !Files.exists(s.confD.resolve(OLD + ".conf")));
-        check("la cartella dei file pubblici ha il nome nuovo, con mta-sts.txt dentro, e la vecchia non c'e' piu'",
+        check("the public files folder has the new name, with mta-sts.txt inside, and the old one is gone",
                 "version: STSv1\nmode: enforce\n".equals(s.read(s.newFolder.resolve("mta-sts.txt"))) && !Files.exists(s.oldFolder));
-        check("fail2ban: jail e filtro nuovi uguali a quelli di oggi, i vecchi tolti",
+        check("fail2ban: new jail and filter equal to today's, the old ones removed",
                 WebProtection.jail().equals(s.read(s.jailD.resolve(NEW + ".conf")))
                         && WebProtection.filter().equals(s.read(s.filterD.resolve(NEW + ".conf")))
                         && !Files.exists(s.jailD.resolve(OLD + ".conf")) && !Files.exists(s.filterD.resolve(OLD + ".conf")));
-        check("la jail spostata tiene i suoi permessi (0640)",
+        check("the moved jail keeps its permissions (0640)",
                 PosixFilePermissions.toString(Files.getPosixFilePermissions(s.jailD.resolve(NEW + ".conf"))).equals("rw-r-----"));
-        check("il log e la sua copia ruotata col nome nuovo, contenuto intatto",
+        check("the log and its rotated copy with the new name, content untouched",
                 "1.2.3.4 - - \"GET /x\" 404\n".equals(s.read(s.logs.resolve(NEW + "-access.log")))
                         && "archive\n".equals(s.read(s.logs.resolve(NEW + "-access.log.0.bz2")))
                         && !Files.exists(s.logs.resolve(OLD + "-access.log"))
                         && !Files.exists(s.logs.resolve(OLD + "-access.log.0.bz2")));
-        check("i file degli altri non si muovono",
+        check("other people's files do not move",
                 "webmail\n".equals(s.read(s.logs.resolve("access.log"))) && Files.exists(s.jailD.resolve("postfix-sasl.conf")));
-        check("nginx -t e reload di nginx e di fail2ban, una volta ciascuno",
+        check("nginx -t and reload of nginx and fail2ban, once each",
                 s.sv.nginxTests == 1 && s.sv.nginxReloads == 1 && s.sv.f2bReloads == 1);
-        check("i due ban della jail vecchia sono nella nuova, la vecchia non c'e' piu'",
+        check("the two bans of the old jail are in the new one, the old one is gone",
                 s.sv.jails.containsKey(NEW) && s.sv.jails.get(NEW).equals(List.of("203.0.113.7", "198.51.100.9"))
                         && !s.sv.jails.containsKey(OLD));
-        check("  ripresi dal database, senza nessun ban dato a mano (recidive non conta niente)",
+        check("  taken back from the database, with no ban given by hand (recidive counts nothing)",
                 s.sv.stateMoves == 1 && s.sv.manualBans == 0);
-        check("  e la jail nuova riprende il log dal punto in cui era la vecchia",
+        check("  and the new jail takes the log back from the point where the old one was",
                 s.logs.resolve(NEW + "-access.log").toString().equals(s.sv.logOf.get(NEW)) && !s.sv.logOf.containsKey(OLD));
 
-        OUT.println("\n== Il secondo avvio ==");
+        OUT.println("\n== The second start ==");
         Map<String, String> after = s.snapshot();
         int calls = s.sv.foldersCalls;
         r = s.run();
-        check("niente da fare, e nemmeno nginx -T", r.outcome() == PublicSurfaceRename.Outcome.NOTHING
+        check("nothing to do, not even nginx -T", r.outcome() == PublicSurfaceRename.Outcome.NOTHING
                 && s.sv.foldersCalls == calls && after.equals(s.snapshot()));
 
-        OUT.println("\n== nginx rifiuta: si rimette tutto com'era ==");
+        OUT.println("\n== nginx refuses: everything is put back as it was ==");
         s = new Server(true, true, true);
         s.sv.nginxTestFails = true;
         Map<String, String> before = s.snapshot();
         r = s.run();
-        check("esito ROLLED_BACK", r.outcome() == PublicSurfaceRename.Outcome.ROLLED_BACK);
-        check("ogni file torna al suo nome e al suo contenuto", before.equals(s.snapshot()));
-        check("niente reload: ne' nginx ne' fail2ban, e i ban restano dove erano",
+        check("outcome ROLLED_BACK", r.outcome() == PublicSurfaceRename.Outcome.ROLLED_BACK);
+        check("every file goes back to its name and its content", before.equals(s.snapshot()));
+        check("no reload: neither nginx nor fail2ban, and the bans stay where they were",
                 s.sv.nginxReloads == 0 && s.sv.f2bReloads == 0 && s.sv.jails.get(OLD).size() == 2);
 
-        OUT.println("\n== fail2ban rifiuta il reload: si rimette tutto, nginx compreso ==");
+        OUT.println("\n== fail2ban refuses the reload: everything is put back, nginx included ==");
         s = new Server(true, true, true);
         s.sv.f2bReloadFails = true;
         before = s.snapshot();
         r = s.run();
-        check("esito ROLLED_BACK", r.outcome() == PublicSurfaceRename.Outcome.ROLLED_BACK);
-        check("ogni file torna com'era", before.equals(s.snapshot()));
-        check("nginx ricaricato due volte (avanti e indietro), fail2ban due (il rifiuto e il ritorno)",
+        check("outcome ROLLED_BACK", r.outcome() == PublicSurfaceRename.Outcome.ROLLED_BACK);
+        check("every file goes back as it was", before.equals(s.snapshot()));
+        check("nginx reloaded twice (forward and back), fail2ban twice (the refusal and the return)",
                 s.sv.nginxReloads == 2 && s.sv.f2bReloads == 2);
-        check("la jail vecchia e' di nuovo attiva, coi suoi due ban ripresi dal database",
+        check("the old jail is active again, with its two bans taken back from the database",
                 s.sv.jails.containsKey(OLD) && !s.sv.jails.containsKey(NEW) && s.sv.jails.get(OLD).size() == 2
                         && s.sv.manualBans == 0);
 
-        OUT.println("\n== fail2ban ricarica ma non vede la jail nuova: indietro ==");
+        OUT.println("\n== fail2ban reloads but does not see the new jail: back ==");
         s = new Server(true, true, true);
         s.sv.f2bIgnoresNewJail = true;
         before = s.snapshot();
         r = s.run();
-        check("esito ROLLED_BACK e file com'erano",
+        check("outcome ROLLED_BACK and files as they were",
                 r.outcome() == PublicSurfaceRename.Outcome.ROLLED_BACK && before.equals(s.snapshot()));
-        check("dopo il ritorno la jail vecchia c'e' di nuovo, con i suoi due ban",
+        check("after the return the old jail is there again, with its two bans",
                 s.sv.jails.containsKey(OLD) && s.sv.jails.get(OLD).equals(List.of("203.0.113.7", "198.51.100.9")));
 
-        OUT.println("\n== Il database di fail2ban non si puo' aggiornare ==");
+        OUT.println("\n== fail2ban's database cannot be updated ==");
         s = new Server(true, true, true);
         s.sv.databaseFails = true;
         r = s.run();
-        check("la rinomina va avanti lo stesso, e lo dice", r.outcome() == PublicSurfaceRename.Outcome.DONE
+        check("the rename goes on all the same, and says so", r.outcome() == PublicSurfaceRename.Outcome.DONE
                 && r.detail().contains("not carried over") && s.sv.jails.containsKey(NEW) && !s.sv.jails.containsKey(OLD));
-        check("  senza ribannare a mano", s.sv.manualBans == 0);
+        check("  without banning again by hand", s.sv.manualBans == 0);
 
-        OUT.println("\n== Cose che non si toccano ==");
+        OUT.println("\n== Things that are not touched ==");
         s = new Server(true, true, true);
         Files.writeString(s.jailD.resolve(OLD + ".conf"), "[" + OLD + "]\nenabled = true\n# written by hand\n");
         before = s.snapshot();
         r = s.run();
-        check("una jail scritta a mano: NOT_OURS, niente spostato, nessun servizio toccato",
+        check("a jail written by hand: NOT_OURS, nothing moved, no service touched",
                 r.outcome() == PublicSurfaceRename.Outcome.NOT_OURS && before.equals(s.snapshot())
                         && s.sv.nginxTests == 0 && s.sv.f2bReloads == 0);
 
@@ -307,7 +307,7 @@ public class PublicSurfaceRenameTest {
         Files.writeString(s.confD.resolve(NEW + ".conf"), conf(s.newFolder));
         before = s.snapshot();
         r = s.run();
-        check("nome vecchio e nuovo insieme: BOTH_NAMES, niente spostato",
+        check("old and new name together: BOTH_NAMES, nothing moved",
                 r.outcome() == PublicSurfaceRename.Outcome.BOTH_NAMES && before.equals(s.snapshot()));
 
         s = new Server(true, true, true);
@@ -315,22 +315,22 @@ public class PublicSurfaceRenameTest {
         s.sv.folders = List.of(s.confD.toString(), s.sites.toString());
         before = s.snapshot();
         r = s.run();
-        check("due file vecchi in due cartelle incluse: AMBIGUOUS, niente spostato",
+        check("two old files in two included folders: AMBIGUOUS, nothing moved",
                 r.outcome() == PublicSurfaceRename.Outcome.AMBIGUOUS && before.equals(s.snapshot()));
 
         s = new Server(true, true, true);
         s.sv.folders = null;
         before = s.snapshot();
         r = s.run();
-        check("nginx -T non risponde: NGINX_UNREADABLE, niente spostato",
+        check("nginx -T does not answer: NGINX_UNREADABLE, nothing moved",
                 r.outcome() == PublicSurfaceRename.Outcome.NGINX_UNREADABLE && before.equals(s.snapshot()));
 
-        OUT.println("\n== Servizi spenti o assenti ==");
+        OUT.println("\n== Services off or missing ==");
         s = new Server(true, true, true);
         s.sv.f2bRunning = false;
         s.sv.nginxRunning = false;
         r = s.run();
-        check("fail2ban e nginx spenti: si sposta tutto, nginx -t si', nessun reload",
+        check("fail2ban and nginx off: everything moves, nginx -t yes, no reload",
                 r.outcome() == PublicSurfaceRename.Outcome.DONE && Files.exists(s.jailD.resolve(NEW + ".conf"))
                         && Files.exists(s.confD.resolve(NEW + ".conf")) && s.sv.nginxTests == 1
                         && s.sv.nginxReloads == 0 && s.sv.f2bReloads == 0);
@@ -338,48 +338,48 @@ public class PublicSurfaceRenameTest {
         s = new Server(false, true, true);
         s.sv.folders = List.of();
         r = s.run();
-        check("senza nginx (solo jail e log): si spostano quelli, senza nginx -t",
+        check("without nginx (only jail and log): those move, without nginx -t",
                 r.outcome() == PublicSurfaceRename.Outcome.DONE && WebProtection.jail().equals(s.read(s.jailD.resolve(NEW + ".conf")))
                         && Files.exists(s.logs.resolve(NEW + "-access.log")) && s.sv.nginxTests == 0
                         && s.sv.jails.get(NEW).size() == 2);
 
         s = new Server(true, false, true);
         r = s.run();
-        check("senza jail (la 443 c'e', fail2ban non l'ha): si sposta nginx, fail2ban non si tocca",
+        check("without a jail (the 443 is there, fail2ban does not have it): nginx moves, fail2ban is not touched",
                 r.outcome() == PublicSurfaceRename.Outcome.DONE && Files.exists(s.confD.resolve(NEW + ".conf"))
                         && s.sv.f2bReloads == 0 && s.sv.nginxReloads == 1);
 
-        OUT.println("\n== La cartella dei file pubblici ==");
-        check("la cartella la sposta solo questa migrazione: non e' fra i file che sposta PathMigration",
+        OUT.println("\n== The public files folder ==");
+        check("only this migration moves the folder: it is not among the files PathMigration moves",
                 !LegacyNames.single("publicFolder").isEmpty()
                         && LegacyNames.pairs("files").stream().noneMatch(p -> p[0].equals(LegacyNames.single("publicFolder"))));
         s = new Server(true, true, true);
         Files.createDirectories(s.newFolder);
         before = s.snapshot();
         r = s.run();
-        check("cartella vecchia e nuova insieme: BOTH_NAMES, niente spostato",
+        check("old and new folder together: BOTH_NAMES, nothing moved",
                 r.outcome() == PublicSurfaceRename.Outcome.BOTH_NAMES && before.equals(s.snapshot()) && Files.exists(s.oldFolder));
 
         s = new Server(true, true, true);
         s.sv.nginxTestFails = true;
         r = s.run();
-        check("nginx rifiuta: la cartella torna al nome vecchio, e nginx la cita ancora",
+        check("nginx refuses: the folder goes back to the old name, and nginx still quotes it",
                 r.outcome() == PublicSurfaceRename.Outcome.ROLLED_BACK && Files.exists(s.oldFolder.resolve("mta-sts.txt"))
                         && !Files.exists(s.newFolder) && oldConf(s.oldFolder).equals(s.read(s.confD.resolve(OLD + ".conf"))));
 
-        // Un server che main ha gia' portato al nome nuovo prima di questa correzione: la cartella
-        // l'ha spostata PathMigration, e il file di nginx cita ancora la vecchia.
+        // A server main had already brought to the new name before this fix: PathMigration moved the
+        // folder, and the nginx file still quotes the old one.
         s = new Server(false, false, false);
         Files.createDirectories(s.newFolder);
         Files.writeString(s.newFolder.resolve("mta-sts.txt"), "version: STSv1\n");
         Files.writeString(s.confD.resolve(NEW + ".conf"), conf(s.oldFolder));
         r = s.run();
-        check("gia' rinominato ma col percorso vecchio: si riscrive solo il file di nginx, nginx -t e reload",
+        check("already renamed but with the old path: only the nginx file is rewritten, nginx -t and reload",
                 r.outcome() == PublicSurfaceRename.Outcome.DONE && conf(s.newFolder).equals(s.read(s.confD.resolve(NEW + ".conf")))
                         && s.sv.nginxTests == 1 && s.sv.nginxReloads == 1 && s.sv.f2bReloads == 0);
         calls = s.sv.foldersCalls;
         r = s.run();
-        check("  e al secondo avvio non c'e' piu' niente da fare, nemmeno nginx -T",
+        check("  and at the second start there is nothing left to do, not even nginx -T",
                 r.outcome() == PublicSurfaceRename.Outcome.NOTHING && s.sv.foldersCalls == calls);
 
         s = new Server(false, false, false);
@@ -388,24 +388,24 @@ public class PublicSurfaceRenameTest {
         s.sv.nginxTestFails = true;
         before = s.snapshot();
         r = s.run();
-        check("  se nginx rifiuta il file riscritto, torna com'era", r.outcome() == PublicSurfaceRename.Outcome.ROLLED_BACK
+        check("  if nginx refuses the rewritten file, it goes back as it was", r.outcome() == PublicSurfaceRename.Outcome.ROLLED_BACK
                 && before.equals(s.snapshot()));
 
         s = new Server(false, false, false);
         Files.createDirectories(s.oldFolder);
         Files.writeString(s.oldFolder.resolve("mta-sts.txt"), "version: STSv1\n");
         r = s.run();
-        check("solo la cartella vecchia, nessun file di nginx che la cita: si sposta, senza nginx -t",
+        check("only the old folder, no nginx file quoting it: it moves, without nginx -t",
                 r.outcome() == PublicSurfaceRename.Outcome.DONE && Files.exists(s.newFolder.resolve("mta-sts.txt"))
                         && !Files.exists(s.oldFolder) && s.sv.nginxTests == 0);
 
-        check("il percorso conta solo intero: un'altra cartella che comincia allo stesso modo non cambia",
+        check("the path counts only whole: another folder starting the same way does not change",
                 PublicSurfaceRename.renamed("alias /d/" + OLD_FOLDER + "-bis/x;\n", Path.of("/d/" + OLD_FOLDER), Path.of("/d/public"))
                         .contains("/d/" + OLD_FOLDER + "-bis/x;")
                         && PublicSurfaceRename.renamed("alias /d/" + OLD_FOLDER + "/x;\n", Path.of("/d/" + OLD_FOLDER), Path.of("/d/public"))
                         .contains("/d/public/x;"));
 
-        OUT.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
+        OUT.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);
     }
 }

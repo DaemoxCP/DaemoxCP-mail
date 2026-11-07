@@ -6,21 +6,22 @@ import java.util.regex.*;
 import java.util.stream.*;
 
 /**
- * Le rinomine fatte sul testo possono colpire stringhe che non sono nomi del codice.
+ * Renames made on the text can hit strings that are not names of the code.
  *
- * Il 25/10/2026 la rinomina delle chiavi JSON (so -> os, prova -> test, posta -> mail) aveva
- * cambiato anche: le dieci righe "extension=pdo_mysql.so" del php.ini di Roundcube (diventate
- * ".os": PHP non avrebbe caricato le estensioni), sette comandi di shell su libssl.so e
- * libmysqlclient.so.24, i due nomi vecchi in PathMigration (la migrazione di quei file non
- * avveniva piu', e la guardia old == new lo taceva) e l'identificatore del profilo Apple.
- * Nessuna prova lo vedeva: servono FreeBSD, Roundcube, un iPhone. Questa guarda i sorgenti.
+ * On 25/10/2026 the rename of the JSON keys (so -> os, prova -> test, posta -> mail) had also
+ * changed: the ten "extension=pdo_mysql.so" lines of Roundcube's php.ini (become ".os": PHP would not
+ * have loaded the extensions), seven shell commands on libssl.so and libmysqlclient.so.24, the two
+ * old names in PathMigration (the migration of those files no longer happened, and the old == new
+ * guard kept it quiet) and the Apple profile's identifier. No test saw it: it needs FreeBSD,
+ * Roundcube, an iPhone. This one looks at the sources.
  *
- * Il 30/10/2026 (punto 88 dei reperti) si e' visto il danno nei commenti: le rinomine del 16/10 e
- * del 24/10 avevano cambiato "che" in whichLabel, "riga" in lineItem, "gia'" in already', "uno
- * script" in "one script", "gli intervalli" in "gli ranges" anche nei commenti italiani dei file
- * che gli script scrivono sul server e delle pagine. Il punto 5 li cerca; il punto 6, dal 31/10
- * (punto 90 dei reperti), fa lo stesso nei commenti del codice e delle prove, dove la #21 ne aveva
- * rovinati 110 ("la correzione c'e'?" era diventato "la fix c'e'?").
+ * On 30/10/2026 (point 88 of the reperti) the damage in the comments was seen: the renames of 16/10
+ * and 24/10 had changed "che" into whichLabel, "riga" into lineItem, "gia'" into already', "uno
+ * script" into "one script", "gli intervalli" into "gli ranges" also in the Italian comments of the
+ * files the scripts write on the server and of the pages. Point 5 looks for them; point 6, since
+ * 31/10 (point 90 of the reperti), does the same in the comments of the code and of the tests, where
+ * #21 had damaged 110 of them ("la correzione c'e'?" had become "la fix c'e'?"). The Italian words
+ * and forms quoted in this class are the data it looks for.
  */
 public class RenameDamageTest {
 
@@ -33,8 +34,8 @@ public class RenameDamageTest {
             java = s.filter(p -> p.toString().endsWith(".java")).sorted().toList();
         }
 
-        // 1. una libreria condivisa si chiama .so: ".os" dopo un nome e' una rinomina sbagliata.
-        //    L'unica eccezione e' la chiave di lingua up.os ({{t:up.os}}).
+        // 1. a shared library is called .so: ".os" after a name is a wrong rename.
+        //    The only exception is the language key up.os ({{t:up.os}}).
         Pattern os = Pattern.compile("[A-Za-z0-9_)]\\.os(?![A-Za-z0-9_])");
         List<String> bad = new ArrayList<>();
         for (Path f : java) {
@@ -45,10 +46,10 @@ public class RenameDamageTest {
             }
         }
         bad.stream().limit(10).forEach(b -> System.out.println("  " + b));
-        check("nessuna stringa nomina una libreria .os invece di .so", bad.isEmpty());
+        check("no string names a .os library instead of .so", bad.isEmpty());
 
-        // 2. I nomi di prima stanno nel file di dati: una coppia con lo stesso nome di qua e di la'
-        //    non migra niente (una rinomina fatta a testo li cambierebbe tutti e due).
+        // 2. The old names live in the data file: a pair with the same name on both sides migrates
+        //    nothing (a rename made on the text would change both).
         org.json.JSONObject legacy = new org.json.JSONObject(Files.readString(root.resolve("src/main/resources/legacy-names.json")));
         int pairs = 0; List<String> same = new ArrayList<>();
         for (String section : legacy.keySet()) {
@@ -58,33 +59,32 @@ public class RenameDamageTest {
                 if (a.getJSONArray(i).getString(0).equals(a.getJSONArray(i).getString(1))) same.add(section + ": " + a.getJSONArray(i).getString(0));
             }
         }
-        same.forEach(x -> System.out.println("  stesso nome: " + x));
-        check("legacy-names.json: " + pairs + " coppie, ognuna da un nome vecchio a uno nuovo", pairs > 0 && same.isEmpty());
+        same.forEach(x -> System.out.println("  same name: " + x));
+        check("legacy-names.json: " + pairs + " pairs, each from an old name to a new one", pairs > 0 && same.isEmpty());
 
-        // 3. il php.ini di Roundcube carica le estensioni col loro nome vero.
+        // 3. Roundcube's php.ini loads the extensions with their real name.
         String rc = Files.readString(root.resolve("src/main/java/org/mail_panel/scripts/RoundcubeScript.java"));
-        check("Roundcube: extension=pdo_mysql.so e intl.so nel php.ini",
+        check("Roundcube: extension=pdo_mysql.so and intl.so in php.ini",
                 rc.contains("extension=pdo_mysql.so") && rc.contains("extension=intl.so"));
 
-        // 4. il profilo Apple tiene l'identificatore che i dispositivi conoscono (dal 30/10/2026:
-        //    cambiarlo ancora farebbe installare un secondo profilo accanto al primo).
+        // 4. the Apple profile keeps the identifier the devices know (since 30/10/2026: changing it
+        //    again would make a second profile be installed next to the first).
         String ap = Files.readString(root.resolve("src/main/java/org/mail_panel/system/AppleProfile.java"));
-        check("profilo Apple: PayloadIdentifier ...mail e semi \"mail:\" e \"profile:\" invariati",
+        check("Apple profile: PayloadIdentifier ...mail and seeds \"mail:\" and \"profile:\" unchanged",
                 ap.contains("<string>%s.mail</string>") && ap.contains("deterministic(\"mail:\"")
                         && ap.contains("deterministic(\"profile:\""));
 
-        // 5. I commenti italiani dei testi generati (text block e letterali del Java, le pagine):
-        //    una parola italiana sostituita dal nome inglese che le ha dato una rinomina. Le coppie
-        //    vengono dalle mappe in tools/renames, quelle col nome vecchio fatto di sole minuscole
-        //    (una parola, non un identificatore). Si segnala solo cio' che in italiano non puo'
-        //    stare: un identificatore camelCase (whichLabel), una parola inglese con l'apostrofo
-        //    dell'accento (already'), una parola grammaticale inglese in una frase italiana (where,
-        //    stays, one), un articolo che davanti a quella iniziale non si usa (l'fingerprint, gli
-        //    ranges). Non si vede un sostantivo dopo un articolo giusto ("il verdict", "la fix",
-        //    "della mail"): non si distingue da un prestito come "il port" o "il log". E dal 31/10
-        //    un camelCase che nel codice, tolti i commenti, non c'e' da nessuna parte: il nome
-        //    italiano che una rinomina ha cambiato dappertutto tranne che nel commento
-        //    (@param tieniInoltri sopra un parametro che si chiama keepForwards).
+        // 5. The Italian comments of the generated texts (text blocks and literals of the Java, the
+        //    pages): an Italian word replaced by the English name a rename gave it. The pairs come
+        //    from the maps in tools/renames, those whose old name is made only of lowercase letters
+        //    (a word, not an identifier). Only what cannot stand in Italian is reported: a camelCase
+        //    identifier (whichLabel), an English word with the accent's apostrophe (already'), an
+        //    English function word in an Italian sentence (where, stays, one), an article not used
+        //    before that initial (l'fingerprint, gli ranges). A noun after a right article cannot be
+        //    seen ("il verdict", "la fix", "della mail"): it cannot be told from a loanword like "il
+        //    port" or "il log". And since 31/10 a camelCase that, comments removed, is nowhere in the
+        //    code: the Italian name a rename changed everywhere except in the comment
+        //    (@param tieniInoltri above a parameter called keepForwards).
         Map<String, Set<String>> renamed = new TreeMap<>();
         try (Stream<Path> s = Files.list(root.resolve("tools/renames"))) {
             for (Path f : s.filter(p -> p.toString().endsWith(".txt")).sorted().toList()) {
@@ -114,13 +114,13 @@ public class RenameDamageTest {
             }
         }
         damaged.stream().limit(40).forEach(b -> System.out.println("  " + b));
-        check(renamed.size() + " nomi dalle mappe di tools/renames, " + examined
-                + " righe di commento nei testi generati: nessuna parola italiana rinominata",
+        check(renamed.size() + " names from the maps of tools/renames, " + examined
+                + " comment lines in the generated texts: no renamed Italian word",
                 renamed.size() > 100 && examined > 2000 && damaged.isEmpty());
 
-        // 6. Gli stessi segnali nei commenti del codice: i commenti del Java (pannello, prove,
-        //    attrezzi), quelli dei .js e dei .py delle prove e degli attrezzi, i due README. Questa
-        //    classe no: i suoi commenti citano apposta le forme rovinate.
+        // 6. The same signals in the comments of the code: the comments of the Java (panel, tests,
+        //    tools), those of the .js and .py of the tests and tools, the two READMEs. Not this
+        //    class: its comments quote the damaged forms on purpose.
         List<Path> code = new ArrayList<>(java);
         for (String dir : new String[]{"tests", "tools"}) {
             try (Stream<Path> s = Files.walk(root.resolve(dir))) {
@@ -146,33 +146,33 @@ public class RenameDamageTest {
             }
         }
         damagedCode.stream().limit(40).forEach(b -> System.out.println("  " + b));
-        check(examinedCode + " righe di commento del codice e dei README: nessuna parola italiana rinominata",
+        check(examinedCode + " comment lines of the code and of the READMEs: no renamed Italian word",
                 examinedCode > 10000 && damagedCode.isEmpty());
 
-        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 
-    // ---------------- il punto 5 ----------------
+    // ---------------- point 5 ----------------
 
-    /** Una parola intera: non un pezzo di rotate_start, mail-panel-auth, chiave.one o real(). */
+    /** A whole word: not a piece of rotate_start, mail-panel-auth, key.one or real(). */
     private static final Pattern WORD = Pattern.compile("(?<![A-Za-z0-9_.-])[A-Za-z][A-Za-z0-9]*(?![A-Za-z0-9_(-])");
     private static final Pattern CAMEL = Pattern.compile("[a-z]+[A-Z][A-Za-z0-9]*");
-    /** Parole che bastano a dire che una frase e' italiana: due in una riga. */
+    /** Words that are enough to say a sentence is Italian: two in a line. */
     private static final Pattern ITALIAN = Pattern.compile(
             "(?<![A-Za-z])(di|che|il|la|non|per|del|della|un|una|si|con|sono|gli|nel|e'|c'e'|perche'|anche|come|solo|piu'|cosi'|gia')(?![A-Za-z])");
-    /** Parole grammaticali inglesi: in una frase italiana non ci stanno mai. */
+    /** English function words: in an Italian sentence they never belong. */
     private static final Set<String> FUNCTION = Set.of("where", "when", "while", "still", "already",
             "stays", "one", "real", "only", "also");
-    /** Un articolo eliso (l', un', dell'...) e' italiano solo davanti a una vocale (o a una h). */
+    /** An elided article (l', un', dell'...) is Italian only before a vowel (or an h). */
     private static final Pattern ELISION = Pattern.compile("(?<![A-Za-z])(?:[lL]|[uU]n|[dDnNsS][aeu]ll|[aA]ll|[cC]oll|[qQ]uell|[qQ]uest)'$");
-    /** gli, lo e uno vogliono una vocale, una s impura, una z, gn, ps: non "gli ranges". */
+    /** gli, lo and uno want a vowel, an impure s, a z, gn, ps: not "gli ranges". */
     private static final Pattern GLI = Pattern.compile("(?<![A-Za-z])(?:[gG]li|[lL]o|[uU]no)\\s+$");
 
-    /** Le parole sospette di una riga di commento: tipo, nome inglese e parola italiana di prima. */
+    /** The suspicious words of a comment line: kind, English name and the Italian word of before. */
     static List<String> damageIn(String comment, Map<String, Set<String>> renamed, Set<String> codeWords) {
-        // Fra virgolette, doppie o singole, ci sono comandi e valori ("which dig", '--restart'), e
-        // fra apici inversi o in {@code} nomi del codice: non frasi.
+        // Between quotes, double or single, there are commands and values ("which dig", '--restart'),
+        // and between backticks or in {@code} names of the code: not sentences.
         String c = comment.replaceAll("\"[^\"]*\"", "\"\"")
                 .replaceAll("(?<![A-Za-z])'[^'\\n]*'(?![A-Za-z])", "''")
                 .replaceAll("`[^`]*`|\\{@(?:code|link) [^}]*\\}", "");
@@ -188,34 +188,34 @@ public class RenameDamageTest {
             boolean accent = m.end() < c.length() && c.charAt(m.end()) == '\''
                     && prev != '\'' && (m.end() + 1 >= c.length() || !Character.isLetter(c.charAt(m.end() + 1)));
             String why = null;
-            if (accent) why = "accento";
-            else if (CAMEL.matcher(w).matches()) why = "identificatore";
-            else if (italian && FUNCTION.contains(w)) why = "parola inglese";
-            else if (ELISION.matcher(before).find() && w.matches("[b-df-gj-np-tv-z].*")) why = "elisione";
+            if (accent) why = "accent";
+            else if (CAMEL.matcher(w).matches()) why = "identifier";
+            else if (italian && FUNCTION.contains(w)) why = "English word";
+            else if (ELISION.matcher(before).find() && w.matches("[b-df-gj-np-tv-z].*")) why = "elision";
             else if (GLI.matcher(before).find() && w.matches("[b-df-gj-np-rtv-xy].*") && !w.matches("(gn|ps|pn).*"))
-                why = "articolo";
-            if (why != null) out.add(why + " " + w + " (era " + String.join("/", old) + ")");
+                why = "article";
+            if (why != null) out.add(why + " " + w + " (was " + String.join("/", old) + ")");
         }
         if (italian) {
             Matcher d = DEAD.matcher(c);
             while (d.find()) if (!codeWords.contains(d.group()) && !renamed.containsKey(d.group()))
-                out.add("nome che nel codice non c'e' " + d.group());
+                out.add("a name that is not in the code " + d.group());
         }
         return out;
     }
 
     /**
-     * Un camelCase con almeno due minuscole davanti (jBCrypt e' il nome di una libreria), che non
-     * sia un esempio di codice: seguito da ".metodo" o da "(" lo e' (autoDns.create(...)).
+     * A camelCase with at least two lowercase letters in front (jBCrypt is a library's name), that is
+     * not a code example: followed by ".method" or by "(" it is (autoDns.create(...)).
      */
     private static final Pattern DEAD = Pattern.compile("(?<![A-Za-z0-9_.$-])[a-z]{2,}[A-Z][A-Za-z0-9]*(?![A-Za-z0-9_(-])(?!\\.[A-Za-z])");
-    /** Un letterale su una riga, un commento // o un commento a blocco. */
+    /** A literal on one line, a // comment or a block comment. */
     private static final Pattern STRING_OR_COMMENT = Pattern.compile("\"(?:[^\"\\\\\\n]|\\\\.)*\"|//[^\\n]*|/\\*.*?\\*/", Pattern.DOTALL);
 
     /**
-     * Tutti i nomi che compaiono nel codice, commenti tolti: Java, JavaScript, HTML, JSON e Python
-     * del pannello, delle prove e degli attrezzi. Anche i commenti dentro i text block (le pagine)
-     * si tolgono: un nome che c'e' solo li' non esiste.
+     * All the names that appear in the code, comments removed: Java, JavaScript, HTML, JSON and Python
+     * of the panel, of the tests and of the tools. The comments inside the text blocks (the pages)
+     * are removed too: a name that is only there does not exist.
      */
     static Set<String> codeWords(Path root) throws java.io.IOException {
         Set<String> out = new HashSet<>();
@@ -238,7 +238,7 @@ public class RenameDamageTest {
         return out;
     }
 
-    /** La parte di commento di una riga di testo generato: # ; // /* * <!-- --, o null. */
+    /** The comment part of a line of generated text: # ; // /* * <!-- --, or null. */
     static String commentOf(String line) {
         String s = line.strip();
         if (s.startsWith("#") || s.startsWith(";") || s.startsWith("//") || s.startsWith("/*")
@@ -248,8 +248,8 @@ public class RenameDamageTest {
     }
 
     /**
-     * I commenti del Java (// e i blocchi /* ... *\/, Javadoc compresi), riga per riga, con la riga
-     * del sorgente. I letterali e i text block si saltano: sono il punto 5.
+     * The comments of the Java (// and the /* ... *\/ blocks, Javadoc included), line by line, with
+     * the source line. The literals and the text blocks are skipped: they are point 5.
      */
     static List<Map.Entry<Integer, String>> javaComments(String src) {
         List<Map.Entry<Integer, String>> out = new ArrayList<>();
@@ -286,7 +286,7 @@ public class RenameDamageTest {
         return out;
     }
 
-    /** Le righe di un file di testo, numerate da 1. */
+    /** The lines of a text file, numbered from 1. */
     static List<Map.Entry<Integer, String>> numbered(String src) {
         List<Map.Entry<Integer, String>> out = new ArrayList<>();
         String[] l = src.split("\n", -1);
@@ -295,8 +295,8 @@ public class RenameDamageTest {
     }
 
     /**
-     * Il testo che il Java genera: il contenuto dei text block e dei letterali, riga per riga, con
-     * la riga del sorgente. I commenti del Java si saltano: non finiscono da nessuna parte.
+     * The text the Java generates: the content of the text blocks and of the literals, line by line,
+     * with the source line. The Java comments are skipped: they end up nowhere.
      */
     static List<Map.Entry<Integer, String>> generatedTexts(String src) {
         List<Map.Entry<Integer, String>> out = new ArrayList<>();

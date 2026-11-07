@@ -3,32 +3,29 @@ package org.mail_panel.system;
 import org.json.JSONObject;
 
 /**
- * Il referto delle vulnerabilita' di un pacchetto: la domanda giusta, e la prova che una
- * risposta c'e' stata.
+ * The vulnerability report of a package: the right question, and the proof that an answer came.
  *
- * Il pannello chiedeva {@code pkg audit <nome>}, col solo nome. Misurato sulla VM FreeBSD
- * 15.1 il 23/10/2026:
+ * The panel asked {@code pkg audit <name>}, with the name alone. Measured on the FreeBSD 15.1 VM on
+ * 23/10/2026:
  *
- *  - col solo nome, pkg risponde "VuXML ha voci per questo nome?", non "la versione
- *    installata e' vulnerabile?": su nginx 1.30.6,3 appena aggiornato rispondeva
- *    "nginx is vulnerable" con 25 problemi, mentre `pkg audit` senza argomenti non lo
- *    nominava affatto. E l'intestazione e' "nginx is vulnerable:", SENZA la versione,
- *    quindi il lettore dei dettagli — che cerca "nome-versione is vulnerable:" — non
- *    entrava mai nel blocco: zero CVE sempre, in entrambe le direzioni;
- *  - su php84 8.4.26, vulnerabile per davvero, la scheda del pannello diceva "[ok] Nessuna
- *    vulnerabilita' nota registrata per questo pacchetto", mentre PackagePlan.fixes
- *    trovava la fix nella 8.4.27;
- *  - senza il database delle vulnerabilita' pkg dice "vulnxml file vuln.xml does not exist"
- *    ed esce 1, e chi cerca solo le righe "is vulnerable" conclude "nessuna vulnerabilita'":
- *    una rassicurazione al posto di un "non ho potuto controllare".
+ *  - with the name alone, pkg answers "does VuXML have entries for this name?", not "is the
+ *    installed version vulnerable?": on nginx 1.30.6,3 just upgraded it answered "nginx is
+ *    vulnerable" with 25 problems, while `pkg audit` without arguments did not name it at all. And
+ *    the header is "nginx is vulnerable:", WITHOUT the version, so the details reader — which looks
+ *    for "name-version is vulnerable:" — never entered the block: zero CVEs always, both ways;
+ *  - on php84 8.4.26, really vulnerable, the panel's card said "[ok] No known vulnerability
+ *    recorded for this package", while PackagePlan.fixes found the fix in 8.4.27;
+ *  - without the vulnerability database pkg says "vulnxml file vuln.xml does not exist" and exits
+ *    1, and whoever looks only for the "is vulnerable" lines concludes "no vulnerability": a
+ *    reassurance instead of an "I could not check".
  *
- * Le uscite usate qui sono quelle vere, copiate da quella misura.
+ * The outputs used here are the real ones, copied from that measurement.
  */
 public class AuditReportTest {
 
     private static int failures = 0, skipped = 0;
 
-    /** Il referto vero di `pkg audit 'php84-8.4.26'`, accorciato ai pezzi che contano. */
+    /** The real report of `pkg audit 'php84-8.4.26'`, cut down to the pieces that matter. */
     private static final String VULNERABLE_REPORT =
             "php84-8.4.26 is vulnerable:\n"
           + "  Affected versions:\n"
@@ -39,14 +36,14 @@ public class AuditReportTest {
           + "\n"
           + "1 problem(s) in 1 package(s) found.\n";
 
-    /** Il referto vero di `pkg audit 'nginx-1.30.6,3'` dopo l'aggiornamento. */
+    /** The real report of `pkg audit 'nginx-1.30.6,3'` after the upgrade. */
     private static final String CLEAN_REPORT = "0 problem(s) in 0 package(s) found.\n";
 
-    /** Quello che pkg risponde senza il database delle vulnerabilita'. */
+    /** What pkg answers without the vulnerability database. */
     private static final String REPORT_WITHOUT_DATABASE =
             "pkg: vulnxml file vuln.xml does not exist. Try running 'pkg audit -F' first\n";
 
-    /** Quello che rispondeva al SOLO NOME: nessuna versione nell'intestazione. */
+    /** What it answered to the NAME ALONE: no version in the header. */
     private static final String NAME_ONLY_REPORT =
             "php84 is vulnerable:\n"
           + "  Affected versions:\n"
@@ -58,60 +55,60 @@ public class AuditReportTest {
 
     public static void main(String[] args) {
 
-        // ===== 1. Un pacchetto vulnerabile: il referto dice quanti problemi, e quali =====
+        // ===== 1. A vulnerable package: the report says how many problems, and which =====
         JSONObject v = UpdateManager.readAuditReport(VULNERABLE_REPORT, "php84",
                 UpdateManager.emptyAuditReport("php84", "8.4.26"));
-        check("il referto e' stato fatto", v.optBoolean("done"));
-        check("conta 1 problema, come la riga finale di pkg", v.optInt("problems") == 1);
-        check("legge il CVE", v.getJSONArray("cve").toString().contains("CVE-2026-11111"));
-        check("legge la descrizione", v.optString("description").contains("multiple vulnerabilities"));
-        check("legge il riferimento", v.getJSONArray("references").toString().contains("vuxml.FreeBSD.org"));
+        check("the report was made", v.optBoolean("done"));
+        check("it counts 1 problem, like pkg's final line", v.optInt("problems") == 1);
+        check("it reads the CVE", v.getJSONArray("cve").toString().contains("CVE-2026-11111"));
+        check("it reads the description", v.optString("description").contains("multiple vulnerabilities"));
+        check("it reads the reference", v.getJSONArray("references").toString().contains("vuxml.FreeBSD.org"));
 
-        // ===== 2. Un pacchetto pulito: zero problemi, ma il controllo c'e' stato =====
+        // ===== 2. A clean package: zero problems, but the check happened =====
         JSONObject p = UpdateManager.readAuditReport(CLEAN_REPORT, "nginx",
                 UpdateManager.emptyAuditReport("nginx", "1.30.6,3"));
-        check("il referto di un pacchetto pulito e' stato fatto", p.optBoolean("done"));
-        check("e dice zero problemi", p.optInt("problems") == 0);
+        check("the report of a clean package was made", p.optBoolean("done"));
+        check("and it says zero problems", p.optInt("problems") == 0);
 
-        // ===== 3. Senza il database: NON si dice "nessuna vulnerabilita'" =====
+        // ===== 3. Without the database: "no vulnerability" is NOT said =====
         JSONObject s = UpdateManager.readAuditReport(REPORT_WITHOUT_DATABASE, "nginx",
                 UpdateManager.emptyAuditReport("nginx", "1.30.6,3"));
-        check("senza il database il referto NON risulta fatto", !s.optBoolean("done"));
-        check("e il motivo nomina pkg audit -F", s.optString("error").contains("pkg audit -F"));
-        check("e i problemi non si contano come zero rassicurante",
+        check("without the database the report does NOT show as made", !s.optBoolean("done"));
+        check("and the reason names pkg audit -F", s.optString("error").contains("pkg audit -F"));
+        check("and the problems are not counted as a reassuring zero",
              s.optInt("problems") == 0 && !s.optBoolean("done"));
 
-        // ===== 4. Uscita vuota (comando non eseguito, timeout): idem =====
-        check("un'uscita vuota non e' un referto",
+        // ===== 4. Empty output (command not run, timeout): the same =====
+        check("an empty output is not a report",
              !UpdateManager.readAuditReport("", "nginx", UpdateManager.emptyAuditReport("nginx", "1.0")).optBoolean("done"));
-        check("e nemmeno un'uscita nulla",
+        check("nor is a null output",
              !UpdateManager.readAuditReport(null, "nginx", UpdateManager.emptyAuditReport("nginx", "1.0")).optBoolean("done"));
 
-        // ===== 5. Il referto del SOLO NOME: perche' le due correzioni vanno insieme =====
-        // Qui la riga finale c'e', quindi "done" e' vero, ma l'intestazione non porta la
-        // versione e i dettagli restano vuoti: contare i CVE avrebbe dato zero mentre pkg
-        // diceva "is vulnerable". Chiedere con nome e versione e' cio' che rende leggibili
-        // i dettagli; pretendere la riga finale e' cio' che distingue un referto da un errore.
+        // ===== 5. The report of the NAME ALONE: why the two fixes go together =====
+        // Here the final line is there, so "done" is true, but the header does not carry the version
+        // and the details stay empty: counting the CVEs would have given zero while pkg said "is
+        // vulnerable". Asking with name and version is what makes the details readable; requiring
+        // the final line is what tells a report from an error.
         JSONObject nameOnlyReport = UpdateManager.readAuditReport(NAME_ONLY_REPORT, "php84",
                 UpdateManager.emptyAuditReport("php84", "8.4.26"));
-        check("dal referto del solo nome i dettagli non si leggono", nameOnlyReport.getJSONArray("cve").isEmpty());
-        check("  e il conto sarebbe 3 invece di 1", nameOnlyReport.optInt("problems") == 3);
+        check("from the report of the name alone the details cannot be read", nameOnlyReport.getJSONArray("cve").isEmpty());
+        check("  and the count would be 3 instead of 1", nameOnlyReport.optInt("problems") == 3);
 
-        // ===== 6. Una versione che non passa il filtro non diventa una riga di comando =====
+        // ===== 6. A version that does not pass the filter does not become a command line =====
         JSONObject malformed = UpdateManager.auditReport("nginx", "1.0; rm -rf /");
-        check("una versione non conforme non si esegue", !malformed.optBoolean("done"));
-        check("  e lo dice", !malformed.optString("error").isEmpty());
-        check("un nome non conforme non si esegue",
+        check("a non-conforming version is not run", !malformed.optBoolean("done"));
+        check("  and it says so", !malformed.optString("error").isEmpty());
+        check("a non-conforming name is not run",
              !UpdateManager.auditReport("ngi nx", "1.0").optBoolean("done"));
 
-        // ===== 7. Contro pkg vero: chi e' vulnerabile per pkg lo e' anche per il referto =====
+        // ===== 7. Against real pkg: whoever is vulnerable for pkg is for the report too =====
         if (!hasPkg()) {
-            skip("il confronto con pkg vero: pkg non c'e' su questa macchina");
+            skip("the comparison with real pkg: pkg is not on this machine");
         } else {
             JSONObject fixes = PackagePlan.fixes();
             if (!fixes.optBoolean("success")) {
-                skip("il confronto con pkg vero: " + fixes.optString("error")
-                    + " (serve il database delle vulnerabilita': pkg audit -F)");
+                skip("the comparison with real pkg: " + fixes.optString("error")
+                    + " (it needs the vulnerability database: pkg audit -F)");
             } else {
                 JSONObject byPackage = fixes.getJSONObject("packages");
                 java.util.Map<String, String[]> inst = PackagePlan.installed();
@@ -124,20 +121,20 @@ public class AuditReportTest {
                     checked++;
                     if (report.optBoolean("done") && report.optInt("problems") > 0) agreeing++;
                     else disagreeing.append(' ').append(name).append('(')
-                                 .append(report.optBoolean("done") ? report.optInt("problems") + " problemi" : "non fatto")
+                                 .append(report.optBoolean("done") ? report.optInt("problems") + " problems" : "not made")
                                  .append(')');
                 }
                 if (checked == 0) {
-                    skip("il confronto con pkg vero: nessun pacchetto vulnerabile su questa macchina");
+                    skip("the comparison with real pkg: no vulnerable package on this machine");
                 } else {
-                    check("i " + checked + " pacchetti che pkg dice vulnerabili lo sono anche nel referto"
-                         + (disagreeing.length() > 0 ? " — discordi:" + disagreeing : ""),
+                    check("the " + checked + " packages pkg calls vulnerable are vulnerable in the report too"
+                         + (disagreeing.length() > 0 ? " — disagreeing:" + disagreeing : ""),
                          agreeing == checked);
                 }
-                // E il caso che smaschera la domanda sbagliata: un pacchetto che pkg NON
-                // considera vulnerabile ma che HA una storia in VuXML. Col solo nome pkg
-                // risponde con tutte le voci di quel nome; con nome e versione risponde zero.
-                // Sulla VM e' nginx, appena portato alla 1.30.6,3: 25 problemi contro 0.
+                // And the case that unmasks the wrong question: a package pkg does NOT consider
+                // vulnerable but that HAS a history in VuXML. With the name alone pkg answers with
+                // all the entries of that name; with name and version it answers zero. On the VM it
+                // is nginx, just brought to 1.30.6,3: 25 problems against 0.
                 String withHistory = null;
                 int nameOnly = 0;
                 org.json.JSONArray stack = UpdateManager.packagesStatus().optJSONArray("packages");
@@ -149,12 +146,12 @@ public class AuditReportTest {
                     if (n > 0) { withHistory = name; nameOnly = n; }
                 }
                 if (withHistory == null) {
-                    skip("il caso del solo nome: su questa macchina nessun pacchetto sano ha voci"
-                        + " in VuXML, quindi la differenza non si puo' misurare");
+                    skip("the case of the name alone: on this machine no healthy package has entries"
+                        + " in VuXML, so the difference cannot be measured");
                 } else {
                     JSONObject report = UpdateManager.auditReport(withHistory, inst.get(withHistory)[0]);
-                    check(withHistory + " " + inst.get(withHistory)[0] + ": pkg col solo nome dice "
-                         + nameOnly + " problemi, il referto per la versione installata ne dice "
+                    check(withHistory + " " + inst.get(withHistory)[0] + ": pkg with the name alone says "
+                         + nameOnly + " problems, the report for the installed version says "
                          + report.optInt("problems"),
                          report.optBoolean("done") && report.optInt("problems") == 0);
                 }
@@ -162,12 +159,12 @@ public class AuditReportTest {
         }
 
         System.out.println();
-        if (skipped > 0) System.out.println(skipped + " PROVE SALTATE (lo dicono sopra)");
-        System.out.println(failures == 0 ? "TUTTO OK" : failures + " PROVE FALLITE");
+        if (skipped > 0) System.out.println(skipped + " CHECKS SKIPPED (they say so above)");
+        System.out.println(failures == 0 ? "ALL OK" : failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 
-    /** Il numero di problemi dalla riga finale di pkg audit; -1 se quella riga non c'e'. */
+    /** The number of problems from pkg audit's final line; -1 if that line is not there. */
     private static int declaredProblems(String out) {
         java.util.regex.Matcher m = java.util.regex.Pattern.compile(
                 "(\\d+)\\s+problem\\(s\\)\\s+in\\s+(\\d+)\\s+[^\\n]*package\\(s\\)\\s+found")
@@ -186,7 +183,7 @@ public class AuditReportTest {
     }
 
     private static void skip(String name) {
-        System.out.println("  --   SALTATA: " + name);
+        System.out.println("  --   SKIPPED: " + name);
         skipped++;
     }
 }

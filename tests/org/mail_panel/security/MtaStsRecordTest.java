@@ -9,21 +9,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Prova la scrittura del record _mta-sts su Cloudflare, AutoDns.alignMtaStsTxt(), con un
- * Cloudflare finto: la zona sta in memoria, e ogni operazione si puo' far rifiutare.
+ * Tests the writing of the _mta-sts record on Cloudflare, AutoDns.alignMtaStsTxt(), with a fake
+ * Cloudflare: the zone lives in memory, and every operation can be made to refuse.
  *
- * La cosa da dimostrare: alla fine su quel nome resta UN record MTA-STS, con l'id giusto.
- * Con due record v=STSv1 i mittenti fanno come se MTA-STS non ci fosse (RFC 8461 §3.1), e
- * prima la scrittura guardava il primo record: se era gia' giusto rispondeva "invariato" e
- * lasciava l'altro. In fondo la prova rimette quella logica davanti allo stesso caso, per
- * dimostrare che i controlli lo vedono.
+ * What must be shown: at the end ONE MTA-STS record stays on that name, with the right id. With two
+ * v=STSv1 records senders act as if MTA-STS were not there (RFC 8461 §3.1), and before, the writing
+ * looked at the first record: if it was already right it answered "unchanged" and left the other.
+ * At the end the test puts that logic back in front of the same case, to show that the checks see
+ * it.
+ *
+ * The panel's messages are read in English (I18n.setCurrent): outside a request it writes Italian.
  */
 public class MtaStsRecordTest {
 
     static int failed = 0;
 
     static void require(String what, boolean condition) {
-        System.out.println((condition ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((condition ? "  OK   " : "  FAILED ") + what);
         if (!condition) failed++;
     }
 
@@ -31,13 +33,13 @@ public class MtaStsRecordTest {
     static final String RIGHT = "v=STSv1; id=0fec393151a7c577266a";
     static final String OLD = "v=STSv1; id=1700000000000";
 
-    /** Una zona Cloudflare in memoria. Restituisce i TXT come fa l'API: con le virgolette. */
+    /** A Cloudflare zone in memory. It returns the TXT records as the API does: with the quotes. */
     static class FakeCloudflare extends CloudflareManager {
         final Map<String, TxtRecordInfo> zone = new LinkedHashMap<>();
         final List<String> operations = new ArrayList<>();
         String refuseDeletionOf = null;
         boolean refuseUpdate = false;
-        boolean firstReadingEmpty = false;   // l'elenco che fallisce e torna vuoto senza dirlo
+        boolean firstReadingEmpty = false;   // the listing that fails and comes back empty without saying so
         int readings = 0, next = 1;
 
         FakeCloudflare() { super(null); }
@@ -65,30 +67,30 @@ public class MtaStsRecordTest {
 
         @Override
         public RecordOp deleteRecord(String token, String zoneId, String id) {
-            operations.add("togli " + id);
-            if (id.equals(refuseDeletionOf)) return new RecordOp(false, null, "permesso negato (finto)");
-            if (zone.remove(id) == null) return new RecordOp(false, null, "record inesistente");
+            operations.add("remove " + id);
+            if (id.equals(refuseDeletionOf)) return new RecordOp(false, null, "permission denied (fake)");
+            if (zone.remove(id) == null) return new RecordOp(false, null, "no such record");
             return new RecordOp(true, id, null);
         }
 
         @Override
         public RecordOp updateTxtRecord(String token, String zoneId, String id, String name, String value, int ttl) {
-            operations.add("aggiorna " + id);
-            if (refuseUpdate) return new RecordOp(false, null, "permesso negato (finto)");
+            operations.add("update " + id);
+            if (refuseUpdate) return new RecordOp(false, null, "permission denied (fake)");
             TxtRecordInfo t = zone.get(id);
-            if (t == null) return new RecordOp(false, null, "record inesistente");
+            if (t == null) return new RecordOp(false, null, "no such record");
             t.content = formatTxtRecordContent(value);
             return new RecordOp(true, id, null);
         }
 
         @Override
         public RecordOp createTxtRecord(String token, String zoneId, String name, String value, int ttl) {
-            operations.add("crea");
+            operations.add("create");
             put(name, formatTxtRecordContent(value));
             return new RecordOp(true, "r" + (next - 1), null);
         }
 
-        /** I contenuti MTA-STS rimasti su quel nome, gia' ripuliti dalle virgolette. */
+        /** The MTA-STS contents left on that name, already cleaned of the quotes. */
         List<String> mtaSts() {
             List<String> c = new ArrayList<>();
             for (TxtRecordInfo t : zone.values())
@@ -104,7 +106,7 @@ public class MtaStsRecordTest {
     }
 
     static JSONObject write(FakeCloudflare cf) {
-        return new AutoDns(null, cf).alignMtaStsTxt("token", "zona", NAME_PATTERN, RIGHT, new JSONObject());
+        return new AutoDns(null, cf).alignMtaStsTxt("token", "zone", NAME_PATTERN, RIGHT, new JSONObject());
     }
 
     static String removed(JSONObject r) {
@@ -114,148 +116,149 @@ public class MtaStsRecordTest {
 
     public static void main(String[] a) {
 
-        System.out.println("\n== la regola: cosa conta come record MTA-STS ==");
-        require("\"v=STSv1; id=1\" conta", DnsRules.eMtaSts("v=STSv1; id=1"));
-        require("\"V=STSV1; id=1\" conta (mailauth ignora le maiuscole)", DnsRules.eMtaSts("V=STSV1; id=1"));
-        require("\" v=STSv1; id=1\" conta (mailauth toglie gli spazi ai bordi)", DnsRules.eMtaSts(" v=STSv1; id=1"));
-        require("un SPF non conta", !DnsRules.eMtaSts("v=spf1 -all"));
-        require("una verifica di Google non conta", !DnsRules.eMtaSts("google-site-verification=abc"));
-        require("null non conta", !DnsRules.eMtaSts(null));
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        System.out.println("\n== the rule: what counts as an MTA-STS record ==");
+        require("\"v=STSv1; id=1\" counts", DnsRules.eMtaSts("v=STSv1; id=1"));
+        require("\"V=STSV1; id=1\" counts (mailauth ignores case)", DnsRules.eMtaSts("V=STSV1; id=1"));
+        require("\" v=STSv1; id=1\" counts (mailauth trims the spaces at the edges)", DnsRules.eMtaSts(" v=STSv1; id=1"));
+        require("an SPF does not count", !DnsRules.eMtaSts("v=spf1 -all"));
+        require("a Google verification does not count", !DnsRules.eMtaSts("google-site-verification=abc"));
+        require("null does not count", !DnsRules.eMtaSts(null));
 
-        System.out.println("\n== nessun record: si crea ==");
+        System.out.println("\n== no record: it is created ==");
         FakeCloudflare cf = new FakeCloudflare();
         JSONObject r = write(cf);
-        require("riuscito: " + r.optString("note", r.optString("error")), r.optBoolean("success"));
-        require("sul nome c'e' un record, quello giusto: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
+        require("succeeded: " + r.optString("note", r.optString("error")), r.optBoolean("success"));
+        require("the name has one record, the right one: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
 
-        System.out.println("\n== un record giusto: non si tocca niente ==");
+        System.out.println("\n== a right record: nothing is touched ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + RIGHT + "\"");
         r = write(cf);
         require("unchanged", r.optBoolean("success") && r.optBoolean("unchanged"));
-        require("nessuna operazione su Cloudflare: " + cf.operations, cf.operations.isEmpty());
+        require("no operation on Cloudflare: " + cf.operations, cf.operations.isEmpty());
 
-        System.out.println("\n== un record con l'id vecchio: si aggiorna ==");
-        cf = new FakeCloudflare().put(NAME_PATTERN, OLD);   // senza virgolette, come a volte lo da' Cloudflare
+        System.out.println("\n== a record with the old id: it is updated ==");
+        cf = new FakeCloudflare().put(NAME_PATTERN, OLD);   // without quotes, as Cloudflare sometimes gives it
         r = write(cf);
-        require("riuscito e aggiornato", r.optBoolean("success") && r.optBoolean("updated"));
-        require("resta un record, quello giusto: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
+        require("succeeded and updated", r.optBoolean("success") && r.optBoolean("updated"));
+        require("one record stays, the right one: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
 
-        System.out.println("\n== due record, il primo gia' giusto (il caso che prima diceva \"invariato\") ==");
+        System.out.println("\n== two records, the first already right (the case that used to say \"unchanged\") ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + RIGHT + "\"").put(NAME_PATTERN, "\"" + OLD + "\"");
         r = write(cf);
-        require("riuscito: " + r.optString("note", r.optString("error")), r.optBoolean("success"));
-        require("NON dice invariato", !r.optBoolean("unchanged"));
-        require("resta un record solo, quello giusto: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
-        require("toglie solo il vecchio, senza aggiornare niente: " + cf.operations,
-                cf.operations.equals(List.of("togli r2")));
-        require("e lo dice nella risposta: " + removed(r), removed(r).contains(OLD));
+        require("succeeded: " + r.optString("note", r.optString("error")), r.optBoolean("success"));
+        require("it does NOT say unchanged", !r.optBoolean("unchanged"));
+        require("only one record stays, the right one: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
+        require("it removes only the old one, without updating anything: " + cf.operations,
+                cf.operations.equals(List.of("remove r2")));
+        require("and it says so in the answer: " + removed(r), removed(r).contains(OLD));
 
-        System.out.println("\n== due record, il giusto e' il secondo ==");
+        System.out.println("\n== two records, the right one is the second ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + OLD + "\"").put(NAME_PATTERN, "\"" + RIGHT + "\"");
         r = write(cf);
-        require("tiene il giusto e toglie l'altro: " + cf.operations,
-                r.optBoolean("success") && cf.operations.equals(List.of("togli r1")));
-        require("resta un record solo: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
+        require("it keeps the right one and removes the other: " + cf.operations,
+                r.optBoolean("success") && cf.operations.equals(List.of("remove r1")));
+        require("only one record stays: " + cf.mtaSts(), cf.mtaSts().equals(List.of(RIGHT)));
 
-        System.out.println("\n== due record, nessuno giusto ==");
+        System.out.println("\n== two records, none right ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + OLD + "\"").put(NAME_PATTERN, "\"v=STSv1; id=2\"");
         r = write(cf);
-        require("prima toglie l'altro, poi aggiorna quello che resta: " + cf.operations,
-                cf.operations.equals(List.of("togli r2", "aggiorna r1")));
-        require("riuscito, con un record solo e giusto: " + cf.mtaSts(),
+        require("first it removes the other, then it updates the one left: " + cf.operations,
+                cf.operations.equals(List.of("remove r2", "update r1")));
+        require("succeeded, with a single right record: " + cf.mtaSts(),
                 r.optBoolean("success") && cf.mtaSts().equals(List.of(RIGHT)));
 
-        System.out.println("\n== tre record, uno scritto in maiuscolo, e TXT che non c'entrano ==");
+        System.out.println("\n== three records, one written in upper case, and TXT records that have nothing to do with it ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + OLD + "\"").put(NAME_PATTERN, "\"V=STSV1; id=9\"")
                 .put(NAME_PATTERN, "\"google-site-verification=abc\"").put(NAME_PATTERN, "\"" + RIGHT + "\"")
                 .put("domain-d.test", "\"v=spf1 mx -all\"").put("_mta-sts.other.it", "\"" + OLD + "\"");
         r = write(cf);
-        require("riuscito, con un record solo e giusto: " + cf.mtaSts(),
+        require("succeeded, with a single right record: " + cf.mtaSts(),
                 r.optBoolean("success") && cf.mtaSts().equals(List.of(RIGHT)));
-        require("toglie anche quello in maiuscolo, che per mailauth conta: " + removed(r),
+        require("it also removes the upper-case one, which counts for mailauth: " + removed(r),
                 removed(r).contains("V=STSV1; id=9"));
-        require("non tocca la verifica di Google, l'SPF e l'altro dominio (" + cf.otherTxt() + " restano)",
+        require("it does not touch the Google verification, the SPF and the other domain (" + cf.otherTxt() + " stay)",
                 cf.otherTxt() == 3);
 
-        System.out.println("\n== Cloudflare rifiuta di togliere il record in piu' ==");
+        System.out.println("\n== Cloudflare refuses to remove the extra record ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + RIGHT + "\"").put(NAME_PATTERN, "\"" + OLD + "\"");
         cf.refuseDeletionOf = "r2";
         r = write(cf);
-        require("NON riuscito", !r.optBoolean("success"));
-        require("l'errore dice quale record e perche' conta: " + r.optString("error"),
+        require("NOT succeeded", !r.optBoolean("success"));
+        require("the error says which record and why it matters: " + r.optString("error"),
                 r.optString("error").contains(OLD) && r.optString("error").contains("RFC 8461"));
 
-        System.out.println("\n== Cloudflare rifiuta l'aggiornamento, dopo aver tolto l'altro ==");
+        System.out.println("\n== Cloudflare refuses the update, after removing the other ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + OLD + "\"").put(NAME_PATTERN, "\"v=STSv1; id=2\"");
         cf.refuseUpdate = true;
         r = write(cf);
-        require("NON riuscito", !r.optBoolean("success"));
-        require("e lo dice, insieme a cio' che ha tolto: " + r.optString("error"),
-                r.optString("error").contains("rifiutato l'aggiornamento") && r.optString("error").contains("id=2"));
-        require("resta un record solo (con l'id vecchio, ma i mittenti lo leggono): " + cf.mtaSts(),
+        require("NOT succeeded", !r.optBoolean("success"));
+        require("and it says so, together with what it removed: " + r.optString("error"),
+                r.optString("error").contains("refused the update") && r.optString("error").contains("id=2"));
+        require("only one record stays (with the old id, but senders read it): " + cf.mtaSts(),
                 cf.mtaSts().equals(List.of(OLD)));
 
-        System.out.println("\n== la prima lettura torna vuota per un errore, e c'era gia' un record ==");
+        System.out.println("\n== the first read comes back empty because of an error, and there was already a record ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + OLD + "\"");
         cf.firstReadingEmpty = true;
         r = write(cf);
-        require("si accorge che ora i record sono due: " + r.optString("error"),
-                !r.optBoolean("success") && r.optString("error").contains("2 record"));
+        require("it notices that now there are two records: " + r.optString("error"),
+                !r.optBoolean("success") && r.optString("error").contains("2 MTA-STS records"));
 
-        System.out.println("\n== la riga MTA-STS della pagina DNS ==");
-        // Letture costruite da uscite di dig nella forma vera, e una politica finta che
-        // risponde o no: niente DNS, niente rete.
+        System.out.println("\n== the MTA-STS row of the DNS page ==");
+        // Reads built from dig outputs in the real shape, and a fake policy that answers or not: no
+        // DNS, no network.
         String head = ";; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 32535\n;; ANSWER SECTION:\n";
         String rightLine = NAME_PATTERN + ".\t3498\tIN\tTXT\t\"" + RIGHT + "\"\n";
         String oldLine = NAME_PATTERN + ".\t3498\tIN\tTXT\t\"" + OLD + "\"\n";
         java.util.function.Function<String, JSONObject> answers = d -> new JSONObject().put("ok", true);
         java.util.function.Function<String, JSONObject> silent =
-                d -> new JSONObject().put("ok", false).put("error", "526 (finto).");
+                d -> new JSONObject().put("ok", false).put("error", "526 (fake).");
         DnsRecordsGenerator.DnsCheck c = DnsRecordsGenerator.mtaStsCheck("domain-d.test",
                 org.mail_panel.system.MtaStsSetup.parseTxt(0, head + rightLine), answers);
-        require("un record e la politica che risponde: verde (" + c.message + ")", c.passed);
+        require("one record and the policy answering: green (" + c.message + ")", c.passed);
         c = DnsRecordsGenerator.mtaStsCheck("domain-d.test",
                 org.mail_panel.system.MtaStsSetup.parseTxt(0, head + rightLine + oldLine), answers);
-        require("due record, anche con la politica che risponde: NON verde", !c.passed);
-        require("il messaggio dice perche': " + c.message, c.message.contains("RFC 8461") && c.message.contains("2 record"));
-        require("e mostra tutti e due i record: " + c.currentValue,
+        require("two records, even with the policy answering: NOT green", !c.passed);
+        require("the message says why: " + c.message, c.message.contains("RFC 8461") && c.message.contains("2 v=STSv1 records"));
+        require("and it shows both records: " + c.currentValue,
                 c.currentValue.contains(RIGHT) && c.currentValue.contains(OLD));
-        require("non e' grigio (informativo): e' un guasto", !c.informational);
+        require("it is not grey (informational): it is a fault", !c.informational);
         c = DnsRecordsGenerator.mtaStsCheck("domain-d.test",
                 org.mail_panel.system.MtaStsSetup.parseTxt(0, head + rightLine), silent);
-        require("un record e la politica che non risponde: rosso (" + c.message.substring(0, 40) + "...)", !c.passed);
+        require("one record and the policy not answering: red (" + c.message.substring(0, 40) + "...)", !c.passed);
         c = DnsRecordsGenerator.mtaStsCheck("domain-d.test",
                 org.mail_panel.system.MtaStsSetup.parseTxt(0,
                         ";; ->>HEADER<<- opcode: QUERY, status: SERVFAIL, id: 37005\n"), answers);
-        require("un SERVFAIL: non \"Non attivo\", ma il motivo vero (" + c.message + ")",
+        require("a SERVFAIL: not \"Not active\", but the real reason (" + c.message + ")",
                 !c.passed && !c.informational && c.message.contains("SERVFAIL"));
         c = DnsRecordsGenerator.mtaStsCheck("domain-d.test",
                 org.mail_panel.system.MtaStsSetup.parseTxt(0,
                         ";; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 2902\n"), answers);
-        require("nessun record: grigio, \"Non attivo\"", !c.passed && c.informational && c.message.startsWith("Non attivo"));
+        require("no record: grey, \"Not active\"", !c.passed && c.informational && c.message.startsWith("Not active"));
 
-        System.out.println("\n== la scrittura di prima, davanti al caso dei due record ==");
+        System.out.println("\n== the old writing, in front of the two-record case ==");
         cf = new FakeCloudflare().put(NAME_PATTERN, "\"" + RIGHT + "\"").put(NAME_PATTERN, "\"" + OLD + "\"");
         String before = howItWroteBefore(cf);
-        System.out.println("  diceva: " + before + "; sul nome restavano " + cf.mtaSts().size() + " record");
-        require("prima diceva \"invariato\" e lasciava due record: i controlli qui sopra lo vedono",
+        System.out.println("  it said: " + before + "; " + cf.mtaSts().size() + " records were left on the name");
+        require("before, it said \"unchanged\" and left two records: the checks above see it",
                 before.equals("unchanged") && cf.mtaSts().size() == 2);
 
-        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         if (failed > 0) System.exit(1);
     }
 
-    /** Il ciclo di AutoDns.createTxtMtaSts com'era prima, ridotto all'esito. */
+    /** The loop of AutoDns.createTxtMtaSts as it was before, reduced to the outcome. */
     static String howItWroteBefore(FakeCloudflare cf) {
-        for (CloudflareManager.TxtRecordInfo t : cf.listTxtRecordsContaining("token", "zona", null)) {
+        for (CloudflareManager.TxtRecordInfo t : cf.listTxtRecordsContaining("token", "zone", null)) {
             if (!t.name.equals(NAME_PATTERN)) continue;
             String c = DnsRules.cloudflareContent(t.content);
             if (!c.toLowerCase(java.util.Locale.ROOT).startsWith("v=stsv1")) continue;
             if (c.trim().equals(RIGHT.trim())) return "unchanged";
-            cf.updateTxtRecord("token", "zona", t.id, NAME_PATTERN, RIGHT, 3600);
+            cf.updateTxtRecord("token", "zone", t.id, NAME_PATTERN, RIGHT, 3600);
             return "updated";
         }
-        cf.createTxtRecord("token", "zona", NAME_PATTERN, RIGHT, 3600);
+        cf.createTxtRecord("token", "zone", NAME_PATTERN, RIGHT, 3600);
         return "created";
     }
 }

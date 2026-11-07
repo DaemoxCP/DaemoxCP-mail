@@ -18,14 +18,14 @@ import java.util.TreeMap;
 import java.util.stream.Stream;
 
 /**
- * acme.sh col suo utente (AcmeUser): i pezzi della migrazione da /root/.acme.sh, la migrazione in
- * cartelle temporanee con pkg, cron e acme.sh finti e un guasto piantato per ogni passo, la porta
- * 80 della sfida HTTP, e l'esecuzione come acme.
+ * acme.sh with its own user (AcmeUser): the pieces of the migration from /root/.acme.sh, the
+ * migration in temporary folders with fake pkg, cron and acme.sh and a fault planted for every
+ * step, the HTTP challenge's port 80, and running as acme.
  *
- * <p>L'esecuzione come acme e' vera: uno script finto, eseguito da {@link AcmeUser#run} con un
- * Layout che lo nomina, dice con quale utente gira, che HOME vede e quali variabili riceve; poi
- * acme.sh vero (--version). Serve l'utente acme, cioe' il pacchetto security/acme.sh: senza, la
- * parte si salta dicendolo. Va lanciata da root sulla VM FreeBSD.
+ * <p>Running as acme is real: a fake script, run by {@link AcmeUser#run} with a Layout that names
+ * it, says which user it runs as, which HOME it sees and which variables it gets; then real acme.sh
+ * (--version). The acme user is needed, that is the security/acme.sh package: without it, that part
+ * is skipped saying so. It must be run as root on the FreeBSD VM.
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeUserTest
  */
 public class AcmeUserTest {
@@ -34,15 +34,15 @@ public class AcmeUserTest {
     static final PrintStream OUT = System.out;
 
     static void check(String what, boolean ok) {
-        OUT.println((ok ? "  OK   " : "  FALLITO ") + what);
+        OUT.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
-    /** account.conf come lo scrive l'installazione con curl, piu' quello che aggiungono dns_cf e --set-default-ca. */
+    /** account.conf as the installation with curl writes it, plus what dns_cf and --set-default-ca add. */
     static final String OLD_ACCOUNT = """
             #LOG_FILE="/root/.acme.sh/acme.sh.log"
             #LOG_LEVEL=1
-            ACCOUNT_EMAIL='postmaster@prova.local'
+            ACCOUNT_EMAIL='postmaster@test.local'
             AUTO_UPGRADE='1'
             UPGRADE_HASH='0123abcd'
             USER_PATH='/sbin:/bin:/usr/sbin:/usr/bin:/root/bin'
@@ -57,14 +57,14 @@ public class AcmeUserTest {
             CERT_HOME="/var/db/acme/certs"
             LOG_FILE='/var/log/acme.sh.log'
             """;
-    /** Il cron di root con la riga che si scriveva acme.sh installato in {@code home}. */
+    /** Root's cron with the line acme.sh installed in {@code home} used to write. */
     static String crontab(String home) {
-        return "SHELL=/bin/sh\n# il cron di root\n15 3 * * * /usr/local/sbin/backup.sh\n"
+        return "SHELL=/bin/sh\n# root's cron\n15 3 * * * /usr/local/sbin/backup.sh\n"
             + "25 0 * * * \"" + home + "\"/acme.sh --cron --home \"" + home + "\" > /dev/null\n";
     }
     static final String CRONTAB = crontab("/root/.acme.sh");
 
-    /** Un /root/.acme.sh come lo lascia l'installazione di prima, con due certificati. */
+    /** A /root/.acme.sh as the old installation leaves it, with two certificates. */
     static final class Bench {
         final Path root, oldHome, moved, home, certHome, backup;
         final AcmeUser.Places at;
@@ -77,15 +77,15 @@ public class AcmeUserTest {
             backup = root.resolve("backup");
             at = new AcmeUser.Places(oldHome, moved, home, certHome, backup);
             Files.createDirectories(oldHome.resolve("dnsapi"));
-            Files.writeString(oldHome.resolve("acme.sh"), "#!/bin/sh\necho vecchio\n");
+            Files.writeString(oldHome.resolve("acme.sh"), "#!/bin/sh\necho old\n");
             Files.writeString(oldHome.resolve("dnsapi/dns_cf.sh"), "# dns_cf\n");
             Files.writeString(oldHome.resolve("account.conf"), OLD_ACCOUNT);
             Files.createDirectories(oldHome.resolve("ca/acme-v02.api.letsencrypt.org/directory"));
             Path key = oldHome.resolve("ca/acme-v02.api.letsencrypt.org/directory/account.key");
             Files.writeString(key, "-----BEGIN EC PRIVATE KEY-----\nplanted\n");
             Files.setPosixFilePermissions(key, PosixFilePermissions.fromString("rw-------"));
-            cert("mail.prova.local_ecc", "mail.prova.local", "no");
-            cert("webmail.prova.local", "webmail.prova.local", "dns_cf");
+            cert("mail.test.local_ecc", "mail.test.local", "no");
+            cert("webmail.test.local", "webmail.test.local", "dns_cf");
             Files.createDirectories(home);
             Files.writeString(home.resolve("account.conf"), PKG_ACCOUNT);
             Files.createDirectories(certHome);
@@ -118,7 +118,7 @@ public class AcmeUserTest {
         return m;
     }
 
-    /** pkg, cron e acme.sh finti: --list dice i certificati che trova nella cartella nuova, come quello vero. */
+    /** Fake pkg, cron and acme.sh: --list says the certificates it finds in the new folder, like the real one. */
     static final class Fake implements AcmeUser.Services {
         final Bench b;
         boolean installed = true, installWorks = true, crontabUnreadable, crontabWriteFails, listForgets;
@@ -154,7 +154,7 @@ public class AcmeUserTest {
     }
 
     static void plantedFault(String what, java.util.function.Consumer<Fake> plant, AcmeUser.Outcome expected) throws Exception {
-        OUT.println("\n-- guasto piantato: " + what);
+        OUT.println("\n-- planted fault: " + what);
         Bench b = new Bench();
         try {
             Map<String, String> before = photo(b.root);
@@ -162,10 +162,10 @@ public class AcmeUserTest {
             plant.accept(f);
             AcmeUser.Report r = AcmeUser.migrate(b.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
-            check("esito " + expected, r.outcome() == expected);
-            check("non dice EXCEPT", !r.detail().contains("EXCEPT"));
-            check("ogni file com'era, /root/.acme.sh compreso", before.equals(photo(b.root)));
-            check("il cron di root com'era", crontab(b.oldHome.toString()).equals(f.crontab));
+            check("outcome " + expected, r.outcome() == expected);
+            check("it does not say EXCEPT", !r.detail().contains("EXCEPT"));
+            check("every file as it was, /root/.acme.sh included", before.equals(photo(b.root)));
+            check("root's cron as it was", crontab(b.oldHome.toString()).equals(f.crontab));
         } finally { b.clean(); }
     }
 
@@ -179,29 +179,29 @@ public class AcmeUserTest {
 
     public static void main(String[] args) throws Exception {
         if (!"root".equals(System.getProperty("user.name")) || !System.getProperty("os.name").contains("FreeBSD")) {
-            OUT.println("Questa prova esegue programmi come acme: va lanciata da root sulla VM FreeBSD.");
+            OUT.println("This test runs programs as acme: it must be run as root on the FreeBSD VM.");
             System.exit(2);
         }
 
-        OUT.println("== I pezzi");
+        OUT.println("== The pieces");
         String merged = AcmeUser.mergedAccount(PKG_ACCOUNT, OLD_ACCOUNT, "/root/.acme.sh");
-        check("account.conf: CERT_HOME e LOG_FILE del pacchetto", merged.contains("CERT_HOME=\"/var/db/acme/certs\"")
+        check("account.conf: the package's CERT_HOME and LOG_FILE", merged.contains("CERT_HOME=\"/var/db/acme/certs\"")
                 && merged.contains("LOG_FILE='/var/log/acme.sh.log'") && !merged.contains("/root/.acme.sh/acme.sh.log'"));
-        check("account.conf: email, token e CA di prima", merged.contains("ACCOUNT_EMAIL='postmaster@prova.local'")
+        check("account.conf: the old email, token and CA", merged.contains("ACCOUNT_EMAIL='postmaster@test.local'")
                 && merged.contains("SAVED_CF_Token='planted-token'") && merged.contains("DEFAULT_ACME_SERVER="));
-        check("account.conf: niente USER_PATH di root, niente aggiornamento da se'", !merged.contains("USER_PATH") && !merged.contains("AUTO_UPGRADE"));
-        check("Le_Webroot='no' (standalone) diventa la cartella delle sfide",
+        check("account.conf: no root USER_PATH, no self-update", !merged.contains("USER_PATH") && !merged.contains("AUTO_UPGRADE"));
+        check("Le_Webroot='no' (standalone) becomes the challenge folder",
                 AcmeUser.withoutStandalone("Le_Domain='a'\nLe_Webroot='no'\n").contains("Le_Webroot='" + AcmeUser.WEBROOT + "'"));
-        check("dns_cf resta dns_cf", AcmeUser.withoutStandalone("Le_Webroot='dns_cf'\n").equals("Le_Webroot='dns_cf'\n"));
+        check("dns_cf stays dns_cf", AcmeUser.withoutStandalone("Le_Webroot='dns_cf'\n").equals("Le_Webroot='dns_cf'\n"));
         String cron = AcmeUser.withoutAcmeCron(CRONTAB, "/root/.acme.sh");
-        check("il cron senza la riga di acme.sh, col resto intatto", !cron.contains("acme.sh") && cron.contains("backup.sh") && cron.endsWith("\n")
-                && cron.startsWith("SHELL=/bin/sh\n# il cron di root\n"));
-        check("un cron con la sola riga di acme.sh resta vuoto", AcmeUser.withoutAcmeCron(
+        check("the cron without the acme.sh line, the rest untouched", !cron.contains("acme.sh") && cron.contains("backup.sh") && cron.endsWith("\n")
+                && cron.startsWith("SHELL=/bin/sh\n# root's cron\n"));
+        check("a cron with only the acme.sh line stays empty", AcmeUser.withoutAcmeCron(
                 "25 0 * * * \"/root/.acme.sh\"/acme.sh --cron --home \"/root/.acme.sh\" > /dev/null\n", "/root/.acme.sh").isEmpty());
-        check("un commento che cita acme.sh resta", AcmeUser.withoutAcmeCron("# /root/.acme.sh --cron\n", "/root/.acme.sh").equals("# /root/.acme.sh --cron\n"));
-        check("un cron senza acme.sh non cambia", AcmeUser.withoutAcmeCron("1 1 * * * x\n", "/root/.acme.sh").equals("1 1 * * * x\n"));
+        check("a comment quoting acme.sh stays", AcmeUser.withoutAcmeCron("# /root/.acme.sh --cron\n", "/root/.acme.sh").equals("# /root/.acme.sh --cron\n"));
+        check("a cron without acme.sh does not change", AcmeUser.withoutAcmeCron("1 1 * * * x\n", "/root/.acme.sh").equals("1 1 * * * x\n"));
 
-        OUT.println("\n== La migrazione che riesce");
+        OUT.println("\n== The migration that succeeds");
         Bench b = new Bench();
         try {
             Fake f = new Fake(b);
@@ -209,83 +209,83 @@ public class AcmeUserTest {
             AcmeUser.Report r = AcmeUser.migrate(b.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
             check("DONE", r.outcome() == AcmeUser.Outcome.DONE);
-            check("il pacchetto installato una volta", f.installs == 1);
-            check("i due certificati nella cartella nuova", Files.exists(b.certHome.resolve("mail.prova.local_ecc/mail.prova.local.key"))
-                    && Files.exists(b.certHome.resolve("webmail.prova.local/webmail.prova.local.cer")));
-            check("le chiavi restano 600", PosixFilePermissions.toString(Files.getPosixFilePermissions(
-                    b.certHome.resolve("mail.prova.local_ecc/mail.prova.local.key"))).equals("rw-------"));
-            check("l'account (ca/) nella casa nuova", Files.exists(b.home.resolve("ca/acme-v02.api.letsencrypt.org/directory/account.key")));
-            check("il certificato chiesto con --standalone ora usa la cartella delle sfide",
-                    Files.readString(b.certHome.resolve("mail.prova.local_ecc/mail.prova.local.conf")).contains("Le_Webroot='" + AcmeUser.WEBROOT + "'"));
-            check("quello via Cloudflare resta dns_cf", Files.readString(b.certHome.resolve("webmail.prova.local/webmail.prova.local.conf")).contains("Le_Webroot='dns_cf'"));
-            check("account.conf unito", Files.readString(b.home.resolve("account.conf")).contains("SAVED_CF_Token='planted-token'")
+            check("the package installed once", f.installs == 1);
+            check("the two certificates in the new folder", Files.exists(b.certHome.resolve("mail.test.local_ecc/mail.test.local.key"))
+                    && Files.exists(b.certHome.resolve("webmail.test.local/webmail.test.local.cer")));
+            check("the keys stay 600", PosixFilePermissions.toString(Files.getPosixFilePermissions(
+                    b.certHome.resolve("mail.test.local_ecc/mail.test.local.key"))).equals("rw-------"));
+            check("the account (ca/) in the new home", Files.exists(b.home.resolve("ca/acme-v02.api.letsencrypt.org/directory/account.key")));
+            check("the certificate requested with --standalone now uses the challenge folder",
+                    Files.readString(b.certHome.resolve("mail.test.local_ecc/mail.test.local.conf")).contains("Le_Webroot='" + AcmeUser.WEBROOT + "'"));
+            check("the one through Cloudflare stays dns_cf", Files.readString(b.certHome.resolve("webmail.test.local/webmail.test.local.conf")).contains("Le_Webroot='dns_cf'"));
+            check("account.conf merged", Files.readString(b.home.resolve("account.conf")).contains("SAVED_CF_Token='planted-token'")
                     && Files.readString(b.home.resolve("account.conf")).contains("CERT_HOME=\"/var/db/acme/certs\""));
-            check("il programma e dnsapi non si copiano (li da' il pacchetto)", !Files.exists(b.home.resolve("acme.sh")) && !Files.exists(b.home.resolve("dnsapi")));
-            check("tutto quello che si e' copiato e' dato ad acme", f.given.contains(b.home.resolve("ca")) && f.given.contains(b.home.resolve("account.conf"))
-                    && f.given.contains(b.certHome.resolve("mail.prova.local_ecc")));
-            check("il cron di root non esegue piu' acme.sh, il resto c'e'", !f.crontab.contains("acme.sh") && f.crontab.contains("backup.sh"));
-            check("/root/.acme.sh ha cambiato nome, con dentro tutto", !Files.exists(b.oldHome) && Files.exists(b.moved.resolve("account.conf")));
-            check("la copia del cron di prima nella cartella di backup", Files.exists(b.backup));
+            check("the program and dnsapi are not copied (the package provides them)", !Files.exists(b.home.resolve("acme.sh")) && !Files.exists(b.home.resolve("dnsapi")));
+            check("everything copied is given to acme", f.given.contains(b.home.resolve("ca")) && f.given.contains(b.home.resolve("account.conf"))
+                    && f.given.contains(b.certHome.resolve("mail.test.local_ecc")));
+            check("root's cron no longer runs acme.sh, the rest is there", !f.crontab.contains("acme.sh") && f.crontab.contains("backup.sh"));
+            check("/root/.acme.sh changed name, with everything inside", !Files.exists(b.oldHome) && Files.exists(b.moved.resolve("account.conf")));
+            check("the copy of the old cron in the backup folder", Files.exists(b.backup));
             r = AcmeUser.migrate(b.at, f);
-            check("la seconda volta: NOTHING (" + r.outcome() + ")", r.outcome() == AcmeUser.Outcome.NOTHING);
+            check("the second time: NOTHING (" + r.outcome() + ")", r.outcome() == AcmeUser.Outcome.NOTHING);
         } finally { b.clean(); }
 
-        OUT.println("\n== I guasti piantati: ogni passo fallito rimette tutto, e acme.sh resta da root");
-        plantedFault("il pacchetto non si installa", f -> { f.installed = false; f.installWorks = false; }, AcmeUser.Outcome.NOT_YET);
-        plantedFault("acme.sh, come acme, non vede uno dei certificati", f -> f.listForgets = true, AcmeUser.Outcome.ROLLED_BACK);
-        plantedFault("il cron di root non si legge", f -> f.crontabUnreadable = true, AcmeUser.Outcome.ROLLED_BACK);
-        plantedFault("il cron di root non si riscrive", f -> f.crontabWriteFails = true, AcmeUser.Outcome.ROLLED_BACK);
+        OUT.println("\n== The planted faults: every failed step puts everything back, and acme.sh stays as root");
+        plantedFault("the package does not install", f -> { f.installed = false; f.installWorks = false; }, AcmeUser.Outcome.NOT_YET);
+        plantedFault("acme.sh, as acme, does not see one of the certificates", f -> f.listForgets = true, AcmeUser.Outcome.ROLLED_BACK);
+        plantedFault("root's cron cannot be read", f -> f.crontabUnreadable = true, AcmeUser.Outcome.ROLLED_BACK);
+        plantedFault("root's cron cannot be rewritten", f -> f.crontabWriteFails = true, AcmeUser.Outcome.ROLLED_BACK);
 
-        OUT.println("\n-- guasto piantato: /root/.acme.sh non si sposta (chflags schg), col cron gia' riscritto");
+        OUT.println("\n-- planted fault: /root/.acme.sh does not move (chflags schg), with the cron already rewritten");
         Bench m = new Bench();
         try {
             Map<String, String> before = photo(m.root);
-            check("chflags schg piantato", Shell.run("chflags", "schg", m.oldHome.toString()).success());
+            check("chflags schg planted", Shell.run("chflags", "schg", m.oldHome.toString()).success());
             Fake f = new Fake(m);
             AcmeUser.Report r = AcmeUser.migrate(m.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
             Shell.run("chflags", "noschg", m.oldHome.toString());
-            check("ROLLED_BACK, senza EXCEPT", r.outcome() == AcmeUser.Outcome.ROLLED_BACK && !r.detail().contains("EXCEPT"));
-            check("il cron di root rimesso com'era (riscritto due volte)", crontab(m.oldHome.toString()).equals(f.crontab) && f.crontabWrites == 2);
-            check("ogni file com'era", before.equals(photo(m.root)));
+            check("ROLLED_BACK, without EXCEPT", r.outcome() == AcmeUser.Outcome.ROLLED_BACK && !r.detail().contains("EXCEPT"));
+            check("root's cron put back as it was (rewritten twice)", crontab(m.oldHome.toString()).equals(f.crontab) && f.crontabWrites == 2);
+            check("every file as it was", before.equals(photo(m.root)));
         } finally { Shell.run("chflags", "-R", "noschg", m.root.toString()); m.clean(); }
 
-        OUT.println("\n-- rifiuto: un certificato c'e' gia' nella cartella nuova");
+        OUT.println("\n-- refusal: a certificate is already in the new folder");
         Bench c = new Bench();
         try {
-            Files.createDirectories(c.certHome.resolve("webmail.prova.local"));
+            Files.createDirectories(c.certHome.resolve("webmail.test.local"));
             Map<String, String> before = photo(c.root);
             Fake f = new Fake(c);
             AcmeUser.Report r = AcmeUser.migrate(c.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
-            check("BOTH_PLACES, niente cambiato", r.outcome() == AcmeUser.Outcome.BOTH_PLACES && before.equals(photo(c.root))
+            check("BOTH_PLACES, nothing changed", r.outcome() == AcmeUser.Outcome.BOTH_PLACES && before.equals(photo(c.root))
                     && crontab(c.oldHome.toString()).equals(f.crontab));
         } finally { c.clean(); }
 
-        OUT.println("\n== La porta della sfida HTTP");
+        OUT.println("\n== The HTTP challenge's port");
         Path dir = Files.createTempDirectory(Path.of("/var/tmp"), "acme-challenge-");
-        Path secret = Files.writeString(dir.resolveSibling(dir.getFileName() + "-secret"), "segreto\n");
+        Path secret = Files.writeString(dir.resolveSibling(dir.getFileName() + "-secret"), "secret\n");
         try {
             Files.writeString(dir.resolve("tok3n_-A"), "tok3n_-A.thumbprint");
             Files.createSymbolicLink(dir.resolve("linked"), secret);
             int port = 18000 + (int) (ProcessHandle.current().pid() % 1000);
             try (AcmeUser.Challenge ch = AcmeUser.Challenge.open(port, dir)) {
-                check("il gettone si legge", get(port, "/.well-known/acme-challenge/tok3n_-A", "GET").equals("200 tok3n_-A.thumbprint"));
+                check("the token can be read", get(port, "/.well-known/acme-challenge/tok3n_-A", "GET").equals("200 tok3n_-A.thumbprint"));
                 check("HEAD risponde 200", get(port, "/.well-known/acme-challenge/tok3n_-A", "HEAD").startsWith("200"));
-                check("un gettone che non c'e': 404", get(port, "/.well-known/acme-challenge/nope", "GET").startsWith("404"));
-                check("uscire dalla cartella: 404", get(port, "/.well-known/acme-challenge/..%2F" + secret.getFileName(), "GET").startsWith("404")
+                check("a token that is not there: 404", get(port, "/.well-known/acme-challenge/nope", "GET").startsWith("404"));
+                check("leaving the folder: 404", get(port, "/.well-known/acme-challenge/..%2F" + secret.getFileName(), "GET").startsWith("404")
                         && get(port, "/.well-known/acme-challenge/../" + secret.getFileName(), "GET").startsWith("404"));
-                check("un link nella cartella non si segue: 404", get(port, "/.well-known/acme-challenge/linked", "GET").startsWith("404"));
-                check("un altro percorso: 404", get(port, "/index.html", "GET").startsWith("404"));
+                check("a link in the folder is not followed: 404", get(port, "/.well-known/acme-challenge/linked", "GET").startsWith("404"));
+                check("another path: 404", get(port, "/index.html", "GET").startsWith("404"));
                 check("POST: 404", get(port, "/.well-known/acme-challenge/tok3n_-A", "POST").startsWith("404"));
             }
             boolean closed;
             try { get(port, "/.well-known/acme-challenge/tok3n_-A", "GET"); closed = false; } catch (java.io.IOException e) { closed = true; }
-            check("alla fine del try la porta e' chiusa", closed);
+            check("at the end of the try the port is closed", closed);
             try (AcmeUser.Challenge one = AcmeUser.Challenge.open(port, dir)) {
                 boolean busy;
                 try (AcmeUser.Challenge two = AcmeUser.Challenge.open(port, dir)) { busy = false; } catch (java.net.BindException e) { busy = true; }
-                check("porta occupata: BindException, che AcmeManager dice a parole", busy);
+                check("port busy: BindException, which AcmeManager puts into words", busy);
             }
         } finally {
             Files.deleteIfExists(dir.resolve("linked"));
@@ -294,9 +294,9 @@ public class AcmeUserTest {
             Files.deleteIfExists(secret);
         }
 
-        OUT.println("\n== Come acme, davvero");
+        OUT.println("\n== As acme, for real");
         if (!AcmeUser.userExists() || !Files.isRegularFile(Path.of(AcmeUser.SCRIPT))) {
-            OUT.println("  SALTATA: manca l'utente acme o " + AcmeUser.SCRIPT + " (pkg install " + AcmeUser.PACKAGE + ")");
+            OUT.println("  SKIPPED: the acme user or " + AcmeUser.SCRIPT + " is missing (pkg install " + AcmeUser.PACKAGE + ")");
         } else {
             Path probe = Files.createTempDirectory(Path.of("/var/tmp"), "acme-run-");
             Path script = probe.resolve("fake-acme.sh");
@@ -308,17 +308,17 @@ public class AcmeUserTest {
                 String out = AcmeUser.run(new AcmeUser.Layout(script.toString(), AcmeUser.HOME, AcmeUser.CERT_HOME, true),
                         "--list", Map.of("CF_Token", "planted-cf"));
                 OUT.println("     " + out.trim().replace("\n", " | "));
-                check("gira come acme, con la casa di acme", out.contains("user=acme home=/var/db/acme pwd=/var/db/acme"));
-                check("riceve il token di Cloudflare", out.contains("token=planted-cf"));
-                // Lanciata via ssh, la JVM ha SSH_CONNECTION: se arrivasse ad acme.sh, l'ambiente non sarebbe vuoto.
-                if (System.getenv("SSH_CONNECTION") == null) OUT.println("  SALTATA: senza SSH_CONNECTION non si vede se l'ambiente passa");
-                else check("e non l'ambiente di chi lo lancia (SSH_CONNECTION)", out.contains("ssh=none"));
-                check("con --home e --cert-home davanti", out.contains("args=--home " + AcmeUser.HOME + " --cert-home " + AcmeUser.CERT_HOME + " --list"));
+                check("it runs as acme, with acme's home", out.contains("user=acme home=/var/db/acme pwd=/var/db/acme"));
+                check("it gets the Cloudflare token", out.contains("token=planted-cf"));
+                // Started via ssh, the JVM has SSH_CONNECTION: if it reached acme.sh, the environment would not be empty.
+                if (System.getenv("SSH_CONNECTION") == null) OUT.println("  SKIPPED: without SSH_CONNECTION it cannot be seen whether the environment passes");
+                else check("and not the environment of whoever starts it (SSH_CONNECTION)", out.contains("ssh=none"));
+                check("with --home and --cert-home in front", out.contains("args=--home " + AcmeUser.HOME + " --cert-home " + AcmeUser.CERT_HOME + " --list"));
                 String legacy = AcmeUser.run(new AcmeUser.Layout(script.toString(), "/root/.acme.sh", "/root/.acme.sh", false), "--list", null);
-                check("prima della migrazione: da root, come prima", legacy.contains("user=root home=/root"));
+                check("before the migration: as root, as before", legacy.contains("user=root home=/root"));
                 String v = AcmeUser.run(new AcmeUser.Layout(AcmeUser.SCRIPT, AcmeUser.HOME, AcmeUser.CERT_HOME, true), "--version", null);
                 OUT.println("     " + v.trim().replace("\n", " | "));
-                check("acme.sh vero, come acme: risponde con la sua versione", v.contains("v3."));
+                check("real acme.sh, as acme: it answers with its version", v.contains("v3."));
             } finally {
                 Files.deleteIfExists(script);
                 Files.deleteIfExists(probe);
@@ -326,7 +326,7 @@ public class AcmeUserTest {
         }
 
         OUT.println();
-        OUT.println(failed == 0 ? "TUTTO OK" : "FALLITE: " + failed);
+        OUT.println(failed == 0 ? "ALL OK" : "FAILED: " + failed);
         if (failed > 0) System.exit(1);
     }
 }

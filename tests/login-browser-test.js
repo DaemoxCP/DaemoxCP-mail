@@ -22,7 +22,7 @@
 //
 // Usage (from the project root, after mvn package, with the test MySQL of README.md):
 //   D=$(mktemp -d) && cp target/freebsd-mail-panel-1.0.jar $D/
-//   MYSQL="-Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova" \
+//   MYSQL="-Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test" \
 //     NODE_PATH=$(npm root -g) node tests/login-browser-test.js $D [screenshots-dir]
 const { chromium } = require('playwright');
 const { spawn, execFileSync } = require('child_process');
@@ -37,10 +37,10 @@ const REMOTE = process.env.REMOTE || '';
 const SSH = ['-o', 'BatchMode=yes'].concat(process.env.REMOTE_KEY ? ['-i', process.env.REMOTE_KEY] : []);
 const HOST_IP = REMOTE ? REMOTE.replace(/^.*@/, '') : '127.0.0.1';
 const PORT = Number(process.env.PORT) || 19000 + Math.floor(Math.random() * 1000);
-// Un comando per la shell remota, con ogni argomento fra apici.
+// A command for the remote shell, with every argument in single quotes.
 const q = a => "'" + String(a).replace(/'/g, "'\\''") + "'";
-// L'indirizzo da cui il server vede arrivare il browser: in locale il loopback, da remoto quello del
-// Mac come lo vede la macchina di prova (lo stesso da cui arriva ssh).
+// The address the server sees the browser come from: locally the loopback, remotely the Mac's as the
+// test machine sees it (the same one ssh comes from).
 const CLIENT_IP_OF = () => REMOTE ? remote('echo "${SSH_CLIENT%% *}"').trim() : '127.0.0.1';
 let CLIENT_IP = '127.0.0.1';
 function remote(cmd, opts) { return execFileSync('ssh', SSH.concat([REMOTE, cmd]), Object.assign({ encoding: 'utf8' }, opts || {})); }
@@ -64,7 +64,7 @@ function mails() {
 }
 
 function startServer() {
-    // TESTS_CLASSES: le classi di prova compilate altrove, per non lasciarle in tests/.
+    // TESTS_CLASSES: the test classes compiled elsewhere, so as not to leave them in tests/.
     const javaArgs = PROPS.concat(['-cp', (process.env.TESTS_CLASSES || path.join(root, 'tests')) + ':' + JAR,
         'org.mail_panel.webserver.LoginE2EServer', String(PORT)]);
     const server = REMOTE
@@ -118,7 +118,7 @@ async function shot(page, name) {
         const page = await context.newPage();
         const errors = [];
         page.on('pageerror', e => errors.push(e.message));
-        // Le violazioni della Content-Security-Policy che manda il server vero (reperto 178).
+        // The Content-Security-Policy violations the real server sends (reperto 178).
         csp.watch(page, errors);
         page.on('dialog', d => d.accept());
         const cdp = await context.newCDPSession(page);
@@ -317,7 +317,7 @@ async function shot(page, name) {
     } finally {
         await browser.close();
         server.kill();
-        // Chiudere ssh non ferma il server dall'altra parte.
+        // Closing ssh does not stop the server on the other side.
         if (REMOTE) { try { remote('pkill -f ' + q('LoginE2EServer ' + PORT) + ' || true'); } catch (e) { } }
     }
     console.log(failures === 0 ? '\nAll checks passed.' : '\nFailed checks: ' + failures);

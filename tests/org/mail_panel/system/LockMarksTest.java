@@ -7,16 +7,16 @@ import java.util.TreeSet;
 import org.mail_panel.util.Shell;
 
 /**
- * Il cartello "bloccato dal pannello" deve stare su ogni pacchetto che il pannello tiene
- * bloccato, e solo su quelli.
+ * The "locked by the panel" mark must be on every package the panel keeps locked, and only on
+ * those.
  *
- * Prima si annotava solo il pacchetto bloccato all'avvio. Misurato sulla VM FreeBSD 15.1 il
- * 24/10/2026: reinstallare un pacchetto (quindi anche aggiornarlo) cancella le sue
- * annotazioni — annotato nginx, reinstallato nginx 1.30.6,3 dalla cache, annotazione sparita —
- * e nessuna riprotezione le riscriveva. Su 39 pacchetti protetti l'annotazione stava su uno.
+ * Before, only the package locked at start was annotated. Measured on the FreeBSD 15.1 VM on
+ * 24/10/2026: reinstalling a package (so also upgrading it) deletes its annotations — nginx
+ * annotated, nginx 1.30.6,3 reinstalled from the cache, annotation gone — and no relocking wrote
+ * them again. Of 39 protected packages the annotation was on one.
  *
- * Le prove 1-3 sono pure. La 4 lavora su pkg vero, se c'e', e rimette i cartelli esattamente
- * come li ha trovati, qualunque sia l'esito.
+ * Checks 1-3 are pure. Check 4 works on real pkg, if there is one, and puts the marks back exactly
+ * as it found them, whatever the outcome.
  */
 public class LockMarksTest {
 
@@ -24,7 +24,7 @@ public class LockMarksTest {
 
     public static void main(String[] args) {
 
-        // --- 1. Chi porta il cartello, da un'uscita di pkg query -a '%n %At' ---
+        // --- 1. Who carries the mark, from an output of pkg query -a '%n %At' ---
         String output = String.join("\n",
                 "alsa-lib FreeBSD_version",
                 "nginx cpe",
@@ -32,77 +32,78 @@ public class LockMarksTest {
                 "redis mail_panel_lock",
                 "redis cpe",
                 "postfix-mysql mail_panel_lock",
-                "pkg: warning: qualcosa su stderr",
+                "pkg: warning: something on stderr",
                 "rm;-rf mail_panel_lock",
                 "");
         Set<String> marked = UpdateManager.markedIn(output);
-        check("dall'uscita di pkg: redis e postfix-mysql", marked.equals(Set.of("redis", "postfix-mysql")));
-        check("  una riga di stderr non e' un pacchetto", !marked.contains("pkg:"));
-        check("  un nome che non passa il filtro non entra", marked.stream().noneMatch(n -> n.contains(";")));
-        check("uscita vuota: nessun cartello", UpdateManager.markedIn("").isEmpty());
+        check("from pkg's output: redis and postfix-mysql", marked.equals(Set.of("redis", "postfix-mysql")));
+        check("  a stderr line is not a package", !marked.contains("pkg:"));
+        check("  a name that does not pass the filter does not get in", marked.stream().noneMatch(n -> n.contains(";")));
+        check("empty output: no mark", UpdateManager.markedIn("").isEmpty());
 
-        // --- 1-bis. Il testo del cartello, da pkg query -a '%n %At %Av' ---
-        // Sui server installati prima il valore e' quello italiano: non serve riconoscerlo, basta
-        // che non sia quello di adesso. Il pannello lo riscrive, solo sui pacchetti ancora bloccati.
+        // --- 1-bis. The mark's text, from pkg query -a '%n %At %Av' ---
+        // On the servers installed before the value is the Italian one: there is no need to
+        // recognise it, it is enough that it is not today's. The panel rewrites it, only on the
+        // packages still locked.
         String withValues = String.join("\n",
                 "nginx repository FreeBSD",
                 "redis " + UpdateManager.MARK_KEY + " " + UpdateManager.MARK_VALUE,
-                "postfix-mysql " + UpdateManager.MARK_KEY + " un testo di prima: vedi la nota",
+                "postfix-mysql " + UpdateManager.MARK_KEY + " an old text: see the note",
                 "dovecot " + UpdateManager.MARK_KEY,
-                "lmdb " + UpdateManager.MARK_KEY + " un testo di prima",
+                "lmdb " + UpdateManager.MARK_KEY + " an old text",
                 "");
-        check("con i valori si leggono gli stessi cartelli",
+        check("with the values the same marks are read",
              UpdateManager.markedIn(withValues).equals(Set.of("redis", "postfix-mysql", "dovecot", "lmdb")));
-        check("  e quelli col testo di prima (o senza testo): postfix-mysql, dovecot, lmdb",
+        check("  and those with the old text (or without text): postfix-mysql, dovecot, lmdb",
              UpdateManager.staleMarksIn(withValues).equals(Set.of("postfix-mysql", "dovecot", "lmdb")));
         List<String> rw = UpdateManager.lockMarkCommands(Set.of("redis", "postfix-mysql", "dovecot"),
                 UpdateManager.markedIn(withValues), UpdateManager.staleMarksIn(withValues));
-        check("si riscrivono postfix-mysql e dovecot, bloccati; lmdb, non piu' bloccato, si toglie (" + rw + ")",
+        check("postfix-mysql and dovecot, locked, are rewritten; lmdb, no longer locked, is removed (" + rw + ")",
              rw.size() == 3 && rw.contains(UpdateManager.rewriteMarkCommand("postfix-mysql"))
                      && rw.contains(UpdateManager.rewriteMarkCommand("dovecot")) && rw.contains(UpdateManager.removeMarkCommand("lmdb")));
-        check("il valore e' in inglese e rimanda alla nota e al comando di sblocco",
+        check("the value is in English and points to the note and to the unlock command",
              UpdateManager.MARK_VALUE.startsWith("locked by the mail panel")
                      && UpdateManager.MARK_VALUE.contains(UpdateManager.LOCK_NOTE) && UpdateManager.MARK_VALUE.contains(UpdateManager.UNLOCK_ALL_COMMAND));
-        check("il comando che riscrive usa -M con lo stesso valore di quello che mette",
+        check("the rewriting command uses -M with the same value as the one that sets it",
              ("pkg annotate -y -M nginx " + UpdateManager.MARK_KEY + " '" + UpdateManager.MARK_VALUE + "'").equals(UpdateManager.rewriteMarkCommand("nginx"))
                      && UpdateManager.markCommand("nginx").endsWith(" '" + UpdateManager.MARK_VALUE + "'")
                      && UpdateManager.rewriteMarkCommand("x; rm -rf /") == null);
 
-        // --- 2. I comandi per portare i cartelli dove servono ---
+        // --- 2. The commands to bring the marks where they are needed ---
         List<String> c = UpdateManager.lockMarkCommands(
                 Set.of("nginx", "redis", "dovecot"), Set.of("redis", "lmdb"));
-        check("tre comandi: due da mettere, uno da togliere (" + c.size() + ")", c.size() == 3);
-        check("  mette il cartello su dovecot", c.stream().anyMatch(x -> x.contains(" -A dovecot ")));
-        check("  e su nginx", c.stream().anyMatch(x -> x.contains(" -A nginx ")));
-        check("  non tocca redis, che ce l'ha", c.stream().noneMatch(x -> x.contains(" redis ")));
-        check("  toglie quello di lmdb, che non e' piu' bloccato",
+        check("three commands: two to set, one to remove (" + c.size() + ")", c.size() == 3);
+        check("  it puts the mark on dovecot", c.stream().anyMatch(x -> x.contains(" -A dovecot ")));
+        check("  and on nginx", c.stream().anyMatch(x -> x.contains(" -A nginx ")));
+        check("  it does not touch redis, which has it", c.stream().noneMatch(x -> x.contains(" redis ")));
+        check("  it removes lmdb's, which is no longer locked",
              c.contains(UpdateManager.removeMarkCommand("lmdb")));
-        check("  e il comando che toglie nomina la chiave e il pacchetto",
+        check("  and the removing command names the key and the package",
              "pkg annotate -y -D lmdb mail_panel_lock".equals(UpdateManager.removeMarkCommand("lmdb")));
-        check("tutto in pari: nessun comando",
+        check("everything even: no command",
              UpdateManager.lockMarkCommands(Set.of("nginx"), Set.of("nginx")).isEmpty());
-        check("un nome che non passa il filtro non produce nessun comando",
+        check("a name that does not pass the filter produces no command",
              UpdateManager.lockMarkCommands(Set.of("ngi nx; rm -rf /"), Set.of()).isEmpty()
              && UpdateManager.removeMarkCommand("x; rm -rf /") == null);
 
-        // --- 3. La macchina della misura: 39 bloccati, il cartello su uno ---
+        // --- 3. The measured machine: 39 locked, the mark on one ---
         Set<String> thirtyNine = new TreeSet<>();
         for (int i = 0; i < 38; i++) thirtyNine.add("package" + i);
         thirtyNine.add("redis");
-        check("39 bloccati e un cartello solo: 38 da mettere, niente da togliere",
+        check("39 locked and a single mark: 38 to set, nothing to remove",
              UpdateManager.lockMarkCommands(thirtyNine, Set.of("redis")).size() == 38);
 
-        // --- 4. Su pkg vero ---
+        // --- 4. On real pkg ---
         if (!Shell.runShell(Duration.ofSeconds(10), "command -v pkg").success()) {
-            System.out.println("  --   pkg vero: pkg non c'e' su questa macchina, salto");
+            System.out.println("  --   real pkg: pkg is not on this machine, skipped");
         } else {
             onRealPkg();
-            // --- 5. Nessun pacchetto bloccato (reperto 173): sblocca tutto, solo su un clone ---
+            // --- 5. No locked package (reperto 173): it unlocks everything, only on a clone ---
             if ("yes".equals(System.getProperty("e2e.vm"))) withNothingLocked();
-            else System.out.println("  --   nessun pacchetto bloccato: serve -De2e.vm=yes (sblocca tutto, su un clone)");
+            else System.out.println("  --   no locked package: it needs -De2e.vm=yes (it unlocks everything, on a clone)");
         }
 
-        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 
@@ -110,48 +111,48 @@ public class LockMarksTest {
         Set<String> markedBefore = markedNow();
         Set<String> locked = panelLocked();
         if (locked.isEmpty()) {
-            System.out.println("  --   pkg vero: nessun pacchetto dello stack bloccato, salto");
+            System.out.println("  --   real pkg: no package of the stack locked, skipped");
             return;
         }
         String one = locked.iterator().next();
         String free = firstUnlocked();
         try {
             UpdateManager.syncLockMarks();
-            check("pkg vero: dopo la sincronizzazione il cartello sta su tutti e soli i "
+            check("real pkg: after the sync the mark is on all and only the "
                  + locked.size() + " bloccati", markedNow().equals(locked));
 
-            // Il cartello perso da un aggiornamento, e uno rimasto su un pacchetto sbloccato
+            // The mark lost by an upgrade, and one left on an unlocked package
             sh("pkg annotate -y -D " + one + " " + UpdateManager.MARK_KEY);
             if (free != null) sh(UpdateManager.markCommand(free));
             int[] done = UpdateManager.syncLockMarks();
-            check("  il cartello tolto a " + one + " torna", markedNow().contains(one));
+            check("  the mark removed from " + one + " comes back", markedNow().contains(one));
             if (free != null) {
-                check("  quello messo su " + free + ", che non e' bloccato, se ne va",
+                check("  the one put on " + free + ", which is not locked, goes away",
                      !markedNow().contains(free));
-                check("  e la sincronizzazione lo conta: 1 messo, 1 tolto (" + done[0] + ", " + done[1] + ")",
+                check("  and the sync counts it: 1 set, 1 removed (" + done[0] + ", " + done[1] + ")",
                      done[0] == 1 && done[1] == 1);
             }
-            check("  e una seconda volta non c'e' niente da fare",
+            check("  and a second time there is nothing to do",
                  java.util.Arrays.equals(UpdateManager.syncLockMarks(), new int[]{0, 0, 0}));
 
-            // Il cartello col testo di prima, come lo lascia un server installato prima.
-            sh("pkg annotate -y -M " + one + " " + UpdateManager.MARK_KEY + " 'un testo di prima'");
+            // The mark with the old text, as a server installed before leaves it.
+            sh("pkg annotate -y -M " + one + " " + UpdateManager.MARK_KEY + " 'an old text'");
             int[] again = UpdateManager.syncLockMarks();
-            check("  il cartello di " + one + " col testo di prima si riscrive (" + again[2] + "), e dice quello di adesso",
+            check("  " + one + "'s mark with the old text is rewritten (" + again[2] + "), and says today's",
                  again[2] == 1 && sh("pkg annotate -S " + one + " " + UpdateManager.MARK_KEY).contains(UpdateManager.MARK_VALUE));
         } finally {
-            // Come li ho trovati, cartello per cartello.
+            // As I found them, mark by mark.
             Set<String> now = markedNow();
             for (String n : now) if (!markedBefore.contains(n)) sh("pkg annotate -y -D " + n + " " + UpdateManager.MARK_KEY);
             for (String n : markedBefore) if (!now.contains(n)) sh(UpdateManager.markCommand(n));
         }
-        check("  e la prova lascia i cartelli come li ha trovati", markedNow().equals(markedBefore));
+        check("  and the test leaves the marks as it found them", markedNow().equals(markedBefore));
     }
 
     /**
-     * Senza nessun pacchetto bloccato "pkg lock -l" esce con 1, e la sincronizzazione lo prendeva
-     * per un errore e non toglieva niente. Si sbloccano tutti, si mette un cartello su un pacchetto
-     * qualunque, e la sincronizzazione deve toglierlo. Poi blocchi e cartelli come prima.
+     * Without any locked package "pkg lock -l" exits with 1, and the sync took it for an error and
+     * removed nothing. Everything is unlocked, a mark is put on any package, and the sync must
+     * remove it. Then locks and marks as before.
      */
     private static void withNothingLocked() {
         Set<String> lockedBefore = new TreeSet<>(List.of(sh("pkg query -e '%k = 1' '%n'").split("\n")));
@@ -160,13 +161,13 @@ public class LockMarksTest {
         String any = sh("pkg query -a '%n' | head -1").trim();
         try {
             sh("pkg unlock -a -y");
-            check("nessun bloccato: pkg lock -l esce con 1 (il tranello)",
+            check("nothing locked: pkg lock -l exits with 1 (the trap)",
                  !Shell.runShell(Duration.ofSeconds(30), "pkg lock -l").success());
             sh(UpdateManager.markCommand(any));
             int[] done = UpdateManager.syncLockMarks();
-            check("  il cartello su " + any + ", che non e' bloccato, se ne va (" + done[1] + " tolti)",
+            check("  the mark on " + any + ", which is not locked, goes away (" + done[1] + " removed)",
                  !markedNow().contains(any) && done[1] >= 1);
-            check("  e nessun cartello resta su un pacchetto sbloccato", markedNow().isEmpty());
+            check("  and no mark stays on an unlocked package", markedNow().isEmpty());
         } finally {
             for (String n : lockedBefore) sh("pkg lock -y " + n);
             Set<String> now = markedNow();
@@ -175,7 +176,7 @@ public class LockMarksTest {
         }
         Set<String> lockedAfter = new TreeSet<>(List.of(sh("pkg query -e '%k = 1' '%n'").split("\n")));
         lockedAfter.removeIf(String::isBlank);
-        check("  e la prova rimette blocchi e cartelli come li ha trovati",
+        check("  and the test puts locks and marks back as it found them",
              lockedAfter.equals(lockedBefore) && markedNow().equals(markedBefore));
     }
 
@@ -183,13 +184,13 @@ public class LockMarksTest {
         return UpdateManager.markedIn(sh("pkg query -a '%n %At'"));
     }
 
-    /** La stessa regola della nota: lo stack di posta, bloccato adesso. */
+    /** The same rule as the note: the mail stack, locked now. */
     private static Set<String> panelLocked() {
         Set<String> r = new TreeSet<>();
         for (String line : sh("sed -n '/^[a-z]/p' " + UpdateManager.LOCK_NOTE + " 2>/dev/null").split("\n")) {
             if (!line.isBlank()) r.add(line.trim());
         }
-        // La nota e' quella dell'ultimo avvio: si tiene solo cio' che e' bloccato davvero adesso.
+        // The note is the one of the last start: only what is really locked now is kept.
         r.retainAll(UpdateManager.lockedNames(sh("pkg lock -l")));
         return r;
     }

@@ -4,26 +4,25 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Il pannello non esegue piani che RIMUOVONO o RETROCEDONO pacchetti.
+ * The panel does not run plans that REMOVE or DOWNGRADE packages.
  *
- * E' una regola del pannello, non un fatto di pkg: un aggiornamento che toglie un pacchetto
- * da un server di posta, o che ne riporta indietro la versione, va deciso da una persona che
- * sa chi lo usa.
+ * It is a rule of the panel, not a fact of pkg: an update that takes a package off a mail server,
+ * or that brings its version back, must be decided by a person who knows who uses it.
  *
- * Stava scritta in un punto solo — la scheda di un pacchetto protetto — e mancava negli altri
- * due lavori che eseguono un piano. Misurato sulla VM FreeBSD 15.1 il 23/10/2026, sulla
- * stessa macchina e sullo stesso pacchetto:
+ * It was written in one place only — the card of a protected package — and it was missing in the
+ * other two jobs that run a plan. Measured on the FreeBSD 15.1 VM on 23/10/2026, on the same
+ * machine and the same package:
  *
- *   aggiornamento guidato di postfix-mysql -> «[block] Il piano rimuove pacchetti:
- *                                             pkg rimuoverebbe lmdb 1.0.2,1»
- *   manutenzione completa                  -> runnable=true, impedimenti [], e nel piano
- *                                             «rimuove lmdb 1.0.2,1»
+ *   guided update of postfix-mysql -> "[block] The plan removes packages:
+ *                                      pkg would remove lmdb 1.0.2,1"
+ *   full maintenance                -> runnable=true, blockers [], and in the plan
+ *                                      "removes lmdb 1.0.2,1"
  *
- * Due risposte opposte alla stessa domanda, e quella permissiva stava sul pulsante che si
- * preme per aggiornare tutto.
+ * Two opposite answers to the same question, and the permissive one was on the button one presses
+ * to update everything.
  *
- * Qui si prova la regola, che adesso e' una sola funzione. Che i tre lavori la chiedano
- * davvero si vede sulla macchina: la manutenzione completa, su quella VM, si ferma.
+ * Here the rule is tested, which is now a single function. That the three jobs really ask for it
+ * shows on the machine: the full maintenance, on that VM, stops.
  */
 public class DestructivePlanTest {
 
@@ -31,62 +30,62 @@ public class DestructivePlanTest {
 
     public static void main(String[] args) {
 
-        // ===== Il caso misurato: il piano della manutenzione su quella macchina =====
+        // ===== The measured case: the maintenance plan on that machine =====
         JSONObject real = plan(
                 change("install", "lmdb0", "", "0.9.35"),
                 change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1"),
                 change("remove", "lmdb", "1.0.2,1", ""));
         String reason = UpdateManager.destructivePlanReason(real);
-        check("il piano misurato sulla VM non si esegue", reason != null);
-        check("  e il motivo nomina il pacchetto e la versione",
+        check("the plan measured on the VM does not run", reason != null);
+        check("  and the reason names the package and the version",
              reason != null && reason.contains("lmdb 1.0.2,1"));
         JSONObject d = UpdateManager.destructiveChanges(real);
-        check("  una rimozione, nessuna retrocessione",
+        check("  one removal, no downgrade",
              d.getJSONArray("removes").length() == 1 && d.getJSONArray("downgrades").isEmpty());
-        check("  e l'installazione e l'aggiornamento non c'entrano",
+        check("  and the installation and the upgrade have nothing to do with it",
              !d.getJSONArray("removes").toString().contains("lmdb0")
              && !d.getJSONArray("removes").toString().contains("postfix-mysql"));
 
-        // ===== Una retrocessione =====
+        // ===== A downgrade =====
         JSONObject downgrade = plan(change("downgrade", "redis", "8.10.2", "8.9.0"));
         String m2 = UpdateManager.destructivePlanReason(downgrade);
-        check("una retrocessione non si esegue", m2 != null);
-        check("  e il motivo dice da quale versione a quale",
+        check("a downgrade does not run", m2 != null);
+        check("  and the reason says from which version to which",
              m2 != null && m2.contains("8.10.2") && m2.contains("8.9.0"));
 
-        // ===== Tutte e due insieme: si dicono entrambe =====
+        // ===== Both together: both are said =====
         String m3 = UpdateManager.destructivePlanReason(plan(
                 change("remove", "lmdb", "1.0.2,1", ""),
                 change("downgrade", "redis", "8.10.2", "8.9.0")));
-        check("rimozione e retrocessione insieme: il motivo le dice entrambe",
+        check("removal and downgrade together: the reason says both",
              m3 != null && m3.contains("lmdb") && m3.contains("redis"));
 
-        // ===== Un piano che non tocca niente in quel modo: si esegue =====
-        check("aggiornamenti, installazioni e reinstallazioni non fermano niente",
+        // ===== A plan that touches nothing that way: it runs =====
+        check("upgrades, installations and reinstallations stop nothing",
              UpdateManager.destructivePlanReason(plan(
                  change("upgrade", "nginx", "1.30.5_2,3", "1.30.6,3"),
                  change("install", "lmdb0", "", "0.9.35"),
                  change("reinstall", "cyrus-sasl", "2.1.28_5", "2.1.28_5"))) == null);
 
-        // ===== Piani vuoti o assenti: nessun motivo inventato =====
-        check("un piano senza cambiamenti non si ferma",
+        // ===== Empty or missing plans: no made-up reason =====
+        check("a plan without changes does not stop",
              UpdateManager.destructivePlanReason(plan()) == null);
-        check("un piano senza la chiave 'changes' non si ferma",
+        check("a plan without the 'changes' key does not stop",
              UpdateManager.destructivePlanReason(new JSONObject()) == null);
-        check("e nemmeno un piano nullo",
+        check("nor does a null plan",
              UpdateManager.destructivePlanReason(null) == null);
-        check("su un piano nullo l'elenco e' vuoto, non nullo",
+        check("on a null plan the list is empty, not null",
              UpdateManager.destructiveChanges(null).getJSONArray("removes").isEmpty());
 
-        // ===== Molte rimozioni: si nominano tutte, non solo la prima =====
+        // ===== Many removals: all are named, not only the first =====
         String m4 = UpdateManager.destructivePlanReason(plan(
                 change("remove", "lmdb", "1.0.2,1", ""),
                 change("remove", "tinycdb", "0.81", ""),
                 change("remove", "libtlsrpt", "0.5.1", "")));
-        check("tre rimozioni, tutte nominate",
+        check("three removals, all named",
              m4 != null && m4.contains("lmdb") && m4.contains("tinycdb") && m4.contains("libtlsrpt"));
 
-        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 

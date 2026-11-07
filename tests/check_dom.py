@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""Lo spazio dei nomi del DOM attraversa QUATTRO superfici, non tre:
-   pages/*.js, pages/*.html, il JavaScript dentro i .java, e tests/*.js.
-Le prove da browser sono CONSUMATRICI: cercano id e selettori che l'applicazione
-deve creare, ma non ne creano nessuno. Non guardarle ha fatto passare 35
-riferimenti morti quando la famiglia "ramo" e' diventata "branch".
+"""The DOM namespace crosses FOUR surfaces, not three:
+   pages/*.js, pages/*.html, the JavaScript inside the .java files, and tests/*.js.
+The browser tests are CONSUMERS: they look for ids and selectors the application must create,
+but they create none. Not looking at them let 35 dead references through when the "ramo"
+family became "branch".
 
-Verifica sull'unione:
-  - ogni funzione chiamata da un attributo on* e' dichiarata da qualche parte
-  - ogni id cercato dall'applicazione e' creato da qualche parte
-  - ogni id/selettore cercato dalle PROVE e' creato dall'applicazione
+It checks on the union:
+  - every function called from an on* attribute is declared somewhere
+  - every id the application looks for is created somewhere
+  - every id/selector the TESTS look for is created by the application
 
-Tre cose che vanno sapute, o la rete urla a vuoto:
-  - passwordField("X") genera id X, XErr, XShow, XCopy via %1$s
-  - gli id costruiti ('ver-' + k) danno un PREFISSO, non un id
-  - nelle prove, un selettore con .count() === 0 asserisce che NON c'e'
+Three things to know, or the net shouts for nothing:
+  - passwordField("X") generates ids X, XErr, XShow, XCopy via %1$s
+  - the built ids ('ver-' + k) give a PREFIX, not an id
+  - in the tests, a selector with .count() === 0 asserts that it is NOT there
 """
 import re, sys, glob, os
 
-# La radice e' il primo argomento che NON e' un'opzione. Prima era argv[1] qualunque fosse,
-# quindi "check_dom.py --quiet" prendeva "--quiet" per una cartella: i glob non trovavano
-# niente, la rete stampava zero problemi e usciva ZERO. Un controllo che non puo' fallire e'
-# peggio di nessun controllo, e questo non poteva nemmeno accorgersene.
+# The root is the first argument that is NOT an option. Before it was argv[1] whatever it was,
+# so "check_dom.py --quiet" took "--quiet" for a folder: the globs found nothing, the net printed
+# zero problems and exited ZERO. A check that cannot fail is worse than no check, and this one
+# could not even notice.
 folders = [a for a in sys.argv[1:] if not a.startswith("-")]
 root = folders[0] if folders else "."
 quiet = "--quiet" in sys.argv
@@ -38,9 +38,9 @@ app += read_sources(['src/main/java/**/*.java'], rec=True)
 test_sources = read_sources(['tests/*.js'])
 A = "\n".join(s for _, s in app)
 
-# ---- handler chiamati da on* ----
-# tutto il VALORE dell'attributo, poi ogni chiamata dentro: onkeyup="if(...)loadLogs()"
-# ne contiene due, e la vecchia rete vedeva solo "if", che e' una parola chiave.
+# ---- handlers called from on* ----
+# the whole VALUE of the attribute, then every call inside: onkeyup="if(...)loadLogs()"
+# contains two, and the old net saw only "if", which is a keyword.
 ATTR = re.compile(r'on(?:click|change|input|submit|keyup|focus|blur)\s*=\s*\\{0,2}(["\'])((?:(?!\1)[^\\]|\\.)*)\1')
 KW = {'if','else','for','while','do','switch','case','return','typeof','instanceof',
       'new','delete','void','function','this','try','catch','finally','throw','await','in','of'}
@@ -52,7 +52,7 @@ for m in ATTR.finditer(A):
     v = m.group(2)
     for c in re.finditer(r'([A-Za-z_$][\w$]*)\s*\(', v):
         if c.group(1) in KW: continue
-        if c.start() and v[c.start()-1] == '.': continue   # chiamata di metodo, non funzione
+        if c.start() and v[c.start()-1] == '.': continue   # a method call, not a function
         if c.group(1) in GLOBAL_NAMES: continue
         calls.add(c.group(1))
 calls = sorted(calls)
@@ -63,21 +63,21 @@ def declared(n):
                      r'|\b'+e+r'\s*:\s*(?:async\s*)?(?:function\b|\()', A)
 orphans = [c for c in calls if not declared(c)]
 
-# ---- id creati dall'applicazione ----
+# ---- ids created by the application ----
 created  = set(re.findall(r'id\s*=\s*\\{0,2}["\']([A-Za-z0-9_$-]+)', A))
 created |= set(re.findall(r"\.id\s*=\s*\\{0,2}['\"]([A-Za-z0-9_$-]+)", A))
 # passwordField("X") -> X, XErr, XShow, XCopy
 for m in re.finditer(r'passwordField\(\s*"([A-Za-z0-9_-]+)"', A):
     b = m.group(1); created |= {b, b+"Err", b+"Show", b+"Copy"}
-# prefissi costruiti: 'ver-' + k, 'pk-det-' + i
+# built prefixes: 'ver-' + k, 'pk-det-' + i
 prefixes = set(re.findall(r"""['"]([A-Za-z0-9_-]*-)['"]\s*\+""", A))
-# id scritti con un segnaposto di String.format: id="%s-status", id="%1$s"
+# ids written with a String.format placeholder: id="%s-status", id="%1$s"
 patterns = []
 wildcard = []
 for lit in set(re.findall(r'id\s*=\s*\\{0,2}["\']([A-Za-z0-9_$%-]*%[0-9$]*s[A-Za-z0-9_$-]*)', A)):
     fixed = re.sub(r'%[0-9]*\$?s', '', lit).strip('-_')
     if not fixed:
-        wildcard.append(lit)   # id="%s" da solo assolverebbe QUALUNQUE id: scartato
+        wildcard.append(lit)   # id="%s" alone would absolve ANY id: discarded
         continue
     patterns.append(re.compile("^" + re.sub(r'%[0-9]*\$?s', '[A-Za-z0-9_-]+', re.escape(lit).replace('\\%','%').replace('\\$','$')) + "$"))
 
@@ -86,12 +86,12 @@ def resolved(i):
     if any(i.startswith(p) for p in prefixes if p): return True
     return any(r.match(i) for r in patterns)
 
-# ---- id cercati dall'applicazione ----
+# ---- ids the application looks for ----
 g = re.compile(r"getElementById\(\s*\\{0,2}['\"]([A-Za-z0-9_$-]+)\\{0,2}['\"]?(\s*\+)?")
 sought = sorted(set(m.group(1) for m in g.finditer(A) if not m.group(2)))
 missing = [i for i in sought if not resolved(i)]
 
-# ---- id/selettori cercati dalle prove (consumatrici) ----
+# ---- ids/selectors the tests look for (consumers) ----
 NEG = re.compile(r"\.count\(\)\s*===\s*0")
 SEL = re.compile(r"""getElementById\(['"]([A-Za-z0-9_-]+)['"]\)|['"`]#([A-Za-z0-9_-]+)""")
 from_tests, negatives = {}, set()
@@ -100,38 +100,38 @@ for f, s in test_sources:
         neg = bool(NEG.search(line))
         for m in SEL.finditer(line):
             i = m.group(1) or m.group(2)
-            if line[m.end():m.end()+6].lstrip().startswith("+"): continue  # prefisso, non id
+            if line[m.end():m.end()+6].lstrip().startswith("+"): continue  # a prefix, not an id
             if neg: negatives.add(i)
             else: from_tests.setdefault(i, set()).add(os.path.basename(f))
 dead = {i: v for i, v in from_tests.items() if not resolved(i)}
 
-# ---- le ancore dei collegamenti ----
-# Un collegamento a una scheda porta il suo id dopo il cancelletto: href="/updates#branch",
-# a.href = '/updates#branch', data-bs-target="#hetznerGuide". Se l'id cambia e l'ancora no, il
-# collegamento apre la pagina e non porta piu' alla scheda, senza errori. Misurato il 29/10/2026:
-# la Home mandava a /updates#ramo da quando la scheda si chiama branch.
+# ---- the links' anchors ----
+# A link to a card carries its id after the hash: href="/updates#branch",
+# a.href = '/updates#branch', data-bs-target="#hetznerGuide". If the id changes and the anchor
+# does not, the link opens the page and no longer leads to the card, without errors. Measured on
+# 29/10/2026: Home sent to /updates#ramo since the card has been called branch.
 ANCHOR = re.compile(r"""(?:href|data-bs-target)\s*=\s*\\{0,2}["'][^"'#\s]*#([A-Za-z][A-Za-z0-9_-]*)\\{0,2}["']"""
                     r"""|\.href\s*=\s*\\{0,2}['"][^'"#\s]*#([A-Za-z][A-Za-z0-9_-]*)\\{0,2}['"]""")
 anchors = sorted(set(m.group(1) or m.group(2) for m in ANCHOR.finditer(A)))
 broken_anchors = [i for i in anchors if not resolved(i)]
 
-# Zero file non e' "zero problemi": e' "non ho guardato niente". Si dice e si esce male,
-# altrimenti una radice sbagliata passa per una rete verde.
+# Zero files is not "zero problems": it is "I looked at nothing". It is said and it exits badly,
+# otherwise a wrong root passes for a green net.
 if not app or not test_sources:
-    print(f"  NIENTE DA CONTROLLARE in {root!r}: file applicazione {len(app)}, file di prova {len(test_sources)}.")
-    print("  La radice e' sbagliata, o i file non ci sono: in nessuno dei due casi questa e' una rete verde.")
+    print(f"  NOTHING TO CHECK in {root!r}: application files {len(app)}, test files {len(test_sources)}.")
+    print("  The root is wrong, or the files are not there: in neither case is this a green net.")
     sys.exit(2)
 
-print(f"  file applicazione: {len(app)}   file di prova: {len(test_sources)}")
-print(f"  funzioni chiamate da on*: {len(calls)}   senza dichiarazione: {len(orphans)}")
-for o in orphans[:10]: print(f"    orfana: {o}")
-print(f"  id cercati dall'applicazione: {len(sought)}   mai creati: {len(missing)}")
-for m in missing[:10]: print(f"    mai creato: {m}")
-print(f"  ancore dei collegamenti: {len(anchors)}   verso id mai creati: {len(broken_anchors)}")
-for i in broken_anchors[:10]: print(f"    ancora morta: #{i}")
-print(f"  id/selettori cercati dalle PROVE: {len(from_tests)}   mai creati: {len(dead)}")
-for i in sorted(dead): print(f"    MORTO NELLE PROVE: {i:<22} {', '.join(sorted(dead[i]))}")
+print(f"  application files: {len(app)}   test files: {len(test_sources)}")
+print(f"  functions called from on*: {len(calls)}   without a declaration: {len(orphans)}")
+for o in orphans[:10]: print(f"    orphan: {o}")
+print(f"  ids the application looks for: {len(sought)}   never created: {len(missing)}")
+for m in missing[:10]: print(f"    never created: {m}")
+print(f"  links' anchors: {len(anchors)}   towards ids never created: {len(broken_anchors)}")
+for i in broken_anchors[:10]: print(f"    dead anchor: #{i}")
+print(f"  ids/selectors the TESTS look for: {len(from_tests)}   never created: {len(dead)}")
+for i in sorted(dead): print(f"    DEAD IN THE TESTS: {i:<22} {', '.join(sorted(dead[i]))}")
 if not quiet:
-    print(f"  (prefissi costruiti noti: {len(prefixes)}; schemi di format: {len(patterns)}; "
-          f"jolly scartati: {wildcard}; selettori asseriti ASSENTI, esclusi: {len(negatives)})")
+    print(f"  (known built prefixes: {len(prefixes)}; format patterns: {len(patterns)}; "
+          f"discarded wildcards: {wildcard}; selectors asserted ABSENT, excluded: {len(negatives)})")
 sys.exit(1 if (orphans or missing or dead or broken_anchors) else 0)

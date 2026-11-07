@@ -22,20 +22,20 @@ import java.util.TreeMap;
 import java.util.stream.Stream;
 
 /**
- * Roundcube dal pool www (l'utente di nginx) al pool roundcube (RoundcubeUser.migrate), in una
- * cartella temporanea con file, proprietari e permessi veri, e con php-fpm, nginx e la webmail
- * finti. Il php-fpm finto, ricaricato, fa girare i pool che trova nei file, come quello vero.
+ * Roundcube from the www pool (nginx's user) to the roundcube pool (RoundcubeUser.migrate), in a
+ * temporary folder with real files, owners and permissions, and with a fake php-fpm, nginx and
+ * webmail. The fake php-fpm, reloaded, runs the pools it finds in the files, like the real one.
  *
- * <p>Per ogni passo che puo' andare male c'e' un guasto piantato, e la prova vuole che la
- * migrazione torni indietro lasciando OGNI file com'era: contenuto, proprietario, gruppo e
- * permessi, confrontati con una fotografia presa prima. Poi i rifiuti (un www.conf non del
- * pannello, un pool che serve anche un altro sito, una webmail che gia' non risponde), i link
- * messi dentro logs da chi aveva preso www (non si seguono), la seconda volta (non fa niente) e le
- * derive (un aggiornamento di Roundcube che rimette logs a www, il pacchetto di PHP che ricopia
- * www.conf.default).
+ * <p>For every step that can go wrong there is a planted fault, and the test wants the migration to
+ * go back leaving EVERY file as it was: content, owner, group and permissions, compared with a photo
+ * taken before. Then the refusals (a www.conf that is not the panel's, a pool also serving another
+ * site, a webmail that already does not answer), the links put inside logs by whoever had taken www
+ * (not followed), the second time (it does nothing) and the drifts (a Roundcube upgrade that puts
+ * logs back to www, the PHP package that copies
+ * www.conf.default again).
  *
- * <p>Tocca proprietari veri: va lanciata da root sulla VM FreeBSD, dove esistono www e wheel, e
- * crea l'utente roundcube se manca (come la migrazione vera).
+ * <p>It touches real owners: it must be run as root on the FreeBSD VM, where www and wheel exist,
+ * and it creates the roundcube user if missing (like the real migration).
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeUserTest
  */
 public class RoundcubeUserTest {
@@ -44,11 +44,11 @@ public class RoundcubeUserTest {
     static final PrintStream OUT = System.out;
 
     static void check(String what, boolean ok) {
-        OUT.println((ok ? "  OK   " : "  FALLITO ") + what);
+        OUT.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
-    /** Il www.conf che scriveva FullMailServerScript prima di questa versione. */
+    /** The www.conf FullMailServerScript wrote before this version. */
     static final String PANEL_WWW = """
             [www]
             user = www
@@ -63,16 +63,16 @@ public class RoundcubeUserTest {
             pm.min_spare_servers = 2
             pm.max_spare_servers = 5
             """;
-    static final String WWW_DEFAULT = "; il campione di php84\n[www]\nuser = www\ngroup = www\nlisten = 127.0.0.1:9000\npm = dynamic\npm.max_children = 5\n";
+    static final String WWW_DEFAULT = "; php84's sample\n[www]\nuser = www\ngroup = www\nlisten = 127.0.0.1:9000\npm = dynamic\npm.max_children = 5\n";
     static final String ROTATION_SAMPLE = """
             # logfilename                 [owner:group] mode count size when  flags [/pid_file] [sig_num]
             /usr/local/www/roundcube/logs/errors.log    www:www       644  10    1000 *     XCBN
             /usr/local/www/roundcube/logs/sendmail.log  www:www       644  10    1000 *     XCBN
             """;
-    static final String PHP_ROTATION = "# Registro degli errori di PHP (scritto dall'installazione del pannello mail)\n"
+    static final String PHP_ROTATION = "# PHP error log (written by the mail panel's installation)\n"
             + "/var/log/php_errors.log    www:www    640    7    1024    *    JC\n";
 
-    /** nginx.conf come lo scrive regenerateNginxRoundcubeConfig, con la radice della webmail data. */
+    /** nginx.conf as regenerateNginxRoundcubeConfig writes it, with the given webmail root. */
     static String nginx(Path rc, String pass, String extraServer) {
         return """
                 worker_processes auto;
@@ -88,7 +88,7 @@ public class RoundcubeUserTest {
                     # Roundcube webmail: responds ONLY to the configured domain
                     server {
                         listen 8443 ssl;
-                        server_name webmail.prova.local;
+                        server_name webmail.test.local;
                         root %s/public_html;
                         index index.php;
                         location / { try_files $uri $uri/ /index.php?$args; }
@@ -103,7 +103,7 @@ public class RoundcubeUserTest {
                 """.formatted(rc, pass, extraServer);
     }
 
-    /** Un server di posta in miniatura: i file della webmail coi proprietari di prima. */
+    /** A mail server in miniature: the webmail's files with the old owners. */
     static final class Bench {
         final Path root, fpm, rc, sessions, phpErrors, newsyslog, sample, ssoKey, backup, nginxConf, outside;
         final RoundcubeUser.Places at;
@@ -130,15 +130,15 @@ public class RoundcubeUserTest {
             write(rc.resolve("config/config.inc.php"), "<?php $config['des_key'] = 'x';\n", "root", "www", "rw-r-----");
             dir(rc.resolve("plugins"), "root", "wheel", "rwxr-xr-x");
             dir(rc.resolve("plugins/mailpanel_sso"), "www", "www", "rwxr-xr-x");
-            write(rc.resolve("plugins/mailpanel_sso/mailpanel_sso.php"), "<?php // codice\n", "www", "www", "rw-r--r--");
-            write(rc.resolve("plugins/mailpanel_sso/config.inc.php"), "<?php // segreto\n", "www", "www", "rw-------");
+            write(rc.resolve("plugins/mailpanel_sso/mailpanel_sso.php"), "<?php // code\n", "www", "www", "rw-r--r--");
+            write(rc.resolve("plugins/mailpanel_sso/config.inc.php"), "<?php // secret\n", "www", "www", "rw-------");
             dir(rc.resolve("temp"), "www", "www", "rwxr-xr-x");
-            write(rc.resolve("temp/upload.tmp"), "allegato\n", "www", "www", "rw-r--r--");
+            write(rc.resolve("temp/upload.tmp"), "attachment\n", "www", "www", "rw-r--r--");
             dir(rc.resolve("logs"), "www", "www", "rwxr-xr-x");
             write(rc.resolve("logs/errors.log"), "", "www", "www", "rw-r--r--");
             write(rc.resolve("logs/userlogins.log"), "[x] Successful login\n", "www", "www", "rw-r-----");
-            // Un link messo da chi aveva preso www: root non deve seguirlo.
-            write(outside, "di root\n", "root", "wheel", "rw-------");
+            // A link put by whoever had taken www: root must not follow it.
+            write(outside, "root's\n", "root", "wheel", "rw-------");
             Files.createSymbolicLink(rc.resolve("logs/evil"), outside);
             dir(sessions, "www", "www", "rwx------");
             write(sessions.resolve("sess_abc"), "x", "www", "www", "rw-------");
@@ -181,7 +181,7 @@ public class RoundcubeUserTest {
         return a.owner().getName() + ":" + a.group().getName() + " " + PosixFilePermissions.toString(a.permissions());
     }
 
-    /** Ogni file sotto la cartella: contenuto (hash), proprietario, gruppo, permessi. */
+    /** Every file under the folder: content (hash), owner, group, permissions. */
     static Map<String, String> photo(Path root) throws Exception {
         Map<String, String> m = new TreeMap<>();
         MessageDigest sha = MessageDigest.getInstance("SHA-256");
@@ -197,7 +197,7 @@ public class RoundcubeUserTest {
         return m;
     }
 
-    /** php-fpm, nginx e la webmail finti. Il php-fpm ricaricato fa girare i pool scritti nei file. */
+    /** Fake php-fpm, nginx and webmail. The reloaded php-fpm runs the pools written in the files. */
     static final class Fake implements RoundcubeUser.Services {
         final Bench b;
         boolean dumpNull, fpmTestFails, nginxTestFails, fpmReloadFails, nginxReloadFails, nginxNeverReloads, fpmKeepsOldPools;
@@ -247,9 +247,9 @@ public class RoundcubeUserTest {
         static Shell.Result r(boolean ok, String out) { return new Shell.Result(ok ? 0 : 1, ok ? "" : out, false, List.of()); }
     }
 
-    /** Un guasto piantato: la migrazione torna indietro e lascia ogni file com'era. */
+    /** A planted fault: the migration goes back and leaves every file as it was. */
     static void plantedFault(String what, java.util.function.Consumer<Fake> plant, int fpmReloadsAfter, int nginxReloadsAfter) throws Exception {
-        OUT.println("\n-- guasto piantato: " + what);
+        OUT.println("\n-- planted fault: " + what);
         Bench b = new Bench();
         try {
             Map<String, String> before = photo(b.root);
@@ -257,20 +257,20 @@ public class RoundcubeUserTest {
             plant.accept(f);
             RoundcubeUser.Report r = RoundcubeUser.migrate(b.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
-            check("torna indietro (ROLLED_BACK)", r.outcome() == RoundcubeUser.Outcome.ROLLED_BACK);
-            check("e non dice EXCEPT", !r.detail().contains("EXCEPT"));
+            check("it goes back (ROLLED_BACK)", r.outcome() == RoundcubeUser.Outcome.ROLLED_BACK);
+            check("and it does not say EXCEPT", !r.detail().contains("EXCEPT"));
             Map<String, String> after = photo(b.root);
-            check("ogni file com'era: contenuto, proprietario, permessi", before.equals(after));
+            check("every file as it was: content, owner, permissions", before.equals(after));
             if (!before.equals(after))
-                for (String k : after.keySet()) if (!after.get(k).equals(before.get(k))) OUT.println("       diverso: " + k + " " + before.get(k) + " -> " + after.get(k));
-            check("php-fpm ricaricato " + fpmReloadsAfter + " volte (anche per tornare indietro)", f.fpmReloads == fpmReloadsAfter);
-            check("nginx ricaricato " + nginxReloadsAfter + " volte", f.nginxReloads == nginxReloadsAfter);
+                for (String k : after.keySet()) if (!after.get(k).equals(before.get(k))) OUT.println("       different: " + k + " " + before.get(k) + " -> " + after.get(k));
+            check("php-fpm reloaded " + fpmReloadsAfter + " times (also to go back)", f.fpmReloads == fpmReloadsAfter);
+            check("nginx reloaded " + nginxReloadsAfter + " times", f.nginxReloads == nginxReloadsAfter);
         } finally { b.clean(); }
     }
 
-    /** Un rifiuto: niente cambia. */
+    /** A refusal: nothing changes. */
     static void refusal(String what, RoundcubeUser.Outcome expected, ThrowingConsumer<Bench> prepare, java.util.function.Consumer<Fake> plant) throws Exception {
-        OUT.println("\n-- rifiuto: " + what);
+        OUT.println("\n-- refusal: " + what);
         Bench b = new Bench();
         try {
             prepare.accept(b);
@@ -279,9 +279,9 @@ public class RoundcubeUserTest {
             plant.accept(f);
             RoundcubeUser.Report r = RoundcubeUser.migrate(b.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
-            check("esito " + expected, r.outcome() == expected);
-            check("nessun file cambiato", before.equals(photo(b.root)));
-            check("nessun ricaricamento", f.fpmReloads + f.nginxReloads == 0);
+            check("outcome " + expected, r.outcome() == expected);
+            check("no file changed", before.equals(photo(b.root)));
+            check("no reload", f.fpmReloads + f.nginxReloads == 0);
         } finally { b.clean(); }
     }
 
@@ -289,167 +289,167 @@ public class RoundcubeUserTest {
 
     public static void main(String[] args) throws Exception {
         if (!"root".equals(System.getProperty("user.name")) || !System.getProperty("os.name").contains("FreeBSD")) {
-            OUT.println("Questa prova cambia proprietari veri: va lanciata da root sulla VM FreeBSD.");
+            OUT.println("This test changes real owners: it must be run as root on the FreeBSD VM.");
             System.exit(2);
         }
 
-        OUT.println("== I pezzi");
+        OUT.println("== The pieces");
         List<RoundcubeUser.Pool> pools = RoundcubeUser.pools("; c\n[www]\nuser = www\nlisten = /var/run/php-fpm.sock\n[b]\nuser=x\n");
-        check("due pool letti, coi valori", pools.size() == 2 && "www".equals(pools.get(0).get("user")) && "x".equals(pools.get(1).get("user")));
-        check("un percorso diventa unix: per nginx", "unix:/a.sock".equals(RoundcubeUser.nginxForm("/a.sock"))
+        check("two pools read, with the values", pools.size() == 2 && "www".equals(pools.get(0).get("user")) && "x".equals(pools.get(1).get("user")));
+        check("a path becomes unix: for nginx", "unix:/a.sock".equals(RoundcubeUser.nginxForm("/a.sock"))
                 && "127.0.0.1:9000".equals(RoundcubeUser.nginxForm("127.0.0.1:9000")));
-        Map<Path, String> files = RoundcubeUser.configFiles("# configuration file /a.conf:\nuno\n# configuration file /b.conf:\ndue\n");
-        check("nginx -T diviso nei suoi file", files.size() == 2 && files.get(Path.of("/b.conf")).trim().equals("due"));
-        check("un # fra virgolette non e' un commento", RoundcubeUser.withoutComments("a \"x#y\"; # via\nb").equals("a \"x#y\"; \nb"));
+        Map<Path, String> files = RoundcubeUser.configFiles("# configuration file /a.conf:\none\n# configuration file /b.conf:\ntwo\n");
+        check("nginx -T split into its files", files.size() == 2 && files.get(Path.of("/b.conf")).trim().equals("two"));
+        check("a # inside quotes is not a comment", RoundcubeUser.withoutComments("a \"x#y\"; # gone\nb").equals("a \"x#y\"; \nb"));
         String two = nginx(Path.of("/rc"), "unix:/var/run/php-fpm.sock", "    server { listen 80; # fastcgi_pass unix:/var/run/php-fpm.sock;\n    }\n");
         List<String> blocks = RoundcubeUser.serverBlocks(RoundcubeUser.withoutComments(two));
-        check("tre blocchi server, non l'upstream (" + blocks.size() + ")", blocks.size() == 3);
+        check("three server blocks, not the upstream (" + blocks.size() + ")", blocks.size() == 3);
         List<RoundcubeUser.Site> sites = RoundcubeUser.sitesPassingTo(Map.of(Path.of("/n"), two), "unix:/var/run/php-fpm.sock", Path.of("/rc"));
-        check("un solo sito passa al pool (il commento nell'altro non conta)", sites.size() == 1 && sites.get(0).roundcube());
-        check("nome e porta del sito", sites.size() == 1 && "webmail.prova.local".equals(sites.get(0).name()) && "8443".equals(sites.get(0).port()));
-        check("fastcgi_pass spostato sul socket nuovo", RoundcubeUser.repointed(two, "unix:/var/run/php-fpm.sock")
+        check("a single site passes to the pool (the comment in the other does not count)", sites.size() == 1 && sites.get(0).roundcube());
+        check("the site's name and port", sites.size() == 1 && "webmail.test.local".equals(sites.get(0).name()) && "8443".equals(sites.get(0).port()));
+        check("fastcgi_pass moved to the new socket", RoundcubeUser.repointed(two, "unix:/var/run/php-fpm.sock")
                 .contains("fastcgi_pass unix:" + RoundcubeUser.SOCKET + ";"));
         String pool = RoundcubeUser.poolConf("pm = static\npm.max_children = 4\n");
         List<RoundcubeUser.Pool> pp = RoundcubeUser.pools(pool);
-        check("il pool nuovo: roundcube, socket suo, nginx nel gruppo, pm portati",
+        check("the new pool: roundcube, its own socket, nginx in the group, pm carried over",
                 pp.size() == 1 && "roundcube".equals(pp.get(0).get("user")) && RoundcubeUser.SOCKET.equals(pp.get(0).get("listen"))
                 && "www".equals(pp.get(0).get("listen.group")) && "static".equals(pp.get(0).get("pm")));
-        check("il segnaposto di www.conf non ha pool, e nessun '#'", RoundcubeUser.pools(RoundcubeUser.wwwPlaceholder()).isEmpty()
+        check("the www.conf placeholder has no pool, and no '#'", RoundcubeUser.pools(RoundcubeUser.wwwPlaceholder()).isEmpty()
                 && RoundcubeUser.wwwPlaceholder().lines().allMatch(l -> l.startsWith(";")));
 
-        OUT.println("\n== Gli script d'installazione nascono col pool roundcube");
+        OUT.println("\n== The installation scripts are born with the roundcube pool");
         Map<String, String> scripts = new LinkedHashMap<>();
         scripts.put("FullMailServerScript", new FullMailServerScript().getScriptContent());
         scripts.put("RoundcubeScript", new RoundcubeScript().getScriptContent());
         scripts.put("FullMailStackScript", new FullMailStackScript().getScriptContent());
         for (Map.Entry<String, String> e : scripts.entrySet()) {
             String s = e.getValue();
-            check(e.getKey() + ": scrive il pool roundcube e il segnaposto", s.contains(RoundcubeUser.poolConf(null)) && s.contains(RoundcubeUser.wwwPlaceholder()));
-            check(e.getKey() + ": nessun 'user = www', nessun 'chown -R www:www'", !s.contains("user = www") && !s.contains("chown -R www:www"));
-            check(e.getKey() + ": nginx passa al socket di roundcube", s.contains("fastcgi_pass unix:" + RoundcubeUser.SOCKET + ";")
+            check(e.getKey() + ": it writes the roundcube pool and the placeholder", s.contains(RoundcubeUser.poolConf(null)) && s.contains(RoundcubeUser.wwwPlaceholder()));
+            check(e.getKey() + ": no 'user = www', no 'chown -R www:www'", !s.contains("user = www") && !s.contains("chown -R www:www"));
+            check(e.getKey() + ": nginx passes to roundcube's socket", s.contains("fastcgi_pass unix:" + RoundcubeUser.SOCKET + ";")
                     && !s.contains("fastcgi_pass unix:/var/run/php-fpm.sock;") && !s.contains("fastcgi_pass 127.0.0.1:9000;"));
-            check(e.getKey() + ": config.inc.php a root:roundcube", s.contains("chown root:roundcube /usr/local/www/roundcube/config/config.inc.php"));
+            check(e.getKey() + ": config.inc.php as root:roundcube", s.contains("chown root:roundcube /usr/local/www/roundcube/config/config.inc.php"));
         }
-        check("FullMailServerScript: la rotazione degli errori di PHP e' di roundcube",
+        check("FullMailServerScript: the PHP errors rotation is roundcube's",
                 scripts.get("FullMailServerScript").contains(RoundcubeUser.phpErrorsRotationLine()));
-        check("FullMailServerScript: la chiave SSO non e' piu' di www", !scripts.get("FullMailServerScript").contains("chown root:www"));
+        check("FullMailServerScript: the SSO key is no longer www's", !scripts.get("FullMailServerScript").contains("chown root:www"));
 
-        OUT.println("\n== La migrazione che riesce");
+        OUT.println("\n== The migration that succeeds");
         Bench b = new Bench();
         try {
             Fake f = new Fake(b);
             RoundcubeUser.Report r = RoundcubeUser.migrate(b.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
             check("DONE", r.outcome() == RoundcubeUser.Outcome.DONE);
-            check("il pool roundcube coi pm di prima", Files.readString(b.fpm.resolve("roundcube.conf")).equals(RoundcubeUser.poolConf(
+            check("the roundcube pool with the old pm values", Files.readString(b.fpm.resolve("roundcube.conf")).equals(RoundcubeUser.poolConf(
                     "pm = dynamic\npm.max_children = 10\npm.start_servers = 3\npm.min_spare_servers = 2\npm.max_spare_servers = 5\n")));
-            check("www.conf senza pool", Files.readString(b.fpm.resolve("www.conf")).equals(RoundcubeUser.wwwPlaceholder()));
-            check("nginx passa al socket nuovo", Files.readString(b.nginxConf).contains("fastcgi_pass unix:" + RoundcubeUser.SOCKET + ";"));
-            check("php-fpm fa girare roundcube come roundcube, e nient'altro", f.running.equals(Map.of("roundcube", Set.of("roundcube"))));
-            check("php-fpm -t e nginx -t chiesti", f.fpmTests == 1 && f.nginxTests == 1);
+            check("www.conf without a pool", Files.readString(b.fpm.resolve("www.conf")).equals(RoundcubeUser.wwwPlaceholder()));
+            check("nginx passes to the new socket", Files.readString(b.nginxConf).contains("fastcgi_pass unix:" + RoundcubeUser.SOCKET + ";"));
+            check("php-fpm runs roundcube as roundcube, and nothing else", f.running.equals(Map.of("roundcube", Set.of("roundcube"))));
+            check("php-fpm -t and nginx -t asked", f.fpmTests == 1 && f.nginxTests == 1);
             check("config.inc.php root:roundcube 640", owner(b.rc.resolve("config/config.inc.php")).equals("root:roundcube rw-r-----"));
-            check("plugin SSO: codice di root", owner(b.rc.resolve("plugins/mailpanel_sso")).equals("root:wheel rwxr-xr-x")
+            check("SSO plugin: code owned by root", owner(b.rc.resolve("plugins/mailpanel_sso")).equals("root:wheel rwxr-xr-x")
                     && owner(b.rc.resolve("plugins/mailpanel_sso/mailpanel_sso.php")).equals("root:wheel rw-r--r--"));
-            check("plugin SSO: configurazione root:roundcube 640", owner(b.rc.resolve("plugins/mailpanel_sso/config.inc.php")).equals("root:roundcube rw-r-----"));
-            check("temp di roundcube 700, e il suo contenuto", owner(b.rc.resolve("temp")).equals("roundcube:roundcube rwx------")
+            check("SSO plugin: configuration root:roundcube 640", owner(b.rc.resolve("plugins/mailpanel_sso/config.inc.php")).equals("root:roundcube rw-r-----"));
+            check("roundcube's temp 700, and its content", owner(b.rc.resolve("temp")).equals("roundcube:roundcube rwx------")
                     && owner(b.rc.resolve("temp/upload.tmp")).startsWith("roundcube:roundcube rw-r-----"));
-            check("logs di roundcube 750, coi log", owner(b.rc.resolve("logs")).equals("roundcube:roundcube rwxr-x---")
+            check("roundcube's logs 750, with the logs", owner(b.rc.resolve("logs")).equals("roundcube:roundcube rwxr-x---")
                     && owner(b.rc.resolve("logs/userlogins.log")).equals("roundcube:roundcube rw-r-----"));
-            check("il link in logs non e' stato seguito: il file fuori resta di root", owner(b.outside).equals("root:wheel rw-------"));
-            check("sessioni di roundcube", owner(b.sessions).equals("roundcube:roundcube rwx------") && owner(b.sessions.resolve("sess_abc")).startsWith("roundcube:roundcube"));
-            check("registro degli errori di PHP di roundcube", owner(b.phpErrors).equals("roundcube:roundcube rw-r-----"));
-            check("la chiave SSO solo di root", owner(b.ssoKey).equals("root:wheel rw-------"));
-            check("rotazione degli errori di PHP: roundcube:roundcube", Files.readString(b.newsyslog.resolve("php-errors.conf")).contains(" roundcube:roundcube "));
-            check("rotazione di Roundcube riscritta col proprietario giusto", Files.readString(b.newsyslog.resolve("roundcube.conf"))
+            check("the link in logs was not followed: the file outside stays root's", owner(b.outside).equals("root:wheel rw-------"));
+            check("roundcube's sessions", owner(b.sessions).equals("roundcube:roundcube rwx------") && owner(b.sessions.resolve("sess_abc")).startsWith("roundcube:roundcube"));
+            check("roundcube's PHP error log", owner(b.phpErrors).equals("roundcube:roundcube rw-r-----"));
+            check("the SSO key only root's", owner(b.ssoKey).equals("root:wheel rw-------"));
+            check("PHP errors rotation: roundcube:roundcube", Files.readString(b.newsyslog.resolve("php-errors.conf")).contains(" roundcube:roundcube "));
+            check("Roundcube's rotation rewritten with the right owner", Files.readString(b.newsyslog.resolve("roundcube.conf"))
                     .contains(b.rc + "/logs/errors.log    roundcube:roundcube"));
-            check("le copie di prima nella cartella di backup", Files.isDirectory(b.backup));
+            check("the old copies in the backup folder", Files.isDirectory(b.backup));
 
-            OUT.println("\n-- la seconda volta");
+            OUT.println("\n-- the second time");
             Map<String, String> photo = photo(b.root);
             int reloads = f.fpmReloads + f.nginxReloads;
             r = RoundcubeUser.migrate(b.at, f);
             check("NOTHING (" + r.outcome() + ")", r.outcome() == RoundcubeUser.Outcome.NOTHING);
-            check("nessun file cambiato, nessun ricaricamento", photo.equals(photo(b.root)) && reloads == f.fpmReloads + f.nginxReloads);
+            check("no file changed, no reload", photo.equals(photo(b.root)) && reloads == f.fpmReloads + f.nginxReloads);
 
-            OUT.println("\n-- un aggiornamento di Roundcube rimette temp e logs a www:www (il post-install del pacchetto)");
+            OUT.println("\n-- a Roundcube upgrade puts temp and logs back to www:www (the package's post-install)");
             own(b.rc.resolve("temp"), "www", "www", "rwxr-xr-x");
             own(b.rc.resolve("logs"), "www", "www", "rwxr-xr-x");
             r = RoundcubeUser.migrate(b.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
             check("REPAIRED", r.outcome() == RoundcubeUser.Outcome.REPAIRED);
-            check("temp e logs tornati a roundcube", owner(b.rc.resolve("temp")).equals("roundcube:roundcube rwx------")
+            check("temp and logs back to roundcube", owner(b.rc.resolve("temp")).equals("roundcube:roundcube rwx------")
                     && owner(b.rc.resolve("logs")).equals("roundcube:roundcube rwxr-x---"));
-            check("senza ricaricare niente", reloads == f.fpmReloads + f.nginxReloads);
+            check("without reloading anything", reloads == f.fpmReloads + f.nginxReloads);
 
-            OUT.println("\n-- il pacchetto di PHP ricopia www.conf.default (qualcuno aveva tolto il segnaposto)");
+            OUT.println("\n-- the PHP package copies www.conf.default again (somebody had removed the placeholder)");
             Files.writeString(b.fpm.resolve("www.conf"), WWW_DEFAULT);
             f.running = f.poolsInFiles();
             r = RoundcubeUser.migrate(b.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
-            check("REPAIRED, col segnaposto di nuovo", r.outcome() == RoundcubeUser.Outcome.REPAIRED
+            check("REPAIRED, with the placeholder again", r.outcome() == RoundcubeUser.Outcome.REPAIRED
                     && Files.readString(b.fpm.resolve("www.conf")).equals(RoundcubeUser.wwwPlaceholder()));
-            check("php-fpm ricaricato: niente piu' pool www", !f.running.containsKey("www"));
+            check("php-fpm reloaded: no www pool any more", !f.running.containsKey("www"));
 
-            OUT.println("\n-- un www.conf con un pool scritto da qualcuno");
+            OUT.println("\n-- a www.conf with a pool written by somebody");
             Files.writeString(b.fpm.resolve("www.conf"), "[www]\nuser = www\nlisten = 127.0.0.1:9100\n");
             r = RoundcubeUser.migrate(b.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
-            check("NOT_OURS, e il file resta suo", r.outcome() == RoundcubeUser.Outcome.NOT_OURS
+            check("NOT_OURS, and the file stays theirs", r.outcome() == RoundcubeUser.Outcome.NOT_OURS
                     && Files.readString(b.fpm.resolve("www.conf")).contains("9100"));
         } finally { b.clean(); }
 
-        OUT.println("\n== I guasti piantati: ogni passo fallito rimette tutto");
-        plantedFault("php-fpm -t rifiuta il pool nuovo", f -> f.fpmTestFails = true, 0, 0);
-        plantedFault("nginx -t rifiuta il socket nuovo", f -> f.nginxTestFails = true, 0, 0);
-        plantedFault("il reload di php-fpm fallisce", f -> f.fpmReloadFails = true, 2, 0);
-        plantedFault("php-fpm continua a far girare il pool www", f -> f.fpmKeepsOldPools = true, 2, 0);
-        plantedFault("il reload di nginx fallisce", f -> f.nginxReloadFails = true, 2, 2);
-        plantedFault("la webmail non risponde dopo lo scambio", f -> f.answersAfter = false, 2, 2);
+        OUT.println("\n== The planted faults: every failed step puts everything back");
+        plantedFault("php-fpm -t refuses the new pool", f -> f.fpmTestFails = true, 0, 0);
+        plantedFault("nginx -t refuses the new socket", f -> f.nginxTestFails = true, 0, 0);
+        plantedFault("the php-fpm reload fails", f -> f.fpmReloadFails = true, 2, 0);
+        plantedFault("php-fpm keeps running the www pool", f -> f.fpmKeepsOldPools = true, 2, 0);
+        plantedFault("the nginx reload fails", f -> f.nginxReloadFails = true, 2, 2);
+        plantedFault("the webmail does not answer after the switch", f -> f.answersAfter = false, 2, 2);
 
-        OUT.println("\n-- guasto piantato: nginx non si ricarica nemmeno tornando indietro");
+        OUT.println("\n-- planted fault: nginx does not reload even when going back");
         Bench n = new Bench();
         try {
             Fake f = new Fake(n);
             f.nginxNeverReloads = true;
             RoundcubeUser.Report r = RoundcubeUser.migrate(n.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
-            check("ROLLED_BACK, e lo dice: EXCEPT nginx reload", r.outcome() == RoundcubeUser.Outcome.ROLLED_BACK
+            check("ROLLED_BACK, and it says so: EXCEPT nginx reload", r.outcome() == RoundcubeUser.Outcome.ROLLED_BACK
                     && r.detail().contains("EXCEPT: nginx reload"));
         } finally { n.clean(); }
 
-        OUT.println("\n-- guasto piantato: un file che non si puo' cambiare (chflags schg) a meta' strada");
+        OUT.println("\n-- planted fault: a file that cannot be changed (chflags schg) halfway");
         Bench s = new Bench();
         try {
             Map<String, String> before = photo(s.root);
-            check("chflags schg piantato", Shell.run("chflags", "schg", s.phpErrors.toString()).success());
+            check("chflags schg planted", Shell.run("chflags", "schg", s.phpErrors.toString()).success());
             Fake f = new Fake(s);
             RoundcubeUser.Report r = RoundcubeUser.migrate(s.at, f);
             OUT.println("     " + r.outcome() + ": " + r.detail());
             check("ROLLED_BACK", r.outcome() == RoundcubeUser.Outcome.ROLLED_BACK);
             Shell.run("chflags", "noschg", s.phpErrors.toString());
-            check("ogni file com'era", before.equals(photo(s.root)));
+            check("every file as it was", before.equals(photo(s.root)));
         } finally { s.clean(); }
 
-        OUT.println("\n== I rifiuti: niente cambia");
-        refusal("www.conf con due pool", RoundcubeUser.Outcome.NOT_OURS,
+        OUT.println("\n== The refusals: nothing changes");
+        refusal("www.conf with two pools", RoundcubeUser.Outcome.NOT_OURS,
                 bb -> Files.writeString(bb.fpm.resolve("www.conf"), PANEL_WWW + "[other]\nuser = nobody\nlisten = /tmp/o.sock\n"), f -> {});
-        refusal("il pool www non gira come www", RoundcubeUser.Outcome.NOT_OURS,
+        refusal("the www pool does not run as www", RoundcubeUser.Outcome.NOT_OURS,
                 bb -> Files.writeString(bb.fpm.resolve("www.conf"), PANEL_WWW.replace("user = www", "user = nobody")), f -> {});
-        refusal("il pool www serve anche un altro sito", RoundcubeUser.Outcome.OTHER_SITES,
+        refusal("the www pool also serves another site", RoundcubeUser.Outcome.OTHER_SITES,
                 bb -> Files.writeString(bb.nginxConf, nginx(bb.rc, "unix:/var/run/php-fpm.sock",
                         "    server { listen 8444; server_name blog.local; root /usr/local/www/blog;\n        location ~ \\.php { fastcgi_pass unix:/var/run/php-fpm.sock; }\n    }\n")), f -> {});
-        refusal("nginx non passa la webmail al pool www", RoundcubeUser.Outcome.NOT_SERVED,
+        refusal("nginx does not pass the webmail to the www pool", RoundcubeUser.Outcome.NOT_SERVED,
                 bb -> Files.writeString(bb.nginxConf, nginx(bb.rc, "127.0.0.1:9000", "")), f -> {});
-        refusal("la webmail gia' non risponde", RoundcubeUser.Outcome.NOT_ANSWERING, bb -> {}, f -> f.answersBefore = false);
-        refusal("nginx -T non risponde", RoundcubeUser.Outcome.NGINX_UNREADABLE, bb -> {}, f -> f.dumpNull = true);
-        refusal("Roundcube non c'e'", RoundcubeUser.Outcome.NOTHING, bb -> {
+        refusal("the webmail already does not answer", RoundcubeUser.Outcome.NOT_ANSWERING, bb -> {}, f -> f.answersBefore = false);
+        refusal("nginx -T does not answer", RoundcubeUser.Outcome.NGINX_UNREADABLE, bb -> {}, f -> f.dumpNull = true);
+        refusal("Roundcube is not there", RoundcubeUser.Outcome.NOTHING, bb -> {
             try (Stream<Path> st = Files.walk(bb.rc)) {
                 for (Path p : st.sorted(java.util.Comparator.reverseOrder()).toList()) Files.delete(p);
             }
         }, f -> {});
 
         OUT.println();
-        OUT.println(failed == 0 ? "TUTTO OK" : "FALLITE: " + failed);
+        OUT.println(failed == 0 ? "ALL OK" : "FAILED: " + failed);
         if (failed > 0) System.exit(1);
     }
 }

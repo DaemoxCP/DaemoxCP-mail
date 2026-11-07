@@ -3,8 +3,8 @@ package org.mail_panel.system;
 import org.mail_panel.i18n.I18n;
 
 /**
- * Per le prove del menu a schermo: crea la via di ritorno di una reinstallazione (come la crea la
- * reinstallazione, PackageWayBack.beforeInstallation) e stampa il nome. Solo su un clone di prova.
+ * For the on-screen menu tests: creates a reinstallation's way back (as the reinstallation creates
+ * it, PackageWayBack.beforeInstallation) and prints its name. Only on a test clone.
  *   java -cp "tests:freebsd-mail-panel-1.0.jar" org.mail_panel.system.MakeReinstallWayBack
  */
 public class MakeReinstallWayBack {
