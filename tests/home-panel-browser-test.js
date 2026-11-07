@@ -49,7 +49,7 @@ function detailsReply(o) {
         jarPath: '/home/panel/panel.jar', jarSha256: SHA,
         java: { version: '25.0.1+8-LTS', vendor: 'FreeBSD', vm: 'OpenJDK 64-Bit Server VM', home: '/usr/local/openjdk25' },
         os: { userland: '15.1-RELEASE-p2', kernel: '15.1-RELEASE-p2', arch: 'amd64' },
-        hostname: 'mailserver1.example.test', bootedAt: new Date(Date.now() + SKEW - 9 * 86400 * 1000).toISOString(),
+        hostname: 'mailserver1.example.test', bootedAt: new Date(Date.now() + SKEW - (9 * 86400 + 30) * 1000).toISOString(),
         pid: 85114, user: 'panel', heapUsed: 212 * 1024 * 1024, heapMax: 1024 * 1024 * 1024, processors: 4, port: 2096 }, o.details || {});
 }
 
@@ -209,8 +209,9 @@ async function remote() {
     await page.close();
     ({ page, seen, errors } = await open(ctx, 'it', { forbidden: true }));
     await page.click('#panelInfoToggle');
-    await page.waitForFunction(() => document.querySelector('#panelInfoList dd'));
-    check('un 403 lo dice: ' + await text(page, '#panelInfoList'), await text(page, '#panelInfoList') === 'Il tuo ruolo non può vedere i dettagli tecnici.');
+    await page.waitForFunction(() => /ruolo/.test(document.getElementById('panelInfoList').textContent), null, { timeout: 5000 }).catch(() => {});
+    const refusal = await text(page, '#panelInfoList');
+    check('un 403 lo dice: ' + refusal, refusal === 'Il tuo ruolo non può vedere i dettagli tecnici.');
     await page.close();
     ({ page, seen, errors } = await open(ctx, 'it', { details: { build: '', commit: '' }, up: 20 }));
     check('meno di un minuto: ' + await text(page, '#panelInfoUptime'), await text(page, '#panelInfoUptime') === 'meno di un minuto');
