@@ -750,7 +750,10 @@ session, no CSRF token, no permission) never reaches the root; the account API s
 Then requests forged on the socket, as a broken-into web part would send them: a viewer's session
 asking to create an administrator gets 403 and creates nothing, someone else's administrator id or a
 revoked session 401, a public route, a page or the account API 404; the role is the database's. A
-Set-Cookie from the root never reaches the browser, and with the root gone the web answers 503.
+Set-Cookie from the root never reaches the browser, and with the root gone the web answers 503. The
+routes the web part serves by itself (domains, mailboxes...) never reach the root, and the root refuses
+them on its socket; its one operation, mail-folders, is refused to a viewer, with GET, with a body,
+without a live session, and an operation that is not in the list.
 
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RootChannelTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SeparatedPanelTest
@@ -790,8 +793,9 @@ the jar to test installed in the panel folder and the compiled tests in a folder
 
 Who runs what and who listens (the web part as mailpanel on 2096, the root part on no port), every
 shared file's permissions, what mailpanel can and cannot read or write, a sign-in with a console code
-and the API through the web part, requests forged on the real socket, a second start with no DONE and
-no WARNING; then the planted faults, each put back: the user mailpanel someone else's, the jar
+and the API through the web part, the routes the web part serves by itself (a test domain and mailbox
+added and removed, their mail folders made by the root part as vmail, the password read back from the
+vault by the web part), requests forged on the real socket, a second start with no DONE and no WARNING; then the planted faults, each put back: the user mailpanel someone else's, the jar
 unreadable by mailpanel, the web part killed every time it starts (the panel goes back to serving
 everything as root), the root part killed with -9 (the next start stops the web part left behind).
 

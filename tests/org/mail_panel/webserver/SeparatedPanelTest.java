@@ -161,8 +161,12 @@ public class SeparatedPanelTest {
                     h.equalsIgnoreCase("Cookie") || h.equalsIgnoreCase("X-CSRF-Token") || h.equalsIgnoreCase("Host")));
             String sent = got == null ? "" : got.toString() + new String(got.body(), StandardCharsets.UTF_8);
             check("the session token is nowhere in what the root received", !sent.contains(boss.token()) && !sent.contains(boss.csrf()));
+            int beforeLocal = seen.size();
             r = send("GET", "/api/domains", null, boss, false);
-            check("the domains list too (" + r.statusCode() + ")", r.statusCode() == 200 && seen.get(seen.size() - 1).route().equals("/api/domains"));
+            check("the domains list answers from the web part, without the root part (" + r.statusCode() + ")",
+                    r.statusCode() == 200 && seen.size() == beforeLocal);
+            r = send("GET", "/api/logs", null, boss, false);
+            check("the logs go to the root part (" + r.statusCode() + ")", r.statusCode() == 200 && seen.get(seen.size() - 1).route().equals("/api/logs"));
             java.util.List<String> warned = new CopyOnWriteArrayList<>();
             java.util.logging.Handler watch = new java.util.logging.Handler() {
                 @Override public void publish(java.util.logging.LogRecord l) {
@@ -188,7 +192,7 @@ public class SeparatedPanelTest {
 
             System.out.println("\n== 2. What the web part refuses never reaches the root ==");
             int before = seen.size();
-            r = send("GET", "/api/domains", null, null, false);
+            r = send("GET", "/api/logs", null, null, false);
             check("no session: 401 (" + r.statusCode() + ")", r.statusCode() == 401);
             r = send("POST", "/api/theme", "{\"theme\":\"dark\"}", boss, false);
             check("no CSRF token: 403 (" + r.statusCode() + ")", r.statusCode() == 403);
@@ -205,15 +209,26 @@ public class SeparatedPanelTest {
             check("a viewer's session asking to create an administrator: 403 (" + h.status() + " " + answer + ")",
                     h.status() == 403 && answer.toString().contains("\"forbidden\":true"));
             check("  and no administrator was created", AuthStore.adminByUsername("sep-forged").isEmpty());
-            h = forge(sock, "/api/domains", "GET", "/api/domains", null, null, boss.adminId(), vera.sessionId(), answer);
+            h = forge(sock, "/api/logs", "GET", "/api/logs", null, null, boss.adminId(), vera.sessionId(), answer);
             check("a session with someone else's administrator id: 401 (" + h.status() + ")", h.status() == 401);
-            h = forge(sock, "/api/domains", "GET", "/api/domains", null, null, boss.adminId(), 999_999_999L, answer);
+            h = forge(sock, "/api/logs", "GET", "/api/logs", null, null, boss.adminId(), 999_999_999L, answer);
             check("a session that does not exist: 401 (" + h.status() + ")", h.status() == 401);
             for (String[] p : new String[][]{{"/api/login", "/api/login"}, {"/api/account", "/api/account"}, {"/index", "/index"},
-                    {"/", "/"}, {"/home", "/home"}, {"/api/webmail", "/api/webmail/open"}}) {
+                    {"/", "/"}, {"/home", "/home"}, {"/api/fail2ban", "/api/fail2ban_health"}, {"/api/domains", "/api/domains"},
+                    {"/api/mailboxes", "/api/mailboxes"}}) {
                 h = forge(sock, p[0], "GET", p[1], null, null, boss.adminId(), boss.sessionId(), answer);
                 check("route " + p[0] + " with path " + p[1] + ": 404 (" + h.status() + ")", h.status() == 404);
             }
+            h = forge(sock, "/op/mail-folders", "POST", "/op/mail-folders", null, null, vera.adminId(), vera.sessionId(), answer);
+            check("the mail-folders operation asked by a viewer: 403 (" + h.status() + ")", h.status() == 403);
+            h = forge(sock, "/op/mail-folders", "GET", "/op/mail-folders", null, null, boss.adminId(), boss.sessionId(), answer);
+            check("the mail-folders operation with GET: 404 (" + h.status() + ")", h.status() == 404);
+            h = forge(sock, "/op/mail-folders", "POST", "/op/mail-folders", null, "{\"x\":1}", boss.adminId(), boss.sessionId(), answer);
+            check("the mail-folders operation with a body: 404, it takes nothing (" + h.status() + ")", h.status() == 404);
+            h = forge(sock, "/op/run-anything", "POST", "/op/run-anything", null, null, boss.adminId(), boss.sessionId(), answer);
+            check("an operation that is not in the list: 404 (" + h.status() + ")", h.status() == 404);
+            h = forge(sock, "/op/mail-folders", "POST", "/op/mail-folders", null, null, boss.adminId(), 999_999_999L, answer);
+            check("the mail-folders operation without a live session: 401 (" + h.status() + ")", h.status() == 401);
             h = forge(sock, "/api/panel_info", "GET", "/api/panel_info", "action=uptime", null, boss.adminId(), boss.sessionId(), answer);
             check("a well-formed request of a live session is served (" + h.status() + ")", h.status() == 200);
             check("the viewer's role comes from the database: promoted to superadmin, the same session may",
@@ -221,7 +236,7 @@ public class SeparatedPanelTest {
                     && forge(sock, "/api/admins", "GET", "/api/admins", null, null, vera.adminId(), vera.sessionId(), answer).status() == 200);
             AuthStore.setRole(vera.adminId(), "viewer");
             Main.sessions.revokeById(vera.sessionId(), vera.adminId());
-            h = forge(sock, "/api/domains", "GET", "/api/domains", null, null, vera.adminId(), vera.sessionId(), answer);
+            h = forge(sock, "/api/logs", "GET", "/api/logs", null, null, vera.adminId(), vera.sessionId(), answer);
             check("a revoked session: 401 (" + h.status() + ")", h.status() == 401);
         } finally {
             channel.close();
@@ -237,11 +252,11 @@ public class SeparatedPanelTest {
             try (java.io.OutputStream os = ex.getResponseBody()) { os.write(b); }
         };
         try (RootChannel fake = RootChannel.open(sock, null, null, cookieSetter)) {
-            HttpResponse<String> r = send("GET", "/api/domains", null, boss2, false);
+            HttpResponse<String> r = send("GET", "/api/logs", null, boss2, false);
             check("a Set-Cookie from the root never reaches the browser (" + r.headers().allValues("Set-Cookie") + ")",
                     r.statusCode() == 200 && r.headers().allValues("Set-Cookie").isEmpty());
         }
-        HttpResponse<String> gone = send("GET", "/api/domains", null, boss2, false);
+        HttpResponse<String> gone = send("GET", "/api/logs", null, boss2, false);
         check("with the root part gone: 503 and a sentence (" + gone.statusCode() + " " + gone.body() + ")", gone.statusCode() == 503
                 && gone.body().contains(org.mail_panel.i18n.I18n.t("en", "server.rootPart.unavailable").substring(0, 20)));
 
