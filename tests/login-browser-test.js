@@ -208,7 +208,7 @@ async function shot(page, name) {
         await page.click('#btnSendCode');
         await page.waitForSelector('#step-code.active');
         const login = mails().slice(before).pop();
-        check('one email, to the stored address, subject in English', login && login.to === 'admin@example.org' && login.subject === 'Mail panel sign-in code');
+        check('one email, to the stored address, subject in English', login && login.to === 'admin@example.org' && /^\[[a-z0-9.-]+\] Your sign-in code for the mail control panel$/.test(login.subject));
         await page.fill('#emailCode', login && login.code === '000000' ? '111111' : '000000');
         await page.click('#btnVerifyCode');
         await page.waitForSelector('#errorAlert:not(.d-none)');

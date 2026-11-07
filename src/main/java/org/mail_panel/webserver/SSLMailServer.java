@@ -135,7 +135,7 @@ public class SSLMailServer {
         "panel_env", "dovecot24_preview", "rspamd_timeout", "web_diagnosis", "web443_status", "web443_config",
         "mtasts_plan", "watch", "watch_changes", "openssl_expiry", "port465_status",
         "python_preflight", "python_leftovers", "java_preflight", "java_status", "roundcube_preflight",
-        "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status");
+        "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status", "interruption_status");
 
     /** Le rotte dichiarate, con il loro accesso: le prove controllano che ci siano tutte. */
     private final Map<String, Access> routes = new java.util.LinkedHashMap<>();
@@ -7141,6 +7141,28 @@ public class SSLMailServer {
                 case "os_upgrade_verify" -> response = UpdateManager.verifyAfterUpdate();
                 case "jump_state" -> response = UpdateManager.versionJumpStatus();
                 case "be_list" -> response = UpdateManager.bootEnvironments();
+                // Un lavoro sui pacchetti interrotto: l'avviso, e chiuderlo dopo aver controllato.
+                case "interruption_status" -> response = org.mail_panel.system.PackageRecovery.status();
+                // Tornare al server di prima di una reinstallazione completa (ReinstallReturn): la
+                // posta di adesso fusa dentro, bectl activate, e il riavvio fra un minuto.
+                case "reinstall_way_back" -> {
+                    if (!"GO BACK".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
+                        break;
+                    }
+                    String name = req.optString("name", "");
+                    org.json.JSONArray lines = new org.json.JSONArray();
+                    response = org.mail_panel.system.ReinstallReturn.goBack(name, lines::put);
+                    response.put("log", lines);
+                    logAudit("REINSTALL_WAY_BACK", ip, (response.optBoolean("success") ? "activated " : "refused ")
+                            + name + (response.optBoolean("success") ? ", " + response.optInt("merged") + " mail files merged" : ": " + response.optString("error")));
+                    if (response.optBoolean("success")) response.put("reboot", UpdateManager.restartServer(true, 1));
+                }
+                case "interruption_dismiss" -> {
+                    response = org.mail_panel.system.PackageRecovery.dismiss();
+                    logAudit("PKG_INTERRUPTION_CHECKED", ip, response.optBoolean("success")
+                            ? "interrupted package job notice closed" : "close refused: packages still unprotected");
+                }
                 case "ssl_usage" -> response = UpdateManager.opensslUsage();
                 case "removal_candidates" -> response = UpdateManager.removalCandidates();
                 case "panel_uses" -> response = UpdateManager.panelUsage(req.optString("name", ""));

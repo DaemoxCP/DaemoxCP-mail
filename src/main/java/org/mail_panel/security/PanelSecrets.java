@@ -39,6 +39,12 @@ public final class PanelSecrets {
     static final String WEBMAIL_KEY = "webmail_key";
     /** La password dell'utente MySQL del pannello (prima stava nel database SQLite di configurazione). */
     public static final String MYSQL_PASSWORD = "mysql_password";
+    /**
+     * La password nuova dell'utente MySQL del pannello finche' MySQL non l'ha accettata: la scrive
+     * l'installazione prima dello script, e diventa {@link #MYSQL_PASSWORD} solo quando MySQL la
+     * conosce (org.mail_panel.system.PendingDbPassword). Di solito non c'e'.
+     */
+    public static final String MYSQL_PASSWORD_PENDING = "mysql_password_pending";
     /** La password di root di MySQL: prima non esisteva, e root entrava senza nulla. */
     public static final String MYSQL_ROOT_PASSWORD = "mysql_root_password";
     /**

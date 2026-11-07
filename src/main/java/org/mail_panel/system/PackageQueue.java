@@ -2,7 +2,11 @@ package org.mail_panel.system;
 
 import java.nio.ByteBuffer;
 import org.mail_panel.i18n.I18n;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -30,6 +34,14 @@ import java.util.logging.Logger;
  * Il turno si prende nella richiesta, PRIMA di avviare il lavoro: quindi prima dei controlli, del
  * piano e di ogni sblocco. Si rilascia quando il lavoro finisce, qualunque cosa succeda. Chi lo
  * trova preso non parte, e sa chi lo tiene.
+ *
+ * Il turno vale fra PROCESSI, non solo dentro questo. Fino al 06/11/2026 era un AtomicReference:
+ * misurato sulla VM, un secondo processo Java lo prendeva mentre il primo lo teneva, e ogni avvio
+ * del jar (anche il menu da console aperto mentre il pannello web aggiorna) riproteggeva i
+ * pacchetti di un lavoro in corso e ne cancellava l'elenco, facendo fallire il suo pkg upgrade
+ * («is locked and may not be modified»). Adesso chi prende il turno tiene anche un lock fcntl su
+ * TURN_LOCK_PATH: il sistema lo toglie da solo quando il processo muore, quindi un lavoro
+ * interrotto non lascia il turno preso per sempre.
  */
 public final class PackageQueue {
 
@@ -50,6 +62,21 @@ public final class PackageQueue {
     private record Turn(String id, String description, long start) {}
 
     private static final AtomicReference<Turn> IN_PROGRESS = new AtomicReference<>();
+
+    /** Il lock del turno fra processi. Dentro c'e' scritto chi lo tiene, per dirlo a chi lo trova preso. */
+    public static final String TURN_LOCK_PATH = "/var/db/mailpanel/package-turn.lock";
+
+    /** Dove sta il lock. E' una variabile solo perche' le prove non scrivano in /var/db. */
+    static Path turnLock = Path.of(TURN_LOCK_PATH);
+
+    /**
+     * Il canale e il lock di chi tiene il turno in QUESTO processo. Si toccano solo da chi tiene
+     * IN_PROGRESS: un secondo canale aperto e chiuso sullo stesso file, nello stesso processo,
+     * toglierebbe il lock fcntl (e' la regola di POSIX, la ricorda anche la documentazione di
+     * FileChannel), quindi qui se ne apre uno solo per volta.
+     */
+    private static FileChannel lockChannel;
+    private static FileLock fileLock;
 
     /**
      * Prende il turno per il lavoro 'id'. null se l'ha preso; altrimenti il motivo per cui il
@@ -78,6 +105,12 @@ public final class PackageQueue {
             if (holder != null) return busy(holder);
             // Rilasciato fra i due passi: si riprova.
         }
+        // Poi il turno fra processi: un altro pannello (o un menu da console) puo' tenerlo.
+        String other = takeFileLock(fresh);
+        if (other != null) {
+            IN_PROGRESS.compareAndSet(fresh, null);
+            return other;
+        }
         if (notWithOpenList && statePresent()) {
             release(id);
             return I18n.tr("server.turn.openList", java.util.Map.of("file", String.valueOf(list)));
@@ -85,10 +118,54 @@ public final class PackageQueue {
         return null;
     }
 
+    /**
+     * Il lock fra processi, per il turno appena preso in questo processo. null se preso; altrimenti
+     * il messaggio per chi lo trova preso (o per chi non puo' nemmeno aprire il file: senza il
+     * lock non si parte, perche' un turno che non vale fra processi e' quello che si e' rotto).
+     */
+    private static String takeFileLock(Turn t) {
+        FileChannel c = null;
+        try {
+            Files.createDirectories(turnLock.getParent());
+            c = FileChannel.open(turnLock, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
+            FileLock l;
+            try { l = c.tryLock(); }
+            catch (OverlappingFileLockException e) { l = null; }   // non succede: c'e' IN_PROGRESS davanti
+            if (l == null) {
+                String who = new String(Files.readAllBytes(turnLock), StandardCharsets.UTF_8).trim();
+                c.close();
+                return busy(I18n.tr("server.turn.otherProcess", java.util.Map.of("who", who.isEmpty() ? "?" : who)));
+            }
+            String who = "pid " + ProcessHandle.current().pid() + ", " + t.description()
+                    + " (" + java.time.Instant.ofEpochMilli(t.start()).truncatedTo(java.time.temporal.ChronoUnit.SECONDS) + ")";
+            c.truncate(0);
+            c.write(ByteBuffer.wrap((who + "\n").getBytes(StandardCharsets.UTF_8)), 0);
+            lockChannel = c;
+            fileLock = l;
+            return null;
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Cannot take the package turn lock " + turnLock, e);
+            if (c != null) try { c.close(); } catch (Exception ignored) { }
+            return I18n.tr("server.turn.lockFileError", java.util.Map.of("file", String.valueOf(turnLock), "err", String.valueOf(e.getMessage())));
+        }
+    }
+
     /** Rilascia il turno, ma solo se e' di 'id': un lavoro non puo' liberare quello di un altro. */
     public static void release(String id) {
         Turn t = IN_PROGRESS.get();
-        if (t != null && t.id().equals(id)) IN_PROGRESS.compareAndSet(t, null);
+        if (t == null || !t.id().equals(id)) return;
+        // Prima il lock fra processi, poi il turno di questo processo: al contrario, un altro
+        // thread potrebbe prendere il turno e trovare il file ancora bloccato da noi.
+        try {
+            if (fileLock != null) fileLock.release();
+            if (lockChannel != null) lockChannel.close();
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Cannot release the package turn lock " + turnLock, e);
+        } finally {
+            fileLock = null;
+            lockChannel = null;
+        }
+        IN_PROGRESS.compareAndSet(t, null);
     }
 
     /** Chi tiene il turno adesso ("manutenzione, in corso da 3 minuti"), o null se e' libero. */
@@ -147,7 +224,55 @@ public final class PackageQueue {
      * perderebbe proprio i pacchetti da riproteggere.
      */
     public static String writeState(List<String> packages) {
-        return writeState(list, packages);
+        String error = writeState(list, packages);
+        if (error == null) writeJobRecord(packages, false);
+        return error;
+    }
+
+    /**
+     * Come writeState, per un lavoro che passa i pacchetti a uno script fuori dal pannello e si
+     * aspetta di essere riavviato da lui (l'aggiornamento della JVM): al riavvio l'elenco c'e' per
+     * disegno, e non va scambiato per un lavoro interrotto.
+     */
+    public static String writeStateForRestart(List<String> packages) {
+        String error = writeState(list, packages);
+        if (error == null) writeJobRecord(packages, true);
+        return error;
+    }
+
+    /** Accanto all'elenco: quale lavoro l'ha scritto, quando, e da quale processo. */
+    static Path jobRecordPath() {
+        return list.resolveSibling(list.getFileName() + ".job.json");
+    }
+
+    /**
+     * Chi ha scritto l'elenco, per dire all'avvio QUALE lavoro si e' interrotto. Se non si scrive
+     * non si ferma niente: l'elenco basta a riproteggere, questo serve solo a spiegare.
+     */
+    private static void writeJobRecord(List<String> packages, boolean expectsRestart) {
+        Turn t = IN_PROGRESS.get();
+        JSONObject r = new JSONObject()
+                .put("description", t == null ? "" : t.description())
+                .put("turnId", t == null ? "" : t.id())
+                .put("startedUtc", java.time.Instant.ofEpochMilli(t == null ? System.currentTimeMillis() : t.start())
+                        .truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString())
+                .put("pid", ProcessHandle.current().pid())
+                .put("expectsRestart", expectsRestart)
+                .put("packages", new JSONArray(packages));
+        try {
+            Path tmp = jobRecordPath().resolveSibling(jobRecordPath().getFileName() + ".tmp");
+            Files.writeString(tmp, r.toString(2) + "\n", StandardCharsets.UTF_8);
+            Files.move(tmp, jobRecordPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Cannot write " + jobRecordPath(), e);
+        }
+    }
+
+    /** Il lavoro che ha scritto l'elenco, o un oggetto vuoto se non si sa (elenco di un pannello di prima). */
+    public static JSONObject jobRecord() {
+        try { return new JSONObject(Files.readString(jobRecordPath())); }
+        catch (Exception e) { return new JSONObject(); }
     }
 
     static String writeState(Path f, List<String> packages) {
@@ -175,6 +300,8 @@ public final class PackageQueue {
     public static void deleteState() {
         try { Files.deleteIfExists(list); }
         catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot remove " + list, e); }
+        try { Files.deleteIfExists(jobRecordPath()); }
+        catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot remove " + jobRecordPath(), e); }
     }
 
     /** Se c'e' un elenco di un lavoro non concluso. */

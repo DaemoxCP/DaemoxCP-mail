@@ -553,6 +553,34 @@ pkg unlock -a -y
 
 One package only: `pkg unlock -y <name>`. The real state is always `pkg lock -l`.
 
+**A way back before every package job.** Before the guided update, the maintenance, the update
+of unprotected packages, Roundcube, Python, MySQL 8.4, the relinking and the removal of a
+package, the panel creates a ZFS boot environment named `packages-before-<UTC time>-<job>`, and
+the job log says how to go back (`bectl activate <name> && shutdown -r now`). If the system has
+boot environments and the creation fails, the job does not start. If no package changed in the
+end, that boot environment is removed; otherwise the panel keeps the last three and removes the
+older ones (never the active one). Careful: when `/var/vmail` or `/var/db/mysql` live inside the
+boot environment, going back also brings back the mail and the databases as they were: the log
+says so, and `tools/upgrade/rollback-panel.sh` shows how to copy the newer mail first.
+
+**One package job at a time, across processes.** The package turn is also an `fcntl` lock on
+`/var/db/mailpanel/package-turn.lock` (the file says who holds it). A second panel process —
+the terminal menu opened while the web panel is updating — cannot start a job and does not
+touch the running job's list at startup. The lock disappears with the process that held it.
+
+**If a job is interrupted** (the panel killed, restarted or crashed, a power loss), the next
+start protects the listed packages again; if `pkg` is still working, it retries every 30
+seconds until it can, instead of waiting for the next restart. It also writes
+`/var/db/mailpanel/package-job-interrupted.json`: which job, when, and what to check by hand.
+The notice stays at the top of *Updates* and in the periodic report until an administrator
+marks it as checked (recorded in the audit log). The report also names packages still
+unprotected, and mail stack packages that nobody unlocked from the panel.
+
+**`pkg` is never killed halfway.** A `pkg install/upgrade/delete` or `freebsd-update install`
+that runs past its time limit is not stopped: an installation stopped halfway leaves packages
+half-installed. The job log says it is still working and keeps waiting. Other commands are
+stopped together with all their subprocesses.
+
 ---
 
 ## Service Commands
