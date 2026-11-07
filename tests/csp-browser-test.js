@@ -36,6 +36,13 @@ function file(route, f) {
     return route.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
 }
 
+// I gestori e gli stili in linea nell'HTML che gli script costruiscono dopo (on...= e style= dentro
+// le loro stringhe): nella pagina appena aperta non ci sono ancora, e il browser li rifiuterebbe solo
+// quando quel pezzo compare. Si cercano nel testo degli script.
+function builtInline(js) {
+    return [...js.matchAll(/(?<![-\w.$])(on[a-z]+|style)=\\{0,2}["']/g)].map(m => js.slice(Math.max(0, m.index - 40), m.index + 30).replace(/\s+/g, ' '));
+}
+
 // Le funzioni che gli script chiamano dall'HTML che costruiscono: data-on-*="nome(" dentro le stringhe.
 function builtNames(js) {
     const names = new Set();
@@ -110,6 +117,8 @@ async function served(route) {
         real('nessun gestore o stile in linea nel DOM' + (r.inline.length ? ': ' + r.inline.slice(0, 5).join(', ') : ''), r.inline.length === 0);
         real('ogni data-on-* chiama funzioni del pannello' + (r.actions.length ? ': ' + r.actions.slice(0, 3).join(' | ') : ''), r.actions.length === 0);
         real('ogni data-style e\' applicato' + (r.styles.length ? ': ' + r.styles.slice(0, 3).join(' | ') : ''), r.styles.length === 0);
+        const inlineBuilt = builtInline(js);
+        real('nessun gestore o stile in linea nell\'HTML che gli script costruiscono' + (inlineBuilt.length ? ': ' + inlineBuilt.slice(0, 2).join(' | ') : ''), inlineBuilt.length === 0);
         real('le funzioni chiamate dall\'HTML costruito dagli script esistono' + (r.missing.length ? ': ' + r.missing.join(', ') : ''), r.missing.length === 0);
         real('nessun errore di panel-actions' + (actionErrors.length ? ': ' + actionErrors.slice(0, 3).join(' | ') : ''), actionErrors.length === 0);
         if (pageErrors.length) console.log('    (errori della pagina coi dati finti, non contano: ' + pageErrors.length + ', il primo: ' + pageErrors[0].slice(0, 140) + ')');

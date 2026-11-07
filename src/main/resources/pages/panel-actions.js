@@ -1,7 +1,7 @@
 // Le azioni e gli stili delle pagine senza codice in linea, per una Content-Security-Policy senza
 // 'unsafe-inline' (reperto 178).
 //
-// Prima ogni pulsante portava il suo onclick="...", e ogni elemento il suo style="...": con
+// Prima ogni pulsante portava il suo gestore onclick in linea, e ogni elemento il suo attributo style: con
 // 'unsafe-inline' nella CSP, una stringa iniettata in una pagina (un nome di casella, una riga di
 // log) poteva eseguire codice qualunque. Adesso:
 //
@@ -12,7 +12,7 @@
 //    this e le sue proprieta' (this.value, this.dataset.id, this.closest('tr')), event,
 //    Number(...), === e !==, e "return" (return false = preventDefault). Piu' istruzioni con ";".
 //    Una forma che non conosce la scrive in console come errore e non fa niente.
-//  - data-style="..." al posto di style="...": lo stesso stile, applicato con il CSSOM appena
+//  - data-style="..." al posto dell'attributo style: lo stesso stile, applicato con il CSSOM appena
 //    l'elemento entra nella pagina (anche quelli creati dopo con innerHTML). Il CSSOM la CSP non lo
 //    blocca, e cosi' lo stile resta uno stile dell'elemento: il codice che mostra e nasconde con
 //    el.style.display = '' o 'none' continua a funzionare (con una classe non funzionerebbe).
