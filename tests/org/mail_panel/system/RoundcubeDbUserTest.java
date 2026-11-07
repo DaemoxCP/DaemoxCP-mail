@@ -25,21 +25,21 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * La webmail dall'utente MySQL del pannello al suo (RoundcubeDbUser.migrate), con config.inc.php
- * vero in una cartella temporanea (contenuto, proprietario, gruppo, permessi) e MySQL, php-fpm,
- * nginx e la webmail finti. Il MySQL finto esegue le istruzioni che la migrazione gli manda -- e si
- * ferma su una che non conosce --; la webmail finta entra in MySQL col db_dsnw che php-fpm ha
- * caricato all'ultimo reload, come quella vera con opcache.
+ * The webmail moved from the panel's MySQL user to its own (RoundcubeDbUser.migrate), with a real
+ * config.inc.php in a temporary folder (content, owner, group, permissions) and fake MySQL, php-fpm,
+ * nginx and webmail. The fake MySQL runs the statements the migration sends it -- and stops on one it
+ * does not know --; the fake webmail enters MySQL with the db_dsnw php-fpm loaded at the last reload,
+ * like the real one with opcache.
  *
- * <p>Per ogni controllo c'e' un guasto piantato che solo lui vede, e la prova vuole che la
- * migrazione torni indietro lasciando TUTTO com'era: config.inc.php byte per byte con proprietario,
- * gruppo e permessi, gli account MySQL con password e privilegi, la webmail che risponde. Poi i
- * rifiuti (un altro utente, un altro server, un account roundcube che c'e' gia', un'altra
- * configurazione che entra come il pannello, una webmail che gia' non risponde), la seconda volta
- * (non fa niente, e non chiede nemmeno a root), il caso degli script vecchi (roundcube con la
- * password del pannello) e quello di un avvio fermato prima della revoca.
+ * <p>For every check there is a planted fault that only that check sees, and the test wants the
+ * migration to go back leaving EVERYTHING as it was: config.inc.php byte for byte with owner, group
+ * and permissions, the MySQL accounts with passwords and privileges, the webmail answering. Then the
+ * refusals (another user, another server, a roundcube account that already exists, another
+ * configuration that enters as the panel, a webmail that already does not answer), the second time
+ * (it does nothing, and does not even ask root), the case of the old scripts (roundcube with the
+ * panel's password) and that of a start stopped before the revoke.
  *
- * <p>Cambia proprietari veri: va lanciata da root sulla VM FreeBSD, dove esistono www e wheel.
+ * <p>It changes real owners: it must be run as root on the FreeBSD VM, where www and wheel exist.
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeDbUserTest
  */
 public class RoundcubeDbUserTest {
@@ -48,14 +48,14 @@ public class RoundcubeDbUserTest {
     static final PrintStream OUT = System.out;
 
     static void check(String what, boolean ok) {
-        OUT.println((ok ? "  OK   " : "  FALLITO ") + what);
+        OUT.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
     static final String PANEL_PASS = "PanelPass0123456789abcde";
     static final String SECRET = "RoundcubeSecret01234567x";
 
-    /** config.inc.php come lo scriveva FullMailServerScript, col blocco del plugin password in fondo. */
+    /** config.inc.php as FullMailServerScript wrote it, with the password plugin's block at the end. */
     static String config(String user, String password) {
         return "<?php\n"
              + "$config['db_dsnw'] = 'mysql://" + user + ":" + password + "@127.0.0.1/roundcubemail';\n"
@@ -67,9 +67,9 @@ public class RoundcubeDbUserTest {
              + "// END mail-panel: webmail password changes\n";
     }
 
-    // ===================== MySQL finto =====================
+    // ===================== Fake MySQL =====================
 
-    /** Un account: la password, i database su cui ha tutto, e il SELECT su tutto (un privilegio globale). */
+    /** An account: the password, the databases it has everything on, and SELECT on everything (a global privilege). */
     static final class Account {
         String password;
         Set<String> dbs = new TreeSet<>();
@@ -81,7 +81,7 @@ public class RoundcubeDbUserTest {
 
     static final class Fake implements RoundcubeDbUser.Services {
         final Path config;
-        final Map<String, Account> accounts = new TreeMap<>();   // "utente@host"
+        final Map<String, Account> accounts = new TreeMap<>();   // "user@host"
         final Set<String> sessions = new HashSet<>();
         final List<String> rootLog = new ArrayList<>();
         final List<String> unknown = new ArrayList<>();
@@ -89,9 +89,9 @@ public class RoundcubeDbUserTest {
         int sessionCounter = 0;
         int realLogins = 0;
         boolean performanceSchema = true;
-        String loaded;                       // la configurazione che php-fpm ha caricato
+        String loaded;                       // the configuration php-fpm loaded
         String secret = SECRET;
-        // i guasti
+        // the faults
         boolean rootDown, createRefused, roundcubeLocked, reloadFails, reloadIgnored, roundcubeCannotWriteSessions,
                 ssoBroken, ssoBreaksForRoundcube, pluginUsesPanel, revokeFails, nginxDown, noSites, webmailDown;
 
@@ -113,7 +113,7 @@ public class RoundcubeDbUserTest {
         boolean canUse(String user, String password, String host, String db) {
             Account a = accounts.get(user + "@" + host);
             if (a == null || !a.password.equals(password)) return false;
-            if (USER.equals(user) && roundcubeLocked) return false;      // init_connect che roundcube non passa
+            if (USER.equals(user) && roundcubeLocked) return false;      // an init_connect roundcube does not pass
             return a.dbs.contains(db) || a.globalSelect;
         }
         static final String USER = RoundcubeDbUser.USER;
@@ -141,7 +141,7 @@ public class RoundcubeDbUserTest {
 
         String account(String u, String h) { return u + "@" + h; }
 
-        /** Le istruzioni che la migrazione usa, e solo quelle: il resto e' un errore della prova. */
+        /** The statements the migration uses, and only those: anything else is a mistake of the test. */
         String exec(String st) {
             Matcher m;
             if (st.equals("SELECT 1")) return "1\n";
@@ -169,7 +169,7 @@ public class RoundcubeDbUserTest {
                 return b.toString();
             }
             if ((m = Pattern.compile("CREATE USER IF NOT EXISTS '(\\w+)'@'([^']+)' IDENTIFIED BY '([^']*)'").matcher(st)).matches()) {
-                if (createRefused) return null;      // validate_password: la politica rifiuta una password di sole lettere e cifre
+                if (createRefused) return null;      // validate_password: the policy refuses a password of letters and digits only
                 accounts.putIfAbsent(account(m.group(1), m.group(2)), new Account(m.group(3)));
                 return "";
             }
@@ -215,9 +215,9 @@ public class RoundcubeDbUserTest {
             return null;
         }
 
-        // ===================== la webmail finta =====================
+        // ===================== The fake webmail =====================
 
-        /** La webmail entra in MySQL col db_dsnw che php-fpm ha caricato; un plugin, se c'e', come il pannello. */
+        /** The webmail enters MySQL with the db_dsnw php-fpm loaded; a plugin, if there is one, as the panel. */
         boolean webmailDb() {
             if (webmailDown) return false;
             RoundcubeDbUser.Dsn d = RoundcubeDbUser.activeDsn(loaded);
@@ -229,7 +229,7 @@ public class RoundcubeDbUserTest {
         }
 
         @Override public Shell.Result phpFpmReload() {
-            // Come php-fpm -t vero, su piu' righe; una volta sola: il ritorno indietro ricarica
+            // Like the real php-fpm -t, on several lines; only once: the way back reloads
             if (reloadFails) { reloadFails = false; return r(false, "Performing sanity check on php-fpm configuration:\n"
                     + "ERROR: failed to load configuration file '/usr/local/etc/php-fpm.conf'\nERROR: FPM initialization failed"); }
             try { if (!reloadIgnored) reload(); } catch (Exception e) { return r(false, e.toString()); }
@@ -245,7 +245,7 @@ public class RoundcubeDbUserTest {
             if (!webmailDb()) return new RoundcubeDbUser.Page(false, null);
             String id = "abcdef" + (++sessionCounter) + "0123";
             RoundcubeDbUser.Dsn d = RoundcubeDbUser.activeDsn(loaded);
-            if (!(roundcubeCannotWriteSessions && USER.equals(d.user()))) sessions.add(id);   // un trigger sulla tabella session
+            if (!(roundcubeCannotWriteSessions && USER.equals(d.user()))) sessions.add(id);   // a trigger on the session table
             return new RoundcubeDbUser.Page(true, id);
         }
 
@@ -260,7 +260,7 @@ public class RoundcubeDbUserTest {
 
         @Override public void pause() {}
 
-        /** Tutto quello che la migrazione puo' toccare, per confrontarlo prima e dopo. */
+        /** Everything the migration can touch, to compare it before and after. */
         String state() throws Exception {
             PosixFileAttributes a = Files.readAttributes(config, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
             return Files.readString(config) + "|" + a.owner().getName() + ":" + a.group().getName() + " "
@@ -274,7 +274,7 @@ public class RoundcubeDbUserTest {
         }
     }
 
-    // ===================== la cartella della prova =====================
+    // ===================== The test folder =====================
 
     static Path root;
 
@@ -295,7 +295,7 @@ public class RoundcubeDbUserTest {
         return RoundcubeDbUser.migrate(new RoundcubeDbUser.Places(f.config.getParent().getParent()), f);
     }
 
-    /** Nessuna istruzione che cambia account o privilegi (SHOW CREATE USER e SHOW GRANTS leggono soltanto). */
+    /** No statement that changes accounts or privileges (SHOW CREATE USER and SHOW GRANTS only read). */
     static boolean noWrites(Fake f) {
         for (String s : f.rootLog)
             for (String l : s.split("\n"))
@@ -311,27 +311,27 @@ public class RoundcubeDbUserTest {
     public static void main(String[] args) throws Exception {
         root = Files.createTempDirectory("roundcube-db-user-test");
 
-        OUT.println("== db_dsnw: quale riga conta, e cosa cambia");
+        OUT.println("== db_dsnw: which line counts, and what changes");
         {
             String c = "<?php\n// $config['db_dsnw'] = 'mysql://old:x@127.0.0.1/old';\n"
                      + "$config['db_dsnw'] = 'mysql://first:p1@127.0.0.1/roundcubemail';\n"
                      + "#$config['db_dsnw'] = 'mysql://hash:p2@127.0.0.1/x';\n"
-                     + "  $config[\"db_dsnw\"] = \"mysql://mailpanel:p3@127.0.0.1:3306/roundcubemail\"; // l'ultima vince\n"
+                     + "  $config[\"db_dsnw\"] = \"mysql://mailpanel:p3@127.0.0.1:3306/roundcubemail\"; // the last one wins\n"
                      + " * $config['db_dsnw'] = 'mysql://doc:p4@127.0.0.1/doc';\n";
             RoundcubeDbUser.Dsn d = RoundcubeDbUser.activeDsn(c);
-            check("vince l'ultima assegnazione attiva, non le commentate", d != null && d.user().equals("mailpanel")
+            check("the last active assignment wins, not the commented ones", d != null && d.user().equals("mailpanel")
                     && d.password().equals("p3") && d.host().equals("127.0.0.1:3306") && d.db().equals("roundcubemail"));
-            check("l'host dell'account e' senza porta", d != null && d.accountHost().equals("127.0.0.1"));
+            check("the account's host is without the port", d != null && d.accountHost().equals("127.0.0.1"));
             String w = RoundcubeDbUser.withCredentials(c, d, "roundcube", "NEW");
             String[] a = c.split("\n", -1), b = w.split("\n", -1);
             int diff = 0;
             for (int i = 0; i < a.length; i++) if (!a[i].equals(b[i])) diff++;
-            check("cambia solo la riga attiva, solo utente e password",
-                    diff == 1 && b[4].equals("  $config[\"db_dsnw\"] = \"mysql://roundcube:NEW@127.0.0.1:3306/roundcubemail\"; // l'ultima vince"));
-            check("nessun db_dsnw: null", RoundcubeDbUser.activeDsn("<?php\n// $config['db_dsnw'] = 'mysql://a:b@c/d';\n") == null);
+            check("only the active line changes, only user and password",
+                    diff == 1 && b[4].equals("  $config[\"db_dsnw\"] = \"mysql://roundcube:NEW@127.0.0.1:3306/roundcubemail\"; // the last one wins"));
+            check("no db_dsnw: null", RoundcubeDbUser.activeDsn("<?php\n// $config['db_dsnw'] = 'mysql://a:b@c/d';\n") == null);
         }
 
-        OUT.println("== i siti della webmail, da nginx -T");
+        OUT.println("== the webmail's sites, from nginx -T");
         {
             String dump = "# configuration file /usr/local/etc/nginx/nginx.conf:\nhttp {\n"
                     + "  server { listen 80 default_server; server_name _; return 444; }\n"
@@ -341,11 +341,11 @@ public class RoundcubeDbUserTest {
                     + "}\n# configuration file /usr/local/etc/nginx/conf.d/mailpanel-public.conf:\n"
                     + "server { listen 443 ssl; server_name mta-sts.example.test; root /var/db/mailpanel/public; }\n";
             List<RoundcubeDbUser.Site> s = RoundcubeDbUser.webmailSites(dump, Path.of("/usr/local/www/roundcube"));
-            check("un sito solo: la webmail sulla 8443, non i commentati ne' gli altri",
+            check("one site only: the webmail on 8443, not the commented ones nor the others",
                     s.size() == 1 && s.get(0).name().equals("webmail.example.test") && s.get(0).port().equals("8443"));
         }
 
-        OUT.println("== gli script d'installazione");
+        OUT.println("== the installation scripts");
         {
             Map<String, String> scripts = new LinkedHashMap<>();
             scripts.put("FullMailServerScript", new FullMailServerScript().getScriptContent());
@@ -355,29 +355,29 @@ public class RoundcubeDbUserTest {
             for (Map.Entry<String, String> e : scripts.entrySet()) {
                 String s = e.getValue(), n = e.getKey();
                 Matcher m = dsn.matcher(s);
-                check(n + ": la webmail entra come roundcube con la sua password",
+                check(n + ": the webmail enters as roundcube with its own password",
                         m.find() && m.group(1).equals("roundcube") && m.group(2).matches("\\$\\{?ROUNDCUBE_DB_PASSWORD\\}?") && !m.find());
-                check(n + ": crea l'account roundcube coi privilegi sul solo roundcubemail",
+                check(n + ": it creates the roundcube account with privileges on roundcubemail only",
                         s.contains("CREATE USER IF NOT EXISTS 'roundcube'@'127.0.0.1' IDENTIFIED BY '")
                         && s.contains("ALTER USER 'roundcube'@'127.0.0.1' IDENTIFIED BY '")
                         && s.contains("GRANT ALL PRIVILEGES ON roundcubemail.* TO 'roundcube'@'127.0.0.1';"));
-                check(n + ": toglie roundcubemail all'utente del pannello", s.contains("REVOKE IF EXISTS ALL PRIVILEGES ON roundcubemail.* FROM '"));
-                check(n + ": nessuna GRANT su roundcubemail ad altri", !Pattern.compile("GRANT [^;]*ON roundcubemail\\.\\* TO '(?!roundcube')").matcher(s).find());
-                check(n + ": senza ROUNDCUBE_DB_PASSWORD si ferma", s.contains("ROUNDCUBE_DB_PASSWORD not in the environment"));
-                check(n + ": nessuna password sulla riga di comando di mysql", !Pattern.compile("mysql [^\\n]*-p\"?\\$").matcher(s).find());
-                check(n + ": niente IDENTIFIED BY dentro una GRANT (MySQL 8 lo rifiuta)", !Pattern.compile("GRANT [^;\\n]*IDENTIFIED BY").matcher(s).find());
+                check(n + ": it takes roundcubemail away from the panel's user", s.contains("REVOKE IF EXISTS ALL PRIVILEGES ON roundcubemail.* FROM '"));
+                check(n + ": no GRANT on roundcubemail to others", !Pattern.compile("GRANT [^;]*ON roundcubemail\\.\\* TO '(?!roundcube')").matcher(s).find());
+                check(n + ": without ROUNDCUBE_DB_PASSWORD it stops", s.contains("ROUNDCUBE_DB_PASSWORD not in the environment"));
+                check(n + ": no password on mysql's command line", !Pattern.compile("mysql [^\\n]*-p\"?\\$").matcher(s).find());
+                check(n + ": no IDENTIFIED BY inside a GRANT (MySQL 8 refuses it)", !Pattern.compile("GRANT [^;\\n]*IDENTIFIED BY").matcher(s).find());
                 Path f = root.resolve(n + ".sh");
                 Files.writeString(f, s);
                 Shell.Result r = Shell.run("sh", "-n", f.toString());
-                check(n + ": sh -n lo accetta" + (r.success() ? "" : " (" + r.outputTrim() + ")"), r.success());
+                check(n + ": sh -n accepts it" + (r.success() ? "" : " (" + r.outputTrim() + ")"), r.success());
             }
-            check("RoundcubeScript non legge piu' /usr/local/etc/mail/mysql_password",
+            check("RoundcubeScript no longer reads /usr/local/etc/mail/mysql_password",
                     !scripts.get("RoundcubeScript").contains("$(cat /usr/local/etc/mail/mysql_password)"));
-            check("FullMailServerScript: l'utente del pannello non e' piu' nella configurazione della webmail",
+            check("FullMailServerScript: the panel's user is no longer in the webmail's configuration",
                     !scripts.get("FullMailServerScript").contains("mysql://$MYSQL_USER"));
         }
 
-        OUT.println("== la migrazione riuscita, coi permessi di prima (www:wheel 644)");
+        OUT.println("== the migration that succeeds, with the permissions of before (www:wheel 644)");
         {
             Fake f = bench("ok", config("mailpanel", PANEL_PASS), "www", "wheel", "rw-r--r--");
             String before = Files.readString(f.config);
@@ -385,49 +385,49 @@ public class RoundcubeDbUserTest {
             RoundcubeDbUser.Report r = run(f);
             String after = Files.readString(f.config);
             check("DONE: " + r.detail(), r.outcome() == RoundcubeDbUser.Outcome.DONE);
-            check("db_dsnw usa roundcube con la password del file dei segreti",
+            check("db_dsnw uses roundcube with the password from the secrets file",
                     after.equals(before.replace("mysql://mailpanel:" + PANEL_PASS + "@", "mysql://roundcube:" + SECRET + "@")));
-            check("proprietario e gruppo di prima, niente lettura per gli altri", attrs(f.config).equals("www:wheel rw-r-----"));
-            check("l'account roundcube ha solo roundcubemail", f.accounts.get("roundcube@127.0.0.1") != null
+            check("owner and group of before, no read for others", attrs(f.config).equals("www:wheel rw-r-----"));
+            check("the roundcube account has roundcubemail only", f.accounts.get("roundcube@127.0.0.1") != null
                     && f.accounts.get("roundcube@127.0.0.1").password.equals(SECRET)
                     && f.accounts.get("roundcube@127.0.0.1").dbs.equals(Set.of("roundcubemail")));
-            check("il pannello ha solo mailserver, da tutti e due gli host",
+            check("the panel has mailserver only, from both hosts",
                     f.accounts.get("mailpanel@localhost").dbs.equals(Set.of("mailserver"))
                     && f.accounts.get("mailpanel@127.0.0.1").dbs.equals(Set.of("mailserver")));
-            check("php-fpm ha caricato la configurazione nuova, e la webmail risponde", f.loaded.equals(after) && f.webmailDb());
-            check("MySQL ha visto entrare roundcube", f.rcConnections > c0);
-            check("verificata anche con un accesso vero", r.detail().contains("real login through the panel's SSO") && f.realLogins >= 3);
-            check("nessuna istruzione sconosciuta", f.unknown.isEmpty());
-            check("nessun file temporaneo rimasto", !Files.exists(f.config.resolveSibling("config.inc.php.mailpanel.tmp")));
+            check("php-fpm loaded the new configuration, and the webmail answers", f.loaded.equals(after) && f.webmailDb());
+            check("MySQL saw roundcube come in", f.rcConnections > c0);
+            check("also verified with a real login", r.detail().contains("real login through the panel's SSO") && f.realLogins >= 3);
+            check("no unknown statement", f.unknown.isEmpty());
+            check("no temporary file left", !Files.exists(f.config.resolveSibling("config.inc.php.mailpanel.tmp")));
 
             f.rootLog.clear();
             String st = f.state();
             RoundcubeDbUser.Report again = run(f);
-            check("la seconda volta non fa niente", again.outcome() == RoundcubeDbUser.Outcome.NOTHING && f.state().equals(st));
-            check("e non chiede niente a root", f.rootLog.isEmpty());
+            check("the second time it does nothing", again.outcome() == RoundcubeDbUser.Outcome.NOTHING && f.state().equals(st));
+            check("and asks root nothing", f.rootLog.isEmpty());
         }
 
-        OUT.println("== senza accesso vero (l'SSO non entra gia' prima) e senza performance_schema");
+        OUT.println("== without a real login (the SSO already does not get in before) and without performance_schema");
         {
             Fake f = bench("nosso", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
             f.ssoBroken = true;
             f.performanceSchema = false;
             RoundcubeDbUser.Report r = run(f);
-            check("DONE, e lo dice: " + r.detail(), r.outcome() == RoundcubeDbUser.Outcome.DONE
+            check("DONE, and it says so: " + r.detail(), r.outcome() == RoundcubeDbUser.Outcome.DONE
                     && r.detail().contains("without a real login: the SSO login as mailbox #1 did not open the mailbox"));
-            check("root:www 640 resta root:www 640", attrs(f.config).equals("root:www rw-r-----"));
+            check("root:www 640 stays root:www 640", attrs(f.config).equals("root:www rw-r-----"));
         }
 
-        OUT.println("== un guasto per ogni controllo: si torna indietro, e tutto e' com'era");
+        OUT.println("== one fault for each check: it goes back, and everything is as it was");
         String[][] faults = {
-            {"createRefused", "l'account non si crea (validate_password)", "cannot create the MySQL account"},
-            {"roundcubeLocked", "roundcube non entra (init_connect)", "roundcube cannot read roundcubemail"},
-            {"reloadFails", "il reload di php-fpm fallisce", "php-fpm reload failed"},
-            {"reloadIgnored", "php-fpm tiene la configurazione di prima (opcache)", "php-fpm still runs the old configuration"},
-            {"roundcubeCannotWriteSessions", "la sessione di roundcube non arriva nel database", "is not in the database roundcubemail after the switch"},
-            {"ssoBreaksForRoundcube", "l'accesso vero non riesce dopo il cambio", "the real login failed"},
-            {"pluginUsesPanel", "un plugin entra come il pannello: si vede dopo la revoca", "once mailpanel lost roundcubemail"},
-            {"revokeFails", "la revoca fallisce", "cannot take roundcubemail away from mailpanel"},
+            {"createRefused", "the account is not created (validate_password)", "cannot create the MySQL account"},
+            {"roundcubeLocked", "roundcube does not get in (init_connect)", "roundcube cannot read roundcubemail"},
+            {"reloadFails", "the php-fpm reload fails", "php-fpm reload failed"},
+            {"reloadIgnored", "php-fpm keeps the configuration of before (opcache)", "php-fpm still runs the old configuration"},
+            {"roundcubeCannotWriteSessions", "roundcube's session does not reach the database", "is not in the database roundcubemail after the switch"},
+            {"ssoBreaksForRoundcube", "the real login fails after the switch", "the real login failed"},
+            {"pluginUsesPanel", "a plugin enters as the panel: it shows after the revoke", "once mailpanel lost roundcubemail"},
+            {"revokeFails", "the revoke fails", "cannot take roundcubemail away from mailpanel"},
         };
         for (String[] fault : faults) {
             Fake f = bench("fault-" + fault[0], config("mailpanel", PANEL_PASS), "www", "wheel", "rw-r--r--");
@@ -438,32 +438,32 @@ public class RoundcubeDbUserTest {
             f.getClass().getDeclaredField(fault[0]).setBoolean(f, false);
             check(fault[1] + ": ROLLED_BACK (" + r.detail() + ")", r.outcome() == RoundcubeDbUser.Outcome.ROLLED_BACK
                     && r.detail().contains(fault[2]) && r.detail().endsWith("everything put back"));
-            check(fault[1] + ": config.inc.php, account e privilegi come prima",
+            check(fault[1] + ": config.inc.php, accounts and privileges as before",
                     f.state().equals(st) && acc.toString().equals(f.accounts.toString()));
-            check(fault[1] + ": la webmail risponde col pannello", f.webmailDb() && !f.accounts.containsKey("roundcube@127.0.0.1"));
-            check(fault[1] + ": nessuna istruzione sconosciuta", f.unknown.isEmpty());
-            check(fault[1] + ": il messaggio sta su una riga del log", !r.detail().contains("\n"));
+            check(fault[1] + ": the webmail answers with the panel", f.webmailDb() && !f.accounts.containsKey("roundcube@127.0.0.1"));
+            check(fault[1] + ": no unknown statement", f.unknown.isEmpty());
+            check(fault[1] + ": the message fits on one log line", !r.detail().contains("\n"));
         }
         {
-            // Senza performance_schema il php-fpm che tiene la configurazione vecchia lo vede la verifica dopo la revoca.
+            // Without performance_schema, the php-fpm that keeps the old configuration is seen by the check after the revoke.
             Fake f = bench("stale-nops", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
             String st = f.state();
             f.reloadIgnored = true;
             f.performanceSchema = false;
             RoundcubeDbUser.Report r = run(f);
             f.reloadIgnored = false;
-            check("opcache senza performance_schema: lo vede la verifica dopo la revoca (" + r.detail() + ")",
+            check("opcache without performance_schema: the check after the revoke sees it (" + r.detail() + ")",
                     r.outcome() == RoundcubeDbUser.Outcome.ROLLED_BACK && r.detail().contains("once mailpanel lost roundcubemail")
                     && f.state().equals(st));
         }
 
-        OUT.println("== i rifiuti: non cambia niente");
+        OUT.println("== the refusals: nothing changes");
         Object[][] refusals = {
-            {"un altro utente", config("someone", "x1"), "NOT_OURS", "neither the panel's"},
-            {"un altro server", config("mailpanel", PANEL_PASS).replace("127.0.0.1/roundcubemail", "db.example.test/roundcubemail"), "NOT_OURS", "not to the panel's MySQL"},
-            {"un altro motore", config("mailpanel", PANEL_PASS).replace("'mysql://", "'pgsql://"), "NOT_OURS", "not to the panel's MySQL"},
-            {"nessun db_dsnw", "<?php\n$config['imap_host'] = 'x';\n", "NOT_OURS", "no active db_dsnw"},
-            {"db_dsnr come il pannello", config("mailpanel", PANEL_PASS) + "$config['db_dsnr'] = 'mysql://mailpanel:" + PANEL_PASS + "@127.0.0.1/roundcubemail';\n",
+            {"another user", config("someone", "x1"), "NOT_OURS", "neither the panel's"},
+            {"another server", config("mailpanel", PANEL_PASS).replace("127.0.0.1/roundcubemail", "db.example.test/roundcubemail"), "NOT_OURS", "not to the panel's MySQL"},
+            {"another engine", config("mailpanel", PANEL_PASS).replace("'mysql://", "'pgsql://"), "NOT_OURS", "not to the panel's MySQL"},
+            {"no db_dsnw", "<?php\n$config['imap_host'] = 'x';\n", "NOT_OURS", "no active db_dsnw"},
+            {"db_dsnr as the panel", config("mailpanel", PANEL_PASS) + "$config['db_dsnr'] = 'mysql://mailpanel:" + PANEL_PASS + "@127.0.0.1/roundcubemail';\n",
                     "NOT_OURS", "config.inc.php line 10"},
         };
         for (Object[] c : refusals) {
@@ -480,20 +480,20 @@ public class RoundcubeDbUserTest {
             Files.writeString(pc.resolve("config.inc.php"), "<?php\n// $config['password_db_dsn'] = 'mysql://mailpanel:x@127.0.0.1/mailserver';\n"
                     + "$config['password_db_dsn'] = 'mysql://mailpanel:" + PANEL_PASS + "@127.0.0.1/mailserver';\n");
             RoundcubeDbUser.Report r = run(f);
-            check("un plugin che entra come il pannello: NOT_OURS col file e la riga (" + r.detail() + ")",
+            check("a plugin that enters as the panel: NOT_OURS with the file and the line (" + r.detail() + ")",
                     r.outcome() == RoundcubeDbUser.Outcome.NOT_OURS && r.detail().contains("plugins/password/config.inc.php line 3") && noWrites(f));
         }
         {
             Fake f = bench("commented-other", config("mailpanel", PANEL_PASS) + "// $config['db_dsnr'] = 'mysql://mailpanel:x@127.0.0.1/roundcubemail';\n",
                     "root", "www", "rw-r-----");
-            check("una riga commentata non ferma niente", run(f).outcome() == RoundcubeDbUser.Outcome.DONE);
+            check("a commented line stops nothing", run(f).outcome() == RoundcubeDbUser.Outcome.DONE);
         }
         {
             Fake f = bench("refuse-existing", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
             f.accounts.put("roundcube@127.0.0.1", new Account("SomethingElse12345678", "roundcubemail"));
             String st = f.state();
             RoundcubeDbUser.Report r = run(f);
-            check("un account roundcube che la webmail non usa: NOT_OURS (" + r.detail() + ")",
+            check("a roundcube account the webmail does not use: NOT_OURS (" + r.detail() + ")",
                     r.outcome() == RoundcubeDbUser.Outcome.NOT_OURS && r.detail().contains("already exists") && f.state().equals(st) && noWrites(f));
         }
         {
@@ -501,15 +501,15 @@ public class RoundcubeDbUserTest {
             f.accounts.put("roundcube@127.0.0.1", new Account("OldPassword123456789", "roundcubemail", "mailserver"));
             String st = f.state();
             RoundcubeDbUser.Report r = run(f);
-            check("un account roundcube con altri privilegi: NOT_OURS (" + r.detail() + ")",
+            check("a roundcube account with other privileges: NOT_OURS (" + r.detail() + ")",
                     r.outcome() == RoundcubeDbUser.Outcome.NOT_OURS && r.detail().contains("privileges beyond roundcubemail")
                     && r.detail().contains("`mailserver`") && f.state().equals(st) && noWrites(f));
         }
         Object[][] blocked = {
-            {"webmailDown", "una webmail che gia' non risponde", "NOT_ANSWERING"},
-            {"rootDown", "root di MySQL non entra", "NO_ROOT"},
-            {"nginxDown", "nginx -T non risponde", "NOT_SERVED"},
-            {"noSites", "nessun sito serve la webmail", "NOT_SERVED"},
+            {"webmailDown", "a webmail that already does not answer", "NOT_ANSWERING"},
+            {"rootDown", "MySQL's root does not get in", "NO_ROOT"},
+            {"nginxDown", "nginx -T does not answer", "NOT_SERVED"},
+            {"noSites", "no site serves the webmail", "NOT_SERVED"},
         };
         for (Object[] c : blocked) {
             Fake f = bench("blocked-" + c[0], config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
@@ -523,11 +523,11 @@ public class RoundcubeDbUserTest {
             Fake f = bench("bad-secret", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
             f.secret = "with'quote@and/slash000";
             RoundcubeDbUser.Report r = run(f);
-            check("una password nel file dei segreti che il pannello non genera: NOT_OURS",
+            check("a password in the secrets file that the panel does not generate: NOT_OURS",
                     r.outcome() == RoundcubeDbUser.Outcome.NOT_OURS && noWrites(f) && f.rootLog.isEmpty());
         }
 
-        OUT.println("== gli script di prima: roundcube con la password del pannello");
+        OUT.println("== the scripts of before: roundcube with the panel's password");
         {
             Fake f = bench("shared", config("roundcube", PANEL_PASS), "root", "www", "rw-r-----");
             f.accounts.put("roundcube@127.0.0.1", new Account(PANEL_PASS, "roundcubemail"));
@@ -537,16 +537,16 @@ public class RoundcubeDbUserTest {
             f.reloadFails = true;
             RoundcubeDbUser.Report r = run(f);
             f.reloadFails = false;
-            check("con un guasto torna la password di prima, e la webmail entra (" + r.detail() + ")",
+            check("with a fault the password of before comes back, and the webmail gets in (" + r.detail() + ")",
                     r.outcome() == RoundcubeDbUser.Outcome.ROLLED_BACK && f.state().equals(st)
                     && f.accounts.get("roundcube@127.0.0.1").password.equals(PANEL_PASS) && f.webmailDb());
             r = run(f);
-            check("senza guasto la password cambia: DONE (" + r.detail() + ")", r.outcome() == RoundcubeDbUser.Outcome.DONE
+            check("without a fault the password changes: DONE (" + r.detail() + ")", r.outcome() == RoundcubeDbUser.Outcome.DONE
                     && f.accounts.get("roundcube@127.0.0.1").password.equals(SECRET) && f.webmailDb()
                     && Files.readString(f.config).contains("mysql://roundcube:" + SECRET + "@"));
         }
 
-        OUT.println("== un avvio fermato prima della revoca");
+        OUT.println("== a start stopped before the revoke");
         {
             Fake f = bench("half", config("roundcube", SECRET), "root", "www", "rw-r-----");
             f.accounts.put("roundcube@127.0.0.1", new Account(SECRET, "roundcubemail"));
@@ -554,26 +554,26 @@ public class RoundcubeDbUserTest {
             f.pluginUsesPanel = true;
             RoundcubeDbUser.Report r = run(f);
             f.pluginUsesPanel = false;
-            check("se dopo la revoca la webmail non va, i privilegi tornano (" + r.detail() + ")",
+            check("if the webmail does not work after the revoke, the privileges come back (" + r.detail() + ")",
                     r.outcome() == RoundcubeDbUser.Outcome.ROLLED_BACK && acc.toString().equals(f.accounts.toString()));
             r = run(f);
-            check("FINISHED: il pannello perde roundcubemail (" + r.detail() + ")", r.outcome() == RoundcubeDbUser.Outcome.FINISHED
+            check("FINISHED: the panel loses roundcubemail (" + r.detail() + ")", r.outcome() == RoundcubeDbUser.Outcome.FINISHED
                     && f.accounts.get("mailpanel@localhost").dbs.equals(Set.of("mailserver")) && f.webmailDb());
-            check("poi non fa piu' niente", run(f).outcome() == RoundcubeDbUser.Outcome.NOTHING);
+            check("then it does nothing any more", run(f).outcome() == RoundcubeDbUser.Outcome.NOTHING);
         }
 
-        OUT.println("== il pannello legge ancora per un privilegio globale: lo dice");
+        OUT.println("== the panel still reads through a global privilege: it says so");
         {
             Fake f = bench("global", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
             f.accounts.get("mailpanel@localhost").globalSelect = true;
             f.accounts.get("mailpanel@127.0.0.1").globalSelect = true;
             RoundcubeDbUser.Report r = run(f);
-            check("PARTIAL, col privilegio (" + r.detail() + ")", r.outcome() == RoundcubeDbUser.Outcome.PARTIAL
+            check("PARTIAL, with the privilege (" + r.detail() + ")", r.outcome() == RoundcubeDbUser.Outcome.PARTIAL
                     && r.detail().contains("GRANT SELECT ON *.*") && f.accounts.get("roundcube@127.0.0.1") != null);
         }
 
         Shell.run("rm", "-rf", root.toString());
-        OUT.println(failed == 0 ? "\nTUTTO OK" : "\nFALLITI: " + failed);
+        OUT.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         System.exit(failed == 0 ? 0 : 1);
     }
 }
