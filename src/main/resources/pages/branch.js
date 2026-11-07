@@ -16,6 +16,7 @@
             box.textContent = t('up.readingPkg');
             document.getElementById('branch-preview').textContent = '';
             const r = await updApi('branch_status');
+            document.dispatchEvent(new CustomEvent('upd:branch', { detail: r }));
             box.textContent = '';
             if (!r.success) {
                 box.appendChild(branchEl('div', 'alert alert-secondary py-2 small mb-0', r.error || t('up.branchUnreadable')));
@@ -166,8 +167,18 @@
                 if (s.job.status === 'completed' || s.job.status === 'error') {
                     outcome.textContent = '';
                     const ok = s.job.status === 'completed';
-                    outcome.appendChild(branchEl('div', 'alert ' + (ok ? 'alert-success' : 'alert-danger') + ' py-2 small mb-0',
-                        ok ? (s.job.result || t('up.branchChanged')) : (s.job.errorMessage || t('up.branchChangeFailed'))));
+                    const done = branchEl('div', 'alert ' + (ok ? 'alert-success' : 'alert-danger') + ' py-2 small mb-0',
+                        ok ? (s.job.result || t('up.branchChanged')) : (s.job.errorMessage || t('up.branchChangeFailed')));
+                    // Il passo dopo (reperto 187): il catalogo nuovo cambia cosa c'e' da aggiornare, e la scheda
+                    // in cima lo rilegge e lo dice, coi suoi pulsanti.
+                    if (ok && typeof ucShow === 'function') {
+                        const next = branchEl('button', 'btn btn-sm btn-outline-primary ms-2 touch-target', t('uc.afterBranch'));
+                        next.type = 'button';
+                        next.setAttribute('data-on-click', 'ucShow()');
+                        done.appendChild(next);
+                        pkOverview();
+                    }
+                    outcome.appendChild(done);
                     branchStatus();
                     return;
                 }

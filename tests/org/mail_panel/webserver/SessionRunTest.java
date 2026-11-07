@@ -29,21 +29,22 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 
 /**
- * Le sessioni del pannello valgono per un avvio solo del jar, coi cookie Strict (reperto 184).
+ * Panel sessions last for one start of the jar only, with Strict cookies (reperto 184).
  *
- *  1. I cookie: sessione, pre-accesso e lingua SameSite=Strict, __Host-, HttpOnly, Secure; quello
- *     della sessione senza Max-Age ne' Expires: un cookie di sessione del browser.
- *  2. Nel database l'impronta del token non e' il suo SHA-256: chi legge il database non puo'
- *     nemmeno provare un token. E' quella di tokenHash, con la chiave di questo avvio.
- *  3. Il riavvio: un secondo processo col database di questo (il jar ripartito) non riconosce il
- *     token, ne calcola un altro token CSRF e un altro token di prima dell'accesso; poi beginRun
- *     (quello che fa SSLMailServer.start) toglie le righe, e nemmeno questo processo la ritrova.
- *  4. Sul server vero, in HTTPS: un cookie che non vale su una pagina, 302 a /index?session=ended
- *     e il cookie tolto (Strict); su un'API, 401 con X-Panel-Session: ended; senza cookie, /index e
- *     basta; un codice di conferma sbagliato (anche lui 401) senza X-Panel-Session; l'uscita col
- *     cookie tolto e Clear-Site-Data.
+ *  1. The cookies: session, pre-login and language are SameSite=Strict, __Host-, HttpOnly, Secure;
+ *     the session one has no Max-Age nor Expires: a browser-session cookie.
+ *  2. In the database the token's fingerprint is not its SHA-256: whoever reads the database cannot
+ *     even try a token. It is tokenHash's, keyed with this start's key.
+ *  3. The restart: a second process on this database (the jar started again) does not recognise the
+ *     token, and computes another CSRF token and another pre-login token; then beginRun (what
+ *     SSLMailServer.start does) removes the rows, and not even this process finds its session.
+ *  4. On the real server, over HTTPS: a cookie that is no longer valid on a page gives a 302 to
+ *     /index?session=ended and the cookie removed (Strict); on an API, 401 with X-Panel-Session:
+ *     ended; without a cookie, /index and nothing else; a wrong confirmation code (also a 401)
+ *     without X-Panel-Session; logout removes the cookie and sends Clear-Site-Data; with the
+ *     database not answering the cookie stays and there is no X-Panel-Session (reperto 185).
  *
- * Uso (col MySQL di prova di README.md, sulla VM):
+ * Usage (with the test MySQL of README.md, on the test VM):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SessionRunTest
  */
@@ -67,7 +68,7 @@ public class SessionRunTest {
 
     public static void main(String[] args) throws Exception {
         if (System.getProperty("mysql.port") == null) {
-            System.out.println("SALTATA: serve il MySQL di prova (-Dmysql.port=...).");
+            System.out.println("SKIPPED: it needs the test MySQL (-Dmysql.port=...).");
             System.exit(0);
         }
         if (args.length > 0 && args[0].equals("restarted")) { restarted(args[1], args[2], args[3]); return; }
@@ -87,7 +88,7 @@ public class SessionRunTest {
                 for (Path p : walk.sorted((a, b) -> b.compareTo(a)).toList()) Files.deleteIfExists(p);
             }
         }
-        System.out.println(failed == 0 ? "\nTutte le prove passate." : "\n" + failed + " prove FALLITE.");
+        System.out.println(failed == 0 ? "\nAll checks passed." : "\n" + failed + " checks FAILED.");
         System.exit(failed == 0 ? 0 : 1);
     }
 
@@ -95,42 +96,42 @@ public class SessionRunTest {
         long admin = TestSessions.admin("rita-run");
         String token = Main.sessions.create(admin, UA, "127.0.0.1");
 
-        System.out.println("== 1. I cookie ==");
-        check("la sessione: __Host-, Path=/, HttpOnly, Secure, SameSite=Strict, senza scadenza nel browser",
+        System.out.println("== 1. The cookies ==");
+        check("the session: __Host-, Path=/, HttpOnly, Secure, SameSite=Strict, no expiry in the browser",
                 WebSessions.cookieHeader(token).equals("__Host-MailPanel=" + token + "; Path=/; HttpOnly; Secure; SameSite=Strict"));
-        check("toglierla: Strict e Max-Age=0", WebSessions.clearCookieHeader().equals("__Host-MailPanel=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0"));
-        check("il cookie di prima dell'accesso: Strict, di sessione del browser",
+        check("removing it: Strict and Max-Age=0", WebSessions.clearCookieHeader().equals("__Host-MailPanel=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0"));
+        check("the pre-login cookie: Strict, a browser-session cookie",
                 WebSessions.preCookieHeader(token).equals("__Host-MailPanelPre=" + token + "; Path=/; HttpOnly; Secure; SameSite=Strict"));
-        check("quello della lingua: Strict", I18n.cookieHeader("en").endsWith("; SameSite=Strict"));
+        check("the language one: Strict", I18n.cookieHeader("en").endsWith("; SameSite=Strict"));
 
-        System.out.println("\n== 2. L'impronta nel database ==");
+        System.out.println("\n== 2. The fingerprint in the database ==");
         String stored = "";
         try (PreparedStatement p = db.getConnection().prepareStatement("SELECT token_hash FROM panel_sessions WHERE admin_id = ? ORDER BY id DESC LIMIT 1")) {
             p.setLong(1, admin);
             try (ResultSet r = p.executeQuery()) { if (r.next()) stored = r.getString(1); }
         }
-        check("e' quella della chiave di questo avvio", stored.equals(WebSessions.tokenHash(token)) && stored.matches("[0-9a-f]{64}"));
-        check("non lo SHA-256 del token, che chiunque legga il database potrebbe provare", !stored.equals(DataCrypto.sha256Hex(token)));
-        check("la sessione vale, in questo processo", Main.sessions.check(token, UA).isPresent());
+        check("it is the one of this start's key", stored.equals(WebSessions.tokenHash(token)) && stored.matches("[0-9a-f]{64}"));
+        check("not the token's SHA-256, which anyone reading the database could try", !stored.equals(DataCrypto.sha256Hex(token)));
+        check("the session is valid, in this process", Main.sessions.check(token, UA).isPresent());
 
-        System.out.println("\n== 3. Il jar riavviato: un altro processo, lo stesso database ==");
+        System.out.println("\n== 3. The jar started again: another process, the same database ==");
         String pre = WebSessions.newToken();
         Map<String, String> child = restart(token, pre, "no");
-        check("non riconosce il token (" + child.get("CHECK") + ")", "false".equals(child.get("CHECK")));
-        check("ne calcola un altro token CSRF", child.get("CSRF") != null && !child.get("CSRF").equals(WebSessions.csrfToken(token)));
-        check("e un altro token della pagina d'accesso", child.get("PRE") != null && !child.get("PRE").equals(WebSessions.preLoginCsrf(pre)));
-        check("la riga c'e' ancora (non l'ha toccata), ma non serve a niente", Main.sessions.check(token, UA).isPresent());
+        check("it does not recognise the token (" + child.get("CHECK") + ")", "false".equals(child.get("CHECK")));
+        check("it computes another CSRF token", child.get("CSRF") != null && !child.get("CSRF").equals(WebSessions.csrfToken(token)));
+        check("and another pre-login token", child.get("PRE") != null && !child.get("PRE").equals(WebSessions.preLoginCsrf(pre)));
+        check("the row is still there (it did not touch it), but it is of no use", Main.sessions.check(token, UA).isPresent());
         child = restart(token, pre, "yes");
-        check("all'avvio del server (beginRun) le righe di prima se ne vanno (" + child.get("BEGIN") + " tolte)",
+        check("when the server starts (beginRun) the old rows go (" + child.get("BEGIN") + " removed)",
                 Integer.parseInt(child.getOrDefault("BEGIN", "-1")) >= 1 && "0".equals(child.get("COUNT")));
-        check("e nemmeno il processo di prima ritrova la sua sessione", Main.sessions.check(token, UA).isEmpty());
+        check("and not even the first process finds its session", Main.sessions.check(token, UA).isEmpty());
 
-        System.out.println("\n== 4. Sul server vero ==");
+        System.out.println("\n== 4. On the real server ==");
         Process cert = new ProcessBuilder("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                 "-subj", "/CN=localhost", "-keyout", dir.resolve("k.pem").toString(), "-out", dir.resolve("c.pem").toString())
                 .redirectErrorStream(true).start();
         cert.getInputStream().readAllBytes();
-        check("certificato di prova", cert.waitFor() == 0);
+        check("test certificate", cert.waitFor() == 0);
         SSLMailServer srv = new SSLMailServer(0, Files.readString(dir.resolve("c.pem")), Files.readString(dir.resolve("k.pem")));
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);
@@ -149,30 +150,48 @@ public class SessionRunTest {
         try {
             String dead = "__Host-MailPanel=" + token;
             HttpResponse<String> page = send(http, base, "GET", "/home", null, dead, null);
-            check("un cookie che non vale su una pagina: 302 a /index?session=ended (" + page.statusCode() + " "
+            check("a cookie no longer valid on a page: 302 to /index?session=ended (" + page.statusCode() + " "
                     + page.headers().firstValue("Location").orElse("") + ")", page.statusCode() == 302
                     && "/index?session=ended".equals(page.headers().firstValue("Location").orElse("")));
-            check("  e il cookie se ne va, Strict", page.headers().allValues("Set-Cookie").contains(WebSessions.clearCookieHeader()));
+            check("  and the cookie goes, Strict", page.headers().allValues("Set-Cookie").contains(WebSessions.clearCookieHeader()));
             HttpResponse<String> api = send(http, base, "GET", "/api/domains", null, dead, null);
-            check("su un'API: 401 con X-Panel-Session: ended", api.statusCode() == 401
+            check("on an API: 401 with X-Panel-Session: ended", api.statusCode() == 401
                     && "ended".equals(api.headers().firstValue("X-Panel-Session").orElse("")));
             HttpResponse<String> none = send(http, base, "GET", "/home", null, null, null);
-            check("senza cookie: /index e basta, nessun cookie da togliere", none.statusCode() == 302
+            check("without a cookie: /index and nothing else, no cookie to remove", none.statusCode() == 302
                     && "/index".equals(none.headers().firstValue("Location").orElse("")) && none.headers().allValues("Set-Cookie").isEmpty());
+            // The database not answering (MySQL restarting, or stopping before the panel while the
+            // server reboots) does not mean the session has ended (reperto 185).
+            java.util.function.Supplier<java.sql.Connection> real = org.mail_panel.security.AuthStore.connection;
+            org.mail_panel.security.AuthStore.connection = () -> (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
+                    SessionRunTest.class.getClassLoader(), new Class<?>[]{java.sql.Connection.class}, (proxy, method, a) -> {
+                        throw new java.sql.SQLException("MySQL is not reachable (test)");
+                    });
+            try {
+                HttpResponse<String> downPage = send(http, base, "GET", "/home", null, dead, null);
+                check("the database does not answer: a page goes to /index without saying the session ended, and the cookie stays",
+                        downPage.statusCode() == 302 && "/index".equals(downPage.headers().firstValue("Location").orElse(""))
+                        && downPage.headers().allValues("Set-Cookie").isEmpty());
+                HttpResponse<String> downApi = send(http, base, "GET", "/api/domains", null, dead, null);
+                check("  an API: 401 without X-Panel-Session (the open page does not go to the sign-in page)", downApi.statusCode() == 401
+                        && downApi.headers().firstValue("X-Panel-Session").isEmpty());
+            } finally {
+                org.mail_panel.security.AuthStore.connection = real;
+            }
             String fresh = Main.sessions.create(admin, UA, "127.0.0.1");
             String live = "__Host-MailPanel=" + fresh;
-            check("una sessione di questo avvio apre la pagina", send(http, base, "GET", "/home", null, live, null).statusCode() == 200);
+            check("a session of this start opens the page", send(http, base, "GET", "/home", null, live, null).statusCode() == 200);
             HttpResponse<String> wrong = send(http, base, "POST", "/api/account", "{\"action\":\"stepup_code_verify\",\"code\":\"000000\"}",
                     live, WebSessions.csrfToken(fresh));
-            check("un codice di conferma sbagliato (" + wrong.statusCode() + "): niente X-Panel-Session, la pagina resta",
+            check("a wrong confirmation code (" + wrong.statusCode() + "): no X-Panel-Session, the page stays",
                     wrong.statusCode() != 200 && wrong.headers().firstValue("X-Panel-Session").isEmpty());
-            check("  e la sessione vale ancora", Main.sessions.check(fresh, UA).isPresent());
+            check("  and the session is still valid", Main.sessions.check(fresh, UA).isPresent());
             HttpResponse<String> out = send(http, base, "POST", "/api/logout", "{}", live, WebSessions.csrfToken(fresh));
             String csd = out.headers().firstValue("Clear-Site-Data").orElse("");
-            check("l'uscita: 200, il cookie tolto (Strict) e Clear-Site-Data \"cache\", \"storage\" (" + csd + ")", out.statusCode() == 200
+            check("logout: 200, the cookie removed (Strict) and Clear-Site-Data \"cache\", \"storage\" (" + csd + ")", out.statusCode() == 200
                     && out.headers().allValues("Set-Cookie").contains(WebSessions.clearCookieHeader())
                     && csd.contains("\"cache\"") && csd.contains("\"storage\"") && !csd.contains("cookies"));
-            check("  e dopo la sessione non c'e' piu'", Main.sessions.check(fresh, UA).isEmpty());
+            check("  and afterwards the session is gone", Main.sessions.check(fresh, UA).isEmpty());
         } finally {
             https.stop(0);
         }
@@ -187,7 +206,7 @@ public class SessionRunTest {
         return http.send(b.build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    /** Un altro processo, col database e i segreti di questo: il jar riavviato. Le righe "CHIAVE valore" che stampa. */
+    /** Another process, with this one's database and secrets: the jar started again. The "KEY value" lines it prints. */
     static Map<String, String> restart(String token, String pre, String begin) throws Exception {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         List<String> cmd = new ArrayList<>(List.of(java));

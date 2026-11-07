@@ -132,7 +132,7 @@ public class SSLMailServer {
     static final Map<String, String> UPDATES_ACTIONS = Access.actions(SYSTEM_VIEW,
         "packages_status", "packages_overview", "updates_status", "compatibility", "dovecot_config_dump", "maintenance_preview", "plan",
         "mysql84_preflight", "broken_libs", "mysql_client_diag", "defaults_check", "branch_status", "branch_preview",
-        "system_report", "os_status", "reboot_preview", "rc_state", "system_summary", "cf_intervals",
+        "system_report", "os_status", "reboot_preview", "reboot_state", "rc_state", "system_summary", "cf_intervals",
         "rc_remove_preview", "rc_preview", "os_upgrade_targets", "os_upgrade_preflight", "os_upgrade_instructions",
         "os_upgrade_verify", "jump_state", "be_list", "ssl_usage", "removal_candidates", "panel_uses", "deep_scan",
         "panel_env", "dovecot24_preview", "rspamd_timeout", "web_diagnosis", "web443_status", "web443_config",
@@ -344,15 +344,18 @@ public class SSLMailServer {
         if (session.isEmpty()) {
             // Un cookie di sessione che non vale (il jar e' ripartito, o la sessione e' scaduta): si
             // toglie, e la pagina d'accesso dice perche' si e' di nuovo li' (reperto 184).
-            // Col database fermo non si sa: il cookie resta, e quando torna la sessione vale ancora.
-            boolean ended = Main.mysqlAvailable && !Main.setupRequired && WebSessions.wellFormed(cookieValue(exchange, WebSessions.COOKIE));
+            // Col database fermo non si sa: il cookie resta, e quando torna la sessione vale ancora. Fermo
+            // vuol dire anche una lettura che e' appena fallita (MySQL che si riavvia, o che si spegne
+            // prima del pannello durante un riavvio del server: reperto 185).
+            boolean known = Main.mysqlAvailable && !Main.setupRequired && !WebSessions.lastCheckFailed();
+            boolean ended = known && WebSessions.wellFormed(cookieValue(exchange, WebSessions.COOKIE));
             if (ended) exchange.getResponseHeaders().add("Set-Cookie", WebSessions.clearCookieHeader());
             if (pageGet) {
                 redirect(exchange, ended ? "/index?session=ended" : "/index");
             } else {
                 // Il segnale per le pagine aperte (l'involucro di fetch nella testa): questo 401 e' la
                 // sessione che non c'e' piu', non un codice di conferma sbagliato (anche quello e' 401).
-                exchange.getResponseHeaders().set(SESSION_ENDED_HEADER, "ended");
+                if (known) exchange.getResponseHeaders().set(SESSION_ENDED_HEADER, "ended");
                 sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             }
             return false;
@@ -7147,6 +7150,8 @@ public class SSLMailServer {
                 case "system_report" -> response = UpdateManager.systemReport();
                 case "os_status" -> response = UpdateManager.operatingSystem();
                 case "reboot_preview" -> response = UpdateManager.restartServer(false, 1);
+                // Per la striscia in alto di ogni pagina: serve un riavvio? (reperto 185)
+                case "reboot_state" -> response = UpdateManager.rebootState();
                 case "reboot_cancel" -> {
                     response = UpdateManager.cancelReboot();
                     logAudit("SERVER_REBOOT_CANCEL", ip, response.optString("pid", ""));
@@ -7326,6 +7331,24 @@ public class SSLMailServer {
                     }
                     response = UpdateManager.startSystemPreparation(req.optString("target", "15.1"));
                     logAudit("OS_UPGRADE_PREPARE", ip, req.optString("target", ""));
+                }
+                case "updates_search" -> {
+                    // Scarica cataloghi, vulnerabilita' e patch: non installa niente (reperto 186).
+                    if (!"SEARCH".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
+                        break;
+                    }
+                    response = UpdateManager.startUpdatesSearch();
+                    logAudit("UPDATES_SEARCH", ip, response.optString("jobId", response.optString("error", "")));
+                }
+                case "os_patch_install" -> {
+                    // Scarica e installa le patch del sistema di base, con un ambiente di avvio prima (reperto 185).
+                    if (!"INSTALL PATCHES".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
+                        break;
+                    }
+                    response = UpdateManager.startOsPatchInstall();
+                    logAudit("OS_PATCH_INSTALL", ip, response.optString("jobId", response.optString("error", "")));
                 }
                 case "os_fetch" -> {
                     if (!"FETCH UPDATES".equals(req.optString("confirm", ""))) {

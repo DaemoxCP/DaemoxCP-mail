@@ -1,0 +1,18 @@
+            <!-- Aggiorna il server: cosa c'e' da fare, in ordine, e il pulsante per ognuna (reperto 186). Le
+                 schede qui sotto restano per i casi particolari e le diagnosi; i motori sono gli stessi. -->
+            <section class="card mb-4 border-primary" id="update-center" aria-labelledby="ucTitle">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h3 class="h5 mb-0" id="ucTitle"><i class="fas fa-circle-arrow-up me-2" aria-hidden="true"></i>{{t:uc.title}}</h3>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary touch-target" data-on-click="ucLoad(true)"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:uc.reread}}</button>
+                        <button type="button" class="btn btn-sm btn-primary touch-target" id="ucSearchButton" data-on-click="ucSearch()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:uc.search}}</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">{{t:uc.intro}}</p>
+                    <p class="small mb-2" id="ucState" role="status">{{t:uc.reading}}</p>
+                    <div id="ucOutcome" role="status" aria-live="polite"></div>
+                    <ul class="list-group mb-0" id="ucList"></ul>
+                    <pre id="uc-log" class="upd-log mt-3" hidden></pre>
+                </div>
+            </section>

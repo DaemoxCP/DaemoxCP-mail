@@ -148,8 +148,21 @@ public final class WebSessions {
         return COOKIE + "=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0";
     }
 
+    /**
+     * Vero se l'ultimo check di questo thread non ha potuto leggere il database: allora "nessuna
+     * sessione" non vuol dire che la sessione e' finita (reperto 185). Durante un riavvio MySQL si
+     * ferma prima del pannello, e il pannello toglieva il cookie a tutti come se la sessione fosse
+     * scaduta; lo stesso per un riavvio di MySQL durante un aggiornamento dei pacchetti.
+     */
+    private static final ThreadLocal<Boolean> LAST_CHECK_FAILED = ThreadLocal.withInitial(() -> false);
+
+    public static boolean lastCheckFailed() {
+        return LAST_CHECK_FAILED.get();
+    }
+
     /** La sessione del token, se esiste, non e' scaduta, e' dello stesso browser e l'amministratore e' attivo. */
     public Optional<Current> check(String token, String userAgent) {
+        LAST_CHECK_FAILED.set(false);
         if (!wellFormed(token)) return Optional.empty();
         Instant now = Instant.now();
         try (PreparedStatement p = AuthStore.connection.get().prepareStatement(
@@ -169,6 +182,7 @@ public final class WebSessions {
                 return Optional.of(new Current(id, token, admin.get(), r.getObject(5, LocalDateTime.class)));
             }
         } catch (SQLException e) {
+            LAST_CHECK_FAILED.set(true);
             LOGGER.log(Level.WARNING, "Session check failed", e);
             return Optional.empty();
         }

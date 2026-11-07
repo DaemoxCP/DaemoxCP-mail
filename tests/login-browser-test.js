@@ -160,7 +160,7 @@ async function shot(page, name) {
         await page.fill('#consoleCode', m ? m[1] : '');
         await Promise.all([page.waitForURL('**/account?setup=passkey'), page.click('#btnConsole')]);
         check('the right code: signed in, sent to Account to create a passkey', new URL(page.url()).pathname === '/account');
-        // Il cookie come lo mette il server all'accesso (reperto 184): Strict, e di sessione del browser.
+        // The cookie as the server sets it at sign-in (reperto 184): Strict, and a browser-session cookie.
         const sessionCookie = (await context.cookies()).find(c => c.name === '__Host-MailPanel');
         check('the session cookie the server set: SameSite=Strict, HttpOnly, Secure, gone when the browser closes ('
             + (sessionCookie ? sessionCookie.sameSite + ' ' + sessionCookie.expires : 'none') + ')', !!sessionCookie

@@ -237,7 +237,7 @@ public class LoginRoutesTest {
             HttpResponse<String> ok = ask("POST", "/api/login", "{\"action\":\"code_verify\",\"email\":\"" + bossEmail + "\",\"code\":\"" + code
                     + "\",\"csrf_token\":\"" + token + "\"}", "Cookie", preCookie);
             String session = cookieValue(ok, WebSessions.COOKIE);
-            // Strict e senza Max-Age: un cookie di sessione del browser, mai mandato da un altro sito (reperto 184).
+            // Strict and without Max-Age: a browser-session cookie, never sent by another site (reperto 184).
             check("200 and the session cookie: __Host-, HttpOnly, Secure, SameSite=Strict, a browser-session cookie", ok.statusCode() == 200 && session != null
                     && setCookie(ok).contains(WebSessions.COOKIE + "=" + session + "; Path=/; HttpOnly; Secure; SameSite=Strict")
                     && !setCookie(ok).contains("Max-Age=43200") && !setCookie(ok).contains("Expires"));

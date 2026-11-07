@@ -13,17 +13,17 @@ import java.nio.file.Path;
 import java.util.concurrent.Executors;
 
 /**
- * Il server vero del pannello per home-panel-browser-test.js in modo REMOTE (reperto 183): i
- * gestori Java, le pagine generate, /api/panel_info con i dati veri della macchina, il MySQL di
- * prova, su HTTPS col nome panel.localhost. Un superadmin e una sua sessione di prova: il token
- * esce su stdout ("SESSION ..."), per il cookie del browser, che cosi' non passa dall'accesso
- * (lo prova login-browser-test.js). La sessione vale solo con lo User-Agent "HomePanelE2EServer"
- * (WebSessions la lega al browser): la prova lo usa.
+ * The real panel server for home-panel-browser-test.js and session-restart-browser-test.js in REMOTE
+ * mode (reperti 183-184): the Java handlers, the generated pages, /api/panel_info with the machine's
+ * real data, the test MySQL, over HTTPS with the name panel.localhost. A superadmin and a test
+ * session of theirs: the token goes to stdout ("SESSION ..."), for the browser cookie, which thus
+ * does not go through the sign-in (login-browser-test.js covers that). The session is valid only
+ * with the User-Agent "HomePanelE2EServer" (WebSessions ties it to the browser): the tests use it.
  *
- * Stampa anche l'impronta del jar ("SHA256 ...") e la porta: la prova da browser le confronta con
- * quello che la scheda mostra.
+ * It also prints the jar's fingerprint ("SHA256 ...") and the port: the browser test compares them
+ * with what the card shows.
  *
- * Uso (da una cartella vuota col jar dentro; READY su stderr quando ascolta):
+ * Usage (from an empty folder with the jar inside; READY on stderr when it listens):
  *   java -Dmysql.port=... -Dmysql.user=... -Dmysql.password=... -Dmysql.database=... \
  *        -cp "tests:$D/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.HomePanelE2EServer PORT
  */
@@ -59,7 +59,7 @@ public class HomePanelE2EServer {
                 .redirectErrorStream(true).start();
         cert.getInputStream().readAllBytes();
         if (cert.waitFor() != 0) throw new IllegalStateException("openssl failed");
-        // Il nome del pannello: HostCheck accetta solo quello (e localhost), e il browser arriva come panel.localhost.
+        // The panel's name: HostCheck accepts only that (and localhost), and the browser comes as panel.localhost.
         Main.dbManager.update_panel_config("panel.localhost", "0", Files.readString(dir.resolve("c.pem")),
                 Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
         SSLMailServer srv = new SSLMailServer(port, Files.readString(dir.resolve("c.pem")), Files.readString(dir.resolve("k.pem")));
@@ -69,8 +69,8 @@ public class HomePanelE2EServer {
         https.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         https.start();
 
-        // Come SSLMailServer.start (reperto 184): le sessioni dell'avvio di prima se ne vanno. Lo
-        // stesso database fra due avvii di questo server e' un jar riavviato.
+        // Like SSLMailServer.start (reperto 184): the sessions of the previous start go. The same
+        // database across two starts of this server is a jar started again.
         System.out.println("CLOSED " + Main.sessions.beginRun());
         String[] session = TestSessions.open(db, "dashboard-boss", "HomePanelE2EServer");
         System.out.println("SESSION " + session[0]);

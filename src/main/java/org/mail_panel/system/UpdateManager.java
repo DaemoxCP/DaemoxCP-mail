@@ -8694,7 +8694,15 @@ public final class UpdateManager {
                 // updatesready NON scarica: dice solo se c'e' gia' qualcosa di pronto da installare.
                 String ready = sh("freebsd-update updatesready 2>&1", 60).trim();
                 r.put("alreadyReady", ready);
-                r.put("readyExist", !ready.toLowerCase().contains("no updates are available"));
+                boolean readyExist = !ready.toLowerCase().contains("no updates are available");
+                r.put("readyExist", readyExist);
+                // Cosa porterebbero, se si installano: la versione (dal file tag) e se c'e' il kernel,
+                // cioe' se dopo servira' un riavvio (reperto 185).
+                if (readyExist) {
+                    r.put("readyTarget", OsPatch.target(sh("cat /var/db/freebsd-update/tag 2>/dev/null", 10)));
+                    r.put("readyKernel", number(sh("cat /var/db/freebsd-update/*-install/INDEX-NEW 2>/dev/null"
+                            + " | cut -d'|' -f1 | grep -c '^/boot/kernel/'", 30)) > 0);
+                }
             }
             return r.put("success", true);
         } catch (Exception e) {
@@ -8782,6 +8790,216 @@ public final class UpdateManager {
         t.setDaemon(true);
         t.start();
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    // ===================== Le patch di FreeBSD, installate dal pannello (reperto 185) =====================
+
+    /** L'ultima installazione di patch fatta dal pannello: serve a dire, dopo, se manca il riavvio. */
+    static Path osPatchState = Paths.get("/var/db/mailpanel/system/os-patch.json");
+    /** La configurazione di freebsd-update con cui il pannello installa: vedi OsPatch.installConfig. */
+    static Path osPatchConfig = Paths.get("/var/db/mailpanel/system/freebsd-update.conf");
+
+    /**
+     * Installa gli aggiornamenti del sistema di base: prima li scarica (quelli pronti possono essere
+     * vecchi: sul server vero erano del 22/10), poi l'ambiente di avvio per tornare indietro, poi
+     * "freebsd-update install", poi controlla le versioni e dice se serve un riavvio.
+     *
+     * Prende il turno dei pacchetti (PackageQueue): un pkg upgrade e un'installazione del sistema
+     * di base insieme si pestano i piedi (le librerie di sistema sotto i pacchetti che si
+     * aggiornano), e il turno vale anche fra processi.
+     */
+    public static JSONObject startOsPatchInstall() {
+        String id = "osp-" + System.currentTimeMillis();
+        String refusal = PackageQueue.take(id, I18n.tr("server.osPatch.turn"));
+        if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
+        Job j = new Job(id, "os-patch");
+        JOBS.put(id, j);
+        PackageQueue.start(id, "os-patch", () -> runOsPatchInstall(j));
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    private static void runOsPatchInstall(Job j) {
+        j.status = "running";
+        final int TOT = 5;
+        try {
+            j.advance(1, TOT);
+            j.write("=== " + I18n.tr("server.osPatch.title") + " ===");
+            j.write("");
+            j.write(I18n.tr("server.osPatch.step1", Map.of("total", String.valueOf(TOT))));
+            JSONObject os = operatingSystem();
+            if (!os.optBoolean("updatableWithFreebsdUpdate", false))
+                throw new IllegalStateException(os.optString("updatesNote", I18n.tr("server.um.findSystemUpdates.1")));
+            String fromUserland = os.optString("userland");
+            j.write("    " + I18n.tr("server.osPatch.now", Map.of("userland", fromUserland, "kernel", os.optString("uname"))));
+            long freeKb = number(sh("df -k / | awk 'NR==2 {print $4}'", 20));
+            if (freeKb < 1024L * 1024L)
+                throw new IllegalStateException(I18n.tr("server.osPatch.noSpace", Map.of("mb", String.valueOf(freeKb / 1024))));
+            if (ok("pgrep -f '/usr/sbin/freebsd-update' >/dev/null", 10))
+                throw new IllegalStateException(I18n.tr("server.osPatch.otherRunning"));
+            if (!ok("bectl check", 30))
+                throw new IllegalStateException(I18n.tr("server.osPatch.noBootEnvironments"));
+
+            j.advance(2, TOT);
+            j.write("");
+            j.write(I18n.tr("server.osPatch.step2", Map.of("total", String.valueOf(TOT))));
+            StringBuilder fetched = new StringBuilder();
+            int code = runLogged(j, "freebsd-update --not-running-from-cron fetch 2>&1", 1800, fetched);
+            if (code != 0 && !OsPatch.nothingToFetch(fetched.toString()))
+                throw new IllegalStateException(I18n.tr("server.um.startSystemUpdateSearch.8", Map.of("code", String.valueOf(code))));
+            String ready = sh("freebsd-update updatesready 2>&1", 60);
+            if (OsPatch.nothingToInstall(ready)) {
+                j.write("");
+                j.write(I18n.tr("server.osPatch.upToDate", Map.of("userland", fromUserland)));
+                j.outcome = I18n.tr("server.osPatch.upToDate", Map.of("userland", fromUserland));
+                j.status = "completed";
+                return;
+            }
+            String target = OsPatch.target(sh("cat /var/db/freebsd-update/tag 2>/dev/null", 10));
+            boolean kernelInside = number(sh("cat /var/db/freebsd-update/*-install/INDEX-NEW 2>/dev/null"
+                    + " | cut -d'|' -f1 | grep -c '^/boot/kernel/'", 30)) > 0;
+            j.write("    " + I18n.tr("server.osPatch.toInstall", Map.of("target", target.isEmpty() ? "?" : target))
+                    + (kernelInside ? " " + I18n.tr("server.osPatch.withKernel") : ""));
+
+            j.advance(3, TOT);
+            j.write("");
+            j.write(I18n.tr("server.osPatch.step3", Map.of("total", String.valueOf(TOT))));
+            String ts = sh("date -u '+%Y%m%d-%H%M%S'", 15).trim();
+            if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date");
+            String be = BE_PREFIX + "freebsd-patches-" + ts;
+            if (!ok("bectl create " + be, 300) || !ok("bectl list -H 2>/dev/null | cut -f1 | grep -qx '" + be + "'", 30))
+                throw new IllegalStateException(I18n.tr("server.osPatch.beFailed", Map.of("be", be)));
+            j.write("    " + I18n.tr("server.osPatch.beCreated", Map.of("be", be)));
+
+            j.advance(4, TOT);
+            j.write("");
+            j.write(I18n.tr("server.osPatch.step4", Map.of("total", String.valueOf(TOT))));
+            Files.createDirectories(osPatchConfig.getParent());
+            Files.writeString(osPatchConfig, OsPatch.installConfig(Files.readString(Paths.get("/etc/freebsd-update.conf"))));
+            boolean rebootFirst = false;
+            for (int round = 1; round <= 3; round++) {
+                StringBuilder out = new StringBuilder();
+                code = runLogged(j, "freebsd-update -f " + osPatchConfig + " install 2>&1", 3600, out);
+                if (code != 0 && !OsPatch.nothingToInstall(out.toString()))
+                    throw new IllegalStateException(I18n.tr("server.osPatch.installFailed", Map.of("code", String.valueOf(code), "be", be)));
+                if (OsPatch.asksRebootFirst(out.toString())) { rebootFirst = true; break; }
+                if (OsPatch.nothingToInstall(sh("freebsd-update updatesready 2>&1", 60))) break;
+            }
+
+            j.advance(5, TOT);
+            j.write("");
+            j.write(I18n.tr("server.osPatch.step5", Map.of("total", String.valueOf(TOT))));
+            String installedKernel = sh("freebsd-version -k 2>/dev/null", 20).trim();
+            String runningKernel = sh("uname -r 2>/dev/null", 20).trim();
+            String userland = sh("freebsd-version -u 2>/dev/null", 20).trim();
+            j.write("    " + I18n.tr("server.um.x.kernelInstalled", Map.of("k", installedKernel)));
+            j.write("    " + I18n.tr("server.um.x.kernelRunning", Map.of("k", runningKernel)));
+            j.write("    userland:             " + userland);
+            long now = java.time.Instant.now().getEpochSecond();
+            JSONObject state = new JSONObject().put("from", fromUserland).put("to", userland)
+                    .put("installedKernel", installedKernel).put("installedAt", now).put("bootEnvironment", be)
+                    .put("continueAfterReboot", rebootFirst);
+            Files.writeString(osPatchState, state.toString(2));
+            boolean reboot = rebootFirst || !installedKernel.equals(runningKernel);
+            j.write("");
+            j.outcome = reboot
+                    ? I18n.tr("server.osPatch.doneReboot", Map.of("to", userland, "kernel", installedKernel))
+                    : I18n.tr("server.osPatch.doneAdvised", Map.of("to", userland));
+            j.write(j.outcome);
+            if (rebootFirst) j.write(I18n.tr("server.osPatch.continueAfterReboot"));
+            j.write(I18n.tr("server.osPatch.wayBack", Map.of("be", be)));
+            j.status = "completed";
+        } catch (Exception e) {
+            j.status = "error";
+            j.errorMessage = e.getMessage();
+            j.write(I18n.tr("server.um.startMtaStsActivation.1", Map.of("message", String.valueOf(e.getMessage()))));
+        } finally {
+            j.finishedAt = System.currentTimeMillis();
+        }
+    }
+
+    /**
+     * Cerca gli aggiornamenti di tutto, per la scheda «Aggiorna il server» (reperto 186): il catalogo
+     * dei pacchetti (pkg update), l'elenco delle vulnerabilita' (pkg audit -F) e le patch del sistema
+     * di base (freebsd-update fetch, se la release le riceve). Scarica e basta: non installa niente.
+     * Prima ognuna stava in una scheda diversa, e il quadro dei pacchetti confronta col catalogo gia'
+     * scaricato, senza rete: senza un pkg update i conteggi erano quelli dell'ultima volta.
+     *
+     * Col turno dei pacchetti: un pkg update mentre un altro lavoro installa cambia il catalogo sotto
+     * il suo piano.
+     */
+    public static JSONObject startUpdatesSearch() {
+        String id = "srch-" + System.currentTimeMillis();
+        String refusal = PackageQueue.take(id, I18n.tr("server.search.turn"));
+        if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
+        Job j = new Job(id, "search");
+        JOBS.put(id, j);
+        PackageQueue.start(id, "updates-search", () -> runUpdatesSearch(j));
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    private static void runUpdatesSearch(Job j) {
+        j.status = "running";
+        final int TOT = 3;
+        try {
+            j.advance(1, TOT);
+            j.write(I18n.tr("server.search.step1", Map.of("total", String.valueOf(TOT))));
+            int code = runLogged(j, "pkg update 2>&1", 600);
+            if (code != 0) throw new IllegalStateException(I18n.tr("server.search.pkgFailed", Map.of("code", String.valueOf(code))));
+
+            j.advance(2, TOT);
+            j.write("");
+            j.write(I18n.tr("server.search.step2", Map.of("total", String.valueOf(TOT))));
+            // pkg audit esce con 1 anche quando trova pacchetti vulnerabili: conta l'elenco scaricato.
+            runLogged(j, "pkg audit -F -q 2>&1 | tail -5", 600);
+
+            j.advance(3, TOT);
+            j.write("");
+            j.write(I18n.tr("server.search.step3", Map.of("total", String.valueOf(TOT))));
+            JSONObject os = operatingSystem();
+            if (!os.optBoolean("updatableWithFreebsdUpdate", false)) {
+                j.write("    " + os.optString("updatesNote", I18n.tr("server.um.findSystemUpdates.1")));
+            } else {
+                StringBuilder out = new StringBuilder();
+                code = runLogged(j, "freebsd-update --not-running-from-cron fetch 2>&1", 1800, out);
+                if (code != 0 && !OsPatch.nothingToFetch(out.toString()))
+                    throw new IllegalStateException(I18n.tr("server.um.startSystemUpdateSearch.8", Map.of("code", String.valueOf(code))));
+            }
+            j.write("");
+            j.outcome = I18n.tr("server.search.done");
+            j.write(j.outcome);
+            j.status = "completed";
+        } catch (Exception e) {
+            j.status = "error";
+            j.errorMessage = e.getMessage();
+            j.write(I18n.tr("server.um.startMtaStsActivation.1", Map.of("message", String.valueOf(e.getMessage()))));
+        } finally {
+            j.finishedAt = System.currentTimeMillis();
+        }
+    }
+
+    /**
+     * Se il server va riavviato, per ogni pagina del pannello (la striscia in alto): letture leggere,
+     * senza freebsd-update ne' pkg. Anche un riavvio gia' programmato, per poterlo annullare.
+     */
+    public static JSONObject rebootState() {
+        String installedKernel = sh("freebsd-version -k 2>/dev/null", 10).trim();
+        String runningKernel = sh("uname -r 2>/dev/null", 10).trim();
+        java.time.Instant boot = PanelInfo.bootTime(sh("sysctl -n kern.boottime 2>/dev/null", 10));
+        long installedAt = 0;
+        String to = "";
+        try {
+            if (Files.isRegularFile(osPatchState)) {
+                JSONObject st = new JSONObject(Files.readString(osPatchState));
+                installedAt = st.optLong("installedAt", 0);
+                to = st.optString("to", "");
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "os-patch state unreadable", e);
+        }
+        JSONObject r = OsPatch.rebootState(installedKernel, runningKernel, installedAt, boot, to);
+        String pid = sh("pgrep -x shutdown 2>/dev/null | head -1", 10).trim();
+        r.put("scheduled", pid.matches("[0-9]{1,7}"));
+        return r;
     }
 
     /**

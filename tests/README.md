@@ -219,6 +219,7 @@ solo pacchetto Playwright, senza il suo Chromium):
     NODE_PATH=$(npm root -g) node tests/way-back-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/csp-browser-test.js $D
     NODE_PATH=$(npm root -g) node tests/home-panel-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/update-center-browser-test.js $D [screenshot-folder]
 
 Sul Mac basta il pacchetto Playwright, senza il suo Chromium: con `CHROMIUM` le prove usano il Chrome
 installato (tutte lo leggono dal 07/11/2026, reperto 177). Il pacchetto si puo' tenere fuori dal progetto:
@@ -633,6 +634,17 @@ CSRF, `beginRun` che toglie le righe di prima, e sul server vero il 302 a `/inde
 prova riavvia con il comando in `START`: i cookie come li mette il server, un link da un altro sito che arriva senza
 sessione, la pagina aperta che dopo il riavvio va all'accesso e dice perche', il cookie di prima che se ne va, la
 sessione del nuovo avvio che entra.
+
+**update-center-browser-test.js** — updating from the panel (reperti 185-187), with a simulated server:
+the restart banner on every page (and the Italian text taken
+from it.json), the "Update the server" card with its five rows in words, the package update confirmed in
+the panel's window with the exact plan and its signature, the FreeBSD patch install with INSTALL
+PATCHES, the restart window (what stops, the chosen delay, the time, cancelling, Escape), reads that
+queue up instead of failing, 44 px touch buttons at 375 px, and no browser dialog at all.
+
+**OsPatchTest** — the decisions behind installing FreeBSD patches (OsPatch): the target version from
+freebsd-update's tag file, its outputs (nothing to fetch, nothing to install, reboot then install
+again), whether a restart is needed or advised, and the install configuration with CreateBootEnv no.
 
 **home-panel-browser-test.js** — la scheda del pannello in cima alla dashboard (reperto 183), col
 server simulato due ore avanti al browser: da quanto gira (contato con l'ora del server) e da quando,
