@@ -94,15 +94,41 @@ public final class InstallLocks {
 
     /** Prende il turno e sblocca i pacchetti protetti, prima che lo script fermi qualcosa. */
     public static Start prepare(String description) {
-        return prepare(description, real());
+        return prepare(description, real(), () -> null);
+    }
+
+    /**
+     * Come {@link #prepare(String)}, con un passo in mezzo: {@code onTurn} gira col turno gia' preso
+     * e PRIMA di qualunque sblocco. E' il posto della via di ritorno (PackageWayBack): un boot
+     * environment fatto qui ha i pacchetti protetti com'erano e nessun elenco di sblocchi aperto,
+     * quindi ripartire da li' e' ripartire dal server di prima. Se {@code onTurn} restituisce un
+     * motivo, non si sblocca niente, il turno si rilascia e il motivo e' il rifiuto.
+     */
+    public static Start prepare(String description, java.util.function.Supplier<String> onTurn) {
+        return prepare(description, real(), onTurn);
     }
 
     static Start prepare(String description, Pkg pkg) {
+        return prepare(description, pkg, () -> null);
+    }
+
+    static Start prepare(String description, Pkg pkg, java.util.function.Supplier<String> onTurn) {
         String id = "install-" + System.nanoTime();
         // take, non takeForLocks: con l'elenco di un lavoro interrotto su disco i pacchetti
         // potrebbero essere gia' sbloccati, e un elenco nuovo non si potrebbe nemmeno scrivere.
         String refusal = PackageQueue.take(id, description);
         if (refusal != null) return new Start(null, refusal, "");
+        String notNow;
+        try {
+            notNow = onTurn.get();
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "The step before the unlock failed", e);
+            notNow = String.valueOf(e.getMessage());
+        }
+        if (notNow != null) {
+            PackageQueue.release(id);
+            return new Start(null, notNow, "");
+        }
         boolean listWritten = false;
         List<String> locked = List.of();
         try {

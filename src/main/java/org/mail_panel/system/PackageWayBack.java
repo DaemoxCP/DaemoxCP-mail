@@ -112,6 +112,26 @@ public final class PackageWayBack {
         prune(log, KEEP);
     }
 
+    /**
+     * Dopo la reinstallazione completa dal menu. A differenza dei lavori sui pacchetti, li' i
+     * pacchetti uguali non dicono che niente e' cambiato: lo script ferma i servizi, cancella e
+     * riscrive le configurazioni, svuota /var/vmail e ricrea le tabelle di MySQL anche quando non
+     * installa niente di nuovo. Quindi il boot environment si toglie solo se lo script si e'
+     * fermato PRIMA di cambiare qualcosa ({@code systemTouched} falso: non e' arrivato alla fase 1)
+     * e i pacchetti sono uguali; altrimenti resta, si dice come tornarci, e si potano i piu' vecchi.
+     */
+    public static void afterInstallation(Consumer<String> log, Prepared p, boolean systemTouched) {
+        if (p == null || p.name().isEmpty()) return;
+        if (!systemTouched && p.inventory().equals(inventory()) && !p.inventory().isEmpty()) {
+            String err = destroy(p.name());
+            log.accept(err == null ? I18n.tr("server.reinstall.wayBackNotNeeded", Map.of("name", p.name()))
+                                   : I18n.tr("server.um.x.wbPruneFailed", Map.of("name", p.name(), "err", err)));
+            return;
+        }
+        log.accept(I18n.tr("server.reinstall.wayBackKept", Map.of("name", p.name())));
+        prune(log, KEEP);
+    }
+
     /** Toglie i boot environment dei pacchetti piu' vecchi, tenendo gli ultimi 'keep'. */
     static void prune(Consumer<String> log, int keep) {
         List<String> own = new ArrayList<>();

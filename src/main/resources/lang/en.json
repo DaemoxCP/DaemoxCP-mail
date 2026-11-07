@@ -3482,6 +3482,8 @@
   "server.reinstall.turn": "complete mail server installation",
   "server.reinstall.unlockFailed": "Still locked after the unlock: {list}. The installation would stop on them with the mail services already stopped, so it does not start. {back}",
   "server.reinstall.unlocked": "{n} locked packages unlocked for the installation. Their list is in {file}: they are locked again at the end, even if the installation fails, and if this process dies the panel locks them again at its next start.",
+  "server.reinstall.wayBackKept": "{name} stays: it is the server as it was before this installation, which stopped the services, rewrote the configurations, emptied /var/vmail and recreated the MySQL tables. To go back to it: bectl activate {name} && shutdown -r now",
+  "server.reinstall.wayBackNotNeeded": "The installation stopped before changing anything, so {name} is not needed: removed.",
   "server.tz.badValue": "Invalid value: an offset like '+02:00', 'SYSTEM' or a name like 'Europe/Rome'.",
   "server.tz.globalFailed": "Global time_zone not set (missing the SUPER privilege?): {error}",
   "server.tz.globalSet": "Global time_zone set to '{value}'",
