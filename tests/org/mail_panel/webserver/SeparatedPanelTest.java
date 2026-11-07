@@ -163,6 +163,24 @@ public class SeparatedPanelTest {
             check("the session token is nowhere in what the root received", !sent.contains(boss.token()) && !sent.contains(boss.csrf()));
             r = send("GET", "/api/domains", null, boss, false);
             check("the domains list too (" + r.statusCode() + ")", r.statusCode() == 200 && seen.get(seen.size() - 1).route().equals("/api/domains"));
+            java.util.List<String> warned = new CopyOnWriteArrayList<>();
+            java.util.logging.Handler watch = new java.util.logging.Handler() {
+                @Override public void publish(java.util.logging.LogRecord l) {
+                    if (l.getLevel().intValue() >= java.util.logging.Level.WARNING.intValue())
+                        warned.add(l.getMessage() + (l.getThrown() == null ? "" : " " + l.getThrown()));
+                }
+                @Override public void flush() { }
+                @Override public void close() { }
+            };
+            java.util.logging.Logger.getLogger("").addHandler(watch);
+            r = send("HEAD", "/api/panel_info?action=uptime", null, boss, false);
+            Thread.sleep(300);
+            java.util.logging.Logger.getLogger("").removeHandler(watch);
+            check("a HEAD through both parts: 200 and no body; the root part served it as the GET it is (" + r.statusCode() + ")",
+                    r.statusCode() == 200 && r.body().isEmpty() && "/api/panel_info".equals(seen.get(seen.size() - 1).route()));
+            // The test has no SQLite: hostAllowed warns that it cannot read the panel's host on every request.
+            warned.removeIf(w -> w.startsWith("Cannot read the configured panel host"));
+            check("  and nothing logged at WARNING or above" + (warned.isEmpty() ? "" : " " + warned), warned.isEmpty());
             r = send("GET", "/api/admins", null, boss, false);
             check("the administrators API goes to the root part too (" + r.statusCode() + ")", r.statusCode() == 200
                     && seen.get(seen.size() - 1).route().equals("/api/admins") && r.body().contains("sep-boss"));

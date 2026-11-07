@@ -757,6 +757,16 @@ Set-Cookie from the root never reaches the browser, and with the root gone the w
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelSeparationTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.SecretsSplitTest
 
+**HeadRequestTest** — HEAD on the real server, without MySQL. Before, every handler sent the body's
+length and then wrote the body: Java's HTTP server logged a warning for the length and refused the
+write, and the sign-in page logged it as SEVERE (seen on the real server with one `curl -I`). Now a
+HEAD is a GET without a body for every filter and handler (HeadExchange): the sign-in page, a script
+of it, a Font Awesome file, a protected page (sends to the sign-in like the GET), an API without a
+session, a wrong Host; each with the GET's status, no body, the GET's length in Content-Length, and
+nothing logged. With the jar before the fix it fails.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.HeadRequestTest
+
 **PanelSeparationTest** — the root part's preparation: a user mailpanel that is not the panel's
 (another comment, home or shell, a password, uid 0, another group, other members in the group) is
 refused with its reason; the daemon(8) line; as root on the VM, a folder opened to the web part is
