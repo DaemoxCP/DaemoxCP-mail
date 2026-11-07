@@ -208,6 +208,39 @@ public class QuickHardeningTest {
             System.out.println("    syslogd put back: flags '" + Shell.run(Duration.ofSeconds(10), "sysrc", "-n", "syslogd_flags").outputTrim() + "'");
         }
 
+        System.out.println("\n== 6. rspamd on the VM ==");
+        String to = System.getProperty("test.mailbox", "");
+        boolean rcSet = Shell.run(Duration.ofSeconds(10), "sh", "-c", "sysrc -n rspamd_user >/dev/null 2>&1").success();
+        System.out.println("    main process as '" + RspamdUser.mainUser() + "', rspamd_user " + (rcSet ? "set" : "not set")
+                + ", a scan says '" + RspamdUser.scan() + "'");
+        try {
+            logged.clear();
+            capture(RspamdUser.class);
+            RspamdUser.ensureAtBoot();
+            System.out.println("    log: " + logged);
+            check("the repair: DONE", logged.size() == 1 && logged.get(0).startsWith("INFO: [RspamdUser] DONE: "));
+            List<String> users = RspamdUser.processes().stream().map(p -> p[0]).distinct().toList();
+            check("every rspamd process, the main one too, as rspamd (" + users + ")", users.equals(List.of("rspamd")));
+            check("a real scan answers (" + RspamdUser.scan() + ")", RspamdUser.scan() != null);
+            if (!to.isEmpty()) {
+                String d = delivery(to);
+                check("a real message through Postfix and rspamd's milter is delivered (" + d + ")", d == null);
+            } else System.out.println("    (no -Dtest.mailbox: real delivery not tried)");
+            logged.clear();
+            RspamdUser.ensureAtBoot();
+            check("the second time: nothing", logged.isEmpty());
+            // Fault: back to root; the check must say so.
+            Shell.run(Duration.ofSeconds(10), "sysrc", "-x", "rspamd_user");
+            Shell.run(Duration.ofSeconds(120), "service", "rspamd", "restart");
+            String problem = RspamdUser.verify();
+            check("the main process as root again: the check sees it (" + problem + ")", problem != null && problem.contains("root"));
+        } finally {
+            if (!rcSet) Shell.run(Duration.ofSeconds(10), "sysrc", "-x", "rspamd_user");
+            Shell.run(Duration.ofSeconds(120), "service", "rspamd", "restart");
+            Thread.sleep(3000);
+            System.out.println("    rspamd put back: main process as '" + RspamdUser.mainUser() + "', a scan says '" + RspamdUser.scan() + "'");
+        }
+
         System.out.println("\n== 5. /var/vmail, on a copy ==");
         Path root = Files.createTempDirectory(Path.of("/var/tmp"), "vmail-test");
         Path saved = VmailPermissions.root;
@@ -238,6 +271,33 @@ public class QuickHardeningTest {
             VmailPermissions.root = saved;
             Shell.run(Duration.ofSeconds(30), "rm", "-rf", root.toString());
         }
+    }
+
+    /** A real message through Postfix (and rspamd's milter) to the VM's test mailbox: delivered, no milter error. */
+    static String delivery(String to) throws Exception {
+        String id = "rspamd-probe-" + java.util.UUID.randomUUID() + "@mailpanel.invalid";
+        Path m = Files.createTempFile(Path.of("/var/tmp"), "probe-", ".eml");
+        Files.writeString(m, "From: root@localhost\nTo: " + to + "\nSubject: mailpanel rspamd probe\nMessage-ID: <" + id
+                + ">\n\nThis message checks that Postfix and rspamd still deliver.\n");
+        Shell.runShell(Duration.ofSeconds(30), "/usr/local/sbin/sendmail -t < " + m);
+        Files.deleteIfExists(m);
+        java.util.regex.Pattern queued = java.util.regex.Pattern.compile("postfix/cleanup\\[\\d+\\]: ([0-9A-Za-z]+): message-id=<" + java.util.regex.Pattern.quote(id) + ">");
+        String qid = null;
+        for (int i = 0; i < 40; i++) {
+            Thread.sleep(1000);
+            String log = Shell.run(Duration.ofSeconds(10), "tail", "-n", "400", "/var/log/maillog").output();
+            if (qid == null) {
+                java.util.regex.Matcher q = queued.matcher(log);
+                if (q.find()) qid = q.group(1); else continue;
+            }
+            for (String l : log.split("\n")) {
+                if (!l.contains(qid + ":")) continue;
+                if (l.contains("milter-reject") || l.contains("milter") && l.contains("error")) return "milter: " + l;
+                if (l.contains("status=sent")) return null;
+                if (l.contains("status=bounced") || l.contains("status=deferred")) return "not delivered: " + l;
+            }
+        }
+        return "the message " + id + (qid == null ? " never reached cleanup" : " (" + qid + ") was not delivered") + " within 40 seconds";
     }
 
     static String mode(Path p) {

@@ -74,7 +74,9 @@ public final class ServiceUsers {
             new Rule("mysql", "/libexec/mysqld( |$)|/bin/mysqld_safe( |$)", false),
             new Rule("redis", "redis-server", false),
             new Rule("clamav", "/sbin/clamd( |$)|/bin/freshclam( |$)", false),
-            new Rule("rspamd", "^rspamd: main process", true),
+            // Il processo principale di rspamd non ha bisogno di root: porte sopra la 1023 e file suoi
+            // (RspamdUser lo avvia con il suo utente). Da root e' un avviso.
+            new Rule("rspamd", "^rspamd: main process", false),
             new Rule("rspamd", "^rspamd: ", false),
             new Rule("unbound", "local-unbound( |$)|/sbin/unbound( |$)", false));
 
