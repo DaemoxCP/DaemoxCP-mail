@@ -85,6 +85,32 @@ public class dataBaseManager {
         return secret(0);
     }
 
+    /**
+     * Da adesso il pannello entra in MySQL con questa password: nel file dei segreti, e la colonna di
+     * SQLite vuota (una colonna piena vincerebbe sul file). Se il file non e' scrivibile, nella colonna.
+     * La colonna si riscrive solo se cambia: col servizio --web acceso dalla stessa cartella SQLite e'
+     * occupato (SQLITE_BUSY, reperto 156), e di solito la colonna e' gia' vuota.
+     */
+    public void setMysqlPassword(String password) {
+        String inSqlite = storeSecret(0, password);
+        String column = null;
+        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(
+                "SELECT " + SECRET_COLUMNS[0][0] + " FROM config WHERE id = 1");
+             ResultSet rs = ps.executeQuery()) {
+            column = rs.next() ? rs.getString(1) : null;
+        } catch (SQLException e) {
+            // tabella non ancora creata
+        }
+        if (column == null || column.equals(inSqlite)) return;
+        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(
+                "UPDATE config SET " + SECRET_COLUMNS[0][0] + " = ? WHERE id = 1")) {
+            ps.setString(1, inSqlite);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Could not write " + SECRET_COLUMNS[0][0] + " in SQLite: " + e.getMessage());
+        }
+    }
+
     /** La chiave privata TLS (PEM) del pannello: dal file dei segreti (o, se non si e' potuto spostarla, da SQLite). */
     public String panelTlsKey() {
         return secret(1);

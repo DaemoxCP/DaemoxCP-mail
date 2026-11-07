@@ -15,6 +15,7 @@ import org.mail_panel.gui.RoundcubeConfig;
 import org.mail_panel.gui.Welcome;
 import org.mail_panel.scripts.*;
 import org.mail_panel.sqli.dataBaseManager;
+import org.mail_panel.system.InstallLocks;
 import org.mail_panel.webserver.SSLMailServer;
 import org.mail_panel.webserver.WebSessions;
 
@@ -204,7 +205,7 @@ public class Main {
      * Execute a shell script with detailed output
      */
     public static boolean executeScript(String scriptPath, String scriptName, String... args) {
-        return executeScript(scriptPath, scriptName, java.util.Map.of(), args);
+        return executeScript(scriptPath, scriptName, java.util.Map.of(), true, args);
     }
 
     /**
@@ -226,11 +227,16 @@ public class Main {
      */
     public static boolean executeScriptWithSecrets(String scriptPath, String scriptName,
                                                    java.util.Map<String, String> secrets, String... args) {
-        return executeScript(scriptPath, scriptName, secrets, args);
+        return executeScript(scriptPath, scriptName, secrets, true, args);
     }
 
+    /**
+     * @param pause se aspettare ENTER alla fine (solo con un terminale, vedi waitForEnter). Falso
+     *              quando dopo lo script c'e' ancora qualcosa da fare che non deve dipendere da un
+     *              tasto: l'installazione completa riprotegge i pacchetti, e aspetta dopo.
+     */
     private static boolean executeScript(String scriptPath, String scriptName,
-                                         java.util.Map<String, String> secrets, String... args) {
+                                         java.util.Map<String, String> secrets, boolean pause, String... args) {
         System.out.println();
         System.out.println(ANSI_CYAN + "═══════════════════════════════════════════════════════════════" + ANSI_RESET);
         System.out.println(ANSI_CYAN + "  Executing: " + scriptName + ANSI_RESET);
@@ -247,7 +253,7 @@ public class Main {
         File scriptFile = new File(scriptPath);
         if (!scriptFile.exists()) {
             System.out.println(ANSI_RED + "[ERROR] Script file not found: " + scriptPath + ANSI_RESET);
-            waitForEnter();
+            if (pause) waitForEnter();
             return false;
         }
 
@@ -308,12 +314,12 @@ public class Main {
             System.out.println();
             System.out.flush();
 
-            waitForEnter();
+            if (pause) waitForEnter();
             return exitCode == 0;
 
         } catch (Exception e) {
             System.out.println(ANSI_RED + "[ERROR] Failed to execute script: " + e.getMessage() + ANSI_RESET);
-            waitForEnter();
+            if (pause) waitForEnter();
             return false;
         }
     }
@@ -383,6 +389,21 @@ public class Main {
         if (needsTableCreation) {
             dbManager.create_tables();
             dbManager.insert_data_default();
+        }
+
+        // Prima che qualunque cosa entri in MySQL: se un'installazione e' stata interrotta con la
+        // password nuova ancora in attesa, o se MySQL rifiuta quella del pannello (i server rotti
+        // dalla versione di prima, reperto 156), si chiede a MySQL quale conosce. Vale per ogni
+        // processo: il servizio --web, il menu, i comandi da console. Di solito costa una
+        // connessione e non cambia niente (PendingDbPassword.settleAtStartup).
+        try {
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            String decided;
+            try { decided = org.mail_panel.system.PendingDbPassword.settleAtStartup(dbManager).message(); }
+            finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+            if (!decided.isEmpty()) System.out.println("[MYSQL] " + decided);
+        } catch (Exception e) {
+            System.out.println("Checking the panel's MySQL password failed: " + e.getMessage());
         }
 
         // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
@@ -576,14 +597,73 @@ public class Main {
             return;
         }
 
-        // Save hostname
-        dbManager.setMailHostname(mailHostname.trim());
-
         try {
             screen.stopScreen();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+        runInstallation(mailHostname.trim());
+
+        // Un'attesa sola, alla fine: dopo la riprotezione dei pacchetti, non prima. Con l'attesa
+        // dentro executeScript, chi chiudeva il terminale davanti a "Press ENTER" uccideva il
+        // processo con i pacchetti ancora sbloccati (li riproteggeva solo il prossimo avvio).
+        waitForEnter();
+
+        try {
+            screen.startScreen();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * L'installazione completa, senza la finestra del nome: e' quello che fa la voce del menu
+     * dopo che il nome e' stato scritto. Pubblica per il conduttore delle prove
+     * (tests/org/mail_panel/system/MenuReinstall.java), che cosi' prova proprio questo codice.
+     *
+     * Sul turno dei lavori sui pacchetti, con i pacchetti protetti sbloccati prima e riprotetti
+     * alla fine (InstallLocks). Il turno e lo sblocco vengono PRIMA di qualunque cambiamento:
+     * prima del nome, dei flag dei servizi e soprattutto della nuova password di MySQL, che
+     * salvata senza installazione lascerebbe il pannello con una password che MySQL non conosce.
+     *
+     * @return vero se lo script e' uscito con 0
+     */
+    public static boolean runInstallation(String mailHostname) {
+        InstallLocks.Start start;
+        org.mail_panel.i18n.I18n.setCurrent("en");   // la console e' in inglese
+        try { start = InstallLocks.prepare(org.mail_panel.i18n.I18n.tr("server.reinstall.turn")); }
+        finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+        if (start.refusal() != null) {
+            System.out.println(ANSI_RED + "[STOPPED] " + start.refusal() + ANSI_RESET);
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            try { System.out.println(ANSI_RED + org.mail_panel.i18n.I18n.tr("server.reinstall.notStarted") + ANSI_RESET); }
+            finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+            System.out.flush();
+            return false;
+        }
+        if (!start.report().isEmpty()) System.out.println(ANSI_YELLOW + "[LOCKS] " + start.report() + ANSI_RESET);
+        boolean success = false;
+        try {
+            success = installOnTurn(mailHostname);
+        } finally {
+            String back;
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            try { back = InstallLocks.finish(start.held()); }
+            finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+            if (!back.isEmpty()) {
+                boolean allBack = !org.mail_panel.system.PackageQueue.statePresent();
+                System.out.println((allBack ? ANSI_GREEN : ANSI_RED) + "[LOCKS] " + back + ANSI_RESET);
+            }
+            System.out.flush();
+        }
+        return success;
+    }
+
+    /** Il corpo dell'installazione, con il turno gia' preso e i pacchetti gia' sbloccati. */
+    private static boolean installOnTurn(String mailHostname) {
+        // Save hostname
+        dbManager.setMailHostname(mailHostname);
 
         // Reset all service flags in SQLite (fresh install/reinstall)
         System.out.println(ANSI_YELLOW + "[RESET] Resetting service flags for fresh installation..." + ANSI_RESET);
@@ -608,14 +688,30 @@ public class Main {
             System.out.println(ANSI_YELLOW + "[WARNING] Could not read MySQL config: " + e.getMessage() + ANSI_RESET);
         }
 
-        // ALWAYS generate a new password (both install and reinstall)
-        // This ensures a fresh secure password every time
-        mysqlPassword = org.mail_panel.security.PanelSecrets.newAlphanumericPassword(24);
-        System.out.println(ANSI_GREEN + "[AUTO] Generated MySQL password" + ANSI_RESET);
-
-        // Save it (replaces old password if reinstalling): the password goes to the panel secrets file, the rest to SQLite
-        dbManager.update_mysql_config(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
-        System.out.println(ANSI_GREEN + "[AUTO] MySQL password saved to the panel secrets file" + ANSI_RESET);
+        // Una password nuova a ogni installazione, ma IN ATTESA: quella del pannello resta la
+        // vecchia finche' MySQL non conosce la nuova. Prima la si scriveva subito come password del
+        // pannello, e ogni uscita dello script prima della fase 3 (Roundcube non configurato, un
+        // parametro mancante, il turno, un pacchetto protetto, pkg) lasciava il pannello con una
+        // password che MySQL rifiutava (reperto 156). La decisione e' dopo lo script, qui sotto.
+        org.mail_panel.system.PendingDbPassword.Store passwordStore =
+                org.mail_panel.system.PendingDbPassword.panelStore(dbManager);
+        org.mail_panel.system.PendingDbPassword.Probe mysqlProbe =
+                org.mail_panel.system.PendingDbPassword.mysqlProbe(mysqlHost, mysqlPort, mysqlUser);
+        org.mail_panel.i18n.I18n.setCurrent("en");   // la console e' in inglese
+        try {
+            org.mail_panel.system.PendingDbPassword.Prepared prepared =
+                    org.mail_panel.system.PendingDbPassword.prepare(passwordStore, mysqlProbe, mysqlUser);
+            mysqlPassword = prepared.password();
+            if (!prepared.note().isEmpty()) System.out.println(ANSI_YELLOW + "[MYSQL] " + prepared.note() + ANSI_RESET);
+            System.out.println(ANSI_GREEN + "[AUTO] " + org.mail_panel.i18n.I18n.tr("server.dbPassword.aside") + ANSI_RESET);
+        } catch (RuntimeException e) {
+            System.out.println(ANSI_RED + "[STOPPED] " + org.mail_panel.i18n.I18n.tr("server.dbPassword.cannotAside",
+                    java.util.Map.of("err", String.valueOf(e.getMessage()))) + ANSI_RESET);
+            System.out.flush();
+            return false;
+        } finally {
+            org.mail_panel.i18n.I18n.clearCurrent();
+        }
 
         // La password di root di MySQL. Quella NON si rigenera a ogni installazione: la si
         // genera la prima volta e poi e' quella, perche' se MySQL c'e' gia' root la usa gia'
@@ -684,12 +780,43 @@ public class Main {
 
         // Execute the unified mail server installation script. Le due password viaggiano
         // nell'ambiente e non fra gli argomenti: un argomento lo legge chiunque con "ps".
-        boolean success = executeScriptWithSecrets("./install_scripts/install_mail_server.sh",
+        // Senza l'attesa di un tasto alla fine: la fa installMailServer, dopo la riprotezione.
+        // MAIL_PANEL_PACKAGE_TURN dice allo script che il turno dei pacchetti lo tiene questo
+        // processo, suo padre: senza, lo script prenderebbe il turno da se' con lockf, lo
+        // troverebbe preso da noi e si fermerebbe. Lo script non ci crede sulla parola: controlla
+        // che il lock sia preso e che dentro ci sia questo pid (FullMailServerScript).
+        boolean success = executeScript("./install_scripts/install_mail_server.sh",
                 "Complete Mail Server Installation",
                 java.util.Map.of("MYSQL_PASSWORD", mysqlPassword,
-                                 "MYSQL_ROOT_PASSWORD", mysqlRootPassword),
-                mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname.trim(),
+                                 "MYSQL_ROOT_PASSWORD", mysqlRootPassword,
+                                 "MAIL_PANEL_PACKAGE_TURN", String.valueOf(ProcessHandle.current().pid())),
+                false,
+                mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname,
                 roundcubeDomain, roundcubePort, roundcubeSslCert, roundcubeSslKey, roundcubeSslChain);
+
+        // Quale password conosce MySQL adesso: lo dice MySQL, non il codice d'uscita. Uno script
+        // fallito dopo la fase 3 ha gia' dato a MySQL (e a Postfix e Dovecot) la password nuova;
+        // uno fermato prima no. Il turno dei pacchetti e' ancora nostro (runInstallation).
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        try {
+            org.mail_panel.system.PendingDbPassword.Result decided =
+                    org.mail_panel.system.PendingDbPassword.settle(passwordStore, mysqlProbe, mysqlUser);
+            if (decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.NEW_ADOPTED) {
+                // Il resto della configurazione MySQL (host, porta, utente, database) in SQLite.
+                dbManager.update_mysql_config(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
+            }
+            boolean good = decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.NEW_ADOPTED
+                    || decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.OLD_KEPT
+                    || decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.COPY_ADOPTED;
+            if (!decided.message().isEmpty())
+                System.out.println((good ? ANSI_GREEN : ANSI_YELLOW) + "[MYSQL] " + decided.message() + ANSI_RESET);
+        } catch (RuntimeException e) {
+            System.out.println(ANSI_YELLOW + "[MYSQL] " + org.mail_panel.i18n.I18n.tr("server.dbPassword.settleFailed",
+                    java.util.Map.of("err", String.valueOf(e.getMessage()))) + ANSI_RESET);
+        } finally {
+            org.mail_panel.i18n.I18n.clearCurrent();
+        }
+        System.out.flush();
 
         if (success) {
             // Mark all services as installed
@@ -747,14 +874,7 @@ public class Main {
             System.out.println(ANSI_YELLOW + "Remember to configure a real SSL certificate from the web panel!" + ANSI_RESET);
             System.out.flush();
         }
-
-        // L'attesa di un tasto la fa gia' executeScript(), e solo se c'e' un terminale.
-
-        try {
-            screen.startScreen();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        return success;
     }
 
     /**

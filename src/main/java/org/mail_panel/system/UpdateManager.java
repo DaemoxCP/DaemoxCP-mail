@@ -351,11 +351,24 @@ public final class UpdateManager {
      * senza l'elenco degli sblocchi voluti bloccherebbe anche quelli.
      */
     public static String applyLockPolicy() {
-        if (Files.exists(Paths.get(MAINTENANCE_STATE)) || org.mail_panel.Main.mailDatabase == null) return "";
+        if (PackageQueue.statePresent() || org.mail_panel.Main.mailDatabase == null) return "";
         // Anche questa passa all'avvio di ogni processo: se un altro pannello sta lavorando sui
-        // pacchetti, le protezioni che ha tolto sono sue (reperto 147).
-        if (PackageQueue.takeForLocks("startup-lock-policy", I18n.tr("server.recovery.turnLockPolicy")) != null) return "";
-        try { return applyLockPolicyOnTurn(); }
+        // pacchetti, le protezioni che ha tolto sono sue (reperto 147). Per esempio la
+        // reinstallazione completa dal menu, che li ha sbloccati apposta: bloccarli adesso le
+        // fermerebbe pkg a meta' (reperto 154). Lo si dice nel log: tornando "" come quando non
+        // c'e' niente da fare, chi legge il log del servizio non sapeva che la regola era saltata.
+        String refusal = PackageQueue.takeForLocks("startup-lock-policy", I18n.tr("server.recovery.turnLockPolicy"));
+        if (refusal != null) {
+            String msg = "Package lock rule not applied at this start (it is applied at the next one): " + refusal;
+            LOGGER.info(msg);
+            return msg;
+        }
+        try {
+            // Col turno in mano si riguarda: l'elenco di un lavoro puo' essere comparso fra il
+            // primo sguardo e il turno, e allora prima va ripristinato quello.
+            if (PackageQueue.statePresent()) return "";
+            return applyLockPolicyOnTurn();
+        }
         finally { PackageQueue.release("startup-lock-policy"); }
     }
 
@@ -2233,7 +2246,9 @@ public final class UpdateManager {
      *    pagina Aggiornamenti e il rapporto mostrano finche' qualcuno non controlla.
      */
     public static String restoreLocksAfterCrash() {
-        Path f = Paths.get(MAINTENANCE_STATE);
+        // PackageQueue.list, non il percorso scritto qui: e' lo stesso file, ma e' quello che
+        // leggono PackageRecovery.statePackages e le prove, che lo spostano in una cartella loro.
+        Path f = PackageQueue.list;
         if (!Files.exists(f)) return "";
         String refusal = PackageQueue.takeForLocks("startup-restore", I18n.tr("server.recovery.turnAtStartup"));
         if (refusal != null) {
@@ -2302,7 +2317,7 @@ public final class UpdateManager {
      * tentativo, per non pestare un lavoro partito nel frattempo.
      */
     static boolean retryRelock() {
-        Path f = Paths.get(MAINTENANCE_STATE);
+        Path f = PackageQueue.list;
         if (!Files.exists(f)) return true;
         if (PackageQueue.takeForLocks("relock-retry", I18n.tr("server.recovery.turnRetry")) != null) return false;
         try {
