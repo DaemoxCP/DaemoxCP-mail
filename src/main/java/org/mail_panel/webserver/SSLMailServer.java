@@ -324,6 +324,19 @@ public class SSLMailServer {
         HttpHandler served = mode == Mode.WEB_PART && access.kind() == Access.Kind.API && !WEB_LOCAL_API.contains(path)
                 ? exchange -> forwardToRoot(exchange, path) : handler;
         HttpContext context = server.createContext(path, served);
+        // Per prima, una HEAD diventa per tutti quelli che seguono una GET senza corpo (HeadExchange): ogni
+        // gestore scrive la risposta come sempre, e nessuno deve sapere delle HEAD.
+        context.getFilters().add(new Filter() {
+            @Override
+            public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+                chain.doFilter("HEAD".equals(exchange.getRequestMethod()) ? new HeadExchange(exchange) : exchange);
+            }
+
+            @Override
+            public String description() {
+                return "HEAD answered like GET, without the body";
+            }
+        });
         if (!HOST_CHECK_EXEMPT.contains(path)) {
             context.getFilters().add(new Filter() {
                 @Override
@@ -1134,9 +1147,12 @@ public class SSLMailServer {
                 sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
                 return;
             }
-            CURRENT_SESSION.set(new Object[]{exchange, session});
-            if (!accessAllowed(exchange, access)) return;
-            handler.handle(exchange);
+            // Come sulla porta (HeadExchange): una HEAD il gestore la serve come una GET, e il corpo si scarta. La web
+            // le passa gia' come GET; qui arriva una HEAD solo se qualcuno la scrive sul socket.
+            HttpExchange ex = "HEAD".equals(r.method()) ? new HeadExchange(exchange) : exchange;
+            CURRENT_SESSION.set(new Object[]{ex, session});
+            if (!accessAllowed(ex, access)) return;
+            handler.handle(ex);
         } finally {
             I18n.clearCurrent();
             forgetCurrentSession();
@@ -12091,7 +12107,7 @@ http {
         if (session.isEmpty()) return false;
         // Una richiesta inoltrata dalla parte web: il token l'ha controllato il suo filtro CSRF, e qui non
         // c'e' (la root non riceve ne' il token della sessione ne' quello CSRF).
-        if (exchange instanceof ForwardedExchange) return true;
+        if (HeadExchange.unwrap(exchange) instanceof ForwardedExchange) return true;
         // L'intestazione che lo script di ogni pagina aggiunge (getHead), oppure il campo del corpo
         String header = exchange.getRequestHeaders().getFirst("X-CSRF-Token");
         String providedToken = header != null ? header : request.optString("csrf_token", "");
