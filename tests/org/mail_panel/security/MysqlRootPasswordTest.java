@@ -13,31 +13,28 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * La password di root di MySQL, che prima non esisteva, e le due strade da cui i segreti
- * uscivano dal pannello.
+ * MySQL's root password, which did not exist before, and the two roads by which the secrets left
+ * the panel.
  *
- * Quello che va provato qui, e che compilare non direbbe:
- *  - la prima password si GENERA, e una volta generata non cambia piu'. Se cambiasse a ogni
- *    installazione, quella scritta nel file e quella impostata in MySQL non sarebbero piu'
- *    lo stesso segreto e nessuno entrerebbe piu' come root;
- *  - la password di root non contiene caratteri che la spezzerebbero dove finisce davvero:
- *    dentro IDENTIFIED BY '...' in un here-document, e dentro un file di opzioni di MySQL.
- *    Non si guarda l'alfabeto: si fa espandere il here-document a /bin/sh e si guarda la
- *    riga che ne esce;
- *  - la password dell'UTENTE DEL PANNELLO ha un alfabeto piu' stretto, e il motivo non e'
- *    la pigrizia: quella finisce in un URL (mysql://utente:password@host/db). Qui si
- *    ricostruisce l'URL e lo si rilegge, perche' una chiocciola o un segno di percento
- *    dentro la password lo spezzerebbero in silenzio;
- *  - i segreti non passano piu' per gli argomenti ne' per lo standard output. Il controllo
- *    non guarda il codice: lancia uno script vero con executeScriptWithSecrets, cattura
- *    tutto quello che il pannello stampa, e pretende che il segreto non ci sia e che sia
- *    arrivato al figlio;
- *  - lo script e il chiamante sono due parti della stessa cosa (r26): se uno sposta un
- *    argomento e l'altro no, l'installazione configura il database col nome dell'host. Qui
- *    si legge l'elenco dei posizionali dallo script generato e si confronta con quello che
- *    Main gli passa.
+ * What must be tested here, and that compiling would not tell:
+ *  - the first password is GENERATED, and once generated it no longer changes. If it changed at
+ *    every installation, the one written in the file and the one set in MySQL would no longer be
+ *    the same secret and nobody would get in as root any more;
+ *  - the root password contains no characters that would break it where it really ends up: inside
+ *    IDENTIFIED BY '...' in a here-document, and inside a MySQL option file. The alphabet is not
+ *    looked at: /bin/sh is made to expand the here-document and the line that comes out is looked at;
+ *  - the password of the PANEL'S USER has a narrower alphabet, and the reason is not laziness: it
+ *    ends up in a URL (mysql://user:password@host/db). Here the URL is rebuilt and read back,
+ *    because an at sign or a percent sign inside the password would break it silently;
+ *  - the secrets no longer go through the arguments nor through standard output. The check does
+ *    not look at the code: it starts a real script with executeScriptWithSecrets, captures
+ *    everything the panel prints, and requires the secret not to be there and to have reached the
+ *    child;
+ *  - the script and the caller are two parts of the same thing (r26): if one moves an argument and
+ *    the other does not, the installation configures the database with the host's name. Here the
+ *    list of positionals is read from the generated script and compared with what Main passes it.
  *
- * Si lancia da una cartella qualunque:
+ * It runs from any folder:
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.security.MysqlRootPasswordTest
  */
 public class MysqlRootPasswordTest {
@@ -46,11 +43,11 @@ public class MysqlRootPasswordTest {
     static final PrintStream OUT = System.out;
 
     static void check(String what, boolean ok) {
-        OUT.println((ok ? "  OK   " : "  FALLITO ") + what);
+        OUT.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
-    /** L'ordine dei posizionali che Main.installMailServer passa allo script, in ordine. */
+    /** The order of the positionals Main.installMailServer passes to the script, in order. */
     static final List<String> ARGUMENTS_FROM_THE_PANEL = List.of(
             "MYSQL_HOST", "MYSQL_PORT", "MYSQL_USER", "MYSQL_DATABASE", "MAIL_HOSTNAME",
             "ROUNDCUBE_DOMAIN", "ROUNDCUBE_PORT", "ROUNDCUBE_SSL_CERT", "ROUNDCUBE_SSL_KEY",
@@ -60,34 +57,34 @@ public class MysqlRootPasswordTest {
         Path home = Files.createTempDirectory("mysql-root-password");
         PanelSecrets.dir = home.resolve("secrets");
         reset();
-        // Senza questo, executeScript aspetta un ENTER quando la prova gira da un terminale.
+        // Without this, executeScript waits for an ENTER when the test runs from a terminal.
         var interactive = Main.class.getDeclaredField("nonInteractive");
         interactive.setAccessible(true);
         interactive.set(null, true);
 
-        OUT.println("\n== La prima password di root ==");
-        check("all'inizio non c'e'", PanelSecrets.text(PanelSecrets.MYSQL_ROOT_PASSWORD).isEmpty());
+        OUT.println("\n== The first root password ==");
+        check("at the start it is not there", PanelSecrets.text(PanelSecrets.MYSQL_ROOT_PASSWORD).isEmpty());
         String generated = PanelSecrets.ensureMysqlRootPassword();
-        check("dopo c'e', ed e' lunga 28", generated.length() == 28);
-        check("la seconda chiamata restituisce LA STESSA, non una nuova",
+        check("afterwards it is there, and it is 28 long", generated.length() == 28);
+        check("the second call returns THE SAME, not a new one",
                 generated.equals(PanelSecrets.ensureMysqlRootPassword()));
         reset();
-        check("riletta dal file e' ancora quella",
+        check("read back from the file it is still that one",
                 generated.equals(PanelSecrets.text(PanelSecrets.MYSQL_ROOT_PASSWORD)));
-        PanelSecrets.setText(PanelSecrets.MYSQL_ROOT_PASSWORD, "messa-a-mano");
-        check("una password messa a mano non viene sostituita",
-                "messa-a-mano".equals(PanelSecrets.ensureMysqlRootPassword()));
-        check("il file e' leggibile solo da root, la cartella solo attraversabile da root",
+        PanelSecrets.setText(PanelSecrets.MYSQL_ROOT_PASSWORD, "set-by-hand");
+        check("a password set by hand is not replaced",
+                "set-by-hand".equals(PanelSecrets.ensureMysqlRootPassword()));
+        check("the file is readable only by root, the folder only traversable by root",
                 "rw-------".equals(permissions(PanelSecrets.dir.resolve("panel-secrets.properties")))
                         && "rwx------".equals(permissions(PanelSecrets.dir)));
 
-        OUT.println("\n== La password di root sopravvive al here-document dell'installazione ==");
-        // Non si guarda l'alfabeto: si prende la riga ESATTA dello script, la si fa espandere
-        // a /bin/sh, e poi la si rilegge come la legge MySQL. I due passaggi rompono per
-        // motivi diversi, e uno solo non basta: la barra rovescia la mangia la shell (in un
-        // here-document non quotato "\\" diventa "\"), mentre l'apice attraversa la shell
-        // intatto e chiude il letterale in faccia a MySQL. Misurato: con un controllo che
-        // confrontava solo il testo espanso, un alfabeto con l'apice passava la prova.
+        OUT.println("\n== The root password survives the installation's here-document ==");
+        // The alphabet is not looked at: the EXACT line of the script is taken, /bin/sh is made to
+        // expand it, and then it is read back as MySQL reads it. The two passes break for different
+        // reasons, and one alone is not enough: the backslash is eaten by the shell (in an unquoted
+        // here-document "\\" becomes "\"), while the quote goes through the shell intact and closes
+        // the literal in MySQL's face. Measured: with a check that compared only the expanded text,
+        // an alphabet with the quote passed the test.
         int through = 0, mangledByShell = 0, mangledBySql = 0;
         for (int i = 0; i < 200; i++) {
             String password = PanelSecrets.newPassword(28);
@@ -97,21 +94,21 @@ public class MysqlRootPasswordTest {
             if (!password.equals(passwordAsMysqlReadsIt(expanded))) { mangledBySql++; continue; }
             through++;
         }
-        check("200 password generate arrivano a MySQL intatte (" + through + " su 200; "
-                + mangledByShell + " rotte dalla shell, " + mangledBySql + " dal letterale SQL)",
+        check("200 generated passwords reach MySQL intact (" + through + " of 200; "
+                + mangledByShell + " broken by the shell, " + mangledBySql + " by the SQL literal)",
                 mangledByShell == 0 && mangledBySql == 0);
 
-        // Lo stesso, nella seconda forma in cui la password finisce: il file di opzioni.
-        // Un '#' non quotato apre un commento, e MySQL leggerebbe mezza password.
+        // The same, in the second form the password ends up in: the option file. An unquoted '#'
+        // opens a comment, and MySQL would read half a password.
         int readBack = 0;
         for (int i = 0; i < 200; i++) {
             String password = PanelSecrets.newPassword(28);
             if (password.equals(optionFileValue(optionFile(password)))) readBack++;
         }
-        check("200 password rilette dal file di opzioni come MySQL lo legge (" + readBack + " su 200)",
+        check("200 passwords read back from the option file as MySQL reads it (" + readBack + " of 200)",
                 readBack == 200);
 
-        OUT.println("\n== La password dell'utente del pannello finisce in un URL ==");
+        OUT.println("\n== The panel user's password ends up in a URL ==");
         int urlOk = 0, urlBroken = 0;
         for (int i = 0; i < 500; i++) {
             String password = PanelSecrets.newAlphanumericPassword(24);
@@ -125,10 +122,10 @@ public class MysqlRootPasswordTest {
                 urlBroken++;
             }
         }
-        check("500 password del pannello dentro mysql://utente:password@host/db, rilette uguali ("
-                + urlOk + " su 500)", urlBroken == 0);
-        // Provato a fallire: con l'alfabeto di root l'URL si rompe. Se un giorno smettesse
-        // di rompersi, questo controllo non distinguerebbe piu' niente e va tolto.
+        check("500 panel passwords inside mysql://user:password@host/db, read back the same ("
+                + urlOk + " of 500)", urlBroken == 0);
+        // Made to fail: with the root alphabet the URL breaks. If one day it stopped breaking, this
+        // check would no longer tell anything apart and must be removed.
         int richBroken = 0;
         for (int i = 0; i < 500; i++) {
             String password = PanelSecrets.newPassword(24);
@@ -140,59 +137,59 @@ public class MysqlRootPasswordTest {
                 richBroken++;
             }
         }
-        check("e con l'alfabeto di root lo stesso URL si rompe (" + richBroken + " su 500): e' per"
-                + " questo che i due alfabeti sono diversi", richBroken > 250);
+        check("and with the root alphabet the same URL breaks (" + richBroken + " of 500): that is"
+                + " why the two alphabets are different", richBroken > 250);
 
-        OUT.println("\n== Il segreto non passa piu' per lo schermo ne' per gli argomenti ==");
+        OUT.println("\n== The secret no longer goes through the screen nor through the arguments ==");
         Path script = home.resolve("echo-secret.sh");
         Files.writeString(script, "#!/bin/sh\n"
-                + "# Scrive la LUNGHEZZA del segreto, mai il segreto: se lo stampasse, questa\n"
-                + "# prova non distinguerebbe piu' lo standard output del pannello da quello\n"
-                + "# dello script.\n"
+                + "# Writes the LENGTH of the secret, never the secret: if it printed it, this\n"
+                + "# test would no longer tell the panel's standard output from the\n"
+                + "# script's.\n"
                 + "printf '%s' \"${MYSQL_ROOT_PASSWORD}\" > \"$1/arrived\"\n"
                 + "echo \"the child got ${#MYSQL_ROOT_PASSWORD} characters\"\n", StandardCharsets.UTF_8);
         String secret = PanelSecrets.newPassword(28);
         String printed = capture(() -> Main.executeScriptWithSecrets(script.toString(),
-                "prova", Map.of("MYSQL_ROOT_PASSWORD", secret), home.toString()));
-        check("il segreto arriva al figlio nell'ambiente",
+                "test", Map.of("MYSQL_ROOT_PASSWORD", secret), home.toString()));
+        check("the secret reaches the child in the environment",
                 secret.equals(Files.readString(home.resolve("arrived"), StandardCharsets.UTF_8)));
-        check("e non compare in niente di quello che il pannello stampa", !printed.contains(secret));
-        check("al suo posto si dice quanti argomenti ci sono", printed.contains("1 (hidden"));
-        // E se un giorno qualcuno rimette un segreto FRA GLI ARGOMENTI, non deve comparire
-        // lo stesso: qui glielo si passa apposta come argomento e si guarda lo schermo.
+        check("and it appears in nothing the panel prints", !printed.contains(secret));
+        check("in its place it says how many arguments there are", printed.contains("1 (hidden"));
+        // And if one day somebody puts a secret back AMONG THE ARGUMENTS, it must not appear either:
+        // here it is passed on purpose as an argument and the screen is looked at.
         String asArgument = PanelSecrets.newPassword(28);
         String withSecretArgument = capture(() -> Main.executeScriptWithSecrets(script.toString(),
-                "prova", Map.of("MYSQL_ROOT_PASSWORD", secret), home.toString(), asArgument));
-        check("un segreto passato come argomento non finisce comunque sullo schermo",
+                "test", Map.of("MYSQL_ROOT_PASSWORD", secret), home.toString(), asArgument));
+        check("a secret passed as an argument still does not end up on the screen",
                 !withSecretArgument.contains(asArgument));
-        String plain = capture(() -> Main.executeScript(script.toString(), "prova", home.toString()));
-        check("senza segreti gli argomenti si stampano come prima", plain.contains(home.toString()));
+        String plain = capture(() -> Main.executeScript(script.toString(), "test", home.toString()));
+        check("without secrets the arguments are printed as before", plain.contains(home.toString()));
 
-        OUT.println("\n== Lo script e il pannello sono d'accordo su chi e' il numero N ==");
+        OUT.println("\n== The script and the panel agree on who number N is ==");
         String text = new FullMailServerScript().getScriptContent();
         for (int i = 0; i < ARGUMENTS_FROM_THE_PANEL.size(); i++) {
             String name = ARGUMENTS_FROM_THE_PANEL.get(i);
             String position = i < 9 ? "\"$" + (i + 1) + "\"" : "\"${" + (i + 1) + "}\"";
-            check("argomento " + (i + 1) + " = " + name, text.contains(name + "=" + position));
+            check("argument " + (i + 1) + " = " + name, text.contains(name + "=" + position));
         }
-        check("nessuna password e' piu' un argomento posizionale",
+        check("no password is a positional argument any more",
                 !text.contains("MYSQL_PASSWORD=\"$") && !text.contains("MYSQL_ROOT_PASSWORD=\"$"));
-        check("lo script si ferma se le password non sono nell'ambiente",
+        check("the script stops if the passwords are not in the environment",
                 text.contains("MYSQL_PASSWORD not in the environment")
                         && text.contains("MYSQL_ROOT_PASSWORD not in the environment"));
-        check("root non entra piu' senza password dove si fa il lavoro",
+        check("root no longer gets in without a password where the work is done",
                 !text.contains("mysql -u root < ") && !text.contains("mysql -u root << ROUNDCUBE_DB")
                         && text.contains("--defaults-extra-file=\"$MYSQL_ROOT_CNF\""));
-        check("il file SQL col segreto non sta piu' in /tmp", !text.contains("/tmp/mysql_setup.sql"));
+        check("the SQL file with the secret is no longer in /tmp", !text.contains("/tmp/mysql_setup.sql"));
         Path generatedScript = home.resolve("install_mail_server.sh");
         Files.writeString(generatedScript, text, StandardCharsets.UTF_8);
-        check("lo script generato passa sh -n", run("/bin/sh", "-n", generatedScript.toString()) == 0);
+        check("the generated script passes sh -n", run("/bin/sh", "-n", generatedScript.toString()) == 0);
 
-        OUT.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        OUT.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         System.exit(failed == 0 ? 0 : 1);
     }
 
-    /** La riga dell'installazione, espansa da /bin/sh esattamente come nello script. */
+    /** The installation's line, expanded by /bin/sh exactly as in the script. */
     static String expandHereDocument(String password) throws Exception {
         String shell = "MYSQL_ROOT_PASSWORD='" + password.replace("'", "'\\''") + "'\n"
                 + "cat << EOROOT\n"
@@ -202,14 +199,13 @@ public class MysqlRootPasswordTest {
     }
 
     /**
-     * La password che MySQL legge da quella riga, o null se la riga non e' piu' l'istruzione
-     * che doveva essere.
+     * The password MySQL reads from that line, or null if the line is no longer the statement it
+     * should be.
      *
-     * <p>Legge il letterale fra apici come lo legge MySQL: la barra rovescia e' un'escape,
-     * due apici di fila sono un apice, il primo apice non escapato chiude. Dopo il letterale
-     * deve restare esattamente {@code ;}: se la password contiene un apice, il letterale
-     * chiude in mezzo e quello che resta e' spazzatura, cioe' un'istruzione rotta — che e'
-     * esattamente il guasto che l'alfabeto deve impedire.
+     * <p>It reads the quoted literal as MySQL reads it: the backslash is an escape, two quotes in a
+     * row are a quote, the first unescaped quote closes. After the literal exactly {@code ;} must be
+     * left: if the password contains a quote, the literal closes in the middle and what is left is
+     * garbage, that is a broken statement — which is exactly the fault the alphabet must prevent.
      */
     static String passwordAsMysqlReadsIt(String statement) {
         String head = "ALTER USER 'root'@'localhost' IDENTIFIED BY '";
@@ -218,11 +214,11 @@ public class MysqlRootPasswordTest {
         int i = head.length();
         while (i < statement.length()) {
             char c = statement.charAt(i);
-            if (c == '\\' && i + 1 < statement.length()) {          // escape di MySQL
+            if (c == '\\' && i + 1 < statement.length()) {          // MySQL's escape
                 value.append(unescape(statement.charAt(i + 1)));
                 i += 2;
             } else if (c == '\'' && i + 1 < statement.length() && statement.charAt(i + 1) == '\'') {
-                value.append('\'');                                  // '' e' un apice
+                value.append('\'');                                  // '' is a quote
                 i += 2;
             } else if (c == '\'') {
                 return statement.substring(i + 1).equals(";") ? value.toString() : null;
@@ -231,10 +227,10 @@ public class MysqlRootPasswordTest {
                 i++;
             }
         }
-        return null;                                                 // letterale mai chiuso
+        return null;                                                 // literal never closed
     }
 
-    /** Le escape di MySQL che cambiano il carattere; le altre danno il carattere stesso. */
+    /** MySQL's escapes that change the character; the others give the character itself. */
     static char unescape(char c) {
         switch (c) {
             case '0': return '\0';
@@ -247,7 +243,7 @@ public class MysqlRootPasswordTest {
         }
     }
 
-    /** Il file di opzioni come lo scrive lo script. */
+    /** The option file as the script writes it. */
     static String optionFile(String password) throws Exception {
         String shell = "MYSQL_ROOT_PASSWORD='" + password.replace("'", "'\\''") + "'\n"
                 + "cat << EOCNF\n[client]\nuser=root\npassword=\"$MYSQL_ROOT_PASSWORD\"\nEOCNF\n";
@@ -255,9 +251,8 @@ public class MysqlRootPasswordTest {
     }
 
     /**
-     * Il valore che MySQL legge da quel file: taglia a un '#' non quotato, toglie le
-     * virgolette intorno. E' la regola dei file di opzioni, scritta qui apposta per
-     * misurare che la forma scelta regga.
+     * The value MySQL reads from that file: it cuts at an unquoted '#', removes the quotes around it.
+     * It is the rule of option files, written here on purpose to measure that the chosen form holds.
      */
     static String optionFileValue(String file) {
         for (String line : file.split("\n")) {
@@ -290,7 +285,7 @@ public class MysqlRootPasswordTest {
         return p.waitFor();
     }
 
-    /** Tutto quello che il pannello scrive mentre fa una cosa. */
+    /** Everything the panel writes while it does something. */
     static String capture(ThrowingRunnable what) throws Exception {
         java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
         PrintStream before = System.out;
