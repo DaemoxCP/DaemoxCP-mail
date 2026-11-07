@@ -131,6 +131,9 @@ public class ReinstallJobTest {
             check("il secondo menu segue quella in corso", out.contains("already running") && out.contains("pid " + job));
             check("e non ne fa partire un'altra", count(out, "runs by itself") == 0 && jobLogs() == 3);
             check("la segue fino in fondo e la da' per riuscita", code == 0 && out.contains("step 12") && out.contains("MENU RESULT true"));
+            // Le utenze del pannello sono cancellate con le tabelle: lo si dice, con il comando per rientrare.
+            check("e dice che le utenze del pannello sono cancellate, e come creare il primo amministratore",
+                    out.contains("panel accounts were deleted") && out.contains("--create-admin"));
             afterJob("J3", job, lockedBefore);
 
             System.out.println("\n== J5. Senza daemon(8): la reinstallazione dentro il menu, come prima ==");

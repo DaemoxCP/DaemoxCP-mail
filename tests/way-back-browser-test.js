@@ -53,13 +53,18 @@ async function served(route) {
     }
 }
 
+// L'avviso deve comparire al caricamento, anche se altre richieste lente (branch_status,
+// packages_overview) partono prima: la guardia di updApi lo respingeva senza chiedere (reperto 176).
 async function open(page) {
     await page.goto(BASE + '/updates');
-    await page.waitForFunction(() => document.getElementById('upd-interrupted') && document.getElementById('upd-interrupted').innerHTML.length > 0);
+    const shown = await page.waitForFunction(() => document.getElementById('upd-interrupted')
+        && document.getElementById('upd-interrupted').innerHTML.length > 0, null, { timeout: 10000 }).then(() => true, () => false);
+    real('l\'avviso compare al caricamento della pagina', shown);
+    if (!shown) { console.log('\n' + failedOnes + ' CONTROLLI FALLITI'); process.exit(1); }
 }
 
 (async () => {
-    const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }).catch(() => chromium.launch());
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }).catch(() => chromium.launch());
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await ctx.route('**/*', served);
     const page = await ctx.newPage();

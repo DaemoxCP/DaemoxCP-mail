@@ -45,6 +45,17 @@ public class Chooser {
     /**
      * Confirm action with Cancel as default (safety first)
      */
+    /**
+     * Cosa cancella una reinstallazione, detto prima. Prima diceva solo «la configurazione si azzera»,
+     * ma lo script ricrea vuote anche le tabelle della posta e quelle delle utenze del pannello
+     * (amministratori, passkey, sessioni): si cancellano, deciso dal committente il 07/11/2026.
+     */
+    private static String reinstallWarning() {
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        try { return org.mail_panel.i18n.I18n.tr("server.reinstall.menuWarning"); }
+        finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+    }
+
     private boolean confirmAction(String title, String message) {
         MessageDialogButton result = new MessageDialogBuilder()
             .setTitle(title)
@@ -97,8 +108,7 @@ public class Chooser {
                     "  • Roundcube (Webmail)\n" +
                     "  • MySQL tables\n" +
                     "  • Self-signed SSL (temporary)\n\n" +
-                    "WARNING: If already installed,\n" +
-                    "ALL configuration will be RESET!")) {
+                    reinstallWarning())) {
                 setOptionAndClose(4);
             }
         });

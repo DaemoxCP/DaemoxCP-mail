@@ -989,6 +989,16 @@ public class Main {
             dbManager.setServiceInstalled("rspamd", true);
             dbManager.setServiceInstalled("clamav", true);
 
+            // Le utenze del pannello se ne vanno con le tabelle (lo script le ricrea vuote): chi ha
+            // reinstallato deve sapere che il pannello web non fa entrare nessuno finche' non crea il
+            // primo amministratore dalla console.
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            try {
+                System.out.println(ANSI_YELLOW + "[PANEL] " + org.mail_panel.i18n.I18n.tr("server.reinstall.accountsDeleted") + ANSI_RESET);
+            } finally {
+                org.mail_panel.i18n.I18n.clearCurrent();
+            }
+
             // Auto-load the generated self-signed certificate ONLY if no certificate is configured
             // This prevents overwriting user-configured Cloudflare certificates
             try {

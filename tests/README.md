@@ -48,6 +48,7 @@ passata.
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InterruptionReportTest
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LockMarksTest
     expect tests/menu-way-back.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
+    expect tests/menu-reinstall-warning.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
@@ -205,6 +206,15 @@ nome.en.html in inglese, piu' i dizionari degli script in i18n/ (da servire come
     NODE_PATH=$(npm root -g) node tests/queue-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/limits-statistics-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/english-pages-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/packages-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/way-back-browser-test.js $D [cartella-per-le-foto]
+
+Sul Mac basta il pacchetto Playwright, senza il suo Chromium: con `CHROMIUM` le prove usano il Chrome
+installato (tutte lo leggono dal 07/11/2026, reperto 177). Il pacchetto si puo' tenere fuori dal progetto:
+
+    mkdir -p $PW && (cd $PW && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts playwright)
+    CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" NODE_PATH=$PW/node_modules \
+        node tests/way-back-browser-test.js $D [cartella-per-le-foto]
 
 L'accesso senza password invece gira sul server vero (LoginE2EServer), con il MySQL di prova, e
 Chromium con un autenticatore virtuale. Il server parte da una cartella vuota con il jar dentro:

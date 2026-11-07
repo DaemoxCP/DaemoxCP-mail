@@ -12510,8 +12510,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // un thread HTTP del pannello: due click o due schede bastano a saturarlo. La guardia
         // sta qui, in un punto solo, invece che dentro ogni funzione.
         async function updApi(action, extra) {
-            if (updBusy) return { success: false, error: t('up.busy') };
+            // Le letture leggere non passano dalla guardia. Prima la guardia veniva prima di sapere se
+            // l'azione era lenta: al caricamento della pagina branch_status e packages_overview partono
+            // per primi, e interruption_status tornava «occupato» senza nemmeno chiedere. L'avviso di un
+            // lavoro interrotto (e il pulsante per tornare indietro) non compariva mai (reperto 176).
             const slow = action !== 'job_status' && action !== 'interruption_status';
+            if (slow && updBusy) return { success: false, error: t('up.busy') };
             if (slow) updBusy = true;
             try {
                 const body = Object.assign({
