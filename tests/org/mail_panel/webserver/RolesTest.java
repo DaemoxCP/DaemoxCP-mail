@@ -34,7 +34,7 @@ import java.util.concurrent.Executors;
  * unknown job, an action that does not exist, a confirmation that is missing).
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RolesTest
  */
 public class RolesTest {
@@ -87,7 +87,7 @@ public class RolesTest {
         Path audit = dir.resolve("audit.log");
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
+        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
         check("connected to MySQL", db.connect());
         // The schema BEFORE the entry, and the entry read back: see TestSessions.auditLogTo.
         // Written before the tables existed, it was not saved and the panel wrote to the real

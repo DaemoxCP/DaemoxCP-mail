@@ -47,7 +47,7 @@ import java.util.concurrent.Executors;
  *    go away, the panel block is written once, and the file is not readable by other users.
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.MailboxPasswordTest
  */
 public class MailboxPasswordTest {
@@ -117,7 +117,7 @@ public class MailboxPasswordTest {
 
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(mysqlPort), System.getProperty("mysql.database", "mailpanel_prova"));
+        db.setConnection("127.0.0.1", Integer.parseInt(mysqlPort), System.getProperty("mysql.database", "mailpanel_test"));
         check("connected to MySQL", db.connect());
         // The schema BEFORE the entry, and the entry read back: see TestSessions.auditLogTo.
         // Written before the tables existed, it was not saved and the panel wrote to the real
@@ -191,7 +191,7 @@ public class MailboxPasswordTest {
 
         System.out.println("\n== Filling a missing copy ==");
         setColumn("password_encrypted", bob, null);
-        check("wrong password: no copy", !db.fillMissingVaultCopy(bob, "Sbagliata-2026-xx") && column("password_encrypted", bob) == null);
+        check("wrong password: no copy", !db.fillMissingVaultCopy(bob, "Wrong-Password-2026-xx") && column("password_encrypted", bob) == null);
         check("right password: the copy is written", db.fillMissingVaultCopy(bob, "Plain-Text-Bob-2026") && "Plain-Text-Bob-2026".equals(copyOf(bob)));
         check("already the same copy: nothing written", !db.fillMissingVaultCopy(bob, "Plain-Text-Bob-2026"));
 

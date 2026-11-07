@@ -21,7 +21,7 @@ import java.util.List;
  * database; one MySQL must refuse (another people's table points to domains), which deletes nothing
  * and says so. Without MySQL it only tests that without a connection the reset does not start. The
  * MySQL is given like this:
- *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
+ *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test
  */
 public class ResetDatabaseTest {
 
@@ -54,7 +54,7 @@ public class ResetDatabaseTest {
     static void database(String port) throws Exception {
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
+        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
         if (!db.connect()) { real("connection to MySQL", false); return; }
         Connection c = db.getConnection();
         try (Statement st = c.createStatement(); ResultSet r = st.executeQuery("SELECT VERSION()")) {

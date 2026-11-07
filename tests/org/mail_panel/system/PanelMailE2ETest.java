@@ -55,14 +55,14 @@ public class PanelMailE2ETest {
         try { r = PeriodicReport.sendNow(to, false); }
         finally { I18n.clearCurrent(); }
         System.out.println("report: " + r.optString("note", r.optString("error")));
-        check("rapporto: consegnato", r.optBoolean("success") && !r.optBoolean("warning"));
+        check("report: delivered", r.optBoolean("success") && !r.optBoolean("warning"));
         String reportId = messageId(r.optString("output"));
         Path report = waitFor(maildir, reportId);
         check("report: arrived in the mailbox", report != null);
         if (report != null) {
             String raw = Files.readString(report, StandardCharsets.ISO_8859_1);
             Files.writeString(copies.resolve("report-it.eml"), raw, StandardCharsets.ISO_8859_1);
-            arrived("rapporto", raw, server, "it", r.optString("subject"));
+            arrived("report", raw, server, "it", r.optString("subject"));
         }
 
         // --- the three codes, in English, with the panel's Mailer ---

@@ -35,7 +35,7 @@ public class HomePanelE2EServer {
         String mysqlPort = System.getProperty("mysql.port");
         String user = System.getProperty("mysql.user", "mailpanel");
         String password = System.getProperty("mysql.password", "");
-        String database = System.getProperty("mysql.database", "mailpanel_prova");
+        String database = System.getProperty("mysql.database", "mailpanel_test");
 
         Files.createDirectories(dir.resolve("database"));
         Main.dbManager = new dataBaseManager();

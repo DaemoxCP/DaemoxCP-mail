@@ -45,7 +45,7 @@ import java.util.concurrent.Executors;
  *     database not answering the cookie stays and there is no X-Panel-Session (reperto 185).
  *
  * Usage (with the test MySQL of README.md, on the test VM):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
+ *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SessionRunTest
  */
 public class SessionRunTest {
@@ -61,7 +61,7 @@ public class SessionRunTest {
     static MailDatabase connect() {
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(System.getProperty("mysql.port")), System.getProperty("mysql.database", "mailpanel_prova"));
+        db.setConnection("127.0.0.1", Integer.parseInt(System.getProperty("mysql.port")), System.getProperty("mysql.database", "mailpanel_test"));
         if (!db.connect()) throw new IllegalStateException("MySQL not reachable");
         return db;
     }

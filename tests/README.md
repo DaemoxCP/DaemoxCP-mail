@@ -1,17 +1,16 @@
-# Test del pannello
+# The panel's tests
 
-Non fanno parte della build: Maven non guarda questa cartella, il jar non le contiene.
-Sono classi con un `main`, si compilano contro il jar gia' costruito e si eseguono a mano.
+They are not part of the build: Maven does not look at this folder, and the jar does not contain
+them. They are classes with a `main`, compiled against the jar already built and run by hand.
 
-Il jar e' compilato per Java 25 (`<release>25</release>` nel pom). Con un JDK piu' recente
-sul Mac, le prove vanno compilate con `--release 25`, altrimenti sulla VM non partono:
+The jar is compiled for Java 25 (`<release>25</release>` in the pom). With a newer JDK on the Mac,
+the tests must be compiled with `--release 25`, otherwise they do not start on the VM:
 «has been compiled by a more recent version of the Java Runtime (class file version 70.0),
-this version ... recognizes class file versions up to 69.0». Il jar invece va bene, perche'
-Maven la release la dichiara.
+this version ... recognizes class file versions up to 69.0». The jar instead is fine, because
+Maven declares the release.
 
-E l'esito di una prova e' il suo **codice di uscita**: `java ... | tail -4` restituisce
-quello di `tail`, cioe' zero sempre. Una prova che non parte affatto, letta cosi', sembra
-passata.
+And the outcome of a test is its **exit code**: `java ... | tail -4` returns that of `tail`, that
+is always zero. A test that does not start at all, read that way, looks passed.
 
     mvn -o -q package -DskipTests
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/system/*.java
@@ -47,8 +46,8 @@ passata.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.NoBootEnvironmentTest
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InterruptionReportTest
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LockMarksTest
-    expect tests/menu-way-back.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
-    expect tests/menu-reinstall-warning.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
+    expect tests/menu-way-back.exp <ssh key> <clone host> <panel folder on the clone> <jar>
+    expect tests/menu-reinstall-warning.exp <ssh key> <clone host> <panel folder on the clone> <jar>
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.util.ShellShortPathTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
@@ -76,100 +75,103 @@ passata.
     sh tests/pkg-simulation-test.sh
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallPackagesTest
 
-## Le prove dell'area aggiornamenti
+Every test is in English, comments and messages included. When a check needs an Italian text of the
+panel, it reads it from `src/main/resources/lang/it.json` by key (in Java with `I18n.t("it", key)`,
+in the browser tests from the parsed file), never writes it out; the Java tests that read the
+panel's messages set `I18n.setCurrent("en")`, because outside a request the panel speaks Italian.
+
+## The tests of the updates area
 
 `ChildStdinTest`, `HeldUpdatesReportTest`, `PlanDivergenceTest`, `PlanAfterFetchTest`,
-`ServiceFallTest`, `AuditReportTest` e `LockTraceTest` vanno eseguite **sulla VM FreeBSD**,
-non sul Mac: una parte di loro chiede a `pkg` com'e' fatta davvero la macchina (le chiavi che
-`packagesStatus` mette, i pacchetti che `pkg audit` dice vulnerabili, i pacchetti bloccati) e
-quella parte sul Mac **si salta dicendolo**, perche' una prova che si salta in silenzio conta
-come verde senza aver provato niente.
+`ServiceFallTest`, `AuditReportTest` and `LockTraceTest` must be run **on the FreeBSD VM**, not on
+the Mac: part of them asks `pkg` what the machine is really like (the keys `packagesStatus` sets,
+the packages `pkg audit` calls vulnerable, the locked packages) and on the Mac that part **is
+skipped, saying so**, because a test skipped in silence counts as green without having tested
+anything.
 
-Due di loro toccano il sistema e rimettono tutto com'era: `LockTraceTest` scrive
-l'annotazione `mail_panel_lock` su un pacchetto e la rimuove, e scrive la nota dei blocchi in
-una cartella temporanea (non in `/var/db`, come `PackageQueueTest` con il suo elenco).
-`AuditReportTest` chiede a `pkg audit` dei pacchetti installati e non cambia niente. Vanno
-bene su una macchina di prova, non su un server di posta vero.
+Two of them touch the system and put everything back as it was: `LockTraceTest` writes the
+`mail_panel_lock` annotation on a package and removes it, and writes the locks note in a temporary
+folder (not in `/var/db`, like `PackageQueueTest` with its list). `AuditReportTest` asks `pkg audit`
+about the installed packages and changes nothing. They are fine on a test machine, not on a real
+mail server.
 
-`InstallScriptDriftTest` e' la prova del reperto 42 (lo script di installazione di postfix
-che toglie IPv6 da main.cf) e ha due parti. La prima legge l'uscita vera di
-quell'aggiornamento e gira ovunque. La seconda fa girare i tre lavori veri — aggiornamento
-guidato, non protetti, manutenzione completa — su un pacchetto finto, `drift-probe`, che si
-costruisce da sola con `pkg create`: si accende solo con `-De2e.vm=yes`, da root, su FreeBSD.
-Per la durata della prova spegne i repository FreeBSD-ports e FreeBSD-ports-kmods (un file in
-`/usr/local/etc/pkg/repos`), mette in ascolto un `nc` sulla porta 47425 di 127.0.0.1 e ::1, e
-la manutenzione sblocca e riprotegge i pacchetti protetti come sempre; prima di ogni lavoro
-controlla che il piano contenga solo `drift-probe`, e alla fine controlla che pacchetti,
-protezioni e repository siano quelli di prima. Solo su una macchina di prova. Dura qualche
-minuto: un indirizzo che manca si aspetta sessanta secondi prima di dirlo perso.
+`InstallScriptDriftTest` is the test of reperto 42 (postfix's install script removing IPv6 from
+main.cf) and has two parts. The first reads the real output of that update and runs anywhere. The
+second runs the three real jobs — guided update, unprotected packages, full maintenance — on a fake
+package, `drift-probe`, which it builds by itself with `pkg create`: it is turned on only with
+`-De2e.vm=yes`, as root, on FreeBSD. For the duration of the test it turns off the FreeBSD-ports
+and FreeBSD-ports-kmods repositories (a file in `/usr/local/etc/pkg/repos`), puts an `nc` listening
+on port 47425 of 127.0.0.1 and ::1, and the maintenance unlocks and locks again the protected
+packages as always; before every job it checks that the plan contains only `drift-probe`, and at
+the end it checks that packages, protections and repositories are those of before. Only on a test
+machine. It takes a few minutes: a missing address is waited for sixty seconds before it is called
+lost.
 
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallScriptDriftTest
 
-`UpdaterRobustnessE2ETest` prova i bordi dell'aggiornamento dei pacchetti con lavori veri su
-pacchetti finti (`nginx-robust-probe`, `robust-probe-other`) da un catalogo `file://`, coi
-repository veri spenti: la via di ritorno (M1), il turno fra processi (M2, M2b), un pkg esterno
-che tiene il lock (M3), il pannello ucciso a meta' di pkg (M4), il timeout (M5), il rapporto
-dopo un lavoro interrotto (M6). Crea e toglie boot environment `packages-before-*`. La M7 (la
-macchina spenta di colpo durante pkg) e' in due tempi: `-Dmeasure=m7`, poi `reboot -nq` quando
-stampa «M7 IN PKG», poi, a pannello ripartito, il modo `m7-after`. Solo su una macchina di prova.
+`UpdaterRobustnessE2ETest` tests the edges of the package update with real jobs on fake packages
+(`nginx-robust-probe`, `robust-probe-other`) from a `file://` catalog, with the real repositories
+turned off: the way back (M1), the turn across processes (M2, M2b), an external pkg holding the
+lock (M3), the panel killed halfway through pkg (M4), the timeout (M5), the report after an
+interrupted job (M6). It creates and removes `packages-before-*` boot environments. M7 (the machine
+switched off abruptly during pkg) comes in two steps: `-Dmeasure=m7`, then `reboot -nq` when it
+prints "M7 IN PKG", then, with the panel started again, the `m7-after` mode. Only on a test machine.
 
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdaterRobustnessE2ETest
 
-`MenuReinstall` non e' una prova ma il conduttore della reinstallazione completa dal menu
-(`ReinstallJob.runFromMenu`, la stessa funzione della voce del menu: la lancia staccata con daemon(8)
-e ne segue il registro) su un server dove il pannello e' gia' partito: sblocca i protetti, lancia lo
-script col turno del pannello, li riprotegge. Ferma la
-posta, svuota `/var/vmail` e cambia la password di MySQL del pannello: solo su un clone di un boot
-environment, e da una COPIA della cartella del pannello se questa sta in `/home` (fuori dai boot
-environment). Come e' stata usata sulla VM, con i tentativi di concorrenza a meta': reperto 154.
+`MenuReinstall` is not a test but the driver of the full reinstallation from the menu
+(`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
+daemon(8) and follows its log) on a server where the panel has already started: it unlocks the
+protected packages, runs the script with the panel's turn, locks them again. It stops the mail,
+empties `/var/vmail` and changes the panel's MySQL password: only on a clone of a boot environment,
+and from a COPY of the panel folder if that is in `/home` (outside the boot environments). How it
+was used on the VM, with the concurrency attempts halfway: reperto 154.
 
-    cd <copia della cartella del pannello> && java -cp "<tests compilate>:freebsd-mail-panel-1.0.jar" org.mail_panel.system.MenuReinstall
+    cd <copy of the panel folder> && java -cp "<compiled tests>:freebsd-mail-panel-1.0.jar" org.mail_panel.system.MenuReinstall
 
-Le quattro prove che fanno lavori veri (questa, `InstallScriptDriftTest`,
-`PackageReplacementE2ETest`, `PostfixMapsJobsE2ETest`) alla fine tolgono i boot environment che
-i loro lavori hanno creato.
+The four tests that run real jobs (this one, `InstallScriptDriftTest`, `PackageReplacementE2ETest`,
+`PostfixMapsJobsE2ETest`) remove at the end the boot environments their jobs created.
 
-`HeldUpdatesReportTest` e `AuditReportTest` hanno bisogno del database delle vulnerabilita'
-(`pkg audit -F`): senza, dicono quali prove hanno saltato e perche'.
+`HeldUpdatesReportTest` and `AuditReportTest` need the vulnerability database (`pkg audit -F`):
+without it, they say which checks they skipped and why.
 
-## L'installazione completa
+## The full installation
 
-`InstallPackagesTest` e' la prova del reperto 52 (l'installatore metteva un Dovecot senza
-MySQL e si dichiarava riuscito). Le parti A, B e D girano ovunque: il testo dello script, le
-sue righe d'installazione vere fatte girare contro un pkg finto che toglie un pacchetto chiesto
-ed esce con 0 (lo script deve fermarsi li'), e le etichette dell'updater. La parte C chiede al
-risolutore VERO di pkg il piano di ogni riga come su una macchina appena installata: una copia
-del database di pkg con installato solo pkg, i pacchetti scaricati in una cartella temporanea
-(~180 MB, perche' i conflitti sui file pkg li vede solo dopo averli scaricati), e ogni
-pacchetto chiesto deve stare nel piano finale. Non installa niente e non tocca il database
-vero; si accende con `-De2e.vm=yes`, da root, su FreeBSD.
+`InstallPackagesTest` is the test of reperto 52 (the installer put in a Dovecot without MySQL and
+declared itself successful). Parts A, B and D run anywhere: the script's text, its real install
+lines run against a fake pkg that drops a requested package and exits with 0 (the script must stop
+there), and the updater's labels. Part C asks pkg's REAL solver for the plan of every line as on a
+freshly installed machine: a copy of pkg's database with only pkg installed, the packages
+downloaded into a temporary folder (~180 MB, because pkg sees file conflicts only after downloading
+them), and every requested package must be in the final plan. It installs nothing and does not
+touch the real database; it is turned on with `-De2e.vm=yes`, as root, on FreeBSD.
 
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallPackagesTest
 
-Dopo un'installazione da zero (`InstallFromScratch`), `mail-login-probe.sh` fa un login vero:
-crea una casella di prova in `login-probe.test`, prova `doveadm auth test`, un LOGIN IMAP
-sulla 993 e un AUTH PLAIN sulla 587, mostra le righe del maillog e toglie casella e dominio.
-Il 24/10/2026, con l'installatore di prima, i servizi erano tutti attivi e falliva su tutti e
-tre gli ingressi. Da root, nella cartella del pannello:
+After an installation from scratch (`InstallFromScratch`), `mail-login-probe.sh` does a real login:
+it creates a test mailbox in `login-probe.test`, tries `doveadm auth test`, an IMAP LOGIN on 993 and
+an AUTH PLAIN on 587, shows the maillog lines and removes mailbox and domain. On 24/10/2026, with
+the installer of before, the services were all running and it failed on all three entrances. As
+root, in the panel folder:
 
     sh tests/mail-login-probe.sh
 
-## Con un MySQL di prova
+## With a test MySQL
 
-AddressConversionTest, SoftwareVersionsTest e ResetDatabaseTest hanno una parte che gira su un MySQL vero, e
-senza le opzioni `-Dmysql.*` la saltano dicendolo. Serve il MySQL ufficiale 8.0, quello che il pannello installa
-(mysql80-server), non MariaDB: su FreeBSD `pkg install mysql80-server`, su macOS
-`brew install mysql@8.0`. Un server usa e getta, in una cartella di prova e solo su 127.0.0.1
-(da root aggiungi `--user=root` alle due righe di mysqld):
+AddressConversionTest, SoftwareVersionsTest and ResetDatabaseTest have a part that runs on a real
+MySQL, and without the `-Dmysql.*` options they skip it, saying so. It needs the official MySQL 8.0,
+the one the panel installs (mysql80-server), not MariaDB: on FreeBSD `pkg install mysql80-server`,
+on macOS `brew install mysql@8.0`. A throwaway server, in a test folder and only on 127.0.0.1 (as
+root add `--user=root` to the two mysqld lines):
 
     M=$(mktemp -d)
-    mysqld --initialize-insecure --datadir=$M/dati
-    mysqld --datadir=$M/dati --socket=$M/m.sock --port=33062 --bind-address=127.0.0.1 \
+    mysqld --initialize-insecure --datadir=$M/data
+    mysqld --datadir=$M/data --socket=$M/m.sock --port=33062 --bind-address=127.0.0.1 \
            --mysqlx=OFF --secure-file-priv= --pid-file=$M/m.pid &
-    mysql -uroot -S $M/m.sock -e "CREATE DATABASE mailpanel_prova;
-        CREATE USER 'mailpanel'@'127.0.0.1' IDENTIFIED BY 'password-di-prova';
-        GRANT ALL ON mailpanel_prova.* TO 'mailpanel'@'127.0.0.1';"
-    P="-Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=password-di-prova -Dmysql.database=mailpanel_prova"
+    mysql -uroot -S $M/m.sock -e "CREATE DATABASE mailpanel_test;
+        CREATE USER 'mailpanel'@'127.0.0.1' IDENTIFIED BY 'test-password';
+        GRANT ALL ON mailpanel_test.* TO 'mailpanel'@'127.0.0.1';"
+    P="-Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=test-password -Dmysql.database=mailpanel_test"
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.AddressConversionTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SoftwareVersionsTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.VersionsApiTest
@@ -183,618 +185,617 @@ senza le opzioni `-Dmysql.*` la saltano dicendolo. Serve il MySQL ufficiale 8.0,
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.LoginSecurityTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.ResetDatabaseTest
 
-**Mai sul database del pannello**: la parte di AddressConversionTest cancella e ricrea tutte le tabelle
-del database che le si indica (VersionsApiTest, LanguageRoutesTest, QueueApiTest, RateLimitsApiTest, CsrfFilterTest
-LoginRoutesTest e MailboxPasswordTest usano le tabelle che lascia), LoginSecurityTest le cancella e le ricrea come una
-vecchia installazione con le password, e ResetDatabaseTest
-lo svuota del tutto, tabelle non del pannello comprese. SoftwareVersionsTest invece
-legge soltanto (SELECT VERSION()).
+The tests default to the database `mailpanel_test` when `-Dmysql.database` is not given.
 
-## Nel browser
+**Never on the panel's database**: AddressConversionTest's part drops and creates again all the
+tables of the database it is given (VersionsApiTest, LanguageRoutesTest, QueueApiTest,
+RateLimitsApiTest, CsrfFilterTest, LoginRoutesTest and MailboxPasswordTest use the tables it
+leaves), LoginSecurityTest drops them and creates them again as an old installation with
+passwords, and ResetDatabaseTest empties it completely, tables that are not the panel's included.
+SoftwareVersionsTest instead only reads (SELECT VERSION()).
 
-Le pagine generate dal pannello in Chromium, con Playwright e il server simulato. PageGenerator le
-scrive complete come le manda il server, con la cornice e i testi: nome.html in italiano e
-nome.en.html in inglese, piu' i dizionari degli script in i18n/ (da servire come /i18n/it.js e
-/i18n/en.js). Dal 07/11/2026 (reperto 178) le pagine non hanno piu' script ne' stili in linea: sono
-file in assets/ (da servire come /assets/...), e csp.txt e' la Content-Security-Policy del pannello.
-Ogni prova li serve e manda la politica con `tests/browser-csp.js`, e una violazione e' un errore
-della pagina.
+## In the browser
 
-**Dove gira cosa.** PageGenerator e le prove Java girano sulla macchina di prova FreeBSD
-(192.168.1.20), mai sul Mac; sul Mac solo il browser: le pagine generate sulla VM si copiano sul Mac,
-e le prove da browser girano li' (anche col Chrome installato, `CHROMIUM=".../Google Chrome"`, e il
-solo pacchetto Playwright, senza il suo Chromium):
+The pages generated by the panel in Chromium, with Playwright and the simulated server.
+PageGenerator writes them complete as the server sends them, with the frame and the texts:
+name.html in Italian and name.en.html in English, plus the scripts' dictionaries in i18n/ (to serve
+as /i18n/it.js and /i18n/en.js). Since 07/11/2026 (reperto 178) the pages have no inline scripts
+or styles any more: they are files in assets/ (to serve as /assets/...), and csp.txt is the panel's
+Content-Security-Policy. Every test serves them and sends the policy with `tests/browser-csp.js`,
+and a violation is a page error.
+
+**What runs where.** PageGenerator and the Java tests run on the FreeBSD test machine
+(192.168.1.20), never on the Mac; on the Mac only the browser: the pages generated on the VM are
+copied to the Mac, and the browser tests run there (also with the installed Chrome,
+`CHROMIUM=".../Google Chrome"`, and only the Playwright package, without its Chromium):
 
     D=$(mktemp -d)
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator $D
-    NODE_PATH=$(npm root -g) node tests/address-conversion-browser-test.js $D [cartella-per-le-foto]
-    NODE_PATH=$(npm root -g) node tests/software-versions-browser-test.js $D [cartella-per-le-foto]
-    NODE_PATH=$(npm root -g) node tests/pkg-branch-browser-test.js $D [cartella-per-le-foto]
-    NODE_PATH=$(npm root -g) node tests/layout-browser-test.js $D [cartella-per-le-foto]
-    NODE_PATH=$(npm root -g) node tests/queue-browser-test.js $D [cartella-per-le-foto]
-    NODE_PATH=$(npm root -g) node tests/limits-statistics-browser-test.js $D [cartella-per-le-foto]
-    NODE_PATH=$(npm root -g) node tests/english-pages-browser-test.js $D [cartella-per-le-foto]
-    NODE_PATH=$(npm root -g) node tests/packages-browser-test.js $D [cartella-per-le-foto]
-    NODE_PATH=$(npm root -g) node tests/way-back-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/address-conversion-browser-test.js $D [screenshot-folder]
+    NODE_PATH=$(npm root -g) node tests/software-versions-browser-test.js $D [screenshot-folder]
+    NODE_PATH=$(npm root -g) node tests/pkg-branch-browser-test.js $D [screenshot-folder]
+    NODE_PATH=$(npm root -g) node tests/layout-browser-test.js $D [screenshot-folder]
+    NODE_PATH=$(npm root -g) node tests/queue-browser-test.js $D [screenshot-folder]
+    NODE_PATH=$(npm root -g) node tests/limits-statistics-browser-test.js $D [screenshot-folder]
+    NODE_PATH=$(npm root -g) node tests/english-pages-browser-test.js $D [screenshot-folder]
+    NODE_PATH=$(npm root -g) node tests/packages-browser-test.js $D [screenshot-folder]
+    NODE_PATH=$(npm root -g) node tests/way-back-browser-test.js $D [screenshot-folder]
     NODE_PATH=$(npm root -g) node tests/csp-browser-test.js $D
-    NODE_PATH=$(npm root -g) node tests/home-panel-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/home-panel-browser-test.js $D [screenshot-folder]
     NODE_PATH=$(npm root -g) node tests/update-center-browser-test.js $D [screenshot-folder]
 
-Sul Mac basta il pacchetto Playwright, senza il suo Chromium: con `CHROMIUM` le prove usano il Chrome
-installato (tutte lo leggono dal 07/11/2026, reperto 177). Il pacchetto si puo' tenere fuori dal progetto:
+On the Mac the Playwright package is enough, without its Chromium: with `CHROMIUM` the tests use
+the installed Chrome (all of them read it since 07/11/2026, reperto 177). The package can be kept
+outside the project:
 
     mkdir -p $PW && (cd $PW && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts playwright)
     CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" NODE_PATH=$PW/node_modules \
-        node tests/way-back-browser-test.js $D [cartella-per-le-foto]
+        node tests/way-back-browser-test.js $D [screenshot-folder]
 
-L'accesso senza password invece gira sul server vero (LoginE2EServer), con il MySQL di prova, e
-Chromium con un autenticatore virtuale. Il server parte da una cartella vuota con il jar dentro:
+The passwordless login instead runs on the real server (LoginE2EServer), with the test MySQL, and
+Chromium with a virtual authenticator. The server starts from an empty folder with the jar inside:
 
     D=$(mktemp -d) && cp target/freebsd-mail-panel-1.0.jar $D/
-    MYSQL="$P" NODE_PATH=$(npm root -g) node tests/login-browser-test.js $D [cartella-per-le-foto]
+    MYSQL="$P" NODE_PATH=$(npm root -g) node tests/login-browser-test.js $D [screenshot-folder]
 
-Col server sulla macchina di prova e il browser sul Mac (come va fatta): una cartella sulla VM col jar,
-le prove compilate sulla VM, il MySQL di prova acceso li', il servizio del pannello del clone fermo
-(la prova usa la sua porta 2096, l'unica che il firewall della VM lascia passare):
+With the server on the test machine and the browser on the Mac (the way it must be done): a folder
+on the VM with the jar, the tests compiled on the VM, the test MySQL running there, the clone's
+panel service stopped (the test uses its port 2096, the only one the VM's firewall lets through):
 
     REMOTE=root@192.168.1.20 REMOTE_KEY=~/.ssh/freebsd_test_vm PORT=2096 TESTS_CLASSES=/var/tmp/csp/tc \
-    MYSQL="$P" NODE_PATH=... node tests/login-browser-test.js /var/tmp/csp/login [cartella-per-le-foto]
+    MYSQL="$P" NODE_PATH=... node tests/login-browser-test.js /var/tmp/csp/login [screenshot-folder]
 
-## Cosa provano
+## What they test
 
-**MtaStsTest** — `ripartisci()`, cioe' come i domini finiscono nei passi del piano, e la
-lettura del record `_mta-sts`. Copre il caso di domain-d.test (nessun record, risponde un jolly
-proxato) e il caso di un record insieme sbagliato e proxato. La lettura decide dallo stato
-della risposta DNS: con NOERROR si contano i record v=STSv1 (nessuno e' ASSENTE, uno e'
-PRESENTE, piu' d'uno e' TROPPI); NXDOMAIN e' ASSENTE; un errore (SERVFAIL, REFUSED) o nessuna
-risposta e' NON_CHIESTO, con il motivo che il piano scrive accanto al dominio. Si prova in
-due modi:
-- `parseTxt()` con uscite di `dig` vere, registrate il 2/10/2026 (record pubblicato,
-  SERVFAIL di dnssec-failed.org, NXDOMAIN, nome senza TXT, DNS che non risponde), piu'
-  varianti costruite su quelle (record spezzato, accanto ad altri TXT, dietro un CNAME,
-  REFUSED, due record v=STSv1 in varie forme). Vale ovunque, anche senza rete;
-- `readTxt()` sul DNS vero. Se da qui `dig` raggiunge un DNS si esigono i fatti veri: su
-  domain-d.test il record c'e', un nome inesistente non ce l'ha, e se il resolver convalida
-  DNSSEC il SERVFAIL di dnssec-failed.org e' NON_CHIESTO. Se non lo raggiunge (`dig` assente
-  o rete chiusa) si esige NON_CHIESTO, mai un ASSENTE inventato.
-Prima la lettura usava `dig +short`, che per un SERVFAIL non stampa niente, come per un nome
-senza record: il piano leggeva "assente" e proponeva di pubblicare un record che forse c'e'
-gia'. Contro quella versione la prova fallisce in cinque punti. E prima ancora la prova dava
-per scontato il DNS e falliva su ogni macchina che non ce l'aveva.
-Prova anche `testAndTxtSteps()`, dove il passo del record diventa "fatto": con due record
-v=STSv1 non deve diventarlo, perche' per i mittenti due record valgono zero (RFC 8461 §3.1).
-Prima la lettura prendeva il primo record: se era quello giusto, il passo risultava fatto.
+**MtaStsTest** — `split()`, that is how the domains end up in the plan's steps, and the reading of
+the `_mta-sts` record. It covers the case of domain-d.test (no record, a proxied wildcard answers) and
+the case of a record that is both wrong and proxied. The reading decides from the status of the DNS
+answer: with NOERROR the v=STSv1 records are counted (none is ABSENT, one is PRESENT, more than one
+is TOO_MANY); NXDOMAIN is ABSENT; an error (SERVFAIL, REFUSED) or no answer is NOT_ASKED, with the
+reason the plan writes next to the domain. It is tested in two ways:
+- `parseTxt()` with real `dig` outputs, recorded on 2/10/2026 (published record, SERVFAIL of
+  dnssec-failed.org, NXDOMAIN, name without TXT, DNS not answering), plus variants built on those
+  (split record, next to other TXT records, behind a CNAME, REFUSED, two v=STSv1 records in various
+  forms). It holds anywhere, even without a network;
+- `readTxt()` on the real DNS. If `dig` reaches a DNS from here the real facts are required: on
+  domain-d.test the record is there, a nonexistent name does not have it, and if the resolver
+  validates DNSSEC the SERVFAIL of dnssec-failed.org is NOT_ASKED. If it does not reach one (`dig`
+  missing or network closed) NOT_ASKED is required, never a made-up ABSENT.
+Before, the reading used `dig +short`, which for a SERVFAIL prints nothing, as for a name without a
+record: the plan read "absent" and proposed publishing a record that might already be there.
+Against that version the test fails in five points. And before that the test took the DNS for
+granted and failed on every machine that did not have it.
+It also tests `testAndTxtSteps()`, where the record's step becomes "done": with two v=STSv1 records
+it must not, because for senders two records count as zero (RFC 8461 §3.1). Before, the reading
+took the first record: if it was the right one, the step came out done.
 
-**MtaStsRecordTest** — il record `_mta-sts` dal lato di Cloudflare e della pagina DNS, senza
-rete. La regola comune (`DnsRules.eMtaSts`: conta ogni record che almeno un mittente vero
-conta, anche scritto in maiuscolo). La scrittura, `AutoDns.alignMtaStsTxt()`, contro un
-Cloudflare finto con la zona in memoria: crea, lascia stare, aggiorna, e con piu' record ne
-lascia uno solo e giusto senza toccare gli altri TXT; con Cloudflare che rifiuta una
-cancellazione o un aggiornamento lo dice; se la prima lettura della zona torna vuota per un
-errore, la rilettura finale si accorge dei due record. La riga MTA-STS della pagina DNS,
-`mtaStsCheck()`: due record non sono mai verdi, un SERVFAIL non e' "Non attivo". In fondo
-rimette la scrittura di prima davanti ai due record, uno gia' giusto: diceva "invariato" e li
-lasciava tutti e due, e la prova lo vede.
+**MtaStsRecordTest** — the `_mta-sts` record from Cloudflare's side and the DNS page's, without a
+network. The common rule (`DnsRules.eMtaSts`: it counts every record that at least one real sender
+counts, even written in uppercase). The writing, `AutoDns.alignMtaStsTxt()`, against a fake
+Cloudflare with the zone in memory: it creates, leaves alone, updates, and with several records it
+leaves only one, the right one, without touching the other TXT records; with Cloudflare refusing a
+deletion or an update it says so; if the first reading of the zone comes back empty because of an
+error, the final re-reading notices the two records. The DNS page's MTA-STS line, `mtaStsCheck()`:
+two records are never green, a SERVFAIL is not "Not active". At the end it puts the writing of
+before in front of the two records, one already right: it said "unchanged" and left both, and the
+test sees it.
 
-**PackageCatalogTest** — di quando e' il catalogo dei pacchetti (`PkgCatalog`). Home e rapporto
-dicevano "eta' sconosciuta" perche' guardavano `/var/db/pkg/repo-FreeBSD.sqlite`: il nome delle
-versioni vecchie di pkg e del repository "FreeBSD" di prima di FreeBSD 15. Oggi il catalogo di
-ogni repository e' `$PKG_DBDIR/repos/<nome>/db`, e pkg gli da' la data di pubblicazione sul
-server (sorgente di pkg: `libpkg/repo/binary/common.c` e `update.c`). La prova legge un'uscita
-di `pkg -vv` nella forma di `print_repository()` (anche "yes (overridden by pkg)"), costruisce
-una cartella di pkg con date scelte da lei e controlla: solo i repository accesi, vale il piu'
-vecchio, un acceso senza catalogo e' detto, senza cataloghi si dice dove si e' guardato,
-repository tutti spenti non e' "non so", il nome vecchio e' ancora riconosciuto, un nome con
-`../` non finisce in un percorso, un orologio indietro non da' eta' negative. Poi la riga vera
-del rapporto, da `PeriodicReport.componi()`.
+**PackageCatalogTest** — how old the package catalog is (`PkgCatalog`). Home and the report said
+"age unknown" because they looked at `/var/db/pkg/repo-FreeBSD.sqlite`: the name used by old pkg
+versions and by the "FreeBSD" repository before FreeBSD 15. Today the catalog of every repository is
+`$PKG_DBDIR/repos/<name>/db`, and pkg gives it the publication date on the server (pkg's source:
+`libpkg/repo/binary/common.c` and `update.c`). The test reads a `pkg -vv` output in the form of
+`print_repository()` (also "yes (overridden by pkg)"), builds a pkg folder with dates of its
+choosing and checks: only the enabled repositories, the oldest counts, an enabled one without a
+catalog is said, without catalogs it says where it looked, all repositories disabled is not "I do
+not know", the old name is still recognised, a name with `../` does not end up in a path, a clock
+running behind does not give negative ages. Then the real line of the report, from `ReportMail`.
 
-**PropagationWaitTest** — l'attesa della propagazione, con un orologio finto invece di sei minuti
-veri. Verifica le tre proprieta' che devono valere: non si aspetta se i domini rispondono
-gia', si smette appena rispondono, e si esce comunque alla scadenza invece di girare
-per sempre.
+**PropagationWaitTest** — waiting for propagation, with a fake clock instead of six real minutes. It
+verifies the three properties that must hold: no waiting if the domains already answer, it stops as
+soon as they answer, and it leaves anyway at the deadline instead of running forever.
 
-**MtaStsSequenceTest** — i pezzi nati dall'unione delle due sequenze: `filtra()`, il filtro
-per dominio (confronto esatto e senza maiuscole: "ake.net" non deve pescare "domain-d.test", e
-un dominio inesistente deve dare lista vuota, che e' la guardia contro il falso successo), e
-`asEntries()`, che traduce l'esito nelle righe della pagina DNS senza perdere le righe rosse.
+**MtaStsSequenceTest** — the pieces born from merging the two sequences: `filter()`, the filter by
+domain (exact comparison, case-insensitive: "ake.net" must not catch "domain-d.test", and a nonexistent
+domain must give an empty list, which is the guard against the false success), and `asEntries()`,
+which turns the outcome into the DNS page's rows without losing the red rows.
 
-**AutoconfigTest** — il verdetto della scheda Autoconfig. Il caso che conta e' `pronto(true, 0, 0)`:
-zero domini provati, zero riusciti, e senza la condizione `esaminati > 0` il conteggio direbbe
-verde proprio quando non e' stato guardato niente.
+**AutoconfigTest** — the verdict of the Autoconfig tab. The case that matters is `ready(true, 0, 0)`:
+zero domains tried, zero successful, and without the condition `reviewed > 0` the count would say
+green exactly when nothing was looked at.
 
-**SrvRecordTest** — il confronto di un record SRV, che faceva riscrivere in produzione due SRV
-gia' giusti a ogni esecuzione. Cloudflare mette nel `content` di un SRV tre campi (peso,
-porta, destinazione) e tiene la priorita' a parte; `analyzeSrv` ne pretende quattro perche'
-e' scritta per l'uscita di `dig`, quindi tornava `null` — "non lo riconosco" — e il record
-risultava sbagliato. La prova copre tutte e tre le forme e finisce riproducendo il difetto
-sulla logica vecchia: se un giorno quell'ultimo controllo passa, la prova non verifica piu'
-niente.
+**SrvRecordTest** — the comparison of an SRV record, which made production rewrite two SRV records
+that were already right at every run. Cloudflare puts three fields in an SRV's `content` (weight,
+port, target) and keeps the priority apart; `analyzeSrv` requires four because it is written for
+`dig`'s output, so it returned `null` — "I do not recognise it" — and the record came out wrong. The
+test covers all three forms and ends by reproducing the defect on the old logic: if one day that
+last check passes, the test no longer verifies anything.
 
-**ReportDeliveryTest** — da quale sendmail parte il rapporto periodico e come il pannello
-capisce com'e' andata. Il 25/09/2026 il rapporto partiva da /usr/sbin/sendmail, cioe'
-mailwrapper, cioe' dma: arrivava in chiaro e senza firma DKIM, e il pannello scriveva
-"riuscito". La prova verifica che mailwrapper non venga mai scelto (collegamento simbolico o
-hard link che sia), e legge righe vere del log: consegnato con TLS, rimandato, respinto per
-DMARC, rifiutato dal milter, formato RFC 5424, e le righe di dma, con le quali l'esito NON
-deve diventare "consegnato" perche' Postfix quel messaggio non l'ha visto. Il TLS si prende solo
-dalla riga del processo smtp che ha consegnato (stesso pid) e della connessione su cui e' partito:
-un altro processo che apre una connessione cifrata verso lo stesso server, una connessione
-precedente dello stesso processo, una riusata (conn_use) o il ripiego in chiaro dopo un TLS
-caduto non devono far scrivere "con TLS" a un rapporto partito in chiaro.
+**ReportDeliveryTest** — which sendmail the periodic report leaves from and how the panel
+understands how it went. On 25/09/2026 the report left from /usr/sbin/sendmail, that is mailwrapper,
+that is dma: it arrived in clear and without a DKIM signature, and the panel wrote "successful". The
+test verifies that mailwrapper is never chosen (symbolic link or hard link alike), and reads real
+log lines: delivered with TLS, deferred, bounced for DMARC, refused by the milter, RFC 5424 format,
+and dma's lines, with which the outcome must NOT become "delivered" because Postfix never saw that
+message. TLS is taken only from the line of the smtp process that delivered (same pid) and of the
+connection it left on: another process opening an encrypted connection to the same server, an
+earlier connection of the same process, a reused one (conn_use) or the fallback in clear after a
+failed TLS must not make a report sent in clear say "with TLS".
 
-**LocalMtaTest** — Postfix come MTA locale (LocalMtaScript), sulla VM perche' servono `postconf`
-e `sysrc`. Fino al 24/10/2026 nessuno dei tre script che installano Postfix scriveva
-`/usr/local/etc/mail/mailer.conf`, e la posta di cron, di periodic e del mail() di PHP usciva da
-dma. La prova verifica che tutti e tre contengano il pezzo dopo `pkg install`, fa leggere a
-`postconf` il loro `main.cf` (myorigin = localhost, mydestination senza il nome del server, la
-consegna locale accesa) ed esegue il pezzo in una cartella finta, con i percorsi del sistema
-sostituiti e controllati: senza Postfix non scrive niente, ripetuto non riscrive niente, un
-mailer.conf diverso lo mette da parte, un messaggio rimasto nella coda di dma lo dice. Non tocca
-il sistema.
+**LocalMtaTest** — Postfix as the local MTA (LocalMtaScript), on the VM because `postconf` and
+`sysrc` are needed. Until 24/10/2026 none of the three scripts that install Postfix wrote
+`/usr/local/etc/mail/mailer.conf`, and the mail of cron, of periodic and of PHP's mail() left from
+dma. The test verifies that all three contain the piece after `pkg install`, has `postconf` read
+their `main.cf` (myorigin = localhost, mydestination without the server's name, local delivery on)
+and runs the piece in a fake folder, with the system paths replaced and checked: without Postfix it
+writes nothing, repeated it rewrites nothing, a different mailer.conf is set aside, a message left
+in dma's queue is said. It does not touch the system.
 
-**PackagePlanTest** — il piano esatto di un aggiornamento e la risposta a "la patch c'e'?".
-Legge uscite di `pkg upgrade -n` e di `pkg audit -Rjson` con la forma che il sorgente di pkg
-stampa (sezioni, totali in fondo, `(vulnerable!)`, intervalli di VuXML come ">= a : < b"), e
-rifiuta di chiamare completo un piano con una riga che non capisce o con i conti che non tornano.
-Dentro c'e' il caso che l'ha motivata: nginx 1.30.4,3 con il catalogo fermo alla stessa e VuXML
-"< 1.30.5,3" — la correzione esiste, il ramo non ce l'ha, e il lock non c'entra.
-In fondo le letture della scheda Pacchetti: le righe "<" di `pkg version -U -vRL=` (con righe vere
-di FreeBSD 15.1: i "?" e i ">" non sono aggiornamenti, una versione con caratteri strani resta
-fuori), `pkg query '%n\t%v\t%k'` con versione e blocco, il tipo di cambiamento nella lingua di
-chi legge.
+**PackagePlanTest** — the exact plan of an update and the answer to "is the patch there?". It reads
+outputs of `pkg upgrade -n` and of `pkg audit -Rjson` in the form pkg's source prints them
+(sections, totals at the bottom, `(vulnerable!)`, VuXML ranges like ">= a : < b"), and refuses to
+call complete a plan with a line it does not understand or with totals that do not add up. Inside
+is the case that prompted it: nginx 1.30.4,3 with the catalog stuck at the same version and VuXML
+"< 1.30.5,3" — the fix exists, the branch does not have it, and the lock has nothing to do with it.
+At the end the Packages tab's readings: the "<" lines of `pkg version -U -vRL=` (with real lines
+from FreeBSD 15.1: the "?" and ">" are not updates, a version with strange characters stays out),
+`pkg query '%n\t%v\t%k'` with version and lock, the kind of change in the reader's language.
 
-**PackageQueueTest** — un lavoro alla volta sui pacchetti, e l'elenco per riproteggerli
-scritto davvero prima di sbloccarli. Nasce da una revisione sul pannello web, e il
-difetto qui era lo stesso: due lavori partivano insieme e si sovrascrivevano l'elenco su disco, e
-se l'elenco non si poteva scrivere il lavoro sbloccava lo stesso. La prova mette 64 thread a
-chiedere il turno nello stesso istante (lo prende uno solo), controlla che il turno si liberi anche
-quando il lavoro fallisce, che l'elenco di un lavoro interrotto non venga sovrascritto, che un
-elenco non scritto venga detto, e che con quell'elenco su disco non parta nessun lavoro che
-installa o aggiorna, mentre rimettere le protezioni resta possibile.
+**PackageQueueTest** — one job at a time on the packages, and the list to lock them again really
+written before unlocking them. It comes from a review of the web panel, and the defect here
+was the same: two jobs started together and overwrote each other's list on disk, and if the list
+could not be written the job unlocked anyway. The test has 64 threads ask for the turn at the same
+instant (only one takes it), checks that the turn is freed even when the job fails, that the list
+of an interrupted job is not overwritten, that a list not written is said, and that with that list
+on disk no job that installs or updates starts, while putting the protections back stays possible.
 
-**InstallLocksTest** — la reinstallazione completa su un server coi pacchetti protetti
-(`InstallLocks`), con un pkg finto per i guasti che pkg vero non da': uno sblocco che dice si' e
-non sblocca, una lettura delle protezioni che non risponde, una riprotezione che fallisce, pkg che
-esplode a meta'. Per ognuno: se lo script puo' partire, che cosa resta protetto, se l'elenco su
-disco (e il record del lavoro accanto) si chiude o resta, se il turno si libera.
+**InstallLocksTest** — the full reinstallation on a server with protected packages
+(`InstallLocks`), with a fake pkg for the faults the real pkg does not give: an unlock that says yes
+and does not unlock, a reading of the protections that does not answer, a re-lock that fails, pkg
+blowing up halfway. For each one: whether the script can start, what stays protected, whether the
+list on disk (and the job record next to it) is closed or stays, whether the turn is freed.
 
-**PackageTurnAcrossProcessesTest** — il turno dei pacchetti fra processi: un secondo processo
-vero (`TurnHolder`) lo tiene, e questo non lo prende, non riprotegge l'elenco dell'altro
-all'avvio, non applica la regola dei blocchi (e lo dice); ucciso l'altro con kill -9, l'elenco si
-riprotegge con l'avviso che nomina il lavoro interrotto. Poi `lockf(1)` contro il pannello, nei
-due sensi, e la parte del turno di `install_mail_server.sh` (dal testo vero, fino al controllo dei
-protetti: non arriva mai alla fase 1) dal menu, a mano, con le variabili messe a mano. Da root,
-sulla VM: tutto in una cartella di `/var/tmp`, pkg solo in lettura. Reperto 153.
+**PackageTurnAcrossProcessesTest** — the packages' turn across processes: a second real process
+(`TurnHolder`) holds it, and this one does not take it, does not lock again the other's list at
+start, does not apply the locks rule (and says so); with the other killed by kill -9, the list is
+locked again with the notice naming the interrupted job. Then `lockf(1)` against the panel, in both
+directions, and the turn part of `install_mail_server.sh` (from the real text, up to the check of
+the protected packages: it never reaches phase 1) from the menu, by hand, with the variables set by
+hand. As root, on the VM: everything in a folder of `/var/tmp`, pkg read-only. Reperto 153.
 
-**PendingDbPasswordTest** — la password MySQL nuova del pannello resta in attesa finche' MySQL non
-la conosce (`PendingDbPassword`, reperto 157), con un MySQL finto: lo script che esce prima di
-MySQL (si tiene la vecchia), quello che ci arriva (si adotta la nuova), MySQL muto (non si decide,
-e l'installazione dopo riusa quella in attesa), la password in attesa che non si scrive, la copia
-di Postfix per i server rotti dalla versione di prima (adottata solo se MySQL la accetta e solo se
-e' dello stesso utente). Gira ovunque, ma si lancia sulla VM come le altre.
+**PendingDbPasswordTest** — the panel's new MySQL password stays pending until MySQL knows it
+(`PendingDbPassword`, reperto 157), with a fake MySQL: the script that exits before MySQL (the old
+one is kept), the one that gets there (the new one is adopted), MySQL silent (nothing is decided,
+and the next installation reuses the pending one), the pending password that cannot be written,
+Postfix's copy for the servers broken by the previous version (adopted only if MySQL accepts it and
+only if it belongs to the same user). It runs anywhere, but it is run on the VM like the others.
 
-**PendingDbPasswordE2ETest** — lo stesso con MySQL vero e il corpo vero dell'installazione
-(`Main.installOnTurn`): al posto di `install_mail_server.sh` uno script piantato che esce prima di
-MySQL, fallisce dopo, riesce, o uccide il pannello con kill -9 prima o dopo aver cambiato la
-password; poi l'avvio (`settleAtStartup`), anche col turno dei pacchetti tenuto da un altro
-processo e con MySQL che non risponde (porta 1). Dopo ogni giro: il pannello entra in MySQL
-(`Main.connectFromConfig`)? Ogni giro ha cartella, SQLite e file dei segreti suoi, e un utente
-MySQL di prova (`e2e_pending`) che alla fine si toglie; la password di root la legge dal file dei
-segreti vero. Si accende solo con `-De2e.vm=yes`, da root, con MySQL acceso.
+**PendingDbPasswordE2ETest** — the same with real MySQL and the real body of the installation
+(`Main.installOnTurn`): in place of `install_mail_server.sh` a planted script that exits before
+MySQL, fails after it, succeeds, or kills the panel with kill -9 before or after changing the
+password; then the start (`settleAtStartup`), also with the packages' turn held by another process
+and with MySQL not answering (port 1). After every round: does the panel get into MySQL
+(`Main.connectFromConfig`)? Every round has its own folder, SQLite and secrets file, and a MySQL
+test user (`e2e_pending`) removed at the end; it reads root's password from the real secrets file.
+It is turned on only with `-De2e.vm=yes`, as root, with MySQL running.
 
-**SqliteSharedTest** — il database SQLite del pannello usato da due processi insieme, come il
-servizio `--web` e il menu dalla stessa cartella (reperto 160): un processo fa le letture del servizio
-e resta acceso, un altro scrive quello che scrive la reinstallazione, tutto subito e senza
-`SQLITE_BUSY`; poi una scrittura tenuta 6 secondi dall'uno e l'altro che aspetta e riesce (6 e non 3:
-sqlite-jdbc aspetta gia' 3 secondi di suo). NON vede il ResultSet che `startWebServer` teneva aperto
-per tutta la vita del servizio: quello lo vede solo la reinstallazione dal menu col servizio vero
-acceso, sul clone (reperto 161).
+**SqliteSharedTest** — the panel's SQLite database used by two processes together, like the
+`--web` service and the menu from the same folder (reperto 160): one process does the service's
+reads and stays up, another writes what the reinstallation writes, all at once and without
+`SQLITE_BUSY`; then a write held 6 seconds by one and the other waiting and succeeding (6 and not
+3: sqlite-jdbc already waits 3 seconds on its own). It does NOT see the ResultSet that
+`startWebServer` kept open for the whole life of the service: only the reinstallation from the menu
+with the real service running sees that, on the clone (reperto 161).
 
-**MysqlReconnectTest** — il pannello acceso si ricollega a MySQL con la password che c'e' adesso nel
-file dei segreti, non con quella dell'avvio. MySQL vero, utente di prova `e2e_reconnect` tolto alla
-fine; `-De2e.vm=yes`, da root.
+**MysqlReconnectTest** — the running panel reconnects to MySQL with the password that is in the
+secrets file now, not with the one from the start. Real MySQL, test user `e2e_reconnect` removed at
+the end; `-De2e.vm=yes`, as root.
 
-**InstallWayBackTest** — la via di ritorno della reinstallazione senza bectl: il passo che la crea gira
-col turno e prima dello sblocco, un suo rifiuto ferma tutto, e `Main.installOnTurn` dice «ha cambiato
-il sistema» solo se lo script (piantato) arriva alla fase 1.
+**InstallWayBackTest** — the reinstallation's way back without bectl: the step that creates it runs
+with the turn and before the unlock, a refusal of it stops everything, and `Main.installOnTurn` says
+"it changed the system" only if the (planted) script reaches phase 1.
 
-**ReinstallWayBackE2ETest** — la stessa con bectl vero: quando il boot environment resta e quando si
-toglie, e alla fine gli stessi boot environment e snapshot di prima. Crea e toglie boot environment:
-solo su un clone, e si rifiuta di partire (codice 2) se ci sono gia' vie di ritorno dei lavori sui
-pacchetti, che la potatura toglierebbe.
+**ReinstallWayBackE2ETest** — the same with real bectl: when the boot environment stays and when it
+is removed, and at the end the same boot environments and snapshots as before. It creates and
+removes boot environments: only on a clone, and it refuses to start (code 2) if there are already
+ways back of package jobs, which the pruning would remove.
 
-**ReinstallJobTest** — la reinstallazione completa staccata dal menu (`ReinstallJob`, reperto 163): il
-menu ucciso, il terminale del menu che si chiude (SIGHUP al suo gruppo), un secondo menu aperto a
-meta', la reinstallazione stessa uccisa (e un «servizio» col guardiano che se ne accorge da solo,
-reperto 166). Script piantato, il resto vero (JVM staccata, turno, pkg,
-bectl): solo su un clone, `-De2e.vm=yes`, da root; si rifiuta di partire se ci sono gia' vie di
-ritorno di reinstallazioni o un elenco di pacchetti sbloccati.
+**ReinstallJobTest** — the full reinstallation detached from the menu (`ReinstallJob`, reperto
+163): the menu killed, the menu's terminal closing (SIGHUP to its group), a second menu opened
+halfway, the reinstallation itself killed (and a "service" with the watcher that notices by itself,
+reperto 166). Planted script, the rest real (detached JVM, turn, pkg, bectl): only on a clone,
+`-De2e.vm=yes`, as root; it refuses to start if there are already ways back of reinstallations or a
+list of unlocked packages.
 
-**InterruptionWatchTest** — il guardiano del servizio acceso (`UpdateManager.watchOnce`, reperto 166):
-quando NON tocca l'elenco dei pacchetti sbloccati (l'elenco dell'aggiornamento della JVM, chi l'ha
-scritto ancora vivo, un lavoro di questo processo, il turno tenuto da un altro processo) e il testo
-dell'avviso di una reinstallazione interrotta. Senza pkg: il caso che riprotegge davvero e'
-`ReinstallJobTest` J4.
+**InterruptionWatchTest** — the running service's watcher (`UpdateManager.watchOnce`, reperto 166):
+when it does NOT touch the list of unlocked packages (the list of the JVM's update, whoever wrote it
+still alive, a job of this process, the turn held by another process) and the text of the notice of
+an interrupted reinstallation. Without pkg: the case that really locks again is `ReinstallJobTest`
+J4.
 
-**InstallScriptsTest** — gli script d'installazione su disco sono sempre quelli del jar che gira
-(`InstallScripts`, reperto 169): scrittura tutto o niente, lo script vecchio riscritto, quelli che nessuno
-scrive piu' messi da parte, l'impronta del jar dopo la `#!`; con `-De2e.vm=yes` anche un avvio vero del
-pannello che lo fa.
+**InstallScriptsTest** — the install scripts on disk are always those of the running jar
+(`InstallScripts`, reperto 169): all-or-nothing writing, the old script rewritten, those nobody
+writes any more set aside, the jar's fingerprint after the `#!`; with `-De2e.vm=yes` also a real
+start of the panel doing it.
 
-**InstallScriptVersionTest** — `install_mail_server.sh` lanciato a mano si ferma se e' di un'altra
-versione del pannello di quella del servizio, prima di cambiare qualunque cosa. Script vero, da root,
-sulla VM: si ferma sempre prima della fase 1, e rimette rc.conf.
+**InstallScriptVersionTest** — `install_mail_server.sh` started by hand stops if it belongs to a
+different panel version from the service's, before changing anything. Real script, as root, on the
+VM: it always stops before phase 1, and puts rc.conf back.
 
-**ReinstallReturnE2ETest** — tornare alla via di ritorno di una reinstallazione con la posta arrivata dopo
-fusa dentro (`ReinstallReturn`, reperto 170), con bectl vero e senza riavviare; tutto rimesso nell'ordine
-giusto (bectl activate promuove). Solo su un clone.
+**ReinstallReturnE2ETest** — going back to the way back of a reinstallation with the mail that
+arrived afterwards merged in (`ReinstallReturn`, reperto 170), with real bectl and without
+rebooting; everything put back in the right order (bectl activate promotes). Only on a clone.
 
-**NoBootEnvironmentTest** — un sistema senza boot environment (un bectl finto davanti nel PATH che
-fallisce sempre): la via di ritorno non si crea e lo si dice, lo spazio non si misura, il ritorno rifiuta
-ogni nome, la scheda dice che non ci sono (reperto 172).
+**NoBootEnvironmentTest** — a system without boot environments (a fake bectl first in the PATH that
+always fails): the way back is not created and it is said, the space is not measured, the return
+refuses every name, the tab says there are none (reperto 172).
 
-**InterruptionReportTest** — la reinstallazione interrotta nel rapporto periodico: la cosa piu' urgente,
-col suo titolo e il comando per tornare indietro; un lavoro qualunque resta com'era. Con `-De2e.vm=yes`
-anche i dati veri del rapporto (`UpdateManager.reportData`). Reperto 172.
+**InterruptionReportTest** — the interrupted reinstallation in the periodic report: the most urgent
+thing, with its title and the command to go back; any other job stays as it was. With
+`-De2e.vm=yes` also the report's real data (`UpdateManager.reportData`). Reperto 172.
 
-**LockMarksTest** — il cartello «bloccato dal pannello» su tutti e soli i bloccati. Con `-De2e.vm=yes`
-anche la prova 5, che sblocca TUTTI i pacchetti (solo su un clone) e rimette blocchi e cartelli come li ha
-trovati: senza nessun bloccato `pkg lock -l` esce con 1, e i cartelli rimasti non se ne andavano mai
-(reperto 173).
+**LockMarksTest** — the "locked by the panel" sign on all and only the locked packages. With
+`-De2e.vm=yes` also check 5, which unlocks ALL packages (only on a clone) and puts locks and signs
+back as it found them: with no locked package `pkg lock -l` exits with 1, and the signs left never
+went away (reperto 173).
 
-**menu-way-back.exp** — la voce 6 del menu a schermo, in un terminale vero (`ssh -tt`), con expect: va
-preparata sul clone una copia del pannello, una via di ritorno vera (`MakeReinstallWayBack`) e l'avviso di
-una reinstallazione interrotta; dopo, la via di ritorno e' quella del prossimo avvio e la posta e' ferma,
-e va rimesso tutto (reperto 174). Lanterna ridisegna solo le celle che cambiano: si aspetta una riga che
-arriva intera, non una qualunque.
+**menu-way-back.exp** — entry 6 of the on-screen menu, in a real terminal (`ssh -tt`), with expect:
+a copy of the panel, a real way back (`MakeReinstallWayBack`) and the notice of an interrupted
+reinstallation must be prepared on the clone; afterwards, the way back is the one of the next boot
+and the mail is stopped, and everything must be put back (reperto 174). Lanterna redraws only the
+cells that change: it waits for a line that arrives whole, not just any line.
 
-`ReinstallJobTest` vuole la classe ombra di `FullMailServerScript` (`tests/planted`) davanti al jar: la
-reinstallazione riscrive sempre lo script dal suo jar, e senza l'ombra eseguirebbe quello vero (la prova lo
-controlla e si rifiuta). `MenuGoBack` e' il conduttore della voce 6 del menu, come `MenuReinstall`.
+`ReinstallJobTest` wants the shadow class of `FullMailServerScript` (`tests/planted`) in front of
+the jar: the reinstallation always rewrites the script from its jar, and without the shadow it
+would run the real one (the test checks it and refuses). `MenuGoBack` is the driver of the menu's
+entry 6, like `MenuReinstall`.
 
-**AliasMessagesTest** — che cosa il pannello dice dopo aver creato, modificato, disattivato o eliminato
-un alias. Postfix legge solo gli alias attivi e li applica prima delle caselle: una casella con un
-inoltro attivo e senza "se stessa -> se stessa" attivo non riceve piu' niente, e un indirizzo che
-non e' una casella esiste solo finche' ha un alias attivo (o il dominio un catch-all attivo). Da
-quando un alias si puo' disattivare, la riga della copia puo' esserci ed essere spenta: la logica
-di prima guardava la riga e non lo stato, e taceva proprio li'. La prova finisce riproducendo quel
-silenzio sulla logica vecchia.
+**AliasMessagesTest** — what the panel says after creating, editing, disabling or deleting an
+alias. Postfix reads only the active aliases and applies them before the mailboxes: a mailbox with
+an active forward and without an active "itself -> itself" no longer receives anything, and an
+address that is not a mailbox exists only while it has an active alias (or the domain an active
+catch-all). Since an alias can be disabled, the copy's row can be there and be off: the logic of
+before looked at the row and not at its state, and stayed silent exactly there. The test ends by
+reproducing that silence on the old logic.
 
-**PasswordGeneratorTest** — il generatore di password e la regola che il pannello applica alle
-password delle caselle. Con "Tutti i caratteri" il generatore metteva anche < > / ~ e l'apice
-inverso, che la regola rifiuta: la password proposta dal pannello veniva respinta dal pannello
-stesso, sette volte su dieci. La prova genera migliaia di password per ogni tipo e combinazione e
-pretende che passino tutte, controlla che la stima dell'entropia usi gli stessi insiemi, che la
-regola sia rimasta quella di prima carattere per carattere, che le password delle caselle ne
-vogliano almeno 12 (il login dell'admin resta com'era: alzarlo avrebbe chiuso fuori chi ha una
-password piu' corta), e finisce riproducendo il rifiuto con i simboli vecchi.
+**PasswordGeneratorTest** — the password generator and the rule the panel applies to mailbox
+passwords. With "All characters" the generator also put in < > / ~ and the backtick, which the rule
+refuses: the password proposed by the panel was rejected by the panel itself, seven times out of
+ten. The test generates thousands of passwords for every type and combination and requires them all
+to pass, checks that the entropy estimate uses the same sets, that the rule stayed the same as
+before character by character, that mailbox passwords want at least 12 (the admin login stays as it
+was: raising it would have locked out whoever has a shorter password), and ends by reproducing the
+refusal with the old symbols.
 
-**AddressConversionTest** — trasformare un alias in casella e una casella in alias (AddressTransform
-e MailDatabase), solo quando si puo' davvero. Senza database: i rifiuti (raccolta @dominio,
-indirizzo che e' gia' una casella, dominio che non e' del pannello, nomi che uscirebbero da
-/var/vmail, come "..@dominio"), le destinazioni (valide, esistenti se sono sui domini del pannello, al
-massimo venti, nessun giro che torna all'indirizzo), la posta di una casella di prima trovata sul
-disco (contata, messa da parte senza cancellarla, rimessa a posto se la trasformazione fallisce) e
-l'impronta dell'anteprima, che cambia quando cambia lo stato. Su MySQL: le due transazioni,
-guardate con le stesse query che usa Postfix; se l'ultimo passo fallisce il database torna
-com'era; il vincolo UNIQUE rifiuta una seconda casella con lo stesso indirizzo; con la casella se
-ne vanno risposta automatica, filtri, inoltri e limiti, e l'alias "se stessa -> se stessa"; andata
-e ritorno.
+**AddressConversionTest** — turning an alias into a mailbox and a mailbox into an alias
+(AddressTransform and MailDatabase), only when it can really be done. Without a database: the
+refusals (@domain catch-all, an address that is already a mailbox, a domain that is not the
+panel's, names that would leave /var/vmail, like "..@domain"), the destinations (valid, existing if
+they are on the panel's domains, twenty at most, no loop back to the address), the mail of an
+earlier mailbox found on disk (counted, set aside without deleting it, put back if the
+transformation fails) and the preview's fingerprint, which changes when the state changes. On
+MySQL: the two transactions, looked at with the same queries Postfix uses; if the last step fails
+the database goes back to how it was; the UNIQUE constraint refuses a second mailbox with the same
+address; with the mailbox go auto-reply, filters, forwards and limits, and the "itself -> itself"
+alias; there and back.
 
-**ResetDatabaseTest** — il reset del database del pannello (MailDatabase.dropAllTables, che Main
-usa nel reset). Rifa' prima il reset vecchio, che cancellava le tabelle una alla volta: MySQL
-rifiutava mailboxes, domains e panel_admin perche' altre tabelle ci puntano con una chiave esterna,
-e restavano con i loro dati (insieme ad admin_passkeys, cloudflare_accounts e dkim_rotation_history,
-che l'elenco non aveva) mentre il reset si diceva completato. Poi il nuovo: ogni tabella che
-createSchema e le migrazioni creano e' nel suo elenco; con una riga in ognuna, e le virtual_* delle
-versioni vecchie, non ne resta nessuna e una tabella d'altri accanto non si tocca; ricreate, sono
-vuote; sul database gia' vuoto non da' errori; se una tabella d'altri punta a domains MySQL rifiuta,
-non si cancella niente (un DROP solo, atomico) e l'errore dice cosa resta. Senza collegamento il
-reset non parte.
+**ResetDatabaseTest** — the reset of the panel's database (MailDatabase.dropAllTables, which Main
+uses in the reset). First it redoes the old reset, which dropped the tables one at a time: MySQL
+refused mailboxes, domains and panel_admin because other tables point at them with a foreign key,
+and they stayed with their data (together with admin_passkeys, cloudflare_accounts and
+dkim_rotation_history, which the list did not have) while the reset called itself complete. Then
+the new one: every table that createSchema and the migrations create is in its list; with a row in
+each, and the virtual_* tables of the old versions, none is left and a table of someone else's next
+to them is not touched; created again, they are empty; on the database already empty it gives no
+errors; if a table of someone else's points at domains MySQL refuses, nothing is dropped (a single
+DROP, atomic) and the error says what is left. Without a connection the reset does not start.
 
-**SoftwareVersionsTest** — le versioni della Home (SoftwareVersions). Un sistema finto risponde con le
-uscite vere dei programmi su FreeBSD (postconf, dovecot, rspamd, redis-server, nginx, php-fpm,
-openssl, freebsd-version, clamd, mysqld, pkg which, pkg query) e si controlla: ogni versione
-riconosciuta; il pacchetto trovato dal binario anche quando si chiama postfix-mysql o
-dovecot-mysql (per nome non si trovava); pkg chiamato due volte in tutto; "da riavviare" quando
-il processo e' partito prima dell'installazione del pacchetto, o risponde con un'altra versione
-(MySQL, ClamAV, la Java del pannello, il kernel), e mai quando non si sa (nessun pidfile, processo
-sparito, PHP-FPM che si ricarica nello stesso processo). I casi storti: clamd che non risponde,
-firme vecchie di diciannove giorni, MySQL irraggiungibile, programmi che rispondono con un errore
-o con dell'HTML, che non passa mai come versione. Poi il socket di clamd, vero: un demone finto
-che risponde e uno muto, dal quale la lettura si deve staccare in tre secondi.
+**SoftwareVersionsTest** — Home's versions (SoftwareVersions). A fake system answers with the real
+outputs of the programs on FreeBSD (postconf, dovecot, rspamd, redis-server, nginx, php-fpm,
+openssl, freebsd-version, clamd, mysqld, pkg which, pkg query) and it checks: every version
+recognised; the package found from the binary even when it is called postfix-mysql or
+dovecot-mysql (by name it was not found); pkg called twice in all; "to restart" when the process
+started before the package was installed, or answers with another version (MySQL, ClamAV, the
+panel's Java, the kernel), and never when it is not known (no pidfile, process gone, PHP-FPM
+reloading in the same process). The crooked cases: clamd not answering, signatures nineteen days
+old, MySQL unreachable, programs answering with an error or with HTML, which never passes as a
+version. Then clamd's socket, for real: a fake daemon that answers and a silent one, from which the
+reading must detach in three seconds.
 
-**VersionsApiTest** — /api/versions e /api/service sul server vero (SSLMailServer), via HTTPS,
-con una sessione come quella del login: si accende solo il server HTTP con le sue rotte, non i
-gestori che toccherebbero il sistema. Senza sessione 401; con la sessione le versioni, MySQL
-letto dal server vero; la lettura tenuta trenta secondi e "fresh" che non rilegge prima di tre;
-parametri e metodi sbagliati rifiutati. /api/service senza token CSRF, o con un token sbagliato,
-e' 403 e finisce nel registro di audit; con il token giusto la richiesta passa; un'azione su un
-servizio va nel registro, con lo stesso esito della risposta, e fa rileggere le versioni. L'azione
-e' `service redis restart` vero: dove il server di posta e' installato, redis riparte davvero.
+**VersionsApiTest** — /api/versions and /api/service on the real server (SSLMailServer), over
+HTTPS, with a session like the login's: only the HTTP server with its routes is started, not the
+handlers that would touch the system. Without a session 401; with the session the versions, MySQL
+read from the real server; the reading kept thirty seconds and "fresh" that does not re-read
+before three; wrong parameters and methods refused. /api/service without a CSRF token, or with a
+wrong token, is 403 and ends up in the audit log; with the right token the request goes through; an
+action on a service goes to the log, with the same outcome as the response, and makes the versions
+be read again. The action is a real `service redis restart`: where the mail server is installed,
+redis really restarts.
 
-Per questo, sulla VM, **mai sotto `timeout` senza `-f`**: il `timeout(1)` di FreeBSD fa da reaper
-del comando e dei suoi discendenti, e aspetta anche il redis appena riavviato. Misurato il
-30/10/2026: la prova scrive «TUTTO VERDE» e la sua JVM esce, ma `timeout 60` resta li' fino allo
-scadere, esce con 124 e uccide redis (`redis is not running`). Con `timeout -f 60`: uscita 0 in 4
-secondi, redis acceso.
+That is why, on the VM, **never under `timeout` without `-f`**: FreeBSD's `timeout(1)` acts as the
+reaper of the command and its descendants, and also waits for the redis just restarted. Measured on
+30/10/2026: the test prints "ALL GREEN" and its JVM exits, but `timeout 60` stays there until the
+deadline, exits with 124 and kills redis (`redis is not running`). With `timeout -f 60`: exit 0 in
+4 seconds, redis running.
 
-**PkgBranchTest** — il ramo dei pacchetti, quarterly o latest (PkgBranch). Il sistema finto fa
-quello che fa pkg (libpkg/pkg_config.c, letto il 03/10/2026): parte dal /etc/pkg/FreeBSD.conf di
-FreeBSD 15.0 RELEASE (quarterly, moduli del kernel con la versione minore, FreeBSD-base spento) e
-legge i file di /usr/local/etc/pkg/repos in ordine alfabetico, con ogni blocco che sovrascrive i
-campi del suo repository e le variabili di pkg espanse. Si prova: leggere i repository (ufficiali
-o no, pacchetti, moduli, sistema base; i nomi di FreeBSD 14 e i moduli di -STABLE senza versione
-minore), quando non si puo' cambiare (pacchetti da un repository proprio) e perche', i rami misti;
-l'anteprima, che non tocca niente e scrive gli indirizzi con ${ABI} e ${VERSION_MINOR} invece dei
-valori di oggi, e riscrive uguali priority e ip_version (un blocco li azzererebbe); il cambio
-quarterly -> latest e ritorno, dove il file del pannello si toglie se il ramo di serie basta; il
-FreeBSD.conf dell'utente mai toccato; e i ritorni indietro: un file letto dopo quello del pannello
-che vince lui, un catalogo che non si scarica, una cartella non scrivibile, una configurazione
-cambiata dopo l'anteprima. In fondo il file vero su disco: permessi rw-r--r--, nessun temporaneo
-rimasto, i .conf elencati come li legge pkg.
+**PkgBranchTest** — the packages' branch, quarterly or latest (PkgBranch). The fake system does
+what pkg does (libpkg/pkg_config.c, read on 03/10/2026): it starts from the /etc/pkg/FreeBSD.conf of
+FreeBSD 15.0 RELEASE (quarterly, kernel modules with the minor version, FreeBSD-base off) and reads
+the files of /usr/local/etc/pkg/repos in alphabetical order, with every block overwriting the fields
+of its repository and pkg's variables expanded. It tests: reading the repositories (official or
+not, packages, modules, base system; FreeBSD 14's names and -STABLE's modules without a minor
+version), when it cannot be changed (packages from a repository of one's own) and why, the mixed
+branches; the preview, which touches nothing and writes the addresses with ${ABI} and
+${VERSION_MINOR} instead of today's values, and writes priority and ip_version back unchanged (a
+block would reset them); the change quarterly -> latest and back, where the panel's file is removed
+if the default branch is enough; the user's FreeBSD.conf never touched; and the ways back: a file
+read after the panel's that wins, a catalog that does not download, a folder that cannot be
+written, a configuration changed after the preview. At the end the real file on disk: permissions
+rw-r--r--, no temporary file left, the .conf files listed as pkg reads them.
 
-**pkg-branch-browser-test.js** — la scheda "Ramo dei pacchetti" della pagina Aggiornamenti: si legge da
-sola, nomi e indirizzi solo come testo, l'anteprima, il nome del ramo scritto a mano per
-confermare, impronta e token CSRF nella richiesta, il lavoro seguito fino all'esito, l'errore di
-un cambio che non parte; tema scuro e telefono.
+**pkg-branch-browser-test.js** — the "Package branch" tab of the Updates page: it reads by itself,
+names and addresses only as text, the preview, the branch name typed by hand to confirm,
+fingerprint and CSRF token in the request, the job followed to its outcome, the error of a change
+that does not start; dark theme and phone.
 
-**packages-browser-test.js** — la scheda Pacchetti della pagina Aggiornamenti, con il server
-simulato: si legge da sola; il riepilogo; l'avviso sui pacchetti dello stack non bloccati con il
-pulsante per bloccarli; per ogni riga versione installata e del catalogo, verdetto sulla
-vulnerabilita' (testo, mai HTML), blocco; "Aggiorna" anche su un pacchetto bloccato, "trattenuto"
-dove l'avvertenza dice di aspettare, il JDK del pannello che rimanda alla procedura di Java;
-Blocca/Sblocca con nome e token CSRF. La finestra di aggiornamento: piano esatto, i passi in
-chiaro, il pulsante spento finche' il nome del pacchetto non e' scritto giusto, la richiesta con
-conferma e impronta, il lavoro seguito fino all'esito. E nella scheda Aggiornamenti l'intestazione
-di una vulnerabilita' che dice lo stesso verdetto del dettaglio (era "l'aggiornamento la corregge"
-sopra un "l'aggiornamento non basta"), con il pulsante Aggiorna accanto.
+**packages-browser-test.js** — the Packages tab of the Updates page, with the simulated server: it
+reads by itself; the summary; the warning about the stack's unlocked packages with the button to
+lock them; for every row installed and catalog version, verdict on the vulnerability (text, never
+HTML), lock; "Update" also on a locked package, "held" where the advisory says to wait, the panel's
+JDK pointing to the Java procedure; Lock/Unlock with name and CSRF token. The update window: exact
+plan, the steps in plain words, the button off until the package name is typed right, the request
+with confirmation and fingerprint, the job followed to its outcome. And in the Updates tab the
+header of a vulnerability saying the same verdict as the detail (it was "the update fixes it" above
+a "the update is not enough"), with the Update button next to it.
 
-**address-conversion-browser-test.js** — le finestre "Trasforma in casella" (pagina Alias) e "Trasforma
-in alias" (pagina Caselle): l'anteprima, la password proposta dal generatore, la scelta
-obbligatoria sulla posta di prima, l'indirizzo scritto per conferma, l'impronta e il token CSRF
-nelle richieste, il token anche in "Elimina casella"; tema scuro e telefono.
+**address-conversion-browser-test.js** — the "Turn into mailbox" (Aliases page) and "Turn into
+alias" (Mailboxes page) windows: the preview, the password proposed by the generator, the mandatory
+choice about the earlier mail, the address typed to confirm, the fingerprint and the CSRF token in
+the requests, the token also in "Delete mailbox"; dark theme and phone.
 
-**software-versions-browser-test.js** — la Home: la colonna Versione di "Servizi Mail" (con le righe
-MySQL e Redis), "Altro software", le note "da riavviare", una versione con dentro HTML che resta
-testo, i nomi dei pulsanti per i lettori di schermo, la domanda prima di fermare un servizio o
-riavviare MySQL (annullata non parte niente), il token CSRF a /api/service, la rilettura dopo
-ogni comando; tema scuro e telefono, dove le tabelle diventano schede.
+**software-versions-browser-test.js** — Home: the Version column of "Mail services" (with the MySQL
+and Redis rows), "Other software", the "to restart" notes, a version with HTML inside that stays
+text, the buttons' names for screen readers, the question before stopping a service or restarting
+MySQL (cancelled, nothing starts), the CSRF token to /api/service, the re-reading after every
+command; dark theme and phone, where the tables become cards.
 
-**I18nTest** — le lingue dell'interfaccia (I18n) e la cornice delle pagine (Layout). I file di
-lingua hanno le stesse chiavi, nessun testo vuoto e gli stessi {valori} in italiano e in inglese;
-ogni {{t:chiave}} e ogni t('chiave') degli script esiste nelle due lingue; nessuno script nasconde
-la funzione t dietro una variabile con lo stesso nome; una pagina completata non ha segnaposti
-rimasti. Poi la lingua di una richiesta (Accept-Language con i pesi, il cookie) e la cornice: le
-quattro sezioni, ogni pagina servita dal pannello nel menu, la pagina in cui ti trovi segnata.
+**I18nTest** — the interface's languages (I18n) and the pages' frame (Layout). The language files
+have the same keys, no empty text and the same {values} in Italian and in English; every
+{{t:key}} and every t('key') of the scripts exists in both languages; no script hides the t
+function behind a variable with the same name; a completed page has no placeholders left. Then the
+language of a request (Accept-Language with the weights, the cookie) and the frame: the four
+sections, every page served by the panel in the menu, the page you are on marked.
 
-**LanguageRoutesTest** — le lingue sul server vero (SSLMailServer), via HTTPS, con il MySQL di
-prova: il dizionario /i18n/(lingua).js, la lingua della pagina di accesso (cookie prima del
-browser, inglese per un browser che non chiede nessuna delle due), /api/language prima di entrare
-(solo col token della pagina di accesso) e dopo (col token della sessione: si salva nell'account),
-la scelta salvata che vince sul browser e il cookie riallineato, la cornice intorno alle pagine.
+**LanguageRoutesTest** — the languages on the real server (SSLMailServer), over HTTPS, with the
+test MySQL: the dictionary /i18n/(language).js, the language of the sign-in page (cookie before the
+browser, English for a browser that asks for neither), /api/language before signing in (only with
+the sign-in page's token) and after (with the session's token: it is saved in the account), the
+saved choice that wins over the browser and the cookie realigned, the frame around the pages.
 
-**LoginSecurityTest** — l'accesso senza password, con il MySQL di prova. La migrazione di una
-vecchia installazione: via le colonne password_hash, totp_secret, totp_enabled e backup_codes, le
-date in DATETIME convertite in UTC, il piu' vecchio amministratore superadmin se non ce n'era uno,
-le passkey di prima legate al loro user handle e ancora buone per entrare; le chiavi in un file 600
-fuori dal database. La cifratura AES-256-GCM (nonce casuale, un carattere cambiato e non si
-decifra, un'altra chiave non decifra) e l'indice cieco. Le passkey firmate da un autenticatore
-software (SoftAuthenticator): registrazione e login validi, e rifiutati con un'altra sessione,
-un'altra origine, un altro rpId, senza verifica dell'utente, con il contatore all'indietro, con la
-firma rovinata, con la sfida riusata o scaduta, con una chiave di nessuno o di un amministratore
-disattivato; la conferma di un'operazione solo con la propria passkey e la propria sessione. I
-codici monouso: solo l'HMAC nel database, una volta sola, cinque tentativi, dieci minuti, i limiti
-per indirizzo, IP e sottorete, il codice della console, quello di conferma, il cambio dell'email
-che vale solo quando torna il codice, e nel log mai un codice o un indirizzo. Le sessioni: solo
-l'impronta del token, IP e browser cifrati, lo stesso browser, 30 minuti senza richieste e 12 ore
-al massimo, la revoca (una, le altre, all'uscita, con l'amministratore), il token CSRF derivato.
+**LoginSecurityTest** — the passwordless login, with the test MySQL. The migration of an old
+installation: away with the columns password_hash, totp_secret, totp_enabled and backup_codes, the
+DATETIME dates converted to UTC, the oldest administrator made superadmin if there was none, the
+earlier passkeys tied to their user handle and still good for signing in; the keys in a 600 file
+outside the database. The AES-256-GCM encryption (random nonce, one character changed and it does
+not decrypt, another key does not decrypt) and the blind index. Passkeys signed by a software
+authenticator (SoftAuthenticator): valid registration and login, and refused with another session,
+another origin, another rpId, without user verification, with the counter going backwards, with
+the signature spoiled, with the challenge reused or expired, with a key of nobody or of a disabled
+administrator; the confirmation of an operation only with one's own passkey and one's own session.
+The one-time codes: only the HMAC in the database, once only, five attempts, ten minutes, the limits
+per address, IP and subnet, the console code, the confirmation one, the email change that holds
+only when the code comes back, and never a code or an address in the log. The sessions: only the
+token's fingerprint, IP and browser encrypted, the same browser, 30 minutes without requests and 12
+hours at most, the revocation (one, the others, at sign-out, by the administrator), the derived
+CSRF token.
 
-**LoginRoutesTest** — le rotte dell'accesso sul server vero, via HTTPS: la pagina di accesso non
-crea niente sul server e lega il suo token a un cookie; ogni richiesta prima del login vuole token e
-cookie; chiedere un codice per un indirizzo di nessuno risponde come per uno vero (stato, testo,
-tempo), e cosi' un codice sbagliato; codice giusto, codice della console e passkey aprono una
-sessione nel database con il cookie __Host-; /api/account vuole il token della sessione; gli
-amministratori hanno un'email e nessuna password; il vault vuole una conferma recente; l'uscita
-chiude la sessione nel database; le vecchie rotte con password e TOTP non rispondono piu'.
+**LoginRoutesTest** — the sign-in routes on the real server, over HTTPS: the sign-in page creates
+nothing on the server and ties its token to a cookie; every request before the login wants token
+and cookie; asking for a code for nobody's address answers as for a real one (status, text, time),
+and so does a wrong code; right code, console code and passkey open a session in the database with
+the __Host- cookie; /api/account wants the session's token; administrators have an email and no
+password; the vault wants a recent confirmation; signing out closes the session in the database;
+the old routes with password and TOTP no longer answer.
 
-**MailboxPasswordTest** — le password delle caselle si possono sempre rivedere, con il MySQL di
-prova e il server vero. Ogni password e' salvata due volte, hash bcrypt e copia cifrata; se il vault
-non cifra non si salva niente. "Rivela" mostra la copia solo se e' ancora la password (confronto con
-l'hash): copia mancante, vecchia o illeggibile hanno ciascuna il suo messaggio. Le righe rimaste in
-chiaro (il vecchio driver sql della webmail) si riconoscono e all'avvio diventano hash + copia.
-/api/internal/mailbox-password (il cambio dalla webmail): solo da loopback, senza intestazioni di un
-proxy, con la chiave della webmail; password attuale controllata, hash e copia insieme, tentativi
-limitati, nel log nessuna password. /api/internal/mailbox-vault riempie una copia mancante dopo un
-accesso alla webmail. La configurazione di Roundcube: via le righe del driver sql (con la password
-MySQL del pannello), il blocco del pannello una volta sola, file non leggibile dagli altri utenti.
-Con `-Droundcube.dir=<roundcubemail-1.6.x-complete scompattato>` e `php` fa girare anche il codice
-vero di Roundcube (webmail-roundcube-test.php): il driver httpapi con il suo Guzzle e l'hook di
-accesso del plugin mailpanel_sso, contro il pannello.
+**MailboxPasswordTest** — mailbox passwords can always be seen again, with the test MySQL and the
+real server. Every password is saved twice, bcrypt hash and encrypted copy; if the vault does not
+encrypt nothing is saved. "Reveal" shows the copy only if it is still the password (comparison with
+the hash): missing, old or unreadable copies each have their own message. The rows left in clear
+(the webmail's old sql driver) are recognised and at start become hash + copy.
+/api/internal/mailbox-password (the change from the webmail): only from loopback, without a
+proxy's headers, with the webmail's key; current password checked, hash and copy together, limited
+attempts, no password in the log. /api/internal/mailbox-vault fills a missing copy after a webmail
+login. Roundcube's configuration: away with the sql driver's lines (with the panel's MySQL
+password), the panel's block only once, file not readable by other users.
+With `-Droundcube.dir=<roundcubemail-1.6.x-complete unpacked>` and `php` it also runs Roundcube's
+real code (webmail-roundcube-test.php): the httpapi driver with its Guzzle and the mailpanel_sso
+plugin's login hook, against the panel.
 
-**ConfigSecretsTest** — la password MySQL e la chiave privata TLS escono dal database SQLite anche su
-un server gia' avviato: al primo avvio passano nel file dei segreti (600, cartella 700) e le colonne
-si svuotano; quello che il pannello salva dopo va nel file; un valore scritto da una versione vecchia
-vince all'avvio dopo; la chiave PEM torna identica; con il file non scrivibile il valore resta in
-SQLite e si legge lo stesso; database/ 700 e mail_panel.db 600.
+**ConfigSecretsTest** — the MySQL password and the TLS private key leave the SQLite database even
+on a server already started: at the first start they move to the secrets file (600, folder 700) and
+the columns are emptied; what the panel saves afterwards goes into the file; a value written by an
+old version wins at the next start; the PEM key comes back identical; with the file not writable
+the value stays in SQLite and is read all the same; database/ 700 and mail_panel.db 600.
 
-**csp-browser-test.js** — ogni pagina generata in Chromium con la Content-Security-Policy del
-pannello (senza 'unsafe-inline', reperto 178): nessuna violazione, nessun gestore on...= o stile in
-linea nel DOM, ogni data-on-* nella lingua di panel-actions.js e solo con funzioni del pannello, ogni
-data-style applicato, e le funzioni chiamate dall'HTML che gli script costruiscono dopo esistono.
+**csp-browser-test.js** — every generated page in Chromium with the panel's
+Content-Security-Policy (without 'unsafe-inline', reperto 178): no violation, no on...= handler or
+inline style in the DOM, every data-on-* in panel-actions.js's language and only with the panel's
+functions, every data-style applied, and the functions called from the HTML the scripts build later
+exist.
 
-**SessionRunTest** — le sessioni valgono per un avvio solo del jar, coi cookie Strict (reperto 184), col MySQL di
-prova: i cookie (Strict, quello della sessione senza scadenza), l'impronta nel database che non e' lo SHA-256 del
-token, un secondo processo sullo stesso database (il jar riavviato) che non riconosce il token e ne calcola un altro
-CSRF, `beginRun` che toglie le righe di prima, e sul server vero il 302 a `/index?session=ended`, il 401 con
-`X-Panel-Session: ended`, il codice di conferma sbagliato senza quel segnale, l'uscita con `Clear-Site-Data`.
+**SessionRunTest** — sessions last for one start of the jar, with Strict cookies (reperto 184), with
+the test MySQL: the cookies (Strict, the session one without expiry), the fingerprint in the
+database that is not the token's SHA-256, a second process on the same database (the restarted
+jar) that does not recognise the token and computes another CSRF token for it, `beginRun` removing
+the rows of before, and on the real server the 302 to `/index?session=ended`, the 401 with
+`X-Panel-Session: ended`, the wrong confirmation code without that signal, signing out with
+`Clear-Site-Data`.
 
-**session-restart-browser-test.js** — lo stesso col Chrome vero e il server vero (HomePanelE2EServer sulla VM), che la
-prova riavvia con il comando in `START`: i cookie come li mette il server, un link da un altro sito che arriva senza
-sessione, la pagina aperta che dopo il riavvio va all'accesso e dice perche', il cookie di prima che se ne va, la
-sessione del nuovo avvio che entra.
+**session-restart-browser-test.js** — the same with the real Chrome and the real server
+(HomePanelE2EServer on the VM), which the test restarts with the command in `START`: the cookies as
+the server sets them, a link from another site arriving without the session, the open page that
+after the restart goes to the sign-in page and says why, the old cookie going away, the new start's
+session getting in.
 
-**update-center-browser-test.js** — updating from the panel (reperti 185-187), with a simulated server:
-the restart banner on every page (and the Italian text taken
-from it.json), the "Update the server" card with its five rows in words, the package update confirmed in
-the panel's window with the exact plan and its signature, the FreeBSD patch install with INSTALL
-PATCHES, the restart window (what stops, the chosen delay, the time, cancelling, Escape), reads that
-queue up instead of failing, 44 px touch buttons at 375 px, and no browser dialog at all.
+**update-center-browser-test.js** — updating from the panel (reperti 185-187), with a simulated
+server: the restart banner on every page (and the Italian text taken from it.json), the "Update the
+server" card with its five rows in words, the package update confirmed in the panel's window with
+the exact plan and its signature, the FreeBSD patch install with INSTALL PATCHES, the restart window
+(what stops, the chosen delay, the time, cancelling, Escape), reads that queue up instead of
+failing, 44 px touch buttons at 375 px, and no browser dialog at all.
 
 **OsPatchTest** — the decisions behind installing FreeBSD patches (OsPatch): the target version from
 freebsd-update's tag file, its outputs (nothing to fetch, nothing to install, reboot then install
 again), whether a restart is needed or advised, and the install configuration with CreateBootEnv no.
 
-**home-panel-browser-test.js** — la scheda del pannello in cima alla dashboard (reperto 183), col
-server simulato due ore avanti al browser: da quanto gira (contato con l'ora del server) e da quando,
-col fuso; l'occhio chiuso all'inizio e i dettagli chiesti solo quando lo si apre, col mouse e con la
-tastiera; le dieci righe dei dettagli e l'impronta copiata negli appunti; chi non puo' vederli non ha
-l'occhio, un 403 lo dice, un jar senza build registrata o con modifiche fuori dal commit lo dice; in
-inglese, a 375 px senza scorrimento orizzontale e coi pulsanti di 44 px al tocco. Con `REMOTE` gira sul
-server vero (**HomePanelE2EServer**, sulla VM) e confronta la scheda coi dati della macchina: impronta
-del jar, commit, FreeBSD, porta.
+**home-panel-browser-test.js** — the panel card at the top of the dashboard (reperto 183), with the
+simulated server two hours ahead of the browser: how long it has been running (counted with the
+server's time) and since when, with the time zone; the eye closed at first and the details asked
+for only when it is opened, with the mouse and with the keyboard; the ten rows of details and the
+fingerprint copied to the clipboard; whoever cannot see them has no eye, a 403 says so, a jar
+without a recorded build or with changes outside the commit says so; in English, at 375 px without
+horizontal scrolling and with 44 px touch buttons. With `REMOTE` it runs on the real server
+(**HomePanelE2EServer**, on the VM) and compares the card with the machine's data: the jar's
+fingerprint, commit, FreeBSD, port.
 
-**PanelInfoTest** — quello che la scheda legge (PanelInfo): le voci che Maven scrive nel jar e quelle
-che non ha sostituito, l'accensione della macchina da `kern.boottime`, l'avvio della JVM, i dettagli
-del processo, e l'impronta del jar ricalcolata a parte. Sulla VM, dopo `tools/build-jar.sh`, con
-`-Dbuild.script=yes` pretende anche numero di build e commit.
+**PanelInfoTest** — what the card reads (PanelInfo): the entries Maven writes into the jar and those
+it did not replace, the machine's boot from `kern.boottime`, the JVM's start, the process details,
+and the jar's fingerprint computed again on its own. On the VM, after `tools/build-jar.sh`, with
+`-Dbuild.script=yes` it also requires the build number and the commit.
 
-**PageAssetsTest** — gli script e gli stili come file (PageAssets), chi puo' averli, la scrittura e la
-pulizia, la politica, le pagine generate e i sorgenti senza codice in linea. La parte sui sorgenti va
-lanciata dalla radice del progetto (sulla VM, da una copia).
+**PageAssetsTest** — scripts and styles as files (PageAssets), who can have them, writing and
+cleanup, the policy, the generated pages and the sources without inline code. The part on the
+sources must be run from the project root (on the VM, from a copy).
 
-**login-browser-test.js** — l'accesso in Chromium con un autenticatore virtuale, sul server vero:
-il primo accesso con il codice della console (java ... Main --access-code), la passkey creata nella
-pagina Account, l'email di accesso confermata con il suo codice, le sessioni aperte, la chiave del
-vault (in Impostazioni) che chiede la conferma con la passkey, l'uscita e l'ingresso con la sola
-passkey, un amministratore nuovo con l'email, l'ingresso con un codice via email (e uno sbagliato
-rifiutato); poi i ruoli: l'amministratore nuovo (Lettore) entra con un codice e trova un menu
-ridotto, "Sola lettura" e i rifiuti (password delle caselle, messaggi in coda), promosso a
-Operatore puo' cambiare le caselle alla pagina dopo, eliminato esce subito. In fondo la pagina di
-accesso su un telefono in italiano.
+**login-browser-test.js** — signing in in Chromium with a virtual authenticator, on the real server:
+the first sign-in with the console code (java ... Main --access-code), the passkey created on the
+Account page, the sign-in email confirmed with its code, the open sessions, the vault key (in
+Settings) asking for confirmation with the passkey, signing out and in with the passkey alone, a new
+administrator with the email, signing in with a code by email (and a wrong one refused); then the
+roles: the new administrator (Reader) signs in with a code and finds a reduced menu, "Read only"
+and the refusals (mailbox passwords, queued messages), promoted to Operator can change the mailboxes
+at the next page, deleted is out at once. At the end the sign-in page on a phone in Italian.
 
-**layout-browser-test.js** — la cornice in Chromium: la barra laterale a quattro sezioni (con le
-pagine Coda, Limiti di invio, Statistiche e Amministratori, che prima nessun link raggiungeva), la
-voce della pagina in cui ti trovi, "Sezione › Pagina" nella barra in alto, "Vai al contenuto" col
-primo Tab, il cambio di lingua (la richiesta col token CSRF, la pagina che torna in inglese, il
-dizionario degli script inglese, e indietro), la scelta della lingua sulle pagine di accesso e di
-installazione, il menu sul telefono (si apre, prende il fuoco, si chiude con Esc e con la X),
-nessuno scorrimento di lato, il tema scuro.
+**layout-browser-test.js** — the frame in Chromium: the sidebar with four sections (with the Queue,
+Sending limits, Statistics and Administrators pages, which no link reached before), the entry of the
+page you are on, "Section › Page" in the top bar, "Skip to content" at the first Tab, the language
+change (the request with the CSRF token, the page coming back in English, the scripts' English
+dictionary, and back), the language choice on the sign-in and installation pages, the menu on the
+phone (it opens, takes the focus, closes with Esc and with the X), no sideways scrolling, the dark
+theme.
 
-**MailQueueTest** — la coda di Postfix (MailQueueManager) con un esecutore finto che registra i
-comandi invece di lanciarli. L'identificativo di coda non arriva mai a una shell: ogni comando e'
-una lista di argomenti, e un identificativo che non e' alfanumerico viene rifiutato prima di
-lanciare qualsiasi cosa (prima finiva in "sh -c postcat -q <id>", e /api/queue?action=message&id=X;comando
-eseguiva il comando). L'elenco letto da postqueue -j, con il motivo del rinvio per ogni destinatario
-(postqueue -p lo metteva su una riga che il vecchio lettore prendeva per il destinatario: la colonna
-Errore restava vuota e "Elimina falliti" non trovava mai niente); permanente solo un messaggio con
-un 5xx per OGNI destinatario; si eliminano solo i messaggi confermati che hanno ancora un errore
-permanente; i messaggi nella lingua della richiesta, le eccezioni in inglese.
+**MailQueueTest** — Postfix's queue (MailQueueManager) with a fake executor that records the
+commands instead of running them. The queue ID never reaches a shell: every command is a list of
+arguments, and an ID that is not alphanumeric is refused before running anything (before it ended
+up in "sh -c postcat -q <id>", and /api/queue?action=message&id=X;command ran the command). The list
+read from postqueue -j, with the deferral reason for every recipient (postqueue -p put it on a line
+the old reader took for the recipient: the Error column stayed empty and "Delete failed" never found
+anything); permanent only a message with a 5xx for EVERY recipient; only the confirmed messages
+that still have a permanent error are deleted; the messages in the request's language, the
+exceptions in English.
 
-**QueueApiTest** — /api/queue sul server vero, via HTTPS, con il MySQL di prova e l'esecutore finto:
-senza sessione 401; l'elenco con il motivo del rinvio e l'arrivo in UTC; un identificativo con
-caratteri di shell rifiutato senza lanciare niente; ogni POST senza token CSRF o con un token
-sbagliato 403, senza lanciare niente e scritto nel registro di audit; con il token l'eliminazione
-lancia postsuper con l'identificativo come unico argomento e finisce nel registro; l'eliminazione
-dei falliti vuole gli identificativi visti e il loro numero, e tocca solo quelli.
+**QueueApiTest** — /api/queue on the real server, over HTTPS, with the test MySQL and the fake
+executor: without a session 401; the list with the deferral reason and the arrival in UTC; an ID
+with shell characters refused without running anything; every POST without a CSRF token or with a
+wrong token 403, without running anything and written to the audit log; with the token the deletion
+runs postsuper with the ID as the only argument and ends up in the log; the deletion of the failed
+ones wants the IDs seen and their number, and touches only those.
 
-**queue-browser-test.js** — la pagina Coda in Chromium, in italiano e in inglese: i quattro contatori
-dai campi che il server manda davvero (prima leggeva inflight/tempfail/permfail, che il server non
-ha mai mandato), mittente, oggetto, motivo del rinvio e testo con dentro HTML mostrati come testo e
-mai eseguiti, il token CSRF in ogni POST, l'eliminazione di un messaggio dopo la conferma, quella
-dei falliti solo scrivendone il numero, le date nella lingua della pagina, nessuno scorrimento di
-lato sul telefono.
+**queue-browser-test.js** — the Queue page in Chromium, in Italian and in English: the four counters
+from the fields the server really sends (before it read inflight/tempfail/permfail, which the
+server never sent), sender, subject, deferral reason and text with HTML inside shown as text and
+never run, the CSRF token in every POST, deleting a message after the confirmation, deleting the
+failed ones only by typing their number, the dates in the page's language, no sideways scrolling
+on the phone.
 
-**RateLimitsApiTest** — /api/ratelimits sul server vero, con il MySQL di prova: senza sessione 401;
-ogni POST senza token CSRF 403; zero e un limite giornaliero sotto quello orario rifiutati col
-motivo; salvare di nuovo i limiti globali AGGIORNA l'unica riga globale (con target_id NULL
-l'indice UNIQUE di MySQL lasciava aggiungere una riga a ogni salvataggio) e toglie le righe NULL
-rimaste; il limite di una casella creato, aggiornato sul posto ed eliminato con i nomi e i campi
-che la pagina manda (prima mandava create/update/id, che il server non conosceva); tutto nel
-registro di audit.
+**RateLimitsApiTest** — /api/ratelimits on the real server, with the test MySQL: without a session
+401; every POST without a CSRF token 403; zero and a daily limit below the hourly one refused with
+the reason; saving the global limits again UPDATES the single global row (with target_id NULL
+MySQL's UNIQUE index let a row be added at every save) and removes the NULL rows left; a mailbox's
+limit created, updated in place and deleted with the names and fields the page sends (before it
+sent create/update/id, which the server did not know); everything in the audit log.
 
-**limits-statistics-browser-test.js** — Limiti di invio e Statistiche in Chromium, in italiano e
-in inglese. Limiti: l'avviso che i limiti orari e giornalieri sono salvati ma non applicati, i
-limiti globali salvati col token CSRF, il limite di una casella creato (save_mailbox), modificato
-senza cambiare casella ed eliminato dopo la conferma, un indirizzo con dentro HTML che resta testo.
-Statistiche: l'avviso che i conteggi di invio e ricezione non vengono raccolti, le schede da
-"totals" e la tabella da "domains", i numeri di Rspamd letti dove il server li mette (prima li
-cercava sotto "stats": sempre "-"), il periodo mandato come giorni, numeri e date nella lingua
-della pagina; nessuno scorrimento di lato sul telefono.
+**limits-statistics-browser-test.js** — Sending limits and Statistics in Chromium, in Italian and
+in English. Limits: the warning that the hourly and daily limits are saved but not applied, the
+global limits saved with the CSRF token, a mailbox's limit created (save_mailbox), edited without
+changing mailbox and deleted after the confirmation, an address with HTML inside that stays text.
+Statistics: the warning that the sending and receiving counts are not collected, the cards from
+"totals" and the table from "domains", Rspamd's numbers read where the server puts them (before it
+looked for them under "stats": always "-"), the period sent as days, numbers and dates in the page's
+language; no sideways scrolling on the phone.
 
-**RolesTest** — ruoli e permessi con nome sul server vero, in HTTPS, col MySQL di prova. Prima
-solo amministratori e vault erano del superadmin, e un Lettore poteva cambiare tutto il resto.
-Controlla i permessi di ogni ruolo, la tabella delle rotte (ognuna dichiara il suo accesso, le
-pubbliche sono solo quelle dell'accesso, di autoconfig, di MTA-STS e della webmail, ogni voce del
-menu chiede lo stesso permesso della sua rotta) e il controllo davanti a ogni rotta per ogni ruolo:
-302 e 401 senza sessione, 403 per la password di una casella, un messaggio in coda, la webmail di
-una casella, un servizio, il riavvio, il vault, il firewall; il corpo rimesso al suo posto per il
-gestore; il ruolo cambiato che vale subito; l'amministratore tolto che esce; i rifiuti nel registro.
+**RolesTest** — roles and named permissions on the real server, over HTTPS, with the test MySQL.
+Before, only administrators and the vault belonged to the superadmin, and a Reader could change
+everything else. It checks every role's permissions, the routes table (each one declares its
+access, the public ones are only those of the sign-in, autoconfig, MTA-STS and the webmail, every
+menu entry asks for the same permission as its route) and the check in front of every route for
+every role: 302 and 401 without a session, 403 for a mailbox's password, a queued message, a
+mailbox's webmail, a service, the reboot, the vault, the firewall; the body put back in place for
+the handler; the changed role holding at once; the removed administrator out; the refusals in the
+log.
 
-**CsrfFilterTest** — il token CSRF controllato una volta per tutte le rotte (il filtro di
-SSLMailServer.context), sul server vero. Venticinque rotte autenticate accettavano POST senza
-chiederlo; la sonda e' una di quelle, /api/timezone-diag, con una richiesta che il gestore rifiuta
-senza toccare niente: senza token 403, con l'intestazione X-CSRF-Token o col campo csrf_token
-arriva al gestore, che legge lo stesso corpo; un'intestazione sbagliata vince su un token giusto
-nel corpo; senza sessione risponde il gestore (401); GET e le rotte usate prima di entrare non si
-toccano; ogni rifiuto nel registro di audit.
+**CsrfFilterTest** — the CSRF token checked once for all the routes (the filter of
+SSLMailServer.context), on the real server. Twenty-five authenticated routes accepted POST without
+asking for it; the probe is one of them, /api/timezone-diag, with a request the handler refuses
+without touching anything: without a token 403, with the X-CSRF-Token header or with the csrf_token
+field it reaches the handler, which reads the same body; a wrong header wins over a right token in
+the body; without a session the handler answers (401); GET and the routes used before signing in
+are not touched; every refusal in the audit log.
 
-**english-pages-browser-test.js** — le pagine tradotte in Chromium, IN INGLESE, con un server
-simulato che risponde a ogni API in modo plausibile (e in inglese). Per ogni pagina: gli script
-girano senza errori, <html lang="en">, e il testo visibile dopo che gli script hanno riempito la
-pagina, piu' title, aria-label e placeholder, non ha parole italiane rimaste. Per la pagina DNS si
-scelgono un dominio, la verifica, la diagnostica dell'orario e le schede di autodns, autoconfig e
-MTA-STS.
+**english-pages-browser-test.js** — the translated pages in Chromium, IN ENGLISH, with a simulated
+server that answers every API plausibly (and in English). For every page: the scripts run without
+errors, <html lang="en">, and the visible text after the scripts have filled the page, plus title,
+aria-label and placeholder, has no Italian words left. For the DNS page a domain is chosen, the
+check, the time diagnostics and the autodns, autoconfig and MTA-STS tabs.
 
-**pkg-simulation-test.sh** — la simulazione su COPIA del database di pkg, contro un pkg finto che
-tiene i "lock" come file. Dimostra che lo sblocco avviene nella copia e non nel database vero,
-che le dipendenze protette nominate da pkg vengono aggiunte solo se si possono sbloccare, e che
-la copia sparisce alla fine.
+**pkg-simulation-test.sh** — the simulation on a COPY of pkg's database, against a fake pkg that
+keeps the "locks" as files in `$FAKE_DB/locked`. It shows that the unlock happens in the copy and
+not in the real database, that the protected dependencies named by pkg are added only if they can
+be unlocked, and that the copy disappears at the end (the `simulation` mode of PackagePlanTest);
+then the family twin, protected mysql84-client and postfix-mysql to upgrade, in its two cases
+(`family-new-catalog`, `family-real-conflict`).
 
-**MtaStsOldLogicTest** — la logica di classificazione com'era prima della correzione, messa
-davanti agli stessi due casi. Serve a dimostrare che i controlli di MtaStsTest non sono
-decorativi: qui devono fallire. Se un giorno passa anche questa, vuol dire che la prova
-non sta piu' verificando niente.
+**MtaStsOldLogicTest** — the classification logic as it was before the fix, put in front of the
+same two cases. It serves to show that MtaStsTest's checks are not decorative: here they must fail.
+If one day this one passes too, it means the test is no longer verifying anything.
 
-**RoundcubeUserTest** — Roundcube dal pool `www` di php-fpm (l'utente di nginx) al pool
-`roundcube` (RoundcubeUser.migrate), in una cartella di `/var/tmp` con file, proprietari e
-permessi veri e con php-fpm, nginx e la webmail finti; il php-fpm finto, ricaricato, fa girare i
-pool che trova nei file. Per ogni passo che puo' andare male un guasto piantato (php-fpm -t, nginx -t,
-i due reload, il pool www che resta, la webmail che non risponde, un file con `chflags schg`), e la
-migrazione deve rimettere OGNI file com'era, confrontato con una fotografia di contenuto,
-proprietario, gruppo e permessi. Poi i rifiuti, il link messo in `logs` (non si segue), la
-seconda volta, le derive (Roundcube aggiornato che rimette `logs` a `www`, php84 che ricopia
-`www.conf.default`) e i tre script d'installazione. Tocca proprietari veri e crea l'utente
-`roundcube`: **da root, sulla VM**.
+**RoundcubeUserTest** — Roundcube from php-fpm's `www` pool (nginx's user) to the `roundcube` pool
+(RoundcubeUser.migrate), in a folder of `/var/tmp` with real files, owners and permissions and with
+fake php-fpm, nginx and webmail; the fake php-fpm, reloaded, runs the pools it finds in the files.
+For every step that can go wrong a planted fault (php-fpm -t, nginx -t, the two reloads, the www
+pool that stays, the webmail not answering, a file with `chflags schg`), and the migration must put
+EVERY file back as it was, compared with a picture of content, owner, group and permissions. Then
+the refusals, the link put in `logs` (not followed), the second time, the drifts (Roundcube updated
+putting `logs` back to `www`, php84 copying `www.conf.default` again) and the three install
+scripts. It touches real owners and creates the `roundcube` user: **as root, on the VM**.
 
-**AcmeUserTest** — acme.sh da `/root/.acme.sh` all'utente `acme` (AcmeUser.migrate) in cartelle
-temporanee, con pkg, cron e `--list` finti e un guasto per ogni passo (il pacchetto che non si
-installa, un certificato che acme.sh non vede, il cron che non si legge o non si riscrive,
-`/root/.acme.sh` che non si sposta); la porta della sfida HTTP (gettoni, percorsi fuori dalla
-cartella, link, metodi); e l'esecuzione vera come `acme` (utente, casa, ambiente vuoto, il token
-di Cloudflare che arriva, `acme.sh --version`). Quest'ultima parte vuole il pacchetto
-`security/acme.sh` e si salta dicendolo. **Da root, sulla VM.**
+**AcmeUserTest** — acme.sh from `/root/.acme.sh` to the `acme` user (AcmeUser.migrate) in temporary
+folders, with fake pkg, cron and `--list` and a fault for every step (the package that does not
+install, a certificate acme.sh does not see, the cron that cannot be read or rewritten,
+`/root/.acme.sh` that does not move); the HTTP challenge's door (tokens, paths outside the folder,
+links, methods); and the real run as `acme` (user, home, empty environment, Cloudflare's token
+arriving, `acme.sh --version`). This last part wants the `security/acme.sh` package and is skipped,
+saying so. **As root, on the VM.**
 
-**ServiceUsersTest** — il controllo di chi fa girare ogni servizio (ServiceUsers.examine) sull'uscita
-di `ps` della VM prima e dopo, con un guasto piantato per ogni avviso e i casi che NON devono
-avvisare (`local` di Postfix, `auth` di Dovecot). Non chiama niente.
+**ServiceUsersTest** — the check of who runs every service (ServiceUsers.examine) on the VM's `ps`
+output before and after, with a planted fault for every warning and the cases that must NOT warn
+(Postfix's `local`, Dovecot's `auth`). It calls nothing.
 
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ServiceUsersTest
 
-## Le email del pannello
+## The panel's emails
 
-`PanelMailTest` prova la busta (mittente, oggetto in RFC 2047, quoted-printable, intestazioni) e
-il contenuto del rapporto e dei codici nelle due lingue, senza toccare il sistema; sulla VM
-controlla anche che il nome del server venga da Postfix e non da hostname(1). Con
-`-Dpanelmail.dump=<cartella>` scrive i messaggi composti come `.eml`, da aprire in un programma di
-posta.
+`PanelMailTest` tests the envelope (sender, subject in RFC 2047, quoted-printable, headers) and the
+content of the report and of the codes in both languages, without touching the system; on the VM
+it also checks that the server's name comes from Postfix and not from hostname(1). With
+`-Dpanelmail.dump=<folder>` it writes the composed messages as `.eml`, to open in a mail program.
 
-`PanelMailE2ETest` manda posta vera: il rapporto e le tre email dei codici, per il sendmail di
-Postfix, a una casella del server; poi le ritrova nella Maildir e controlla il messaggio come e'
-arrivato. Solo su una macchina di prova, con `-De2e.vm=yes`:
+`PanelMailE2ETest` sends real mail: the report and the three code emails, through Postfix's
+sendmail, to a mailbox of the server; then it finds them again in the Maildir and checks the
+message as it arrived. Only on a test machine, with `-De2e.vm=yes`:
 
     java -De2e.vm=yes -Dpanelmail.to=alice@rehearsal.test \
          -Dpanelmail.maildir=/var/vmail/rehearsal.test/alice -Dpanelmail.copies=/var/tmp/panel-emails/copies \

@@ -35,7 +35,7 @@ import java.util.Set;
  *
  * Uso: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SoftwareVersionsTest
  * With a test MySQL it also reads the version from the real server (reads only):
- *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
+ *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test
  */
 public class SoftwareVersionsTest {
 
@@ -337,7 +337,7 @@ public class SoftwareVersionsTest {
             System.out.println("\n== Real MySQL on port " + port + " ==");
             org.mail_panel.database.MailDatabase db = new org.mail_panel.database.MailDatabase();
             db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-            db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
+            db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
             real("connection", db.connect());
             String v = db.serverVersion();
             real("serverVersion(): " + v, v != null && SoftwareVersions.numbers(v).matches("\\d+\\.\\d+\\.\\d+"));
