@@ -203,8 +203,13 @@ public final class Shell {
     private static final java.io.File NO_STDIN = new java.io.File("/dev/null");
 
     private static Result runInternal(Duration timeout, List<String> cmd) {
-        ProcessBuilder pb = new ProcessBuilder(cmd);
-        pb.environment().put("PATH", FULL_PATH);
+        // applyPath e non solo il PATH nell'ambiente: Java cerca il programma da lanciare col PATH
+        // del pannello, non con quello del figlio. Avviato da rc.d senza /usr/local, il pannello
+        // non trovava nginx, doveadm, postmap... anche se il PATH del figlio li aveva. Sul server
+        // vero il 07/11/2026 tre migrazioni del primo avvio sono rimaste ferme su «Cannot run
+        // program nginx» (reperto 181).
+        ProcessBuilder pb = new ProcessBuilder(new java.util.ArrayList<>(cmd));
+        applyPath(pb);
         pb.redirectInput(ProcessBuilder.Redirect.from(NO_STDIN));
         pb.redirectErrorStream(true);
         Process p = null;
