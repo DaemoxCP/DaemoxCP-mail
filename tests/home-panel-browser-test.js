@@ -99,7 +99,9 @@ async function remote() {
     const browser = await chromium.launch(launch).catch(() => chromium.launch({ args: launch.args }));
     for (const [lang, width] of [['it', 1280], ['en', 375]]) {
         console.log('\n== Il server vero, ' + lang + ', ' + width + ' px ==');
-        const ctx = await browser.newContext({ viewport: { width, height: 900 }, ignoreHTTPSErrors: true, timezoneId: 'Europe/Rome' });
+        // La sessione vale solo con lo User-Agent con cui e' nata (WebSessions): quello di HomePanelE2EServer.
+        const ctx = await browser.newContext({ viewport: { width, height: 900 }, ignoreHTTPSErrors: true, timezoneId: 'Europe/Rome',
+                                               userAgent: 'HomePanelE2EServer' });
         await ctx.addCookies([{ name: '__Host-MailPanel', value: E.SESSION, url: E.REMOTE, secure: true, httpOnly: true, sameSite: 'Strict' },
                               { name: '__Host-lang', value: lang, url: E.REMOTE, secure: true, sameSite: 'Strict' }]);
         const page = await ctx.newPage();
@@ -107,7 +109,8 @@ async function remote() {
         page.on('pageerror', e => errors.push(String(e)));
         csp.watch(page, errors);
         const res = await page.goto(E.REMOTE + '/home');
-        check('la dashboard risponde 200, con la CSP del pannello', res.status() === 200 && /script-src 'self';/.test(res.headers()['content-security-policy'] || ''));
+        check('la dashboard risponde 200, con la CSP del pannello', res.status() === 200 && new URL(page.url()).pathname === '/home'
+            && /script-src 'self';/.test(res.headers()['content-security-policy'] || ''));
         await page.waitForFunction(() => document.getElementById('panelInfoUptime').textContent.trim() !== '\u2013', null, { timeout: 15000 });
         const up = await text(page, '#panelInfoUptime');
         check('da quanto gira: ' + up, lang === 'it' ? /^(meno di un minuto|\d+ (minut|or|giorn).*)$/.test(up) : /^(less than a minute|\d+ (minute|hour|day).*)$/.test(up));

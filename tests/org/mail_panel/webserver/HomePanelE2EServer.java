@@ -17,7 +17,8 @@ import java.util.concurrent.Executors;
  * gestori Java, le pagine generate, /api/panel_info con i dati veri della macchina, il MySQL di
  * prova, su HTTPS col nome panel.localhost. Un superadmin e una sua sessione di prova: il token
  * esce su stdout ("SESSION ..."), per il cookie del browser, che cosi' non passa dall'accesso
- * (lo prova login-browser-test.js).
+ * (lo prova login-browser-test.js). La sessione vale solo con lo User-Agent "HomePanelE2EServer"
+ * (WebSessions la lega al browser): la prova lo usa.
  *
  * Stampa anche l'impronta del jar ("SHA256 ...") e la porta: la prova da browser le confronta con
  * quello che la scheda mostra.
