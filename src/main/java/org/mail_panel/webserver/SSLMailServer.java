@@ -61,7 +61,11 @@ public class SSLMailServer {
      */
     static final java.util.Set<String> WEB_LOCAL_API = java.util.Set.of("/api/account");
 
-    private final HttpsServer server;
+    /** Il server HTTPS; null nella parte root, che non ha porte (lo crea becomeLegacy se serve). */
+    private HttpsServer server;
+    private SSLContext tlsContext;
+    /** Le rotte nell'ordine in cui si dichiarano: becomeLegacy le registra sul server che crea. */
+    private final java.util.List<Object[]> declared = new java.util.ArrayList<>();
     private final int port;
     private volatile Mode mode = Mode.LEGACY;
     private static final Logger LOGGER = Logger.getLogger(SSLMailServer.class.getName());
@@ -118,20 +122,29 @@ public class SSLMailServer {
     }
 
     /**
-     * Con il modo. In ROOT_PART il server HTTPS si crea senza porta (HttpsServer.create() senza indirizzo):
-     * le rotte ci sono, con i loro filtri, ma nessuno si collega. Se la parte web non parte, becomeLegacy()
-     * prende la porta e il pannello serve tutto da root come prima.
+     * Con il modo. In ROOT_PART non si crea nessun server HTTPS: le rotte ci sono (routes, handlers) ma
+     * non c'e' nemmeno un socket. HttpsServer.create() senza indirizzo apre comunque un socket TCP non
+     * legato, che sockstat mostra (misurato sulla VM il 07/11/2026). Se la parte web non parte,
+     * becomeLegacy() crea il server sulla porta e il pannello serve tutto da root come prima.
      */
     public SSLMailServer(int port, String certContent, String keyContent, Mode mode) throws Exception {
         this.port = port;
         this.mode = mode;
         this.sslCertContent = certContent;
         this.sslKeyContent = keyContent;
-        this.server = mode == Mode.ROOT_PART ? HttpsServer.create() : HttpsServer.create(new InetSocketAddress(port), 0);
 
         // Setup SSL from provided content
-        SSLContext sslContext = createSSLContextFromPEM(certContent, keyContent);
-        server.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
+        this.tlsContext = createSSLContextFromPEM(certContent, keyContent);
+        if (mode != Mode.ROOT_PART) this.server = newHttpsServer();
+
+        // Setup routes
+        setupRoutes();
+    }
+
+    /** Il server HTTPS sulla porta, col contesto TLS del pannello. */
+    private HttpsServer newHttpsServer() throws IOException {
+        HttpsServer s = HttpsServer.create(new InetSocketAddress(port), 0);
+        s.setHttpsConfigurator(new HttpsConfigurator(tlsContext) {
             public void configure(HttpsParameters params) {
                 try {
                     SSLContext context = getSSLContext();
@@ -142,9 +155,7 @@ public class SSLMailServer {
                 }
             }
         });
-
-        // Setup routes
-        setupRoutes();
+        return s;
     }
 
     // I permessi, per nome: le stesse stringhe di AuthStore.
@@ -299,10 +310,16 @@ public class SSLMailServer {
      * della lingua (o, senza, la lingua del browser): ogni pagina lo allinea alla scelta salvata
      * nell'account (renderPage), e le chiamate degli script arrivano da una pagina.
      */
-    private HttpContext context(String path, Access access, HttpHandler handler) {
+    private void context(String path, Access access, HttpHandler handler) {
         java.util.Objects.requireNonNull(access, "every route declares its access");
         if (routes.put(path, access) != null) throw new IllegalStateException("Route declared twice: " + path);
         handlers.put(path, handler);
+        declared.add(new Object[]{path, access, handler});
+        if (server != null) createContext(path, access, handler);
+    }
+
+    /** La rotta sul server HTTPS, coi filtri: Host, lingua, permesso, CSRF. */
+    private HttpContext createContext(String path, Access access, HttpHandler handler) {
         // Nella parte web le API di chi ha fatto l'accesso vanno alla root, dopo tutti i filtri qui sotto.
         HttpHandler served = mode == Mode.WEB_PART && access.kind() == Access.Kind.API && !WEB_LOCAL_API.contains(path)
                 ? exchange -> forwardToRoot(exchange, path) : handler;
@@ -755,8 +772,9 @@ public class SSLMailServer {
      */
     public void becomeLegacy() throws IOException {
         if (mode != Mode.ROOT_PART) return;
-        server.bind(new InetSocketAddress(port), 0);
         mode = Mode.LEGACY;
+        server = newHttpsServer();
+        for (Object[] d : declared) createContext((String) d[0], (Access) d[1], (HttpHandler) d[2]);
     }
 
     public void stop() {
@@ -773,7 +791,7 @@ public class SSLMailServer {
 
         // Stop HTTP server immediately
         try {
-            server.stop(0);
+            if (server != null) server.stop(0);
         } catch (Exception e) {
             // Ignore
         }
@@ -1101,15 +1119,15 @@ public class SSLMailServer {
     public void serveForwarded(RootChannel.Request r, ForwardedExchange exchange) throws IOException {
         Access access = routes.get(r.route());
         HttpHandler handler = handlers.get(r.route());
-        if (mode != Mode.ROOT_PART || access == null || handler == null || access.kind() != Access.Kind.API
-                || WEB_LOCAL_API.contains(r.route()) || !r.route().equals(routeFor(r.path()))) {
-            LOGGER.warning("Root part: forwarded request refused (route " + r.route() + ", path " + r.path() + ")");
-            logAudit("FORWARD_REFUSED", r.clientIp(), "route=" + r.route() + " path=" + r.path());
-            sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
-            return;
-        }
         I18n.setCurrent(I18n.LANGUAGES.contains(r.lang()) ? r.lang() : I18n.FALLBACK_LANGUAGE);
         try {
+            if (mode != Mode.ROOT_PART || access == null || handler == null || access.kind() != Access.Kind.API
+                    || WEB_LOCAL_API.contains(r.route()) || !r.route().equals(routeFor(r.path()))) {
+                LOGGER.warning("Root part: forwarded request refused (route " + r.route() + ", path " + r.path() + ")");
+                logAudit("FORWARD_REFUSED", r.clientIp(), "route=" + r.route() + " path=" + r.path());
+                sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
+                return;
+            }
             Optional<WebSessions.Current> session = Main.sessions.forwarded(r.sessionId(), r.adminId());
             if (session.isEmpty()) {
                 if (!WebSessions.lastCheckFailed()) exchange.getResponseHeaders().set(SESSION_ENDED_HEADER, "ended");

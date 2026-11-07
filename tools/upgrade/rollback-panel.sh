@@ -16,7 +16,9 @@
 #   - i log di nginx della superficie pubblica col nome di prima, se il primo avvio li aveva
 #     rinominati: /var/log sta fuori dai boot environment, e due nomi insieme fermerebbero il
 #     prossimo passaggio (BOTH_NAMES);
-#   - il proprietario di /var/log/php_errors.log, che RoundcubeUser da' all'utente della webmail.
+#   - il proprietario di /var/log/php_errors.log, che RoundcubeUser da' all'utente della webmail;
+#   - il proprietario di /var/log/mail-panel-auth.log, che col pannello separato e' dell'utente
+#     mailpanel (PanelSeparation): nel boot environment di prima quell'utente non c'e'.
 # La posta NON torna indietro: /var/vmail sta DENTRO il boot environment (sul server vero come sulla
 # VM), quindi prima di attivarlo ci si copia la posta di adesso, e quella di prima resta li' accanto
 # (/var/vmail.before-rollback-...). MySQL invece torna al momento del passaggio: caselle, domini e
@@ -94,6 +96,11 @@ fi
 if [ -s "$WORK/php-errors-owner-before.txt" ] && [ -f /var/log/php_errors.log ]; then
     owner=$(awk '{print $1}' "$WORK/php-errors-owner-before.txt")
     chown "$owner" /var/log/php_errors.log && echo "proprietario di /var/log/php_errors.log: $owner"
+fi
+
+if [ -s "$WORK/auth-log-owner-before.txt" ] && [ -f /var/log/mail-panel-auth.log ]; then
+    owner=$(awk '{print $1}' "$WORK/auth-log-owner-before.txt")
+    chown "$owner" /var/log/mail-panel-auth.log && echo "proprietario di /var/log/mail-panel-auth.log: $owner"
 fi
 
 echo ""

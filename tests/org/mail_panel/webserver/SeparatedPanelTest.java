@@ -125,8 +125,7 @@ public class SeparatedPanelTest {
         check("the root part has the same routes, with the same permissions, as the web part", same);
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);
-        HttpsServer rootHttps = (HttpsServer) f.get(root);
-        check("the root part has no address (no port)", rootHttps.getAddress() == null);
+        check("the root part has no HTTPS server at all, not even an unbound socket", f.get(root) == null);
         HttpsServer https = (HttpsServer) f.get(web);
         https.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         https.start();
