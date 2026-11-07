@@ -62,7 +62,7 @@
                 // Il pulsante per creare compare SOLO se l'indirizzo e' libero davvero:
                 // ne' casella ne' alias. Prima guardava solo le caselle.
                 if (id.creatable && !id.exists && id.sender) {
-                    h += '<button class="btn btn-sm btn-outline-success mb-2" data-address="' + escHtml(id.sender) + '" onclick="repCreateIdentity(this.dataset.address)">'
+                    h += '<button class="btn btn-sm btn-outline-success mb-2" data-address="' + escHtml(id.sender) + '" data-on-click="repCreateIdentity(this.dataset.address)">'
                        + '<i class="fas fa-user-plus me-1" aria-hidden="true"></i>' + escHtml(t('rep.createMailbox', { address: id.sender })) + '</button>';
                 }
                 const dm = id.managedDomains || [];
@@ -93,8 +93,8 @@
                + (s.active ? ' checked' : '') + '><label class="form-check-label small" for="repOn">'
                + escHtml(t('rep.auto')) + '</label></div>'
                + '<div class="mt-2">'
-               + '<button class="btn btn-sm btn-success me-1" onclick="repSave()"><i class="fas fa-floppy-disk me-1" aria-hidden="true"></i>' + escHtml(t('common.save')) + '</button>'
-               + '<button class="btn btn-sm btn-outline-primary" onclick="repTest()"><i class="fas fa-paper-plane me-1" aria-hidden="true"></i>' + escHtml(t('rep.sendTest')) + '</button>'
+               + '<button class="btn btn-sm btn-success me-1" data-on-click="repSave()"><i class="fas fa-floppy-disk me-1" aria-hidden="true"></i>' + escHtml(t('common.save')) + '</button>'
+               + '<button class="btn btn-sm btn-outline-primary" data-on-click="repTest()"><i class="fas fa-paper-plane me-1" aria-hidden="true"></i>' + escHtml(t('rep.sendTest')) + '</button>'
                + '</div>'
                + '<div id="rep-outcome" class="mt-2"></div>'
                + '<div class="small text-muted mt-2">' + repEsc(s.next) + '</div>';
@@ -154,7 +154,7 @@
                          + '<div class="small text-muted">' + escHtml(t('rep.previewFrom')) + ' <code>' + repEsc(r.from) + '</code></div>'
                          + '<div class="small text-muted mb-2">' + escHtml(t('rep.subject')) + ' <code>' + repEsc(r.subject) + '</code></div>'
                          + '<pre class="upd-log">' + repEsc(r.text) + '</pre>'
-                         + '<button class="btn btn-sm btn-outline-secondary" onclick="repLoad()">'
+                         + '<button class="btn btn-sm btn-outline-secondary" data-on-click="repLoad()">'
                          + '<i class="fas fa-arrow-left me-1" aria-hidden="true"></i>' + escHtml(t('rep.back')) + '</button>';
         }
 

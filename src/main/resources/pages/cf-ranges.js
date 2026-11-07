@@ -7,7 +7,7 @@
         function cfLists(r) {
             const one = (titleText, entries) => !entries || !entries.length ? ''
                 : '<div class="small fw-bold mt-2 mb-1">' + escHtml(titleText) + ' (' + entries.length + ')</div>'
-                  + '<div class="small" style="line-height:1.9">'
+                  + '<div class="small" data-style="line-height:1.9">'
                   + entries.map(c => '<code class="me-2">' + updEsc(c) + '</code>').join('') + '</div>';
             return one('Cloudflare IPv4', r.listV4)
                  + one('Cloudflare IPv6', r.listV6)
@@ -34,7 +34,7 @@
                   + updEsc(r.note) + '</div>';
 
             h += '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
-               + '<tr class="upd-cell"><td style="width:16rem"><strong>' + escHtml(t('cfi.official')) + '</strong></td><td>'
+               + '<tr class="upd-cell"><td data-style="width:16rem"><strong>' + escHtml(t('cfi.official')) + '</strong></td><td>'
                + updEsc(r.officialV4) + ' IPv4 &middot; ' + updEsc(r.officialV6) + ' IPv6</td></tr>'
                + '<tr class="upd-cell"><td><strong>' + escHtml(t('cfi.compiled')) + '</strong></td><td>'
                + updEsc(r.compiledV4) + ' IPv4 &middot; ' + updEsc(r.compiledV6) + ' IPv6'

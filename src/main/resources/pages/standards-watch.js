@@ -20,7 +20,7 @@
                 h += '<div class="alert alert-' + col + ' py-2 small mb-2"><i class="fas fa-book me-1" aria-hidden="true"></i>'
                    + updEsc(r.note) + '</div>'
                    + '<div class="table-responsive"><table class="table table-sm align-middle mb-1"><thead><tr>'
-                   + '<th scope="col" style="width:6rem">' + escHtml(t('sv.colSpec')) + '</th><th scope="col">' + escHtml(t('sv.colGoverns')) + '</th><th scope="col">' + escHtml(t('set.colState')) + '</th></tr></thead><tbody>';
+                   + '<th scope="col" data-style="width:6rem">' + escHtml(t('sv.colSpec')) + '</th><th scope="col">' + escHtml(t('sv.colGoverns')) + '</th><th scope="col">' + escHtml(t('set.colState')) + '</th></tr></thead><tbody>';
                 (r.standard || []).forEach(s => {
                     const g = s.severity;
                     const iconName = !s.read ? '<i class="fas fa-circle-question text-secondary" aria-hidden="true"></i>'
@@ -34,7 +34,7 @@
                     let buttons = '';
                     newOnes.forEach(x => {
                         buttons += '<button class="btn btn-sm btn-outline-secondary me-1 mt-1" '
-                                 + 'data-rfc="' + escHtml(x) + '" data-ref="' + escHtml(s.rfc) + '" onclick="watchChanges(this.dataset.rfc, this.dataset.ref)">'
+                                 + 'data-rfc="' + escHtml(x) + '" data-ref="' + escHtml(s.rfc) + '" data-on-click="watchChanges(this.dataset.rfc, this.dataset.ref)">'
                                  + '<i class="fas fa-list-check me-1" aria-hidden="true"></i>' + escHtml(t('sv.whatChanges', { rfc: x }))
                                  + '</button>';
                     });
@@ -57,7 +57,7 @@
                 h += '<div class="alert alert-' + col + ' py-2 small mb-2"><i class="fas fa-hourglass-half me-1" aria-hidden="true"></i>'
                    + updEsc(o.note) + '</div>'
                    + '<div class="table-responsive"><table class="table table-sm align-middle mb-1"><thead><tr>'
-                   + '<th scope="col" style="width:6rem">OpenSSL</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col">' + escHtml(t('sv.colSupport')) + '</th></tr></thead><tbody>';
+                   + '<th scope="col" data-style="width:6rem">OpenSSL</th><th scope="col">' + escHtml(t('up.colVersion')) + '</th><th scope="col">' + escHtml(t('sv.colSupport')) + '</th></tr></thead><tbody>';
                 (o.installs || []).forEach(i => {
                     if (!i.present) {
                         h += '<tr class="upd-cell"><td class="small">' + updEsc(i.type) + '</td>'
@@ -115,14 +115,14 @@
                     const i = entryItem.indexOf('  ->  ');
                     const keys = i < 0 ? '' : entryItem.substring(0, i);
                     const line = i < 0 ? entryItem : entryItem.substring(i + 6);
-                    h += '<tr class="upd-cell"><td style="width:12rem" class="small"><code>'
+                    h += '<tr class="upd-cell"><td data-style="width:12rem" class="small"><code>'
                        + updEsc(keys) + '</code></td><td class="small">' + updEsc(line) + '</td></tr>';
                 });
                 h += '</tbody></table></div>';
             }
 
             h += '<div class="small text-muted mb-1">' + escHtml(t('sv.fullList')) + '</div>'
-               + '<pre class="small p-2 border rounded mb-0" style="max-height:32rem;overflow:auto">'
+               + '<pre class="small p-2 border rounded mb-0" data-style="max-height:32rem;overflow:auto">'
                + updEsc(r.text) + '</pre>';
             el.innerHTML = h;
         }

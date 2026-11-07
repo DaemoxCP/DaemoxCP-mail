@@ -10,6 +10,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const csp = require('./browser-csp');
 
 const pageList = process.argv[2];
 const photos = process.argv[3];
@@ -60,9 +61,10 @@ async function served(route) {
     const p = url.pathname;
     if (p === '/') {
         const html = fs.readFileSync(path.join(pageList, 'home.html'), 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-prova');
-        return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
+        return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html, headers: csp.headers(pageList) });
     }
     // The script dictionary (t() and the texts), as the panel serves it.
+    if (p.startsWith('/assets/')) return csp.asset(route, pageList, p);
     if (p.startsWith('/i18n/')) return route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(pageList, p)) });
     if (p.startsWith('/vendor/') || p.startsWith('/fa/')) {
         const f = path.join(resourceList, p);
@@ -81,12 +83,13 @@ async function served(route) {
 }
 
 (async () => {
-    const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }).catch(() => chromium.launch());
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }).catch(() => chromium.launch());
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await ctx.route('**/*', served);
     const page = await ctx.newPage();
     const errorList = [];
     page.on('pageerror', e => errorList.push(String(e)));
+    csp.watch(page, errorList);
     page.on('console', m => { if (m.type() === 'error') errorList.push(m.text()); });
 
     console.log('\n== Servizi Mail: la colonna Versione ==');

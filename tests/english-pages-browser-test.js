@@ -15,6 +15,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const csp = require('./browser-csp');
 
 const pages = process.argv[2];
 const shots = process.argv[3];
@@ -157,6 +158,7 @@ async function serve(route) {
     const req = route.request();
     const url = new URL(req.url());
     const p = url.pathname;
+    if (p.startsWith('/assets/')) return csp.asset(route, pages, p);
     if (p.startsWith('/i18n/')) return route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(pages, p)) });
     if (p.startsWith('/vendor/') || p.startsWith('/fa/')) {
         const f = path.join(resources, p);
@@ -178,7 +180,7 @@ async function serve(route) {
     if (!fs.existsSync(f)) return route.fulfill({ status: 404, body: '' });
     const html = fs.readFileSync(f, 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-test')
         .replace(/\{\{THEME\}\}/g, 'light').replace(/\{\{COLOR_SCHEME\}\}/g, 'light');
-    return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
+    return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html, headers: csp.headers(pages) });
 }
 
 // The pages to visit, with what to do on each before reading the text.
@@ -190,7 +192,7 @@ const VISITS = [
         await page.waitForFunction(() => !document.querySelector('.record-status-badge .fa-spinner'));
         await page.click('#verifyDnsBtn');
         await page.waitForSelector('#verificationResults:not(.d-none) table');
-        await page.click('.card-header[onclick="toggleTzDiag()"]');
+        await page.click('.card-header[data-on-click="toggleTzDiag()"]');
         await page.waitForSelector('#tzDiagTable table');
         await page.evaluate(() => { autoDnsLoad(); acLoad(); stsLoad(); });
         await page.waitForTimeout(800);
@@ -231,7 +233,7 @@ const VISITS = [
         await page.click('.log-preset-btn[data-preset="mail-bounce"]');
         await page.waitForSelector('#logViewer .log-entry');
         await page.fill('#searchPattern', 'reject');
-        await page.click('button[onclick="searchLogs()"]');
+        await page.click('button[data-on-click="searchLogs()"]');
         await page.waitForSelector('#searchResults .alert');
     } },
     { path: '/paths', prepare: async page => {
@@ -247,7 +249,7 @@ const VISITS = [
     { path: '/settings', prepare: async page => {
         await page.waitForSelector('#hostnameConsistency .alert');
         await page.waitForSelector('#rcDomainDns .badge');
-        await page.click('.card-header button[onclick="repLoad()"]');
+        await page.click('.card-header button[data-on-click="repLoad()"]');
         await page.waitForSelector('#repFreq');
     } },
     { path: '/install' },
@@ -272,6 +274,7 @@ const VISITS = [
         const page = await ctx.newPage();
         const errors = [];
         page.on('pageerror', e => errors.push(String(e)));
+        csp.watch(page, errors);
         page.on('dialog', d => d.dismiss());
         await page.goto(BASE + v.path);
         try {

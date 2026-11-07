@@ -160,6 +160,9 @@ public class SSLMailServer {
         // Il dizionario degli script e il cambio di lingua: le pagine di accesso e di installazione
         // hanno gia' la scelta IT/EN. /api/language controlla da se' il token della pagina.
         context("/i18n/", Access.PUBLIC, this::handleI18nScript);
+        // Gli script e gli stili delle pagine come file (PageAssets): quelli delle pagine protette
+        // solo a chi e' entrato, lo controlla il gestore.
+        context("/assets/", Access.PUBLIC, this::handleAsset);
         context("/api/language", Access.PUBLIC, this::handleApiLanguage);
         context("/", Access.PUBLIC, this::handleRoot);
         context("/index", Access.PUBLIC, this::handleIndex);
@@ -365,8 +368,10 @@ public class SSLMailServer {
                 + " path=" + exchange.getRequestURI().getPath());
         if (pageGet) {
             addSecurityHeaders(exchange);
-            byte[] html = renderPage(exchange, withTheme(exchange, org.mail_panel.content.MailPanelContent.getForbiddenHtml()),
-                    getCsrfToken(exchange)).getBytes(StandardCharsets.UTF_8);
+            // Costruita qui come prima, con gli script in file (PageAssets): sono quelli che
+            // generateAllContent ha gia' scritto all'avvio (scrive anche forbidden.html).
+            byte[] html = renderPage(exchange, withTheme(exchange, org.mail_panel.content.PageAssets.externalize(
+                    org.mail_panel.content.MailPanelContent.getForbiddenHtml(), false)), getCsrfToken(exchange)).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
             exchange.sendResponseHeaders(403, html.length);
             try (OutputStream os = exchange.getResponseBody()) { os.write(html); }
@@ -1002,13 +1007,9 @@ public class SSLMailServer {
         String lang = I18n.current();
         String html = "<!doctype html><html lang=\"" + lang + "\"><head><meta charset=\"utf-8\">"
                 + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-                + "<title>" + I18n.escapeHtml(I18n.tr("server.unavailable.title")) + "</title><style>"
-                + "body{background:#16213e;color:#e6e6e6;font-family:-apple-system,Segoe UI,Roboto,sans-serif;"
-                + "display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:1.5rem}"
-                + ".c{max-width:38rem;background:#1a1a2e;border:1px solid #2b2b45;border-radius:12px;padding:2rem}"
-                + "h1{font-size:1.3rem;margin:0 0 1rem;color:#ff6b83}"
-                + "p{line-height:1.6;margin:0 0 1rem}"
-                + "</style></head><body><main class=\"c\">"
+                + "<title>" + I18n.escapeHtml(I18n.tr("server.unavailable.title")) + "</title>"
+                + org.mail_panel.content.MailPanelContent.UNAVAILABLE_STYLE
+                + "</head><body><main class=\"c\">"
                 + "<h1>" + I18n.escapeHtml(I18n.tr("server.unavailable.title")) + "</h1>"
                 + "<p>" + I18n.escapeHtml(I18n.tr("server.unavailable.mysql")) + "</p>"
                 + "<p>" + I18n.escapeHtml(I18n.tr("server.unavailable.mysqlFix")) + "</p>"
@@ -1170,6 +1171,34 @@ public class SSLMailServer {
      * testi dell'interfaccia, e serve anche alla pagina di accesso) e da tenere in cache:
      * l'indirizzo cambia con i testi (?v=impronta).
      */
+    /**
+     * GET /assets/...: uno script o un foglio di stile di una pagina (PageAssets). Il nome e'
+     * l'impronta del contenuto, quindi il file non cambia mai e si tiene in cache per un anno.
+     * Quelli delle pagine protette solo a chi e' entrato: agli altri 404, come se non ci fossero.
+     */
+    private void handleAsset(HttpExchange exchange) throws IOException {
+        try (exchange) {
+            Path f = "GET".equals(exchange.getRequestMethod())
+                    ? org.mail_panel.content.PageAssets.resolve(Paths.get(getJarDirectory(), "admin"),
+                            exchange.getRequestURI().getPath(), isAuthenticated(exchange))
+                    : null;
+            if (f == null) {
+                exchange.sendResponseHeaders(404, -1);
+                return;
+            }
+            byte[] body = Files.readAllBytes(f);
+            boolean open = exchange.getRequestURI().getPath().startsWith("/" + org.mail_panel.content.PageAssets.DIR + "/"
+                    + org.mail_panel.content.PageAssets.OPEN + "/");
+            addSecurityHeaders(exchange);
+            exchange.getResponseHeaders().set("Content-Type", org.mail_panel.content.PageAssets.contentType(f));
+            exchange.getResponseHeaders().set("Cache-Control", (open ? "public" : "private") + ", max-age=31536000, immutable");
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(body);
+            }
+        }
+    }
+
     private void handleI18nScript(HttpExchange exchange) throws IOException {
         try (exchange) {
             String path = exchange.getRequestURI().getPath();
@@ -3119,16 +3148,8 @@ public class SSLMailServer {
         // il pannello ne sorveglia la scadenza. Nota: la regola e' per NOME, non per porta
         // (RFC 6797 §8.1), quindi servita dalla 2096 vale per quel nome ovunque.
         headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-        // Content Security Policy - Restrict resource loading
-        headers.set("Content-Security-Policy",
-            "default-src 'self'; " +
-            "script-src 'self' 'unsafe-inline'; " +
-            "style-src 'self' 'unsafe-inline'; " +
-            "style-src-elem 'self' 'unsafe-inline'; " +
-            "img-src 'self' data: https:; " +
-            "font-src 'self' data:; " +
-            "connect-src 'self'; " +
-            "frame-ancestors 'none'");
+        // Content Security Policy senza 'unsafe-inline' (SecurityHeaders, reperto 178).
+        headers.set("Content-Security-Policy", SecurityHeaders.CONTENT_SECURITY_POLICY);
         // Permissions Policy - Disable unnecessary features
         headers.set("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
     }

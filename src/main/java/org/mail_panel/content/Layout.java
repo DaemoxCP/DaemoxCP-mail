@@ -84,6 +84,15 @@ public final class Layout {
 
     private Layout() {}
 
+    /**
+     * I due script della cornice sono file registrati quando questa classe si carica: chi scrive i
+     * file (MailPanelContent.generateAllContent) la fa caricare prima, chiamando questo metodo.
+     */
+    static void registerAssets() {
+        // Basta il riferimento: i campi statici sono gia' inizializzati.
+        if (LANGUAGE_SCRIPT.isEmpty() || SIDEBAR_SCRIPT.isEmpty()) throw new IllegalStateException();
+    }
+
     /** Il segnaposto che una pagina mette al posto della cornice. */
     public static String placeholder(String page) {
         return "{{LAYOUT:" + page + "}}";
@@ -121,8 +130,7 @@ public final class Layout {
      * la pagina, che il server rimanda gia' tradotta. Il token CSRF e' quello della pagina: della
      * sessione, o prima di entrare quello della pagina di accesso.
      */
-    private static final String LANGUAGE_SCRIPT = """
-<script>
+    private static final String LANGUAGE_SCRIPT = PageAssets.script("""
 document.querySelectorAll('[data-set-lang]').forEach(function (button) {
     button.addEventListener('click', function () {
         var lang = button.getAttribute('data-set-lang');
@@ -137,8 +145,7 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
         }).catch(function () { alert(t('layout.languageError')); });
     });
 });
-</script>
-""";
+""", true);
 
     static String sidebar(String page, Viewer viewer) {
         StringBuilder menu = new StringBuilder();
@@ -223,8 +230,14 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
         <a class="btn btn-sm btn-logout text-white" href="#" id="logoutButton" title="{{t:nav.logout}}"><i class="fas fa-right-from-bracket" aria-hidden="true"></i><span class="d-none d-md-inline ms-1">{{t:nav.logout}}</span></a>
     </div>
 </header>
-<script>
-// La voce della pagina in cui ti trovi sempre a vista, anche in fondo a un menu lungo.
+""" + SIDEBAR_SCRIPT + LANGUAGE_SCRIPT;
+    }
+
+    /**
+     * La voce della pagina in cui ti trovi sempre a vista, anche in fondo a un menu lungo. Come
+     * file, non in linea: la Content-Security-Policy non ha 'unsafe-inline' (reperto 178).
+     */
+    private static final String SIDEBAR_SCRIPT = PageAssets.script("""
 (function () {
     var active = document.querySelector('.sidebar-link.active');
     var sidebar = document.getElementById('sidebar');
@@ -234,7 +247,5 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
         sidebar.scrollTop = active.offsetTop - sidebar.clientHeight / 2;
     }
 })();
-</script>
-""" + LANGUAGE_SCRIPT;
-    }
+""", true);
 }

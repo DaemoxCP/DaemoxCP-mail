@@ -66,6 +66,6 @@
                 ? '<i class="fas fa-circle-question text-secondary" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('wd.unknown')) + '</span>'
                 : (state ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.yes')) + '</span>'
                          : '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('acf.no')) + '</span>');
-            return '<tr><td style="width:2rem">' + iconName + '</td><td class="small">' + whatItem
+            return '<tr><td data-style="width:2rem">' + iconName + '</td><td class="small">' + whatItem
                  + '<div class="text-muted">' + noteText + '</div></td></tr>';
         }

@@ -65,10 +65,10 @@
             }
 
             h += '<div class="d-flex gap-2 flex-wrap">'
-               + '<button class="btn btn-sm btn-outline-secondary" onclick="acPreview()">'
+               + '<button class="btn btn-sm btn-outline-secondary" data-on-click="acPreview()">'
                + '<i class="fas fa-eye me-1" aria-hidden="true"></i>' + escHtml(t('acf.viewFile')) + '</button>'
                + ((r.ready || r.surface443) ? ''
-                  : '<button class="btn btn-sm btn-outline-success" onclick="acInstall()">'
+                  : '<button class="btn btn-sm btn-outline-success" data-on-click="acInstall()">'
                     + '<i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>' + escHtml(t('acf.setUpNginx')) + '</button>')
                + '</div>'
                // Il pulsante sparisce anche quando il file NON arriva, se la superficie sulla
@@ -98,7 +98,7 @@
                 return;
             }
             el.innerHTML = '<div class="small text-muted mb-1">' + escHtml(t('acf.example', { domain: r.domain, n: r.domainCount })) + '</div>'
-                         + '<pre class="small p-2 border rounded" style="max-height:22rem;overflow:auto">'
+                         + '<pre class="small p-2 border rounded" data-style="max-height:22rem;overflow:auto">'
                          + acEsc(r.xml) + '</pre>';
         }
 

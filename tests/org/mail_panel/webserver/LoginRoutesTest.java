@@ -253,6 +253,44 @@ public class LoginRoutesTest {
             check("the same code a second time: refused", ask("POST", "/api/login", "{\"action\":\"code_verify\",\"email\":\"" + bossEmail
                     + "\",\"code\":\"" + code + "\",\"csrf_token\":\"" + token + "\"}", "Cookie", preCookie).statusCode() == 401);
 
+            System.out.println("\n== The Content-Security-Policy, and scripts and styles as files (reperto 178) ==");
+            String policy = SecurityHeaders.CONTENT_SECURITY_POLICY;
+            check("the login page and the home send the policy, without unsafe-inline", policy.equals(page.headers().firstValue("Content-Security-Policy").orElse(""))
+                    && policy.equals(home.headers().firstValue("Content-Security-Policy").orElse("")) && !policy.contains("unsafe-"));
+            for (HttpResponse<String> r : List.of(page, home)) {
+                String b = r.body();
+                check("no inline script, style block, handler or style attribute in " + r.uri().getPath(),
+                        !Pattern.compile("<script(?![^>]*\\bsrc=)").matcher(b).find() && !b.contains("<style")
+                        && !Pattern.compile("\\son[a-z]+=\"").matcher(b).find() && !Pattern.compile("\\sstyle=\"").matcher(b).find());
+            }
+            List<String> openAssets = new ArrayList<>(), ownAssets = new ArrayList<>();
+            for (String b : List.of(page.body(), home.body())) {
+                Matcher am = Pattern.compile("(?:src|href)=\"(/assets/[^\"]+)\"").matcher(b);
+                while (am.find()) (am.group(1).startsWith("/assets/open/") ? openAssets : ownAssets).add(am.group(1));
+            }
+            check("the pages load their scripts and styles from /assets/ (" + openAssets.size() + " shared, " + ownAssets.size() + " of protected pages)",
+                    openAssets.size() >= 3 && !ownAssets.isEmpty());
+            boolean openOk = true;
+            for (String a : openAssets) {
+                HttpResponse<String> r = ask("GET", a, null);
+                openOk &= r.statusCode() == 200 && r.headers().firstValue("Content-Type").orElse("").startsWith(a.endsWith(".css") ? "text/css" : "text/javascript")
+                        && r.headers().firstValue("Cache-Control").orElse("").equals("public, max-age=31536000, immutable")
+                        && r.headers().firstValue("X-Content-Type-Options").orElse("").equals("nosniff");
+            }
+            check("the shared files: to anybody, with their type, nosniff and a year of cache", openOk);
+            boolean ownOk = true;
+            for (String a : ownAssets) {
+                ownOk &= ask("GET", a, null).statusCode() == 404;
+                HttpResponse<String> r = ask("GET", a, null, "Cookie", sc);
+                ownOk &= r.statusCode() == 200 && r.headers().firstValue("Cache-Control").orElse("").startsWith("private,");
+            }
+            check("the files of protected pages: 404 without a session, 200 (private) with it", ownOk);
+            String one = openAssets.isEmpty() ? "/assets/open/x.js" : openAssets.get(0);
+            check("a name that is not a fingerprint, a path outside, a POST: 404", ask("GET", "/assets/open/ABCDEF.js", null).statusCode() == 404
+                    && ask("GET", "/assets/open/../../admin/home.html", null).statusCode() == 404
+                    && ask("GET", "/assets/%2e%2e/admin/home.html", null, "Cookie", sc).statusCode() == 404
+                    && ask("POST", one, "{}").statusCode() == 404);
+
             System.out.println("\n== /api/account ==");
             HttpResponse<String> info = ask("GET", "/api/account", null, "Cookie", sc);
             JSONObject infoJson = new JSONObject(info.body());

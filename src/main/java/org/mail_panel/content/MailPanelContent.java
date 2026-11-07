@@ -40,6 +40,17 @@ public class MailPanelContent {
         }
     }
 
+    /**
+     * Lo stile della pagina che il server mostra quando MySQL non risponde (SSLMailServer), come
+     * file: si vede anche prima di entrare. Sta qui perche' generateAllContent scrive i file.
+     */
+    public static final String UNAVAILABLE_STYLE = PageAssets.stylesheet(
+            "body{background:#16213e;color:#e6e6e6;font-family:-apple-system,Segoe UI,Roboto,sans-serif;"
+            + "display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:1.5rem}"
+            + ".c{max-width:38rem;background:#1a1a2e;border:1px solid #2b2b45;border-radius:12px;padding:2rem}"
+            + "h1{font-size:1.3rem;margin:0 0 1rem;color:#ff6b83}"
+            + "p{line-height:1.6;margin:0 0 1rem}", true);
+
     private static String getJarDirectory() throws URISyntaxException {
         String jarPath = MailPanelContent.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
         return new File(jarPath).getParent();
@@ -53,31 +64,45 @@ public class MailPanelContent {
 
             Files.createDirectories(adminPath);
 
-            writeFile(adminDir + "/index.html", getIndexHtml());
-            writeFile(adminDir + "/setup.html", getSetupHtml());
-            writeFile(adminDir + "/home.html", getHomeHtml());
-            writeFile(adminDir + "/domains.html", getDomainsHtml());
-            writeFile(adminDir + "/mailboxes.html", getMailboxesHtml());
-            writeFile(adminDir + "/aliases.html", getAliasesHtml());
-            writeFile(adminDir + "/dns.html", getDnsHtml());
-            writeFile(adminDir + "/ssl.html", getSslHtml());
-            writeFile(adminDir + "/logs.html", getLogsHtml());
-            writeFile(adminDir + "/queue.html", getQueueHtml());
-            writeFile(adminDir + "/security.html", getSecurityHtml());
-            writeFile(adminDir + "/firewall.html", getFirewallHtml());
-            writeFile(adminDir + "/cloudflare.html", getCloudflareHtml());
-            writeFile(adminDir + "/paths.html", getPathsHtml());
-            writeFile(adminDir + "/install.html", getInstallHtml());
-            writeFile(adminDir + "/settings.html", getSettingsHtml());
-            writeFile(adminDir + "/account.html", getAccountHtml());
-            writeFile(adminDir + "/statistics.html", getStatisticsHtml());
-            writeFile(adminDir + "/admins.html", getAdminsHtml());
-            writeFile(adminDir + "/ratelimits.html", getRateLimitsHtml());
-            writeFile(adminDir + "/updates.html", getUpdatesHtml());
+            page(adminDir, "index.html", getIndexHtml(), true);
+            page(adminDir, "setup.html", getSetupHtml(), true);
+            page(adminDir, "home.html", getHomeHtml(), false);
+            page(adminDir, "domains.html", getDomainsHtml(), false);
+            page(adminDir, "mailboxes.html", getMailboxesHtml(), false);
+            page(adminDir, "aliases.html", getAliasesHtml(), false);
+            page(adminDir, "dns.html", getDnsHtml(), false);
+            page(adminDir, "ssl.html", getSslHtml(), false);
+            page(adminDir, "logs.html", getLogsHtml(), false);
+            page(adminDir, "queue.html", getQueueHtml(), false);
+            page(adminDir, "security.html", getSecurityHtml(), false);
+            page(adminDir, "firewall.html", getFirewallHtml(), false);
+            page(adminDir, "cloudflare.html", getCloudflareHtml(), false);
+            page(adminDir, "paths.html", getPathsHtml(), false);
+            page(adminDir, "install.html", getInstallHtml(), false);
+            page(adminDir, "settings.html", getSettingsHtml(), false);
+            page(adminDir, "account.html", getAccountHtml(), false);
+            page(adminDir, "statistics.html", getStatisticsHtml(), false);
+            page(adminDir, "admins.html", getAdminsHtml(), false);
+            page(adminDir, "ratelimits.html", getRateLimitsHtml(), false);
+            page(adminDir, "updates.html", getUpdatesHtml(), false);
+            page(adminDir, "forbidden.html", getForbiddenHtml(), false);
+            // Gli script e gli stili che le pagine qui sopra hanno messo in file (PageAssets), quelli
+            // della cornice (Layout) e della pagina «non disponibile», e via quelli di una versione di prima.
+            Layout.registerAssets();
+            PageAssets.writeAll(adminPath);
 
         } catch (IOException | URISyntaxException e) {
             // Silent fail
         }
+    }
+
+    /**
+     * Una pagina su disco, con i suoi script e stili in file (PageAssets): nessun codice in linea,
+     * per la Content-Security-Policy senza 'unsafe-inline' (reperto 178).
+     * @param open true per le pagine che si vedono prima di entrare
+     */
+    private static void page(String adminDir, String name, String html, boolean open) throws IOException {
+        writeFile(adminDir + "/" + name, PageAssets.externalize(html, open));
     }
 
     private static void writeFile(String filePath, String content) throws IOException {
@@ -311,6 +336,7 @@ public class MailPanelContent {
     <meta name="color-scheme" content="{{COLOR_SCHEME}}">
     <title>{{t:""" + titleKey + """
 }} - Mail Control Panel</title>
+    """ + PageAssets.ACTIONS + """
     <script>
         (function () {
             var d = document.documentElement, pref = d.getAttribute('data-theme-pref');
@@ -532,6 +558,7 @@ public class MailPanelContent {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{t:login.title}} - Mail Control Panel</title>
+    """ + PageAssets.ACTIONS + """
     <script src="/i18n/{{lang}}.js?v={{i18nVersion}}"></script>
     <link href="/vendor/bootstrap.min.css" rel="stylesheet">
     <link href="/fa/css/all.min.css" rel="stylesheet">
@@ -663,7 +690,7 @@ public class MailPanelContent {
 <body>
     <div class="login-actions">
         {{LANGUAGE_SWITCH}}
-        <button type="button" class="theme-toggle-login" onclick="toggleLoginTheme()" title="{{t:layout.theme}}" aria-label="{{t:layout.theme}}">
+        <button type="button" class="theme-toggle-login" data-on-click="toggleLoginTheme()" title="{{t:layout.theme}}" aria-label="{{t:layout.theme}}">
             <i class="fas fa-sun" id="themeIconLogin" aria-hidden="true"></i>
         </button>
     </div>
@@ -737,7 +764,7 @@ public class MailPanelContent {
         </div>
     </main>
     <footer class="footer bg-light text-center text-lg-start mt-4">
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">&copy; {{YEAR}} {{t:footer.text}}</div>
+        <div class="text-center p-3" data-style="background-color: rgba(0, 0, 0, 0.2);">&copy; {{YEAR}} {{t:footer.text}}</div>
     </footer>
     <script src="/vendor/bootstrap.bundle.min.js"></script>
     <script>
@@ -848,6 +875,7 @@ public class MailPanelContent {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{t:su.pageTitle}} - FreeBSD Mail Panel</title>
+    """ + PageAssets.ACTIONS + """
     <script src="/i18n/{{lang}}.js?v={{i18nVersion}}"></script>
     <link href="/vendor/bootstrap.min.css" rel="stylesheet">
     <link href="/fa/css/all.min.css" rel="stylesheet">
@@ -926,7 +954,7 @@ public class MailPanelContent {
                  Senza display:none inline lampeggerebbe in rosso a ogni caricamento, prima
                  che il JS lo chiuda: un allarme che compare e sparisce e' comunque un allarme
                  che hai letto. -->
-            <div class="alert alert-danger mt-4" id="dnsSetupWarning" style="display:none;">
+            <div class="alert alert-danger mt-4" id="dnsSetupWarning" data-style="display:none;">
                 <h5><i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>{{t:home.dnsEssential}}</h5>
                 <p class="mb-2">{{t:home.dnsFirst.html}}</p>
                 <div class="bg-white p-3 rounded border mb-3">
@@ -948,7 +976,7 @@ public class MailPanelContent {
             </div>
 
             <!-- SSL CERTIFICATE MISMATCH WARNING -->
-            <div class="alert alert-danger mt-3" id="sslMismatchWarning" style="display:none;">
+            <div class="alert alert-danger mt-3" id="sslMismatchWarning" data-style="display:none;">
                 <h5><i class="fas fa-shield-alt me-2" aria-hidden="true"></i>{{t:home.sslMismatch}}</h5>
                 <p class="mb-1">{{t:home.sslIssuedFor}} <strong><code id="sslCnDisplay">-</code></strong></p>
                 <p class="mb-1">{{t:home.sslExpected}} <strong><code id="sslExpectedDisplay">-</code></strong></p>
@@ -960,7 +988,7 @@ public class MailPanelContent {
             </div>
 
             <!-- DNS VERIFICATION STATUS -->
-            <div class="card mt-3 mb-4" id="dnsVerificationCard" style="display:none;">
+            <div class="card mt-3 mb-4" id="dnsVerificationCard" data-style="display:none;">
                 <div class="card-header" id="dnsVerificationHeader">
                     <i class="fas fa-stethoscope me-2" aria-hidden="true"></i>{{t:home.dnsLive}}
                 </div>
@@ -968,13 +996,13 @@ public class MailPanelContent {
                     <div id="dnsVerificationLoading" class="text-center py-2">
                         <i class="fas fa-spinner fa-spin me-2" aria-hidden="true"></i>{{t:home.dnsChecking}}
                     </div>
-                    <div id="dnsVerificationResults" style="display:none;">
+                    <div id="dnsVerificationResults" data-style="display:none;">
                         <table class="table table-sm mb-2">
                             <thead><tr><th>Record</th><th>{{t:home.colName}}</th><th>{{t:home.colCurrent}}</th><th>{{t:home.colExpected}}</th><th>{{t:home.colState}}</th></tr></thead>
                             <tbody id="dnsVerificationBody"></tbody>
                         </table>
                         <div id="dnsVerificationSummary"></div>
-                        <button class="btn btn-outline-primary btn-sm mt-2" onclick="runDnsVerification()">
+                        <button class="btn btn-outline-primary btn-sm mt-2" data-on-click="runDnsVerification()">
                             <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:home.recheck}}
                         </button>
                     </div>
@@ -996,7 +1024,7 @@ public class MailPanelContent {
 
             <div class="d-flex justify-content-between align-items-center mt-4 mb-1">
                 <h3 class="mb-0"><i class="fas fa-server me-2" aria-hidden="true"></i>{{t:home.services}}</h3>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="versionsReread" onclick="loadVersions(true)"><i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:home.rereadVersions}}</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="versionsReread" data-on-click="loadVersions(true)"><i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:home.rereadVersions}}</button>
             </div>
             <p class="small text-muted mb-2" id="versionsState" role="status">{{t:home.readingVersions}}</p>
             <div class="table-responsive">
@@ -1128,7 +1156,7 @@ public class MailPanelContent {
             fetch('/api/hostname', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'check_dns', csrf_token: '{{CSRF_TOKEN}}' })
+                body: JSON.stringify({ action: 'check_dns', csrf_token: document.getElementById('csrf_token').value })
             })
             .then(r => r.json())
             .then(data => {
@@ -1190,7 +1218,7 @@ public class MailPanelContent {
                             advice += '<div class="card border-danger mb-2"><div class="card-body py-2 px-3">' +
                                 '<h6 class="text-danger mb-2"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(t('home.aMissing')) + '</h6>' +
                                 '<p class="mb-1">' + t('home.aWhat.html') + '</p>' +
-                                '<table class="table table-sm table-bordered mb-2" style="max-width:500px">' +
+                                '<table class="table table-sm table-bordered mb-2" data-style="max-width:500px">' +
                                 '<tr><td width="100"><strong>Type</strong></td><td><code>A</code></td></tr>' +
                                 '<tr><td><strong>Name</strong></td><td><code>' + escHtml(subdomain) + '</code></td></tr>' +
                                 '<tr><td><strong>IPv4</strong></td><td><code>' + escHtml(c.expected) + '</code></td></tr>' +
@@ -1203,7 +1231,7 @@ public class MailPanelContent {
                             advice += '<div class="card border-danger mb-2"><div class="card-body py-2 px-3">' +
                                 '<h6 class="text-danger mb-2"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(t('home.mxMissing')) + '</h6>' +
                                 '<p class="mb-1">' + t('home.mxWhat.html') + '</p>' +
-                                '<table class="table table-sm table-bordered mb-2" style="max-width:500px">' +
+                                '<table class="table table-sm table-bordered mb-2" data-style="max-width:500px">' +
                                 '<tr><td width="100"><strong>Type</strong></td><td><code>MX</code></td></tr>' +
                                 '<tr><td><strong>Name</strong></td><td>' + t('home.mxName.html', { name: escHtml(c.name) }) + '</td></tr>' +
                                 '<tr><td><strong>Server</strong></td><td><code>' + escHtml(hostname) + '</code></td></tr>' +
@@ -1216,7 +1244,7 @@ public class MailPanelContent {
                             advice += '<div class="card border-warning mb-2"><div class="card-body py-2 px-3">' +
                                 '<h6 class="text-warning mb-2"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + escHtml(t('home.ptrMissing')) + '</h6>' +
                                 '<p class="mb-1">' + t('home.ptrWhat.html') + '</p>' +
-                                '<table class="table table-sm table-bordered mb-2" style="max-width:500px">' +
+                                '<table class="table table-sm table-bordered mb-2" data-style="max-width:500px">' +
                                 '<tr><td width="100"><strong>IP</strong></td><td><code>' + escHtml(c.name) + '</code></td></tr>' +
                                 '<tr><td><strong>PTR</strong></td><td><code>' + escHtml(hostname) + '</code></td></tr>' +
                                 '</table>' +
@@ -1281,7 +1309,7 @@ public class MailPanelContent {
                         summary.innerHTML += '<div class="card border-danger mb-2 mt-2"><div class="card-body py-2 px-3">' +
                             '<h6 class="text-danger mb-2"><i class="fas fa-envelope-open-text me-1" aria-hidden="true"></i>' + escHtml(t('home.rcMissing')) + '</h6>' +
                             '<p class="mb-1">' + t('home.rcWhat.html') + '</p>' +
-                            '<table class="table table-sm table-bordered mb-2" style="max-width:500px">' +
+                            '<table class="table table-sm table-bordered mb-2" data-style="max-width:500px">' +
                             '<tr><td width="100"><strong>Type</strong></td><td><code>A</code></td></tr>' +
                             '<tr><td><strong>Name</strong></td><td><code>' + escHtml(rcSub) + '</code></td></tr>' +
                             '<tr><td><strong>IPv4</strong></td><td><code>' + escapeHtml(data.server_ip || 'IP_SERVER') + '</code></td></tr>' +
@@ -1318,9 +1346,9 @@ public class MailPanelContent {
                             <td data-label="{{t:home.colVersion}}" id="ver-%s"><span class="small text-muted">{{t:home.reading}}</span></td>
                             <td data-label="{{t:home.colState}}"><span class="badge bg-secondary" id="%s-status">-</span></td>
                             <td data-label="{{t:home.colActions}}" class="text-nowrap">
-                                <button type="button" class="btn btn-success action-btn" onclick="serviceAction('%s','start')" aria-label="{{t:home.start}} %s" title="{{t:home.start}}"><i class="fas fa-play" aria-hidden="true"></i></button>
-                                <button type="button" class="btn btn-warning action-btn" onclick="serviceAction('%s','restart')" aria-label="{{t:home.restart}} %s" title="{{t:home.restart}}"><i class="fas fa-redo" aria-hidden="true"></i></button>
-                                <button type="button" class="btn btn-danger action-btn" onclick="serviceAction('%s','stop')" aria-label="{{t:home.stop}} %s" title="{{t:home.stop}}"><i class="fas fa-stop" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-success action-btn" data-on-click="serviceAction('%s','start')" aria-label="{{t:home.start}} %s" title="{{t:home.start}}"><i class="fas fa-play" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-warning action-btn" data-on-click="serviceAction('%s','restart')" aria-label="{{t:home.restart}} %s" title="{{t:home.restart}}"><i class="fas fa-redo" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-danger action-btn" data-on-click="serviceAction('%s','stop')" aria-label="{{t:home.stop}} %s" title="{{t:home.stop}}"><i class="fas fa-stop" aria-hidden="true"></i></button>
                             </td>
                         </tr>
 """.formatted(icon, name, key, key, service, who, service, who, service, who);
@@ -1467,7 +1495,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-mail" onclick="addDomain()">{{t:common.add}}</button>
+                    <button type="button" class="btn btn-mail" data-on-click="addDomain()">{{t:common.add}}</button>
                 </div>
             </div>
         </div>
@@ -1491,7 +1519,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-mail" onclick="saveDomainDesc()">{{t:common.save}}</button>
+                    <button type="button" class="btn btn-mail" data-on-click="saveDomainDesc()">{{t:common.save}}</button>
                 </div>
             </div>
         </div>
@@ -1519,9 +1547,9 @@ public class MailPanelContent {
                         <td data-label="${escDom(t('nav.aliases'))}"><span class="badge bg-info">${d.alias_count || 0}</span></td>
                         <td data-label="DKIM">${d.has_dkim ? '<span class="badge bg-success">' + escDom(t('dom.dkimOn')) + '</span>' : '<span class="badge bg-warning text-dark">' + escDom(t('dom.dkimOff')) + '</span>'}</td>
                         <td data-label="${escDom(t('home.colActions'))}">
-                            <button class="btn btn-sm btn-secondary" onclick="editDomain(${d.id})" title="${escDom(t('dom.editDesc'))}" aria-label="${escDom(t('dom.editDescOf', { domain: d.domain }))}"><i class="fas fa-edit" aria-hidden="true"></i></button>
-                            <button class="btn btn-sm btn-primary" onclick="viewDnsById(${d.id})"><i class="fas fa-server" aria-hidden="true"></i> DNS</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteDomain(${d.id})" title="${escDom(t('common.delete'))}" aria-label="${escDom(t('dom.deleteOf', { domain: d.domain }))}"><i class="fas fa-trash" aria-hidden="true"></i></button>
+                            <button class="btn btn-sm btn-secondary" data-on-click="editDomain(${d.id})" title="${escDom(t('dom.editDesc'))}" aria-label="${escDom(t('dom.editDescOf', { domain: d.domain }))}"><i class="fas fa-edit" aria-hidden="true"></i></button>
+                            <button class="btn btn-sm btn-primary" data-on-click="viewDnsById(${d.id})"><i class="fas fa-server" aria-hidden="true"></i> DNS</button>
+                            <button class="btn btn-sm btn-danger" data-on-click="deleteDomain(${d.id})" title="${escDom(t('common.delete'))}" aria-label="${escDom(t('dom.deleteOf', { domain: d.domain }))}"><i class="fas fa-trash" aria-hidden="true"></i></button>
                         </td>
                     </tr>
                 `).join('');
@@ -1635,16 +1663,16 @@ public class MailPanelContent {
                                 <label class="form-label small fw-bold mb-1">{{t:cfg.username}}</label>
                                 <div class="input-group input-group-sm">
                                     <input type="text" class="form-control font-monospace" id="cfgEmailField" readonly>
-                                    <button class="btn btn-outline-secondary" type="button" onclick="copyInputValue('cfgEmailField')" title="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
+                                    <button class="btn btn-outline-secondary" type="button" data-on-click="copyInputValue('cfgEmailField')" title="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
                                 </div>
                             </div>
                             <div class="mb-2">
                                 <label class="form-label small fw-bold mb-1">Password</label>
                                 <div class="input-group input-group-sm">
                                     <input type="password" class="form-control font-monospace" id="cfgPasswordField" value="" placeholder="{{t:cfg.passNone}}" readonly>
-                                    <button class="btn btn-outline-secondary" type="button" id="cfgPasswordToggleBtn" onclick="toggleCfgPasswordVisibility()" title="{{t:cfg.showHide}}" disabled><i class="fas fa-eye" aria-hidden="true"></i></button>
-                                    <button class="btn btn-outline-secondary" type="button" id="cfgPasswordCopyBtn" onclick="copyInputValue('cfgPasswordField')" title="{{t:common.copy}}" disabled><i class="fas fa-copy" aria-hidden="true"></i></button>
-                                    <button class="btn btn-warning" type="button" id="cfgPasswordRevealBtn" onclick="revealCfgPassword()" title="{{t:cfg.fromVault}}"><i class="fas fa-unlock me-1" aria-hidden="true"></i>{{t:mbx.reveal}}</button>
+                                    <button class="btn btn-outline-secondary" type="button" id="cfgPasswordToggleBtn" data-on-click="toggleCfgPasswordVisibility()" title="{{t:cfg.showHide}}" disabled><i class="fas fa-eye" aria-hidden="true"></i></button>
+                                    <button class="btn btn-outline-secondary" type="button" id="cfgPasswordCopyBtn" data-on-click="copyInputValue('cfgPasswordField')" title="{{t:common.copy}}" disabled><i class="fas fa-copy" aria-hidden="true"></i></button>
+                                    <button class="btn btn-warning" type="button" id="cfgPasswordRevealBtn" data-on-click="revealCfgPassword()" title="{{t:cfg.fromVault}}"><i class="fas fa-unlock me-1" aria-hidden="true"></i>{{t:mbx.reveal}}</button>
                                 </div>
                                 <small class="text-muted" id="cfgPasswordHint">{{t:mbx.revealHint}}</small>
                             </div>
@@ -1672,10 +1700,10 @@ public class MailPanelContent {
                             <h6 class="mb-2 text-success"><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:cfg.inImap}}</h6>
                             <div class="row g-2 mb-3">
                                 <div class="col-md-8"><label class="form-label small mb-1">Server</label>
-                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgImapServer" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgImapServer')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgImapServer" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgImapServer')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
                                 </div>
                                 <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.port}}</label>
-                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="993" id="cfgImapPort" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgImapPort')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="993" id="cfgImapPort" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgImapPort')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
                                 </div>
                                 <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.security}}</label>
                                     <input type="text" class="form-control form-control-sm" value="SSL/TLS" readonly>
@@ -1685,10 +1713,10 @@ public class MailPanelContent {
                             <h6 class="mb-2 text-secondary"><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:cfg.inPop}}</h6>
                             <div class="row g-2 mb-3">
                                 <div class="col-md-8"><label class="form-label small mb-1">Server</label>
-                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgPop3Server" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgPop3Server')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgPop3Server" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgPop3Server')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
                                 </div>
                                 <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.port}}</label>
-                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="995" id="cfgPop3Port" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgPop3Port')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="995" id="cfgPop3Port" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgPop3Port')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
                                 </div>
                                 <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.security}}</label>
                                     <input type="text" class="form-control form-control-sm" value="SSL/TLS" readonly>
@@ -1698,10 +1726,10 @@ public class MailPanelContent {
                             <h6 class="mb-2 text-primary"><i class="fas fa-paper-plane me-1" aria-hidden="true"></i>{{t:cfg.outSmtp}}</h6>
                             <div class="row g-2 mb-2">
                                 <div class="col-md-8"><label class="form-label small mb-1">Server</label>
-                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgSmtpServer" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgSmtpServer')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgSmtpServer" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgSmtpServer')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
                                 </div>
                                 <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.port}}</label>
-                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="587" id="cfgSmtpPort" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgSmtpPort')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="587" id="cfgSmtpPort" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgSmtpPort')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
                                 </div>
                                 <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.security}}</label>
                                     <input type="text" class="form-control form-control-sm" value="STARTTLS" readonly>
@@ -1717,11 +1745,11 @@ public class MailPanelContent {
                                 <li class="mb-2">{{t:cfg.ol1.html}}</li>
                                 <li class="mb-3">{{t:cfg.ol2}}
                                     <table class="table table-sm table-bordered mt-2 mb-0">
-                                        <tr><td class="fw-bold" style="width:30%">{{t:cfg.imapServer}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgOutlookImap" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgOutlookImap')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold" data-style="width:30%">{{t:cfg.imapServer}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgOutlookImap" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgOutlookImap')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">{{t:cfg.imapPortSec}}</td><td><code>993 / SSL-TLS</code></td></tr>
-                                        <tr><td class="fw-bold">{{t:cfg.smtpServer}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgOutlookSmtp" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgOutlookSmtp')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">{{t:cfg.smtpServer}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgOutlookSmtp" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgOutlookSmtp')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">{{t:cfg.smtpPortSec}}</td><td><code>587 / STARTTLS</code></td></tr>
-                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" onclick="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" data-on-click="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">Password</td><td><small class="text-muted">{{t:cfg.seeCredentials}}</small></td></tr>
                                     </table>
                                 </li>
@@ -1737,9 +1765,9 @@ public class MailPanelContent {
                                 <li class="mb-2">{{t:cfg.ap2.html}}</li>
                                 <li class="mb-3">{{t:cfg.setValues}}
                                     <table class="table table-sm table-bordered mt-2 mb-0">
-                                        <tr><td class="fw-bold" style="width:35%">{{t:cfg.inServerImap}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAppleImap" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgAppleImap')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
-                                        <tr><td class="fw-bold">{{t:cfg.outServerSmtp}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAppleSmtp" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgAppleSmtp')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
-                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" onclick="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold" data-style="width:35%">{{t:cfg.inServerImap}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAppleImap" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgAppleImap')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">{{t:cfg.outServerSmtp}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAppleSmtp" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgAppleSmtp')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" data-on-click="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">Password</td><td><small class="text-muted">{{t:cfg.seeCredentials}}</small></td></tr>
                                     </table>
                                 </li>
@@ -1755,11 +1783,11 @@ public class MailPanelContent {
                                 <li class="mb-2">{{t:cfg.an2.html}}</li>
                                 <li class="mb-3">{{t:cfg.setValues}}
                                     <table class="table table-sm table-bordered mt-2 mb-0">
-                                        <tr><td class="fw-bold" style="width:35%">{{t:cfg.inServer}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAndroidImap" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgAndroidImap')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold" data-style="width:35%">{{t:cfg.inServer}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAndroidImap" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgAndroidImap')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">{{t:cfg.inPortSec}}</td><td><code>993 / SSL</code></td></tr>
-                                        <tr><td class="fw-bold">{{t:cfg.outServer}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAndroidSmtp" readonly><button class="btn btn-outline-secondary" onclick="copyInputValue('cfgAndroidSmtp')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">{{t:cfg.outServer}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAndroidSmtp" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgAndroidSmtp')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">{{t:cfg.outPortSec}}</td><td><code>587 / STARTTLS</code></td></tr>
-                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" onclick="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" data-on-click="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">Password</td><td><small class="text-muted">{{t:cfg.seeCredentials}}</small></td></tr>
                                     </table>
                                 </li>
@@ -1822,13 +1850,13 @@ public class MailPanelContent {
                         <div class="col-md-6">
                             <label class="form-label small fw-bold mb-1">{{t:pw.length}}</label>
                             <div class="input-group">
-                                <button class="btn btn-outline-secondary" type="button" onclick="pwgenLengthDelta(-1)"><i class="fas fa-minus" aria-hidden="true"></i></button>
+                                <button class="btn btn-outline-secondary" type="button" data-on-click="pwgenLengthDelta(-1)"><i class="fas fa-minus" aria-hidden="true"></i></button>
                                 <input type="number" class="form-control text-center" id="pwgenLength" value="20" min="{{PW_MIN}}" max="128">
-                                <button class="btn btn-outline-secondary" type="button" onclick="pwgenLengthDelta(1)"><i class="fas fa-plus" aria-hidden="true"></i></button>
+                                <button class="btn btn-outline-secondary" type="button" data-on-click="pwgenLengthDelta(1)"><i class="fas fa-plus" aria-hidden="true"></i></button>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <input type="range" class="form-range mt-3" id="pwgenLengthRange" min="{{PW_MIN}}" max="64" value="20" oninput="document.getElementById('pwgenLength').value = this.value">
+                            <input type="range" class="form-range mt-3" id="pwgenLengthRange" min="{{PW_MIN}}" max="64" value="20" data-on-input="pwgenSetLength(this.value)">
                         </div>
                     </div>
 
@@ -1861,7 +1889,7 @@ public class MailPanelContent {
                         <label class="form-label small fw-bold">{{t:pw.generated}}</label>
                         <div class="input-group">
                             <input type="text" class="form-control font-monospace fs-5" id="pwgenPreview" readonly placeholder="{{t:pw.previewPh}}">
-                            <button class="btn btn-outline-secondary" type="button" onclick="pwgenCopy()" title="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
+                            <button class="btn btn-outline-secondary" type="button" data-on-click="pwgenCopy()" title="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
                         </div>
                         <div class="mt-2 small">
                             <span id="pwgenStrengthBadge" class="badge bg-secondary">—</span>
@@ -1871,8 +1899,8 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-info" onclick="pwgenGenerate()"><i class="fas fa-sync-alt me-1" aria-hidden="true"></i>{{t:pw.generate}}</button>
-                    <button type="button" class="btn btn-success" id="pwgenUseBtn" onclick="pwgenUse()" disabled><i class="fas fa-check me-1" aria-hidden="true"></i>{{t:pw.use}}</button>
+                    <button type="button" class="btn btn-info" data-on-click="pwgenGenerate()"><i class="fas fa-sync-alt me-1" aria-hidden="true"></i>{{t:pw.generate}}</button>
+                    <button type="button" class="btn btn-success" id="pwgenUseBtn" data-on-click="pwgenUse()" disabled><i class="fas fa-check me-1" aria-hidden="true"></i>{{t:pw.use}}</button>
                 </div>
             </div>
         </div>
@@ -1892,10 +1920,10 @@ public class MailPanelContent {
         return """
                         <div class="input-group has-validation">
                             <input type="password" class="form-control font-monospace password-field" id="%1$s" placeholder="%2$s" maxlength="128"
-                                   autocomplete="new-password" autocapitalize="off" spellcheck="false" oninput="pwCheck('%1$s')" aria-describedby="%1$sErr">
-                            <button class="btn btn-outline-secondary" type="button" id="%1$sShow" onclick="pwShow('%1$s')" title="{{t:pw.showHide}}" aria-label="{{t:pw.show}}"><i class="fas fa-eye" aria-hidden="true"></i></button>
-                            <button class="btn btn-outline-primary" type="button" onclick="pwGenerate('%1$s')" title="{{t:pw.generateSafe}}" aria-label="{{t:pw.generateSafe}}"><i class="fas fa-magic" aria-hidden="true"></i><span class="d-none d-sm-inline ms-1">{{t:pw.generate}}</span></button>
-                            <button class="btn btn-outline-secondary" type="button" id="%1$sCopy" onclick="pwDoCopy('%1$s')" title="{{t:pw.copyClipboard}}" aria-label="{{t:pw.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
+                                   autocomplete="new-password" autocapitalize="off" spellcheck="false" data-on-input="pwCheck('%1$s')" aria-describedby="%1$sErr">
+                            <button class="btn btn-outline-secondary" type="button" id="%1$sShow" data-on-click="pwShow('%1$s')" title="{{t:pw.showHide}}" aria-label="{{t:pw.show}}"><i class="fas fa-eye" aria-hidden="true"></i></button>
+                            <button class="btn btn-outline-primary" type="button" data-on-click="pwGenerate('%1$s')" title="{{t:pw.generateSafe}}" aria-label="{{t:pw.generateSafe}}"><i class="fas fa-magic" aria-hidden="true"></i><span class="d-none d-sm-inline ms-1">{{t:pw.generate}}</span></button>
+                            <button class="btn btn-outline-secondary" type="button" id="%1$sCopy" data-on-click="pwDoCopy('%1$s')" title="{{t:pw.copyClipboard}}" aria-label="{{t:pw.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
                             <div class="invalid-feedback" id="%1$sErr" role="alert"></div>
                         </div>
 """.formatted(id, placeholder);
@@ -2060,7 +2088,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-mail" id="acVia" onclick="transformToMailbox()" disabled><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:ac.title}}</button>
+                    <button type="button" class="btn btn-mail" id="acVia" data-on-click="transformToMailbox()" disabled><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:ac.title}}</button>
                 </div>
             </div>
         </div>
@@ -2222,7 +2250,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-danger" id="aaVia" onclick="transformToAlias()" disabled><i class="fas fa-share me-1" aria-hidden="true"></i>{{t:mbx.toAlias}}</button>
+                    <button type="button" class="btn btn-danger" id="aaVia" data-on-click="transformToAlias()" disabled><i class="fas fa-share me-1" aria-hidden="true"></i>{{t:mbx.toAlias}}</button>
                 </div>
             </div>
         </div>
@@ -2361,6 +2389,12 @@ public class MailPanelContent {
             setTimeout(pwgenGenerate, 100);
         }
 
+        // Il cursore della lunghezza scrive il numero nel campo accanto. Era un'assegnazione nel
+        // gestore in linea; i gestori adesso chiamano solo funzioni (panel-actions.js, reperto 178).
+        function pwgenSetLength(value) {
+            document.getElementById('pwgenLength').value = value;
+        }
+
         function pwgenLengthDelta(delta) {
             const input = document.getElementById('pwgenLength');
             let v = parseInt(input.value) + delta;
@@ -2485,11 +2519,11 @@ public class MailPanelContent {
 
                     <div id="bulkRotateStep1" class="">
                         <!-- Opzioni generatore -->
-                        <div class="border rounded p-2 mb-3" style="background:rgba(13,110,253,0.04)">
+                        <div class="border rounded p-2 mb-3" data-style="background:rgba(13,110,253,0.04)">
                             <div class="row g-2">
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold mb-1" for="bulkRotateType">{{t:bulk.type}}</label>
-                                    <select class="form-select form-select-sm" id="bulkRotateType" onchange="bulkRotateOnTypeChange()">
+                                    <select class="form-select form-select-sm" id="bulkRotateType" data-on-change="bulkRotateOnTypeChange()">
                                         <option value="easy_to_say">{{t:bulk.typeSay}}</option>
                                         <option value="easy_to_read" selected>{{t:bulk.typeRead}}</option>
                                         <option value="all_chars">{{t:bulk.typeAll}}</option>
@@ -2521,7 +2555,7 @@ public class MailPanelContent {
                                     <input class="form-check-input" type="checkbox" id="bulkRotateInclSymbols" checked>
                                     <label class="form-check-label small" for="bulkRotateInclSymbols">{{t:pw.symbols}}</label>
                                 </div>
-                                <button class="btn btn-outline-secondary btn-sm ms-auto" type="button" onclick="bulkRotatePreviewSample()" title="{{t:bulk.sampleHint}}">
+                                <button class="btn btn-outline-secondary btn-sm ms-auto" type="button" data-on-click="bulkRotatePreviewSample()" title="{{t:bulk.sampleHint}}">
                                     <i class="fas fa-eye me-1" aria-hidden="true"></i>{{t:bulk.preview}}
                                 </button>
                             </div>
@@ -2529,14 +2563,14 @@ public class MailPanelContent {
                         </div>
 
                         <div class="d-flex gap-2 mb-2 flex-wrap">
-                            <button class="btn btn-outline-secondary btn-sm" onclick="bulkRotateSelectAll()"><i class="fas fa-check-square me-1" aria-hidden="true"></i>{{t:bulk.selectAll}}</button>
-                            <button class="btn btn-outline-secondary btn-sm" onclick="bulkRotateSelectNone()"><i class="fas fa-square me-1" aria-hidden="true"></i>{{t:bulk.selectNone}}</button>
+                            <button class="btn btn-outline-secondary btn-sm" data-on-click="bulkRotateSelectAll()"><i class="fas fa-check-square me-1" aria-hidden="true"></i>{{t:bulk.selectAll}}</button>
+                            <button class="btn btn-outline-secondary btn-sm" data-on-click="bulkRotateSelectNone()"><i class="fas fa-square me-1" aria-hidden="true"></i>{{t:bulk.selectNone}}</button>
                         </div>
-                        <div class="table-responsive" style="max-height:50vh">
+                        <div class="table-responsive" data-style="max-height:50vh">
                             <table class="table table-sm table-hover align-middle mb-0">
                                 <thead class="table-light sticky-top">
                                     <tr>
-                                        <th style="width:40px"><input type="checkbox" class="form-check-input" id="bulkRotateChkAll" onchange="bulkRotateToggleAll(this)" aria-label="{{t:bulk.selectAll}}"></th>
+                                        <th data-style="width:40px"><input type="checkbox" class="form-check-input" id="bulkRotateChkAll" data-on-change="bulkRotateToggleAll(this)" aria-label="{{t:bulk.selectAll}}"></th>
                                         <th>Email</th>
                                         <th>{{t:mbx.colName}}</th>
                                         <th>{{t:bulk.vaultState}}</th>
@@ -2552,10 +2586,10 @@ public class MailPanelContent {
                     <div id="bulkRotateStep2" class="d-none">
                         <div class="alert alert-success" id="bulkRotateSummary"></div>
                         <div class="d-flex gap-2 mb-2">
-                            <button class="btn btn-sm btn-outline-primary" onclick="bulkRotateCopyAll()"><i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:bulk.copyAll}}</button>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="bulkRotateShowHide()" id="bulkRotateToggleVis"><i class="fas fa-eye me-1" aria-hidden="true"></i>{{t:bulk.showHide}}</button>
+                            <button class="btn btn-sm btn-outline-primary" data-on-click="bulkRotateCopyAll()"><i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:bulk.copyAll}}</button>
+                            <button class="btn btn-sm btn-outline-secondary" data-on-click="bulkRotateShowHide()" id="bulkRotateToggleVis"><i class="fas fa-eye me-1" aria-hidden="true"></i>{{t:bulk.showHide}}</button>
                         </div>
-                        <div class="table-responsive" style="max-height:60vh">
+                        <div class="table-responsive" data-style="max-height:60vh">
                             <table class="table table-sm align-middle mb-0">
                                 <thead class="table-light sticky-top"><tr><th>Email</th><th>{{t:mbx.newPass}}</th><th>{{t:home.colState}}</th></tr></thead>
                                 <tbody id="bulkRotateResultsList"></tbody>
@@ -2569,7 +2603,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.close}}</button>
-                    <button type="button" class="btn btn-warning" id="bulkRotateRunBtn" onclick="bulkRotateRun()"><i class="fas fa-bolt me-1" aria-hidden="true"></i>{{t:bulk.run}}</button>
+                    <button type="button" class="btn btn-warning" id="bulkRotateRunBtn" data-on-click="bulkRotateRun()"><i class="fas fa-bolt me-1" aria-hidden="true"></i>{{t:bulk.run}}</button>
                 </div>
             </div>
         </div>
@@ -2616,7 +2650,7 @@ public class MailPanelContent {
                 let html = '';
                 list.forEach(m => {
                     html += '<tr>';
-                    html += '<td><input type="checkbox" class="form-check-input bulk-rotate-chk" value="' + m.id + '" onchange="updateBulkRotateCount()" aria-label="' + escapeHtmlBl(m.email) + '"></td>';
+                    html += '<td><input type="checkbox" class="form-check-input bulk-rotate-chk" value="' + m.id + '" data-on-change="updateBulkRotateCount()" aria-label="' + escapeHtmlBl(m.email) + '"></td>';
                     html += '<td><code>' + escapeHtmlBl(m.email) + '</code></td>';
                     html += '<td>' + escapeHtmlBl(m.name || '') + '</td>';
                     // Stato vault: NON disponibile su /api/mailboxes lista, mostriamo placeholder
@@ -2771,7 +2805,7 @@ public class MailPanelContent {
                     const display = bulkRotatePasswordsVisible ? r.password : ('•').repeat(r.password.length);
                     html += '<td><div class="input-group input-group-sm">';
                     html += '<input type="text" class="form-control font-monospace" value="' + escapeHtmlBl(display) + '" readonly>';
-                    html += '<button class="btn btn-outline-secondary" type="button" onclick="bulkRotateCopyOne(\\'' + escapeHtmlBl((r.password || '').replace(/\\\\/g, "\\\\\\\\").replace(/'/g, "\\\\'")) + '\\')" title="' + escapeHtmlBl(t('common.copy')) + '" aria-label="' + escapeHtmlBl(t('common.copy')) + '"><i class="fas fa-copy" aria-hidden="true"></i></button>';
+                    html += '<button class="btn btn-outline-secondary" type="button" data-on-click="bulkRotateCopyOne(\\'' + escapeHtmlBl((r.password || '').replace(/\\\\/g, "\\\\\\\\").replace(/'/g, "\\\\'")) + '\\')" title="' + escapeHtmlBl(t('common.copy')) + '" aria-label="' + escapeHtmlBl(t('common.copy')) + '"><i class="fas fa-copy" aria-hidden="true"></i></button>';
                     html += '</div></td>';
                     html += '<td><span class="badge bg-success">OK</span></td>';
                 } else {
@@ -2834,7 +2868,7 @@ public class MailPanelContent {
             <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                 <h2><i class="fas fa-inbox me-2" aria-hidden="true"></i>{{t:mbx.title}}</h2>
                 <div class="d-flex gap-2 flex-wrap">
-                    <button class="btn btn-outline-warning" onclick="openBulkRotateModal()" title="{{t:mbx.bulkHint}}">
+                    <button class="btn btn-outline-warning" data-on-click="openBulkRotateModal()" title="{{t:mbx.bulkHint}}">
                         <i class="fas fa-sync-alt me-1" aria-hidden="true"></i>{{t:mbx.bulk}}
                     </button>
                     <button class="btn btn-mail" data-bs-toggle="modal" data-bs-target="#addMailboxModal"><i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:mbx.add}}</button>
@@ -2901,7 +2935,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-mail" onclick="addMailbox()">{{t:mbx.create}}</button>
+                    <button type="button" class="btn btn-mail" data-on-click="addMailbox()">{{t:mbx.create}}</button>
                 </div>
             </div>
         </div>
@@ -2931,24 +2965,24 @@ public class MailPanelContent {
                         <small class="text-muted">{{t:mbx.vaultHint}}</small>
 
                         <!-- Riquadro per password archiviata: rivelabile con click -->
-                        <div class="mt-2" id="editMbVaultBox" style="display:none">
-                            <div class="border rounded p-2 small" style="background:rgba(13,110,253,0.05)">
+                        <div class="mt-2" id="editMbVaultBox" data-style="display:none">
+                            <div class="border rounded p-2 small" data-style="background:rgba(13,110,253,0.05)">
                                 <i class="fas fa-shield-alt text-primary me-1" aria-hidden="true"></i>
                                 <strong>{{t:mbx.stored}}</strong> {{t:mbx.storedHint}}
-                                <button type="button" class="btn btn-sm btn-link p-0 ms-2" onclick="revealMailboxStoredPassword()">
+                                <button type="button" class="btn btn-sm btn-link p-0 ms-2" data-on-click="revealMailboxStoredPassword()">
                                     <i class="fas fa-eye me-1" aria-hidden="true"></i>{{t:mbx.reveal}}
                                 </button>
                                 <div class="mt-1 d-none" id="editMbRevealedBox">
                                     <div class="input-group input-group-sm">
                                         <input type="text" class="form-control font-monospace" id="editMbRevealedValue" readonly>
-                                        <button class="btn btn-outline-secondary" type="button" onclick="copyRevealedPassword()" title="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
-                                        <button class="btn btn-outline-danger" type="button" onclick="hideRevealedPassword()" title="{{t:mbx.hide}}"><i class="fas fa-eye-slash" aria-hidden="true"></i></button>
+                                        <button class="btn btn-outline-secondary" type="button" data-on-click="copyRevealedPassword()" title="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
+                                        <button class="btn btn-outline-danger" type="button" data-on-click="hideRevealedPassword()" title="{{t:mbx.hide}}"><i class="fas fa-eye-slash" aria-hidden="true"></i></button>
                                     </div>
                                     <div class="small text-muted mt-1"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>{{t:mbx.auditLogged}}</div>
                                 </div>
                             </div>
                         </div>
-                        <div class="mt-2 border rounded p-2 small text-muted" id="editMbNoCopyBox" style="display:none">
+                        <div class="mt-2 border rounded p-2 small text-muted" id="editMbNoCopyBox" data-style="display:none">
                             <i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{t:mbx.noCopy}}
                         </div>
                     </div>
@@ -2987,7 +3021,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-mail" onclick="saveMailbox()">{{t:common.saveChanges}}</button>
+                    <button type="button" class="btn btn-mail" data-on-click="saveMailbox()">{{t:common.saveChanges}}</button>
                 </div>
             </div>
         </div>
@@ -3039,11 +3073,11 @@ public class MailPanelContent {
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-warning" onclick="resetVacationTracking()" title="{{t:mbx.resetHint}}">
+                    <button type="button" class="btn btn-outline-warning" data-on-click="resetVacationTracking()" title="{{t:mbx.resetHint}}">
                         <i class="fas fa-redo me-1" aria-hidden="true"></i>{{t:mbx.resetTracking}}
                     </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-primary" onclick="saveAutoResponder()">{{t:common.save}}</button>
+                    <button type="button" class="btn btn-primary" data-on-click="saveAutoResponder()">{{t:common.save}}</button>
                 </div>
             </div>
         </div>
@@ -3070,7 +3104,7 @@ public class MailPanelContent {
                         <input class="form-check-input" type="checkbox" id="fwKeepCopy" checked>
                         <label class="form-check-label" for="fwKeepCopy">{{t:mbx.fwKeep}}</label>
                     </div>
-                    <button class="btn btn-success" onclick="addForwarding()">
+                    <button class="btn btn-success" data-on-click="addForwarding()">
                         <i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:mbx.fwAdd}}
                     </button>
                 </div>
@@ -3095,12 +3129,12 @@ public class MailPanelContent {
                         <div class="col-md-4">
                             <h6>{{t:mbx.svActive}}</h6>
                             <div id="sieveFiltersList" class="mb-3"></div>
-                            <button class="btn btn-primary btn-sm" onclick="newSieveFilter()">
+                            <button class="btn btn-primary btn-sm" data-on-click="newSieveFilter()">
                                 <i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:mbx.svNew}}
                             </button>
                         </div>
                         <div class="col-md-8">
-                            <div id="sieveEditor" style="display:none;">
+                            <div id="sieveEditor" data-style="display:none;">
                                 <input type="hidden" id="svFilterId">
                                 <div class="mb-3">
                                     <label class="form-label" for="svName">{{t:mbx.svName}}</label>
@@ -3109,14 +3143,14 @@ public class MailPanelContent {
                                 <div class="mb-3">
                                     <label class="form-label">{{t:mbx.svConditions}}</label>
                                     <div id="svConditions"></div>
-                                    <button class="btn btn-outline-secondary btn-sm mt-2" onclick="addSieveCondition()">
+                                    <button class="btn btn-outline-secondary btn-sm mt-2" data-on-click="addSieveCondition()">
                                         <i class="fas fa-plus" aria-hidden="true"></i> {{t:mbx.svAddCondition}}
                                     </button>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">{{t:home.colActions}}</label>
                                     <div id="svActions"></div>
-                                    <button class="btn btn-outline-secondary btn-sm mt-2" onclick="addSieveAction()">
+                                    <button class="btn btn-outline-secondary btn-sm mt-2" data-on-click="addSieveAction()">
                                         <i class="fas fa-plus" aria-hidden="true"></i> {{t:mbx.svAddAction}}
                                     </button>
                                 </div>
@@ -3124,7 +3158,7 @@ public class MailPanelContent {
                                     <input class="form-check-input" type="checkbox" id="svEnabled" checked>
                                     <label class="form-check-label" for="svEnabled">{{t:mbx.svEnabled}}</label>
                                 </div>
-                                <button class="btn btn-success" onclick="saveSieveFilter()">
+                                <button class="btn btn-success" data-on-click="saveSieveFilter()">
                                     <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:mbx.svSave}}
                                 </button>
                             </div>
@@ -3196,33 +3230,33 @@ public class MailPanelContent {
                         ].join(' ').trim()}</td>
                         <td data-label="${escMbx(t('home.colActions'))}">
                             <div class="btn-group">
-                                <button class="btn btn-sm btn-webmail text-white" onclick="openWebmail('${m.email}')" title="${escMbx(t('mbx.openWebmail'))}" aria-label="${escMbx(t('mbx.openWebmail'))}">
+                                <button class="btn btn-sm btn-webmail text-white" data-on-click="openWebmail('${m.email}')" title="${escMbx(t('mbx.openWebmail'))}" aria-label="${escMbx(t('mbx.openWebmail'))}">
                                     <i class="fas fa-envelope-open" aria-hidden="true"></i>
                                 </button>
-                                <button class="btn btn-sm btn-primary" onclick="editMailbox(${m.id})" title="${escMbx(t('common.edit'))}" aria-label="${escMbx(t('common.edit'))}">
+                                <button class="btn btn-sm btn-primary" data-on-click="editMailbox(${m.id})" title="${escMbx(t('common.edit'))}" aria-label="${escMbx(t('common.edit'))}">
                                     <i class="fas fa-edit" aria-hidden="true"></i>
                                 </button>
-                                <button class="btn btn-sm btn-info" onclick="showMailConfig('${m.email}', ${m.id})" title="${escMbx(t('mbx.clientConfig'))}" aria-label="${escMbx(t('mbx.clientConfig'))}">
+                                <button class="btn btn-sm btn-info" data-on-click="showMailConfig('${m.email}', ${m.id})" title="${escMbx(t('mbx.clientConfig'))}" aria-label="${escMbx(t('mbx.clientConfig'))}">
                                     <i class="fas fa-mobile-alt" aria-hidden="true"></i>
                                 </button>
                                 <button class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-label="${escMbx(t('mbx.more'))}">
                                     <i class="fas fa-cog" aria-hidden="true"></i>
                                 </button>
                                 <ul class="dropdown-menu">
-                                    <li><a class="dropdown-item" href="#" onclick="openAutoResponder(${m.id}, '${m.email}')">
+                                    <li><a class="dropdown-item" href="#" data-on-click="openAutoResponder(${m.id}, '${m.email}')">
                                         <i class="fas fa-reply-all me-2" aria-hidden="true"></i>Auto-Responder
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="openForwarding(${m.id}, '${m.email}')">
+                                    <li><a class="dropdown-item" href="#" data-on-click="openForwarding(${m.id}, '${m.email}')">
                                         <i class="fas fa-share me-2" aria-hidden="true"></i>${escMbx(t('mbx.forwarding'))}
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="openSieveFilters(${m.id}, '${m.email}')">
+                                    <li><a class="dropdown-item" href="#" data-on-click="openSieveFilters(${m.id}, '${m.email}')">
                                         <i class="fas fa-filter me-2" aria-hidden="true"></i>${escMbx(t('mbx.filters'))}
                                     </a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="openToAlias(${m.id}); return false;">
+                                    <li><a class="dropdown-item" href="#" data-on-click="openToAlias(${m.id}); return false;">
                                         <i class="fas fa-share me-2" aria-hidden="true"></i>${escMbx(t('mbx.toAlias'))}
                                     </a></li>
                                     <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item text-danger" href="#" onclick="deleteMailbox(${m.id})">
+                                    <li><a class="dropdown-item text-danger" href="#" data-on-click="deleteMailbox(${m.id})">
                                         <i class="fas fa-trash me-2" aria-hidden="true"></i>${escMbx(t('common.delete'))}
                                     </a></li>
                                 </ul>
@@ -3635,7 +3669,7 @@ public class MailPanelContent {
                                 ${r.keep_copy ? '<span class="badge bg-secondary ms-2">' + escMbx(t('mbx.localCopy')) + '</span>' : ''}
                                 ${!r.enabled ? '<span class="badge bg-warning text-dark ms-2">' + escMbx(t('mbx.disabled')) + '</span>' : ''}
                             </div>
-                            <button class="btn btn-sm btn-outline-danger" onclick="deleteForwarding(${r.id})" aria-label="${escMbx(t('common.delete'))}">
+                            <button class="btn btn-sm btn-outline-danger" data-on-click="deleteForwarding(${r.id})" aria-label="${escMbx(t('common.delete'))}">
                                 <i class="fas fa-trash" aria-hidden="true"></i>
                             </button>
                         </div>
@@ -3715,7 +3749,7 @@ public class MailPanelContent {
                         return;
                     }
                     container.innerHTML = filters.map(f => `
-                        <div class="filter-rule ${!f.enabled ? 'opacity-50' : ''}" onclick="editSieveFilter(${f.id})">
+                        <div class="filter-rule ${!f.enabled ? 'opacity-50' : ''}" data-on-click="editSieveFilter(${f.id})">
                             <div class="d-flex justify-content-between">
                                 <strong>${escSieve(f.name)}</strong>
                                 ${f.enabled ? '<span class="badge bg-success">' + escMbx(t('mbx.on')) + '</span>' : '<span class="badge bg-secondary">' + escMbx(t('mbx.off')) + '</span>'}
@@ -3764,23 +3798,45 @@ public class MailPanelContent {
             renderSieveActions();
         }
 
+        // Le righe delle condizioni e delle azioni cambiano il filtro da qui: i gestori chiamano solo
+        // funzioni (panel-actions.js, reperto 178), non assegnano.
+        function sieveSetCondition(i, field, value) {
+            if (sieveConditions[i] && ['field', 'operator', 'value'].includes(field)) sieveConditions[i][field] = value;
+        }
+        function sieveRemoveCondition(i) {
+            sieveConditions.splice(i, 1);
+            renderSieveConditions();
+        }
+        function sieveSetActionType(i, value) {
+            if (!sieveActions[i]) return;
+            sieveActions[i].type = value;
+            renderSieveActions();
+        }
+        function sieveSetActionValue(i, value) {
+            if (sieveActions[i]) sieveActions[i].value = value;
+        }
+        function sieveRemoveAction(i) {
+            sieveActions.splice(i, 1);
+            renderSieveActions();
+        }
+
         function renderSieveConditions() {
             document.getElementById('svConditions').innerHTML = sieveConditions.map((c, i) => `
                 <div class="condition-row d-flex gap-2 align-items-center">
-                    <select class="form-select form-select-sm" style="width:120px" onchange="sieveConditions[${i}].field=this.value">
+                    <select class="form-select form-select-sm" data-style="width:120px" data-on-change="sieveSetCondition(${i}, 'field', this.value)">
                         <option value="from" ${c.field==='from'?'selected':''}>${escHtml(t('mbx.svFrom'))}</option>
                         <option value="to" ${c.field==='to'?'selected':''}>${escHtml(t('mbx.svTo'))}</option>
                         <option value="subject" ${c.field==='subject'?'selected':''}>${escHtml(t('mbx.subject'))}</option>
                         <option value="body" ${c.field==='body'?'selected':''}>${escHtml(t('mbx.svBody'))}</option>
                     </select>
-                    <select class="form-select form-select-sm" style="width:130px" onchange="sieveConditions[${i}].operator=this.value">
+                    <select class="form-select form-select-sm" data-style="width:130px" data-on-change="sieveSetCondition(${i}, 'operator', this.value)">
                         <option value="contains" ${c.operator==='contains'?'selected':''}>${escHtml(t('mbx.svContains'))}</option>
                         <option value="is" ${c.operator==='is'?'selected':''}>${escHtml(t('mbx.svIs'))}</option>
                         <option value="matches" ${c.operator==='matches'?'selected':''}>${escHtml(t('mbx.svMatches'))}</option>
                         <option value="not_contains" ${c.operator==='not_contains'?'selected':''}>${escHtml(t('mbx.svNotContains'))}</option>
                     </select>
-                    <input type="text" class="form-control form-control-sm" value="${escMbx(c.value)}" aria-label="${escMbx(t('mbx.svValue'))}" onchange="sieveConditions[${i}].value=this.value">
-                    <button class="btn btn-sm btn-outline-danger" onclick="sieveConditions.splice(${i},1);renderSieveConditions()">
+                    <input type="text" class="form-control form-control-sm" value="${escMbx(c.value)}" aria-label="${escMbx(t('mbx.svValue'))}" data-on-change="sieveSetCondition(${i}, 'value', this.value)">
+                    <button class="btn btn-sm btn-outline-danger" data-on-click="sieveRemoveCondition(${i})">
                         <i class="fas fa-times" aria-hidden="true"></i>
                     </button>
                 </div>
@@ -3790,7 +3846,7 @@ public class MailPanelContent {
         function renderSieveActions() {
             document.getElementById('svActions').innerHTML = sieveActions.map((a, i) => `
                 <div class="action-row d-flex gap-2 align-items-center">
-                    <select class="form-select form-select-sm" style="width:150px" onchange="sieveActions[${i}].type=this.value;renderSieveActions()">
+                    <select class="form-select form-select-sm" data-style="width:150px" data-on-change="sieveSetActionType(${i}, this.value)">
                         <option value="move" ${a.type==='move'?'selected':''}>${escHtml(t('mbx.svMove'))}</option>
                         <option value="copy" ${a.type==='copy'?'selected':''}>${escHtml(t('mbx.svCopy'))}</option>
                         <option value="delete" ${a.type==='delete'?'selected':''}>${escHtml(t('common.delete'))}</option>
@@ -3799,8 +3855,8 @@ public class MailPanelContent {
                         <option value="reject" ${a.type==='reject'?'selected':''}>${escHtml(t('mbx.svReject'))}</option>
                     </select>
                     ${['move','copy','forward','reject'].includes(a.type) ?
-                        `<input type="text" class="form-control form-control-sm" value="${escMbx(a.value||'')}" placeholder="${a.type==='forward'?'email@...':escMbx(t('mbx.svFolder'))}" onchange="sieveActions[${i}].value=this.value">` : ''}
-                    <button class="btn btn-sm btn-outline-danger" onclick="sieveActions.splice(${i},1);renderSieveActions()">
+                        `<input type="text" class="form-control form-control-sm" value="${escMbx(a.value||'')}" placeholder="${a.type==='forward'?'email@...':escMbx(t('mbx.svFolder'))}" data-on-change="sieveSetActionValue(${i}, this.value)">` : ''}
+                    <button class="btn btn-sm btn-outline-danger" data-on-click="sieveRemoveAction(${i})">
                         <i class="fas fa-times" aria-hidden="true"></i>
                     </button>
                 </div>
@@ -3876,7 +3932,7 @@ public class MailPanelContent {
             <div class="modal-content">
                 <div class="modal-header"><h5 class="modal-title" id="addAliasTitle">{{t:al.add}}</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button></div>
                 <div class="modal-body">
-                    <form id="addAliasForm" onsubmit="addAlias(); return false;">
+                    <form id="addAliasForm" data-on-submit="addAlias(); return false;">
                         <label class="form-label" for="alLocal">{{t:al.source}}</label>
                         <div class="input-group mb-1">
                             <input type="text" class="form-control" id="alLocal" placeholder="info" maxlength="64" autocomplete="off" required>
@@ -3895,7 +3951,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-mail" onclick="addAlias()">{{t:al.create}}</button>
+                    <button type="button" class="btn btn-mail" data-on-click="addAlias()">{{t:al.create}}</button>
                 </div>
             </div>
         </div>
@@ -3907,7 +3963,7 @@ public class MailPanelContent {
             <div class="modal-content">
                 <div class="modal-header"><h5 class="modal-title" id="editAliasTitle">{{t:al.edit}}</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button></div>
                 <div class="modal-body">
-                    <form id="editAliasForm" onsubmit="saveAlias(); return false;">
+                    <form id="editAliasForm" data-on-submit="saveAlias(); return false;">
                         <input type="hidden" id="edAliasId">
                         <label class="form-label" for="edSource">{{t:al.source}}</label>
                         <input type="text" class="form-control mb-1" id="edSource" readonly>
@@ -3920,7 +3976,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-mail" onclick="saveAlias()">{{t:common.save}}</button>
+                    <button type="button" class="btn btn-mail" data-on-click="saveAlias()">{{t:common.save}}</button>
                 </div>
             </div>
         </div>
@@ -3972,12 +4028,12 @@ public class MailPanelContent {
                     return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="text-long">' + escAl(a.source) + '</td><td class="text-long">' + escAl(a.destination)
                         + (a.active ? '' : ' <span class="badge bg-secondary ms-1">' + escAl(t('mbx.inactive')) + '</span>') + '</td>'
                         + '<td class="text-nowrap">'
-                        + '<button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="openEditAlias(' + id + ')" aria-label="' + escAl(t('al.editOf')) + ' ' + whoText + '">' + escAl(t('common.edit')) + '</button>'
-                        + (a.source.startsWith('@') ? '' : '<button type="button" class="btn btn-sm btn-outline-success me-1" onclick="openToMailbox(' + id + ')"'
+                        + '<button type="button" class="btn btn-sm btn-outline-primary me-1" data-on-click="openEditAlias(' + id + ')" aria-label="' + escAl(t('al.editOf')) + ' ' + whoText + '">' + escAl(t('common.edit')) + '</button>'
+                        + (a.source.startsWith('@') ? '' : '<button type="button" class="btn btn-sm btn-outline-success me-1" data-on-click="openToMailbox(' + id + ')"'
                             + ' title="' + escAl(t('al.toMailboxHint')) + '" aria-label="' + escAl(t('al.toMailboxOf', { source: a.source })) + '">' + escAl(t('al.toMailboxShort')) + '</button>')
-                        + '<button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="toggleAlias(' + id + ', ' + (a.active ? 'false' : 'true') + ')"'
+                        + '<button type="button" class="btn btn-sm btn-outline-secondary me-1" data-on-click="toggleAlias(' + id + ', ' + (a.active ? 'false' : 'true') + ')"'
                         + ' aria-label="' + escAl(a.active ? t('al.disableOf') : t('al.enableOf')) + ' ' + whoText + '">' + escAl(a.active ? t('al.disable') : t('al.enable')) + '</button>'
-                        + '<button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias(' + id + ')" aria-label="' + escAl(t('al.deleteOf')) + ' ' + whoText + '">' + escAl(t('common.delete')) + '</button>'
+                        + '<button type="button" class="btn btn-sm btn-danger" data-on-click="deleteAlias(' + id + ')" aria-label="' + escAl(t('al.deleteOf')) + ' ' + whoText + '">' + escAl(t('common.delete')) + '</button>'
                         + '</td></tr>';
                 }).join('');
             });
@@ -4148,7 +4204,7 @@ public class MailPanelContent {
                     let cls = 'badge bg-secondary';
                     if (i < activeIdx) cls = 'badge bg-success';
                     else if (i === activeIdx) cls = 'badge bg-primary';
-                    stepperHtml += '<span class="' + cls + '" style="padding:8px 12px;font-size:0.85rem"' + (i === activeIdx ? ' aria-current="step"' : '') + '>' + escHtml(s.label) + '</span>';
+                    stepperHtml += '<span class="' + cls + '" data-style="padding:8px 12px;font-size:0.85rem"' + (i === activeIdx ? ' aria-current="step"' : '') + '>' + escHtml(s.label) + '</span>';
                 });
                 stepperHtml += '</div>';
                 stepper.innerHTML = stepperHtml;
@@ -4168,8 +4224,8 @@ public class MailPanelContent {
                         : '<strong><i class="fas fa-edit me-1" aria-hidden="true"></i>' + escHtml(t('dns.recAddYourself')) + '</strong>';
                     html += '<div class="mt-2"><strong>' + escHtml(t('dns.recName')) + '</strong> <code>' + escapeHtmlBl(data.pending_dns_name || '') + '</code></div>';
                     html += '<div class="mt-1"><strong>' + escHtml(t('dns.recType')) + '</strong> <code>TXT</code></div>';
-                    html += '<div class="mt-1"><strong>' + escHtml(t('dns.recValueShort')) + '</strong> <code style="word-break:break-all">' + escapeHtmlBl(data.pending_dns_value || '') + '</code> ';
-                    html += '<button class="btn btn-sm btn-outline-secondary ms-2" onclick="copyDkimRotateValue(this)" data-val="' + escapeHtmlBl(data.pending_dns_value || '') + '" aria-label="' + escHtml(t('common.copy')) + '" title="' + escHtml(t('common.copy')) + '"><i class="fas fa-copy" aria-hidden="true"></i></button></div>';
+                    html += '<div class="mt-1"><strong>' + escHtml(t('dns.recValueShort')) + '</strong> <code data-style="word-break:break-all">' + escapeHtmlBl(data.pending_dns_value || '') + '</code> ';
+                    html += '<button class="btn btn-sm btn-outline-secondary ms-2" data-on-click="copyDkimRotateValue(this)" data-val="' + escapeHtmlBl(data.pending_dns_value || '') + '" aria-label="' + escHtml(t('common.copy')) + '" title="' + escHtml(t('common.copy')) + '"><i class="fas fa-copy" aria-hidden="true"></i></button></div>';
                     // "Finché non attivi" da' per scontato che l'attivazione la faccia tu.
                     // Con un account Cloudflare non e' cosi': lo scheduler chiama activatePending
                     // da solo trascorse le ore di propagazione, e piu' avanti completeRotation
@@ -4183,8 +4239,8 @@ public class MailPanelContent {
 
                     if (state === 'pending_dns') {
                         html += '<div class="d-flex gap-2 flex-wrap">';
-                        html += '<button class="btn btn-primary" onclick="rotateDkimCheck()"><i class="fas fa-search me-1" aria-hidden="true"></i>' + escHtml(t('dns.checkPropagation')) + '</button>';
-                        html += '<button class="btn btn-outline-danger" onclick="rotateDkimCancel()"><i class="fas fa-times me-1" aria-hidden="true"></i>' + escHtml(t('dns.cancelRotation')) + '</button>';
+                        html += '<button class="btn btn-primary" data-on-click="rotateDkimCheck()"><i class="fas fa-search me-1" aria-hidden="true"></i>' + escHtml(t('dns.checkPropagation')) + '</button>';
+                        html += '<button class="btn btn-outline-danger" data-on-click="rotateDkimCancel()"><i class="fas fa-times me-1" aria-hidden="true"></i>' + escHtml(t('dns.cancelRotation')) + '</button>';
                         html += '</div>';
                         html += '<div class="small text-muted mt-2">' + escHtml(cloudflareConfigured
                             ? t('dns.propagationCf')
@@ -4195,9 +4251,9 @@ public class MailPanelContent {
                             ? escHtml(t('dns.activationAuto', { hours: data.auto_activate_after_hours || 24, days: data.grace_period_days || 7 })) + ' ' + autoStartSentence(data)
                             : escHtml(t('dns.activationYou'))) + '</div>';
                         html += '<div class="d-flex gap-2 flex-wrap">';
-                        html += '<button class="btn btn-success" onclick="rotateDkimActivate(false)"><i class="fas fa-bolt me-1" aria-hidden="true"></i>' + escHtml(t('dns.activateNew')) + '</button>';
-                        html += '<button class="btn btn-outline-primary" onclick="rotateDkimCheck()"><i class="fas fa-sync me-1" aria-hidden="true"></i>' + escHtml(t('dns.recheckDns')) + '</button>';
-                        html += '<button class="btn btn-outline-danger" onclick="rotateDkimCancel()"><i class="fas fa-times me-1" aria-hidden="true"></i>' + escHtml(t('dns.cancelRotation')) + '</button>';
+                        html += '<button class="btn btn-success" data-on-click="rotateDkimActivate(false)"><i class="fas fa-bolt me-1" aria-hidden="true"></i>' + escHtml(t('dns.activateNew')) + '</button>';
+                        html += '<button class="btn btn-outline-primary" data-on-click="rotateDkimCheck()"><i class="fas fa-sync me-1" aria-hidden="true"></i>' + escHtml(t('dns.recheckDns')) + '</button>';
+                        html += '<button class="btn btn-outline-danger" data-on-click="rotateDkimCancel()"><i class="fas fa-times me-1" aria-hidden="true"></i>' + escHtml(t('dns.cancelRotation')) + '</button>';
                         html += '</div>';
                     }
                 } else if (state === 'active_grace') {
@@ -4239,7 +4295,7 @@ public class MailPanelContent {
                         } else {
                             html += '<div class="alert alert-warning"><i class="fas fa-clock me-1" aria-hidden="true"></i><strong>' + escHtml(t('dns.graceOver')) + '</strong> ' + escHtml(t('dns.graceOverManual')) + ' <a href="/cloudflare" class="alert-link">' + escHtml(t('dns.setUpCf')) + '</a>.</div>';
                         }
-                        html += '<button class="btn btn-success" onclick="rotateDkimComplete()"><i class="fas fa-flag-checkered me-1" aria-hidden="true"></i>' + escHtml(t('dns.completeRotation')) + '</button>';
+                        html += '<button class="btn btn-success" data-on-click="rotateDkimComplete()"><i class="fas fa-flag-checkered me-1" aria-hidden="true"></i>' + escHtml(t('dns.completeRotation')) + '</button>';
                     } else {
                         // PRIMA del grace period: il bottone "Completa" è SEMPRE disabilitato.
                         // Nessuna possibilità di forzare: il server side rifiuterebbe comunque la chiamata
@@ -4434,7 +4490,7 @@ public class MailPanelContent {
 
                     html += '<div class="card mb-3">';
                     html += '<div class="card-header ' + headerClass + ' d-flex justify-content-between align-items-center">';
-                    html += '<div><strong>' + escHtml(labelType) + ':</strong> <code class="ms-1" style="background:rgba(255,255,255,0.2);padding:2px 6px;border-radius:3px;color:inherit">' + escapeHtmlBl(report.target) + '</code>' + badge + '</div>';
+                    html += '<div><strong>' + escHtml(labelType) + ':</strong> <code class="ms-1" data-style="background:rgba(255,255,255,0.2);padding:2px 6px;border-radius:3px;color:inherit">' + escapeHtmlBl(report.target) + '</code>' + badge + '</div>';
                     html += '<small class="opacity-75">' + escHtml(report.elapsed_ms) + ' ms</small>';
                     html += '</div>';
                     html += '<div class="card-body p-2"><div class="table-responsive"><table class="table table-sm mb-0">';
@@ -4595,21 +4651,21 @@ public class MailPanelContent {
                              + '<div class="small mt-1">' + escHtml(t('dns.notVerifiableFix')) + '</div></div>';
                 }
                 html += '<table class="table table-sm mb-0 small"><tbody>';
-                html += '<tr><th style="width:180px">' + escHtml(t('dns.queriedRecord')) + '</th><td><code>' + escapeHtmlBl(data.dns_record_name || '') + '</code></td></tr>';
+                html += '<tr><th data-style="width:180px">' + escHtml(t('dns.queriedRecord')) + '</th><td><code>' + escapeHtmlBl(data.dns_record_name || '') + '</code></td></tr>';
                 html += '<tr><th>' + escHtml(t('dns.activeSelector')) + '</th><td><code>' + escapeHtmlBl(data.selector || '') + '</code></td></tr>';
                 if (data.expected_public_key) {
                     const exp = data.expected_public_key;
                     const trunc = exp.length > 60 ? exp.substring(0, 60) + '…' : exp;
-                    html += '<tr><th>' + escHtml(t('dns.expectedKey')) + '</th><td><code style="word-break:break-all">' + escapeHtmlBl(trunc) + '</code> <small class="text-muted">' + escHtml(t('dns.chars', { n: exp.length })) + '</small></td></tr>';
+                    html += '<tr><th>' + escHtml(t('dns.expectedKey')) + '</th><td><code data-style="word-break:break-all">' + escapeHtmlBl(trunc) + '</code> <small class="text-muted">' + escHtml(t('dns.chars', { n: exp.length })) + '</small></td></tr>';
                 }
                 if (data.actual_public_key) {
                     const act = data.actual_public_key;
                     const trunc = act.length > 60 ? act.substring(0, 60) + '…' : act;
-                    html += '<tr><th>' + escHtml(t('dns.foundKey')) + '</th><td><code style="word-break:break-all">' + escapeHtmlBl(trunc) + '</code> <small class="text-muted">' + escHtml(t('dns.chars', { n: act.length })) + '</small></td></tr>';
+                    html += '<tr><th>' + escHtml(t('dns.foundKey')) + '</th><td><code data-style="word-break:break-all">' + escapeHtmlBl(trunc) + '</code> <small class="text-muted">' + escHtml(t('dns.chars', { n: act.length })) + '</small></td></tr>';
                 }
                 html += '</tbody></table>';
                 if (data.raw_output) {
-                    html += '<details class="mt-2"><summary class="small text-muted">' + escHtml(t('dns.digOutput')) + '</summary><pre class="small mt-2" style="white-space:pre-wrap;word-break:break-all">' + escapeHtmlBl(data.raw_output) + '</pre></details>';
+                    html += '<details class="mt-2"><summary class="small text-muted">' + escHtml(t('dns.digOutput')) + '</summary><pre class="small mt-2" data-style="white-space:pre-wrap;word-break:break-all">' + escapeHtmlBl(data.raw_output) + '</pre></details>';
                 }
                 out.innerHTML = html;
                 // Lo storico ora include un evento "key_verified": ricaricalo
@@ -4620,6 +4676,15 @@ public class MailPanelContent {
         }
 
         // ===== Cleanup record DKIM orfani =====
+        // Le due sezioni a scomparsa caricano quando si aprono, se c'e' un dominio scelto. Era un if
+        // nel gestore in linea; i gestori adesso chiamano solo funzioni (panel-actions.js, reperto 178).
+        function dkimOrphansToggled(details) {
+            if (details.open && currentDomainId) scanDkimOrphans();
+        }
+        function dkimHistoryToggled(details) {
+            if (details.open && currentDomainId) loadDkimHistory(currentDomainId);
+        }
+
         function scanDkimOrphans() {
             if (!currentDomainId) { alert(t('dns.chooseDomainFirst')); return; }
             const btn = document.getElementById('scanDkimOrphansBtn');
@@ -4683,10 +4748,10 @@ public class MailPanelContent {
                         badge = '<span class="badge bg-danger">' + escHtml(t('dns.orphan')) + '</span>';
                     }
                     html += '<td>' + badge + stateExtra + '</td>';
-                    html += '<td><code class="small" style="word-break:break-all">' + escapeHtmlBl(r.content_preview || '') + '</code></td>';
+                    html += '<td><code class="small" data-style="word-break:break-all">' + escapeHtmlBl(r.content_preview || '') + '</code></td>';
                     if (r.is_orphan && !r.in_grace_period) {
                         // ORFANO rimovibile (grace period scaduto o mai stato attivo)
-                        html += '<td class="text-end"><button class="btn btn-sm btn-outline-danger" onclick="deleteDkimOrphan(\\'' + escapeHtmlBl(r.record_id).replace(/'/g, "\\\\'") + '\\', \\'' + escapeHtmlBl(r.selector).replace(/'/g, "\\\\'") + '\\')"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('common.delete')) + '</button></td>';
+                        html += '<td class="text-end"><button class="btn btn-sm btn-outline-danger" data-on-click="deleteDkimOrphan(\\'' + escapeHtmlBl(r.record_id).replace(/'/g, "\\\\'") + '\\', \\'' + escapeHtmlBl(r.selector).replace(/'/g, "\\\\'") + '\\')"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('common.delete')) + '</button></td>';
                     } else if (r.is_orphan && r.in_grace_period) {
                         // ORFANO ma in grace period esteso: NON rimovibile
                         html += '<td class="text-end"><span class="text-muted small" title="' + escHtml(t('dns.graceProtectedHint')) + '"><i class="fas fa-shield-alt me-1" aria-hidden="true"></i>' + escHtml(t('dns.graceProtected')) + '</span></td>';
@@ -4769,8 +4834,8 @@ public class MailPanelContent {
                 html += '<th scope="col">' + escHtml(t('dns.colWhen')) + '</th>';
                 html += '<th scope="col">' + escHtml(t('dns.colEvent')) + '</th>';
                 html += '<th scope="col">' + escHtml(t('dns.colSelector')) + '</th>';
-                html += '<th scope="col" title="' + escHtml(t('dns.colOriginHint')) + '" style="cursor:help">' + escHtml(t('dns.colOrigin')) + ' <i class="fas fa-info-circle text-muted small" aria-hidden="true"></i></th>';
-                html += '<th scope="col" title="' + escHtml(t('dns.colModeHint')) + '" style="cursor:help">' + escHtml(t('dns.colMode')) + ' <i class="fas fa-info-circle text-muted small" aria-hidden="true"></i></th>';
+                html += '<th scope="col" title="' + escHtml(t('dns.colOriginHint')) + '" data-style="cursor:help">' + escHtml(t('dns.colOrigin')) + ' <i class="fas fa-info-circle text-muted small" aria-hidden="true"></i></th>';
+                html += '<th scope="col" title="' + escHtml(t('dns.colModeHint')) + '" data-style="cursor:help">' + escHtml(t('dns.colMode')) + ' <i class="fas fa-info-circle text-muted small" aria-hidden="true"></i></th>';
                 html += '<th scope="col">' + escHtml(t('dns.colCfAccount')) + '</th>';
                 html += '<th scope="col">' + escHtml(t('dns.colOutcome')) + '</th>';
                 html += '<th scope="col">' + escHtml(t('dns.colNotes')) + '</th>';
@@ -4791,19 +4856,19 @@ public class MailPanelContent {
                     html += '<td>' + (ev.selector ? '<code>' + escapeHtmlBl(ev.selector) + '</code>' : '<span class="text-muted">—</span>') + '</td>';
                     // Colonna Origine
                     if (trig) {
-                        html += '<td><span class="badge ' + trig.badge + '" title="' + escapeHtmlBl(trig.title) + '" style="cursor:help"><i class="fas fa-' + trig.icon + ' me-1" aria-hidden="true"></i>' + escapeHtmlBl(trig.txt) + '</span></td>';
+                        html += '<td><span class="badge ' + trig.badge + '" title="' + escapeHtmlBl(trig.title) + '" data-style="cursor:help"><i class="fas fa-' + trig.icon + ' me-1" aria-hidden="true"></i>' + escapeHtmlBl(trig.txt) + '</span></td>';
                     } else if (ev.triggered_by) {
                         html += '<td><span class="badge bg-secondary">' + escapeHtmlBl(ev.triggered_by) + '</span></td>';
                     } else {
-                        html += '<td><span class="text-muted" title="' + escHtml(t('dns.noOriginHint')) + '" style="cursor:help">—</span></td>';
+                        html += '<td><span class="text-muted" title="' + escHtml(t('dns.noOriginHint')) + '" data-style="cursor:help">—</span></td>';
                     }
                     // Colonna Modalità DNS
                     if (mode) {
-                        html += '<td><span class="badge ' + mode.badge + '" title="' + escapeHtmlBl(mode.title) + '" style="cursor:help">' + escapeHtmlBl(mode.txt) + '</span></td>';
+                        html += '<td><span class="badge ' + mode.badge + '" title="' + escapeHtmlBl(mode.title) + '" data-style="cursor:help">' + escapeHtmlBl(mode.txt) + '</span></td>';
                     } else if (ev.mode) {
                         html += '<td><span class="badge bg-light text-dark border">' + escapeHtmlBl(ev.mode) + '</span></td>';
                     } else {
-                        html += '<td><span class="text-muted" title="' + escHtml(t('dns.notApplicable')) + '" style="cursor:help">—</span></td>';
+                        html += '<td><span class="text-muted" title="' + escHtml(t('dns.notApplicable')) + '" data-style="cursor:help">—</span></td>';
                     }
                     html += '<td>' + (ev.cloudflare_account_label ? escapeHtmlBl(ev.cloudflare_account_label) : '<span class="text-muted">—</span>') + '</td>';
                     html += '<td>' + (ev.success
@@ -4957,7 +5022,7 @@ public class MailPanelContent {
             }).then(r => r.json()).then(data => {
                 let html = '';
                 if (data.log) {
-                    html += '<pre class="bg-light p-2 rounded small mb-2" style="white-space:pre-wrap">' + escapeHtmlCf(data.log) + '</pre>';
+                    html += '<pre class="bg-light p-2 rounded small mb-2" data-style="white-space:pre-wrap">' + escapeHtmlCf(data.log) + '</pre>';
                 }
                 if (data.success) {
                     html = '<div class="alert alert-success py-2 mb-2"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.tzDone')) + ' <code>' + escapeHtmlCf(data.desired_value || '') + '</code></div>' + html;
@@ -4997,7 +5062,7 @@ public class MailPanelContent {
                             <p class="mb-3">{{t:dns.rotModeQuestion}}</p>
 
                             <div class="d-grid gap-2">
-                                <button type="button" class="btn btn-success text-start" onclick="rotateDkimStartChooseCloudflare()">
+                                <button type="button" class="btn btn-success text-start" data-on-click="rotateDkimStartChooseCloudflare()">
                                     <div class="d-flex align-items-start">
                                         <i class="fas fa-cloud fa-2x me-3 mt-1" aria-hidden="true"></i>
                                         <div>
@@ -5008,7 +5073,7 @@ public class MailPanelContent {
                                     </div>
                                 </button>
 
-                                <button type="button" class="btn btn-outline-secondary text-start" onclick="rotateDkimStartChooseManual()">
+                                <button type="button" class="btn btn-outline-secondary text-start" data-on-click="rotateDkimStartChooseManual()">
                                     <div class="d-flex align-items-start">
                                         <i class="fas fa-edit fa-2x me-3 mt-1" aria-hidden="true"></i>
                                         <div>
@@ -5058,14 +5123,14 @@ public class MailPanelContent {
                             <div class="input-group mb-2">
                                 <input type="email" class="form-control" id="accEmailNew" maxlength="254" autocomplete="email"
                                        inputmode="email" autocapitalize="off" spellcheck="false">
-                                <button class="btn btn-outline-primary" type="button" id="accEmailSend" onclick="accEmailRequest()">{{t:login.sendCode}}</button>
+                                <button class="btn btn-outline-primary" type="button" id="accEmailSend" data-on-click="accEmailRequest()">{{t:login.sendCode}}</button>
                             </div>
                             <div id="accEmailCodeBox" class="d-none">
                                 <label class="form-label" for="accEmailCode">{{t:acc.emailCode}}</label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="accEmailCode" maxlength="6" inputmode="numeric"
                                            autocomplete="one-time-code" placeholder="000000">
-                                    <button class="btn btn-primary" type="button" onclick="accEmailConfirm()">{{t:acc.confirm}}</button>
+                                    <button class="btn btn-primary" type="button" data-on-click="accEmailConfirm()">{{t:acc.confirm}}</button>
                                 </div>
                             </div>
                             <div id="accEmailMsg" class="small mt-2" role="status" aria-live="polite"></div>
@@ -5082,7 +5147,7 @@ public class MailPanelContent {
                                 <div class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> {{t:common.loading}}</div>
                             </div>
                             <p id="passkeyDomainNote" class="small text-warning d-none">{{t:acc.needsDomain}}</p>
-                            <button class="btn btn-success" onclick="addPasskey()" id="addPasskeyBtn">
+                            <button class="btn btn-success" data-on-click="addPasskey()" id="addPasskeyBtn">
                                 <i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:set.addPasskey}}
                             </button>
                         </div>
@@ -5094,7 +5159,7 @@ public class MailPanelContent {
                         <div class="card-body">
                             <p class="text-muted small">{{t:acc.sessionsIntro}}</p>
                             <div id="sessionsList" class="mb-3" aria-live="polite"></div>
-                            <button class="btn btn-outline-danger btn-sm" type="button" id="btnRevokeOthers" onclick="revokeOthers()">
+                            <button class="btn btn-outline-danger btn-sm" type="button" id="btnRevokeOthers" data-on-click="revokeOthers()">
                                 <i class="fas fa-right-from-bracket me-1" aria-hidden="true"></i>{{t:acc.revokeOthers}}
                             </button>
                         </div>
@@ -5121,7 +5186,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-primary" onclick="confirmPasskeyName()">{{t:common.save}}</button>
+                    <button type="button" class="btn btn-primary" data-on-click="confirmPasskeyName()">{{t:common.save}}</button>
                 </div>
             </div>
         </div>
@@ -5143,7 +5208,7 @@ public class MailPanelContent {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-primary" onclick="confirmRenamePasskey()">{{t:common.save}}</button>
+                    <button type="button" class="btn btn-primary" data-on-click="confirmRenamePasskey()">{{t:common.save}}</button>
                 </div>
             </div>
         </div>
@@ -5160,10 +5225,10 @@ public class MailPanelContent {
                 <div class="modal-body">
                     <p class="text-muted">{{t:acc.stepUpIntro}}</p>
                     <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-primary" id="stepUpPasskeyBtn" onclick="stepUpPasskey()">
+                        <button type="button" class="btn btn-primary" id="stepUpPasskeyBtn" data-on-click="stepUpPasskey()">
                             <i class="fas fa-fingerprint me-2" aria-hidden="true"></i>{{t:acc.stepUpPasskey}}
                         </button>
-                        <button type="button" class="btn btn-outline-secondary" id="stepUpEmailBtn" onclick="stepUpEmail()">
+                        <button type="button" class="btn btn-outline-secondary" id="stepUpEmailBtn" data-on-click="stepUpEmail()">
                             <i class="fas fa-paper-plane me-2" aria-hidden="true"></i>{{t:acc.stepUpEmail}}
                         </button>
                     </div>
@@ -5171,7 +5236,7 @@ public class MailPanelContent {
                         <label class="form-label" for="stepUpCode">{{t:login.codeLabel}}</label>
                         <div class="input-group">
                             <input type="text" class="form-control" id="stepUpCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="000000">
-                            <button type="button" class="btn btn-primary" onclick="stepUpVerify()">{{t:login.verify}}</button>
+                            <button type="button" class="btn btn-primary" data-on-click="stepUpVerify()">{{t:login.verify}}</button>
                         </div>
                     </div>
                     <div id="stepUpMsg" class="small mt-2" role="status" aria-live="polite"></div>
@@ -5197,7 +5262,7 @@ public class MailPanelContent {
                                 <input type="text" class="form-control" id="newUsername" maxlength="50" placeholder="{{t:set.usernamePlaceholder}}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="newUsernameHint">
                                 <small class="text-muted" id="newUsernameHint">{{t:set.usernameHint}}</small>
                             </div>
-                            <button class="btn btn-primary" onclick="changeUsername()">
+                            <button class="btn btn-primary" data-on-click="changeUsername()">
                                 <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:set.changeUsername}}
                             </button>
                         </div>
@@ -5216,13 +5281,13 @@ public class MailPanelContent {
                 <div class="card-header bg-success text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <span><i class="fas fa-virus-slash me-2" aria-hidden="true"></i><strong>{{t:sec.clamav}}</strong> <small class="ms-2" id="cavOverallStatus"></small></span>
                     <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-info text-white" id="btnCavTestEicar" onclick="runCavTestEicar()" title="{{t:sec.eicarHint}}">
+                        <button class="btn btn-sm btn-info text-white" id="btnCavTestEicar" data-on-click="runCavTestEicar()" title="{{t:sec.eicarHint}}">
                             <i class="fas fa-flask me-1" aria-hidden="true"></i>{{t:sec.eicar}}
                         </button>
-                        <button class="btn btn-sm btn-warning d-none" id="btnCavFixAll" onclick="runCavFixAll()">
+                        <button class="btn btn-sm btn-warning d-none" id="btnCavFixAll" data-on-click="runCavFixAll()">
                             <i class="fas fa-magic me-1" aria-hidden="true"></i>{{t:sec.fixAll}}
                         </button>
-                        <button class="btn btn-sm btn-light" onclick="loadClamavHealth()">
+                        <button class="btn btn-sm btn-light" data-on-click="loadClamavHealth()">
                             <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:dns.tzRecheck}}
                         </button>
                     </div>
@@ -5340,10 +5405,10 @@ public class MailPanelContent {
             container.innerHTML = presets.map(p => {
                 const isActive = (p.value === activeValue);
                 const badgeHtml = p.badge
-                    ? '<span class="badge bg-success ms-2" style="font-size:.65rem">' + esc(p.badge) + '</span>'
+                    ? '<span class="badge bg-success ms-2" data-style="font-size:.65rem">' + esc(p.badge) + '</span>'
                     : '';
                 const inUseBadge = isActive
-                    ? '<span class="badge bg-primary ms-2" style="font-size:.65rem"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('jc.inUse')) + '</span>'
+                    ? '<span class="badge bg-primary ms-2" data-style="font-size:.65rem"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('jc.inUse')) + '</span>'
                     : '';
                 // Colori che funzionano su tema chiaro E scuro:
                 //  - bordo: blu solido se attivo, grigio semi-trasparente se inattivo
@@ -5352,8 +5417,8 @@ public class MailPanelContent {
                 const borderColor = isActive ? '#0d6efd' : 'rgba(128,128,128,0.35)';
                 const bg = isActive ? 'rgba(13,110,253,0.15)' : 'transparent';
                 return '<div class="filter-option" data-value="' + esc(p.value) + '" '
-                     + 'style="cursor:pointer; padding:10px; border:2px solid ' + borderColor + '; border-radius:6px; background:' + bg + '" '
-                     + 'onclick="selectFilterOption(\\'' + esc(p.value) + '\\')">'
+                     + 'data-style="cursor:pointer; padding:10px; border:2px solid ' + borderColor + '; border-radius:6px; background:' + bg + '" '
+                     + 'data-on-click="selectFilterOption(\\'' + esc(p.value) + '\\')">'
                      + '<div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">'
                      + '  <div><strong>' + esc(p.label) + '</strong> <code class="small text-muted ms-2">' + esc(p.value === '__custom__' ? t('jc.otherFilter') : p.value) + '</code>' + badgeHtml + inUseBadge + '</div>'
                      + '</div>'
@@ -5426,9 +5491,9 @@ public class MailPanelContent {
                 return;
             }
             el.innerHTML = ips.map(ip =>
-                '<span class="badge bg-light text-dark border me-1 mb-1" style="font-size:.8rem">' +
+                '<span class="badge bg-light text-dark border me-1 mb-1" data-style="font-size:.8rem">' +
                 '<code>' + esc(ip) + '</code>' +
-                ' <button class="btn btn-link btn-sm p-0 ms-1" style="font-size:.75rem;color:#dc3545" onclick="removeIgnoreIp(\\'' + esc(ip) + '\\')" title="' + escHtml(t('jc.removeIgnore')) + '" aria-label="' + escHtml(t('jc.removeIgnore')) + ' ' + esc(ip) + '"><i class="fas fa-times" aria-hidden="true"></i></button>' +
+                ' <button class="btn btn-link btn-sm p-0 ms-1" data-style="font-size:.75rem;color:#dc3545" data-on-click="removeIgnoreIp(\\'' + esc(ip) + '\\')" title="' + escHtml(t('jc.removeIgnore')) + '" aria-label="' + escHtml(t('jc.removeIgnore')) + ' ' + esc(ip) + '"><i class="fas fa-times" aria-hidden="true"></i></button>' +
                 '</span>'
             ).join('');
         }
@@ -5597,7 +5662,7 @@ public class MailPanelContent {
                     <div class="card mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <span><i class="fas fa-cog me-2" aria-hidden="true"></i>{{t:jc.title}}</span>
-                            <select class="form-select form-select-sm w-auto" id="cfgJailSelect" aria-label="Jail" onchange="loadJailConfig()">
+                            <select class="form-select form-select-sm w-auto" id="cfgJailSelect" aria-label="Jail" data-on-change="loadJailConfig()">
                                 <option value="mail-panel-auth">mail-panel-auth</option>
                             </select>
                         </div>
@@ -5607,10 +5672,10 @@ public class MailPanelContent {
                                     <label class="form-label small mb-1" for="cfgMaxRetry">{{t:jc.maxRetry}}</label>
                                     <input type="number" class="form-control form-control-sm" id="cfgMaxRetry" min="1" max="100" value="5">
                                     <div class="mt-1 d-flex gap-1 flex-wrap">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgMaxRetry',2)">2 <span class="text-success">★</span></button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgMaxRetry',3)">3</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgMaxRetry',5)">5</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgMaxRetry',10)">10</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgMaxRetry',2)">2 <span class="text-success">★</span></button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgMaxRetry',3)">3</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgMaxRetry',5)">5</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgMaxRetry',10)">10</button>
                                     </div>
                                     <div class="form-text small mt-1">{{t:jc.maxRetryHint.html}}</div>
                                 </div>
@@ -5618,13 +5683,13 @@ public class MailPanelContent {
                                     <label class="form-label small mb-1" for="cfgFindTime">{{t:jc.findTime}}</label>
                                     <input type="number" class="form-control form-control-sm" id="cfgFindTime" min="30" max="86400" value="600">
                                     <div class="mt-1 d-flex gap-1 flex-wrap">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',300)">5 min</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',1200)">20 min</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',1800)">30 min</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',3600)">1 h <span class="text-success">★</span></button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',10800)">3 h</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',21600)">6 h</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgFindTime',86400)">24 h</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgFindTime',300)">5 min</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgFindTime',1200)">20 min</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgFindTime',1800)">30 min</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgFindTime',3600)">1 h <span class="text-success">★</span></button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgFindTime',10800)">3 h</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgFindTime',21600)">6 h</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgFindTime',86400)">24 h</button>
                                     </div>
                                     <div class="form-text small mt-1">{{t:jc.findTimeHint.html}}</div>
                                 </div>
@@ -5632,13 +5697,13 @@ public class MailPanelContent {
                                     <label class="form-label small mb-1" for="cfgBanTime">{{t:jc.banTime}}</label>
                                     <input type="number" class="form-control form-control-sm" id="cfgBanTime" min="60" max="31536000" value="3600">
                                     <div class="mt-1 d-flex gap-1 flex-wrap">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',600)">10 min</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',3600)">1 h</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',21600)">6 h</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',86400)">24 h <span class="text-success">★</span></button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',604800)">{{t:jc.week}}</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',2592000)">{{t:jc.days30}}</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem" onclick="setCfg('cfgBanTime',-1)">{{t:jc.permanent}}</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgBanTime',600)">10 min</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgBanTime',3600)">1 h</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgBanTime',21600)">6 h</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgBanTime',86400)">24 h <span class="text-success">★</span></button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgBanTime',604800)">{{t:jc.week}}</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgBanTime',2592000)">{{t:jc.days30}}</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-style="font-size:.7rem" data-on-click="setCfg('cfgBanTime',-1)">{{t:jc.permanent}}</button>
                                     </div>
                                     <div class="form-text small mt-1">{{t:jc.banTimeHint.html}}</div>
                                 </div>
@@ -5646,25 +5711,25 @@ public class MailPanelContent {
                             <div class="alert alert-success py-2 px-2 mt-2 mb-0 small">
                                 <i class="fas fa-shield-alt me-1" aria-hidden="true"></i>
                                 {{t:jc.presetTitle.html}}
-                                <button type="button" class="btn btn-success btn-sm py-0 px-2 ms-2" style="font-size:.75rem" onclick="setCfg('cfgMaxRetry',2);setCfg('cfgFindTime',3600);setCfg('cfgBanTime',86400)">
+                                <button type="button" class="btn btn-success btn-sm py-0 px-2 ms-2" data-style="font-size:.75rem" data-on-click="setCfg('cfgMaxRetry',2);setCfg('cfgFindTime',3600);setCfg('cfgBanTime',86400)">
                                     <i class="fas fa-magic me-1" aria-hidden="true"></i>{{t:jc.aggressive}}
                                 </button>
-                                <button type="button" class="btn btn-outline-success btn-sm py-0 px-2 ms-1" style="font-size:.75rem" onclick="setCfg('cfgMaxRetry',3);setCfg('cfgFindTime',1800);setCfg('cfgBanTime',21600)">
+                                <button type="button" class="btn btn-outline-success btn-sm py-0 px-2 ms-1" data-style="font-size:.75rem" data-on-click="setCfg('cfgMaxRetry',3);setCfg('cfgFindTime',1800);setCfg('cfgBanTime',21600)">
                                     {{t:jc.balanced}}
                                 </button>
-                                <button type="button" class="btn btn-outline-success btn-sm py-0 px-2 ms-1" style="font-size:.75rem" onclick="setCfg('cfgMaxRetry',5);setCfg('cfgFindTime',600);setCfg('cfgBanTime',3600)">
+                                <button type="button" class="btn btn-outline-success btn-sm py-0 px-2 ms-1" data-style="font-size:.75rem" data-on-click="setCfg('cfgMaxRetry',5);setCfg('cfgFindTime',600);setCfg('cfgBanTime',3600)">
                                     {{t:jc.permissive}}
                                 </button>
-                                <div class="text-muted mt-1" style="font-size:.75rem">{{t:jc.presetHint}}</div>
+                                <div class="text-muted mt-1" data-style="font-size:.75rem">{{t:jc.presetHint}}</div>
                             </div>
                             <div class="d-flex gap-2 mt-3 flex-wrap">
-                                <button class="btn btn-primary btn-sm" onclick="saveJailConfig()">
+                                <button class="btn btn-primary btn-sm" data-on-click="saveJailConfig()">
                                     <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:jc.saveOne}}
                                 </button>
-                                <button class="btn btn-warning btn-sm" onclick="saveJailConfigAllJails()">
+                                <button class="btn btn-warning btn-sm" data-on-click="saveJailConfigAllJails()">
                                     <i class="fas fa-clone me-1" aria-hidden="true"></i>{{t:jc.applyAll}}
                                 </button>
-                                <button class="btn btn-outline-secondary btn-sm" onclick="loadJailConfig()">
+                                <button class="btn btn-outline-secondary btn-sm" data-on-click="loadJailConfig()">
                                     <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:jc.reloadFile}}
                                 </button>
                                 <span id="cfgJailStatus" class="ms-2 small"></span>
@@ -5701,7 +5766,7 @@ public class MailPanelContent {
                             </div>
 
                             <div class="d-flex gap-2">
-                                <button class="btn btn-primary btn-sm" onclick="saveJailFilter()">
+                                <button class="btn btn-primary btn-sm" data-on-click="saveJailFilter()">
                                     <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:jc.saveFilter}}
                                 </button>
                             </div>
@@ -5718,7 +5783,7 @@ public class MailPanelContent {
                                     <input type="text" class="form-control form-control-sm" id="cfgIgnoreIpInput" aria-label="{{t:jc.ignoreTitle}}" placeholder="{{t:jc.ignorePh}}">
                                 </div>
                                 <div class="col-md-3">
-                                    <button class="btn btn-success btn-sm w-100" onclick="addIgnoreIp()">
+                                    <button class="btn btn-success btn-sm w-100" data-on-click="addIgnoreIp()">
                                         <i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:jc.addIgnore}}
                                     </button>
                                 </div>
@@ -5742,7 +5807,7 @@ public class MailPanelContent {
 
                             <h6 class="mt-3"><i class="fas fa-download me-1" aria-hidden="true"></i>{{t:set.vaultBackup}}</h6>
                             <p class="small text-muted mb-2">{{t:set.vaultBackupIntro}}</p>
-                            <button class="btn btn-outline-primary btn-sm mb-2" onclick="vaultBackupKey()">
+                            <button class="btn btn-outline-primary btn-sm mb-2" data-on-click="vaultBackupKey()">
                                 <i class="fas fa-download me-1" aria-hidden="true"></i>{{t:set.vaultExport}}
                             </button>
                             <div id="vaultBackupResult" class="mt-2"></div>
@@ -5754,7 +5819,7 @@ public class MailPanelContent {
                                 <i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>
                                 {{t:set.vaultRotationInfo.html}}
                             </div>
-                            <button class="btn btn-warning btn-sm mb-2" onclick="vaultRotateKey()">
+                            <button class="btn btn-warning btn-sm mb-2" data-on-click="vaultRotateKey()">
                                 <i class="fas fa-sync-alt me-1" aria-hidden="true"></i>{{t:set.vaultRotate}}
                             </button>
                             <div id="vaultRotateResult" class="mt-2"></div>
@@ -6067,8 +6132,8 @@ public class MailPanelContent {
             html += '<div class="input-group input-group-sm mb-2">';
             html += '<span class="input-group-text" id="vaultKeyLabel">' + escHtml(t('set.keyBase64')) + '</span>';
             html += '<input type="text" class="form-control font-monospace" id="vaultBackupKeyValue" value="" readonly aria-labelledby="vaultKeyLabel">';
-            html += '<button class="btn btn-outline-secondary" type="button" onclick="vaultCopyBackupKey()"><i class="fas fa-copy me-1" aria-hidden="true"></i>' + escHtml(t('common.copy')) + '</button>';
-            html += '<button class="btn btn-outline-primary" type="button" onclick="vaultDownloadBackupKey()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('set.downloadTxt')) + '</button>';
+            html += '<button class="btn btn-outline-secondary" type="button" data-on-click="vaultCopyBackupKey()"><i class="fas fa-copy me-1" aria-hidden="true"></i>' + escHtml(t('common.copy')) + '</button>';
+            html += '<button class="btn btn-outline-primary" type="button" data-on-click="vaultDownloadBackupKey()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('set.downloadTxt')) + '</button>';
             html += '</div>';
             html += '<div class="small text-muted">' + escHtml(t('set.fileOnServer')) + ' <code>' + escHtml(data.key_file_path || '') + '</code></div>';
             out.innerHTML = html;
@@ -6153,14 +6218,14 @@ public class MailPanelContent {
             <h2 class="mb-3"><i class="fas fa-server me-2" aria-hidden="true"></i>{{t:dns.title}}</h2>
 
             <!-- BANNER: dominio corrente sempre visibile, con switcher -->
-            <div class="card text-white mb-3" style="background:linear-gradient(135deg,#e94560 0%,#a52a45 100%)">
+            <div class="card text-white mb-3" data-style="background:linear-gradient(135deg,#e94560 0%,#a52a45 100%)">
                 <div class="card-body py-3">
                     <div class="row align-items-center g-3">
                         <div class="col-md-7">
-                            <div class="small text-uppercase opacity-75 mb-1" style="letter-spacing:1px">{{t:dns.managing}}</div>
+                            <div class="small text-uppercase opacity-75 mb-1" data-style="letter-spacing:1px">{{t:dns.managing}}</div>
                             <h3 class="mb-0">
                                 <i class="fas fa-globe me-2" aria-hidden="true"></i>
-                                <span id="currentDomainBanner" style="font-family:monospace">{{t:dns.noDomain}}</span>
+                                <span id="currentDomainBanner" data-style="font-family:monospace">{{t:dns.noDomain}}</span>
                             </h3>
                         </div>
                         <div class="col-md-5">
@@ -6175,10 +6240,10 @@ public class MailPanelContent {
 
             <!-- Azioni globali (visibili sempre, ma operano solo se un dominio è selezionato) -->
             <div class="mb-3 d-flex gap-2 flex-wrap">
-                <button class="btn btn-outline-primary" id="reloadDnsBtn" onclick="loadDnsRecords()" disabled>
+                <button class="btn btn-outline-primary" id="reloadDnsBtn" data-on-click="loadDnsRecords()" disabled>
                     <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:dns.reload}}
                 </button>
-                <button class="btn btn-success" id="verifyDnsBtn" onclick="verifyDns()" disabled>
+                <button class="btn btn-success" id="verifyDnsBtn" data-on-click="verifyDns()" disabled>
                     <i class="fas fa-check me-1" aria-hidden="true"></i>{{t:dns.verify}}
                 </button>
             </div>
@@ -6252,8 +6317,8 @@ public class MailPanelContent {
                         </div>
                     </div>
                     <div class="d-flex gap-2">
-                        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="cfTestNewToken()"><i class="fas fa-vial me-1" aria-hidden="true"></i>{{t:dns.cfTest}}</button>
-                        <button class="btn btn-primary btn-sm" type="button" onclick="cfAddAccount()"><i class="fas fa-save me-1" aria-hidden="true"></i>{{t:dns.cfSave}}</button>
+                        <button class="btn btn-outline-secondary btn-sm" type="button" data-on-click="cfTestNewToken()"><i class="fas fa-vial me-1" aria-hidden="true"></i>{{t:dns.cfTest}}</button>
+                        <button class="btn btn-primary btn-sm" type="button" data-on-click="cfAddAccount()"><i class="fas fa-save me-1" aria-hidden="true"></i>{{t:dns.cfSave}}</button>
                     </div>
 
                     <!-- ASSEGNAZIONE PER-DOMINIO -->
@@ -6282,13 +6347,13 @@ public class MailPanelContent {
                     <div id="dkimRotationTimeline" class="mt-2 d-none">
                         <div class="row g-2">
                             <div class="col-md-6">
-                                <div class="border rounded p-2 h-100" style="background:rgba(25,135,84,0.08)">
+                                <div class="border rounded p-2 h-100" data-style="background:rgba(25,135,84,0.08)">
                                     <div class="small text-muted mb-1"><i class="fas fa-history me-1" aria-hidden="true"></i>{{t:dns.lastRotation}}</div>
                                     <div id="dkimLastRotationText"><span class="text-muted">—</span></div>
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <div class="border rounded p-2 h-100" style="background:rgba(13,110,253,0.08)">
+                                <div class="border rounded p-2 h-100" data-style="background:rgba(13,110,253,0.08)">
                                     <div class="small text-muted mb-1"><i class="fas fa-calendar-day me-1" aria-hidden="true"></i>{{t:dns.nextRotation}}</div>
                                     <div id="dkimNextRotationText"><span class="text-muted">—</span></div>
                                 </div>
@@ -6298,21 +6363,21 @@ public class MailPanelContent {
 
                     <!-- Rotazione programmata -->
                     <div id="dkimSchedulePanel" class="mt-3 d-none">
-                        <div class="border rounded p-3" style="background:rgba(13,110,253,0.05)">
+                        <div class="border rounded p-3" data-style="background:rgba(13,110,253,0.05)">
                             <h6 class="mb-2"><i class="fas fa-calendar-alt me-1" aria-hidden="true"></i>{{t:dns.scheduled}}</h6>
                             <div class="row g-2 align-items-end">
                                 <div class="col-md-5">
                                     <label class="form-label small mb-1" for="dkimSchedulePreset">{{t:dns.frequency}}</label>
-                                    <select class="form-select form-select-sm" id="dkimSchedulePreset" onchange="onSchedulePresetChange()">
+                                    <select class="form-select form-select-sm" id="dkimSchedulePreset" data-on-change="onSchedulePresetChange()">
                                         <!-- popolato dinamicamente dai preset del server -->
                                     </select>
                                 </div>
-                                <div class="col-md-3" id="dkimScheduleCustomWrap" style="display:none">
+                                <div class="col-md-3" id="dkimScheduleCustomWrap" data-style="display:none">
                                     <label class="form-label small mb-1" for="dkimScheduleCustomDays">{{t:dns.customDays}}</label>
                                     <input type="number" min="1" max="3650" class="form-control form-control-sm" id="dkimScheduleCustomDays" placeholder="{{t:dns.customDaysPh}}">
                                 </div>
                                 <div class="col-md-4 text-md-end">
-                                    <button class="btn btn-sm btn-primary" onclick="saveDkimSchedule()"><i class="fas fa-save me-1" aria-hidden="true"></i>{{t:dns.saveSchedule}}</button>
+                                    <button class="btn btn-sm btn-primary" data-on-click="saveDkimSchedule()"><i class="fas fa-save me-1" aria-hidden="true"></i>{{t:dns.saveSchedule}}</button>
                                 </div>
                             </div>
                             <div class="mt-2 small" id="dkimScheduleInfo"></div>
@@ -6320,13 +6385,13 @@ public class MailPanelContent {
                     </div>
 
                     <div class="mt-3 d-flex gap-2 flex-wrap">
-                        <button class="btn btn-warning" id="generateDkimBtn" onclick="generateDkim()" disabled>
+                        <button class="btn btn-warning" id="generateDkimBtn" data-on-click="generateDkim()" disabled>
                             <i class="fas fa-key me-1" aria-hidden="true"></i>{{t:dns.generateDkim}}
                         </button>
-                        <button class="btn btn-outline-primary" id="rotateDkimBtn" onclick="rotateDkimStart()" disabled>
+                        <button class="btn btn-outline-primary" id="rotateDkimBtn" data-on-click="rotateDkimStart()" disabled>
                             <i class="fas fa-sync-alt me-1" aria-hidden="true"></i>{{t:dns.startRotation}}
                         </button>
-                        <button class="btn btn-outline-success" id="verifyActiveDkimBtn" onclick="verifyActiveDkim()" disabled>
+                        <button class="btn btn-outline-success" id="verifyActiveDkimBtn" data-on-click="verifyActiveDkim()" disabled>
                             <i class="fas fa-search me-1" aria-hidden="true"></i>{{t:dns.verifyActive}}
                         </button>
                     </div>
@@ -6352,19 +6417,19 @@ public class MailPanelContent {
                          rotazione appena avviata. Chi apre un elenco si aspetta di vedere
                          adesso, non l'ultima volta che ci ha guardato. -->
                     <details class="mt-4"
-                             ontoggle="if (this.open &amp;&amp; typeof scanDkimOrphans === 'function' &amp;&amp; currentDomainId) scanDkimOrphans();">
-                        <summary class="text-primary" style="cursor:pointer"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:dns.orphansSummary}}</summary>
+                             data-on-toggle="dkimOrphansToggled(this)">
+                        <summary class="text-primary" data-style="cursor:pointer"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:dns.orphansSummary}}</summary>
                         <div class="mt-3">
                             <p class="small text-muted mb-2">{{t:dns.orphansIntro.html}}</p>
-                            <button class="btn btn-sm btn-outline-primary" onclick="scanDkimOrphans()" id="scanDkimOrphansBtn"><i class="fas fa-search me-1" aria-hidden="true"></i>{{t:dns.scanOrphans}}</button>
+                            <button class="btn btn-sm btn-outline-primary" data-on-click="scanDkimOrphans()" id="scanDkimOrphansBtn"><i class="fas fa-search me-1" aria-hidden="true"></i>{{t:dns.scanOrphans}}</button>
                             <div id="dkimOrphansResult" class="mt-3"></div>
                         </div>
                     </details>
 
                     <!-- Storico rotazioni: riletto a ogni apertura, stessa ragione. -->
                     <details class="mt-4" id="dkimHistoryDetails"
-                             ontoggle="if (this.open &amp;&amp; typeof loadDkimHistory === 'function' &amp;&amp; currentDomainId) loadDkimHistory(currentDomainId);">
-                        <summary class="text-primary" style="cursor:pointer"><i class="fas fa-history me-1" aria-hidden="true"></i>{{t:dns.historySummary}}</summary>
+                             data-on-toggle="dkimHistoryToggled(this)">
+                        <summary class="text-primary" data-style="cursor:pointer"><i class="fas fa-history me-1" aria-hidden="true"></i>{{t:dns.historySummary}}</summary>
                         <div id="dkimHistoryBody" class="mt-3">
                             <p class="text-muted small mb-0">{{t:dns.historyPick}}</p>
                         </div>
@@ -6377,7 +6442,7 @@ public class MailPanelContent {
             <div class="card mt-4">
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <span><i class="fas fa-ban me-2" aria-hidden="true"></i><strong>{{t:dns.blTitle}}</strong> <small class="ms-2" id="blOverallStatus"></small></span>
-                    <button class="btn btn-sm btn-outline-secondary" id="btnBlCheck" onclick="runBlacklistCheck()">
+                    <button class="btn btn-sm btn-outline-secondary" id="btnBlCheck" data-on-click="runBlacklistCheck()">
                         <i class="fas fa-search me-1" aria-hidden="true"></i>{{t:dns.blCheck}}
                     </button>
                 </div>
@@ -6392,7 +6457,7 @@ public class MailPanelContent {
             </div>
             <!-- Diagnostica orario server (timezone) -->
             <div class="card mt-4">
-                <div class="card-header d-flex justify-content-between align-items-center" style="cursor:pointer" onclick="toggleTzDiag()">
+                <div class="card-header d-flex justify-content-between align-items-center" data-style="cursor:pointer" data-on-click="toggleTzDiag()">
                     <span><i class="fas fa-clock me-2" aria-hidden="true"></i>{{t:dns.tzTitle}}</span>
                     <span id="tzDiagStatusBadge"><span class="badge bg-secondary"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>{{t:dns.checking}}</span></span>
                 </div>
@@ -6402,12 +6467,12 @@ public class MailPanelContent {
                         <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>{{t:common.loading}}</div>
                     </div>
                     <div class="mt-3 d-flex gap-2 flex-wrap">
-                        <button class="btn btn-success btn-sm" onclick="tzSyncToSystem()"><i class="fas fa-magic me-1" aria-hidden="true"></i>{{t:dns.tzSync}}</button>
-                        <div class="input-group input-group-sm" style="width:auto">
-                            <input type="text" class="form-control form-control-sm" id="tzManualValue" placeholder="{{t:dns.tzManualPh}}" aria-label="{{t:dns.tzManual}}" style="width:200px">
-                            <button class="btn btn-outline-secondary btn-sm" onclick="tzSetManual()"><i class="fas fa-cog me-1" aria-hidden="true"></i>{{t:dns.tzManual}}</button>
+                        <button class="btn btn-success btn-sm" data-on-click="tzSyncToSystem()"><i class="fas fa-magic me-1" aria-hidden="true"></i>{{t:dns.tzSync}}</button>
+                        <div class="input-group input-group-sm" data-style="width:auto">
+                            <input type="text" class="form-control form-control-sm" id="tzManualValue" placeholder="{{t:dns.tzManualPh}}" aria-label="{{t:dns.tzManual}}" data-style="width:200px">
+                            <button class="btn btn-outline-secondary btn-sm" data-on-click="tzSetManual()"><i class="fas fa-cog me-1" aria-hidden="true"></i>{{t:dns.tzManual}}</button>
                         </div>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="loadTzDiag()"><i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:dns.tzRecheck}}</button>
+                        <button class="btn btn-outline-secondary btn-sm" data-on-click="loadTzDiag()"><i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:dns.tzRecheck}}</button>
                     </div>
                     <div id="tzDiagLog" class="mt-2 small"></div>
                 </div>
@@ -6536,10 +6601,11 @@ public class MailPanelContent {
         <div class="content-container">
             <h2><i class="fas fa-lock me-2" aria-hidden="true"></i>{{t:ssl.title}}</h2>
             <p class="text-muted">{{t:ssl.subtitle}} (<strong>{{MAIL_HOSTNAME}}</strong>)</p>
+            <input type="hidden" id="pageMailHostname" value="{{MAIL_HOSTNAME}}">
 
             <!-- Guida Let's Encrypt -->
             <div class="card mb-4">
-                <div class="card-header bg-secondary text-white" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#leGuide" aria-expanded="false">
+                <div class="card-header bg-secondary text-white" data-style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#leGuide" aria-expanded="false">
                     <i class="fas fa-book me-2" aria-hidden="true"></i><strong>{{t:ssl.guide}}</strong>
                     <small class="ms-2 text-white-50">{{t:ssl.clickToggle}}</small>
                     <i class="fas fa-chevron-down float-end mt-1" aria-hidden="true"></i>
@@ -6566,7 +6632,7 @@ public class MailPanelContent {
                         <div class="table-responsive">
                             <table class="table table-sm table-bordered align-middle mb-2">
                                 <thead class="table-light">
-                                    <tr><th style="width:120px">{{t:ssl.days}}</th><th>{{t:ssl.whenToUse}}</th><th>{{t:dns.colNotes}}</th></tr>
+                                    <tr><th data-style="width:120px">{{t:ssl.days}}</th><th>{{t:ssl.whenToUse}}</th><th>{{t:dns.colNotes}}</th></tr>
                                 </thead>
                                 <tbody>
                                     <tr class="table-success"><td><strong>30</strong> ✅</td><td><strong>{{t:ssl.defaultRecommended}}</strong></td><td>{{t:ssl.recommendedBy}}</td></tr>
@@ -6647,7 +6713,7 @@ public class MailPanelContent {
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="autoRenewEnabled" onchange="saveAutoRenewSettings()">
+                                <input class="form-check-input" type="checkbox" id="autoRenewEnabled" data-on-change="saveAutoRenewSettings()">
                                 <label class="form-check-label" for="autoRenewEnabled">
                                     <strong>{{t:ssl.enableAuto}}</strong>
                                 </label>
@@ -6655,7 +6721,7 @@ public class MailPanelContent {
                             </div>
                             <div class="mb-3">
                                 <label class="form-label" for="autoRenewThreshold">{{t:ssl.threshold}}</label>
-                                <input type="number" class="form-control" id="autoRenewThreshold" value="30" min="1" max="89" onchange="saveAutoRenewSettings()">
+                                <input type="number" class="form-control" id="autoRenewThreshold" value="30" min="1" max="89" data-on-change="saveAutoRenewSettings()">
                                 <div class="text-muted small">{{t:ssl.thresholdDefault}}</div>
                             </div>
                         </div>
@@ -6668,22 +6734,22 @@ public class MailPanelContent {
                                     <tr><td><strong>{{t:ssl.nextCheck}}</strong></td><td id="autoRenewNextCheck" class="text-muted">-</td></tr>
                                 </tbody>
                             </table>
-                            <button class="btn btn-outline-info btn-sm" onclick="triggerManualCheck()">
+                            <button class="btn btn-outline-info btn-sm" data-on-click="triggerManualCheck()">
                                 <i class="fas fa-play me-1" aria-hidden="true"></i>{{t:ssl.checkNow}}
                             </button>
-                            <div class="card mt-3 border-0" style="background: rgba(246,130,31,0.08)">
+                            <div class="card mt-3 border-0" data-style="background: rgba(246,130,31,0.08)">
                                 <div class="card-body py-3">
-                                    <h6 class="mb-2"><i class="fas fa-cloud me-1" style="color:#f6821f"></i>{{t:ssl.autoViaCf}}</h6>
+                                    <h6 class="mb-2"><i class="fas fa-cloud me-1" data-style="color:#f6821f"></i>{{t:ssl.autoViaCf}}</h6>
                                     <p class="small text-muted mb-2">
                                         {{t:ssl.cfLinkA}}
                                         (<strong id="autoRenewMailHost">{{MAIL_HOSTNAME}}</strong>){{t:ssl.cfLinkB}}
                                     </p>
                                     <label class="form-label small mb-1" for="autoRenewCfAccount">{{t:ssl.cfAccount}}</label>
                                     <div class="d-flex gap-2 align-items-center flex-wrap">
-                                        <select class="form-select form-select-sm" style="max-width:280px" id="autoRenewCfAccount" onchange="saveCfMailServerAccount(this.value)">
+                                        <select class="form-select form-select-sm" data-style="max-width:280px" id="autoRenewCfAccount" data-on-change="saveCfMailServerAccount(this.value)">
                                             <option value="0">{{t:common.loading}}</option>
                                         </select>
-                                        <button class="btn btn-outline-info btn-sm" type="button" onclick="testCfMailServer()">
+                                        <button class="btn btn-outline-info btn-sm" type="button" data-on-click="testCfMailServer()">
                                             <i class="fas fa-plug me-1" aria-hidden="true"></i>{{t:ssl.testLink}}
                                         </button>
                                         <a href="/cloudflare" class="btn btn-outline-secondary btn-sm">
@@ -6691,7 +6757,7 @@ public class MailPanelContent {
                                         </a>
                                     </div>
                                     <div id="autoRenewCfTest" class="mt-2 small"></div>
-                                    <div class="small text-muted mt-1" id="autoRenewCfHint" style="display:none">
+                                    <div class="small text-muted mt-1" id="autoRenewCfHint" data-style="display:none">
                                         <i class="fas fa-exclamation-triangle text-warning me-1" aria-hidden="true"></i>
                                         {{t:ssl.noCfAccount}}
                                         <a href="/cloudflare" class="alert-link">{{t:ssl.addOneHere}}</a>.
@@ -6713,7 +6779,7 @@ public class MailPanelContent {
             <div class="row mb-4">
                 <!-- Option 1: Let's Encrypt HTTP-01 -->
                 <div class="col-md-4 mb-3">
-                    <div class="card option-card h-100" onclick="selectOption(1)">
+                    <div class="card option-card h-100" data-on-click="selectOption(1)">
                         <div class="card-body text-center">
                             <i class="fas fa-bolt fa-3x text-warning mb-3" aria-hidden="true"></i>
                             <h5>Let's Encrypt (HTTP-01)</h5>
@@ -6725,7 +6791,7 @@ public class MailPanelContent {
 
                 <!-- Option 2: Let's Encrypt DNS-01 -->
                 <div class="col-md-4 mb-3">
-                    <div class="card option-card h-100" onclick="selectOption(2)">
+                    <div class="card option-card h-100" data-on-click="selectOption(2)">
                         <div class="card-body text-center">
                             <i class="fas fa-globe fa-3x text-success mb-3" aria-hidden="true"></i>
                             <h5>Let's Encrypt (DNS-01)</h5>
@@ -6737,7 +6803,7 @@ public class MailPanelContent {
 
                 <!-- Option 3: Manual Certificate -->
                 <div class="col-md-4 mb-3">
-                    <div class="card option-card h-100" onclick="selectOption(3)">
+                    <div class="card option-card h-100" data-on-click="selectOption(3)">
                         <div class="card-body text-center">
                             <i class="fas fa-upload fa-3x text-warning mb-3" aria-hidden="true"></i>
                             <h5>{{t:ssl.manualCert}}</h5>
@@ -6771,7 +6837,7 @@ public class MailPanelContent {
                         </button>
                     </form>
                     <div id="http01Output" class="mt-3 d-none">
-                        <pre class="bg-dark text-light p-3" style="max-height:300px;overflow-y:auto"></pre>
+                        <pre class="bg-dark text-light p-3" data-style="max-height:300px;overflow-y:auto"></pre>
                     </div>
                 </div>
             </div>
@@ -6796,7 +6862,7 @@ public class MailPanelContent {
                             </div>
                             <input type="hidden" id="dns01Hostname" value="{{MAIL_HOSTNAME}}">
                         </div>
-                        <button class="btn btn-primary" onclick="generateDnsChallenge()">
+                        <button class="btn btn-primary" data-on-click="generateDnsChallenge()">
                             <i class="fas fa-key me-1" aria-hidden="true"></i>{{t:ssl.generateChallenge}}
                         </button>
                     </div>
@@ -6809,13 +6875,13 @@ public class MailPanelContent {
                             {{t:ssl.existsHint}}
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
-                            <button class="btn btn-success" onclick="deployExistingCert()">
+                            <button class="btn btn-success" data-on-click="deployExistingCert()">
                                 <i class="fas fa-download me-1" aria-hidden="true"></i>{{t:ssl.deployExisting}}
                             </button>
-                            <button class="btn btn-warning" onclick="forceRegenerateChallenge()">
+                            <button class="btn btn-warning" data-on-click="forceRegenerateChallenge()">
                                 <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:ssl.regenChallenge}}
                             </button>
-                            <button class="btn btn-outline-secondary" onclick="resetDnsChallenge()">
+                            <button class="btn btn-outline-secondary" data-on-click="resetDnsChallenge()">
                                 <i class="fas fa-times me-1" aria-hidden="true"></i>{{t:common.cancel}}
                             </button>
                         </div>
@@ -6828,14 +6894,14 @@ public class MailPanelContent {
                             <label class="form-label">{{t:ssl.recordName}}</label>
                             <div class="dns-record">
                                 <span id="dnsRecordName">_acme-challenge.mail.example.com</span>
-                                <button type="button" class="btn btn-link p-0 copy-btn float-end" onclick="copyToClipboard('dnsRecordName')" aria-label="{{t:common.copy}}" title="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-link p-0 copy-btn float-end" data-on-click="copyToClipboard('dnsRecordName')" aria-label="{{t:common.copy}}" title="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">{{t:ssl.recordValue}}</label>
                             <div class="dns-record">
                                 <span id="dnsRecordValue">xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</span>
-                                <button type="button" class="btn btn-link p-0 copy-btn float-end" onclick="copyToClipboard('dnsRecordValue')" aria-label="{{t:common.copy}}" title="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-link p-0 copy-btn float-end" data-on-click="copyToClipboard('dnsRecordValue')" aria-label="{{t:common.copy}}" title="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button>
                             </div>
                         </div>
                         <div class="alert alert-warning">
@@ -6848,16 +6914,16 @@ public class MailPanelContent {
                     <div id="dns01Step3" class="d-none">
                         <h5><span class="step-number">3</span>{{t:ssl.step3}}</h5>
                         <p>{{t:ssl.step3Hint}}</p>
-                        <button class="btn btn-success" onclick="verifyDnsAndGenerate()">
+                        <button class="btn btn-success" data-on-click="verifyDnsAndGenerate()">
                             <i class="fas fa-check-circle me-1" aria-hidden="true"></i>{{t:ssl.verifyGenerate}}
                         </button>
-                        <button class="btn btn-outline-secondary ms-2" onclick="resetDnsChallenge()">
+                        <button class="btn btn-outline-secondary ms-2" data-on-click="resetDnsChallenge()">
                             <i class="fas fa-redo me-1" aria-hidden="true"></i>{{t:ssl.restart}}
                         </button>
                     </div>
 
                     <div id="dns01Output" class="mt-3 d-none">
-                        <pre class="bg-dark text-light p-3" style="max-height:300px;overflow-y:auto"></pre>
+                        <pre class="bg-dark text-light p-3" data-style="max-height:300px;overflow-y:auto"></pre>
                     </div>
                 </div>
             </div>
@@ -6871,7 +6937,7 @@ public class MailPanelContent {
 
                     <!-- Guida certificato manuale -->
                     <div class="card mb-4 border-info">
-                        <div class="card-header bg-info text-white" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#manualGuide" aria-expanded="true">
+                        <div class="card-header bg-info text-white" data-style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#manualGuide" aria-expanded="true">
                             <i class="fas fa-book me-2" aria-hidden="true"></i><strong>{{t:ssl.mgTitle}}</strong>
                             <i class="fas fa-chevron-down float-end mt-1" aria-hidden="true"></i>
                         </div>
@@ -6901,7 +6967,7 @@ public class MailPanelContent {
                                 <h5 class="mt-3"><i class="fas fa-tools me-2" aria-hidden="true"></i>{{t:ssl.mgBuild}}</h5>
 
                                 <p class="mb-2"><strong>{{t:ssl.mgM1}}</strong></p>
-                                <pre class="bg-dark text-light p-3 mb-3" style="font-size:0.85rem;">cat tuodominio.crt ca-bundle.crt > fullchain.pem</pre>
+                                <pre class="bg-dark text-light p-3 mb-3" data-style="font-size:0.85rem;">cat tuodominio.crt ca-bundle.crt > fullchain.pem</pre>
                                 <p class="text-muted small mb-3">{{t:ssl.mgOrder.html}}</p>
 
                                 <p class="mb-2"><strong>{{t:ssl.mgM2}}</strong></p>
@@ -6916,7 +6982,7 @@ public class MailPanelContent {
                                 </ol>
 
                                 <h5 class="mt-3"><i class="fas fa-eye me-2" aria-hidden="true"></i>{{t:ssl.mgLooks}}</h5>
-<pre class="bg-dark text-light p-3" style="font-size:0.85rem;">-----BEGIN CERTIFICATE-----
+<pre class="bg-dark text-light p-3" data-style="font-size:0.85rem;">-----BEGIN CERTIFICATE-----
 MIIE...   ← (1) {{t:ssl.mgYours}}
 ... base64 ...
 -----END CERTIFICATE-----
@@ -6933,7 +6999,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 <h5 class="mt-3"><i class="fas fa-clipboard me-2" aria-hidden="true"></i>{{t:ssl.mgFields}}</h5>
                                 <div class="table-responsive">
                                     <table class="table table-sm table-bordered align-middle mb-2">
-                                        <thead class="table-light"><tr><th style="width:35%">{{t:ssl.mgField}}</th><th>{{t:ssl.mgContent}}</th></tr></thead>
+                                        <thead class="table-light"><tr><th data-style="width:35%">{{t:ssl.mgField}}</th><th>{{t:ssl.mgContent}}</th></tr></thead>
                                         <tbody>
                                             <tr><td><strong>{{t:ssl.certField}}</strong></td><td>{{t:ssl.mgCertContent.html}}</td></tr>
                                             <tr><td><strong>{{t:ssl.keyField}}</strong></td><td>{{t:ssl.mgKeyContent.html}}</td></tr>
@@ -7011,7 +7077,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 <div class="col-md-8">
                                     <h5><i class="fas fa-exclamation-triangle text-danger me-2" aria-hidden="true"></i>${escHtml(t('ssl.selfSignedTemp'))}</h5>
                                     <table class="table table-sm table-borderless mb-0">
-                                        <tr><td style="width:150px"><strong>${escHtml(t('ssl.cDomain'))}</strong></td><td>${escHtml(data.common_name || data.hostname || 'N/A')}</td></tr>
+                                        <tr><td data-style="width:150px"><strong>${escHtml(t('ssl.cDomain'))}</strong></td><td>${escHtml(data.common_name || data.hostname || 'N/A')}</td></tr>
                                         <tr><td><strong>${escHtml(t('ssl.cIssuer'))}</strong></td><td>${escHtml(data.issuer || 'Self-Signed')}</td></tr>
                                         <tr><td><strong>${escHtml(t('ssl.cExpires'))}</strong></td><td>${escHtml(data.expires_at || 'N/A')} ${data.days_until_expiry ? escHtml(tn('dns.daysParen', data.days_until_expiry)) : ''}</td></tr>
                                         <tr><td><strong>${escHtml(t('ssl.cAlgorithm'))}</strong></td><td>${escHtml(data.algorithm || 'RSA')}</td></tr>
@@ -7048,7 +7114,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 <div class="col-md-8">
                                     <h5><i class="fas fa-shield-alt text-success me-2" aria-hidden="true"></i>${escHtml(data.common_name || t('ssl.sslCert'))}</h5>
                                     <table class="table table-sm table-borderless mb-0">
-                                        <tr><td style="width:150px"><strong>${escHtml(t('ssl.cDomain'))}</strong></td><td>${escHtml(data.common_name || 'N/A')}</td></tr>
+                                        <tr><td data-style="width:150px"><strong>${escHtml(t('ssl.cDomain'))}</strong></td><td>${escHtml(data.common_name || 'N/A')}</td></tr>
                                         <tr><td><strong>${escHtml(t('ssl.cIssuer'))}</strong></td><td>${escHtml(data.issuer || 'N/A')} ${certType}</td></tr>
                                         <tr><td><strong>${escHtml(t('ssl.cFrom'))}</strong></td><td>${escHtml(data.valid_from || 'N/A')}</td></tr>
                                         <tr><td><strong>${escHtml(t('ssl.cExpires'))}</strong></td><td>${escHtml(data.expires_at || 'N/A')} <strong>${data.days_until_expiry ? escHtml(tn('dns.daysParen', data.days_until_expiry)) : ''}</strong></td></tr>
@@ -7071,7 +7137,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 }
                 // Check hostname mismatch
                 const mismatchDiv = document.getElementById('sslHostnameMismatch');
-                const currentMailHostname = '{{MAIL_HOSTNAME}}';
+                // Dalla pagina, non scritto dal server dentro lo script: gli script sono file (reperto 178).
+                const currentMailHostname = document.getElementById('pageMailHostname').value;
                 const certCn = data.common_name || '';
                 if (currentMailHostname && certCn && currentMailHostname !== t('server.notConfigured')) {
                     // Check CN and SANs
@@ -7505,11 +7572,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <h2 class="mb-0"><i class="fas fa-file-alt me-2" aria-hidden="true"></i>{{t:lg.title}}</h2>
                 <div class="d-flex gap-2 align-items-center flex-wrap">
-                    <select class="form-select form-select-sm w-auto" id="logSelect" aria-label="{{t:lg.whichLog}}" onchange="loadLogs()">
+                    <select class="form-select form-select-sm w-auto" id="logSelect" aria-label="{{t:lg.whichLog}}" data-on-change="loadLogs()">
                         <option value="">{{t:common.loading}}</option>
                     </select>
-                    <input type="text" class="form-control form-control-sm w-auto" id="logFilter" maxlength="200" placeholder="{{t:lg.filterPlaceholder}}" aria-label="{{t:lg.filter}}" onkeyup="if(event.key==='Enter')loadLogs()">
-                    <button class="btn btn-sm btn-mail" onclick="loadLogs()" title="{{t:lg.reload}}" aria-label="{{t:lg.reload}}"><i class="fas fa-sync" aria-hidden="true"></i></button>
+                    <input type="text" class="form-control form-control-sm w-auto" id="logFilter" maxlength="200" placeholder="{{t:lg.filterPlaceholder}}" aria-label="{{t:lg.filter}}" data-on-keyup="loadLogsOnEnter(event)">
+                    <button class="btn btn-sm btn-mail" data-on-click="loadLogs()" title="{{t:lg.reload}}" aria-label="{{t:lg.reload}}"><i class="fas fa-sync" aria-hidden="true"></i></button>
                 </div>
             </div>
 
@@ -7517,57 +7584,57 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="card mb-3 border-info">
                 <div class="card-header bg-info text-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <span><i class="fas fa-filter me-2" aria-hidden="true"></i><strong>{{t:lg.quickFilters}}</strong> <small class="text-white-50 ms-2">{{t:lg.quickFiltersHint}}</small></span>
-                    <button class="btn btn-sm btn-light" onclick="applyPreset('all', this)" title="{{t:lg.allDesc}}"><i class="fas fa-eye me-1" aria-hidden="true"></i>{{t:lg.showAll}}</button>
+                    <button class="btn btn-sm btn-light" data-on-click="applyPreset('all', this)" title="{{t:lg.allDesc}}"><i class="fas fa-eye me-1" aria-hidden="true"></i>{{t:lg.showAll}}</button>
                 </div>
                 <div class="card-body py-2">
                     <div class="log-preset-group mb-2" role="group" aria-labelledby="lgCat0">
                         <span class="log-preset-cat text-danger" id="lgCat0"><i class="fas fa-shield-alt me-1" aria-hidden="true"></i>{{t:lg.catSecurity}}</span>
-                        <button type="button" class="btn btn-outline-danger log-preset-btn" data-preset="brute-smtp" aria-pressed="false" onclick="applyPreset('brute-smtp', this)">
+                        <button type="button" class="btn btn-outline-danger log-preset-btn" data-preset="brute-smtp" aria-pressed="false" data-on-click="applyPreset('brute-smtp', this)">
                             <i class="fas fa-user-secret me-1" aria-hidden="true"></i>{{t:lg.bruteSmtp}}
                         </button>
-                        <button type="button" class="btn btn-outline-danger log-preset-btn" data-preset="brute-imap" aria-pressed="false" onclick="applyPreset('brute-imap', this)">
+                        <button type="button" class="btn btn-outline-danger log-preset-btn" data-preset="brute-imap" aria-pressed="false" data-on-click="applyPreset('brute-imap', this)">
                             <i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:lg.bruteImap}}
                         </button>
-                        <button type="button" class="btn btn-outline-danger log-preset-btn" data-preset="brute-panel" aria-pressed="false" onclick="applyPreset('brute-panel', this)">
+                        <button type="button" class="btn btn-outline-danger log-preset-btn" data-preset="brute-panel" aria-pressed="false" data-on-click="applyPreset('brute-panel', this)">
                             <i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:lg.brutePanel}}
                         </button>
-                        <button type="button" class="btn btn-outline-danger log-preset-btn" data-preset="banned" aria-pressed="false" onclick="applyPreset('banned', this)">
+                        <button type="button" class="btn btn-outline-danger log-preset-btn" data-preset="banned" aria-pressed="false" data-on-click="applyPreset('banned', this)">
                             <i class="fas fa-gavel me-1" aria-hidden="true"></i>{{t:lg.banned}}
                         </button>
                     </div>
                     <div class="log-preset-group mb-2" role="group" aria-labelledby="lgCat1">
                         <span class="log-preset-cat text-warning" id="lgCat1"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:lg.catNoise}}</span>
-                        <button type="button" class="btn btn-outline-warning log-preset-btn" data-preset="scanners" aria-pressed="false" onclick="applyPreset('scanners', this)">
+                        <button type="button" class="btn btn-outline-warning log-preset-btn" data-preset="scanners" aria-pressed="false" data-on-click="applyPreset('scanners', this)">
                             <i class="fas fa-satellite-dish me-1" aria-hidden="true"></i>{{t:lg.scanners}}
                         </button>
-                        <button type="button" class="btn btn-outline-warning log-preset-btn" data-preset="known-scanners" aria-pressed="false" onclick="applyPreset('known-scanners', this)">
+                        <button type="button" class="btn btn-outline-warning log-preset-btn" data-preset="known-scanners" aria-pressed="false" data-on-click="applyPreset('known-scanners', this)">
                             <i class="fas fa-robot me-1" aria-hidden="true"></i>{{t:lg.knownScanners}}
                         </button>
-                        <button type="button" class="btn btn-outline-warning log-preset-btn" data-preset="anvil" aria-pressed="false" onclick="applyPreset('anvil', this)">
+                        <button type="button" class="btn btn-outline-warning log-preset-btn" data-preset="anvil" aria-pressed="false" data-on-click="applyPreset('anvil', this)">
                             <i class="fas fa-chart-line me-1" aria-hidden="true"></i>{{t:lg.anvil}}
                         </button>
                     </div>
                     <div class="log-preset-group mb-2" role="group" aria-labelledby="lgCat2">
                         <span class="log-preset-cat text-success" id="lgCat2"><i class="fas fa-envelope me-1" aria-hidden="true"></i>{{t:lg.catMail}}</span>
-                        <button type="button" class="btn btn-outline-success log-preset-btn" data-preset="mail-sent" aria-pressed="false" onclick="applyPreset('mail-sent', this)">
+                        <button type="button" class="btn btn-outline-success log-preset-btn" data-preset="mail-sent" aria-pressed="false" data-on-click="applyPreset('mail-sent', this)">
                             <i class="fas fa-paper-plane me-1" aria-hidden="true"></i>{{t:lg.mailSent}}
                         </button>
-                        <button type="button" class="btn btn-outline-success log-preset-btn" data-preset="mail-bounce" aria-pressed="false" onclick="applyPreset('mail-bounce', this)">
+                        <button type="button" class="btn btn-outline-success log-preset-btn" data-preset="mail-bounce" aria-pressed="false" data-on-click="applyPreset('mail-bounce', this)">
                             <i class="fas fa-undo me-1" aria-hidden="true"></i>{{t:lg.mailBounce}}
                         </button>
-                        <button type="button" class="btn btn-outline-success log-preset-btn" data-preset="spam" aria-pressed="false" onclick="applyPreset('spam', this)">
+                        <button type="button" class="btn btn-outline-success log-preset-btn" data-preset="spam" aria-pressed="false" data-on-click="applyPreset('spam', this)">
                             <i class="fas fa-bug me-1" aria-hidden="true"></i>{{t:lg.spam}}
                         </button>
                     </div>
                     <div class="log-preset-group" role="group" aria-labelledby="lgCat3">
                         <span class="log-preset-cat text-primary" id="lgCat3"><i class="fas fa-exclamation-circle me-1" aria-hidden="true"></i>{{t:lg.catDiag}}</span>
-                        <button type="button" class="btn btn-outline-primary log-preset-btn" data-preset="errors" aria-pressed="false" onclick="applyPreset('errors', this)">
+                        <button type="button" class="btn btn-outline-primary log-preset-btn" data-preset="errors" aria-pressed="false" data-on-click="applyPreset('errors', this)">
                             <i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>{{t:lg.errors}}
                         </button>
-                        <button type="button" class="btn btn-outline-primary log-preset-btn" data-preset="connections" aria-pressed="false" onclick="applyPreset('connections', this)">
+                        <button type="button" class="btn btn-outline-primary log-preset-btn" data-preset="connections" aria-pressed="false" data-on-click="applyPreset('connections', this)">
                             <i class="fas fa-plug me-1" aria-hidden="true"></i>{{t:lg.connections}}
                         </button>
-                        <button type="button" class="btn btn-outline-primary log-preset-btn" data-preset="tls" aria-pressed="false" onclick="applyPreset('tls', this)">
+                        <button type="button" class="btn btn-outline-primary log-preset-btn" data-preset="tls" aria-pressed="false" data-on-click="applyPreset('tls', this)">
                             <i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:lg.tls}}
                         </button>
                     </div>
@@ -7584,8 +7651,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header"><i class="fas fa-search me-2" aria-hidden="true"></i>{{t:lg.searchTitle}}</div>
                 <div class="card-body">
                     <div class="input-group">
-                        <input type="text" class="form-control" id="searchPattern" maxlength="200" placeholder="{{t:lg.searchPlaceholder}}" aria-label="{{t:lg.searchTitle}}" onkeyup="if(event.key==='Enter')searchLogs()">
-                        <button class="btn btn-primary" onclick="searchLogs()">{{t:lg.search}}</button>
+                        <input type="text" class="form-control" id="searchPattern" maxlength="200" placeholder="{{t:lg.searchPlaceholder}}" aria-label="{{t:lg.searchTitle}}" data-on-keyup="searchLogsOnEnter(event)">
+                        <button class="btn btn-primary" data-on-click="searchLogs()">{{t:lg.search}}</button>
                     </div>
                     <div id="searchResults" class="mt-3" aria-live="polite"></div>
                 </div>
@@ -7663,9 +7730,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } else {
                 descEl.classList.remove('d-none');
                 descEl.innerHTML = '<i class="fas fa-info-circle me-1" aria-hidden="true"></i>' + preset.desc +
-                    ' &nbsp;<code class="ms-1" style="font-size:.7rem">' + escHtml(preset.regex) + '</code>';
+                    ' &nbsp;<code class="ms-1" data-style="font-size:.7rem">' + escHtml(preset.regex) + '</code>';
             }
             loadLogs();
+        }
+
+        // Invio nei due campi di ricerca. Era un if nel gestore in linea; i gestori adesso chiamano solo
+        // funzioni (panel-actions.js, reperto 178).
+        function loadLogsOnEnter(event) {
+            if (event.key === 'Enter') loadLogs();
+        }
+        function searchLogsOnEnter(event) {
+            if (event.key === 'Enter') searchLogs();
         }
 
         function loadLogs() {
@@ -7725,7 +7801,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     d.textContent = String(s);
                     return d.innerHTML;
                 };
-                results.innerHTML = '<div class="log-viewer" style="max-height:200px">' +
+                results.innerHTML = '<div class="log-viewer" data-style="max-height:200px">' +
                     data.results.map(r => '<div class="log-entry">' + escSearch(r.raw) + '</div>').join('') +
                     '</div>';
             });
@@ -7766,45 +7842,45 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="col-md-6"><div class="component-card" data-component="timezone">
                     <h5><i class="fas fa-clock me-2" aria-hidden="true"></i>{{t:ins.tzDns}}</h5>
                     <p class="text-muted small">{{t:ins.tzDnsDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" onclick="installComponent('timezone')">{{t:ins.configure}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('timezone')">{{t:ins.configure}}</button>
                 </div></div>
                 <div class="col-md-6"><div class="component-card" data-component="postfix">
                     <h5><i class="fas fa-paper-plane me-2" aria-hidden="true"></i>Postfix</h5>
                     <p class="text-muted small">{{t:ins.postfixDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" onclick="installComponent('postfix')">{{t:ins.install}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('postfix')">{{t:ins.install}}</button>
                 </div></div>
                 <div class="col-md-6"><div class="component-card" data-component="dovecot">
                     <h5><i class="fas fa-inbox me-2" aria-hidden="true"></i>Dovecot</h5>
                     <p class="text-muted small">{{t:ins.dovecotDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" onclick="installComponent('dovecot')">{{t:ins.install}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('dovecot')">{{t:ins.install}}</button>
                 </div></div>
                 <div class="col-md-6"><div class="component-card" data-component="rspamd">
                     <h5><i class="fas fa-shield-alt me-2" aria-hidden="true"></i>Rspamd</h5>
                     <p class="text-muted small">{{t:ins.rspamdDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" onclick="installComponent('rspamd')">{{t:ins.install}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('rspamd')">{{t:ins.install}}</button>
                 </div></div>
                 <div class="col-md-6"><div class="component-card" data-component="clamav">
                     <h5><i class="fas fa-bug me-2" aria-hidden="true"></i>ClamAV</h5>
                     <p class="text-muted small">{{t:ins.clamavDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" onclick="installComponent('clamav')">{{t:ins.install}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('clamav')">{{t:ins.install}}</button>
                 </div></div>
                 <div class="col-md-6"><div class="component-card" data-component="roundcube">
                     <h5><i class="fas fa-envelope-open-text me-2" aria-hidden="true"></i>Roundcube</h5>
                     <p class="text-muted small">{{t:ins.roundcubeDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" onclick="installComponent('roundcube')">{{t:ins.install}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('roundcube')">{{t:ins.install}}</button>
                 </div></div>
             </div>
 
             <hr>
             <div class="text-center">
-                <button class="btn btn-lg btn-danger" onclick="installComponent('all')">
+                <button class="btn btn-lg btn-danger" data-on-click="installComponent('all')">
                     <i class="fas fa-magic me-2" aria-hidden="true"></i>{{t:ins.all}}
                 </button>
             </div>
 
             <div id="installOutput" class="mt-4 d-none">
                 <h5>{{t:ins.output}}</h5>
-                <pre class="bg-dark text-light p-3" style="max-height:400px;overflow-y:auto" id="outputText"></pre>
+                <pre class="bg-dark text-light p-3" data-style="max-height:400px;overflow-y:auto" id="outputText"></pre>
             </div>
         </div>
     </div>
@@ -7873,11 +7949,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 <div class="form-control bg-light flex-grow-1" id="mailHostnameDisplay">
                                     {{MAIL_HOSTNAME}}
                                 </div>
-                                <button class="btn btn-outline-primary btn-sm ms-2" onclick="openChangeHostname()" title="{{t:set.changeHostnameShort}}" aria-label="{{t:set.changeHostnameShort}}">
+                                <button class="btn btn-outline-primary btn-sm ms-2" data-on-click="openChangeHostname()" title="{{t:set.changeHostnameShort}}" aria-label="{{t:set.changeHostnameShort}}">
                                     <i class="fas fa-edit" aria-hidden="true"></i>
                                 </button>
                             </div>
-                            <div id="hostnameConsistency" class="mb-2" style="display:none;"></div>
+                            <div id="hostnameConsistency" class="mb-2" data-style="display:none;"></div>
                             <small class="text-muted"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{t:set.mailHostnameHint}}</small>
                         </div>
                     </div>
@@ -7890,11 +7966,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 <div class="form-control bg-light flex-grow-1" id="rcDomainDisplay">
                                     {{ROUNDCUBE_DOMAIN}}
                                 </div>
-                                <button class="btn btn-outline-primary btn-sm ms-2" onclick="openChangeRcDomain()" title="{{t:set.changeRcShort}}" aria-label="{{t:set.changeRcShort}}">
+                                <button class="btn btn-outline-primary btn-sm ms-2" data-on-click="openChangeRcDomain()" title="{{t:set.changeRcShort}}" aria-label="{{t:set.changeRcShort}}">
                                     <i class="fas fa-edit" aria-hidden="true"></i>
                                 </button>
                             </div>
-                            <div id="rcDomainDns" class="mb-2" style="display:none;"></div>
+                            <div id="rcDomainDns" class="mb-2" data-style="display:none;"></div>
                             <small class="text-muted"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{t:set.rcDomainHint}}</small>
                         </div>
                     </div>
@@ -7948,13 +8024,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             <small class="text-muted">{{t:set.newHostnameHint}}</small>
                         </div>
 
-                        <button class="btn btn-primary w-100" onclick="executeHostnameChange()">
+                        <button class="btn btn-primary w-100" data-on-click="executeHostnameChange()">
                             <i class="fas fa-play me-1" aria-hidden="true"></i>{{t:set.changeHostnameShort}}
                         </button>
                     </div>
 
                     <!-- Step 2: Progress -->
-                    <div id="hostnameStep2" style="display:none;">
+                    <div id="hostnameStep2" data-style="display:none;">
                         <div class="text-center mb-3">
                             <div class="spinner-border text-primary" role="status"></div>
                             <p class="mt-2">{{t:set.hostnameChanging}}</p>
@@ -7962,7 +8038,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     </div>
 
                     <!-- Step 3: Results -->
-                    <div id="hostnameStep3" style="display:none;">
+                    <div id="hostnameStep3" data-style="display:none;">
                         <h6><i class="fas fa-clipboard-check me-2" aria-hidden="true"></i>{{t:set.autoDone}}</h6>
                         <div id="hostnameAutoSteps" class="mb-3"></div>
 
@@ -7974,10 +8050,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         <hr>
                         <h6><i class="fas fa-stethoscope me-2" aria-hidden="true"></i>{{t:set.dnsCheck}}</h6>
                         <p class="text-muted">{{t:set.dnsCheckIntro}}</p>
-                        <button class="btn btn-info w-100 mb-2" onclick="checkHostnameDns()">
+                        <button class="btn btn-info w-100 mb-2" data-on-click="checkHostnameDns()">
                             <i class="fas fa-search me-1" aria-hidden="true"></i>{{t:set.checkDnsRecords}}
                         </button>
-                        <div id="hostnameDnsChecks" style="display:none;"></div>
+                        <div id="hostnameDnsChecks" data-style="display:none;"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -8007,7 +8083,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             <label class="form-label"><strong>{{t:set.currentDomain}}</strong></label>
                             <div class="form-control bg-light" id="rcDomainCurrent">-</div>
                         </div>
-                        <div class="mb-3" id="rcDomainDnsStatus" style="display:none;"></div>
+                        <div class="mb-3" id="rcDomainDnsStatus" data-style="display:none;"></div>
 
                         <div class="mb-3">
                             <label class="form-label" for="newRcDomainInput"><strong>{{t:set.newDomain}}</strong></label>
@@ -8015,7 +8091,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             <small class="text-muted">{{t:set.newDomainHint}}</small>
                         </div>
 
-                        <button class="btn btn-primary w-100 mb-3" onclick="executeRcDomainChange()">
+                        <button class="btn btn-primary w-100 mb-3" data-on-click="executeRcDomainChange()">
                             <i class="fas fa-play me-1" aria-hidden="true"></i>{{t:set.changeRcTitle}}
                         </button>
 
@@ -8035,13 +8111,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             <label class="form-label small" for="rcSslChainInput"><strong>{{t:set.caChain}}</strong></label>
                             <textarea class="form-control form-control-sm font-monospace" id="rcSslChainInput" rows="3" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
                         </div>
-                        <button class="btn btn-warning w-100" onclick="executeRcSslChange()">
+                        <button class="btn btn-warning w-100" data-on-click="executeRcSslChange()">
                             <i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:set.saveSsl}}
                         </button>
                     </div>
 
                     <!-- Step 2: Progress -->
-                    <div id="rcDomainStep2" style="display:none;">
+                    <div id="rcDomainStep2" data-style="display:none;">
                         <div class="text-center mb-3">
                             <div class="spinner-border text-primary" role="status"></div>
                             <p class="mt-2">{{t:set.updating}}</p>
@@ -8049,7 +8125,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     </div>
 
                     <!-- Step 3: Results -->
-                    <div id="rcDomainStep3" style="display:none;">
+                    <div id="rcDomainStep3" data-style="display:none;">
                         <h6><i class="fas fa-clipboard-check me-2" aria-hidden="true"></i>{{t:set.autoDone}}</h6>
                         <div id="rcDomainAutoSteps" class="mb-3"></div>
 
@@ -8060,10 +8136,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         <hr>
                         <h6><i class="fas fa-stethoscope me-2" aria-hidden="true"></i>{{t:set.dnsCheck}}</h6>
                         <p class="text-muted">{{t:set.dnsCheckIntro2}}</p>
-                        <button class="btn btn-info w-100 mb-2" onclick="checkRcDomainDns()">
+                        <button class="btn btn-info w-100 mb-2" data-on-click="checkRcDomainDns()">
                             <i class="fas fa-search me-1" aria-hidden="true"></i>{{t:set.checkRcDns}}
                         </button>
-                        <div id="rcDomainDnsChecks" style="display:none;"></div>
+                        <div id="rcDomainDnsChecks" data-style="display:none;"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -8566,16 +8642,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                 <h2 class="mb-0"><i class="fas fa-list-ol me-2" aria-hidden="true"></i>{{t:que.title}}</h2>
                 <div class="d-flex flex-wrap gap-2">
-                    <button type="button" class="btn btn-success btn-sm" id="flushBtn" onclick="flushQueue()">
+                    <button type="button" class="btn btn-success btn-sm" id="flushBtn" data-on-click="flushQueue()">
                         <i class="fas fa-play" aria-hidden="true"></i> {{t:que.flush}}
                     </button>
-                    <button type="button" class="btn btn-warning btn-sm" id="holdBtn" onclick="holdAll()">
+                    <button type="button" class="btn btn-warning btn-sm" id="holdBtn" data-on-click="holdAll()">
                         <i class="fas fa-pause" aria-hidden="true"></i> {{t:que.hold}}
                     </button>
-                    <button type="button" class="btn btn-primary btn-sm" id="releaseBtn" onclick="releaseAll()">
+                    <button type="button" class="btn btn-primary btn-sm" id="releaseBtn" data-on-click="releaseAll()">
                         <i class="fas fa-play" aria-hidden="true"></i> {{t:que.release}}
                     </button>
-                    <button type="button" class="btn btn-danger btn-sm" id="purgeBtn" onclick="purgePermfails()">
+                    <button type="button" class="btn btn-danger btn-sm" id="purgeBtn" data-on-click="purgePermfails()">
                         <i class="fas fa-trash" aria-hidden="true"></i> {{t:que.purge}}
                     </button>
                 </div>
@@ -8622,7 +8698,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span id="queueTableTitle">{{t:que.messages}}</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshQueue()">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-on-click="refreshQueue()">
                         <i class="fas fa-sync" aria-hidden="true"></i> {{t:common.refresh}}
                     </button>
                 </div>
@@ -8902,7 +8978,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <h2><i class="fas fa-shield-alt me-2" aria-hidden="true"></i>{{t:sec.title}}</h2>
                 <div>
                     <span class="badge bg-secondary me-2" id="statusBadge">{{t:sec.checkingBadge}}</span>
-                    <button class="btn btn-outline-primary btn-sm" onclick="loadStatus()">
+                    <button class="btn btn-outline-primary btn-sm" data-on-click="loadStatus()">
                         <i class="fas fa-sync" aria-hidden="true"></i> {{t:common.refresh}}
                     </button>
                 </div>
@@ -8913,16 +8989,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-stethoscope me-2" aria-hidden="true"></i><strong>{{t:sec.f2bState}}</strong> <small class="ms-2" id="fhcOverallStatus"></small></span>
                     <div class="d-flex gap-2 flex-wrap">
-                        <button class="btn btn-sm btn-warning d-none" id="btnFixAll" onclick="runFhcFixAll()">
+                        <button class="btn btn-sm btn-warning d-none" id="btnFixAll" data-on-click="runFhcFixAll()">
                             <i class="fas fa-magic me-1" aria-hidden="true"></i>{{t:sec.fixAll}}
                         </button>
-                        <button class="btn btn-sm btn-outline-light" onclick="reloadFail2banFromPanel()" title="{{t:sec.reloadHint}}">
+                        <button class="btn btn-sm btn-outline-light" data-on-click="reloadFail2banFromPanel()" title="{{t:sec.reloadHint}}">
                             <i class="fas fa-sync-alt me-1" aria-hidden="true"></i>{{t:sec.reloadConfig}}
                         </button>
-                        <button class="btn btn-sm btn-danger" onclick="restartFail2banFromPanel()" title="{{t:sec.restartHint}}">
+                        <button class="btn btn-sm btn-danger" data-on-click="restartFail2banFromPanel()" title="{{t:sec.restartHint}}">
                             <i class="fas fa-power-off me-1" aria-hidden="true"></i>{{t:sec.restartF2b}}
                         </button>
-                        <button class="btn btn-sm btn-light" onclick="loadFail2banHealth()">
+                        <button class="btn btn-sm btn-light" data-on-click="loadFail2banHealth()">
                             <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:dns.tzRecheck}}
                         </button>
                     </div>
@@ -8940,7 +9016,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="card mb-4 border-secondary">
                 <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-microscope me-2" aria-hidden="true"></i><strong>{{t:sec.liveTitle}}</strong> <small class="ms-2 text-white-50">{{t:sec.liveHint}}</small></span>
-                    <button class="btn btn-sm btn-light" onclick="loadJailLiveState()">
+                    <button class="btn btn-sm btn-light" data-on-click="loadJailLiveState()">
                         <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:common.refresh}}
                     </button>
                 </div>
@@ -8954,10 +9030,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-at me-2" aria-hidden="true"></i><strong>{{t:sec.paliasTitle}}</strong> <small class="ms-2" id="paliasOverallBadge"></small></span>
                     <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-warning d-none" id="paliasFixBtn" onclick="paliasFix()">
+                        <button class="btn btn-sm btn-warning d-none" id="paliasFixBtn" data-on-click="paliasFix()">
                             <i class="fas fa-magic me-1" aria-hidden="true"></i>{{t:sec.fix}}
                         </button>
-                        <button class="btn btn-sm btn-light" onclick="paliasLoad()">
+                        <button class="btn btn-sm btn-light" data-on-click="paliasLoad()">
                             <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:dns.tzRecheck}}
                         </button>
                     </div>
@@ -8971,7 +9047,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <div class="input-group input-group-sm">
                         <span class="input-group-text">root →</span>
                         <input type="text" class="form-control" id="paliasRootForward" aria-label="{{t:sec.rootFwd}}" placeholder="{{t:sec.rootFwdPh}}">
-                        <button class="btn btn-info" type="button" onclick="paliasSetRootForward()"><i class="fas fa-save me-1" aria-hidden="true"></i>{{t:sec.saveFwd}}</button>
+                        <button class="btn btn-info" type="button" data-on-click="paliasSetRootForward()"><i class="fas fa-save me-1" aria-hidden="true"></i>{{t:sec.saveFwd}}</button>
                     </div>
                     <div id="paliasLog" class="mt-2 small"></div>
                 </div>
@@ -8982,13 +9058,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header bg-info text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <span><i class="fas fa-network-wired me-2" aria-hidden="true"></i><strong>{{t:sec.unbound}}</strong> <small class="ms-2" id="ubOverallStatus"></small></span>
                     <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-light" id="btnUbTestQuery" onclick="runUbTestQuery()" title="{{t:sec.testQueryHint}}">
+                        <button class="btn btn-sm btn-light" id="btnUbTestQuery" data-on-click="runUbTestQuery()" title="{{t:sec.testQueryHint}}">
                             <i class="fas fa-vial me-1" aria-hidden="true"></i>{{t:sec.testQuery}}
                         </button>
-                        <button class="btn btn-sm btn-warning d-none" id="btnUbFixAll" onclick="runUbFixAll()">
+                        <button class="btn btn-sm btn-warning d-none" id="btnUbFixAll" data-on-click="runUbFixAll()">
                             <i class="fas fa-magic me-1" aria-hidden="true"></i>{{t:sec.fixAll}}
                         </button>
-                        <button class="btn btn-sm btn-light" onclick="loadUnboundHealth()">
+                        <button class="btn btn-sm btn-light" data-on-click="loadUnboundHealth()">
                             <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:dns.tzRecheck}}
                         </button>
                     </div>
@@ -8998,7 +9074,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
                 <div class="card-body border-top d-none" id="ubTestResult">
                     <h6 class="mb-2"><i class="fas fa-vial me-1" aria-hidden="true"></i>{{t:sec.testQueryResult}}</h6>
-                    <pre id="ubTestBody" class="small mb-0" style="white-space:pre-wrap"></pre>
+                    <pre id="ubTestBody" class="small mb-0" data-style="white-space:pre-wrap"></pre>
                 </div>
                 <div class="card-body border-top d-none" id="ubFixAllReport">
                     <h6 class="mb-2"><i class="fas fa-list-check me-1" aria-hidden="true"></i>{{t:sec.fixReport}}</h6>
@@ -9046,7 +9122,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             <span><i class="fas fa-lock me-2" aria-hidden="true"></i>{{t:sec.activeJails}} <span class="badge bg-secondary ms-1" id="jailsCount">-</span></span>
                             <div class="d-flex align-items-center gap-2">
                                 <small class="text-muted d-none d-md-inline"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{t:sec.jailsWhere}}</small>
-                                <button class="btn btn-outline-primary btn-sm" id="btnRefreshJails" onclick="refreshJails(true)" title="{{t:sec.refreshJails}}">
+                                <button class="btn btn-outline-primary btn-sm" id="btnRefreshJails" data-on-click="refreshJails(true)" title="{{t:sec.refreshJails}}">
                                     <i class="fas fa-sync" id="iconRefreshJails"></i>
                                 </button>
                             </div>
@@ -9068,7 +9144,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     <select class="form-select" id="banJail" aria-label="Jail"></select>
                                 </div>
                                 <div class="col-3">
-                                    <button class="btn btn-danger w-100" onclick="banIp()">{{t:sec.ban}}</button>
+                                    <button class="btn btn-danger w-100" data-on-click="banIp()">{{t:sec.ban}}</button>
                                 </div>
                             </div>
                         </div>
@@ -9081,7 +9157,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="col-md-6">
                     <div class="card mb-4">
                         <div class="card-header"><i class="fas fa-history me-2" aria-hidden="true"></i>{{t:sec.recent}}</div>
-                        <div class="card-body" style="max-height: 300px; overflow-y: auto;" id="recentBans">
+                        <div class="card-body" data-style="max-height: 300px; overflow-y: auto;" id="recentBans">
                             <p class="text-muted">{{t:common.loading}}</p>
                         </div>
                     </div>
@@ -9089,7 +9165,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <div class="card mb-4">
                         <div class="card-header"><i class="fas fa-list me-2" aria-hidden="true"></i>{{t:sec.bannedIps}}</div>
                         <div class="card-body">
-                            <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                            <div class="table-responsive" data-style="max-height: 300px; overflow-y: auto;">
                                 <table class="table table-sm" id="bannedTable">
                                     <thead>
                                         <tr>
@@ -9124,12 +9200,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     <input type="text" id="permabanIpInput" class="form-control form-control-sm" placeholder="{{t:sec.ipPh}}" aria-label="{{t:sec.ipAddress}}">
                                 </div>
                                 <div class="col-4">
-                                    <button class="btn btn-danger btn-sm w-100" onclick="permabanAddManual()">
+                                    <button class="btn btn-danger btn-sm w-100" data-on-click="permabanAddManual()">
                                         <i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:common.add}}
                                     </button>
                                 </div>
                             </div>
-                            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                            <div class="table-responsive" data-style="max-height: 250px; overflow-y: auto;">
                                 <table class="table table-sm mb-0">
                                     <thead>
                                         <tr>
@@ -9144,10 +9220,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 </table>
                             </div>
                             <div class="mt-2">
-                                <button class="btn btn-outline-secondary btn-sm" onclick="permabanReload()" title="{{t:sec.pfReloadHint}}">
+                                <button class="btn btn-outline-secondary btn-sm" data-on-click="permabanReload()" title="{{t:sec.pfReloadHint}}">
                                     <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:sec.pfReload}}
                                 </button>
-                                <button class="btn btn-outline-secondary btn-sm" onclick="permabanList()" title="{{t:sec.refreshList}}">
+                                <button class="btn btn-outline-secondary btn-sm" data-on-click="permabanList()" title="{{t:sec.refreshList}}">
                                     <i class="fas fa-redo me-1" aria-hidden="true"></i>{{t:common.refresh}}
                                 </button>
                             </div>
@@ -9160,13 +9236,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="card mt-4">
                 <div class="card-header"><i class="fas fa-cogs me-2" aria-hidden="true"></i>{{t:sec.service}}</div>
                 <div class="card-body">
-                    <button class="btn btn-success me-2" onclick="serviceAction('start')">
+                    <button class="btn btn-success me-2" data-on-click="serviceAction('start')">
                         <i class="fas fa-play" aria-hidden="true"></i> {{t:sec.start}}
                     </button>
-                    <button class="btn btn-danger me-2" onclick="serviceAction('stop')">
+                    <button class="btn btn-danger me-2" data-on-click="serviceAction('stop')">
                         <i class="fas fa-stop" aria-hidden="true"></i> {{t:sec.stop}}
                     </button>
-                    <button class="btn btn-warning" onclick="serviceAction('reload')">
+                    <button class="btn btn-warning" data-on-click="serviceAction('reload')">
                         <i class="fas fa-sync" aria-hidden="true"></i> {{t:sec.reloadCfg}}
                     </button>
                 </div>
@@ -9229,7 +9305,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     ${escHtml(t('sec.jailCounts', { failed: jail.currently_failed, total: jail.total_banned }))}
                                 </small>
                                 <div class="mt-1">
-                                    <button class="btn btn-sm btn-outline-secondary py-0" data-jail="${escHtml(jail.name)}" onclick="checkJailFilter(this.dataset.jail)" title="${escHtml(t('sec.seesHint'))}">
+                                    <button class="btn btn-sm btn-outline-secondary py-0" data-jail="${escHtml(jail.name)}" data-on-click="checkJailFilter(this.dataset.jail)" title="${escHtml(t('sec.seesHint'))}">
                                         <i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>${escHtml(t('sec.sees'))}</button>
                                     <div id="filter-${escapeHtml(jail.name)}" class="small mt-1"></div>
                                 </div>
@@ -9280,16 +9356,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         <tr>
                             <td>
                                 <span class="ip-badge">${escapeHtml(ban.ip)}</span>
-                                <button class="btn btn-link btn-sm p-0 ms-1" data-ip="${escHtml(ban.ip)}" onclick="showIpInfo(this.dataset.ip)" title="${escHtml(t('sec.ipInfo'))}" aria-label="${escHtml(t('sec.ipInfo'))} ${escapeHtml(ban.ip)}">
+                                <button class="btn btn-link btn-sm p-0 ms-1" data-ip="${escHtml(ban.ip)}" data-on-click="showIpInfo(this.dataset.ip)" title="${escHtml(t('sec.ipInfo'))}" aria-label="${escHtml(t('sec.ipInfo'))} ${escapeHtml(ban.ip)}">
                                     <i class="fas fa-info-circle" aria-hidden="true"></i>
                                 </button>
                             </td>
                             <td><small>${escapeHtml(ban.jail)}</small></td>
                             <td class="d-flex gap-1">
-                                <button class="btn btn-sm btn-outline-success" data-ip="${escHtml(ban.ip)}" data-jail="${escHtml(ban.jail)}" onclick="unbanIp(this.dataset.ip, this.dataset.jail)" title="${escHtml(t('sec.unban'))}" aria-label="${escHtml(t('sec.unban'))} ${escapeHtml(ban.ip)}">
+                                <button class="btn btn-sm btn-outline-success" data-ip="${escHtml(ban.ip)}" data-jail="${escHtml(ban.jail)}" data-on-click="unbanIp(this.dataset.ip, this.dataset.jail)" title="${escHtml(t('sec.unban'))}" aria-label="${escHtml(t('sec.unban'))} ${escapeHtml(ban.ip)}">
                                     <i class="fas fa-unlock" aria-hidden="true"></i>
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger" data-ip="${escHtml(ban.ip)}" onclick="permabanAdd(this.dataset.ip)" title="${escHtml(t('sec.permaban'))}" aria-label="${escHtml(t('sec.permaban'))} ${escapeHtml(ban.ip)}">
+                                <button class="btn btn-sm btn-outline-danger" data-ip="${escHtml(ban.ip)}" data-on-click="permabanAdd(this.dataset.ip)" title="${escHtml(t('sec.permaban'))}" aria-label="${escHtml(t('sec.permaban'))} ${escapeHtml(ban.ip)}">
                                     <i class="fas fa-ban" aria-hidden="true"></i>
                                 </button>
                             </td>
@@ -9339,7 +9415,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 .then(r => r.json())
                 .then(data => {
                     let html = '<table class="table table-sm mb-2"><tbody>';
-                    html += `<tr><td style="width:35%"><strong>IP</strong></td><td><code>${escapeHtml(data.ip || ip)}</code></td></tr>`;
+                    html += `<tr><td data-style="width:35%"><strong>IP</strong></td><td><code>${escapeHtml(data.ip || ip)}</code></td></tr>`;
 
                     // Posizione geografica (GeoIP)
                     let country = '';
@@ -9440,13 +9516,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <h2 class="mb-0"><i class="fas fa-chart-line me-2" aria-hidden="true"></i>{{t:st.title}}</h2>
                 <div class="d-flex gap-2 align-items-center">
                     <label class="visually-hidden" for="periodSelect">{{t:st.period}}</label>
-                    <select class="form-select form-select-sm w-auto" id="periodSelect" onchange="loadStats()">
+                    <select class="form-select form-select-sm w-auto" id="periodSelect" data-on-change="loadStats()">
                         <option value="1">{{t:st.today}}</option>
                         <option value="7" selected>{{t:st.week}}</option>
                         <option value="30">{{t:st.month}}</option>
                         <option value="365">{{t:st.year}}</option>
                     </select>
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="loadStats()" title="{{t:common.refresh}}" aria-label="{{t:common.refresh}}">
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-on-click="loadStats()" title="{{t:common.refresh}}" aria-label="{{t:common.refresh}}">
                         <i class="fas fa-sync" aria-hidden="true"></i>
                     </button>
                 </div>
@@ -9796,7 +9872,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="text-center py-5">
                 <i class="fas fa-ban fa-3x text-danger mb-3" aria-hidden="true"></i>
                 <h2>{{t:access.title}}</h2>
-                <p class="text-muted mx-auto" style="max-width: 36rem">{{t:access.text}}</p>
+                <p class="text-muted mx-auto" data-style="max-width: 36rem">{{t:access.text}}</p>
                 <a class="btn btn-primary mt-2" href="/home"><i class="fas fa-gauge-high me-1" aria-hidden="true"></i>{{t:access.home}}</a>
             </div>
         </div>
@@ -9922,7 +9998,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-primary" onclick="createAdmin()">{{t:adm.create}}</button>
+                    <button type="button" class="btn btn-primary" data-on-click="createAdmin()">{{t:adm.create}}</button>
                 </div>
             </div>
         </div>
@@ -9959,7 +10035,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-primary" onclick="updateAdmin()">{{t:common.save}}</button>
+                    <button type="button" class="btn btn-primary" data-on-click="updateAdmin()">{{t:common.save}}</button>
                 </div>
             </div>
         </div>
@@ -10009,11 +10085,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             <td data-label="${escHtml(t('adm.lastLogin'))}"><small>${escHtml(admDate(admin.last_login) || t('adm.never'))}</small></td>
                             <td data-label="${escHtml(t('adm.created'))}"><small>${escHtml(admDate(admin.created_at))}</small></td>
                             <td data-label="${escHtml(t('home.colActions'))}">
-                                <button class="btn btn-sm btn-outline-primary" data-id="${Number(admin.id)}" onclick="editAdmin(Number(this.dataset.id))"
+                                <button class="btn btn-sm btn-outline-primary" data-id="${Number(admin.id)}" data-on-click="editAdmin(Number(this.dataset.id))"
                                         title="${escHtml(t('common.edit'))}" aria-label="${escHtml(t('adm.editOne', { name: admin.username }))}" ${admin.is_current ? 'disabled' : ''}>
                                     <i class="fas fa-edit" aria-hidden="true"></i>
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger" data-id="${Number(admin.id)}" onclick="deleteAdmin(Number(this.dataset.id))"
+                                <button class="btn btn-sm btn-outline-danger" data-id="${Number(admin.id)}" data-on-click="deleteAdmin(Number(this.dataset.id))"
                                         title="${escHtml(t('common.delete'))}" aria-label="${escHtml(t('adm.deleteOne', { name: admin.username }))}" ${admin.is_current ? 'disabled' : ''}>
                                     <i class="fas fa-trash" aria-hidden="true"></i>
                                 </button>
@@ -10092,10 +10168,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <h2 class="mb-0"><i class="fas fa-stopwatch me-2" aria-hidden="true"></i>{{t:rl.title}}</h2>
                 <div class="d-flex flex-wrap gap-2">
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="loadRateLimits()">
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-on-click="loadRateLimits()">
                         <i class="fas fa-sync" aria-hidden="true"></i> {{t:common.refresh}}
                     </button>
-                    <button type="button" class="btn btn-primary btn-sm" onclick="newLimit()">
+                    <button type="button" class="btn btn-primary btn-sm" data-on-click="newLimit()">
                         <i class="fas fa-plus" aria-hidden="true"></i> {{t:rl.new}}
                     </button>
                 </div>
@@ -10135,7 +10211,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             </div>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-primary" onclick="saveGlobalLimits()">
+                    <button type="button" class="btn btn-primary" data-on-click="saveGlobalLimits()">
                         <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:rl.saveGlobal}}
                     </button>
                 </div>
@@ -10206,7 +10282,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-primary" onclick="saveLimit()">{{t:common.save}}</button>
+                    <button type="button" class="btn btn-primary" data-on-click="saveLimit()">{{t:common.save}}</button>
                 </div>
             </div>
         </div>
@@ -10437,15 +10513,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
         """;
         return getHead("nav.firewall", "firewall", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container-fluid mt-4" style="max-width: 1200px">
+    <div id="main" tabindex="-1" class="content container-fluid mt-4" data-style="max-width: 1200px">
 
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h2 class="mb-0"><i class="fas fa-fire me-2" aria-hidden="true"></i>{{t:fw.title}}</h2>
             <div class="d-flex gap-2">
-                <button class="btn btn-outline-secondary btn-sm" onclick="loadFirewall()" title="{{t:fw.reload}}" aria-label="{{t:fw.reload}}">
+                <button class="btn btn-outline-secondary btn-sm" data-on-click="loadFirewall()" title="{{t:fw.reload}}" aria-label="{{t:fw.reload}}">
                     <i class="fas fa-sync" aria-hidden="true"></i>
                 </button>
-                <button class="btn btn-success" onclick="fwApply()" title="{{t:fw.applyHint}}">
+                <button class="btn btn-success" data-on-click="fwApply()" title="{{t:fw.applyHint}}">
                     <i class="fas fa-check-circle me-1" aria-hidden="true"></i>{{t:fw.apply}}
                 </button>
             </div>
@@ -10468,9 +10544,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <p class="small text-muted mb-3">{{t:fw.modeIntro.html}}</p>
                 <div class="row g-2" id="fwModeContainer"></div>
 
-                <div class="mt-3" id="fwPort25Row" style="display:none">
+                <div class="mt-3" id="fwPort25Row" data-style="display:none">
                     <div class="form-check">
-                        <input type="checkbox" class="form-check-input" id="fwPort25Geo" onchange="fwSetPort25Geo(this.checked)">
+                        <input type="checkbox" class="form-check-input" id="fwPort25Geo" data-on-change="fwSetPort25Geo(this.checked)">
                         <label class="form-check-label small" for="fwPort25Geo">
                             {{t:fw.port25Label.html}}
                             <i class="fas fa-exclamation-triangle text-warning ms-1" aria-hidden="true"></i>
@@ -10491,7 +10567,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2 bg-info bg-opacity-10">
                 <span><i class="fas fa-cloud-download-alt me-2" aria-hidden="true"></i>{{t:fw.autoSyncTitle}} <span id="fwAutoSyncStatus"></span></span>
                 <div>
-                    <button class="btn btn-warning btn-sm me-1" onclick="fwSyncAll()" title="{{t:fw.syncNowHint}}">
+                    <button class="btn btn-warning btn-sm me-1" data-on-click="fwSyncAll()" title="{{t:fw.syncNowHint}}">
                         <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:fw.syncNow}}
                     </button>
                 </div>
@@ -10504,7 +10580,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             <input type="checkbox" class="form-check-input" id="fwAutoSyncEnabled">
                             <label class="form-check-label small" for="fwAutoSyncEnabled">
                                 <strong>{{t:fw.autoSyncOn}}</strong>
-                                <span class="d-block text-muted" style="font-size:.75rem">{{t:fw.autoSyncOnHint}}</span>
+                                <span class="d-block text-muted" data-style="font-size:.75rem">{{t:fw.autoSyncOnHint}}</span>
                             </label>
                         </div>
                     </div>
@@ -10519,7 +10595,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         </select>
                     </div>
                     <div class="col-md-4">
-                        <button class="btn btn-primary btn-sm w-100" onclick="fwSaveAutoSync()">
+                        <button class="btn btn-primary btn-sm w-100" data-on-click="fwSaveAutoSync()">
                             <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:fw.saveAutoSync}}
                         </button>
                     </div>
@@ -10534,7 +10610,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         <div class="card mb-3" id="fwCountriesCard">
             <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span><i class="fas fa-globe me-2" aria-hidden="true"></i>{{t:fw.countries}} <span class="badge bg-secondary ms-1" id="fwCountriesCount">0</span></span>
-                <button class="btn btn-warning btn-sm" onclick="fwSyncAll()" title="{{t:fw.syncGeoHint}}">
+                <button class="btn btn-warning btn-sm" data-on-click="fwSyncAll()" title="{{t:fw.syncGeoHint}}">
                     <i class="fas fa-cloud-download-alt me-1" aria-hidden="true"></i>{{t:fw.syncGeo}}
                 </button>
             </div>
@@ -10561,53 +10637,53 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
                 <!-- Selezione in blocco -->
                 <div class="d-flex flex-wrap gap-1 mb-2">
-                    <button id="fwToggleOnlySelected" class="btn btn-outline-info btn-sm" onclick="fwToggleOnlySelected()" title="{{t:fw.onlySelectedHint}}" aria-pressed="false">
+                    <button id="fwToggleOnlySelected" class="btn btn-outline-info btn-sm" data-on-click="fwToggleOnlySelected()" title="{{t:fw.onlySelectedHint}}" aria-pressed="false">
                         <i class="fas fa-filter me-1" aria-hidden="true"></i>{{t:fw.onlySelected}}
                     </button>
-                    <button class="btn btn-outline-primary btn-sm" onclick="fwSelectAllVisible()" title="{{t:fw.selectVisibleHint}}">
+                    <button class="btn btn-outline-primary btn-sm" data-on-click="fwSelectAllVisible()" title="{{t:fw.selectVisibleHint}}">
                         <i class="fas fa-check-double me-1" aria-hidden="true"></i>{{t:fw.selectVisible}}
                     </button>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="fwDeselectAllVisible()" title="{{t:fw.deselectVisibleHint}}">
+                    <button class="btn btn-outline-secondary btn-sm" data-on-click="fwDeselectAllVisible()" title="{{t:fw.deselectVisibleHint}}">
                         <i class="fas fa-times me-1" aria-hidden="true"></i>{{t:fw.deselectVisible}}
                     </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="fwClearAllCountries()" title="{{t:fw.clearHint}}">
+                    <button class="btn btn-outline-danger btn-sm" data-on-click="fwClearAllCountries()" title="{{t:fw.clearHint}}">
                         <i class="fas fa-trash me-1" aria-hidden="true"></i>{{t:fw.clear}}
                     </button>
                 </div>
 
                 <input type="text" class="form-control form-control-sm mb-2" id="fwCountrySearch" maxlength="60"
-                       placeholder="{{t:fw.searchPlaceholder}}" aria-label="{{t:fw.search}}" oninput="fwFilterCountries()">
+                       placeholder="{{t:fw.searchPlaceholder}}" aria-label="{{t:fw.search}}" data-on-input="fwFilterCountries()">
                 <div class="small mb-2"><strong id="fwGridLabel">{{t:fw.available}}</strong></div>
-                <div class="fw-country-grid" id="fwCountriesGrid" style="max-height: 500px" role="group" aria-labelledby="fwGridLabel"></div>
+                <div class="fw-country-grid" id="fwCountriesGrid" data-style="max-height: 500px" role="group" aria-labelledby="fwGridLabel"></div>
                 <div class="alert alert-info py-2 px-2 mt-2 mb-0 small">
                     <i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{t:fw.blueHint}}
                 </div>
 
                 <!-- Editor dei codici, nei due sensi -->
-                <div class="mt-3 pt-3" style="border-top: 1px solid rgba(128,128,128,0.25)">
+                <div class="mt-3 pt-3" data-style="border-top: 1px solid rgba(128,128,128,0.25)">
                     <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                         <strong class="small" id="fwCodeEditorLabel"><i class="fas fa-code me-1" aria-hidden="true"></i>{{t:fw.codeEditor}}</strong>
                         <div class="d-flex gap-1 align-items-center flex-wrap">
                             <label class="small mb-0" for="fwCodeFormat">{{t:fw.format}}</label>
-                            <select class="form-select form-select-sm" id="fwCodeFormat" style="width:auto;max-width:100%" onchange="renderFwCodeEditor()">
+                            <select class="form-select form-select-sm" id="fwCodeFormat" data-style="width:auto;max-width:100%" data-on-change="renderFwCodeEditor()">
                                 <option value="cf_ne">{{t:fw.fmtCfNe}}</option>
                                 <option value="cf_eq">{{t:fw.fmtCfEq}}</option>
                                 <option value="csv" selected>{{t:fw.fmtCsv}}</option>
                                 <option value="json">{{t:fw.fmtJson}}</option>
                                 <option value="lines">{{t:fw.fmtLines}}</option>
                             </select>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="fwCopyCodeEditor()" title="{{t:fw.copyClipboard}}" aria-label="{{t:fw.copyClipboard}}">
+                            <button class="btn btn-sm btn-outline-secondary" data-on-click="fwCopyCodeEditor()" title="{{t:fw.copyClipboard}}" aria-label="{{t:fw.copyClipboard}}">
                                 <i class="fas fa-copy" aria-hidden="true"></i>
                             </button>
                         </div>
                     </div>
                     <textarea id="fwCodeEditor" class="form-control" rows="4" maxlength="20000"
-                              style="font-family: monospace; font-size: .85rem"
+                              data-style="font-family: monospace; font-size: .85rem"
                               placeholder="{{t:fw.editorPlaceholder}}" aria-labelledby="fwCodeEditorLabel"
-                              oninput="fwScheduleCodeApply()"></textarea>
+                              data-on-input="fwScheduleCodeApply()"></textarea>
                     <div class="d-flex justify-content-between align-items-center mt-1 flex-wrap gap-1">
                         <div id="fwCodeEditorStatus" class="small" role="status">{{t:fw.ready}}</div>
-                        <button class="btn btn-primary btn-sm" onclick="fwApplyCodeEditorNow()">
+                        <button class="btn btn-primary btn-sm" data-on-click="fwApplyCodeEditorNow()">
                             <i class="fas fa-check me-1" aria-hidden="true"></i>{{t:fw.applyNow}}
                         </button>
                     </div>
@@ -10629,7 +10705,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div id="fwWlList" class="mb-2"><span class="text-muted small">{{t:fw.noWl}}</span></div>
                 <div class="row g-2">
                     <div class="col-md-9"><input type="text" class="form-control form-control-sm" id="fwWlInput" maxlength="43" placeholder="{{t:fw.wlPlaceholder}}" aria-label="{{t:fw.wlInput}}"></div>
-                    <div class="col-md-3"><button class="btn btn-success btn-sm w-100" onclick="fwAddCidr('wl')"><i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:common.add}}</button></div>
+                    <div class="col-md-3"><button class="btn btn-success btn-sm w-100" data-on-click="fwAddCidr('wl')"><i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:common.add}}</button></div>
                 </div>
             </div>
         </div>
@@ -10645,7 +10721,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div id="fwBlList" class="mb-2"><span class="text-muted small">{{t:fw.noBl}}</span></div>
                 <div class="row g-2">
                     <div class="col-md-9"><input type="text" class="form-control form-control-sm" id="fwBlInput" maxlength="43" placeholder="{{t:fw.blPlaceholder}}" aria-label="{{t:fw.blInput}}"></div>
-                    <div class="col-md-3"><button class="btn btn-danger btn-sm w-100" onclick="fwAddCidr('bl')"><i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:common.add}}</button></div>
+                    <div class="col-md-3"><button class="btn btn-danger btn-sm w-100" data-on-click="fwAddCidr('bl')"><i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:common.add}}</button></div>
                 </div>
             </div>
         </div>
@@ -10775,10 +10851,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             container.innerHTML = FW_MODES.map(m => {
                 const active = (m.value === __fwState.mode);
                 const recommended = m.recommended
-                    ? '<span class="badge bg-success ms-1" style="font-size:.65rem"><span aria-hidden="true">★ </span>' + escHtml(t('fw.recommended')) + '</span>' : '';
+                    ? '<span class="badge bg-success ms-1" data-style="font-size:.65rem"><span aria-hidden="true">★ </span>' + escHtml(t('fw.recommended')) + '</span>' : '';
                 return '<div class="col-md-6">' +
                     '<button type="button" class="fw-mode-card' + (active ? ' active' : '') + '" aria-pressed="' + active + '"'
-                    + ' data-mode="' + escHtml(m.value) + '" onclick="fwSetMode(this.dataset.mode)">' +
+                    + ' data-mode="' + escHtml(m.value) + '" data-on-click="fwSetMode(this.dataset.mode)">' +
                     '<span class="d-block"><strong>' + escHtml(m.label) + '</strong>' + recommended + '</span>' +
                     '<span class="d-block small text-muted mt-1">' + escHtml(m.desc) + '</span>' +
                     '</button></div>';
@@ -11071,13 +11147,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     badge = '<i class="fas fa-check-double ms-1" aria-hidden="true"></i><span class="visually-hidden"> ' + escHtml(t('fw.contained')) + '</span>';
                 } else if (matchCount > 0) {
                     // Solo alcuni paesi del preset selezionati
-                    badge = '<span class="badge bg-light text-dark ms-1" style="font-size:.65rem" title="' + escHtml(t('fw.partial', { n: matchCount, total: codes.length })) + '">' + matchCount + '/' + codes.length + '</span>';
+                    badge = '<span class="badge bg-light text-dark ms-1" data-style="font-size:.65rem" title="' + escHtml(t('fw.partial', { n: matchCount, total: codes.length })) + '">' + matchCount + '/' + codes.length + '</span>';
                 } else {
                     // Nessun paese del preset selezionato
-                    badge = '<span class="badge bg-light text-dark ms-1" style="font-size:.65rem">' + codes.length + '</span>';
+                    badge = '<span class="badge bg-light text-dark ms-1" data-style="font-size:.65rem">' + codes.length + '</span>';
                 }
                 return '<button type="button" class="btn btn-sm ' + cls + '" '
-                     + 'data-group="' + escHtml(g.id) + '" onclick="fwApplyPresetGroup(this.dataset.group)" '
+                     + 'data-group="' + escHtml(g.id) + '" data-on-click="fwApplyPresetGroup(this.dataset.group)" '
                      + 'title="' + escHtml(fwGroupDesc(g)) + '">'
                      + '<span aria-hidden="true">' + escHtml(g.icon || '') + '</span> ' + escHtml(fwGroupLabel(g)) + badge
                      + '</button>';
@@ -11203,7 +11279,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 // La ricerca trova il paese col nome della pagina e con quello del catalogo.
                 const searchable = (name + ' ' + c.name).toLowerCase();
                 return '<label class="fw-country-item' + selClass + '" data-cc="' + escHtml(c.code) + '" data-name="' + escHtml(searchable) + '" data-common="' + (c.common ? '1' : '0') + '">' +
-                       '<input type="checkbox" onchange="fwToggleCountry(this.closest(\\'label\\').dataset.cc, this.checked)"' + isChecked + '>' +
+                       '<input type="checkbox" data-on-change="fwToggleCountry(this.closest(\\'label\\').dataset.cc, this.checked)"' + isChecked + '>' +
                        '<span class="flag" aria-hidden="true">' + escHtml(c.flag) + '</span>' +
                        '<span>' + nameHtml + '</span>' +
                        '<span class="text-muted small">(' + escHtml(c.code) + ')</span>' +
@@ -11302,7 +11378,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             list.innerHTML = cidrs.map(c =>
                 '<span class="fw-cidr-item"><code>' + escHtml(c) + '</code>' +
-                '<button type="button" class="btn-remove" data-kind="' + escHtml(kind) + '" data-cidr="' + escHtml(c) + '" onclick="fwRemoveCidr(this.dataset.kind, this.dataset.cidr)"'
+                '<button type="button" class="btn-remove" data-kind="' + escHtml(kind) + '" data-cidr="' + escHtml(c) + '" data-on-click="fwRemoveCidr(this.dataset.kind, this.dataset.cidr)"'
                 + ' title="' + escHtml(t('fw.removeCidr', { cidr: c })) + '" aria-label="' + escHtml(t('fw.removeCidr', { cidr: c })) + '"><i class="fas fa-times" aria-hidden="true"></i></button>' +
                 '</span>'
             ).join('');
@@ -11361,11 +11437,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         .cf-form-card { border-left: 4px solid #0d6efd; }
         """;
         return getHead("nav.cloudflare", "cloudflare", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4" style="max-width: 1100px">
+    <div id="main" tabindex="-1" class="content container mt-4" data-style="max-width: 1100px">
 
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-            <h2 class="mb-0"><i class="fas fa-cloud me-2" style="color:#f6821f" aria-hidden="true"></i>Cloudflare <small class="text-muted fs-6">— {{t:cf.subtitle}} (<code>{{MAIL_HOSTNAME}}</code>)</small></h2>
-            <button class="btn btn-outline-secondary btn-sm" onclick="cfLoad()" title="{{t:cf.reload}}">
+            <h2 class="mb-0"><i class="fas fa-cloud me-2" data-style="color:#f6821f" aria-hidden="true"></i>Cloudflare <small class="text-muted fs-6">— {{t:cf.subtitle}} (<code>{{MAIL_HOSTNAME}}</code>)</small></h2>
+            <input type="hidden" id="pageMailHostname" value="{{MAIL_HOSTNAME}}">
+            <button class="btn btn-outline-secondary btn-sm" data-on-click="cfLoad()" title="{{t:cf.reload}}">
                 <i class="fas fa-sync" aria-hidden="true"></i> {{t:cf.reload}}
             </button>
         </div>
@@ -11378,7 +11455,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         <div class="card mb-4 cf-form-card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="fas fa-plus-circle me-2" aria-hidden="true"></i><span id="cfFormTitle">{{t:cf.addTitle}}</span></span>
-                <button class="btn btn-sm btn-outline-secondary" id="cfCancelEditBtn" style="display:none" onclick="cfResetForm()">
+                <button class="btn btn-sm btn-outline-secondary" id="cfCancelEditBtn" data-style="display:none" data-on-click="cfResetForm()">
                     <i class="fas fa-times me-1" aria-hidden="true"></i>{{t:cf.cancelEdit}}
                 </button>
             </div>
@@ -11402,10 +11479,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         <div class="input-group">
                             <input type="password" class="form-control" id="cfToken" autocomplete="off"
                                    placeholder="{{t:cf.tokenPh}}">
-                            <button class="btn btn-outline-secondary" type="button" onclick="cfToggleToken()" title="{{t:cf.showHide}}" aria-label="{{t:cf.showHide}}">
+                            <button class="btn btn-outline-secondary" type="button" data-on-click="cfToggleToken()" title="{{t:cf.showHide}}" aria-label="{{t:cf.showHide}}">
                                 <i class="fas fa-eye" id="cfTokenEye"></i>
                             </button>
-                            <button class="btn btn-outline-info" type="button" onclick="cfTest()">
+                            <button class="btn btn-outline-info" type="button" data-on-click="cfTest()">
                                 <i class="fas fa-vial me-1" aria-hidden="true"></i>{{t:dns.cfTest}}
                             </button>
                         </div>
@@ -11416,7 +11493,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     </div>
                 </div>
                 <div class="mt-3">
-                    <button class="btn btn-primary" onclick="cfSave()">
+                    <button class="btn btn-primary" data-on-click="cfSave()">
                         <i class="fas fa-save me-1" aria-hidden="true"></i><span id="cfSaveLabel">{{t:cf.verifySave}}</span>
                     </button>
                 </div>
@@ -11434,7 +11511,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         </div>
 
         <!-- ===== Certificato del server mail (Mail Hostname) ===== -->
-        <div class="card mb-4" style="border-left:4px solid #198754">
+        <div class="card mb-4" data-style="border-left:4px solid #198754">
             <div class="card-header"><i class="fas fa-server me-2" aria-hidden="true"></i>{{t:cf.mailCert}}</div>
             <div class="card-body">
                 <p class="small text-muted mb-2">
@@ -11473,7 +11550,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         try { const el = document.getElementById('csrf_token'); if (el && el.value) __cfCsrf = el.value; } catch (e) {}
 
         // Mail Hostname pre-compilato lato server (stesso meccanismo di /settings e /ssl)
-        const __cfMailHostname = '{{MAIL_HOSTNAME}}';
+        // Dalla pagina, non scritto dal server dentro lo script: gli script sono file (reperto 178).
+        const __cfMailHostname = document.getElementById('pageMailHostname').value;
 
         let cfState = { accounts: [], mailServer: null };
 
@@ -11523,8 +11601,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     + '<td class="cf-token-cell">' + escCf(a.token_masked || '••••') + '</td>'
                     + '<td>' + verified + '</td>'
                     + '<td class="text-end">'
-                    + '<button class="btn btn-sm btn-outline-primary me-1" onclick="cfEdit(' + a.id + ')" title="' + escHtml(t('common.edit')) + '" aria-label="' + escHtml(t('common.edit')) + ' ' + escCf(a.label || '') + '"><i class="fas fa-pen" aria-hidden="true"></i></button>'
-                    + '<button class="btn btn-sm btn-outline-danger" onclick="cfDelete(' + a.id + ')" title="' + escHtml(t('common.delete')) + '" aria-label="' + escHtml(t('common.delete')) + ' ' + escCf(a.label || '') + '"><i class="fas fa-trash" aria-hidden="true"></i></button>'
+                    + '<button class="btn btn-sm btn-outline-primary me-1" data-on-click="cfEdit(' + a.id + ')" title="' + escHtml(t('common.edit')) + '" aria-label="' + escHtml(t('common.edit')) + ' ' + escCf(a.label || '') + '"><i class="fas fa-pen" aria-hidden="true"></i></button>'
+                    + '<button class="btn btn-sm btn-outline-danger" data-on-click="cfDelete(' + a.id + ')" title="' + escHtml(t('common.delete')) + '" aria-label="' + escHtml(t('common.delete')) + ' ' + escCf(a.label || '') + '"><i class="fas fa-trash" aria-hidden="true"></i></button>'
                     + '</td></tr>';
             });
             html += '</tbody></table></div>';
@@ -11551,12 +11629,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 ? '<span class="badge bg-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('cf.autoOn')) + '</span>'
                 : '<span class="badge bg-secondary"><i class="fas fa-hand me-1" aria-hidden="true"></i>' + escHtml(t('cf.manual')) + '</span>';
             box.innerHTML = '<div class="table-responsive"><table class="table align-middle mb-2">'
-                + '<thead><tr><th scope="col">' + escHtml(t('cf.colHost')) + '</th><th scope="col" style="width:340px">' + escHtml(t('cf.colAccount')) + '</th></tr></thead><tbody>'
+                + '<thead><tr><th scope="col">' + escHtml(t('cf.colHost')) + '</th><th scope="col" data-style="width:340px">' + escHtml(t('cf.colAccount')) + '</th></tr></thead><tbody>'
                 + '<tr>'
                 + '<td><i class="fas fa-server me-1 text-success" aria-hidden="true"></i><strong>' + escCf(host) + '</strong> ' + status + '</td>'
-                + '<td><select class="form-select form-select-sm" id="cfMailServerSelect" aria-label="' + escHtml(t('cf.colAccount')) + '" onchange="cfAssignMailServer(this.value)">' + opts + '</select></td>'
+                + '<td><select class="form-select form-select-sm" id="cfMailServerSelect" aria-label="' + escHtml(t('cf.colAccount')) + '" data-on-change="cfAssignMailServer(this.value)">' + opts + '</select></td>'
                 + '</tr></tbody></table></div>'
-                + '<button class="btn btn-outline-info btn-sm" onclick="cfTestMailServer()">'
+                + '<button class="btn btn-outline-info btn-sm" data-on-click="cfTestMailServer()">'
                 + '<i class="fas fa-plug me-1" aria-hidden="true"></i>' + escHtml(t('ssl.testLink')) + '</button>'
                 + '<div id="cfMailServerTest" class="mt-2"></div>'
                 + '<div class="small text-muted mt-2"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>' + escHtml(t('cf.tokenNeeds', { host: host })) + '</div>';
@@ -11708,14 +11786,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h2><i class="fas fa-folder-tree me-2" aria-hidden="true"></i>{{t:pt.title}}</h2>
-                <button class="btn btn-outline-primary btn-sm" onclick="loadPaths()">
+                <button class="btn btn-outline-primary btn-sm" data-on-click="loadPaths()">
                     <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:common.refresh}}
                 </button>
             </div>
             <p class="text-muted mb-3">{{t:pt.intro}}</p>
 
             <div class="d-flex gap-3 mb-3 align-items-center flex-wrap">
-                <input type="text" id="pathSearch" class="form-control form-control-sm" style="max-width:300px" maxlength="100" placeholder="{{t:pt.filterPlaceholder}}" aria-label="{{t:pt.filter}}" oninput="filterPaths()">
+                <input type="text" id="pathSearch" class="form-control form-control-sm" data-style="max-width:300px" maxlength="100" placeholder="{{t:pt.filterPlaceholder}}" aria-label="{{t:pt.filter}}" data-on-input="filterPaths()">
                 <span class="small text-muted" id="pathStats" aria-live="polite">-</span>
             </div>
 
@@ -11784,7 +11862,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     }
                     if (meta.length > 0) html += '<div class="path-meta mt-1">' + meta.join(' • ') + '</div>';
                     html += '</div>';
-                    html += '<button type="button" class="copy-btn" data-path="' + escHtml(entry.path) + '" onclick="copyPath(this, this.dataset.path)"><i class="fas fa-copy" aria-hidden="true"></i> ' + escHtml(t('common.copy')) + '</button>';
+                    html += '<button type="button" class="copy-btn" data-path="' + escHtml(entry.path) + '" data-on-click="copyPath(this, this.dataset.path)"><i class="fas fa-copy" aria-hidden="true"></i> ' + escHtml(t('common.copy')) + '</button>';
                     html += '</div>';
                     html += '</div>';
                 });
@@ -11864,21 +11942,21 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fab fa-freebsd me-2" aria-hidden="true"></i><strong>{{t:up.os}}</strong>
                         <span class="small text-muted ms-2">{{t:up.osSub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-danger me-1" onclick="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>{{t:up.reboot}}</button>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="rcPrev()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>{{t:up.autostart}}</button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="osState()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.sysState}}</button>
+                        <button class="btn btn-sm btn-outline-danger me-1" data-on-click="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>{{t:up.reboot}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="rcPrev()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>{{t:up.autostart}}</button>
+                        <button class="btn btn-sm btn-outline-primary" data-on-click="osState()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.sysState}}</button>
                     </span>
                 </div>
                 <div class="card-body">
                     <div id="os-body"><span class="text-muted">{{t:up.phSysState}}</span></div>
-                    <pre id="os-log" class="upd-log mt-2" style="display:none"></pre>
+                    <pre id="os-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
             <div class="card mb-4" id="packages">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span><i class="fas fa-cubes me-2" aria-hidden="true"></i><strong>{{t:pkgs.title}}</strong></span>
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="pkOverview()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:common.refresh}}</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-on-click="pkOverview()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:common.refresh}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:pkgs.intro.html}}</p>
@@ -11888,8 +11966,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-footer">
                     <div class="small text-muted mb-2">{{t:pkgs.bulk.intro.html}}</div>
                     <div class="d-flex flex-wrap gap-1">
-                        <button type="button" class="btn btn-sm btn-outline-success" onclick="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:pkgs.bulk.lockAll}}</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="updLockAll(false)"><i class="fas fa-lock-open me-1" aria-hidden="true"></i>{{t:pkgs.bulk.unlockAll}}</button>
+                        <button type="button" class="btn btn-sm btn-outline-success" data-on-click="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:pkgs.bulk.lockAll}}</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-on-click="updLockAll(false)"><i class="fas fa-lock-open me-1" aria-hidden="true"></i>{{t:pkgs.bulk.unlockAll}}</button>
                         <a class="btn btn-sm btn-outline-primary" href="#updates"><i class="fas fa-arrow-down me-1" aria-hidden="true"></i>{{t:pkgs.bulk.goUpdates}}</a>
                     </div>
                 </div>
@@ -11909,14 +11987,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 <input type="text" id="pkUpdName" class="form-control" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="64">
                             </div>
                             <div class="progress mt-3" id="pkUpdProgress" hidden role="progressbar" aria-label="{{t:pkgs.m.progress}}" aria-valuemin="0" aria-valuemax="100">
-                                <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%"></div>
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" data-style="width:0%"></div>
                             </div>
                             <div id="pkUpdResult" class="mt-2" role="status" aria-live="polite"></div>
                             <pre id="pkUpdLog" class="upd-log mt-2 mb-0" hidden></pre>
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.close}}</button>
-                            <button type="button" class="btn btn-danger" id="pkUpdGo" disabled hidden onclick="pkUpdRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>{{t:pkgs.m.go}}</button>
+                            <button type="button" class="btn btn-danger" id="pkUpdGo" disabled hidden data-on-click="pkUpdRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>{{t:pkgs.m.go}}</button>
                         </div>
                     </div>
                 </div>
@@ -11928,19 +12006,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i><strong>{{t:up.release}}</strong>
                         <span class="small text-muted ms-2">{{t:up.releaseSub}}</span></span>
                     <span>
-                        <select id="os-target" class="form-select form-select-sm d-inline-block me-1" style="width:auto" aria-label="{{t:up.targetVersionLabel}}">
+                        <select id="os-target" class="form-select form-select-sm d-inline-block me-1" data-style="width:auto" aria-label="{{t:up.targetVersionLabel}}">
                             <option value="">{{t:up.targetVersion}}</option>
                         </select>
-                        <button class="btn btn-sm btn-warning me-1" onclick="jumpState()"><i class="fas fa-forward me-1" aria-hidden="true"></i>{{t:up.continueJump}}</button>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="upCheck()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkAfter}}</button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="upPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-release-tog" onclick="procOpen('proc-release')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-warning me-1" data-on-click="jumpState()"><i class="fas fa-forward me-1" aria-hidden="true"></i>{{t:up.continueJump}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="upCheck()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkAfter}}</button>
+                        <button class="btn btn-sm btn-outline-danger" data-on-click="upPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-release-tog" data-on-click="procOpen('proc-release')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
-                <div class="card-body" id="proc-release" style="display:none">
+                <div class="card-body" id="proc-release" data-style="display:none">
                     <p class="small text-muted mb-2">{{t:up.releaseIntro.html}}</p>
                     <div id="up-body"><span class="text-muted">{{t:up.phRelease}}</span></div>
-                    <pre id="up-log" class="upd-log mt-2" style="display:none"></pre>
+                    <pre id="up-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
@@ -11949,14 +12027,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-clipboard-list me-2" aria-hidden="true"></i><strong>{{t:up.report}}</strong>
                         <span class="small text-muted ms-2">{{t:up.reportSub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" id="rep-copy" onclick="repCopy()" style="display:none"><i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:common.copy}}</button>
-                        <button class="btn btn-sm btn-outline-info" onclick="repGen()"><i class="fas fa-file-lines me-1" aria-hidden="true"></i>{{t:up.genReport}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" id="rep-copy" data-on-click="repCopy()" data-style="display:none"><i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:common.copy}}</button>
+                        <button class="btn btn-sm btn-outline-info" data-on-click="repGen()"><i class="fas fa-file-lines me-1" aria-hidden="true"></i>{{t:up.genReport}}</button>
                     </span>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.reportIntro.html}}</p>
                     <div id="rep-state"><span class="text-muted">{{t:up.phReport}}</span></div>
-                    <pre id="rep-text" class="upd-log mt-2" style="display:none"></pre>
+                    <pre id="rep-text" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
@@ -11964,7 +12042,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-scale-balanced me-2" aria-hidden="true"></i><strong>{{t:up.defaults}}</strong>
                         <span class="small text-muted ms-2">{{t:up.defaultsSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="defCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.compare}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="defCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.compare}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.defaultsIntro.html}}</p>
@@ -11977,7 +12055,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-terminal me-2" aria-hidden="true"></i><strong>{{t:up.env}}</strong>
                         <span class="small text-muted ms-2">{{t:up.envSub}}</span></span>
                     <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-info" onclick="envCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
+                        <button class="btn btn-sm btn-outline-info" data-on-click="envCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -11990,7 +12068,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-hand me-2" aria-hidden="true"></i><strong>{{t:up.remove}}</strong>
                         <span class="small text-muted ms-2">{{t:up.removeSub}}</span></span>
                     <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-warning" onclick="rmCandidates()"><i class="fas fa-list me-1" aria-hidden="true"></i>{{t:up.listCandidates}}</button>
+                        <button class="btn btn-sm btn-outline-warning" data-on-click="rmCandidates()"><i class="fas fa-list me-1" aria-hidden="true"></i>{{t:up.listCandidates}}</button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -12003,14 +12081,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-link-slash me-2" aria-hidden="true"></i><strong>{{t:up.libs}}</strong>
                         <span class="small text-muted ms-2">{{t:up.libsSub}}</span></span>
 <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-danger me-1" onclick="libsCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="libsDiag()"><i class="fas fa-stethoscope me-1" aria-hidden="true"></i>{{t:up.mysqlClientDiag}}</button>
+                        <button class="btn btn-sm btn-outline-danger me-1" data-on-click="libsCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
+                        <button class="btn btn-sm btn-outline-secondary" data-on-click="libsDiag()"><i class="fas fa-stethoscope me-1" aria-hidden="true"></i>{{t:up.mysqlClientDiag}}</button>
                     </div>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.libsIntro.html}}</p>
                     <div id="libs-body"><span class="text-muted">{{t:up.phCheck}}</span></div>
-                    <pre id="libs-log" class="upd-log mt-2" style="display:none"></pre>
+                    <pre id="libs-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
@@ -12018,12 +12096,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-list-check me-2" aria-hidden="true"></i><strong>{{t:up.plan}}</strong>
                         <span class="small text-muted ms-2">{{t:up.planSub}}</span></span>
-                    <button class="btn btn-sm btn-primary" onclick="planLoad()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:up.computePlan}}</button>
+                    <button class="btn btn-sm btn-primary" data-on-click="planLoad()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:up.computePlan}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.planIntro.html}}</p>
                     <div id="plan-body"><span class="text-muted">{{t:up.phPlan}}</span></div>
-                    <pre id="plan-log" class="upd-log mt-2" style="display:none"></pre>
+                    <pre id="plan-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
@@ -12032,9 +12110,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-vial me-2" aria-hidden="true"></i><strong>{{t:up.compat}}</strong>
                         <span class="small text-muted ms-2">{{t:up.compatSub}}</span></span>
                     <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-primary me-1" onclick="updCompat()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="updDumpDovecot()" title="{{t:up.showDovecotHint}}"><i class="fas fa-file-code me-1" aria-hidden="true"></i>{{t:up.showDovecot}}</button>
-                        <button class="btn btn-sm btn-outline-warning" onclick="updRegenDovecot()" title="{{t:up.regenDovecotHint}}"><i class="fas fa-wand-magic-sparkles me-1" aria-hidden="true"></i>{{t:up.regenDovecot}}</button>
+                        <button class="btn btn-sm btn-outline-primary me-1" data-on-click="updCompat()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="updDumpDovecot()" title="{{t:up.showDovecotHint}}"><i class="fas fa-file-code me-1" aria-hidden="true"></i>{{t:up.showDovecot}}</button>
+                        <button class="btn btn-sm btn-outline-warning" data-on-click="updRegenDovecot()" title="{{t:up.regenDovecotHint}}"><i class="fas fa-wand-magic-sparkles me-1" aria-hidden="true"></i>{{t:up.regenDovecot}}</button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -12047,7 +12125,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-wand-magic-sparkles me-2" aria-hidden="true"></i><strong>{{t:up.ams}}</strong>
                         <span class="small text-muted ms-2">{{t:up.amsSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="amsPlan()"><i class="fas fa-list-check me-1" aria-hidden="true"></i>{{t:up.state}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="amsPlan()"><i class="fas fa-list-check me-1" aria-hidden="true"></i>{{t:up.state}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.amsIntro1.html}}</p>
@@ -12061,7 +12139,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-shield-halved me-2" aria-hidden="true"></i><strong>{{t:up.w443}}</strong>
                         <span class="small text-muted ms-2">{{t:up.w443Sub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="w443Load()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.state}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="w443Load()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.state}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.w443Intro1.html}}</p>
@@ -12074,7 +12152,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-globe me-2" aria-hidden="true"></i><strong>{{t:up.web}}</strong>
                         <span class="small text-muted ms-2">{{t:up.webSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="webDiag()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.diagnose}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="webDiag()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.diagnose}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.webIntro1.html}}</p>
@@ -12087,7 +12165,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-user-shield me-2" aria-hidden="true"></i><strong>{{t:up.svcUsers}}</strong>
                         <span class="small text-muted ms-2">{{t:up.svcUsersSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="svcUsersLoad()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="svcUsersLoad()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.svcUsersIntro1.html}}</p>
@@ -12099,7 +12177,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-binoculars me-2" aria-hidden="true"></i><strong>{{t:up.watch}}</strong>
                         <span class="small text-muted ms-2">{{t:up.watchSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="watchLoad()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="watchLoad()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.watchIntro1.html}}</p>
@@ -12112,7 +12190,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-lock me-2" aria-hidden="true"></i><strong>{{t:up.p465}}</strong>
                         <span class="small text-muted ms-2">{{t:up.p465Sub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" onclick="upd465()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="upd465()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:up.p465Intro1.html}}</p>
@@ -12127,14 +12205,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-download me-2" aria-hidden="true"></i><strong>{{t:up.updates}}</strong>
                         <span class="small text-muted ms-2">{{t:up.updatesSub}}</span></span>
                     <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-primary me-1" onclick="updStatus()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
-                        <button class="btn btn-sm btn-outline-warning me-1" onclick="updApply()" title="{{t:up.upgradeUnlockedHint}}"><i class="fas fa-download me-1" aria-hidden="true"></i>{{t:up.upgradeUnlocked}}</button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="updMaintPreview()" title="{{t:up.fullMaintHint}}"><i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>{{t:up.fullMaint}}</button>
+                        <button class="btn btn-sm btn-outline-primary me-1" data-on-click="updStatus()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
+                        <button class="btn btn-sm btn-outline-warning me-1" data-on-click="updApply()" title="{{t:up.upgradeUnlockedHint}}"><i class="fas fa-download me-1" aria-hidden="true"></i>{{t:up.upgradeUnlocked}}</button>
+                        <button class="btn btn-sm btn-outline-danger" data-on-click="updMaintPreview()" title="{{t:up.fullMaintHint}}"><i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>{{t:up.fullMaint}}</button>
                     </div>
                 </div>
                 <div class="card-body">
                     <div id="upd-status"><span class="text-muted">{{t:up.phUpdates}}</span></div>
-                    <pre id="upd-log" class="upd-log mt-2" style="display:none"></pre>
+                    <pre id="upd-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
@@ -12143,15 +12221,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fab fa-python me-2" aria-hidden="true"></i><strong>{{t:up.py}}</strong>
                         <span class="small text-muted ms-2">{{t:up.pySub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="pyLeftovers()"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:up.leftovers}}</button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="pyPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-python-tog" onclick="procOpen('proc-python')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="pyLeftovers()"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:up.leftovers}}</button>
+                        <button class="btn btn-sm btn-outline-primary" data-on-click="pyPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-python-tog" data-on-click="procOpen('proc-python')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
-                <div class="card-body" id="proc-python" style="display:none">
+                <div class="card-body" id="proc-python" data-style="display:none">
                     <p class="small text-muted mb-2">{{t:up.pyIntro.html}}</p>
                     <div id="py-pre"><span class="text-muted">{{t:up.phPre}}</span></div>
-                    <pre id="py-log" class="upd-log mt-2" style="display:none"></pre>
+                    <pre id="py-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
@@ -12160,15 +12238,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fab fa-java me-2" aria-hidden="true"></i><strong>{{t:up.jvm}}</strong>
                         <span class="small text-muted ms-2">{{t:up.jvmSub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="jvState()"><i class="fas fa-file-alt me-1" aria-hidden="true"></i>{{t:up.lastReport}}</button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="jvPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-jvm-tog" onclick="procOpen('proc-jvm')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="jvState()"><i class="fas fa-file-alt me-1" aria-hidden="true"></i>{{t:up.lastReport}}</button>
+                        <button class="btn btn-sm btn-outline-danger" data-on-click="jvPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-jvm-tog" data-on-click="procOpen('proc-jvm')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
-                <div class="card-body" id="proc-jvm" style="display:none">
+                <div class="card-body" id="proc-jvm" data-style="display:none">
                     <p class="small text-muted mb-2">{{t:up.jvmIntro.html}}</p>
                     <div id="jv-pre"><span class="text-muted">{{t:up.phPre}}</span></div>
-                    <pre id="jv-log" class="upd-log mt-2" style="display:none"></pre>
+                    <pre id="jv-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
@@ -12177,16 +12255,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <span><i class="fas fa-envelope-open-text me-2" aria-hidden="true"></i><strong>{{t:up.rc}}</strong>
                         <span class="small text-muted ms-2">{{t:up.rcSub}}</span></span>
                     <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="rcDiag()"><i class="fas fa-stethoscope me-1" aria-hidden="true"></i>{{t:up.whyNoAnswer}}</button>
-                        <button class="btn btn-sm btn-outline-info me-1" onclick="rcNginx()"><i class="fas fa-wrench me-1" aria-hidden="true"></i>{{t:up.assetsNoStyle}}</button>
-                        <button class="btn btn-sm btn-outline-warning" onclick="rcPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-roundcube-tog" onclick="procOpen('proc-roundcube')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="rcDiag()"><i class="fas fa-stethoscope me-1" aria-hidden="true"></i>{{t:up.whyNoAnswer}}</button>
+                        <button class="btn btn-sm btn-outline-info me-1" data-on-click="rcNginx()"><i class="fas fa-wrench me-1" aria-hidden="true"></i>{{t:up.assetsNoStyle}}</button>
+                        <button class="btn btn-sm btn-outline-warning" data-on-click="rcPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
+                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-roundcube-tog" data-on-click="procOpen('proc-roundcube')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                     </span>
                 </div>
-                <div class="card-body" id="proc-roundcube" style="display:none">
+                <div class="card-body" id="proc-roundcube" data-style="display:none">
                     <p class="small text-muted mb-2">{{t:up.rcIntro.html}}</p>
                     <div id="rc-pre"><span class="text-muted">{{t:up.phPre}}</span></div>
-                    <pre id="rc-log" class="upd-log mt-2" style="display:none"></pre>
+                    <pre id="rc-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
@@ -12194,13 +12272,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-database me-2" aria-hidden="true"></i><strong>{{t:up.my84}}</strong>
                         <span class="small text-muted ms-2">{{t:up.my84Sub}}</span></span>
-                    <button class="btn btn-sm btn-outline-warning" onclick="my84Pre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                    <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-mysql-tog" onclick="procOpen('proc-mysql')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                    <button class="btn btn-sm btn-outline-warning" data-on-click="my84Pre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
+                    <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-mysql-tog" data-on-click="procOpen('proc-mysql')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
                 </div>
-                <div class="card-body" id="proc-mysql" style="display:none">
+                <div class="card-body" id="proc-mysql" data-style="display:none">
                     <p class="small text-muted mb-2">{{t:up.my84Intro.html}}</p>
                     <div id="my84-pre"><span class="text-muted">{{t:up.phPre2}}</span></div>
-                    <pre id="my84-log" class="upd-log mt-2" style="display:none"></pre>
+                    <pre id="my84-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
@@ -12282,7 +12360,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (s.stackUnlocked > 0) {
                 h += '<div class="alert alert-warning py-2 small d-flex flex-wrap align-items-center gap-2"><span><i class="fas fa-lock-open me-1" aria-hidden="true"></i>'
                    + escHtml(tn('pkgs.stackUnlocked', s.stackUnlocked)) + '</span>'
-                   + '<button type="button" class="btn btn-sm btn-success" onclick="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.bulk.lockAll')) + '</button></div>';
+                   + '<button type="button" class="btn btn-sm btn-success" data-on-click="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.bulk.lockAll')) + '</button></div>';
             }
             h += '<div class="table-responsive"><table class="table table-cards table-sm align-middle mb-2"><thead><tr>'
                + '<th scope="col">' + escHtml(t('pkgs.colPackage')) + '</th><th scope="col">' + escHtml(t('pkgs.colInstalled')) + '</th><th scope="col">' + escHtml(t('pkgs.colAvailable')) + '</th>'
@@ -12292,16 +12370,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 let actionItems = '';
                 if (p.update) {
                     if (p.canUpdate) {
-                        actionItems += '<button type="button" class="btn btn-sm ' + (p.vuln ? 'btn-warning' : 'btn-outline-primary') + ' me-1 mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
+                        actionItems += '<button type="button" class="btn btn-sm ' + (p.vuln ? 'btn-warning' : 'btn-outline-primary') + ' me-1 mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-on-click="pkUpdOpen(this.dataset.pkg)">'
                                 + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: p.available })) + '</button>';
                     } else if (p.javaFlow) {
-                        actionItems += '<button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1 text-nowrap" onclick="pkGoJava()">'
+                        actionItems += '<button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1 text-nowrap" data-on-click="pkGoJava()">'
                                 + '<i class="fab fa-java me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.javaFlow')) + '</button>';
                     } else {
                         actionItems += '<span class="badge bg-secondary me-1 mb-1">' + escHtml(t('pkgs.heldBack')) + '</span>';
                     }
                 }
-                actionItems += '<button type="button" class="btn btn-sm btn-outline-secondary mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-lock="' + (p.locked ? '0' : '1') + '" onclick="pkLock(this.dataset.pkg, this.dataset.lock === \\'1\\')">'
+                actionItems += '<button type="button" class="btn btn-sm btn-outline-secondary mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-lock="' + (p.locked ? '0' : '1') + '" data-on-click="pkLock(this.dataset.pkg, this.dataset.lock === \\'1\\')">'
                         + '<i class="fas ' + (p.locked ? 'fa-lock-open' : 'fa-lock') + ' me-1" aria-hidden="true"></i>' + escHtml(p.locked ? t('pkgs.unlock') : t('pkgs.lock')) + '</button>';
                 h += '<tr class="upd-cell' + (p.vuln ? ' table-danger' : '') + '">'
                    + '<td data-label="' + escHtml(t('pkgs.colPackage')) + '"><code>' + escHtml(p.name) + '</code>'
@@ -12312,7 +12390,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         + (p.majorJump ? ' <span class="badge bg-danger">' + escHtml(t('pkgs.majorJump')) + '</span>' : '')
                         : '<span class="text-muted">' + escHtml(t('pkgs.upToDate')) + '</span>') + '</td>'
                    + '<td data-label="' + escHtml(t('pkgs.colSecurity')) + '">' + pkVulnBadge(p.vuln)
-                   + (detailInfo ? ' <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" aria-expanded="false" aria-controls="pk-det-' + i + '" onclick="pkDetail(this, ' + i + ')">' + escHtml(t('pkgs.details')) + '</button>' : '') + '</td>'
+                   + (detailInfo ? ' <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" aria-expanded="false" aria-controls="pk-det-' + i + '" data-on-click="pkDetail(this, ' + i + ')">' + escHtml(t('pkgs.details')) + '</button>' : '') + '</td>'
                    + '<td data-label="' + escHtml(t('pkgs.colLock')) + '"><span class="badge ' + (p.locked ? 'bg-success' : 'bg-warning text-dark') + '"><i class="fas '
                    + (p.locked ? 'fa-lock' : 'fa-lock-open') + ' me-1" aria-hidden="true"></i>' + escHtml(p.locked ? t('pkgs.locked') : t('pkgs.unlocked')) + '</span></td>'
                    + '<td class="text-end">' + actionItems + '</td></tr>';
@@ -12462,7 +12540,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (r.notice) {
                 h += '<div class="alert alert-warning" role="alert"><strong>' + escHtml(t('up.interruptedTitle')) + '</strong>'
                    + '<p class="mb-2">' + escHtml(r.notice.text) + '</p>'
-                   + '<button type="button" class="btn btn-sm btn-outline-dark" onclick="updInterruptedDismiss()">'
+                   + '<button type="button" class="btn btn-sm btn-outline-dark" data-on-click="updInterruptedDismiss()">'
                    + '<i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.interruptedDismiss')) + '</button></div>';
             }
             el.innerHTML = h;
@@ -12599,7 +12677,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + escHtml(d.breakingUpgradeAvailable ? t('up.dvBreakNow') : t('up.dvBreakLater'))
                    + '</div>';
                 h += '<div class="table-responsive"><table class="table table-sm"><thead><tr>'
-                   + '<th scope="col" style="width:30%">' + escHtml(t('up.colConstruct')) + '</th><th scope="col">' + escHtml(t('up.colWants24')) + '</th><th scope="col" style="width:30%">' + escHtml(t('up.colWhere')) + '</th></tr></thead><tbody>';
+                   + '<th scope="col" data-style="width:30%">' + escHtml(t('up.colConstruct')) + '</th><th scope="col">' + escHtml(t('up.colWants24')) + '</th><th scope="col" data-style="width:30%">' + escHtml(t('up.colWhere')) + '</th></tr></thead><tbody>';
                 (d.issues || []).forEach(i => {
                     h += '<tr class="upd-cell"><td><code>' + updEsc(i.construct) + '</code></td>'
                        + '<td>' + updEsc(i.replacement) + '</td>'
@@ -12610,7 +12688,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (d.source) {
                     h += '<p class="small text-muted"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(d.source) + '</p>';
                 }
-                h += '<button class="btn btn-sm btn-outline-primary" onclick="where24()">'
+                h += '<button class="btn btn-sm btn-outline-primary" data-on-click="where24()">'
                    + '<i class="fas fa-file-lines me-1" aria-hidden="true"></i>' + escHtml(t('up.see24')) + '</button>'
                    + '<div id="where24-body" class="mt-2"></div>';
             }
@@ -12654,7 +12732,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 }
                 if (pf.back && pf.recommended) {
                     h += '<button class="btn btn-sm btn-outline-warning mb-1" data-level="' + escHtml(pf.recommended) + '" data-open="' + Number(pf.openHere || 0) + '"'
-                       + ' onclick="pfRaise(this.dataset.level, Number(this.dataset.open))">'
+                       + ' data-on-click="pfRaise(this.dataset.level, Number(this.dataset.open))">'
                        + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('up.raiseLevel', { level: pf.recommended }))
                        + '</button><div id="pf-outcome" class="mt-1"></div>'
                        + '<div class="small text-muted mb-2">' + t('up.raiseNote.html') + '</div>';
@@ -12712,7 +12790,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     });
                     h += '</tbody></table></div>';
                 }
-                h += '<button class="btn btn-sm btn-outline-primary mb-2" onclick="rsTimeout()">'
+                h += '<button class="btn btn-sm btn-outline-primary mb-2" data-on-click="rsTimeout()">'
                    + '<i class="fas fa-stopwatch me-1" aria-hidden="true"></i>' + escHtml(t('up.everTimedOut')) + '</button>'
                    + '<div id="rs-timeout" class="mb-2"></div>';
                 h += '<div class="small mb-1"><strong>rspamadm configtest:</strong> '
@@ -12803,7 +12881,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 return;
             }
             let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
-                  + '<tr class="upd-cell"><td style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
+                  + '<tr class="upd-cell"><td data-style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
                   + updEsc(r.installedKernel) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
                   + updEsc(r.runningKernel) + '</code>'
@@ -12823,10 +12901,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (r.gaScheduled) {
                 h += '<div class="alert alert-danger py-2">' + escHtml(t('up.rebootScheduled')) + ' <code>'
                    + updEsc(r.gaScheduled) + '</code> '
-                   + '<button class="btn btn-sm btn-light ms-2" onclick="rebCancel()">' + escHtml(t('up.cancelReboot')) + '</button></div>';
+                   + '<button class="btn btn-sm btn-light ms-2" data-on-click="rebCancel()">' + escHtml(t('up.cancelReboot')) + '</button></div>';
             }
             h += '<div class="alert alert-secondary py-2 small">' + t('up.rebootInfo.html') + '</div>'
-               + '<button class="btn btn-danger" onclick="rebGo()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.scheduleReboot')) + '</button>';
+               + '<button class="btn btn-danger" data-on-click="rebGo()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.scheduleReboot')) + '</button>';
             el.innerHTML = h;
         }
 
@@ -12842,7 +12920,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + updEsc(r.note) + '</strong>'
                 + ' (' + escHtml(t('up.process', { pid: r.pid })) + ')'
                 + '<br>' + escHtml(t('up.pageWillStop'))
-                + '<br><button class="btn btn-light mt-2" onclick="rebCancel()">'
+                + '<br><button class="btn btn-light mt-2" data-on-click="rebCancel()">'
                 + '<i class="fas fa-ban me-1" aria-hidden="true"></i>' + escHtml(t('up.cancelReboot')) + '</button></div>';
         }
 
@@ -12865,19 +12943,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pre.textContent = r.text;
             let h = '<p class="small text-muted mb-2">' + t('up.rcdIntro.html', { path: updEsc(r.path) }) + '</p>'
                   + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
-                  + '<tr class="upd-cell"><td style="width:12rem"><strong>' + escHtml(t('up.workDir')) + '</strong></td><td><code>' + updEsc(r.dir) + '</code></td></tr>'
+                  + '<tr class="upd-cell"><td data-style="width:12rem"><strong>' + escHtml(t('up.workDir')) + '</strong></td><td><code>' + updEsc(r.dir) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>Java</strong></td><td><code>' + updEsc(r.java) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>Jar</strong></td><td><code>' + updEsc(r.jar) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.alreadyInstalled')) + '</strong></td><td>' + escHtml(r.exists ? t('dns.yes') : t('acf.no'))
                   + (r.enabled ? '  &mdash; mailpanel_enable=' + updEsc(r.enabled) : '') + '</td></tr>'
                   + '</tbody></table></div>'
                   + '<div class="alert alert-info py-2">' + t('up.rcNotStarted.html') + '</div>'
-                  + '<button class="btn btn-warning" onclick="rcGo()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.installEnable')) + '</button>'
+                  + '<button class="btn btn-warning" data-on-click="rcGo()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.installEnable')) + '</button>'
                   // La via d'uscita si mostra solo quando c'e' qualcosa da togliere: un
                   // pulsante che, premuto, risponde "non c'e' niente da fare" e' un pulsante
                   // che non andava mostrato.
                   + ((r.exists || r.enabled)
-                     ? ' <button class="btn btn-outline-danger ms-2" onclick="rcRemovePrev()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
+                     ? ' <button class="btn btn-outline-danger ms-2" data-on-click="rcRemovePrev()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
                      : '');
             el.innerHTML = h;
         }
@@ -12894,13 +12972,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pre.style.display = 'none';
             if (r.nothingToDo) {
                 el.innerHTML = '<div class="alert alert-info py-2 mb-0">' + updEsc(r.note) + '</div>'
-                             + '<button class="btn btn-sm btn-outline-secondary mt-2" onclick="rcPrev()">' + escHtml(t('up.back')) + '</button>';
+                             + '<button class="btn btn-sm btn-outline-secondary mt-2" data-on-click="rcPrev()">' + escHtml(t('up.back')) + '</button>';
                 return;
             }
             el.innerHTML = '<div class="alert alert-warning py-2 mb-2"><strong>' + escHtml(t('up.whatHappens')) + '</strong> '
                 + updEsc(r.note) + '</div>'
                 + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
-                + '<tr class="upd-cell"><td style="width:14rem"><strong>' + escHtml(t('up.rcScript')) + '</strong></td><td>'
+                + '<tr class="upd-cell"><td data-style="width:14rem"><strong>' + escHtml(t('up.rcScript')) + '</strong></td><td>'
                 + (r.installed ? '<code>' + updEsc(r.path) + '</code> &mdash; ' + escHtml(t('up.willBeDeleted'))
                                 : '<span class="text-muted">' + escHtml(t('up.notPresent')) + '</span>') + '</td></tr>'
                 + '<tr class="upd-cell"><td><strong>mailpanel_enable</strong></td><td>'
@@ -12911,8 +12989,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 + '</tbody></table></div>'
                 + '<div class="alert alert-info py-2 mb-2"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>'
                 + t('up.rcRemoveInfo.html') + '</div>'
-                + '<button class="btn btn-danger" onclick="rcRemoveGo()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
-                + ' <button class="btn btn-outline-secondary ms-2" onclick="rcPrev()">' + escHtml(t('common.cancel')) + '</button>';
+                + '<button class="btn btn-danger" data-on-click="rcRemoveGo()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
+                + ' <button class="btn btn-outline-secondary ms-2" data-on-click="rcPrev()">' + escHtml(t('common.cancel')) + '</button>';
         }
 
         async function rcRemoveGo() {
@@ -12922,7 +13000,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('rc_remove', { confirm: 'REMOVE RC' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 mb-0">'
                 + updEsc(r.note || r.error) + '</div>'
-                + '<button class="btn btn-sm btn-outline-secondary mt-2" onclick="rcPrev()">'
+                + '<button class="btn btn-sm btn-outline-secondary mt-2" data-on-click="rcPrev()">'
                 + '<i class="fas fa-rotate me-1" aria-hidden="true"></i>' + escHtml(t('up.rereadState')) + '</button>';
         }
 
@@ -12947,7 +13025,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('os_status');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><tbody>'
-                  + '<tr class="upd-cell"><td style="width:16rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
+                  + '<tr class="upd-cell"><td data-style="width:16rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
                   + updEsc(r.installedKernel) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
                   + updEsc(r.uname) + '</code>' + (r.restartNeeded
@@ -12964,7 +13042,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (r.updatableWithFreebsdUpdate) {
                 h += '<div class="alert alert-' + (r.readyExist ? 'warning' : 'secondary') + ' py-2">'
                    + '<strong>' + escHtml(t('up.baseFetched')) + '</strong> ' + updEsc(r.alreadyReady) + '</div>'
-                   + '<button class="btn btn-outline-primary" onclick="osSearch()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('up.fetchOs')) + '</button>'
+                   + '<button class="btn btn-outline-primary" data-on-click="osSearch()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('up.fetchOs')) + '</button>'
                    + '<span class="small text-muted ms-2">' + t('up.fetchOsNote.html') + '</span>';
             } else {
                 h += '<div class="alert alert-info py-2 mb-0">' + updEsc(r.updatesNote) + '</div>';
@@ -13003,7 +13081,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('jump_state');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
-                  + '<tr class="upd-cell"><td style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
+                  + '<tr class="upd-cell"><td data-style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
                   + updEsc(r.installedKernel) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
                   + updEsc(r.runningKernel) + '</code>'
@@ -13025,12 +13103,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             if (r.restartNeeded) {
                 h += '<div class="alert alert-warning py-2">' + t('up.rebootFirst.html') + '</div>'
-                   + '<button class="btn btn-danger" onclick="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.goReboot')) + '</button>';
+                   + '<button class="btn btn-danger" data-on-click="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.goReboot')) + '</button>';
             } else if (r.phase === 'finished') {
                 h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.jumpDone')) + '</div>';
             } else {
                 h += '<div class="alert alert-info py-2">' + t('up.jumpInfo.html') + '</div>'
-                   + '<button class="btn btn-warning" onclick="jumpGo()"><i class="fas fa-forward me-1" aria-hidden="true"></i>' + escHtml(t('up.continue')) + '</button>';
+                   + '<button class="btn btn-warning" data-on-click="jumpGo()"><i class="fas fa-forward me-1" aria-hidden="true"></i>' + escHtml(t('up.continue')) + '</button>';
             }
             el.innerHTML = h;
             pre.style.display = 'none';
@@ -13089,7 +13167,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('os_upgrade_preflight', { target: upTarget() });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
+                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
                 h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
@@ -13099,8 +13177,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
             } else {
                 h += '<div class="alert alert-warning py-2">' + t('up.prepInfo.html') + '</div>'
-                   + '<button class="btn btn-warning me-2" onclick="upPrep()"><i class="fas fa-shield-halved me-1" aria-hidden="true"></i>' + escHtml(t('up.prepare')) + '</button>'
-                   + '<button class="btn btn-outline-secondary" onclick="upInstr()"><i class="fas fa-list-ol me-1" aria-hidden="true"></i>' + escHtml(t('up.showCommands')) + '</button>';
+                   + '<button class="btn btn-warning me-2" data-on-click="upPrep()"><i class="fas fa-shield-halved me-1" aria-hidden="true"></i>' + escHtml(t('up.prepare')) + '</button>'
+                   + '<button class="btn btn-outline-secondary" data-on-click="upInstr()"><i class="fas fa-list-ol me-1" aria-hidden="true"></i>' + escHtml(t('up.showCommands')) + '</button>';
             }
             el.innerHTML = h;
         }
@@ -13136,7 +13214,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('os_upgrade_verify');
             if (!r.success) { el.innerHTML = '<div class="alert alert-warning py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
+                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
                 h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
@@ -13168,7 +13246,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                        + '<td class="text-end">' + updEsc(x.space) + '</td>'
                        + '<td class="small">' + updEsc(x.created)
                        + (x.deletable
-                          ? '<br><button class="btn btn-sm btn-outline-danger mt-1" data-name="' + escHtml(x.name) + '" onclick="beDelete(this.dataset.name)">'
+                          ? '<br><button class="btn btn-sm btn-outline-danger mt-1" data-name="' + escHtml(x.name) + '" data-on-click="beDelete(this.dataset.name)">'
                             + '<i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('common.delete')) + '</button>'
                           : '')
                        + '</td></tr>';
@@ -13256,7 +13334,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             : escHtml(t('up.declaredByNone')))
                          + '</span>';
                     if (d.pkgName === 'openssl') {
-                        dependentsHtml += '<br><button class="btn btn-sm btn-outline-primary mt-1" onclick="sslUsage()">'
+                        dependentsHtml += '<br><button class="btn btn-sm btn-outline-primary mt-1" data-on-click="sslUsage()">'
                              + '<i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('up.whoUses')) + '</button>';
                     }
                 });
@@ -13483,7 +13561,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             h += '<h6 class="mb-1">' + escHtml(t('up.verifiedDocs')) + '</h6>'
                + '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>';
             conf.forEach(x => {
-                h += '<tr class="upd-cell"><td style="width:12rem"><span class="badge upd-badge-ok">' + escHtml(t('up.sConfirmed')) + '</span></td>'
+                h += '<tr class="upd-cell"><td data-style="width:12rem"><span class="badge upd-badge-ok">' + escHtml(t('up.sConfirmed')) + '</span></td>'
                    + '<td><code class="small">' + updEsc(x.setting) + '</code><br>'
                    + '<span class="small text-muted">' + updEsc(x.note) + '</span></td></tr>';
             });
@@ -13568,7 +13646,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td>' + (x.isProtected
                       ? '<span class="badge upd-badge-ok">' + escHtml(t('dns.yes')) + '</span>'
                       : '<span class="badge upd-badge-warn">' + escHtml(t('acf.no')) + '</span>') + '</td>'
-                   + '<td><button class="btn btn-sm btn-outline-primary" data-name="' + escHtml(x.name) + '" data-i="' + i + '" onclick="rmUse(this.dataset.name, Number(this.dataset.i))">'
+                   + '<td><button class="btn btn-sm btn-outline-primary" data-name="' + escHtml(x.name) + '" data-i="' + i + '" data-on-click="rmUse(this.dataset.name, Number(this.dataset.i))">'
                    + '<i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('up.check')) + '</button>'
                    + '<div id="rim-outcome-' + i + '" class="mt-1"></div></td></tr>';
             });
@@ -13616,9 +13694,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                              || r.verdict === 'NAMES_NOT_THEIRS')) {
                 // L'analisi approfondita viene PRIMA del pulsante che toglie, ed e' l'unica che
                 // guarda gli script su disco: quelli girano dopo, e il jar non li contiene.
-                h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rmDeep(this.dataset.pkg)">'
+                h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pkgName) + '" data-on-click="rmDeep(this.dataset.pkg)">'
                    + '<i class="fas fa-microscope me-1" aria-hidden="true"></i>' + escHtml(t('up.deepScan')) + '</button>'
-                   + '<button class="btn btn-sm btn-outline-danger mb-1" data-pkg="' + escHtml(r.pkgName) + '" onclick="rmRemove(this.dataset.pkg)">'
+                   + '<button class="btn btn-sm btn-outline-danger mb-1" data-pkg="' + escHtml(r.pkgName) + '" data-on-click="rmRemove(this.dataset.pkg)">'
                    + '<i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removePkg', { pkg: r.pkgName })) + '</button>'
                    + '<div id="rim-prof-' + updEsc(r.pkgName) + '" class="mt-1"></div>'
                    + '<div id="rim-esec-' + updEsc(r.pkgName) + '" class="mt-1"></div>';
@@ -13725,7 +13803,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   + escHtml(t('up.libsMissingNote')) + '</div>'
                   + '<ul class="small">';
             pk.forEach(p => { h += '<li>' + t('up.requires.html', { pkg: updEsc(p.name), lib: updEsc(p.lib) }) + '</li>'; });
-            h += '</ul><button class="btn btn-danger" onclick="libsRelink()">'
+            h += '</ul><button class="btn btn-danger" data-on-click="libsRelink()">'
                + '<i class="fas fa-link me-1" aria-hidden="true"></i>' + escHtml(t('up.relink')) + '</button>';
             el.innerHTML = h;
         }
@@ -13772,7 +13850,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (correct && foreign) {
                     h += '<div class="alert alert-warning py-2 mt-2 small">'
                        + t('up.twoClients.html', { good: updEsc(correct), bad: updEsc(foreign) }) + '</div>'
-                       + '<button class="btn btn-warning" data-bad="' + escHtml(foreign) + '" data-good="' + escHtml(correct) + '" onclick="cleanClient(this.dataset.bad, this.dataset.good)">'
+                       + '<button class="btn btn-warning" data-bad="' + escHtml(foreign) + '" data-good="' + escHtml(correct) + '" data-on-click="cleanClient(this.dataset.bad, this.dataset.good)">'
                        + '<i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(t('up.cleanClient', { bad: foreign, good: correct })) + '</button>';
                 }
             }
@@ -13805,13 +13883,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                       + '<span><strong>' + labelText + updEsc(p.title) + '</strong> ' + planBadge(p.state) + '</span>';
                 if (activeNow && p.action) {
                     const idx = planActions.push(p.action) - 1;
-                    h += '<button class="btn btn-sm btn-primary" onclick="planRun(' + idx + ')">'
+                    h += '<button class="btn btn-sm btn-primary" data-on-click="planRun(' + idx + ')">'
                        + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runStep')) + '</button>';
                 } else if (p.redoAction) {
                     // Passo gia' fatto ma ripetibile: pulsante secondario, sempre disponibile,
                     // fuori dalla regola del "solo il primo" perche' non e' un passo da fare.
                     const idx = planActions.push(p.redoAction) - 1;
-                    h += '<button class="btn btn-sm btn-outline-secondary" onclick="planRun(' + idx + ')" '
+                    h += '<button class="btn btn-sm btn-outline-secondary" data-on-click="planRun(' + idx + ')" '
                        + 'title="' + escHtml(t('up.redoHint')) + '">'
                        + '<i class="fas fa-rotate me-1" aria-hidden="true"></i>' + escHtml(t('up.redo')) + '</button>';
                 }
@@ -13908,7 +13986,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (s.job.status === 'error') {
                     el.innerHTML = '<div class="alert alert-danger py-2"><strong>' + escHtml(t('up.stepFailed')) + '</strong> '
                                  + updEsc(s.job.errorMessage) + '<br>' + escHtml(t('up.readLogFirst')) + '</div>'
-                                 + '<button class="btn btn-sm btn-outline-primary" onclick="planLoad()">' + escHtml(t('up.recomputePlan')) + '</button>';
+                                 + '<button class="btn btn-sm btn-outline-primary" data-on-click="planLoad()">' + escHtml(t('up.recomputePlan')) + '</button>';
                     return;
                 }
             }
@@ -13964,7 +14042,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '</tbody></table></div>';
             }
             h += (free > 0 && prob.length === 0)
-               ? '<button class="btn btn-warning" onclick="pyLeftoversGo()"><i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(tn('up.removeFree', free)) + '</button>'
+               ? '<button class="btn btn-warning" data-on-click="pyLeftoversGo()"><i class="fas fa-broom me-1" aria-hidden="true"></i>' + escHtml(tn('up.removeFree', free)) + '</button>'
                : (free === 0
                   ? '<div class="alert alert-info py-2 mb-0">' + escHtml(t('up.noneFree')) + '</div>'
                   : '');
@@ -13996,7 +14074,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('python_preflight');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
+                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
                 h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
@@ -14004,7 +14082,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             h += '</tbody></table></div>';
             if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.nothingToMove')) + '</div>';
             else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
-            else h += '<button class="btn btn-danger" onclick="pyRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.moveTo', { to: 'py' + r.newVersion })) + '</button>';
+            else h += '<button class="btn btn-danger" data-on-click="pyRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.moveTo', { to: 'py' + r.newVersion })) + '</button>';
             el.innerHTML = h;
         }
 
@@ -14025,7 +14103,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('java_preflight');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
+                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
                 h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
@@ -14034,7 +14112,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.latestAlready')) + '</div>';
             else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
             else h += '<div class="alert alert-danger py-2"><strong>' + escHtml(t('up.pageWillStopShort')) + '</strong> ' + escHtml(t('up.jvmStopNote')) + '</div>'
-                   + '<button class="btn btn-danger" onclick="jvRun()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.jvmRun')) + '</button>';
+                   + '<button class="btn btn-danger" data-on-click="jvRun()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.jvmRun')) + '</button>';
             el.innerHTML = h;
         }
 
@@ -14073,7 +14151,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
               + '=== ' + t('up.nowIs') + ' ===\\n' + r.current + '\\n\\n'
               + '=== ' + t('up.wouldBe') + ' ===\\n' + r.proposed;
             el.innerHTML = '<div class="alert alert-info py-2">' + t('up.nginxChange.html') + '</div>'
-              + '<button class="btn btn-warning" onclick="rcNginxGo()"><i class="fas fa-wrench me-1" aria-hidden="true"></i>' + escHtml(t('up.apply')) + '</button>';
+              + '<button class="btn btn-warning" data-on-click="rcNginxGo()"><i class="fas fa-wrench me-1" aria-hidden="true"></i>' + escHtml(t('up.apply')) + '</button>';
         }
 
         async function rcNginxGo() {
@@ -14110,7 +14188,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('roundcube_preflight');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
+                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
                 h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
@@ -14124,7 +14202,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
             } else {
                 h += '<div class="alert alert-warning py-2">' + escHtml(t('up.rcDowntime')) + '</div>'
-                   + '<button class="btn btn-danger" onclick="rcRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.rcRun')) + '</button>';
+                   + '<button class="btn btn-danger" data-on-click="rcRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.rcRun')) + '</button>';
             }
             el.innerHTML = h;
         }
@@ -14147,7 +14225,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('mysql84_preflight');
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
+                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
                 h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
@@ -14168,7 +14246,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.migrationCannotStart')) + '</strong> ' + escHtml(t('up.migrationRedRows')) + '</div>';
             } else {
                 h += '<div class="alert alert-warning py-2"><strong>' + escHtml(t('up.prereqPassed')) + '</strong> ' + escHtml(t('up.migrationNote')) + '</div>'
-                   + '<button class="btn btn-danger" onclick="my84Run()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.migrate84')) + '</button>';
+                   + '<button class="btn btn-danger" data-on-click="my84Run()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.migrate84')) + '</button>';
             }
             el.innerHTML = h;
         }
@@ -14227,8 +14305,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let h = '';
             if ((pn.changes || []).length) {
                 h += '<div class="small fw-bold mb-1">' + escHtml(tn('up.exactPlanN', pn.changes.length)) + '</div>'
-                   + '<div class="table-responsive" style="max-height:24rem;overflow:auto"><table class="table table-sm align-middle mb-1"><thead><tr>'
-                   + '<th scope="col" style="width:8rem"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th><th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colFrom')) + '</th><th scope="col">' + escHtml(t('up.colTo')) + '</th><th scope="col">' + escHtml(t('up.colNote')) + '</th></tr></thead><tbody>';
+                   + '<div class="table-responsive" data-style="max-height:24rem;overflow:auto"><table class="table table-sm align-middle mb-1"><thead><tr>'
+                   + '<th scope="col" data-style="width:8rem"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th><th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colFrom')) + '</th><th scope="col">' + escHtml(t('up.colTo')) + '</th><th scope="col">' + escHtml(t('up.colNote')) + '</th></tr></thead><tbody>';
                 pn.changes.forEach(c => {
                     h += '<tr class="upd-cell"><td><span class="badge ' + (kindCls[c.type] || 'bg-secondary') + '">'
                        + updEsc(kindName[c.type] || c.type) + '</span></td>'
@@ -14315,7 +14393,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     : ' &mdash; ' + t('up.lockedNoUpdate.html'))
                                 : ' &mdash; ' + escHtml(v.fixedByUpgrade ? t('up.fixedByUpgrade') : t('up.noUpdateInCatalog'))))
                        + (v.locked && vc0 && vc0.verdict ? ' <span class="badge bg-secondary"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.locked')) + '</span>' : '')
-                       + (updatable ? '<button type="button" class="btn btn-sm btn-warning ms-auto" data-pkg="' + escHtml(v.name) + '" onclick="pkUpdOpen(this.dataset.pkg)">'
+                       + (updatable ? '<button type="button" class="btn btn-sm btn-warning ms-auto" data-pkg="' + escHtml(v.name) + '" data-on-click="pkUpdOpen(this.dataset.pkg)">'
                             + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: vc0.catalog || '' })) + '</button>' : '')
                        + '</div>';
                     if ((v.cve || []).length) {
@@ -14436,7 +14514,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             h += updPlanHtml(r.plan, r.signature);
             updMaintenanceSignature = r.signature || '';
             if (r.plan && r.plan.runnable && !r.blockedReason) {
-                h += '<button class="btn btn-sm btn-danger" onclick="updMaintRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runMaint')) + '</button>';
+                h += '<button class="btn btn-sm btn-danger" data-on-click="updMaintRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runMaint')) + '</button>';
             } else {
                 h += '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.nothingToRun')) + '</div>';
             }

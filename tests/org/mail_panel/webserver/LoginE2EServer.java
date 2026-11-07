@@ -71,6 +71,12 @@ public class LoginE2EServer {
                 .redirectErrorStream(true).start();
         cert.getInputStream().readAllBytes();
         if (cert.waitFor() != 0) throw new IllegalStateException("openssl failed");
+        // Il nome del pannello: HostCheck (dal 17/10/2026) con l'indirizzo «ascolta ovunque» accetta
+        // solo localhost e gli indirizzi della macchina, e il browser arriva come panel.localhost
+        // (il nome delle passkey). Senza questa riga ogni pagina rispondeva 421 e la prova non
+        // passava piu'; trovato facendola girare contro la macchina di prova (reperto 178).
+        Main.dbManager.update_panel_config("panel.localhost", "0", Files.readString(dir.resolve("c.pem")),
+                Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
         SSLMailServer srv = new SSLMailServer(port, Files.readString(dir.resolve("c.pem")), Files.readString(dir.resolve("k.pem")));
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);

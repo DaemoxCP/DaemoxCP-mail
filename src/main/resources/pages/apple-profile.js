@@ -34,12 +34,12 @@
             el.innerHTML =
                   '<div class="d-flex gap-2 align-items-end flex-wrap mb-2">'
                 + '<div><label class="form-label small mb-1" for="paMailbox">' + paEsc(t('pa.mailbox')) + '</label>'
-                + '<select class="form-select form-select-sm" id="paMailbox" style="min-width:18rem">'
+                + '<select class="form-select form-select-sm" id="paMailbox" data-style="min-width:18rem">'
                 + mailboxes.map(c => '<option value="' + paEsc(c) + '">' + paEsc(c) + '</option>').join('')
                 + '</select></div>'
-                + '<button class="btn btn-sm btn-mail" onclick="paDownload()">'
+                + '<button class="btn btn-sm btn-mail" data-on-click="paDownload()">'
                 + '<i class="fas fa-download me-1" aria-hidden="true"></i>' + paEsc(t('pa.download')) + '</button>'
-                + '<button class="btn btn-sm btn-outline-secondary" onclick="paPreview()">'
+                + '<button class="btn btn-sm btn-outline-secondary" data-on-click="paPreview()">'
                 + '<i class="fas fa-eye me-1" aria-hidden="true"></i>' + paEsc(t('pa.look')) + '</button>'
                 + '</div>'
                 + '<div class="small text-muted mb-2">' + t('pa.sets.html', { imap: paEsc(r.mailHost + ':' + r.imapPort), smtp: paEsc(r.mailHost + ':' + r.smtpPort) }) + '</div>'
@@ -64,6 +64,6 @@
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + paEsc(r.error) + '</div>';
                 return;
             }
-            el.innerHTML = '<pre class="small p-2 border rounded" style="max-height:24rem;overflow:auto">'
+            el.innerHTML = '<pre class="small p-2 border rounded" data-style="max-height:24rem;overflow:auto">'
                          + paEsc(r.profile) + '</pre>';
         }
