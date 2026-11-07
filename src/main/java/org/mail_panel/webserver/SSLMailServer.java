@@ -554,6 +554,16 @@ public class SSLMailServer {
             // root non gli serve. Si verifica con una ricerca vera, e se non va si rimette com'era.
             org.mail_panel.system.DovecotAuthWorker.ensureAtBoot();
 
+            // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
+            // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.
+            // Ognuna si verifica, e se non va torna com'era; al secondo avvio non fanno niente.
+            org.mail_panel.system.MysqlListen.ensureAtBoot();
+            org.mail_panel.system.SyslogNetwork.ensureAtBoot();
+            org.mail_panel.system.VmailPermissions.ensureAtBoot();
+            // rspamd tutto col suo utente, anche il processo principale: le sue porte sono sopra la 1023 e
+            // i suoi file sono gia' suoi (RspamdUser, con una scansione vera prima e dopo).
+            org.mail_panel.system.RspamdUser.ensureAtBoot();
+
             // Auto-setup Postfix aliases: crea /etc/aliases (o /etc/mail/aliases) se manca
             // + compila il .db. Risolve l'errore comune "open database /etc/aliases.db: No such file".
             // Idempotente: se è tutto OK non fa nulla.

@@ -24,7 +24,10 @@
                + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
             (r.services || []).forEach(s => {
                 h += '<tr class="upd-cell"><td class="small"><code>' + updEsc(s.service) + '</code></td>'
-                   + '<td class="small"><code>' + updEsc((s.users || []).join(', ')) + '</code></td>'
+                   + '<td class="small"><code>' + updEsc((s.users || []).join(', ')) + '</code>'
+                   + (s.rootWhy ? '<div class="text-body-secondary mt-1"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>'
+                       + '<span class="visually-hidden">' + escHtml(t('su.rootWhyLabel')) + ' </span>' + updEsc(s.rootWhy) + '</div>' : '')
+                   + '</td>'
                    + '<td class="small">' + (s.ok
                        ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i> ' + escHtml(t('su.ok'))
                        : '<i class="fas fa-triangle-exclamation text-warning" aria-hidden="true"></i> ' + escHtml(t('su.warn'))) + '</td></tr>';

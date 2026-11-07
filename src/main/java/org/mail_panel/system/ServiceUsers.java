@@ -74,9 +74,18 @@ public final class ServiceUsers {
             new Rule("mysql", "/libexec/mysqld( |$)|/bin/mysqld_safe( |$)", false),
             new Rule("redis", "redis-server", false),
             new Rule("clamav", "/sbin/clamd( |$)|/bin/freshclam( |$)", false),
-            new Rule("rspamd", "^rspamd: main process", true),
+            // Il processo principale di rspamd non ha bisogno di root: porte sopra la 1023 e file suoi
+            // (RspamdUser lo avvia con il suo utente). Da root e' un avviso.
+            new Rule("rspamd", "^rspamd: main process", false),
             new Rule("rspamd", "^rspamd: ", false),
             new Rule("unbound", "local-unbound( |$)|/sbin/unbound( |$)", false));
+
+    /**
+     * Dove root resta, il perche' detto a parole sulla pagina (server.su.rootWhy.*): solo i servizi a cui
+     * root serve davvero per come sono fatti. Chi lo guarda deve poter capire che non e' una svista.
+     */
+    static final Map<String, String> ROOT_WHY = Map.of("postfix", "postfix", "dovecot", "dovecot", "nginx", "nginx",
+            "php-fpm", "phpFpm", "fail2ban", "fail2ban", "mail-panel", "mailPanel");
 
     /** I processi di Postfix che consegnano per conto di utenti diversi: root per come e' fatto. */
     private static final Set<String> POSTFIX_PRIVILEGED = Set.of("local", "virtual", "pipe", "spawn");
@@ -109,6 +118,8 @@ public final class ServiceUsers {
         final String name;
         final Set<String> users = new LinkedHashSet<>();
         final Set<String> needlessRoot = new LinkedHashSet<>();
+        /** Un suo processo gira da root e gli serve: la pagina dice perche'. */
+        boolean neededRoot;
         int processes;
         Service(String name) { this.name = name; }
     }
@@ -166,6 +177,7 @@ public final class ServiceUsers {
             s.users.add(p.user());
             s.processes++;
             if ("root".equals(p.user()) && !rootNeeded) s.needlessRoot.add(p.command().split("\\s+")[0]);
+            if ("root".equals(p.user()) && rootNeeded) s.neededRoot = true;
         }
         for (Service s : services.values())
             if (!s.needlessRoot.isEmpty())
@@ -264,8 +276,11 @@ public final class ServiceUsers {
             boolean warned = false;
             for (Problem p : f.problems())
                 if (java.util.Arrays.asList(p.service().split(", ")).contains(s.name)) warned = true;
-            services.put(new JSONObject().put("service", s.name).put("users", new JSONArray(s.users))
-                    .put("processes", s.processes).put("ok", !warned));
+            JSONObject o = new JSONObject().put("service", s.name).put("users", new JSONArray(s.users))
+                    .put("processes", s.processes).put("ok", !warned);
+            String why = ROOT_WHY.get(s.name);
+            if (s.neededRoot && !warned && why != null) o.put("rootWhy", I18n.tr("server.su.rootWhy." + why));
+            services.put(o);
         }
         JSONArray problems = new JSONArray();
         for (Problem p : f.problems())

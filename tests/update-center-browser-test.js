@@ -54,6 +54,10 @@ function replies(o) {
         updates_search: { success: true, jobId: 'srch-1' },
         os_patch_install: { success: true, jobId: 'osp-1' },
         job_status: { success: true, job: { status: 'completed', consoleLog: 'done', result: 'Lists updated.', elapsedSeconds: 3 } },
+        service_users: { success: true, problems: [], pools: [], services: [
+            { service: 'php-fpm', users: ['root', 'roundcube'], ok: true, processes: 4,
+              rootWhy: 'Root only for the master process <b>bold</b>: it creates the webmail socket.' },
+            { service: 'redis', users: ['redis'], ok: true, processes: 1 }] },
     };
 }
 
@@ -193,6 +197,20 @@ const allErrors = [], allDialogs = [];
     const both = await slow.page.evaluate(async () => Promise.all([updApi('os_status'), updApi('os_status')]));
     check('two reads at once both answer (no "operation already running")', both.every(r => r.success));
     await slow.page.close();
+
+    console.log('\n== 8. Why root, on the service users card ==');
+    const su = await open(ctx, 'updates', 'en', { reboot: 'none' });
+    allErrors.push(su.errors); allDialogs.push(su.dialogs);
+    await su.page.click('button[data-on-click="svcUsersLoad()"]');
+    await su.page.waitForFunction(() => document.querySelectorAll('#upd-svc-users tbody tr').length >= 2, null, { timeout: 10000 });
+    const suRows = await su.page.$$eval('#upd-svc-users tbody tr', trs => trs.map(tr => ({ text: tr.innerText, html: tr.innerHTML,
+        hidden: [...tr.querySelectorAll('.visually-hidden')].map(x => x.textContent) })));
+    check('php-fpm says why it keeps root, under its users', suRows[0].text.includes('Root only for the master process')
+        && suRows[0].text.includes('it creates the webmail socket'));
+    check('  as text: a tag in the reason is not markup', suRows[0].text.includes('<b>bold</b>') && !suRows[0].html.includes('<b>bold</b>'));
+    check('  with the label for screen readers (' + suRows[0].hidden.join('|') + ')', suRows[0].hidden.some(x => x.trim() === 'Why root:'));
+    check('redis, without root, says nothing', !suRows[1].text.includes('Root only') && suRows[1].hidden.length === 0);
+    await su.page.close();
 
     console.log('\n== 7. At 375 px ==');
     const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, locale: 'en-GB' });

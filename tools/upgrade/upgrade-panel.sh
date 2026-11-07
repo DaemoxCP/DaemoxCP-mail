@@ -191,7 +191,10 @@ state() {
         printf 'servizio %s: %s\n' "$s" "$(service "$s" status >/dev/null 2>&1 && echo acceso || echo SPENTO)"
     done
     printf 'mysqld: %s\n' "$(pgrep -q mysqld && echo acceso || echo SPENTO)"
-    sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {print "porta in ascolto: " $6}' | sort -u
+    # Le porte di MySQL: la 33060 (protocollo X) e l'indirizzo della 3306 li chiude il pannello stesso
+    # al primo avvio (MysqlListen, che lo verifica e se non va rimette com'era). Qui contano come una
+    # riga sola, cosi' chiuderle non sembra un guasto; che MySQL sia acceso lo dice la riga mysqld.
+    sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:33060$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; print "porta in ascolto: " a}' | sort -u
     printf 'nginx -t: %s\n' "$(nginx -t >/dev/null 2>&1 && echo ok || echo ERRORE)"
     printf 'postfix check: %s\n' "$(postfix check >/dev/null 2>&1 && echo ok || echo ERRORE)"
     printf 'doveconf: %s\n' "$(doveconf -n >/dev/null 2>&1 && echo ok || echo ERRORE)"

@@ -50,7 +50,8 @@ public class ServiceUsersTest {
             root    72566 72455 sshd-session: root@notty (sshd-session)
             """;
     static final String AFTER = BEFORE.replace("www     33079 32645 php-fpm: pool www", "roundcube 33079 32645 php-fpm: pool roundcube")
-            .replace("www     34440 32645 php-fpm: pool www", "roundcube 34440 32645 php-fpm: pool roundcube");
+            .replace("www     34440 32645 php-fpm: pool www", "roundcube 34440 32645 php-fpm: pool roundcube")
+            .replace("root    56502     1 rspamd: main process", "rspamd  56502     1 rspamd: main process");
     static final Map<Path, String> POOL_BEFORE = Map.of(Path.of("/usr/local/etc/php-fpm.d/www.conf"), "[www]\nuser = www\nlisten = /var/run/php-fpm.sock\n");
     static final Map<Path, String> POOL_AFTER = Map.of(Path.of("/usr/local/etc/php-fpm.d/roundcube.conf"), RoundcubeUser.poolConf(null),
             Path.of("/usr/local/etc/php-fpm.d/www.conf"), RoundcubeUser.wwwPlaceholder());
@@ -70,7 +71,10 @@ public class ServiceUsersTest {
         check("www shared between nginx and the www pool", f.problems().stream().anyMatch(p -> "shared".equals(p.code()) && "www".equals(p.user())
                 && p.detail().contains("nginx") && p.detail().contains("php-fpm pool www")));
         check("the www pool configured with nginx's user", f.problems().stream().anyMatch(p -> "poolShared".equals(p.code()) && "www".equals(p.service())));
-        check("no root warning: the processes running as root are the ones that need it", f.problems().stream().noneMatch(p -> "root".equals(p.code())));
+        // Since 07/11/2026 rspamd's main process does not need root either (RspamdUser): on the
+        // 31/10 picture it is the only root warning.
+        check("the only root warning is rspamd's main process (" + codes(f) + ")", f.problems().stream()
+                .filter(p -> "root".equals(p.code())).map(ServiceUsers.Problem::service).toList().equals(List.of("rspamd")));
         check("the users read: mysql, redis, clamav, rspamd, unbound, postfix, dovecot",
                 f.services().get("mysql").users.equals(java.util.Set.of("mysql")) && f.services().get("clamav").users.equals(java.util.Set.of("clamav"))
                 && f.services().get("postfix").users.containsAll(List.of("root", "postfix")) && f.services().get("unbound").users.equals(java.util.Set.of("unbound")));
@@ -96,6 +100,17 @@ public class ServiceUsersTest {
         check("Dovecot's auth-worker as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER + "root    65001 59971 dovecot/auth\n", POOL_AFTER, "", false);
         check("Dovecot's auth as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
+        f = ex(AFTER.replace("rspamd  56502     1 rspamd: main process", "root    56502     1 rspamd: main process"), POOL_AFTER, "", false);
+        check("rspamd's main process as root: warning (" + codes(f) + ")", codes(f).equals("root:rspamd"));
+        OUT.println("\n== Why root, said on the page");
+        for (ServiceUsers.Rule r : ServiceUsers.RULES)
+            if (r.rootNeeded() && !r.service().contains("$1"))
+                check(r.service() + " keeps root by design: the page says why", ServiceUsers.ROOT_WHY.containsKey(r.service()));
+        for (String k : ServiceUsers.ROOT_WHY.values()) {
+            String key = "server.su.rootWhy." + k;
+            check("  " + key + " in both languages", !org.mail_panel.i18n.I18n.t("it", key).equals(key)
+                    && !org.mail_panel.i18n.I18n.t("en", key).equals(key));
+        }
         f = ex(AFTER + "root    65003 59971 dovecot/imap\n", POOL_AFTER, "", false);
         check("a Dovecot imap as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER.replace("www     37741 36807 nginx: worker", "root    37741 36807 nginx: worker"), POOL_AFTER, "", false);

@@ -48,7 +48,10 @@ public class ConfigRegeneratorScript {
                           .append("/").append(user).append("/Maildir/{cur,new,tmp}\n");
                 }
             }
-            script.append("chown -R vmail:vmail /var/vmail\n\n");
+            script.append("chown -R vmail:vmail /var/vmail\n");
+            // Le cartelle le crea root (umask 022, quindi 0755) e Dovecot copia i permessi della
+            // cartella radice nelle cose nuove: solo vmail, come fa VmailPermissions all'avvio.
+            script.append(org.mail_panel.system.VmailPermissions.SHELL).append("\n");
 
             // Reload services
             script.append("# Reload services\n");
