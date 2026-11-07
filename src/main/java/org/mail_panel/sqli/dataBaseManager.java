@@ -1,5 +1,7 @@
 package org.mail_panel.sqli;
 
+import org.mail_panel.database.SqlCatalog;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -213,15 +215,7 @@ public class dataBaseManager {
      */
     public boolean update_panel_config(String host, String port, String sslCert, String sslKey,
                                         String sslChain, String sessionPrefix) {
-        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET " +
-                    "mail_panel_host = ?, " +
-                    "mail_panel_port = ?, " +
-                    "mail_panel_ssl_cert = ?, " +
-                    "mail_panel_ssl_cert_key = ?, " +
-                    "mail_panel_ssl_chain = ?, " +
-                    "mail_panel_sessions_prefix = ? " +
-                    "WHERE id = 1")) {
+        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_UPDATE_PANEL_CONFIG)) {
 
             preparedStatement.setString(1, host);
             preparedStatement.setString(2, port);
@@ -243,14 +237,7 @@ public class dataBaseManager {
      */
     public boolean update_mysql_config(String mysqlHost, String mysqlPort, String mysqlUser,
                                         String mysqlPassword, String mysqlDatabase) {
-        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET " +
-                    "mysql_host = ?, " +
-                    "mysql_port = ?, " +
-                    "mysql_user = ?, " +
-                    "mysql_password = ?, " +
-                    "mysql_database = ? " +
-                    "WHERE id = 1")) {
+        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_UPDATE_MYSQL_CONFIG)) {
 
             preparedStatement.setString(1, mysqlHost);
             preparedStatement.setString(2, mysqlPort);
@@ -267,29 +254,7 @@ public class dataBaseManager {
     }
 
     public boolean insert_data_default() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "INSERT INTO config (" +
-                    "mail_panel_port, " +
-                    "mail_panel_host, " +
-                    "mail_panel_ssl_cert, " +
-                    "mail_panel_ssl_cert_key, " +
-                    "mail_panel_ssl_chain, " +
-                    "mail_panel_sessions_prefix, " +
-                    "mysql_host, " +
-                    "mysql_port, " +
-                    "mysql_user, " +
-                    "mysql_password, " +
-                    "mysql_database, " +
-                    "postfix_installed, " +
-                    "dovecot_installed, " +
-                    "rspamd_installed, " +
-                    "clamav_installed, " +
-                    "roundcube_installed, " +
-                    "roundcube_domain, " +
-                    "roundcube_port, " +
-                    "roundcube_ssl_cert, " +
-                    "roundcube_ssl_key) " +
-                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_INSERT_DATA_DEFAULT)) {
 
             prepare.setString(1, "2096");
             prepare.setString(2, "127.0.0.1");
@@ -366,8 +331,7 @@ public class dataBaseManager {
         try {
             // Non in un try con risorse: il ResultSet esce di qui. Chi lo chiude (tutti lo leggono
             // in un try) chiude anche lo statement, e con lui la lettura che tiene il lock.
-            PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT * FROM config WHERE id = 1");
+            PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_DATA_CONFIG);
             prepare.closeOnCompletion();
             return prepare.executeQuery();
         } catch (SQLException e) {
@@ -376,8 +340,7 @@ public class dataBaseManager {
     }
 
     public boolean updateMySQLPassword(String newPassword) {
-        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET mysql_password = ? WHERE id = 1")) {
+        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_UPDATE_MY_SQLPASSWORD)) {
             preparedStatement.setString(1, storeSecret(0, newPassword));
             return preparedStatement.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -387,14 +350,7 @@ public class dataBaseManager {
     }
 
     public boolean resetAllServices() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET " +
-                    "postfix_installed = 0, " +
-                    "dovecot_installed = 0, " +
-                    "rspamd_installed = 0, " +
-                    "clamav_installed = 0, " +
-                    "roundcube_installed = 0 " +
-                    "WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_RESET_ALL_SERVICES)) {
             return prepare.executeUpdate() > 0;
         } catch (SQLException e) {
             System.out.println("Error resetting services: " + e.getMessage());
@@ -415,8 +371,7 @@ public class dataBaseManager {
     }
 
     public String getMailHostname() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT mail_hostname FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_MAIL_HOSTNAME)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 return rs.getString("mail_hostname");
@@ -428,8 +383,7 @@ public class dataBaseManager {
     }
 
     public boolean setMailHostname(String hostname) {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET mail_hostname = ? WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_SET_MAIL_HOSTNAME)) {
             prepare.setString(1, hostname);
             return prepare.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -444,8 +398,7 @@ public class dataBaseManager {
     }
 
     public String getRoundcubeDomain() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT roundcube_domain FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_ROUNDCUBE_DOMAIN)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 return rs.getString("roundcube_domain");
@@ -457,8 +410,7 @@ public class dataBaseManager {
     }
 
     public String getRoundcubePort() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT roundcube_port FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_ROUNDCUBE_PORT)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 String port = rs.getString("roundcube_port");
@@ -471,8 +423,7 @@ public class dataBaseManager {
     }
 
     public String getRoundcubeSslCert() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT roundcube_ssl_cert FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_ROUNDCUBE_SSL_CERT)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 return rs.getString("roundcube_ssl_cert");
@@ -484,8 +435,7 @@ public class dataBaseManager {
     }
 
     public String getRoundcubeSslKey() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT roundcube_ssl_key FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_ROUNDCUBE_SSL_KEY)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 return rs.getString("roundcube_ssl_key");
@@ -497,14 +447,7 @@ public class dataBaseManager {
     }
 
     public boolean updateRoundcubeConfig(String domain, String port, String sslCert, String sslKey, String sslChain) {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET " +
-                    "roundcube_domain = ?, " +
-                    "roundcube_port = ?, " +
-                    "roundcube_ssl_cert = ?, " +
-                    "roundcube_ssl_key = ?, " +
-                    "roundcube_ssl_chain = ? " +
-                    "WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_UPDATE_ROUNDCUBE_CONFIG)) {
             prepare.setString(1, domain);
             prepare.setString(2, port);
             prepare.setString(3, sslCert);
@@ -518,8 +461,7 @@ public class dataBaseManager {
     }
 
     public String getRoundcubeSslChain() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT roundcube_ssl_chain FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_ROUNDCUBE_SSL_CHAIN)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 String chain = rs.getString("roundcube_ssl_chain");

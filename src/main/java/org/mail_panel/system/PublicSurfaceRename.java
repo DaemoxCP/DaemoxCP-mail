@@ -1,5 +1,7 @@
 package org.mail_panel.system;
 
+import org.mail_panel.database.SqlCatalog;
+
 import org.mail_panel.util.Shell;
 
 import java.io.IOException;
@@ -380,7 +382,7 @@ public final class PublicSurfaceRename {
             try (java.sql.Connection c = java.sql.DriverManager.getConnection("jdbc:sqlite:" + db);
                  java.sql.Statement st = c.createStatement()) {
                 // fail2ban tiene il database aperto: si aspetta il suo turno invece di fallire.
-                st.execute("PRAGMA busy_timeout = 10000");
+                st.execute(SqlCatalog.RENAME_MOVE_JAIL_STATE);
                 c.setAutoCommit(false);
                 try {
                     // Lo schema e' quello di fail2ban (server/database.py): jails, bips, bans, logs.

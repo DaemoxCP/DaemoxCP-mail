@@ -1,5 +1,7 @@
 package org.mail_panel.webserver;
 
+import org.mail_panel.database.SqlCatalog;
+
 import com.sun.net.httpserver.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -4470,8 +4472,8 @@ public class SSLMailServer {
                     return;
                 }
                 // Il valore passa come parametro, mai incollato nella query
-                try (java.sql.PreparedStatement global = Main.mailDatabase.getConnection().prepareStatement("SET GLOBAL time_zone = ?");
-                     java.sql.PreparedStatement session = Main.mailDatabase.getConnection().prepareStatement("SET SESSION time_zone = ?")) {
+                try (java.sql.PreparedStatement global = Main.mailDatabase.getConnection().prepareStatement(SqlCatalog.SERVER_HANDLE_API_TIMEZONE_DIAG);
+                     java.sql.PreparedStatement session = Main.mailDatabase.getConnection().prepareStatement(SqlCatalog.SERVER_HANDLE_API_TIMEZONE_DIAG_2)) {
                     // Prova global (richiede SUPER), poi session
                     try {
                         global.setString(1, desired);
@@ -4543,10 +4545,7 @@ public class SSLMailServer {
 
         // 3) MySQL: @@global.time_zone, @@session.time_zone, NOW(), UTC_TIMESTAMP()
         try (java.sql.Statement stmt = Main.mailDatabase.getConnection().createStatement();
-             java.sql.ResultSet rs = stmt.executeQuery(
-                 "SELECT @@global.time_zone, @@session.time_zone, " +
-                 "NOW(), UTC_TIMESTAMP(), @@system_time_zone, " +
-                 "UNIX_TIMESTAMP() AS unix_ts")) {
+             java.sql.ResultSet rs = stmt.executeQuery(SqlCatalog.SERVER_FILL_TIMEZONE_DIAGNOSTICS)) {
             if (rs.next()) {
                 response.put("mysql_global_tz", rs.getString(1));
                 response.put("mysql_session_tz", rs.getString(2));
