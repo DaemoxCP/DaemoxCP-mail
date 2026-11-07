@@ -69,6 +69,9 @@ public class HomePanelE2EServer {
         https.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         https.start();
 
+        // Come SSLMailServer.start (reperto 184): le sessioni dell'avvio di prima se ne vanno. Lo
+        // stesso database fra due avvii di questo server e' un jar riavviato.
+        System.out.println("CLOSED " + Main.sessions.beginRun());
         String[] session = TestSessions.open(db, "dashboard-boss", "HomePanelE2EServer");
         System.out.println("SESSION " + session[0]);
         System.out.println("SHA256 " + InstallScripts.jarSha256());

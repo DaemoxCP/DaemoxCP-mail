@@ -83,19 +83,7 @@ public final class DataCrypto {
         return hmacHex(PanelSecrets.key(PanelSecrets.CODE_KEY), purpose + ":" + adminId + ":" + code);
     }
 
-    /** Un token derivato da un altro con la chiave delle sessioni (il token CSRF di una sessione). */
-    public static String sessionMac(String purpose, String value) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(PanelSecrets.key(PanelSecrets.SESSION_KEY), "HmacSHA256"));
-            byte[] out = mac.doFinal((purpose + ":" + value).getBytes(StandardCharsets.UTF_8));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(out);
-        } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("HMAC failed", e);
-        }
-    }
-
-    /** SHA-256 in esadecimale: l'impronta del token di sessione (che ha gia' 256 bit casuali). */
+    /** SHA-256 in esadecimale (l'impronta dello User-Agent di una sessione). */
     public static String sha256Hex(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));

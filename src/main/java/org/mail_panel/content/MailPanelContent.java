@@ -364,7 +364,18 @@ public class MailPanelContent {
                     if (!headers.has('X-CSRF-Token')) headers.set('X-CSRF-Token', field.value);
                     init = Object.assign({}, init, { headers: headers });
                 }
-                return send.call(this, input, init);
+                // Il 401 con X-Panel-Session: ended vuol dire che la sessione non c'e' piu': il jar e'
+                // ripartito (le sessioni valgono per un avvio solo, reperto 184) o e' scaduta. La
+                // pagina va all'accesso, che dice perche', invece di riempirsi di errori. Gli altri
+                // 401 (un codice di conferma sbagliato) restano alla pagina.
+                var own = new URL(url, location.href).origin === location.origin;
+                return send.call(this, input, init).then(function (res) {
+                    if (own && res.status === 401 && res.headers.get('X-Panel-Session') === 'ended' && !window.panelSessionEnded) {
+                        window.panelSessionEnded = true;
+                        location.replace('/index?session=ended');
+                    }
+                    return res;
+                });
             };
         })();
     </script>
@@ -790,6 +801,12 @@ public class MailPanelContent {
         }
         document.querySelectorAll('[data-back]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go('start'); }));
         el('linkConsole').addEventListener('click', e => { e.preventDefault(); go('console'); });
+        // Arrivati qui da una sessione finita (il jar ripartito o la sessione scaduta, reperto 184):
+        // lo si dice, e l'indirizzo torna quello della pagina d'accesso.
+        if (new URLSearchParams(location.search).get('session') === 'ended') {
+            showInfo(t('login.sessionEnded'));
+            history.replaceState(null, '', '/index');
+        }
 
         // Tutto passa da /api/login con il token della pagina
         async function login(action, body) {

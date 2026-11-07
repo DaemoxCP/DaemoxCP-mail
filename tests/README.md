@@ -623,6 +623,17 @@ pannello (senza 'unsafe-inline', reperto 178): nessuna violazione, nessun gestor
 linea nel DOM, ogni data-on-* nella lingua di panel-actions.js e solo con funzioni del pannello, ogni
 data-style applicato, e le funzioni chiamate dall'HTML che gli script costruiscono dopo esistono.
 
+**SessionRunTest** — le sessioni valgono per un avvio solo del jar, coi cookie Strict (reperto 184), col MySQL di
+prova: i cookie (Strict, quello della sessione senza scadenza), l'impronta nel database che non e' lo SHA-256 del
+token, un secondo processo sullo stesso database (il jar riavviato) che non riconosce il token e ne calcola un altro
+CSRF, `beginRun` che toglie le righe di prima, e sul server vero il 302 a `/index?session=ended`, il 401 con
+`X-Panel-Session: ended`, il codice di conferma sbagliato senza quel segnale, l'uscita con `Clear-Site-Data`.
+
+**session-restart-browser-test.js** — lo stesso col Chrome vero e il server vero (HomePanelE2EServer sulla VM), che la
+prova riavvia con il comando in `START`: i cookie come li mette il server, un link da un altro sito che arriva senza
+sessione, la pagina aperta che dopo il riavvio va all'accesso e dice perche', il cookie di prima che se ne va, la
+sessione del nuovo avvio che entra.
+
 **home-panel-browser-test.js** — la scheda del pannello in cima alla dashboard (reperto 183), col
 server simulato due ore avanti al browser: da quanto gira (contato con l'ora del server) e da quando,
 col fuso; l'occhio chiuso all'inizio e i dettagli chiesti solo quando lo si apre, col mouse e con la

@@ -1395,6 +1395,7 @@
   "login.usePasskey": "Usa Passkey",
   "login.usePasskeyTitle": "Usa la tua Passkey",
   "login.verify": "Verifica",
+  "login.sessionEnded": "La sessione è finita: il pannello è stato riavviato, oppure è scaduta. Accedi di nuovo.",
   "mail.common.product": "Pannello di controllo della posta",
   "mail.common.senderName": "Pannello di controllo della posta ({server})",
   "mail.common.senderNameBare": "Pannello di controllo della posta",

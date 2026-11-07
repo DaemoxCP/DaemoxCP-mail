@@ -221,7 +221,7 @@ public class I18nTest {
         check("cookie: an unknown language does not count", I18n.fromCookie(List.of("__Host-lang=fr")) == null
                 && I18n.fromCookie(List.of("x__Host-lang=en")) == null && I18n.fromCookie(null) == null);
         check("the cookie: one year, Secure, HttpOnly, SameSite, Path=/", I18n.cookieHeader("en")
-                .equals("__Host-lang=en; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"));
+                .equals("__Host-lang=en; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Strict"));
         check("an unknown language becomes Italian", I18n.normalize("fr").equals("it") && I18n.normalize(null).equals("it"));
 
         System.out.println("\n== The texts ==");
