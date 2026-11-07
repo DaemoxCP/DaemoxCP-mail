@@ -50,6 +50,7 @@ passata.
     expect tests/menu-way-back.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
     expect tests/menu-reinstall-warning.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.util.ShellShortPathTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SoftwareVersionsTest
