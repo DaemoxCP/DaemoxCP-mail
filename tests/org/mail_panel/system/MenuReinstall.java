@@ -7,7 +7,8 @@ import org.mail_panel.sqli.dataBaseManager;
 /**
  * Il conduttore della reinstallazione completa dal menu, su un server dove il pannello e' gia'
  * partito (e quindi i pacchetti dello stack sono protetti): fa quello che fa la voce del menu
- * dopo la finestra del nome, cioe' Main.runInstallation, la stessa funzione. Il menu a schermo
+ * dopo la finestra del nome, cioe' ReinstallJob.runFromMenu, la stessa funzione: la reinstallazione
+ * staccata (Main --reinstall sotto daemon(8)) e il suo registro seguito fino all'esito. Il menu a schermo
  * vuole un terminale e una persona che digita; questo no.
  *
  * Non prepara niente: usa la configurazione che c'e' nella cartella del pannello (SQLite, i
@@ -39,7 +40,8 @@ public class MenuReinstall {
             System.exit(2);
         }
         System.out.println("=== reinstallazione dal menu, hostname " + host + ", pid " + ProcessHandle.current().pid() + " ===");
-        boolean ok = Main.runInstallation(host.trim());
+        // Come la voce del menu: staccata (ReinstallJob), e la si segue fino all'esito.
+        boolean ok = ReinstallJob.runFromMenu(host.trim(), System.out);
         System.out.println("=== esito: " + (ok ? "riuscita" : "FALLITA") + " ===");
         System.exit(ok ? 0 : 1);
     }

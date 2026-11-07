@@ -10153,7 +10153,12 @@ public final class UpdateManager {
                 // delle versioni di prima), e freebsd-update usa <versione>_<data>. Saperlo cambia
                 // cosa significa tenerlo.
                 String origin, explain;
-                if (PackageWayBack.OWN.matcher(name).matches()) {
+                if (PackageWayBack.REINSTALL_OWN.matcher(name).matches()) {
+                    // La via di ritorno di una reinstallazione completa dal menu: il server di prima,
+                    // configurazioni, caselle e database compresi.
+                    origin = I18n.tr("server.um.bootEnvironments.reinstallOrigin");
+                    explain = I18n.tr("server.um.bootEnvironments.reinstallExplain");
+                } else if (PackageWayBack.OWN.matcher(name).matches()) {
                     // La via di ritorno di un lavoro sui pacchetti (PackageWayBack): senza questo
                     // ramo cadeva in "origine non riconosciuta, guardalo prima di toccarlo".
                     origin = I18n.tr("server.um.bootEnvironments.packagesOrigin");

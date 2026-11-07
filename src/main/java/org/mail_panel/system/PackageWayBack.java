@@ -48,6 +48,19 @@ public final class PackageWayBack {
     static final java.util.regex.Pattern OWN = java.util.regex.Pattern.compile(
             "^packages-before-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}-[a-z0-9-]{1,40}$");
 
+    /*
+     * La via di ritorno della reinstallazione completa dal menu ha un nome e una potatura sua.
+     * Prima era "packages-before-...-reinstall" e contava fra le KEEP dei lavori sui pacchetti:
+     * tre aggiornamenti dopo una reinstallazione la toglievano (reperto 162), e una prova lanciata
+     * sul clone dopo tre reinstallazioni ne aveva tolta una vera. Adesso i lavori sui pacchetti non
+     * la vedono, e lei pota solo le sue: e' la sola copia del server di prima (configurazioni,
+     * caselle, database), e una reinstallazione si fa di rado.
+     */
+    static final String REINSTALL_PREFIX = "reinstall-before-";
+    static final int REINSTALL_KEEP = 2;
+    public static final java.util.regex.Pattern REINSTALL_OWN = java.util.regex.Pattern.compile(
+            "^reinstall-before-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}$");
+
     /** I dati che, se stanno dentro il boot environment, tornano indietro con lui. */
     static final List<String> DATA = List.of("/var/vmail", "/var/db/mysql");
 
@@ -76,12 +89,25 @@ public final class PackageWayBack {
      * chiama non deve toccare i pacchetti.
      */
     public static Prepared before(Consumer<String> log, String kind) {
+        return create(log, nameFor(kind, ZonedDateTime.now()));
+    }
+
+    /** Il nome della via di ritorno di una reinstallazione, con l'ora UTC. */
+    static String reinstallName(ZonedDateTime when) {
+        return REINSTALL_PREFIX + when.withZoneSameInstant(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss"));
+    }
+
+    /** Prima della reinstallazione completa: come {@link #before}, col nome della reinstallazione. */
+    public static Prepared beforeInstallation(Consumer<String> log) {
+        return create(log, reinstallName(ZonedDateTime.now()));
+    }
+
+    private static Prepared create(Consumer<String> log, String name) {
         String inv = inventory();
         if (!run("bectl check", 30).success()) {
             log.accept(I18n.tr("server.um.x.wbUnsupported"));
             return new Prepared("", inv);
         }
-        String name = nameFor(kind, ZonedDateTime.now());
         Shell.Result c = run("bectl create " + name + " 2>&1", 300);
         boolean listed = run("bectl list -H 2>/dev/null | cut -f1", 60).outputTrim().lines().anyMatch(name::equals);
         if (!c.success() || !listed) {
@@ -129,15 +155,20 @@ public final class PackageWayBack {
             return;
         }
         log.accept(I18n.tr("server.reinstall.wayBackKept", Map.of("name", p.name())));
-        prune(log, KEEP);
+        prune(log, REINSTALL_OWN, REINSTALL_KEEP, "server.reinstall.wayBackPruned");
     }
 
     /** Toglie i boot environment dei pacchetti piu' vecchi, tenendo gli ultimi 'keep'. */
     static void prune(Consumer<String> log, int keep) {
+        prune(log, OWN, keep, "server.um.x.wbPruned");
+    }
+
+    /** Toglie i piu' vecchi fra quelli del modello 'own', tenendo gli ultimi 'keep'. */
+    static void prune(Consumer<String> log, java.util.regex.Pattern ownNames, int keep, String prunedKey) {
         List<String> own = new ArrayList<>();
         for (String line : run("bectl list -H 2>/dev/null", 60).outputTrim().split("\n")) {
             String[] f = line.split("\t");
-            if (f.length < 2 || !OWN.matcher(f[0].trim()).matches()) continue;
+            if (f.length < 2 || !ownNames.matcher(f[0].trim()).matches()) continue;
             // N = in uso adesso, R = al prossimo avvio, T = solo al prossimo avvio: mai toccarli.
             if (f[1].contains("N") || f[1].contains("R") || f[1].contains("T")) continue;
             own.add(f[0].trim());
@@ -145,7 +176,7 @@ public final class PackageWayBack {
         java.util.Collections.sort(own);
         for (int i = 0; i < own.size() - keep; i++) {
             String err = destroy(own.get(i));
-            log.accept(err == null ? I18n.tr("server.um.x.wbPruned", Map.of("name", own.get(i), "keep", String.valueOf(keep)))
+            log.accept(err == null ? I18n.tr(prunedKey, Map.of("name", own.get(i), "keep", String.valueOf(keep)))
                                    : I18n.tr("server.um.x.wbPruneFailed", Map.of("name", own.get(i), "err", err)));
         }
     }
@@ -156,7 +187,8 @@ public final class PackageWayBack {
      * promozione lo snapshot d'origine puo' essere quello di un altro boot environment.
      */
     static String destroy(String name) {
-        if (!OWN.matcher(name).matches()) return "not a boot environment made before a package job";
+        if (!OWN.matcher(name).matches() && !REINSTALL_OWN.matcher(name).matches())
+            return "not a boot environment made before a package job or a reinstallation";
         String root = run("zfs list -H -o name / 2>/dev/null", 30).outputTrim();
         String parent = root.contains("/") ? root.substring(0, root.lastIndexOf('/')) : "";
         String origin = parent.isEmpty() ? "" : run("zfs get -H -o value origin " + parent + "/" + name + " 2>/dev/null", 30).outputTrim();
