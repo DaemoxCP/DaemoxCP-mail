@@ -8246,11 +8246,6 @@ public class SSLMailServer {
     }
 
     /**
-     * Endpoint diagnostico: ritorna tutti i path che il pannello sta usando,
-     * raggruppati per categoria, ognuno con status (esiste / dimensione / mtime).
-     * Utile per debugging e per copia/incolla rapidi durante troubleshooting.
-     */
-    /**
      * GET /api/panel_info?action=uptime|details: la scheda del pannello in cima alla dashboard
      * (PanelInfo, reperto 183). Il permesso lo ha gia' controllato il filtro (Access): uptime con
      * home.view, details con system.view. La risposta di uptime dice se chi guarda puo' chiedere
@@ -8270,6 +8265,11 @@ public class SSLMailServer {
         }
     }
 
+    /**
+     * Endpoint diagnostico: ritorna tutti i path che il pannello sta usando,
+     * raggruppati per categoria, ognuno con status (esiste / dimensione / mtime).
+     * Utile per debugging e per copia/incolla rapidi durante troubleshooting.
+     */
     private void handleApiSystemPaths(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
             sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
