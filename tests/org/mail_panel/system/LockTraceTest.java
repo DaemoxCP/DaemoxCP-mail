@@ -4,6 +4,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.json.JSONObject;
+import org.mail_panel.i18n.I18n;
 
 /**
  * The trace of the locks on the machine: why those packages are locked, and how they are freed if
@@ -21,8 +22,9 @@ import org.json.JSONObject;
  * Here it is tested that the explanation is there, that it says the things that are needed, and
  * that it does not fall behind the real state.
  *
- * The note itself is written in Italian by the panel (UpdateManager.lockNoteText, not from the
- * language files): the few Italian words below are that output under test, not the test's text.
+ * The note is written in the panel's source language (Italian), with its texts in the language
+ * files (server.lockNote.*): the English note is checked with English words, the Italian one
+ * against it.json by key, so no Italian text is written here.
  */
 public class LockTraceTest {
 
@@ -31,25 +33,46 @@ public class LockTraceTest {
     public static void main(String[] args) throws Exception {
 
         // ===== 1. The note's text says everything that is needed =====
-        String note = UpdateManager.lockNoteText(
-                List.of("dovecot", "nginx", "postfix-mysql"), "2026-10-23T01:00:00Z");
+        List<String> three = List.of("dovecot", "nginx", "postfix-mysql");
+        String when = "2026-10-23T01:00:00Z";
+        String note = UpdateManager.lockNoteText(three, when, "en");
+        // The paragraphs are wrapped into "# " lines: joined back, a sentence reads whole.
+        String flat = flat(note);
         check("the note lists the locked packages",
              note.contains("dovecot") && note.contains("nginx") && note.contains("postfix-mysql"));
-        check("it says when it was written, in UTC", note.contains("2026-10-23T01:00:00Z")
-                && note.contains("UTC"));
+        check("it says when it was written, in UTC", note.contains(when) && note.contains("UTC"));
         check("it says the exact command that frees them", note.contains(UpdateManager.UNLOCK_ALL_COMMAND));
-        check("it says a locked package does not get the security fixes",
-             note.toLowerCase().contains("sicurezza"));
-        check("it says pkg upgrade skips them exiting with code 0",
-             note.contains("codice 0") || note.contains("code 0"));
-        check("it points to the panel to update them", note.contains("Aggiornamenti"));
+        check("it says a locked package does not get the security fixes", flat.contains("security fixes"));
+        check("it says pkg upgrade skips them exiting with code 0", flat.contains("exiting with code 0"));
+        check("it points to the panel to update them", flat.contains("from the panel, Updates page"));
         check("it says how to free a single one", note.contains("pkg unlock -y"));
         check("and where the real state is read", note.contains("pkg lock -l"));
-        check("it warns not to edit it by hand", note.toLowerCase().contains("non modificare"));
+        check("it warns not to edit it by hand", flat.contains("Do NOT edit by hand"));
 
         // A note without packages must not look like an empty list by mistake.
         check("with no locked package it says so",
-             UpdateManager.lockNoteText(List.of(), "2026-10-23T01:00:00Z").contains("nessun pacchetto"));
+             UpdateManager.lockNoteText(List.of(), when, "en").contains("(no locked package)"));
+
+        // The file on the machine is in the panel's source language, whoever triggered the writing.
+        String italian = UpdateManager.lockNoteText(three, when);
+        I18n.setCurrent("en");
+        boolean sameInsideAnEnglishRequest = UpdateManager.lockNoteText(three, when).equals(italian);
+        I18n.clearCurrent();
+        check("the note on the machine is in the source language, even inside an English request",
+             italian.equals(UpdateManager.lockNoteText(three, when, I18n.SOURCE_LANGUAGE)) && sameInsideAnEnglishRequest
+             && !italian.equals(note));
+        boolean allTexts = true;
+        for (String k : List.of("title", "why", "how", "warning", "single", "state"))
+            allTexts &= flat(italian).contains(I18n.t(I18n.SOURCE_LANGUAGE, "server.lockNote." + k).replaceAll("\\s+", " "));
+        check("  with every text of it.json, by key", allTexts && flat(UpdateManager.lockNoteText(List.of(), when))
+             .contains(I18n.t(I18n.SOURCE_LANGUAGE, "server.lockNote.none")));
+
+        // Outside the comments only the package names: that is what a reader of the list takes.
+        boolean format = true;
+        for (String lang : I18n.LANGUAGES)
+            for (String line : UpdateManager.lockNoteText(three, when, lang).split("\n", -1))
+                format &= (line.isEmpty() || line.startsWith("#") || three.contains(line)) && line.length() <= 84;
+        check("in both languages: comment lines of at most 84 columns, and the package names", format);
 
         // ===== 2. The writing: atomic, and it does not fall behind =====
         Path d = Files.createTempDirectory("lock-note-test");
@@ -161,6 +184,11 @@ public class LockTraceTest {
     private static String firstInstalled() {
         for (String n : PackagePlan.installed().keySet()) return n;
         return null;
+    }
+
+    /** The note with its "# " lines joined back, spaces collapsed: a wrapped sentence reads whole. */
+    private static String flat(String note) {
+        return note.replaceAll("\\n#[ ]*", " ").replaceAll("\\s+", " ");
     }
 
     private static boolean hasPkg() {

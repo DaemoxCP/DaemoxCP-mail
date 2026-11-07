@@ -422,38 +422,55 @@ public final class UpdateManager {
     /**
      * Il testo della nota. Funzione pura: riceve l'elenco e il momento, cosi' si prova.
      *
-     * I commenti in italiano come negli altri file che il pannello genera sulla macchina
-     * (l'override del ramo di pkg, il filtro di fail2ban, la lista permaban): li legge chi
-     * amministra il server, non il programma. La firma in inglese, come in tutti (PanelMarker).
+     * In italiano come i commenti degli altri file che il pannello genera sulla macchina
+     * (l'override del ramo di pkg, il filtro di fail2ban, la lista permaban): la legge chi
+     * amministra il server, non il programma. Sempre nella lingua d'origine del pannello, mai in
+     * quella di chi ha fatto scattare la scrittura: la nota si riscrive anche dentro i lavori
+     * lanciati dalle pagine, e cambierebbe lingua secondo chi ha cliccato. La firma in inglese,
+     * come in tutti (PanelMarker).
      */
     static String lockNoteText(java.util.Collection<String> locked, String when) {
+        return lockNoteText(locked, when, I18n.SOURCE_LANGUAGE);
+    }
+
+    /**
+     * La nota in una lingua data. I testi stanno nei file di lingua (server.lockNote.*, r11);
+     * ogni paragrafo si spezza qui in righe di commento, cosi' una traduzione non puo' rompere il
+     * formato: fuori dai commenti restano solo i nomi dei pacchetti, che e' quello che si legge.
+     */
+    static String lockNoteText(java.util.Collection<String> locked, String when, String lang) {
         StringBuilder sb = new StringBuilder();
-        sb.append("# ").append(PanelMarker.WRITTEN).append(" on ").append(when).append(" (UTC).\n")
-          .append("# Pacchetti bloccati dal pannello mail FreeBSD. NON modificare a mano:\n")
-          .append("# viene riscritto a ogni avvio del pannello e a ogni cambio di protezione.\n")
-          .append("#\n")
-          .append("# PERCHE': i pacchetti dello stack di posta restano bloccati (pkg lock) perche' un\n")
-          .append("# \"pkg upgrade\", da qui o da SSH, non li sostituisca senza i controlli\n")
-          .append("# dell'aggiornamento guidato: la configurazione generata dal pannello puo' non\n")
-          .append("# essere accettata dalla versione nuova, e il servizio si rifiuterebbe di partire.\n")
-          .append("#\n")
-          .append("# COME SI AGGIORNANO: dal pannello, pagina Aggiornamenti. Li' si vede, per ogni\n")
-          .append("# pacchetto, se c'e' una versione nuova e se chiude una vulnerabilita'; il pannello\n")
-          .append("# sblocca, aggiorna, riprotegge e riavvia i servizi.\n")
-          .append("#\n")
-          .append("# ATTENZIONE, se il pannello non c'e' piu' o non riparte: questi pacchetti restano\n")
-          .append("# bloccati, cioe' NON riceveranno piu' nemmeno le correzioni di sicurezza, e\n")
-          .append("# \"pkg upgrade\" li salta uscendo con codice 0, come se non ci fosse niente da fare.\n")
-          .append("# Per liberarli tutti:\n")
-          .append("#\n")
-          .append("#     ").append(UNLOCK_ALL_COMMAND).append("\n")
-          .append("#\n")
-          .append("# Uno solo:  pkg unlock -y <nome>\n")
-          .append("# Lo stato vero lo dice sempre: pkg lock -l\n")
-          .append("\n");
-        if (locked.isEmpty()) sb.append("# (nessun pacchetto bloccato)\n");
+        sb.append("# ").append(PanelMarker.WRITTEN).append(" on ").append(when).append(" (UTC).\n");
+        noteComment(sb, I18n.t(lang, "server.lockNote.title"));
+        sb.append("#\n");
+        noteComment(sb, I18n.t(lang, "server.lockNote.why"));
+        sb.append("#\n");
+        noteComment(sb, I18n.t(lang, "server.lockNote.how"));
+        sb.append("#\n");
+        noteComment(sb, I18n.t(lang, "server.lockNote.warning"));
+        sb.append("#\n");
+        sb.append("#     ").append(UNLOCK_ALL_COMMAND).append("\n");
+        sb.append("#\n");
+        noteComment(sb, I18n.t(lang, "server.lockNote.single"));
+        noteComment(sb, I18n.t(lang, "server.lockNote.state"));
+        sb.append("\n");
+        if (locked.isEmpty()) noteComment(sb, I18n.t(lang, "server.lockNote.none"));
         for (String n : locked) sb.append(n).append('\n');
         return sb.toString();
+    }
+
+    /** Un paragrafo come righe "# " di al massimo 84 colonne, spezzate fra le parole. */
+    private static void noteComment(StringBuilder sb, String text) {
+        StringBuilder line = new StringBuilder();
+        for (String word : text.trim().split("\\s+")) {
+            if (line.length() > 0 && line.length() + 1 + word.length() > 82) {
+                sb.append("# ").append(line).append('\n');
+                line.setLength(0);
+            }
+            if (line.length() > 0) line.append(' ');
+            line.append(word);
+        }
+        if (line.length() > 0) sb.append("# ").append(line).append('\n');
     }
 
     /**
