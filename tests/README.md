@@ -770,6 +770,20 @@ record name (test MySQL, as root). With the jar before the fix both planted comm
 
     java -De2e.vm=yes $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.RootDistrustsDataTest
 
+**RootGateTest** — the root part's closed list (RootGate), before any handler: routes and methods, the
+shape of every value (control characters, field names, lengths, nesting), the strict shapes of the
+fields that end up in commands and configurations (a host name starting with a dash, an IP with a
+command after it, jails, ports, packages, services, countries, logs, PEM blocks with something else
+inside); from the project folder, every call the pages make to a root route uses a method in the list.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RootGateTest
+
+**WebPartShellTest** — in the web part Shell runs no system command except dig, sendmail, postconf -h
+and hostname: the root part's commands are refused through Shell.run, Shell.runShell and applyPath, the
+web part's own pass.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.util.WebPartShellTest
+
 **HeadRequestTest** — HEAD on the real server, without MySQL. Before, every handler sent the body's
 length and then wrote the body: Java's HTTP server logged a warning for the length and refused the
 write, and the sign-in page logged it as SEVERE (seen on the real server with one `curl -I`). Now a

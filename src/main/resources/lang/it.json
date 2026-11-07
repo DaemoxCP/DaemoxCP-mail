@@ -6665,5 +6665,6 @@
   "server.paths.panelWebLog": "Log della parte web del pannello",
   "server.paths.panelWebLogDesc": "Quello che scrive la parte web, che gira con l'utente mailpanel: accessi, pagine, richieste passate alla parte root",
   "server.paths.rootSocket": "Socket della parte root",
-  "server.paths.rootSocketDesc": "Da qui la parte web passa le richieste di chi ha fatto l'accesso alla parte root, che non apre porte di rete"
+  "server.paths.rootSocketDesc": "Da qui la parte web passa le richieste di chi ha fatto l'accesso alla parte root, che non apre porte di rete",
+  "server.rootPart.refused": "La richiesta non ha la forma che il pannello si aspetta: niente è stato cambiato."
 }

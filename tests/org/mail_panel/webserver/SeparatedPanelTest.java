@@ -123,6 +123,10 @@ public class SeparatedPanelTest {
                     && java.util.Objects.equals(a.writePermission(), b.writePermission());
         }
         check("the root part has the same routes, with the same permissions, as the web part", same);
+        java.util.Set<String> forwarded = new java.util.TreeSet<>();
+        root.routes().forEach((p, a) -> { if (a.kind() == Access.Kind.API && !SSLMailServer.WEB_LOCAL_API.contains(p)) forwarded.add(p); });
+        check("the root's closed list has exactly the routes the web part forwards (" + forwarded.size() + ")",
+                forwarded.equals(new java.util.TreeSet<>(RootGate.METHODS.keySet())));
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);
         check("the root part has no HTTPS server at all, not even an unbound socket", f.get(root) == null);
@@ -209,6 +213,11 @@ public class SeparatedPanelTest {
             check("a viewer's session asking to create an administrator: 403 (" + h.status() + " " + answer + ")",
                     h.status() == 403 && answer.toString().contains("\"forbidden\":true"));
             check("  and no administrator was created", AuthStore.adminByUsername("sep-forged").isEmpty());
+            int beforeGate = seen.size();
+            r = send("POST", "/api/roundcube-domain", "{\"action\":\"check\",\"domain\":\"-f /etc/master.passwd\"}", boss, true);
+            check("through the web part, a host name that is an option of dig: refused by the root's list, 400 (" + r.statusCode() + ")",
+                    r.statusCode() == 400 && seen.size() == beforeGate + 1
+                    && r.body().contains(org.mail_panel.i18n.I18n.t("en", "server.rootPart.refused").substring(0, 20)));
             h = forge(sock, "/api/logs", "GET", "/api/logs", null, null, boss.adminId(), vera.sessionId(), answer);
             check("a session with someone else's administrator id: 401 (" + h.status() + ")", h.status() == 401);
             h = forge(sock, "/api/logs", "GET", "/api/logs", null, null, boss.adminId(), 999_999_999L, answer);

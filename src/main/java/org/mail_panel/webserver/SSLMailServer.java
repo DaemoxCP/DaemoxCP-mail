@@ -1167,6 +1167,15 @@ public class SSLMailServer {
                 sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
                 return;
             }
+            // L'elenco chiuso (RootGate): il metodo della rotta, la forma di ogni valore, quella stretta dei
+            // parametri che finiscono in comandi e configurazioni. Il motivo nel registro, mai il valore.
+            String refused = RootGate.check(r);
+            if (refused != null) {
+                LOGGER.warning("Root part: forwarded request refused: " + refused);
+                logAudit("FORWARD_REFUSED", r.clientIp(), "route=" + r.route() + " " + refused);
+                sendJsonError(exchange, 400, I18n.tr("server.rootPart.refused"));
+                return;
+            }
             Optional<WebSessions.Current> session = Main.sessions.forwarded(r.sessionId(), r.adminId());
             if (session.isEmpty()) {
                 if (!WebSessions.lastCheckFailed()) exchange.getResponseHeaders().set(SESSION_ENDED_HEADER, "ended");
