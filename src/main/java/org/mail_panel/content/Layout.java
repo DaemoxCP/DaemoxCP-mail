@@ -90,7 +90,7 @@ public final class Layout {
      */
     static void registerAssets() {
         // Basta il riferimento: i campi statici sono gia' inizializzati.
-        if (LANGUAGE_SCRIPT.isEmpty() || SIDEBAR_SCRIPT.isEmpty()) throw new IllegalStateException();
+        if (LANGUAGE_SCRIPT.isEmpty() || SIDEBAR_SCRIPT.isEmpty() || REBOOT_SCRIPT.isEmpty()) throw new IllegalStateException();
     }
 
     /** Il segnaposto che una pagina mette al posto della cornice. */
@@ -230,7 +230,75 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
         <a class="btn btn-sm btn-logout text-white" href="#" id="logoutButton" title="{{t:nav.logout}}"><i class="fas fa-right-from-bracket" aria-hidden="true"></i><span class="d-none d-md-inline ms-1">{{t:nav.logout}}</span></a>
     </div>
 </header>
-""" + SIDEBAR_SCRIPT + LANGUAGE_SCRIPT;
+""" + SIDEBAR_SCRIPT + LANGUAGE_SCRIPT + rebootFrame(viewer);
+    }
+
+    /**
+     * La striscia "il server va riavviato" sotto la barra in alto di ogni pagina, la finestra del
+     * riavvio e quella di conferma (reperto 185). La striscia a chi vede il sistema; il pulsante e le
+     * finestre a chi puo' cambiarlo. Lo script chiede lo stato al server (reboot_state, letture leggere)
+     * e la mostra solo se serve.
+     */
+    static String rebootFrame(Viewer viewer) {
+        if (!viewer.may("system.view")) return "";
+        boolean manage = viewer.may("system.manage");
+        return "<div class=\"px-3 pt-3\" id=\"panelRebootBanner\" hidden data-can-reboot=\"" + manage + "\"></div>\n"
+                + (manage ? REBOOT_MODALS : "") + REBOOT_SCRIPT;
+    }
+
+    private static final String REBOOT_MODALS = """
+<div class="modal fade" id="panelRebootModal" tabindex="-1" aria-labelledby="panelRebootTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="panelRebootTitle"><i class="fas fa-rotate-right me-2" aria-hidden="true"></i>{{t:rb.title}}</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
+            </div>
+            <div class="modal-body">
+                <div id="panelRebootBody" role="status" aria-live="polite"></div>
+                <fieldset class="mt-2" id="panelRebootWhen">
+                    <legend class="fs-6 fw-semibold">{{t:rb.when}}</legend>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="panelRebootMinutes" id="panelRebootIn1" value="1" checked>
+                        <label class="form-check-label" for="panelRebootIn1">{{t:rb.in1}}</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="panelRebootMinutes" id="panelRebootIn5" value="5">
+                        <label class="form-check-label" for="panelRebootIn5">{{t:rb.in5}}</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="panelRebootMinutes" id="panelRebootIn15" value="15">
+                        <label class="form-check-label" for="panelRebootIn15">{{t:rb.in15}}</label></div>
+                </fieldset>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary touch-target" data-bs-dismiss="modal">{{t:common.close}}</button>
+                <button type="button" class="btn btn-danger touch-target" id="panelRebootGo" data-on-click="panelRebootGo()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>{{t:rb.go}}</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="panelAskModal" tabindex="-1" aria-labelledby="panelAskTitle" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="panelAskTitle"></h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
+            </div>
+            <div class="modal-body" id="panelAskBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary touch-target" data-bs-dismiss="modal">{{t:common.cancel}}</button>
+                <button type="button" class="btn btn-primary touch-target" id="panelAskGo" data-on-click="panelAskYes()"></button>
+            </div>
+        </div>
+    </div>
+</div>
+""";
+
+    private static final String REBOOT_SCRIPT = PageAssets.script(readPage("pages/panel-reboot.js"), false);
+
+    private static String readPage(String path) {
+        try (java.io.InputStream in = Layout.class.getClassLoader().getResourceAsStream(path)) {
+            if (in == null) throw new IllegalStateException("missing resource " + path);
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("cannot read " + path, e);
+        }
     }
 
     /**

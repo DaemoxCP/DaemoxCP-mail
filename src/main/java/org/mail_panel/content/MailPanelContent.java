@@ -370,7 +370,11 @@ public class MailPanelContent {
                 // 401 (un codice di conferma sbagliato) restano alla pagina.
                 var own = new URL(url, location.href).origin === location.origin;
                 return send.call(this, input, init).then(function (res) {
-                    if (own && res.status === 401 && res.headers.get('X-Panel-Session') === 'ended' && !window.panelSessionEnded) {
+                    // Durante un riavvio chiesto dal pannello la pagina aspetta che il server torni davvero
+                    // (panel-reboot.js): un 401 mentre si spegne porterebbe a una pagina d'accesso che sta
+                    // per sparire.
+                    if (own && res.status === 401 && res.headers.get('X-Panel-Session') === 'ended' && !window.panelSessionEnded
+                            && !window.panelRebootPending) {
                         window.panelSessionEnded = true;
                         location.replace('/index?session=ended');
                     }
@@ -803,8 +807,9 @@ public class MailPanelContent {
         el('linkConsole').addEventListener('click', e => { e.preventDefault(); go('console'); });
         // Arrivati qui da una sessione finita (il jar ripartito o la sessione scaduta, reperto 184):
         // lo si dice, e l'indirizzo torna quello della pagina d'accesso.
-        if (new URLSearchParams(location.search).get('session') === 'ended') {
-            showInfo(t('login.sessionEnded'));
+        const sessionParam = new URLSearchParams(location.search).get('session');
+        if (sessionParam === 'ended' || sessionParam === 'rebooted') {
+            showInfo(t(sessionParam === 'rebooted' ? 'login.serverRebooted' : 'login.sessionEnded'));
             history.replaceState(null, '', '/index');
         }
 
@@ -11952,6 +11957,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         .upd-log { background:#1a1d21; color:#e9ecef; padding:10px; border-radius:6px;
                    max-height:420px; overflow:auto; white-space:pre-wrap; font-size:0.78rem; }
         .upd-cell { font-size:0.85rem; }
+        /* La tabella dei pacchetti dentro la sua scheda (reperto 185): le etichette lunghe della
+           sicurezza ("vulnerabile · fix non ancora nel tuo catalogo") vanno a capo invece di allargarla
+           fino a nascondere i pulsanti, a 1280 px. */
+        .pk-table .badge { white-space: normal; text-align: start; }
         """;
         return getHead("nav.updates", "updates", extraStyles) + """
     <div id="main" tabindex="-1" class="content container mt-4">
@@ -12385,7 +12394,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + escHtml(tn('pkgs.stackUnlocked', s.stackUnlocked)) + '</span>'
                    + '<button type="button" class="btn btn-sm btn-success" data-on-click="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.bulk.lockAll')) + '</button></div>';
             }
-            h += '<div class="table-responsive"><table class="table table-cards table-sm align-middle mb-2"><thead><tr>'
+            h += '<div class="table-responsive"><table class="table table-cards table-sm align-middle mb-2 pk-table"><thead><tr>'
                + '<th scope="col">' + escHtml(t('pkgs.colPackage')) + '</th><th scope="col">' + escHtml(t('pkgs.colInstalled')) + '</th><th scope="col">' + escHtml(t('pkgs.colAvailable')) + '</th>'
                + '<th scope="col">' + escHtml(t('pkgs.colSecurity')) + '</th><th scope="col">' + escHtml(t('pkgs.colLock')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th></tr></thead><tbody>';
             (r.packages || []).forEach((p, i) => {
@@ -12616,8 +12625,24 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // per primi, e interruption_status tornava «occupato» senza nemmeno chiedere. L'avviso di un
             // lavoro interrotto (e il pulsante per tornare indietro) non compariva mai (reperto 176).
             const slow = action !== 'job_status' && action !== 'interruption_status';
-            if (slow && updBusy) return { success: false, error: t('up.busy') };
-            if (slow) updBusy = true;
+            // In fila, non rifiutate (reperto 185): «Stato del sistema» premuto mentre la pagina caricava
+            // i pacchetti rispondeva «Operazione già in corso» e la scheda restava vuota. Una richiesta
+            // aspetta che finisca quella prima; il server ha comunque i suoi turni per i lavori.
+            if (slow) {
+                const before = updQueue;
+                let done;
+                updQueue = new Promise(resolve => { done = resolve; });
+                await before;
+                updBusy = true;
+                try { return await updSend(action, extra); }
+                finally { updBusy = false; done(); }
+            }
+            return updSend(action, extra);
+        }
+
+        let updQueue = Promise.resolve();
+
+        async function updSend(action, extra) {
             try {
                 const body = Object.assign({
                     action: action,
@@ -12631,8 +12656,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 return await res.json();
             } catch (e) {
                 return { success: false, error: t('common.networkError', { message: e.message }) };
-            } finally {
-                if (slow) updBusy = false;
             }
         }
 
@@ -12919,41 +12942,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- coerenza con i predefiniti ----------
         // ---------- riavvio del server ----------
-        async function rebPrev() {
-            const el = document.getElementById('os-body');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.checkingImpact')) + '';
-            const r = await updApi('reboot_preview');
-            if (!r.success) {
-                el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>';
-                return;
-            }
-            let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
-                  + '<tr class="upd-cell"><td data-style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
-                  + updEsc(r.installedKernel) + '</code></td></tr>'
-                  + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
-                  + updEsc(r.runningKernel) + '</code>'
-                  + (r.restartNeeded
-                     ? ' <span class="badge upd-badge-warn ms-2">' + escHtml(t('up.kernelMismatchReboot')) + '</span>'
-                     : ' <span class="badge upd-badge-ok ms-2">' + escHtml(t('up.kernelMatchNoReboot')) + '</span>') + '</td></tr>'
-                  + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.servicesStopping')) + '</strong></td><td>'
-                  + (r.services || []).map(updEsc).join(', ') + '</td></tr>'
-                  + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.commandRun')) + '</strong></td><td><code>'
-                  + updEsc(r.daemonPath) + ' -f -o /var/db/mailpanel/reboot.log '
-                  + updEsc(r.shutdownPath) + ' -r +1</code></td></tr>' 
-                  + '</tbody></table></div>'
-                  + '<div class="alert alert-warning py-2">' + updEsc(r.effect) + '</div>';
-            if (r.noshutdown) {
-                h += '<div class="alert alert-danger py-2"><strong>' + updEsc(r.noshutdownWarning) + '</strong></div>';
-            }
-            if (r.gaScheduled) {
-                h += '<div class="alert alert-danger py-2">' + escHtml(t('up.rebootScheduled')) + ' <code>'
-                   + updEsc(r.gaScheduled) + '</code> '
-                   + '<button class="btn btn-sm btn-light ms-2" data-on-click="rebCancel()">' + escHtml(t('up.cancelReboot')) + '</button></div>';
-            }
-            h += '<div class="alert alert-secondary py-2 small">' + t('up.rebootInfo.html') + '</div>'
-               + '<button class="btn btn-danger" data-on-click="rebGo()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.scheduleReboot')) + '</button>';
-            el.innerHTML = h;
-        }
+        // Il riavvio si fa dalla finestra del pannello (Layout, panel-reboot.js): la stessa della striscia
+        // in alto, con cosa si ferma e quando (reperto 185).
+        function rebPrev() { panelRebootOpen(); }
 
         async function rebGo() {
             if (!updConfirm('', t('up.wReboot'))) return;
@@ -13087,14 +13078,34 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   + '</td></tr></tbody></table></div>'
                   + '<p class="small text-muted">' + escHtml(t('up.sourceIs', { source: r.supportSource })) + '</p>';
             if (r.updatableWithFreebsdUpdate) {
-                h += '<div class="alert alert-' + (r.readyExist ? 'warning' : 'secondary') + ' py-2">'
-                   + '<strong>' + escHtml(t('up.baseFetched')) + '</strong> ' + updEsc(r.alreadyReady) + '</div>'
-                   + '<button class="btn btn-outline-primary" data-on-click="osSearch()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('up.fetchOs')) + '</button>'
-                   + '<span class="small text-muted ms-2">' + t('up.fetchOsNote.html') + '</span>';
+                // Cosa c'e' di pronto e il pulsante che lo installa (reperto 185). Prima la scheda sapeva
+                // solo scaricare: le patch restavano li', e lo diceva una riga di freebsd-update.
+                h += r.readyExist
+                    ? '<div class="alert alert-warning py-2"><strong>' + escHtml(t('osp.ready', { target: r.readyTarget || '?' })) + '</strong>'
+                      + (r.readyKernel ? ' ' + escHtml(t('osp.readyKernel')) : '') + '</div>'
+                    : '<div class="alert alert-secondary py-2">' + escHtml(t('osp.nothingReady')) + '</div>';
+                h += '<div class="d-flex flex-wrap align-items-center gap-2">'
+                   + '<button type="button" class="btn btn-primary touch-target" id="ospInstall" data-on-click="osInstall()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('osp.install')) + '</button>'
+                   + '<button type="button" class="btn btn-outline-secondary touch-target" data-on-click="osSearch()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('osp.checkOnly')) + '</button>'
+                   + '</div><p class="small text-muted mt-2 mb-0">' + escHtml(t('osp.installHint')) + '</p>';
             } else {
                 h += '<div class="alert alert-info py-2 mb-0">' + updEsc(r.updatesNote) + '</div>';
             }
             el.innerHTML = h;
+        }
+
+        async function osInstall() {
+            const yes = await panelAsk({ title: t('osp.askTitle'), text: t('osp.askText'), confirm: t('osp.askGo') });
+            if (!yes) return;
+            const pre = document.getElementById('os-log');
+            pre.style.display = 'block';
+            pre.textContent = t('osp.running');
+            const r = await updApi('os_patch_install', { confirm: 'INSTALL PATCHES' });
+            if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
+            planPoll(r.jobId, document.getElementById('os-body'), pre, function () {
+                osState();
+                if (typeof panelRebootRefresh === 'function') panelRebootRefresh();
+            });
         }
 
         async function osSearch() {
@@ -14019,7 +14030,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             planPoll(r.jobId, el, pre);
         }
 
-        async function planPoll(id, el, pre) {
+        // after: cosa fare a lavoro finito (bene o male); senza, si ricalcola il piano come prima.
+        async function planPoll(id, el, pre, after) {
             const s = await updApi('job_status', { jobId: id });
             if (s.success && s.job) {
                 pre.textContent = s.job.consoleLog || '';
@@ -14027,17 +14039,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (s.job.status === 'completed') {
                     el.innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>'
                                  + escHtml(t('up.stepDone', { s: s.job.elapsedSeconds })) + '</span>';
-                    setTimeout(planLoad, 1500);
+                    setTimeout(after || planLoad, 1500);
                     return;
                 }
                 if (s.job.status === 'error') {
+                    // Andato male: il messaggio resta a vista (rileggere la scheda lo coprirebbe).
                     el.innerHTML = '<div class="alert alert-danger py-2"><strong>' + escHtml(t('up.stepFailed')) + '</strong> '
                                  + updEsc(s.job.errorMessage) + '<br>' + escHtml(t('up.readLogFirst')) + '</div>'
                                  + '<button class="btn btn-sm btn-outline-primary" data-on-click="planLoad()">' + escHtml(t('up.recomputePlan')) + '</button>';
                     return;
                 }
             }
-            setTimeout(() => planPoll(id, el, pre), 3000);
+            setTimeout(() => planPoll(id, el, pre, after), 3000);
         }
         """ + getUpdatesScript1bb();
     }

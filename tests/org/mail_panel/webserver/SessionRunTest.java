@@ -41,7 +41,8 @@ import java.util.concurrent.Executors;
  *  4. Sul server vero, in HTTPS: un cookie che non vale su una pagina, 302 a /index?session=ended
  *     e il cookie tolto (Strict); su un'API, 401 con X-Panel-Session: ended; senza cookie, /index e
  *     basta; un codice di conferma sbagliato (anche lui 401) senza X-Panel-Session; l'uscita col
- *     cookie tolto e Clear-Site-Data.
+ *     cookie tolto e Clear-Site-Data; col database che non risponde il cookie resta e niente
+ *     X-Panel-Session (reperto 185).
  *
  * Uso (col MySQL di prova di README.md, sulla VM):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
@@ -159,6 +160,24 @@ public class SessionRunTest {
             HttpResponse<String> none = send(http, base, "GET", "/home", null, null, null);
             check("senza cookie: /index e basta, nessun cookie da togliere", none.statusCode() == 302
                     && "/index".equals(none.headers().firstValue("Location").orElse("")) && none.headers().allValues("Set-Cookie").isEmpty());
+            // Il database che non risponde (MySQL che si riavvia, o che si ferma prima del pannello
+            // durante un riavvio del server): non vuol dire che la sessione e' finita (reperto 185).
+            java.util.function.Supplier<java.sql.Connection> real = org.mail_panel.security.AuthStore.connection;
+            org.mail_panel.security.AuthStore.connection = () -> (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
+                    SessionRunTest.class.getClassLoader(), new Class<?>[]{java.sql.Connection.class}, (proxy, method, a) -> {
+                        throw new java.sql.SQLException("MySQL is not reachable (test)");
+                    });
+            try {
+                HttpResponse<String> downPage = send(http, base, "GET", "/home", null, dead, null);
+                check("il database non risponde: una pagina va a /index senza dire che la sessione e' finita, e il cookie resta",
+                        downPage.statusCode() == 302 && "/index".equals(downPage.headers().firstValue("Location").orElse(""))
+                        && downPage.headers().allValues("Set-Cookie").isEmpty());
+                HttpResponse<String> downApi = send(http, base, "GET", "/api/domains", null, dead, null);
+                check("  un'API: 401 senza X-Panel-Session (la pagina aperta non va all'accesso)", downApi.statusCode() == 401
+                        && downApi.headers().firstValue("X-Panel-Session").isEmpty());
+            } finally {
+                org.mail_panel.security.AuthStore.connection = real;
+            }
             String fresh = Main.sessions.create(admin, UA, "127.0.0.1");
             String live = "__Host-MailPanel=" + fresh;
             check("una sessione di questo avvio apre la pagina", send(http, base, "GET", "/home", null, live, null).statusCode() == 200);
