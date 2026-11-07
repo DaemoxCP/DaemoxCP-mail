@@ -14,53 +14,53 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * Il reperto 42: lo script di installazione di un pacchetto cambia la configurazione viva, e
- * l'aggiornamento si dichiara riuscito.
+ * Reperto 42: a package's install script changes the live configuration, and the update declares
+ * itself successful.
  *
- * Misurato sulla VM FreeBSD 15.1 il 24/10/2026: aggiornando postfix-mysql 3.11.7_1,1 ->
- * 3.11.7_3,1 lo script ha scritto {@code inet_protocols = ipv4} in main.cf mentre postfix
- * ascoltava in IPv4 e IPv6. Al riavvio IPv6 sparisce, e ogni controllo dell'aggiornamento
- * guidato passa: configurazione valida, servizio attivo, pid cambiato. E il filtro dei
- * messaggi, sull'uscita vera di quell'aggiornamento, restituiva zero messaggi.
+ * Measured on the FreeBSD 15.1 VM on 24/10/2026: updating postfix-mysql 3.11.7_1,1 -> 3.11.7_3,1
+ * the script wrote {@code inet_protocols = ipv4} into main.cf while postfix listened on IPv4 and
+ * IPv6. At the restart IPv6 disappears, and every check of the guided update passes: valid
+ * configuration, service running, pid changed. And the messages filter, on the real output of
+ * that update, returned zero messages.
  *
- * Due parti.
+ * Two parts.
  *
- * A. Il filtro dei messaggi sull'uscita VERA di quell'aggiornamento, 61 righe copiate da
- *    /tmp/agg.log della VM. Gira ovunque.
+ * A. The messages filter on the REAL output of that update, 61 lines copied from /tmp/agg.log on
+ *    the VM. It runs anywhere.
  *
- * B. I tre lavori veri — aggiornamento guidato, aggiornamento dei non protetti, manutenzione
- *    completa — su un pacchetto finto, nginx-drift-probe, costruito qui con {@code pkg create}.
- *    La sua versione 1.1 fa quello che ha fatto lo script di postfix: stampa un «COMPATIBILITY:
- *    editing», aggiunge {@code protocols = ipv4} alla configurazione viva, e il servizio
- *    smette di ascoltare in IPv6; e scrive anche un file in /etc, che prima nessuno guardava.
- *    La versione 1.2 cambia solo i file suoi e crea il suo utente, come fanno i port: deve
- *    passare pulita, ed e' la direzione che dice che il controllo non grida al lupo.
+ * B. The three real jobs — guided update, update of the unprotected packages, full maintenance —
+ *    on a fake package, nginx-drift-probe, built here with {@code pkg create}. Its version 1.1 does
+ *    what the postfix script did: it prints a "COMPATIBILITY: editing", adds
+ *    {@code protocols = ipv4} to the live configuration, and the service stops listening on IPv6;
+ *    and it also writes a file in /etc, which nobody looked at before. Version 1.2 changes only its
+ *    own files and creates its user, as the ports do: it must pass clean, and it is the direction
+ *    that says the check does not cry wolf.
  *
- *    Il nome comincia con «nginx» apposta: il pannello lo prende per un pezzo di nginx, quindi
- *    l'aggiornamento guidato ha un servizio vero da riavviare — innocuo da riavviare sulla VM.
- *    Nel caso sporco NON lo deve riavviare (il riavvio metterebbe in vigore una configurazione
- *    che nessuno ha letto); nel caso pulito si'. Lo dice il pid di nginx.
+ *    The name starts with "nginx" on purpose: the panel takes it for a piece of nginx, so the
+ *    guided update has a real service to restart — harmless to restart on the VM. In the dirty
+ *    case it must NOT restart it (the restart would put into force a configuration nobody read); in
+ *    the clean case it must. The nginx pid says it.
  *
- *    Il servizio e' un nc in ascolto su 127.0.0.1 e ::1, porta 47425. Lo script della 1.1
- *    non lo riavvia: spegne il lato IPv6, che e' l'effetto del riavvio. Il motivo e' misurato:
- *    un servizio rilanciato dallo script di installazione non sopravvive all'installazione
- *    (dopo l'aggiornamento non c'era piu' niente in ascolto, nemmeno in IPv4).
+ *    The service is an nc listening on 127.0.0.1 and ::1, port 47425. The 1.1 script does not
+ *    restart it: it turns off the IPv6 side, which is the effect of the restart. The reason is
+ *    measured: a service restarted by the install script does not survive the installation (after
+ *    the update nothing was listening any more, not even on IPv4).
  *
- *    Per tenere fuori i pacchetti veri, durante la prova i repository FreeBSD-ports e
- *    FreeBSD-ports-kmods sono spenti (un file in /usr/local/etc/pkg/repos, tolto alla fine),
- *    e prima di ogni lavoro si controlla che il piano contenga SOLO drift-probe. La
- *    manutenzione sblocca e riprotegge davvero i pacchetti protetti della macchina, come
- *    sempre. Tocca il sistema e rimette tutto com'era, e lo controlla: si accende solo con
- *    -De2e.vm=yes, da root, su FreeBSD. Solo su una macchina di prova.
+ *    To keep the real packages out, during the test the FreeBSD-ports and FreeBSD-ports-kmods
+ *    repositories are turned off (a file in /usr/local/etc/pkg/repos, removed at the end), and
+ *    before every job it is checked that the plan contains ONLY drift-probe. The maintenance really
+ *    unlocks and locks again the machine's protected packages, as always. It touches the system
+ *    and puts everything back as it was, and checks it: it is turned on only with -De2e.vm=yes, as
+ *    root, on FreeBSD. Only on a test machine.
  *
- * Con il jar senza la correzione la parte A trova zero messaggi e i casi «sporchi» della
- * parte B finiscono «completed»: questa e' la prova che fallisce senza e passa con.
+ * With the jar without the fix part A finds zero messages and the "dirty" cases of part B end
+ * "completed": this is the test that fails without it and passes with it.
  */
 public class InstallScriptDriftTest {
 
     private static int failures = 0, skipped = 0;
 
-    /** L'uscita di pkg dell'aggiornamento di postfix-mysql, 24/10/2026, riga per riga. */
+    /** pkg's output for the postfix-mysql update, 24/10/2026, line by line. */
     static final String POSTFIX_UPGRADE_OUTPUT = """
             Checking integrity... done (1 conflicting)
               - lmdb0-0.9.35 [FreeBSD-ports] conflicts with lmdb-1.0.2,1 [installed] on /usr/local/bin/mdb_copy
@@ -129,43 +129,43 @@ public class InstallScriptDriftTest {
         messages();
         if ("yes".equals(System.getProperty("e2e.vm"))) {
             if (onFreeBsdAsRoot()) endToEnd();
-            else { skipped++; System.out.println("\n  SALTATA  parte B: serve FreeBSD e root"); }
+            else { skipped++; System.out.println("\n  SKIPPED  part B: it needs FreeBSD and root"); }
         } else {
             skipped++;
-            System.out.println("\n  SALTATA  parte B: tocca il sistema, si accende con -De2e.vm=yes (solo su una VM di prova)");
+            System.out.println("\n  SKIPPED  part B: it touches the system, turned on with -De2e.vm=yes (only on a test VM)");
         }
-        System.out.println(failures == 0 ? "\nTUTTO OK" + (skipped > 0 ? " (" + skipped + " parti saltate, dette sopra)" : "")
-                                         : "\n" + failures + " PROVE FALLITE");
+        System.out.println(failures == 0 ? "\nALL OK" + (skipped > 0 ? " (" + skipped + " parts skipped, said above)" : "")
+                                         : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 
-    // ===================== A. il filtro dei messaggi =====================
+    // ===================== A. the messages filter =====================
 
     private static void messages() {
-        System.out.println("A. Il filtro dei messaggi sull'uscita vera dell'aggiornamento di postfix-mysql");
+        System.out.println("A. The messages filter on the real output of the postfix-mysql update");
         List<String> m = UpdateManager.messagesAskingForAction(POSTFIX_UPGRADE_OUTPUT);
-        System.out.println("     messaggi trovati: " + m.size());
-        check("l'avviso COMPATIBILITY, fuori da ogni blocco «Message from», viene ripescato",
+        System.out.println("     messages found: " + m.size());
+        check("the COMPATIBILITY notice, outside any \"Message from\" block, is picked up",
                 any(m, "COMPATIBILITY: editing /usr/local/etc/postfix/main.cf") && any(m, "inet_protocols=ipv4"));
-        check("  intero: anche la riga che dice che IPv6 si perde", any(m, "want to enable IPv6"));
-        check("le modifiche a master.cf annunciate dallo script anche",
+        check("  whole: the line saying IPv6 is lost too", any(m, "want to enable IPv6"));
+        check("the master.cf changes announced by the script too",
                 any(m, "Editing /usr/local/etc/postfix/master.cf, adding missing entry"));
-        check("il riquadro di mailer.conf, con i comandi da eseguire",
+        check("the mailer.conf box, with the commands to run",
                 any(m, "Postfix was *not* activated") && any(m, "install -m 0644"));
-        check("la frase di pkg sui file diversi dall'esempio non e' un'azione",
+        check("pkg's sentence on files that differ from the sample is not an action",
                 !any(m, "You may need to manually remove"));
-        check("nemmeno quella dei port sull'utente di un pacchetto che si reinstalla",
+        check("nor is the ports' one on the user of a package being reinstalled",
                 !any(m, "You should manually remove the \"postfix\" user"));
-        check("il messaggio della versione VECCHIA, che si disinstalla, non chiede niente",
+        check("the message of the OLD version, which is being uninstalled, asks for nothing",
                 !any(m, "If you remove postfix permanent"));
 
-        // Quello che il filtro sapeva gia' fare non si deve perdere.
+        // What the filter already knew how to do must not be lost.
         String rspamd = "[1/1] Upgrading rspamd from 3.12 to 4.1...\n[1/1] Extracting rspamd-4.1: .... done\n"
                 + "=====\nMessage from rspamd-4.1:\n\n--\nThe statistics format changed.\nIt is recommended to remove\nthe old cache files:\n  rm /var/db/rspamd/*.hs*\n";
         List<String> r = UpdateManager.messagesAskingForAction(rspamd);
-        check("un blocco «Message from» che chiede un'azione resta ripescato, intero",
+        check("a \"Message from\" block that asks for an action is still picked up, whole",
                 r.size() == 1 && r.get(0).contains("It is recommended") && r.get(0).contains("rm /var/db/rspamd"));
-        check("un'uscita senza niente da fare non da' messaggi",
+        check("an output with nothing to do gives no messages",
                 UpdateManager.messagesAskingForAction("[1/1] Upgrading nginx from 1.30.5_2,3 to 1.30.6,3...\n"
                         + "[1/1] Extracting nginx-1.30.6,3: .......... done\n"
                         + "You may need to manually remove /usr/local/etc/nginx/nginx.conf if it is no longer needed.\n").isEmpty());
@@ -176,14 +176,14 @@ public class InstallScriptDriftTest {
         return false;
     }
 
-    // ===================== B. i tre lavori veri =====================
+    // ===================== B. the three real jobs =====================
 
     static final String PKG = "nginx-drift-probe";
     static final String ETC_FILE = "/etc/drift-probe.conf";
     static final String USER = "driftprobe";
     static final String NGINX_PID = "/var/run/nginx.pid";
-    /** Dove il pannello deve mettere la versione di prima: scritto qui per esteso, perche' la
-     *  prova gira anche contro il jar senza la correzione, dove la costante non c'e'. */
+    /** Where the panel must put the version of before: written out in full here, because the test
+     *  also runs against the jar without the fix, where the constant does not exist. */
     static final String SAVED_DIR = "/var/db/mailpanel/config-before-update";
     static final String CONF = "/usr/local/etc/drift-probe/drift-probe.conf";
     static final String RESTART = "/usr/local/libexec/drift-probe/restart";
@@ -199,8 +199,8 @@ public class InstallScriptDriftTest {
     }
 
     private static void endToEnd() throws Exception {
-        System.out.println("\nB. I tre lavori veri, con un pacchetto il cui script cambia la configurazione");
-        // I resti di un giro interrotto falserebbero il confronto finale: via prima di misurare.
+        System.out.println("\nB. The three real jobs, with a package whose script changes the configuration");
+        // The leftovers of an interrupted run would skew the final comparison: away before measuring.
         removePackage();
         sh("rm -f " + REPO_CONF + "; rm -rf " + REPO_DB);
         String packagesBefore = sh("pkg query %n-%v | sort | sha256");
@@ -211,10 +211,10 @@ public class InstallScriptDriftTest {
         work = Files.createTempDirectory(Path.of("/var/tmp"), "drift-probe");
         try {
             buildPackage("1.0", false);
-            buildPackage("1.1", true);    // lo script sporco
-            buildPackage("1.2", false);   // cambia solo i file suoi
-            // Su una macchina appena installata la cartella non c'e': la crea il cambio di ramo.
-            // Misurato sulla VM ripristinata il 24/10/2026, dove la prova cadeva qui.
+            buildPackage("1.1", true);    // the dirty script
+            buildPackage("1.2", false);   // changes only its own files
+            // On a freshly installed machine the folder is not there: the branch change creates it.
+            // Measured on the VM restored on 24/10/2026, where the test fell here.
             if (!Files.isDirectory(Path.of(REPO_CONF).getParent())) {
                 Files.createDirectories(Path.of(REPO_CONF).getParent());
                 createdReposDir = true;
@@ -224,7 +224,7 @@ public class InstallScriptDriftTest {
                   + PKG + ": { url: \"file://" + work.resolve("repo") + "\", signature_type: \"none\", enabled: yes }\n");
             String repos = sh("pkg -vv 2>/dev/null | sed -n '/^Repositories/,$p'");
             if (!enabledOnly(repos, PKG)) {
-                check("i repository veri sono spenti per la prova (altrimenti non si parte)", false);
+                check("the real repositories are turned off for the test (otherwise it does not start)", false);
                 System.out.println(repos);
                 return;
             }
@@ -237,38 +237,38 @@ public class InstallScriptDriftTest {
             sh("rm -f " + REPO_CONF + "; rm -rf " + REPO_DB + " " + work);
             removeWayBacks(bootEnvironmentsBefore);
             if (createdReposDir) sh("rmdir " + Path.of(REPO_CONF).getParent());
-            // Le copie «di prima» che i casi sporchi hanno messo da parte: sono della prova.
+            // The "before" copies the dirty cases set aside: they belong to the test.
             for (String d : sh("ls " + SAVED_DIR + " 2>/dev/null").split("\n"))
                 if (!d.isBlank() && !savedBefore.contains(d.trim())) sh("rm -rf " + SAVED_DIR + "/" + d.trim());
             if (!savedDirExisted) sh("rmdir " + SAVED_DIR + " 2>/dev/null");
-            // E la nota e i cartelli dei pacchetti bloccati, che dopo il pacchetto tolto vanno riallineati.
+            // And the note and the signs of the locked packages, which need realigning after the package is removed.
             UpdateManager.refreshLockTrace();
             String after = sh("pkg query %n-%v | sort | sha256");
-            check("alla fine: gli stessi boot environment di prima",
+            check("at the end: the same boot environments as before",
                     sh("bectl list -H 2>/dev/null | cut -f1 | sort").equals(bootEnvironmentsBefore));
-            check("alla fine: gli stessi pacchetti di prima, alle stesse versioni", after.equals(packagesBefore));
-            check("alla fine: gli stessi pacchetti protetti di prima", locked().equals(lockedBefore));
-            check("alla fine: FreeBSD-ports di nuovo acceso",
+            check("at the end: the same packages as before, at the same versions", after.equals(packagesBefore));
+            check("at the end: the same protected packages as before", locked().equals(lockedBefore));
+            check("at the end: FreeBSD-ports turned on again",
                     sh("pkg -vv 2>/dev/null | grep -A3 '^  FreeBSD-ports: {' | grep -c 'enabled *: yes'").trim().equals("1"));
-            check("alla fine: niente in ascolto sulla porta della prova",
+            check("at the end: nothing listening on the test's port",
                     sh("sockstat -46lq -P tcp -p " + PORT).trim().isEmpty());
-            check("alla fine: niente file di prova in /etc, nessun utente di prova",
+            check("at the end: no test file in /etc, no test user",
                     !Files.exists(Path.of(ETC_FILE)) && !sh("pw usershow " + USER + " 2>&1").startsWith(USER + ":"));
-            check("alla fine: le copie «di prima» sono quelle che c'erano",
+            check("at the end: the \"before\" copies are the ones that were there",
                     sh("ls " + SAVED_DIR + " 2>/dev/null").equals(savedBefore)
                     && Files.isDirectory(Path.of(SAVED_DIR)) == savedDirExisted);
         }
     }
 
-    /** Un caso: drift-probe 1.0 installato e in ascolto, nel catalogo la versione data, e il lavoro. */
+    /** One case: drift-probe 1.0 installed and listening, the given version in the catalog, and the job. */
     private static void runCase(String flow, String version, boolean dirty) throws Exception {
-        System.out.println("\n  --- " + flow + ", 1.0 -> " + version + (dirty ? " (lo script cambia la configurazione)" : " (pulito)") + " ---");
+        System.out.println("\n  --- " + flow + ", 1.0 -> " + version + (dirty ? " (the script changes the configuration)" : " (clean)") + " ---");
         removePackage();
         sh("pkg add " + work.resolve("pkgs/" + PKG + "-1.0.pkg") + " 2>&1");
-        // La configurazione di un amministratore: diversa dal suo esempio, come main.cf.
+        // An administrator's configuration: different from its sample, like main.cf.
         Files.writeString(Path.of(CONF), Files.readString(Path.of(CONF)) + "banner = drift probe\n", StandardCharsets.UTF_8);
         sh(RESTART);
-        if (!waitListening(true)) { check(flow + " " + version + ": il servizio di prova ascolta in IPv4 e IPv6 prima del lavoro", false); return; }
+        if (!waitListening(true)) { check(flow + " " + version + ": the test service listens on IPv4 and IPv6 before the job", false); return; }
         String nginxPidBefore = sh("cat " + NGINX_PID + " 2>/dev/null").trim();
         Path repo = work.resolve("repo");
         sh("rm -rf " + repo + " && mkdir -p " + repo + " && cp " + work.resolve("pkgs/" + PKG + "-" + version + ".pkg") + " " + repo
@@ -283,7 +283,7 @@ public class InstallScriptDriftTest {
                 plan = pf.optJSONObject("plan");
                 signature = pf.optString("signature");
                 if (!pf.optBoolean("canProceed")) {
-                    check(flow + " " + version + ": il preflight lascia partire", false);
+                    check(flow + " " + version + ": the preflight lets it start", false);
                     System.out.println("     " + pf.optJSONArray("checks"));
                     return;
                 }
@@ -303,8 +303,8 @@ public class InstallScriptDriftTest {
         JSONArray ch = plan == null ? new JSONArray() : plan.optJSONArray("changes");
         for (int i = 0; ch != null && i < ch.length(); i++) inPlan.add(ch.getJSONObject(i).optString("name"));
         if (!inPlan.equals(Set.of(PKG))) {
-            // Un piano con altri pacchetti cambierebbe la macchina per davvero: non si parte.
-            check(flow + " " + version + ": il piano contiene solo " + PKG + " (trovato " + inPlan + ")", false);
+            // A plan with other packages would change the machine for real: it does not start.
+            check(flow + " " + version + ": the plan contains only " + PKG + " (found " + inPlan + ")", false);
             return;
         }
         start = switch (flow) {
@@ -313,75 +313,75 @@ public class InstallScriptDriftTest {
             default -> UpdateManager.startMaintenance(signature);
         };
         String id = start.optString("jobId");
-        if (id.isEmpty()) { check(flow + " " + version + ": il lavoro parte (" + start + ")", false); return; }
-        // La fine e' il turno libero, non lo stato: la manutenzione dice «completed» prima dei
-        // suoi controlli finali (reperto 43), e chi si fermasse li' guarderebbe un lavoro a meta'.
+        if (id.isEmpty()) { check(flow + " " + version + ": the job starts (" + start + ")", false); return; }
+        // The end is the free turn, not the status: the maintenance says "completed" before its
+        // final checks (reperto 43), and whoever stopped there would look at a job half done.
         long deadline = System.currentTimeMillis() + 600_000;
         while (PackageQueue.holder() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
         JSONObject job = UpdateManager.jobStatus(id).getJSONObject("job");
-        // -De2e.dump=<cartella>: il JSON del lavoro com'e', quello che la pagina riceve da
-        // job_status. Serve a far vedere a un browser l'esito vero, non uno scritto a mano.
+        // -De2e.dump=<folder>: the job's JSON as it is, what the page receives from job_status. It
+        // serves to show a browser the real outcome, not one written by hand.
         String dump = System.getProperty("e2e.dump");
         if (dump != null) Files.writeString(Path.of(dump, flow + "-" + version + ".json"),
                 new JSONObject().put("success", true).put("job", job).toString(2));
         String log = job.optString("consoleLog"), error = job.optString("errorMessage"), status = job.optString("status");
-        System.out.println("     esito: " + status + " in " + job.optLong("elapsedSeconds") + " s"
-                + (error.isEmpty() ? "" : "\n     errore: " + error));
+        System.out.println("     outcome: " + status + " in " + job.optLong("elapsedSeconds") + " s"
+                + (error.isEmpty() ? "" : "\n     error: " + error));
         for (String l : log.split("\n")) System.out.println("       | " + l);
 
         String nginxPidAfter = sh("cat " + NGINX_PID + " 2>/dev/null").trim();
         String label = flow + " 1.0 -> " + version + ": ";
         if (dirty) {
-            check(label + "il lavoro NON si dichiara riuscito", "error".equals(status));
-            check(label + "l'esito nomina il file che lo script ha cambiato", error.contains(CONF));
-            check(label + "  e quello che ha scritto in /etc", error.contains(ETC_FILE));
-            check(label + "l'esito nomina l'indirizzo perso", error.contains("[::1]:" + PORT));
-            check(label + "il log mostra la riga che lo script ha aggiunto", log.contains("+ protocols = ipv4"));
+            check(label + "the job does NOT declare itself successful", "error".equals(status));
+            check(label + "the outcome names the file the script changed", error.contains(CONF));
+            check(label + "  and the one it wrote in /etc", error.contains(ETC_FILE));
+            check(label + "the outcome names the lost address", error.contains("[::1]:" + PORT));
+            check(label + "the log shows the line the script added", log.contains("+ protocols = ipv4"));
             String header = I18n.tr("server.um.runGuidedUpdate.33");
             int h = log.lastIndexOf(header);
-            check(label + "e ristampa alla fine l'avviso COMPATIBILITY dello script",
+            check(label + "and it prints the script's COMPATIBILITY notice again at the end",
                     h >= 0 && log.indexOf("COMPATIBILITY: editing", h) > h);
-            // La versione di prima, messa da parte: il percorso lo dice il log, il contenuto lo
-            // sa la prova, perche' e' quello che ha scritto lei prima del lavoro.
+            // The version of before, set aside: the log says the path, the test knows the content,
+            // because it is what the test itself wrote before the job.
             String saved = null;
             for (String l : log.split("\n")) {
                 int c = l.indexOf("cp -p ");
                 if (c >= 0 && l.trim().endsWith(" " + CONF)) saved = l.substring(c + 6, l.lastIndexOf(" " + CONF)).trim();
             }
-            check(label + "la versione di prima di " + CONF + " e' messa da parte, ed e' quella giusta",
+            check(label + "the version of before of " + CONF + " is set aside, and it is the right one",
                     saved != null && Files.exists(Path.of(saved))
                     && Files.readString(Path.of(saved)).equals("port = " + PORT + "\nbanner = drift probe\n"));
-            check(label + "  e il log dice che " + ETC_FILE + " prima non c'era",
+            check(label + "  and the log says " + ETC_FILE + " was not there before",
                     log.contains(I18n.tr("server.drift.savedCreated", java.util.Map.of("path", ETC_FILE))));
             if (flow.equals("guided")) {
-                check(label + "nginx NON e' stato riavviato (pid " + nginxPidBefore + " -> " + nginxPidAfter + ")",
+                check(label + "nginx was NOT restarted (pid " + nginxPidBefore + " -> " + nginxPidAfter + ")",
                         !nginxPidBefore.isEmpty() && nginxPidBefore.equals(nginxPidAfter));
-                check(label + "  e l'esito lo dice, col comando per farlo dopo",
+                check(label + "  and the outcome says so, with the command to do it later",
                         error.contains(I18n.tr("server.drift.restartHeldProblem", java.util.Map.of("list", "nginx")))
                         && log.contains("service nginx restart"));
             }
         } else {
-            check(label + "riuscito, senza allarmi", "completed".equals(status) && error.isEmpty());
-            check(label + "  e il controllo della configurazione c'e' stato", log.contains(I18n.tr("server.drift.configHeader")));
-            check(label + "  e quello degli indirizzi pure", log.contains(I18n.tr("server.drift.listenHeader")));
-            check(label + "  l'utente creato dal pacchetto si dice, senza allarme",
+            check(label + "successful, without alarms", "completed".equals(status) && error.isEmpty());
+            check(label + "  and the configuration check took place", log.contains(I18n.tr("server.drift.configHeader")));
+            check(label + "  and the addresses one too", log.contains(I18n.tr("server.drift.listenHeader")));
+            check(label + "  the user created by the package is said, without an alarm",
                     log.contains("/etc/passwd: ") && log.contains(I18n.tr("server.drift.kind.accounts")));
             if (flow.equals("guided"))
-                check(label + "nginx riavviato come sempre (pid " + nginxPidBefore + " -> " + nginxPidAfter + ")",
+                check(label + "nginx restarted as always (pid " + nginxPidBefore + " -> " + nginxPidAfter + ")",
                         !nginxPidAfter.isEmpty() && !nginxPidBefore.equals(nginxPidAfter));
         }
     }
 
-    /** Il pacchetto di prova: un .sample, lo script che fa partire il servizio, e i due script di pkg. */
+    /** The test package: a .sample, the script that starts the service, and pkg's two scripts. */
     private static void buildPackage(String version, boolean dirty) throws Exception {
         Path root = work.resolve("root-" + version);
         Path etc = Files.createDirectories(root.resolve("usr/local/etc/drift-probe"));
         Path libexec = Files.createDirectories(root.resolve("usr/local/libexec/drift-probe"));
         Files.writeString(etc.resolve("drift-probe.conf.sample"),
-                "port = " + PORT + "\n" + ("1.2".equals(version) ? "# esempio della 1.2\n" : ""));
+                "port = " + PORT + "\n" + ("1.2".equals(version) ? "# sample of 1.2\n" : ""));
         Files.writeString(libexec.resolve("restart"), String.join("\n",
                 "#!/bin/sh",
-                "# drift-probe " + version + ": in ascolto in IPv4, e in IPv6 se la configurazione non lo toglie",
+                "# drift-probe " + version + ": listening on IPv4, and on IPv6 unless the configuration removes it",
                 "C=" + CONF,
                 "for f in " + PID4 + " " + PID6 + "; do [ -f $f ] && kill $(cat $f) 2>/dev/null; rm -f $f; done",
                 "sleep 1",
@@ -398,7 +398,7 @@ public class InstallScriptDriftTest {
                 "[ -f " + PID6 + " ] && kill $(cat " + PID6 + ") 2>/dev/null",
                 "rm -f " + PID6, "");
         postInstall += "exit 0\n";
-        // Come lo fanno i port con USERS e GROUPS: il gruppo e l'utente, se non ci sono.
+        // As the ports do with USERS and GROUPS: the group and the user, if they are not there.
         String preInstall = "1.2".equals(version)
                 ? "pw groupshow " + USER + " >/dev/null 2>&1 || pw groupadd " + USER + "\n"
                 + "pw usershow " + USER + " >/dev/null 2>&1 || pw useradd " + USER + " -g " + USER
@@ -408,7 +408,7 @@ public class InstallScriptDriftTest {
                 + "echo \"You may need to manually remove $C if it is no longer needed.\"; fi\nexit 0\n";
         Path manifest = work.resolve("manifest-" + version);
         Files.writeString(manifest, "name: " + PKG + "\nversion: \"" + version + "\"\norigin: misc/" + PKG
-                + "\ncomment: \"prova del reperto 42\"\ndesc: \"prova del reperto 42\"\nmaintainer: root@localhost\n"
+                + "\ncomment: \"test for reperto 42\"\ndesc: \"test for reperto 42\"\nmaintainer: root@localhost\n"
                 + "www: https://localhost/\nprefix: /usr/local\nscripts: {\n"
                 + "  pre-install: <<EOD\n" + preInstall + "EOD\n"
                 + "  post-install: <<EOD\n" + postInstall + "EOD\n"
@@ -438,7 +438,7 @@ public class InstallScriptDriftTest {
         return false;
     }
 
-    /** Nel blocco Repositories di pkg -vv, il solo repository acceso e' quello dato. */
+    /** In pkg -vv's Repositories block, the only enabled repository is the given one. */
     private static boolean enabledOnly(String repos, String name) {
         String current = null;
         Set<String> enabled = new TreeSet<>();
@@ -467,8 +467,8 @@ public class InstallScriptDriftTest {
     }
 
     /**
-     * I boot environment che i lavori della prova hanno creato prima di toccare i pacchetti
-     * (PackageWayBack, dal 06/11/2026): si tolgono, come si rimette tutto il resto.
+     * The boot environments the test's jobs created before touching the packages (PackageWayBack,
+     * since 06/11/2026): they are removed, as everything else is put back.
      */
     private static void removeWayBacks(String before) {
         for (String n : sh("bectl list -H 2>/dev/null | cut -f1").split("\n"))
