@@ -102,6 +102,15 @@ public class ServiceUsersTest {
         check("Dovecot's auth as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER.replace("rspamd  56502     1 rspamd: main process", "root    56502     1 rspamd: main process"), POOL_AFTER, "", false);
         check("rspamd's main process as root: warning (" + codes(f) + ")", codes(f).equals("root:rspamd"));
+        OUT.println("\n== Why root, said on the page");
+        for (ServiceUsers.Rule r : ServiceUsers.RULES)
+            if (r.rootNeeded() && !r.service().contains("$1"))
+                check(r.service() + " keeps root by design: the page says why", ServiceUsers.ROOT_WHY.containsKey(r.service()));
+        for (String k : ServiceUsers.ROOT_WHY.values()) {
+            String key = "server.su.rootWhy." + k;
+            check("  " + key + " in both languages", !org.mail_panel.i18n.I18n.t("it", key).equals(key)
+                    && !org.mail_panel.i18n.I18n.t("en", key).equals(key));
+        }
         f = ex(AFTER + "root    65003 59971 dovecot/imap\n", POOL_AFTER, "", false);
         check("a Dovecot imap as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER.replace("www     37741 36807 nginx: worker", "root    37741 36807 nginx: worker"), POOL_AFTER, "", false);
