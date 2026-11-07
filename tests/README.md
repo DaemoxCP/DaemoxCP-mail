@@ -218,6 +218,7 @@ solo pacchetto Playwright, senza il suo Chromium):
     NODE_PATH=$(npm root -g) node tests/packages-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/way-back-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/csp-browser-test.js $D
+    NODE_PATH=$(npm root -g) node tests/home-panel-browser-test.js $D [cartella-per-le-foto]
 
 Sul Mac basta il pacchetto Playwright, senza il suo Chromium: con `CHROMIUM` le prove usano il Chrome
 installato (tutte lo leggono dal 07/11/2026, reperto 177). Il pacchetto si puo' tenere fuori dal progetto:
@@ -621,6 +622,20 @@ SQLite e si legge lo stesso; database/ 700 e mail_panel.db 600.
 pannello (senza 'unsafe-inline', reperto 178): nessuna violazione, nessun gestore on...= o stile in
 linea nel DOM, ogni data-on-* nella lingua di panel-actions.js e solo con funzioni del pannello, ogni
 data-style applicato, e le funzioni chiamate dall'HTML che gli script costruiscono dopo esistono.
+
+**home-panel-browser-test.js** — la scheda del pannello in cima alla dashboard (reperto 183), col
+server simulato due ore avanti al browser: da quanto gira (contato con l'ora del server) e da quando,
+col fuso; l'occhio chiuso all'inizio e i dettagli chiesti solo quando lo si apre, col mouse e con la
+tastiera; le dieci righe dei dettagli e l'impronta copiata negli appunti; chi non puo' vederli non ha
+l'occhio, un 403 lo dice, un jar senza build registrata o con modifiche fuori dal commit lo dice; in
+inglese, a 375 px senza scorrimento orizzontale e coi pulsanti di 44 px al tocco. Con `REMOTE` gira sul
+server vero (**HomePanelE2EServer**, sulla VM) e confronta la scheda coi dati della macchina: impronta
+del jar, commit, FreeBSD, porta.
+
+**PanelInfoTest** — quello che la scheda legge (PanelInfo): le voci che Maven scrive nel jar e quelle
+che non ha sostituito, l'accensione della macchina da `kern.boottime`, l'avvio della JVM, i dettagli
+del processo, e l'impronta del jar ricalcolata a parte. Sulla VM, dopo `tools/build-jar.sh`, con
+`-Dbuild.script=yes` pretende anche numero di build e commit.
 
 **PageAssetsTest** — gli script e gli stili come file (PageAssets), chi puo' averli, la scrittura e la
 pulizia, la politica, le pagine generate e i sorgenti senza codice in linea. La parte sui sorgenti va

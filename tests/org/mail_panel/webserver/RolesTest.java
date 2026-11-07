@@ -183,6 +183,9 @@ public class RolesTest {
         check("/api/updates: going back to the server before a reinstallation is system.manage (reperto 172)",
                 "system.manage".equals(routes.get("/api/updates").permissionFor("POST", "reinstall_way_back")));
         check("/api/admins: the vault key asks vault.manage", "vault.manage".equals(routes.get("/api/admins").permissionFor("POST", "vault_backup_key")));
+        check("/api/panel_info: how long the panel runs is home.view, its details system.view (reperto 183)",
+                "home.view".equals(routes.get("/api/panel_info").permissionFor("GET", "uptime"))
+                && "system.view".equals(routes.get("/api/panel_info").permissionFor("GET", "details")));
         check("Account for every role, Settings for the superadmin", "account.self".equals(routes.get("/account").readPermission())
                 && "settings.manage".equals(routes.get("/settings").readPermission()));
     }
@@ -213,6 +216,15 @@ public class RolesTest {
         check("viewer reads a job status (a read action of /api/updates), and the handler got the body back",
                 job.statusCode() == 200 && job.body().contains("\"success\":false") && !job.body().contains("Unknown action"));
         check("viewer cannot reboot", refused(send("POST", "/api/updates", "{\"action\":\"reboot_now\"}", viewer)));
+        HttpResponse<String> uptime = send("GET", "/api/panel_info?action=uptime", null, viewer);
+        check("viewer reads how long the panel runs, and may open its details (system.view)", uptime.statusCode() == 200
+                && uptime.body().contains("\"startedAt\"") && uptime.body().contains("\"details\":true"));
+        HttpResponse<String> details = send("GET", "/api/panel_info?action=details", null, viewer);
+        check("viewer reads the details: version, jar fingerprint, process", details.statusCode() == 200
+                && details.body().contains("\"version\"") && details.body().contains("\"jarSha256\"") && details.body().contains("\"pid\""));
+        check("no session: 401, nothing about the panel", send("GET", "/api/panel_info?action=details", null, null).statusCode() == 401);
+        check("/api/panel_info only reads: a POST is 405", send("POST", "/api/panel_info", "{\"action\":\"uptime\"}", viewer).statusCode() == 405);
+        check("/api/panel_info: an unknown action is 400", send("GET", "/api/panel_info?action=nothing", null, viewer).statusCode() == 400);
 
         check("operator cannot create a domain", refused(send("POST", "/api/domains", "{\"domain\":\"x.test\"}", operator)));
         check("operator manages mailboxes (the handler answers)", passed(send("POST", "/api/mailboxes", "{\"action\":\"nothing\"}", operator)));

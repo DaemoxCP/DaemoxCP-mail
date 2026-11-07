@@ -1,0 +1,29 @@
+            <!-- Il pannello: da quando gira, e dietro l'occhio con che cosa gira (PanelInfo, reperto 183).
+                 L'occhio compare solo a chi puo' vedere i dettagli (lo dice /api/panel_info), e i
+                 dettagli si chiedono al server solo quando lo si apre: prima non sono nella pagina. -->
+            <section class="card mb-4" aria-labelledby="panelInfoTitle">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h3 class="h6 mb-0" id="panelInfoTitle"><i class="fas fa-circle-info me-2" aria-hidden="true"></i>{{t:hp.title}}</h3>
+                    <button type="button" class="btn btn-sm btn-outline-secondary touch-target" id="panelInfoToggle" hidden
+                            aria-expanded="false" aria-controls="panelInfoDetails" data-on-click="panelInfoToggle()">
+                        <i class="fas fa-eye me-1" aria-hidden="true" id="panelInfoEye"></i><span id="panelInfoToggleText">{{t:hp.show}}</span>
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <div class="small text-muted">{{t:hp.runningFor}}</div>
+                            <div class="fs-4 fw-semibold" id="panelInfoUptime">&ndash;</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="small text-muted">{{t:hp.startedAt}}</div>
+                            <div class="fs-5"><time id="panelInfoStarted">&ndash;</time></div>
+                        </div>
+                    </div>
+                    <p class="small text-muted mb-0 mt-2" id="panelInfoState" role="status">{{t:hp.reading}}</p>
+                    <div id="panelInfoDetails" class="mt-3 pt-3 border-top" hidden>
+                        <h4 class="visually-hidden">{{t:hp.detailsTitle}}</h4>
+                        <dl class="row mb-0 small" id="panelInfoList"></dl>
+                    </div>
+                </div>
+            </section>

@@ -703,9 +703,14 @@ sysrc php_fpm_enable="YES"
 ### 1. Build the Panel
 
 ```bash
-# Requires Java 24 and Maven
-mvn clean package
+# Requires Java 25 and Maven
+tools/build-jar.sh
 ```
+
+`tools/build-jar.sh` runs `mvn package` with the build number and the commit written into the jar
+(the dashboard shows them behind the eye button) and prints the jar's SHA-256. Extra options go to
+Maven, for example `-o` to build offline. A plain `mvn clean package` works too: the dashboard then
+says the build was not recorded.
 
 ### 2. Run the Panel
 
