@@ -1395,6 +1395,7 @@
   "login.usePasskey": "Use passkey",
   "login.usePasskeyTitle": "Use your passkey",
   "login.verify": "Verify",
+  "login.sessionEnded": "Your session has ended: the panel was restarted, or the session expired. Sign in again.",
   "mail.common.product": "Mail control panel",
   "mail.common.senderName": "Mail control panel ({server})",
   "mail.common.senderNameBare": "Mail control panel",

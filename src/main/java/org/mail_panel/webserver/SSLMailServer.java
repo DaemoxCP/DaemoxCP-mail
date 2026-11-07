@@ -125,6 +125,9 @@ public class SSLMailServer {
     private static final String SYSTEM_VIEW = "system.view", SYSTEM_MANAGE = "system.manage";
     private static final String SETTINGS = "settings.manage", ADMINS = "admins.manage", VAULT = "vault.manage";
 
+    /** L'intestazione del 401 di una sessione che non c'e' (piu'): la pagina aperta va all'accesso (reperto 184). */
+    static final String SESSION_ENDED_HEADER = "X-Panel-Session";
+
     /** /api/updates: le azioni che leggono (anteprime, stati, diagnosi). Tutte le altre cambiano il sistema. */
     static final Map<String, String> UPDATES_ACTIONS = Access.actions(SYSTEM_VIEW,
         "packages_status", "packages_overview", "updates_status", "compatibility", "dovecot_config_dump", "maintenance_preview", "plan",
@@ -339,8 +342,19 @@ public class SSLMailServer {
         Optional<WebSessions.Current> session = currentSession(exchange);
         boolean pageGet = access.kind() == Access.Kind.PAGE && "GET".equals(exchange.getRequestMethod());
         if (session.isEmpty()) {
-            if (pageGet) redirect(exchange, "/index");
-            else sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
+            // Un cookie di sessione che non vale (il jar e' ripartito, o la sessione e' scaduta): si
+            // toglie, e la pagina d'accesso dice perche' si e' di nuovo li' (reperto 184).
+            // Col database fermo non si sa: il cookie resta, e quando torna la sessione vale ancora.
+            boolean ended = Main.mysqlAvailable && !Main.setupRequired && WebSessions.wellFormed(cookieValue(exchange, WebSessions.COOKIE));
+            if (ended) exchange.getResponseHeaders().add("Set-Cookie", WebSessions.clearCookieHeader());
+            if (pageGet) {
+                redirect(exchange, ended ? "/index?session=ended" : "/index");
+            } else {
+                // Il segnale per le pagine aperte (l'involucro di fetch nella testa): questo 401 e' la
+                // sessione che non c'e' piu', non un codice di conferma sbagliato (anche quello e' 401).
+                exchange.getResponseHeaders().set(SESSION_ENDED_HEADER, "ended");
+                sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
+            }
             return false;
         }
         String method = exchange.getRequestMethod();
@@ -649,6 +663,13 @@ public class SSLMailServer {
         //    query DB), il carrier thread va a servirne un'altra → niente starvation
         //  - memoria: ~200 byte/virtual thread vs ~1MB/thread piattaforma
         server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
+        // Le sessioni sono di questo avvio del jar (reperto 184): quelle di prima non valgono gia'
+        // piu' (WebSessions ha una chiave nuova), e qui si tolgono anche dal database. La porta e'
+        // gia' presa (il costruttore): un secondo processo che non puo' servire non tocca niente.
+        if (Main.mysqlAvailable && !Main.setupRequired && Main.sessions != null) {
+            int closed = Main.sessions.beginRun();
+            if (closed > 0) LOGGER.info("Closed " + closed + " panel session(s) of the previous start: every administrator signs in again");
+        }
         server.start();
         initializeManagers();
         LOGGER.info("Mail Panel server started on port " + port + " (virtual threads enabled)");
@@ -1284,6 +1305,9 @@ public class SSLMailServer {
         });
         forgetCurrentSession();
         exchange.getResponseHeaders().add("Set-Cookie", WebSessions.clearCookieHeader());
+        // r14: all'uscita il browser dimentica anche cache e dati delle pagine del pannello. Non
+        // "cookies": varrebbe per tutto il dominio, anche per la webmail sui nomi vicini.
+        exchange.getResponseHeaders().add("Clear-Site-Data", "\"cache\", \"storage\"");
         // Il cookie col nome di prima di __Host-, se un browser lo ha ancora
         exchange.getResponseHeaders().add("Set-Cookie", "MailPanel=; Path=/; HttpOnly; Secure; Max-Age=0");
         sendJsonResponse(exchange, new JSONObject().put("success", true));

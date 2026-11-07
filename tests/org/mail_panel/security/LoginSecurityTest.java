@@ -455,13 +455,13 @@ public class LoginSecurityTest {
         String token = sessions.create(admin.id(), ua, "203.0.113.77");
         check("the token: 32 random bytes in base64url", token.matches("[A-Za-z0-9_-]{43}"));
         check("the database holds its SHA-256, never the token",
-                one("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ?", DataCrypto.sha256Hex(token)).equals("1")
+                one("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ?", WebSessions.tokenHash(token)).equals("1")
                 && one("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ? OR ua_enc LIKE ?", token, "%" + token + "%").equals("0"));
-        check("IP address and browser stored encrypted", one("SELECT ip_enc FROM panel_sessions WHERE token_hash = ?", DataCrypto.sha256Hex(token)).startsWith("v1:")
-                && !one("SELECT CONCAT(ip_enc, ua_enc) FROM panel_sessions WHERE token_hash = ?", DataCrypto.sha256Hex(token)).contains("203.0.113.77"));
+        check("IP address and browser stored encrypted", one("SELECT ip_enc FROM panel_sessions WHERE token_hash = ?", WebSessions.tokenHash(token)).startsWith("v1:")
+                && !one("SELECT CONCAT(ip_enc, ua_enc) FROM panel_sessions WHERE token_hash = ?", WebSessions.tokenHash(token)).contains("203.0.113.77"));
         check("dates written in UTC", Math.abs(Duration.between(java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
                 java.time.LocalDateTime.parse(one("SELECT DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') FROM panel_sessions WHERE token_hash = ?",
-                        DataCrypto.sha256Hex(token)))).toSeconds()) < 60);
+                        WebSessions.tokenHash(token)))).toSeconds()) < 60);
         check("the login records last_login", one("SELECT last_login FROM panel_admin WHERE id = ?", admin.id()) != null);
         Optional<WebSessions.Current> cur = sessions.check(token, ua);
         check("valid with the same browser: the admin", cur.isPresent() && cur.get().admin().id() == admin.id());
@@ -485,14 +485,14 @@ public class LoginSecurityTest {
         sessions.markReauthenticated(cur.get().id());
         check("after a confirmation: re-authenticated for five minutes", sessions.check(token, ua).orElseThrow().reauthenticatedWithin(300));
 
-        sql("UPDATE panel_sessions SET last_seen_at = UTC_TIMESTAMP() - INTERVAL 31 MINUTE WHERE token_hash = '" + DataCrypto.sha256Hex(token2) + "'");
+        sql("UPDATE panel_sessions SET last_seen_at = UTC_TIMESTAMP() - INTERVAL 31 MINUTE WHERE token_hash = '" + WebSessions.tokenHash(token2) + "'");
         check("31 minutes without requests: expired", sessions.check(token2, ua).isEmpty());
         String token3 = sessions.create(admin.id(), ua, "203.0.113.79");
-        sql("UPDATE panel_sessions SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 SECOND WHERE token_hash = '" + DataCrypto.sha256Hex(token3) + "'");
+        sql("UPDATE panel_sessions SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 SECOND WHERE token_hash = '" + WebSessions.tokenHash(token3) + "'");
         check("past the 12 hours: expired, even if active", sessions.check(token3, ua).isEmpty());
         AuthStore.purgeExpired();
         check("the expired ones are purged", one("SELECT COUNT(*) FROM panel_sessions WHERE token_hash IN (?, ?)",
-                DataCrypto.sha256Hex(token2), DataCrypto.sha256Hex(token3)).equals("0"));
+                WebSessions.tokenHash(token2), WebSessions.tokenHash(token3)).equals("0"));
 
         AuthStore.Admin second = AuthStore.adminByUsername("Second").orElseThrow();
         String theirs = sessions.create(second.id(), ua, "203.0.113.90");
@@ -503,7 +503,7 @@ public class LoginSecurityTest {
                 && sessions.check(token, ua).isPresent() && sessions.check(other, ua).isEmpty());
         sessions.revoke(token);
         check("logout: the session is gone from the database", sessions.check(token, ua).isEmpty()
-                && one("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ?", DataCrypto.sha256Hex(token)).equals("0"));
+                && one("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ?", WebSessions.tokenHash(token)).equals("0"));
         sql("UPDATE panel_admin SET active = FALSE WHERE id = " + second.id());
         check("a deactivated administrator: the session no longer counts", sessions.check(theirs, ua).isEmpty());
         AuthStore.deleteAdmin(second.id());

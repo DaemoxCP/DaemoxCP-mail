@@ -237,12 +237,14 @@ public class LoginRoutesTest {
             HttpResponse<String> ok = ask("POST", "/api/login", "{\"action\":\"code_verify\",\"email\":\"" + bossEmail + "\",\"code\":\"" + code
                     + "\",\"csrf_token\":\"" + token + "\"}", "Cookie", preCookie);
             String session = cookieValue(ok, WebSessions.COOKIE);
-            check("200 and the session cookie: __Host-, HttpOnly, Secure, SameSite, 12 hours", ok.statusCode() == 200 && session != null
-                    && setCookie(ok).contains(WebSessions.COOKIE + "=" + session + "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200"));
+            // Strict e senza Max-Age: un cookie di sessione del browser, mai mandato da un altro sito (reperto 184).
+            check("200 and the session cookie: __Host-, HttpOnly, Secure, SameSite=Strict, a browser-session cookie", ok.statusCode() == 200 && session != null
+                    && setCookie(ok).contains(WebSessions.COOKIE + "=" + session + "; Path=/; HttpOnly; Secure; SameSite=Strict")
+                    && !setCookie(ok).contains("Max-Age=43200") && !setCookie(ok).contains("Expires"));
             JSONObject okJson = new JSONObject(ok.body());
             check("no passkey yet: sent to Account to create one", "/account?setup=passkey".equals(okJson.optString("redirect")));
             check("the session is in the database, by its hash", count("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ? AND admin_id = ?",
-                    DataCrypto.sha256Hex(session), boss.id()) == 1);
+                    WebSessions.tokenHash(session), boss.id()) == 1);
             String sc = WebSessions.COOKIE + "=" + session;
             String csrf = WebSessions.csrfToken(session);
             check("the answer carries the session CSRF token", csrf.equals(okJson.optString("csrf_token")));
@@ -363,7 +365,7 @@ public class LoginRoutesTest {
                     + "\",\"csrf_token\":\"" + token + "\"}", "Cookie", preCookie);
             String plainSession = cookieValue(cons, WebSessions.COOKIE);
             check("the console code: a session for that administrator", cons.statusCode() == 200 && plainSession != null
-                    && count("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ? AND admin_id = ?", DataCrypto.sha256Hex(plainSession), plain.id()) == 1);
+                    && count("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ? AND admin_id = ?", WebSessions.tokenHash(plainSession), plain.id()) == 1);
 
             System.out.println("\n== /api/admins: emails, no passwords ==");
             String pc = WebSessions.COOKIE + "=" + plainSession;
@@ -422,7 +424,7 @@ public class LoginRoutesTest {
             HttpResponse<String> out = ask("POST", "/api/logout", "{}", "Cookie", sc, "X-CSRF-Token", csrf);
             check("logout: the cookie is cleared and the session is gone from the database", out.statusCode() == 200
                     && setCookie(out).contains(WebSessions.COOKIE + "=; ") && setCookie(out).contains("Max-Age=0")
-                    && count("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ?", DataCrypto.sha256Hex(session)) == 0
+                    && count("SELECT COUNT(*) FROM panel_sessions WHERE token_hash = ?", WebSessions.tokenHash(session)) == 0
                     && ask("GET", "/home", null, "Cookie", sc).statusCode() == 302);
             check("logout by GET does nothing (no state change via GET)", ask("GET", "/api/logout", null, "Cookie", pc).statusCode() == 405
                     && ask("GET", "/home", null, "Cookie", pc).statusCode() == 200);

@@ -19,7 +19,7 @@ import java.util.Set;
 /**
  * Le chiavi e i segreti del pannello in un file leggibile solo da root, mai nel database ne' nel
  * repository: cifratura dei dati (email degli amministratori, indirizzi delle sessioni), indice
- * cieco, impronte dei codici monouso, token CSRF, chiave della webmail; e i segreti di testo che
+ * cieco, impronte dei codici monouso, chiave della webmail; e i segreti di testo che
  * prima stavano nel database SQLite di configurazione (password MySQL, chiave privata TLS).
  *
  * Il file sta in /usr/local/etc/mail-panel/panel-secrets.properties, accanto a master.key del
@@ -34,7 +34,9 @@ public final class PanelSecrets {
     static final String DATA_KEY = "data_key";
     static final String INDEX_KEY = "index_key";
     static final String CODE_KEY = "code_key";
-    static final String SESSION_KEY = "session_key";
+    // La chiave "session_key" (token CSRF) non si crea piu': i token di sessione, CSRF e di prima
+    // dell'accesso dipendono da una chiave che vive solo nella memoria del processo (WebSessions,
+    // reperto 184). Nei file di prima resta, inutilizzata.
     /** La chiave che la webmail (Roundcube) manda al pannello per cambiare una password di casella. */
     static final String WEBMAIL_KEY = "webmail_key";
     /** La password dell'utente MySQL del pannello (prima stava nel database SQLite di configurazione). */
@@ -289,7 +291,6 @@ public final class PanelSecrets {
         key(DATA_KEY);
         key(INDEX_KEY);
         key(CODE_KEY);
-        key(SESSION_KEY);
         key(WEBMAIL_KEY);
     }
 }

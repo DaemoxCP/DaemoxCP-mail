@@ -140,7 +140,7 @@ public class LanguageRoutesTest {
             Matcher token = Pattern.compile("id=\"csrf_token\" value=\"([^\"]+)\"").matcher(login.body());
             String loginToken = token.find() ? token.group(1) : "";
             check("the login page carries a CSRF token", loginToken.length() >= 16);
-            Matcher preCookie = Pattern.compile("__Host-MailPanelPre=([A-Za-z0-9_-]{43}); Path=/; HttpOnly; Secure; SameSite=Lax").matcher(setCookie(login));
+            Matcher preCookie = Pattern.compile("__Host-MailPanelPre=([A-Za-z0-9_-]{43}); Path=/; HttpOnly; Secure; SameSite=Strict").matcher(setCookie(login));
             String pre = preCookie.find() ? "__Host-MailPanelPre=" + preCookie.group(1) : "";
             check("and the pre-login cookie the token is tied to (no session on the server)", !pre.isEmpty());
 
@@ -149,7 +149,7 @@ public class LanguageRoutesTest {
             check("the login page token without its cookie: 403", ask("POST", "/api/language",
                     "{\"language\":\"en\",\"csrf_token\":\"" + loginToken + "\"}").statusCode() == 403);
             check("with the login page token and its cookie: 200 and the cookie", ok.statusCode() == 200 && new JSONObject(ok.body()).getBoolean("success")
-                    && setCookie(ok).contains("__Host-lang=en; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"));
+                    && setCookie(ok).contains("__Host-lang=en; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Strict"));
             check("without a token: 403", ask("POST", "/api/language", "{\"language\":\"en\"}").statusCode() == 403);
             check("with a wrong token: 403", ask("POST", "/api/language", "{\"language\":\"en\",\"csrf_token\":\"" + "x".repeat(loginToken.length()) + "\"}").statusCode() == 403);
             check("with the token of a logged-in session, from outside it: 403", ask("POST", "/api/language",

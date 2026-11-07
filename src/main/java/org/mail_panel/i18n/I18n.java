@@ -349,9 +349,12 @@ public final class I18n {
         return best != null ? best : FALLBACK_LANGUAGE;
     }
 
-    /** Il cookie della lingua: un anno, solo su HTTPS, mai leggibile dagli script. */
+    /**
+     * Il cookie della lingua: un anno (e' una preferenza, non un accesso), solo su HTTPS, mai
+     * leggibile dagli script, mai mandato da un altro sito (Strict, come quelli della sessione).
+     */
     public static String cookieHeader(String lang) {
-        return COOKIE + "=" + normalize(lang) + "; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax";
+        return COOKIE + "=" + normalize(lang) + "; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Strict";
     }
 
     // ---------- piccoli attrezzi ----------
