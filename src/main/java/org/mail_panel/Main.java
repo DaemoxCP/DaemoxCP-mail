@@ -278,6 +278,9 @@ public class Main {
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             org.mail_panel.util.Shell.applyPath(processBuilder);
             processBuilder.environment().putAll(secrets);
+            // Lo lancia il pannello, che l'ha appena scritto dal suo jar: il controllo della versione
+            // che lo script fa quando lo si lancia a mano qui non serve (InstallScripts).
+            processBuilder.environment().put(org.mail_panel.scripts.InstallScripts.FROM_PANEL, "1");
             processBuilder.redirectErrorStream(true);
             // Lo stdin del figlio e' /dev/null, sempre. L'impostazione predefinita di
             // ProcessBuilder e' una pipe di cui la JVM tiene aperto il capo in scrittura e
@@ -414,6 +417,16 @@ public class Main {
             System.out.println("Checking the panel's MySQL password failed: " + e.getMessage());
         }
 
+        // Gli script d'installazione riscritti da questo jar a ogni avvio (servizio, menu, comandi da
+        // console), e quelli che nessuno scrive piu' messi da parte: mai uno script di una versione di
+        // prima su disco (InstallScripts, reperto 169).
+        try {
+            createDirectoryIfNotExists("./install_scripts/");
+            org.mail_panel.scripts.InstallScripts.refreshAtStartup();
+        } catch (Exception e) {
+            System.out.println("Writing the install scripts failed: " + e.getMessage());
+        }
+
         // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
         //   java -jar freebsd-mail-panel-1.0.jar --create-admin <nome> <email>   il primo amministratore
         //   java -jar freebsd-mail-panel-1.0.jar --access-code [nome]            un codice di accesso monouso
@@ -447,10 +460,10 @@ public class Main {
                     if (exitFile != null) org.mail_panel.system.ReinstallJob.writeExit(exitFile, false);
                     System.exit(2);
                 }
-                // Lo script e' quello che il menu che lo lancia ha scritto al suo avvio
-                // (generateInstallScripts), con lo stesso jar: qui lo si scrive solo se manca.
+                // Lo script si riscrive SEMPRE da questo jar, appena prima di eseguirlo: lanciato a mano
+                // dopo un aggiornamento del jar, un «solo se manca» userebbe quello di prima (reperto 169).
                 createDirectoryIfNotExists("./install_scripts/");
-                if (!new File("./install_scripts/install_mail_server.sh").exists()) new FullMailServerScript().write_file();
+                new FullMailServerScript().write_file();
                 boolean ok = false;
                 try {
                     ok = runInstallation(host);
@@ -517,6 +530,11 @@ public class Main {
         // Generate install scripts
         generateInstallScripts(gui);
 
+        // Se l'ultima reinstallazione completa non e' finita, lo si dice appena il menu si apre, con le
+        // due strade: la voce 6 (il server di prima) o la 4 (rifarla).
+        String unfinished = reinstallAttention();
+        if (!unfinished.isEmpty()) new Welcome("Attention", unfinished).show(gui);
+
         // Main loop
         if (dbManager.check_tables() > 0) {
             while (true) {
@@ -571,6 +589,11 @@ public class Main {
                         emergencyAccess(gui);
                         break;
 
+                    case 6:
+                        // Tornare al server di prima dell'ultima reinstallazione (ReinstallReturn)
+                        goBackFromMenu(screen, gui);
+                        break;
+
                     case 100:
                         // Start Mail Panel WebServer
                         try {
@@ -595,22 +618,90 @@ public class Main {
     }
 
     private static void generateInstallScripts(MultiWindowTextGUI gui) {
-        // Generate timezone/DNS script
+        // Gli script si riscrivono a ogni avvio (InstallScripts.refreshAtStartup, prima del menu): qui
+        // si riscrivono ancora e si dice qualcosa solo se NON si scrivono. Prima, scritti solo «se
+        // mancano», la finestra compariva la prima volta; scritti sempre, comparirebbero due finestre
+        // da chiudere a ogni apertura del menu (reperto 172).
         SetTimeOnSystemScript timezoneScript = new SetTimeOnSystemScript();
         timezoneScript.write_file();
-        if (timezoneScript.writed) {
-            Welcome msg = new Welcome("Information", "Created setup_timezone_and_dns script");
-            msg.show(gui);
-        }
+        if (!timezoneScript.writed)
+            new Welcome("Attention", "Cannot write install_scripts/setup_timezone_and_dns.sh: see the panel log.").show(gui);
 
-        // Generate unified mail server installation script
         FullMailServerScript mailServerScript = new FullMailServerScript();
         mailServerScript.write_file();
-        if (mailServerScript.writed) {
-            Welcome msg = new Welcome("Information", "Created mail server install script");
-            msg.show(gui);
+        if (!mailServerScript.writed)
+            new Welcome("Attention", "Cannot write install_scripts/install_mail_server.sh: see the panel log.").show(gui);
+    }
+
+    /**
+     * Il testo per il menu se l'ultima reinstallazione completa non e' finita: interrotta (l'avviso di
+     * PackageRecovery lo sa) o fallita dopo aver cominciato a cambiare il sistema (ReinstallJob). ""
+     * se non c'e' niente da dire.
+     */
+    static String reinstallAttention() {
+        boolean interrupted = org.mail_panel.system.PackageRecovery.notice().optBoolean("reinstall");
+        String failedLog = org.mail_panel.system.ReinstallJob.lastFailedAfterChanges();
+        if (!interrupted && failedLog.isEmpty()) return "";
+        String wayBack = org.mail_panel.system.ReinstallReturn.latest();
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        try {
+            return org.mail_panel.i18n.I18n.tr("server.wayBack.menuAttention", java.util.Map.of(
+                    "log", failedLog.isEmpty() ? "-" : failedLog,
+                    "wayBack", wayBack.isEmpty() ? org.mail_panel.i18n.I18n.tr("server.wayBack.none") : wayBack));
+        } finally {
+            org.mail_panel.i18n.I18n.clearCurrent();
         }
     }
+
+    /**
+     * Voce 6 del menu: torna al server com'era prima dell'ultima reinstallazione, con la posta arrivata
+     * dopo fusa dentro (ReinstallReturn). Poi chiede se riavviare adesso: il momento lo sceglie chi e'
+     * al terminale.
+     */
+    private static void goBackFromMenu(Screen screen, MultiWindowTextGUI gui) {
+        String name = org.mail_panel.system.ReinstallReturn.latest();
+        if (name.isEmpty()) {
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            try { new Welcome("Go back", org.mail_panel.i18n.I18n.tr("server.wayBack.none")).show(gui); }
+            finally { org.mail_panel.i18n.I18n.clearCurrent(); }
+            return;
+        }
+        try { screen.stopScreen(); } catch (IOException e) { throw new RuntimeException(e); }
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        try {
+            System.out.println(ANSI_CYAN + "[WAY BACK] " + name + ANSI_RESET);
+            JSONObjectHolder.last = org.mail_panel.system.ReinstallReturn.goBack(name,
+                    line -> System.out.println(ANSI_CYAN + "[WAY BACK] " + line + ANSI_RESET));
+            org.json.JSONObject r = JSONObjectHolder.last;
+            if (!r.optBoolean("success")) {
+                System.out.println(ANSI_RED + "[STOPPED] " + r.optString("error") + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + r.optString("note") + ANSI_RESET);
+                if (!nonInteractive) {
+                    System.out.print(org.mail_panel.i18n.I18n.tr("server.wayBack.askReboot") + " ");
+                    System.out.flush();
+                    String answer = new BufferedReader(new InputStreamReader(System.in)).readLine();
+                    if (answer != null && answer.trim().equalsIgnoreCase("yes")) {
+                        System.out.println(org.mail_panel.i18n.I18n.tr("server.wayBack.rebooting"));
+                        System.out.flush();
+                        org.mail_panel.util.Shell.runShell(java.time.Duration.ofSeconds(30), "shutdown -r now");
+                    } else {
+                        System.out.println(org.mail_panel.i18n.I18n.tr("server.wayBack.rebootLater"));
+                    }
+                }
+            }
+        } catch (IOException e) {
+            System.out.println(ANSI_RED + e.getMessage() + ANSI_RESET);
+        } finally {
+            org.mail_panel.i18n.I18n.clearCurrent();
+        }
+        System.out.flush();
+        waitForEnter();
+        try { screen.startScreen(); } catch (IOException e) { throw new RuntimeException(e); }
+    }
+
+    /** L'esito dell'ultimo ritorno chiesto dal menu (le prove lo leggono). */
+    static final class JSONObjectHolder { static volatile org.json.JSONObject last; }
 
     /**
      * Install/Reinstall the complete mail server
@@ -678,6 +769,10 @@ public class Main {
         try {
             start = InstallLocks.prepare(org.mail_panel.i18n.I18n.tr("server.reinstall.turn"), () -> {
                 try {
+                    // Lo spazio prima della via di ritorno: con meno di 1 GB libero si ferma qui, e
+                    // altrimenti dice quanto la via di ritorno terra' occupato (reperto 170).
+                    String noSpace = org.mail_panel.system.PackageWayBack.reinstallSpace(wayBackLog);
+                    if (noSpace != null) return noSpace;
                     wayBack[0] = org.mail_panel.system.PackageWayBack.beforeInstallation(wayBackLog);
                     return null;
                 } catch (IllegalStateException e) {
@@ -893,6 +988,16 @@ public class Main {
             dbManager.setServiceInstalled("dovecot", true);
             dbManager.setServiceInstalled("rspamd", true);
             dbManager.setServiceInstalled("clamav", true);
+
+            // Le utenze del pannello se ne vanno con le tabelle (lo script le ricrea vuote): chi ha
+            // reinstallato deve sapere che il pannello web non fa entrare nessuno finche' non crea il
+            // primo amministratore dalla console.
+            org.mail_panel.i18n.I18n.setCurrent("en");
+            try {
+                System.out.println(ANSI_YELLOW + "[PANEL] " + org.mail_panel.i18n.I18n.tr("server.reinstall.accountsDeleted") + ANSI_RESET);
+            } finally {
+                org.mail_panel.i18n.I18n.clearCurrent();
+            }
 
             // Auto-load the generated self-signed certificate ONLY if no certificate is configured
             // This prevents overwriting user-configured Cloudflare certificates

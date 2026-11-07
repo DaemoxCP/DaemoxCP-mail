@@ -7118,6 +7118,21 @@ public class SSLMailServer {
                 case "be_list" -> response = UpdateManager.bootEnvironments();
                 // Un lavoro sui pacchetti interrotto: l'avviso, e chiuderlo dopo aver controllato.
                 case "interruption_status" -> response = org.mail_panel.system.PackageRecovery.status();
+                // Tornare al server di prima di una reinstallazione completa (ReinstallReturn): la
+                // posta di adesso fusa dentro, bectl activate, e il riavvio fra un minuto.
+                case "reinstall_way_back" -> {
+                    if (!"GO BACK".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
+                        break;
+                    }
+                    String name = req.optString("name", "");
+                    org.json.JSONArray lines = new org.json.JSONArray();
+                    response = org.mail_panel.system.ReinstallReturn.goBack(name, lines::put);
+                    response.put("log", lines);
+                    logAudit("REINSTALL_WAY_BACK", ip, (response.optBoolean("success") ? "activated " : "refused ")
+                            + name + (response.optBoolean("success") ? ", " + response.optInt("merged") + " mail files merged" : ": " + response.optString("error")));
+                    if (response.optBoolean("success")) response.put("reboot", UpdateManager.restartServer(true, 1));
+                }
                 case "interruption_dismiss" -> {
                     response = org.mail_panel.system.PackageRecovery.dismiss();
                     logAudit("PKG_INTERRUPTION_CHECKED", ip, response.optBoolean("success")

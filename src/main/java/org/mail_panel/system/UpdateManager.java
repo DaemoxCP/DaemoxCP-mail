@@ -564,12 +564,17 @@ public final class UpdateManager {
      * protetti dal pannello l'annotazione stava su uno, redis: il cartello spariva proprio dai
      * pacchetti che il pannello aveva aggiornato.
      *
-     * Costa due letture (pkg lock -l, pkg query) e un comando per ogni cartello da cambiare,
-     * quindi a regime nessuno. Se una delle due letture fallisce non si tocca niente: con
-     * l'elenco dei blocchi vuoto per un errore, i cartelli si toglierebbero da tutti.
+     * Costa due letture (pkg query) e un comando per ogni cartello da cambiare, quindi a regime
+     * nessuno. Se una delle due letture fallisce non si tocca niente: con l'elenco dei blocchi
+     * vuoto per un errore, i cartelli si toglierebbero da tutti.
+     *
+     * I bloccati si leggono con pkg query e non con "pkg lock -l": misurato sulla VM il 07/11/2026
+     * (pkg 2.8.4), senza nessun pacchetto bloccato "pkg lock -l" esce con 1 («No locked packages
+     * were found»), cioe' come un errore, e qui si fermava tutto: i cartelli rimasti sui pacchetti
+     * sbloccati non se ne andavano piu' (reperto 173). Lo stesso tranello di InstallLocks.real().
      */
     static int[] syncLockMarks() {
-        Shell.Result lock = Shell.runShell(Duration.ofSeconds(30), "pkg lock -l");
+        Shell.Result lock = Shell.runShell(Duration.ofSeconds(30), "pkg query -e '%k = 1' '%n-%v'");
         Shell.Result annotations = Shell.runShell(Duration.ofSeconds(60), "pkg query -a '%n %At %Av'");
         if (!lock.success() || !annotations.success()) {
             LOGGER.warning("Lock marks not updated: cannot read the locks or the annotations");
@@ -8121,12 +8126,9 @@ public final class UpdateManager {
                             "n", String.valueOf(stillUnprotected.size()),
                             "list", String.join(" ", stillUnprotected))))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
-        JSONObject interrupted = PackageRecovery.notice();
-        if (!interrupted.isEmpty())
-            toDo.put(new JSONObject().put("urgency", 1)
-                    .put("title", I18n.tr("server.recovery.title"))
-                    .put("what", PackageRecovery.text(interrupted))
-                    .put("where", I18n.tr("server.um.x.updatesPage")));
+        // L'avviso di un lavoro interrotto; la reinstallazione con la sua urgenza e il suo titolo (reperto 172).
+        JSONObject interrupted = PackageRecovery.reportItem();
+        if (interrupted != null) toDo.put(interrupted);
         Set<String> byHand = unlockedByHand();
         List<String> loose = new ArrayList<>();
         JSONArray stack = pk.optJSONArray("packages");
@@ -10211,11 +10213,19 @@ public final class UpdateManager {
                     // configurazioni, caselle e database compresi.
                     origin = I18n.tr("server.um.bootEnvironments.reinstallOrigin");
                     explain = I18n.tr("server.um.bootEnvironments.reinstallExplain");
+                    // Il suo «used» e' 0 appena creata: lo spazio che tiene sta nello snapshot da cui e'
+                    // nata (reperto 170). Lo si dice, o sembra gratis.
+                    long pinned = PackageWayBack.pinnedBytes(name);
+                    if (pinned >= 0) explain += " " + I18n.tr("server.um.bootEnvironments.keepsSpace",
+                            java.util.Map.of("space", PackageWayBack.mb(pinned)));
                 } else if (PackageWayBack.OWN.matcher(name).matches()) {
                     // La via di ritorno di un lavoro sui pacchetti (PackageWayBack): senza questo
                     // ramo cadeva in "origine non riconosciuta, guardalo prima di toccarlo".
                     origin = I18n.tr("server.um.bootEnvironments.packagesOrigin");
                     explain = I18n.tr("server.um.bootEnvironments.packagesExplain");
+                    long pinned = PackageWayBack.pinnedBytes(name);
+                    if (pinned >= 0) explain += " " + I18n.tr("server.um.bootEnvironments.keepsSpace",
+                            java.util.Map.of("space", PackageWayBack.mb(pinned)));
                 } else if (panelBootEnvironment(name)) {
                     origin = I18n.tr("server.um.bootEnvironments.2");
                     explain = I18n.tr("server.um.bootEnvironments.3");

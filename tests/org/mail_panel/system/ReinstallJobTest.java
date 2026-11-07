@@ -20,13 +20,18 @@ import java.util.List;
  *      parte sotto daemon(8), cosi' ha un gruppo suo come davanti a un terminale vero);
  *  J3. un menu ucciso a meta' e un secondo menu aperto mentre lei lavora: il secondo segue quella
  *      in corso, non ne fa partire un'altra;
+ *  J5. senza daemon(8) (non FreeBSD): il menu la fa dentro di se', come prima, con lo script
+ *      riscritto dal suo jar (reperto 172);
  *  J4. la reinstallazione stessa uccisa con kill -9: il menu lo dice e non la da' per riuscita, e
  *      un «servizio» acceso col guardiano (UpdateManager.startInterruptionWatch, reperto 166)
  *      riprotegge i pacchetti da solo e scrive l'avviso con la via di ritorno. Lo stesso servizio
  *      resta acceso durante J1-J3, e li' non deve toccare niente.
  * Dopo ognuna: l'esito, la fine dello script, i pacchetti riprotetti, il turno libero.
  *
- * Lo script e' piantato (fase 1, dodici passi da un secondo, poi un segno), il resto e' vero: la
+ * Lo script e' piantato con una classe ombra di FullMailServerScript (tests/planted, davanti al jar
+ * nel classpath: la reinstallazione lo riscrive sempre dal suo jar), e su disco all'inizio c'e' uno
+ * script VECCHIO che non deve mai girare. Lo script piantato: fase 1, dodici passi da un secondo, poi
+ * un segno. Il resto e' vero: la
  * JVM staccata (Main --reinstall), il turno, lo sblocco e la riprotezione dei pacchetti protetti
  * (pkg vero), la via di ritorno (bectl vero). Il pannello di prova sta in una cartella sua, con
  * SQLite, segreti e registri suoi; MySQL non serve (porta 1). SOLO su un clone di prova: si accende
@@ -58,6 +63,11 @@ public class ReinstallJobTest {
         if (!"yes".equals(System.getProperty("e2e.vm"))) {
             System.out.println("SALTATA: serve -De2e.vm=yes (un clone di prova sulla VM FreeBSD, da root).");
             System.exit(0);
+        }
+        // Senza la classe ombra davanti al jar la reinstallazione scriverebbe ed eseguirebbe lo script VERO.
+        if (!new org.mail_panel.scripts.FullMailServerScript().getScriptContent().contains("classe ombra")) {
+            System.out.println("FERMATA: manca la classe ombra di tests/planted davanti al jar: questa prova eseguirebbe lo script vero.");
+            System.exit(2);
         }
         for (String n : sh("bectl list -H 2>/dev/null | cut -f1").split("\n"))
             if (PackageWayBack.REINSTALL_OWN.matcher(n.trim()).matches()) {
@@ -121,12 +131,32 @@ public class ReinstallJobTest {
             check("il secondo menu segue quella in corso", out.contains("already running") && out.contains("pid " + job));
             check("e non ne fa partire un'altra", count(out, "runs by itself") == 0 && jobLogs() == 3);
             check("la segue fino in fondo e la da' per riuscita", code == 0 && out.contains("step 12") && out.contains("MENU RESULT true"));
+            // Le utenze del pannello sono cancellate con le tabelle: lo si dice, con il comando per rientrare.
+            check("e dice che le utenze del pannello sono cancellate, e come creare il primo amministratore",
+                    out.contains("panel accounts were deleted") && out.contains("--create-admin"));
             afterJob("J3", job, lockedBefore);
+
+            System.out.println("\n== J5. Senza daemon(8): la reinstallazione dentro il menu, come prima ==");
+            Files.writeString(panel.resolve("install_scripts/install_mail_server.sh"),
+                    "#!/bin/sh\n# uno script di una versione di prima\necho \"stale script ran\"\nexit 42\n");
+            List<String> noDaemon = new ArrayList<>(menuCommand());
+            noDaemon.add("no-daemon");
+            Process inside = new ProcessBuilder(noDaemon).directory(panel.toFile()).redirectErrorStream(true)
+                    .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null"))).start();
+            String insideOut = new String(inside.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            int insideCode = inside.waitFor();
+            echo(insideOut);
+            check("il menu dice che la fa dentro di se'", insideOut.contains("is not here: the reinstallation runs inside this menu"));
+            check("e la fa fino in fondo, riuscita", insideCode == 0 && insideOut.contains("step 12") && insideOut.contains("MENU RESULT true"));
+            check("con lo script del suo jar, non quello vecchio", !insideOut.contains("stale script ran") && Files.exists(panel.resolve("script-done")));
+            check("riprotetti, nessun elenco, turno libero", locked() == lockedBefore && !PackageQueue.statePresent() && takeAndRelease());
+            Files.deleteIfExists(panel.resolve("script-done"));
+
 
             System.out.println("\n== J4. La reinstallazione stessa uccisa con kill -9 ==");
             menu = startMenu("j4");
             job = waitJobStep(3);
-            check("durante J1-J3 il guardiano non ha toccato niente", !Files.exists(notice)
+            check("durante J1-J3 e J5 il guardiano non ha toccato niente", !Files.exists(notice)
                     && !Files.readString(serviceOut).contains("Interrupted package job detected"));
             sh("kill -9 " + job);
             out = new String(menu.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -173,6 +203,8 @@ public class ReinstallJobTest {
         }
         String log = Files.readString(Path.of(exit.toString().replace(".exit", ".log")));
         check(name + ": il registro ha tutto, fino alla riprotezione", log.contains("step 12") && log.contains("packages locked again"));
+        check(name + ": lo script vecchio non e' girato", !log.contains("stale script ran"));
+        check(name + ": prima della via di ritorno ha guardato lo spazio", log.contains("The way back keeps the mail and the database"));
         check(name + ": i pacchetti di nuovo protetti, nessun elenco", locked() == lockedBefore && !PackageQueue.statePresent());
         check(name + ": la reinstallazione non c'e' piu' e il turno e' libero", waitGone(job) && takeAndRelease());
         Files.deleteIfExists(panel.resolve("script-done"));
@@ -277,12 +309,11 @@ public class ReinstallJobTest {
                 Main.dbManager.ensurePostfixColumn();
                 if (Main.dbManager.check_tables() < 1) { Main.dbManager.create_tables(); Main.dbManager.insert_data_default(); }
                 Main.dbManager.update_mysql_config("127.0.0.1", "1", "e2e_nobody", "E2eNessuna1", "e2e_nobody");
+                // Uno script VECCHIO su disco: la reinstallazione deve riscriverlo dal suo jar (qui la
+                // classe ombra di tests/planted) e non eseguire questo (InstallScripts, reperto 169).
                 Files.createDirectories(Path.of("install_scripts"));
                 Files.writeString(Path.of("install_scripts/install_mail_server.sh"),
-                        "#!/bin/sh\n# prova: piantato al posto di install_mail_server.sh\n"
-                        + "echo \"[PHASE 1/10] Cleaning up existing installation...\"\n"
-                        + "i=1; while [ $i -le 12 ]; do echo \"planted: step $i\"; sleep 1; i=$((i+1)); done\n"
-                        + "touch ./script-done\nexit 0\n");
+                        "#!/bin/sh\n# uno script di una versione di prima\necho \"stale script ran\"\nexit 42\n");
                 System.out.println("SETUP OK");
                 System.exit(0);
             }
@@ -297,6 +328,16 @@ public class ReinstallJobTest {
                 System.exit(0);
             }
             case "menu" -> {
+                if (a.length > 3 && a[3].equals("no-daemon")) {
+                    ReinstallJob.daemon = "/nonexistent/daemon";
+                    // Senza daemon la reinstallazione gira in questo processo, che come il menu vero ha
+                    // la configurazione del pannello aperta (Main.main la apre prima del menu).
+                    Main.dbManager = new dataBaseManager();
+                    Main.dbManager.ensureMailHostnameColumn();
+                    Main.dbManager.ensureSslChainColumn();
+                    Main.dbManager.ensureRoundcubeColumns();
+                    Main.dbManager.ensurePostfixColumn();
+                }
                 boolean ok = ReinstallJob.runFromMenu(a[2], System.out);
                 System.out.println("MENU RESULT " + ok);
                 System.exit(ok ? 0 : 1);

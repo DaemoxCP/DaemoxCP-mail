@@ -38,8 +38,17 @@ passata.
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.MysqlReconnectTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallWayBackTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallWayBackE2ETest
-    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallJobTest
+    javac -cp target/freebsd-mail-panel-1.0.jar -d tests/planted tests/planted/org/mail_panel/scripts/FullMailServerScript.java
+    java -De2e.vm=yes -cp "tests/planted:tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InterruptionWatchTest
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.InstallScriptsTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.InstallScriptVersionTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallReturnE2ETest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.NoBootEnvironmentTest
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InterruptionReportTest
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LockMarksTest
+    expect tests/menu-way-back.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
+    expect tests/menu-reinstall-warning.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
@@ -197,6 +206,15 @@ nome.en.html in inglese, piu' i dizionari degli script in i18n/ (da servire come
     NODE_PATH=$(npm root -g) node tests/queue-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/limits-statistics-browser-test.js $D [cartella-per-le-foto]
     NODE_PATH=$(npm root -g) node tests/english-pages-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/packages-browser-test.js $D [cartella-per-le-foto]
+    NODE_PATH=$(npm root -g) node tests/way-back-browser-test.js $D [cartella-per-le-foto]
+
+Sul Mac basta il pacchetto Playwright, senza il suo Chromium: con `CHROMIUM` le prove usano il Chrome
+installato (tutte lo leggono dal 07/11/2026, reperto 177). Il pacchetto si puo' tenere fuori dal progetto:
+
+    mkdir -p $PW && (cd $PW && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts playwright)
+    CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" NODE_PATH=$PW/node_modules \
+        node tests/way-back-browser-test.js $D [cartella-per-le-foto]
 
 L'accesso senza password invece gira sul server vero (LoginE2EServer), con il MySQL di prova, e
 Chromium con un autenticatore virtuale. Il server parte da una cartella vuota con il jar dentro:
@@ -379,6 +397,42 @@ quando NON tocca l'elenco dei pacchetti sbloccati (l'elenco dell'aggiornamento d
 scritto ancora vivo, un lavoro di questo processo, il turno tenuto da un altro processo) e il testo
 dell'avviso di una reinstallazione interrotta. Senza pkg: il caso che riprotegge davvero e'
 `ReinstallJobTest` J4.
+
+**InstallScriptsTest** — gli script d'installazione su disco sono sempre quelli del jar che gira
+(`InstallScripts`, reperto 169): scrittura tutto o niente, lo script vecchio riscritto, quelli che nessuno
+scrive piu' messi da parte, l'impronta del jar dopo la `#!`; con `-De2e.vm=yes` anche un avvio vero del
+pannello che lo fa.
+
+**InstallScriptVersionTest** — `install_mail_server.sh` lanciato a mano si ferma se e' di un'altra
+versione del pannello di quella del servizio, prima di cambiare qualunque cosa. Script vero, da root,
+sulla VM: si ferma sempre prima della fase 1, e rimette rc.conf.
+
+**ReinstallReturnE2ETest** — tornare alla via di ritorno di una reinstallazione con la posta arrivata dopo
+fusa dentro (`ReinstallReturn`, reperto 170), con bectl vero e senza riavviare; tutto rimesso nell'ordine
+giusto (bectl activate promuove). Solo su un clone.
+
+**NoBootEnvironmentTest** — un sistema senza boot environment (un bectl finto davanti nel PATH che
+fallisce sempre): la via di ritorno non si crea e lo si dice, lo spazio non si misura, il ritorno rifiuta
+ogni nome, la scheda dice che non ci sono (reperto 172).
+
+**InterruptionReportTest** — la reinstallazione interrotta nel rapporto periodico: la cosa piu' urgente,
+col suo titolo e il comando per tornare indietro; un lavoro qualunque resta com'era. Con `-De2e.vm=yes`
+anche i dati veri del rapporto (`UpdateManager.reportData`). Reperto 172.
+
+**LockMarksTest** — il cartello «bloccato dal pannello» su tutti e soli i bloccati. Con `-De2e.vm=yes`
+anche la prova 5, che sblocca TUTTI i pacchetti (solo su un clone) e rimette blocchi e cartelli come li ha
+trovati: senza nessun bloccato `pkg lock -l` esce con 1, e i cartelli rimasti non se ne andavano mai
+(reperto 173).
+
+**menu-way-back.exp** — la voce 6 del menu a schermo, in un terminale vero (`ssh -tt`), con expect: va
+preparata sul clone una copia del pannello, una via di ritorno vera (`MakeReinstallWayBack`) e l'avviso di
+una reinstallazione interrotta; dopo, la via di ritorno e' quella del prossimo avvio e la posta e' ferma,
+e va rimesso tutto (reperto 174). Lanterna ridisegna solo le celle che cambiano: si aspetta una riga che
+arriva intera, non una qualunque.
+
+`ReinstallJobTest` vuole la classe ombra di `FullMailServerScript` (`tests/planted`) davanti al jar: la
+reinstallazione riscrive sempre lo script dal suo jar, e senza l'ombra eseguirebbe quello vero (la prova lo
+controlla e si rifiuta). `MenuGoBack` e' il conduttore della voce 6 del menu, come `MenuReinstall`.
 
 **AliasMessagesTest** — che cosa il pannello dice dopo aver creato, modificato, disattivato o eliminato
 un alias. Postfix legge solo gli alias attivi e li applica prima delle caselle: una casella con un

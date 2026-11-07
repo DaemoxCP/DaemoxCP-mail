@@ -3,6 +3,7 @@ package org.mail_panel.system;
 import org.mail_panel.i18n.I18n;
 import org.mail_panel.util.Shell;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -138,6 +139,40 @@ public class ReinstallWayBackE2ETest {
             check("e non quelli della reinstallazione", now.contains(three.get(1)) && now.contains(three.get(2)));
             for (String n : List.of(three.get(1), three.get(2))) PackageWayBack.destroy(n);
             check("tolti a mano: tutto come prima", bootEnvironments().equals(beBefore) && snapshots().equals(snapBefore));
+
+            System.out.println("\n== Lo spazio (reperto 170) ==");
+            long saved = PackageWayBack.reinstallMinFree;
+            try {
+                PackageWayBack.reinstallMinFree = Long.MAX_VALUE;
+                log.clear();
+                String refused = PackageWayBack.reinstallSpace(log::add);
+                check("con poco spazio libero la reinstallazione non parte, e lo dice", refused != null && refused.contains("MB free"));
+            } finally {
+                PackageWayBack.reinstallMinFree = saved;
+            }
+            log.clear();
+            check("con spazio a sufficienza parte", PackageWayBack.reinstallSpace(log::add) == null);
+            check("e dice quanto la via di ritorno terra' occupato", String.join("\n", log).contains("The way back keeps the mail and the database"));
+            Path probe = Path.of("/var/vmail/e2e-space-probe");
+            sh("dd if=/dev/urandom of=" + probe + " bs=1m count=50 2>/dev/null");
+            p = PackageWayBack.beforeInstallation(log::add);
+            made.add(p.name());
+            sh("rm -f " + probe);       // come la reinstallazione che svuota /var/vmail
+            // ZFS conta lo spazio di uno snapshot quando chiude la transazione: letto subito dopo la
+            // cancellazione dava 0 (misurato). Si forza la chiusura e si aspetta fino a 30 secondi.
+            long pinned = -1;
+            for (int k = 0; k < 15 && pinned < 45L * 1048576; k++) {
+                sh("zpool sync 2>/dev/null; sleep 2");
+                pinned = PackageWayBack.pinnedBytes(p.name());
+            }
+            check("i 50 MB cancellati restano occupati dalla via di ritorno (" + PackageWayBack.mb(pinned) + " MB)", pinned >= 45L * 1048576);
+            String explain = "";
+            org.json.JSONArray list2 = UpdateManager.bootEnvironments().optJSONArray("environments");
+            for (int k = 0; list2 != null && k < list2.length(); k++)
+                if (p.name().equals(list2.getJSONObject(k).optString("name"))) explain = list2.getJSONObject(k).optString("explanation");
+            check("e la scheda lo dice: " + explain.replaceAll(".*(It keeps [0-9]+ MB).*", "$1"), explain.matches(".*It keeps ([4-9][0-9]|[0-9]{3,}) MB taken.*"));
+            check("toglierla lascia tutto come prima", PackageWayBack.destroy(p.name()) == null
+                    && bootEnvironments().equals(beBefore) && snapshots().equals(snapBefore));
         } finally {
             for (String n : made) if (bootEnvironments().contains(n)) PackageWayBack.destroy(n);
         }

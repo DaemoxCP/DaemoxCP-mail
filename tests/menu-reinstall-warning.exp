@@ -1,0 +1,42 @@
+#!/usr/bin/expect -f
+# La conferma della voce 4 del menu dice che cosa si cancella (reperto 177): la posta, i domini, le
+# caselle, gli alias e le utenze del pannello con passkey e sessioni. Poi Annulla (preselezionato) e
+# uscita dal menu: la reinstallazione non deve partire. Su un clone di prova, da una copia del pannello.
+# Uso, dal Mac: expect tests/menu-reinstall-warning.exp <chiave ssh> <host> <cartella del pannello sul clone> <jar>
+set timeout 90
+set key [lindex $argv 0]; set host [lindex $argv 1]; set dir [lindex $argv 2]; set jar [lindex $argv 3]
+log_user 0
+spawn ssh -tt -i $key -o BatchMode=yes root@$host "cd $dir && TERM=xterm exec java -jar $jar"
+proc step {what pattern} {
+    expect {
+        -re $pattern { puts "  OK   $what" }
+        timeout { puts "  FAILED $what (non arrivato: $pattern)"; exit 1 }
+        eof { puts "  FAILED $what (il menu e' uscito)"; exit 1 }
+    }
+}
+step "il menu si apre col benvenuto" "Welcome to FreeBSD Mail Panel"
+send "\r"
+step "le voci del menu" "Select an option"
+step "c'e' la voce 4" "4\\) Install/Reinstall Mail Server"
+send "\033\[B\033\[B\033\[B"
+send "\r"
+# Il titolo della finestra puo' arrivare a pezzi (Lanterna ridisegna solo le celle cambiate, e una
+# finestra piu' corta finisce su altre righe): si distingue il testo nuovo da quello di prima.
+expect {
+    -re "DELETED" { puts "  OK   la conferma dice che posta, caselle e utenze del pannello si cancellano" }
+    -re "RESET!" { puts "  FAILED la conferma dice solo che la configurazione si azzera"; exit 1 }
+    timeout { puts "  FAILED nessuna conferma"; exit 1 }
+    eof { puts "  FAILED il menu e' uscito"; exit 1 }
+}
+send "\r"
+# Annulla e' preselezionato. Il titolo del menu non si ridisegna (non e' cambiato): si prova che si e'
+# tornati al menu uscendone, e che la reinstallazione non e' partita (chiederebbe il nome del server).
+after 1500
+send "\t"
+send "\r"
+expect {
+    -re "Mail Server Hostname" { puts "  FAILED annullata: invece e' partita la reinstallazione"; exit 1 }
+    eof { puts "  OK   annullata: di nuovo il menu, e Tab+Invio ne esce" }
+    timeout { puts "  FAILED il menu non e' uscito"; exit 1 }
+}
+exit 0

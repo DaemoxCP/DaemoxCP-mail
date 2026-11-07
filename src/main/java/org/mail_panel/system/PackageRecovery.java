@@ -102,6 +102,21 @@ public final class PackageRecovery {
         }
     }
 
+    /**
+     * Per il rapporto periodico (UpdateManager.reportData): l'avviso come una cosa da fare, o null se
+     * non c'e'. La reinstallazione interrotta e' la cosa piu' urgente (la posta puo' essere spenta) e
+     * ha il suo titolo; prima usciva con l'urgenza e il titolo di un lavoro qualunque (reperto 172).
+     */
+    public static JSONObject reportItem() {
+        JSONObject n = notice();
+        if (n.isEmpty()) return null;
+        boolean reinstall = n.optBoolean("reinstall");
+        return new JSONObject().put("urgency", reinstall ? 0 : 1)
+                .put("title", I18n.tr(reinstall ? "mail.report.title.reinstallInterrupted" : "server.recovery.title"))
+                .put("what", text(n))
+                .put("where", I18n.tr(reinstall ? "mail.report.where.interrupted" : "server.um.x.updatesPage"));
+    }
+
     /** L'avviso, o un oggetto vuoto se non c'e'. */
     public static JSONObject notice() {
         try { return new JSONObject(Files.readString(notice)); }
