@@ -2246,11 +2246,64 @@ public final class UpdateManager {
      *    pagina Aggiornamenti e il rapporto mostrano finche' qualcuno non controlla.
      */
     public static String restoreLocksAfterCrash() {
+        return restoreLocksAfterCrash(I18n.tr("server.recovery.turnAtStartup"));
+    }
+
+    /** Ogni quanto il servizio acceso guarda se un lavoro sui pacchetti e' morto a meta'. */
+    static int watchSeconds = 60;
+    private static Thread interruptionWatch;
+
+    /**
+     * Il guardiano del servizio --web: ogni watchSeconds, il ripristino dell'avvio se un lavoro sui
+     * pacchetti e' morto a meta' MENTRE il pannello era acceso.
+     *
+     * <p>Misurato sulla VM il 06/11/2026 (reperto 165): la reinstallazione completa uccisa a meta'
+     * lasciava i 39 pacchetti sbloccati con l'elenco su disco, e il servizio acceso non se ne
+     * accorgeva: il ripristino lo faceva solo il suo avvio successivo, cioe' anche giorni dopo. Lo
+     * stesso per qualunque lavoro di un altro processo del pannello (il menu, un comando da console).
+     */
+    public static synchronized void startInterruptionWatch() {
+        if (interruptionWatch != null && interruptionWatch.isAlive()) return;
+        interruptionWatch = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(watchSeconds * 1000L);
+                    watchOnce();      // quello che trova lo scrive gia' nel log il ripristino
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                } catch (RuntimeException e) {
+                    LOGGER.warning("Watching for interrupted package jobs failed: " + e.getMessage());
+                }
+            }
+        }, "package-job-watch");
+        interruptionWatch.setDaemon(true);
+        interruptionWatch.start();
+    }
+
+    /**
+     * Un giro del guardiano. Il ripristino dell'avvio solo se l'elenco c'e', non e' quello lasciato
+     * apposta dall'aggiornamento della JVM (lo chiude il riavvio che lui stesso fa), e chi l'ha
+     * scritto non c'e' piu'. Il turno lo controlla poi il ripristino: se lo tiene qualcun altro, non
+     * tocca niente. "" se non c'era niente da fare.
+     */
+    static String watchOnce() {
+        if (!PackageQueue.statePresent()) return "";
+        JSONObject job = PackageQueue.jobRecord();
+        if (job.optBoolean("expectsRestart")) return "";
+        long pid = job.optLong("pid", 0);
+        long self = ProcessHandle.current().pid();
+        if (pid == self && PackageQueue.holder() != null) return "";     // un lavoro di questo processo
+        if (pid > 0 && pid != self && ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) return "";
+        return restoreLocksAfterCrash(I18n.tr("server.recovery.turnWatch"));
+    }
+
+    static String restoreLocksAfterCrash(String turnDescription) {
         // PackageQueue.list, non il percorso scritto qui: e' lo stesso file, ma e' quello che
         // leggono PackageRecovery.statePackages e le prove, che lo spostano in una cartella loro.
         Path f = PackageQueue.list;
         if (!Files.exists(f)) return "";
-        String refusal = PackageQueue.takeForLocks("startup-restore", I18n.tr("server.recovery.turnAtStartup"));
+        String refusal = PackageQueue.takeForLocks("startup-restore", turnDescription);
         if (refusal != null) {
             String msg = "A list of unlocked packages is on disk, but another panel process holds the package turn "
                     + "(a job is running there): the list is not touched. " + refusal;
@@ -2270,7 +2323,7 @@ public final class UpdateManager {
             if (!expected) PackageRecovery.recordInterruption(job, names, unlockedNow, pkgNow);
             StringBuilder log = new StringBuilder();
             boolean done = relockFromState(f, log);
-            String msg = "Interrupted maintenance detected at startup: " + log;
+            String msg = "Interrupted package job detected: " + log;
             if (!done) {
                 msg += (pkgNow.isEmpty() ? "" : "pkg is still working (" + pkgNow.replace("\n", "; ") + "): ")
                         + "retrying every " + PackageRecovery.retrySeconds + " seconds until they are protected again.\n";

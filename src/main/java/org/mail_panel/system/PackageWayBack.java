@@ -97,6 +97,16 @@ public final class PackageWayBack {
         return REINSTALL_PREFIX + when.withZoneSameInstant(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss"));
     }
 
+    /** La via di ritorno di reinstallazione piu' recente su questo sistema, o "" se non ce n'e'. */
+    static String newestReinstallWayBack() {
+        String newest = "";
+        for (String line : run("bectl list -H 2>/dev/null | cut -f1", 60).outputTrim().split("\n")) {
+            String n = line.trim();
+            if (REINSTALL_OWN.matcher(n).matches() && n.compareTo(newest) > 0) newest = n;
+        }
+        return newest;
+    }
+
     /** Prima della reinstallazione completa: come {@link #before}, col nome della reinstallazione. */
     public static Prepared beforeInstallation(Consumer<String> log) {
         return create(log, reinstallName(ZonedDateTime.now()));
