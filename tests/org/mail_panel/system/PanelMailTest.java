@@ -2,39 +2,43 @@ package org.mail_panel.system;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.mail_panel.i18n.I18n;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Le email del pannello: busta, codifiche e contenuto.
+ * The panel's emails: envelope, encodings and content.
  *
- * Il difetto del 05/11/2026: il committente riceve dal server vero un'email da "Control panel"
- * con oggetto "[freebsd] 1 thing to do - 05/11/2026". Ne' quale pannello, ne' quale server
- * ("freebsd" e' hostname(1), il server si chiama mail.domain-b.test), ne' che cosa fare. In piu'
- * il piede del rapporto mostrava un "\n" scritto per davvero, e il messaggio era solo testo.
+ * The defect of 05/11/2026: the owner receives from the real server an email from "Control panel"
+ * with subject "[freebsd] 1 thing to do - 05/11/2026". Neither which panel, nor which server
+ * ("freebsd" is hostname(1), the server is called mail.domain-b.test), nor what to do. On top of
+ * that the report's footer showed a "\n" written out literally, and the message was text only.
  *
- * Qui si prova, senza toccare il sistema:
- *  - la busta: mittente "Mail control panel (server)", oggetto in RFC 2047 entro i 75 caratteri
- *    per parola, Date, Message-ID, Content-Language, Auto-Submitted, multipart con testo e HTML
- *    in quoted-printable che si decodificano esattamente in cio' che si e' scritto;
- *  - il rapporto: l'oggetto dice server e cosa fare, ogni voce ha urgenza scritta, titolo,
- *    spiegazione e posto nel pannello, in testo e in HTML, nelle due lingue, senza chiavi di
- *    lingua scoperte, senza "\n" letterali, con l'HTML che non lascia passare markup dai dati;
- *  - i codici: il codice nel corpo ma non nell'oggetto ne' nell'anteprima, l'IP di chi l'ha
- *    chiesto solo nei messaggi che vanno all'amministratore, mai nel cambio dell'email.
+ * Tested here, without touching the system:
+ *  - the envelope: sender "Mail control panel (server)", subject in RFC 2047 within 75 characters
+ *    per word, Date, Message-ID, Content-Language, Auto-Submitted, multipart with text and HTML in
+ *    quoted-printable that decode exactly into what was written;
+ *  - the report: the subject says the server and what to do, every item has its urgency in words,
+ *    title, explanation and place in the panel, in text and in HTML, in both languages, without
+ *    bare language keys, without literal "\n", with HTML that lets no markup through from the data;
+ *  - the codes: the code in the body but not in the subject nor in the preview, the IP of who asked
+ *    for it only in the messages that go to the administrator, never in the email change.
  *
- * Si lancia sulla VM come le altre:
+ * It runs on the VM like the others:
  *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelMailTest
- * Con -Dpanelmail.dump=<cartella> scrive anche i messaggi composti (.eml), per guardarli in un
- * programma di posta.
+ * With -Dpanelmail.dump=<folder> it also writes the composed messages (.eml), to look at them in a
+ * mail program.
  */
 public class PanelMailTest {
 
@@ -42,6 +46,11 @@ public class PanelMailTest {
 
     private static final ZonedDateTime WHEN = ZonedDateTime.of(2026, 11, 5, 20, 15, 0, 0, ZoneId.of("UTC"));
     private static final String SERVER = "mail.example.org";
+    // The Italian texts are read from it.json, never written here; the Italian date is formatted
+    // here with the Italian locale, apart from the panel's patterns.
+    private static final String IT_PRODUCT = I18n.t("it", "mail.common.product");
+    private static final String IT_DATE = WHEN.format(DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ITALIAN));
+    private static final String IT_WHEN = WHEN.format(DateTimeFormatter.ofPattern(I18n.t("it", "mail.common.dateTimePattern"), Locale.ITALIAN));
 
     public static void main(String[] args) throws Exception {
         envelope();
@@ -54,21 +63,21 @@ public class PanelMailTest {
         if (failed > 0) System.exit(1);
     }
 
-    // ===================== la busta =====================
+    // ===================== the envelope =====================
 
     static void envelope() {
-        System.out.println("== la busta ==");
-        String long1 = "Una riga lunghissima con lettere accentate: perché, più, città, è, à, ò, ù — "
-                + "e ancora testo ".repeat(12) + "fine.";
-        String tricky = "a=b\ttab finale \nspazio finale \n\n=3D non decodificato\n" + long1 + "\nultima";
+        System.out.println("== the envelope ==");
+        String long1 = "A very long line with accented letters: café, naïve, résumé, façade, déjà vu, Zoë — "
+                + "and more text ".repeat(12) + "end.";
+        String tricky = "a=b\tinner tab, trailing space \ntrailing space \n\n=3D not decoded\n" + long1 + "\nlast";
         String qp = PanelMail.quotedPrintable(tricky);
-        check("quoted-printable: nessuna riga oltre 76", qp.lines().allMatch(l -> l.length() <= 76));
-        check("quoted-printable: solo ASCII stampabile (e il TAB dentro la riga, che la norma ammette)", qp.chars().allMatch(c -> c == '\r' || c == '\n' || c == '\t' || (c >= 32 && c < 127)));
-        check("quoted-printable: si decodifica esattamente nel testo di partenza", qpDecode(qp).equals(tricky.replace("\r\n", "\n")));
-        check("quoted-printable: lo spazio a fine riga diventa =20", qp.contains("finale=20\r\n"));
-        check("quoted-printable: '=' diventa =3D", qp.contains("a=3Db"));
+        check("quoted-printable: no line over 76", qp.lines().allMatch(l -> l.length() <= 76));
+        check("quoted-printable: printable ASCII only (and the TAB inside the line, which the standard allows)", qp.chars().allMatch(c -> c == '\r' || c == '\n' || c == '\t' || (c >= 32 && c < 127)));
+        check("quoted-printable: it decodes exactly into the starting text", qpDecode(qp).equals(tricky.replace("\r\n", "\n")));
+        check("quoted-printable: the space at the end of a line becomes =20", qp.contains("space=20\r\n"));
+        check("quoted-printable: '=' becomes =3D", qp.contains("a=3Db"));
 
-        String subject = "[mail.esempio.it] Urgente: Applica 2 correzioni di sicurezza, e altre 2 cose - rapporto del 5 novembre 2026 — città";
+        String subject = "[mail.example.org] Urgent: Apply 2 security fixes, and 2 more things to do - report of 5 November 2026 — café";
         String h = PanelMail.encodeHeader(subject, 9);
         List<String> words = new ArrayList<>();
         Matcher m = Pattern.compile("=\\?UTF-8\\?B\\?([A-Za-z0-9+/=]*)\\?=").matcher(h);
@@ -76,64 +85,64 @@ public class PanelMailTest {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         while (m.find()) { words.add(m.group()); bytes.writeBytes(Base64.getDecoder().decode(m.group(1))); }
         decoded.append(bytes.toString(StandardCharsets.UTF_8));
-        check("RFC 2047: piu' parole codificate per un oggetto lungo", words.size() > 1);
-        check("RFC 2047: ogni parola codificata entro 75 caratteri", words.stream().allMatch(w -> w.length() <= 75));
-        check("RFC 2047: le parole si ricompongono nell'oggetto esatto", decoded.toString().equals(subject));
-        check("RFC 2047: righe piegate con CRLF e spazio", h.contains("\r\n ") && !h.contains("\n\n"));
-        check("RFC 2047: un oggetto ASCII resta com'e'", PanelMail.encodeHeader("[mail.example.org] All good", 9).equals("[mail.example.org] All good"));
-        check("intestazione: un a capo nell'oggetto non apre un'intestazione nuova",
+        check("RFC 2047: several encoded words for a long subject", words.size() > 1);
+        check("RFC 2047: every encoded word within 75 characters", words.stream().allMatch(w -> w.length() <= 75));
+        check("RFC 2047: the words join back into the exact subject", decoded.toString().equals(subject));
+        check("RFC 2047: lines folded with CRLF and a space", h.contains("\r\n ") && !h.contains("\n\n"));
+        check("RFC 2047: an ASCII subject stays as it is", PanelMail.encodeHeader("[mail.example.org] All good", 9).equals("[mail.example.org] All good"));
+        check("header: a newline in the subject does not open a new header",
                 !PanelMail.encodeHeader("x\r\nBcc: someone@example.com", 9).contains("\n"));
 
         String from = PanelMail.address(PanelMail.senderName("en", SERVER), "no-reply@example.org");
-        check("mittente: \"Mail control panel (mail.example.org)\" <no-reply@example.org>",
+        check("sender: \"Mail control panel (mail.example.org)\" <no-reply@example.org>",
                 from.equals("\"Mail control panel (mail.example.org)\" <no-reply@example.org>"));
-        check("mittente: le virgolette nel nome si proteggono", PanelMail.address("A \"B\"", "x@example.org").equals("\"A \\\"B\\\"\" <x@example.org>"));
-        check("mittente: un nome non ASCII va in RFC 2047", PanelMail.address("Pannello è", "x@example.org").startsWith("=?UTF-8?B?"));
-        check("mittente senza server: solo il nome del pannello", PanelMail.senderName("en", "").equals("Mail control panel"));
-        check("mittente in italiano", PanelMail.senderName("it", SERVER).equals("Pannello di controllo della posta (mail.example.org)"));
+        check("sender: the quotes in the name are escaped", PanelMail.address("A \"B\"", "x@example.org").equals("\"A \\\"B\\\"\" <x@example.org>"));
+        check("sender: a non-ASCII name goes into RFC 2047", PanelMail.address("Panel café", "x@example.org").startsWith("=?UTF-8?B?"));
+        check("sender without a server: the panel's name only", PanelMail.senderName("en", "").equals("Mail control panel"));
+        check("sender in Italian: the product name from it.json, with the server", PanelMail.senderName("it", SERVER).equals(IT_PRODUCT + " (mail.example.org)"));
 
-        PanelMail.Message msg = new PanelMail.Message("Prova è", tricky, "<p>città</p>", "it");
+        PanelMail.Message msg = new PanelMail.Message("Test café", tricky, "<p>café</p>", "it");
         String raw = PanelMail.compose(PanelMail.senderName("it", SERVER), "no-reply@example.org", "admin@example.org", msg,
                 "report.1@example.org", WHEN);
         String head = raw.substring(0, raw.indexOf("\r\n\r\n"));
-        check("busta: From con il nome del pannello e del server", "\"Pannello di controllo della posta (mail.example.org)\" <no-reply@example.org>".equals(unfold(head, "From")));
-        check("busta: Date in forma RFC 5322", head.contains("\r\nDate: Thu, 5 Nov 2026 20:15:00 +0000"));
-        check("busta: Message-ID", head.contains("\r\nMessage-ID: <report.1@example.org>"));
-        check("busta: Content-Language", head.contains("\r\nContent-Language: it"));
-        check("busta: Auto-Submitted e X-Auto-Response-Suppress", head.contains("\r\nAuto-Submitted: auto-generated") && head.contains("\r\nX-Auto-Response-Suppress: All"));
+        check("envelope: From with the panel's and the server's name", ("\"" + IT_PRODUCT + " (mail.example.org)\" <no-reply@example.org>").equals(unfold(head, "From")));
+        check("envelope: Date in RFC 5322 form", head.contains("\r\nDate: Thu, 5 Nov 2026 20:15:00 +0000"));
+        check("envelope: Message-ID", head.contains("\r\nMessage-ID: <report.1@example.org>"));
+        check("envelope: Content-Language", head.contains("\r\nContent-Language: it"));
+        check("envelope: Auto-Submitted and X-Auto-Response-Suppress", head.contains("\r\nAuto-Submitted: auto-generated") && head.contains("\r\nX-Auto-Response-Suppress: All"));
         Matcher bm = Pattern.compile("boundary=\"([^\"]+)\"").matcher(head);
-        check("busta: multipart/alternative con il suo separatore", head.contains("Content-Type: multipart/alternative;") && bm.find());
+        check("envelope: multipart/alternative with its boundary", head.contains("Content-Type: multipart/alternative;") && bm.find());
         String boundary = bm.group(1);
         String[] parts = raw.split("--" + Pattern.quote(boundary));
-        check("busta: due parti e la chiusura", parts.length == 4 && parts[3].startsWith("--"));
-        check("busta: prima il testo, poi l'HTML (i programmi mostrano l'ultima che sanno leggere)",
+        check("envelope: two parts and the closing", parts.length == 4 && parts[3].startsWith("--"));
+        check("envelope: first the text, then the HTML (programs show the last one they can read)",
                 parts[1].contains("Content-Type: text/plain; charset=UTF-8") && parts[2].contains("Content-Type: text/html; charset=UTF-8"));
-        check("busta: il testo si decodifica in cio' che si e' scritto", qpDecode(body(parts[1])).equals(tricky));
-        check("busta: l'HTML si decodifica in cio' che si e' scritto", qpDecode(body(parts[2])).equals("<p>città</p>"));
-        check("busta: nessuna riga oltre 78 caratteri", raw.lines().allMatch(l -> l.length() <= 78));
-        check("busta: righe chiuse da CRLF", !raw.replace("\r\n", "").contains("\n"));
+        check("envelope: the text decodes into what was written", qpDecode(body(parts[1])).equals(tricky));
+        check("envelope: the HTML decodes into what was written", qpDecode(body(parts[2])).equals("<p>café</p>"));
+        check("envelope: no line over 78 characters", raw.lines().allMatch(l -> l.length() <= 78));
+        check("envelope: lines ended by CRLF", !raw.replace("\r\n", "").contains("\n"));
 
-        // Le intestazioni lunghe vere: il nome del pannello in italiano con un server lungo, un
-        // oggetto ASCII di cento caratteri, un oggetto accentato di cento.
+        // The real long headers: the panel's name in Italian with a long server, an ASCII subject
+        // of a hundred characters, an accented subject of a hundred.
         PanelMail.Message longOnes = new PanelMail.Message(
                 "[mail.example.org] Urgent: Restart the stopped services: dovecot, and 3 more - report of 5 November 2026",
                 "x", "<p>x</p>", "it");
-        String raw2 = PanelMail.compose(PanelMail.senderName("it", "posta-principale.esempio-molto-lungo.it"), "no-reply@esempio-molto-lungo.it",
+        String raw2 = PanelMail.compose(PanelMail.senderName("it", "main-mail-server.a-very-long-example.org"), "no-reply@a-very-long-example.org",
                 "admin@example.org", longOnes, "report.2@example.org", WHEN);
         String head2 = raw2.substring(0, raw2.indexOf("\r\n\r\n"));
-        check("intestazioni lunghe: nessuna riga oltre 78", head2.lines().allMatch(l -> l.length() <= 78));
+        check("long headers: no line over 78", head2.lines().allMatch(l -> l.length() <= 78));
         String from2 = unfold(head2, "From");
-        check("intestazioni lunghe: un nome che fra virgolette non ci sta va in parole codificate, che si ricompongono identiche",
-                from2.startsWith("=?UTF-8?B?") && from2.endsWith(" <no-reply@esempio-molto-lungo.it>")
-                && decodeWords(from2.substring(0, from2.lastIndexOf(" <"))).equals("Pannello di controllo della posta (posta-principale.esempio-molto-lungo.it)"));
-        check("intestazioni lunghe: l'oggetto ripiegato si ricompone identico",
+        check("long headers: a name that does not fit between quotes goes into encoded words, which join back identical",
+                from2.startsWith("=?UTF-8?B?") && from2.endsWith(" <no-reply@a-very-long-example.org>")
+                && decodeWords(from2.substring(0, from2.lastIndexOf(" <"))).equals(IT_PRODUCT + " (main-mail-server.a-very-long-example.org)"));
+        check("long headers: the folded subject joins back identical",
                 unfold(head2, "Subject").equals(longOnes.subject()));
         String raw3 = PanelMail.compose("x", "a@example.org", "b@example.org", new PanelMail.Message(subject, "x", "y", "it"),
                 "report.3@example.org", WHEN);
-        check("intestazioni lunghe: anche l'oggetto codificato sta nei 78", raw3.substring(0, raw3.indexOf("\r\n\r\n")).lines().allMatch(l -> l.length() <= 78));
+        check("long headers: the encoded subject fits in the 78 too", raw3.substring(0, raw3.indexOf("\r\n\r\n")).lines().allMatch(l -> l.length() <= 78));
     }
 
-    /** Le parole codificate di RFC 2047 riunite: lo spazio fra due parole codificate non conta. */
+    /** RFC 2047's encoded words joined: the space between two encoded words does not count. */
     private static String decodeWords(String s) {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         Matcher m = Pattern.compile("=\\?UTF-8\\?B\\?([A-Za-z0-9+/=]*)\\?=").matcher(s);
@@ -141,7 +150,7 @@ public class PanelMailTest {
         return bytes.toString(StandardCharsets.UTF_8);
     }
 
-    /** Il valore di un'intestazione con le righe ripiegate riunite (RFC 5322, 2.2.3). */
+    /** The value of a header with its folded lines joined (RFC 5322, 2.2.3). */
     private static String unfold(String head, String name) {
         String u = head.replace("\r\n ", " ").replace("\r\n\t", "\t");
         for (String l : u.split("\r\n")) if (l.startsWith(name + ": ")) return l.substring(name.length() + 2);
@@ -149,21 +158,21 @@ public class PanelMailTest {
     }
 
     /**
-     * Il nome del server, sul sistema vero: senza database del pannello lo dice Postfix
-     * (myhostname), non hostname(1). Sulla VM hostname(1) e' "freebsdlocal" e myhostname
-     * "mail.rehearsal.test", come sul server vero "freebsd" e "mail.domain-b.test": e' proprio il
-     * caso che ha prodotto "[freebsd] 1 thing to do". Senza postconf (sul Mac) si salta.
+     * The server's name, on the real system: without the panel's database Postfix says it
+     * (myhostname), not hostname(1). On the VM hostname(1) is "freebsdlocal" and myhostname
+     * "mail.rehearsal.test", as on the real server "freebsd" and "mail.domain-b.test": it is exactly
+     * the case that produced "[freebsd] 1 thing to do". Without postconf (on the Mac) it is skipped.
      */
     static void serverName() throws Exception {
-        System.out.println("\n== il nome del server ==");
+        System.out.println("\n== the server's name ==");
         String postfix = run("postconf", "-h", "myhostname");
         String host = run("hostname");
-        if (postfix.isEmpty()) { System.out.println("  (postconf non c'e': controllo saltato)"); return; }
+        if (postfix.isEmpty()) { System.out.println("  (postconf is not here: check skipped)"); return; }
         String name = PanelMail.serverName();
-        System.out.println("  hostname(1) " + host + ", myhostname " + postfix + ", il pannello usa " + name);
-        check("il nome del server e' quello di Postfix", name.equals(postfix.toLowerCase()));
+        System.out.println("  hostname(1) " + host + ", myhostname " + postfix + ", the panel uses " + name);
+        check("the server's name is Postfix's", name.equals(postfix.toLowerCase()));
         if (!host.equalsIgnoreCase(postfix))
-            check("e non quello di hostname(1), che qui e' diverso", !name.equalsIgnoreCase(host));
+            check("and not hostname(1)'s, which is different here", !name.equalsIgnoreCase(host));
     }
 
     private static String run(String... cmd) {
@@ -192,7 +201,7 @@ public class PanelMailTest {
         return out.toString(StandardCharsets.UTF_8);
     }
 
-    // ===================== il rapporto =====================
+    // ===================== the report =====================
 
     static JSONObject data(JSONArray toDo) {
         return new JSONObject()
@@ -225,7 +234,7 @@ public class PanelMailTest {
     }
 
     static void report() {
-        System.out.println("\n== il rapporto ==");
+        System.out.println("\n== the report ==");
         JSONArray four = new JSONArray()
                 .put(item(0, "Restart the stopped services: dovecot", "Services NOT running: dovecot", "Panel home"))
                 .put(item(1, "Apply 1 security fix", "1 vulnerable package has a fix available: nginx: 1.30.5,3 -> 1.30.6,3", "Updates -> Guided update of a protected package"))
@@ -233,105 +242,108 @@ public class PanelMailTest {
                 .put(item(2, null, "An item from an older producer, without a title.", "Updates"));
         ReportMail.Context en = new ReportMail.Context("en", SERVER, "admin@example.org", true, "weekly", WHEN);
         PanelMail.Message m = ReportMail.message(en, data(four));
-        System.out.println("  oggetto: " + m.subject());
-        check("oggetto: server, urgenza, la cosa piu' urgente, quante altre, data",
+        System.out.println("  subject: " + m.subject());
+        check("subject: server, urgency, the most urgent thing, how many others, date",
                 m.subject().equals("[mail.example.org] Urgent: Restart the stopped services: dovecot, and 3 more things to do - report of 5 November 2026"));
-        check("oggetto: niente piu' \"thing to do\" generico ne' data numerica", !m.subject().contains("thing to do") && !m.subject().contains("05/11/2026"));
+        check("subject: no more generic \"thing to do\" nor numeric date", !m.subject().contains("thing to do") && !m.subject().contains("05/11/2026"));
         for (int i = 0; i < four.length(); i++) {
             JSONObject x = four.getJSONObject(i);
             String title = ReportMail.title(x);
-            check("testo: la voce \"" + title + "\" c'e', con il posto nel pannello",
+            check("text: the item \"" + title + "\" is there, with the place in the panel",
                     flat(m.text()).contains(title) && flat(m.text()).contains(x.getString("where")));
-            check("HTML: la voce \"" + title + "\" c'e', con il posto nel pannello",
+            check("HTML: the item \"" + title + "\" is there, with the place in the panel",
                     m.html().contains(PanelMail.esc(title)) && m.html().contains(PanelMail.esc(x.getString("where").replace(" -> ", " → "))));
         }
-        check("testo: le urgenze scritte, non solo colori", m.text().contains("[Act now]") && m.text().contains("[Urgent]") && m.text().contains("[To do]"));
-        check("HTML: le urgenze scritte", m.html().contains(">Act now<") && m.html().contains(">Urgent<") && m.html().contains(">To do<"));
-        check("una voce senza titolo usa il suo testo", flat(m.text()).contains("An item from an older producer, without a title."));
-        check("stato in cima: quante e quante urgenti", m.text().contains("4 THINGS TO DO") && flat(m.text()).contains("3 are urgent and come first."));
-        check("tipo di rapporto e ora con il fuso", m.text().contains("Weekly report, 5 November 2026 at 20:15 UTC"));
-        check("le sezioni dello stato, in testo e in HTML", List.of("System", "Packages", "Known vulnerabilities", "TLS certificate",
+        check("text: the urgencies in words, not only colours", m.text().contains("[Act now]") && m.text().contains("[Urgent]") && m.text().contains("[To do]"));
+        check("HTML: the urgencies in words", m.html().contains(">Act now<") && m.html().contains(">Urgent<") && m.html().contains(">To do<"));
+        check("an item without a title uses its text", flat(m.text()).contains("An item from an older producer, without a title."));
+        check("status at the top: how many, and how many urgent", m.text().contains("4 THINGS TO DO") && flat(m.text()).contains("3 are urgent and come first."));
+        check("kind of report and time with the zone", m.text().contains("Weekly report, 5 November 2026 at 20:15 UTC"));
+        check("the status sections, in text and in HTML", List.of("System", "Packages", "Known vulnerabilities", "TLS certificate",
                 "Services", "Libraries", "Disk space", "Ways back (boot environments)").stream()
                 .allMatch(s -> m.text().contains(s.toUpperCase()) && m.html().contains(">" + PanelMail.esc(s) + "<")));
-        check("architettura: dalla chiave che operatingSystem mette davvero (\"arch\")", flat(m.text()).contains("Architecture: arm64"));
-        check("spazio: la riga di df detta in parole", flat(m.text()).contains("File system /: 18% used, 24G free of 29G"));
-        check("certificato: nome, emittente, scadenza", flat(m.text()).contains("Expiry: in 10 days, on 15 November 2026"));
-        check("piede: perche' arriva e come si ferma", flat(m.text()).contains("sent automatically by the mail control panel of mail.example.org to admin@example.org")
+        check("architecture: from the key operatingSystem really sets (\"arch\")", flat(m.text()).contains("Architecture: arm64"));
+        check("space: the df line said in words", flat(m.text()).contains("File system /: 18% used, 24G free of 29G"));
+        check("certificate: name, issuer, expiry", flat(m.text()).contains("Expiry: in 10 days, on 15 November 2026"));
+        check("footer: why it arrives and how to stop it", flat(m.text()).contains("sent automatically by the mail control panel of mail.example.org to admin@example.org")
                 && flat(m.text()).contains("Settings, Periodic email report"));
-        check("nessun \\n scritto per davvero (il piede di prima lo mostrava)", !m.text().contains("\\n") && !m.html().contains("\\n"));
-        check("testo: nessuna riga oltre 72 colonne, salvo le parole che non si spezzano",
+        check("no \\n written out literally (the old footer showed it)", !m.text().contains("\\n") && !m.html().contains("\\n"));
+        check("text: no line over 72 columns, except words that do not break",
                 m.text().lines().allMatch(l -> l.length() <= 72 || !l.trim().contains(" ")));
-        check("HTML: i dati non portano markup (<script> dai nomi dei pacchetti)",
+        check("HTML: the data carry no markup (<script> from the package names)",
                 !m.html().contains("<script>") && m.html().contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
-        check("HTML: lingua dichiarata e un solo h1", m.html().contains("<html lang=\"en\">") && count(m.html(), "<h1") == 1);
-        check("HTML: tabelle di impaginazione dichiarate come tali, tabelle di dati con th scope",
+        check("HTML: language declared and a single h1", m.html().contains("<html lang=\"en\">") && count(m.html(), "<h1") == 1);
+        check("HTML: layout tables declared as such, data tables with th scope",
                 m.html().contains("role=\"presentation\"") && m.html().contains("<th scope=\"row\""));
-        check("HTML: nessuna risorsa esterna, nessun collegamento", !m.html().contains("http://") && !m.html().contains("https://")
+        check("HTML: no external resource, no link", !m.html().contains("http://") && !m.html().contains("https://")
                 && !m.html().contains("<a ") && !m.html().contains("<img") && !m.html().contains("<link"));
-        check("HTML: riga di anteprima nascosta con le prime cose da fare",
+        check("HTML: hidden preview line with the first things to do",
                 m.html().contains("display:none") && m.html().contains("4 things to do: Restart the stopped services: dovecot; Apply 1 security fix;"));
 
         JSONArray one = new JSONArray().put(item(2, "Update 3 packages", "3 packages have a newer version in the repository.", "Updates -> Maintenance plan"));
-        check("oggetto con una voce non urgente", ReportMail.message(en, data(one)).subject()
+        check("subject with one non-urgent item", ReportMail.message(en, data(one)).subject()
                 .equals("[mail.example.org] To do: Update 3 packages - report of 5 November 2026"));
         PanelMail.Message none = ReportMail.message(en, data(new JSONArray()));
-        check("oggetto senza niente da fare", none.subject().equals("[mail.example.org] All good, nothing to do - report of 5 November 2026"));
-        check("senza niente da fare lo si dice in una riga", none.text().contains("ALL GOOD: NOTHING TO DO") && !none.text().contains("WHAT TO DO"));
+        check("subject with nothing to do", none.subject().equals("[mail.example.org] All good, nothing to do - report of 5 November 2026"));
+        check("with nothing to do it says so in one line", none.text().contains("ALL GOOD: NOTHING TO DO") && !none.text().contains("WHAT TO DO"));
 
         ReportMail.Context onRequest = new ReportMail.Context("en", SERVER, "admin@example.org", false, "weekly", WHEN);
         PanelMail.Message manual = ReportMail.message(onRequest, data(one));
-        check("inviato dal pulsante: lo dice, e non si spaccia per settimanale",
+        check("sent from the button: it says so, and does not pass itself off as weekly",
                 manual.text().contains("Report sent on request from the panel") && !manual.text().contains("Weekly report"));
 
-        ReportMail.Context it = new ReportMail.Context("it", "mail.esempio.it", "admin@esempio.it", true, "monthly", WHEN);
-        PanelMail.Message mi = ReportMail.message(it, data(new JSONArray().put(item(1, "Applica 2 correzioni di sicurezza", "x", "Aggiornamenti")).put(item(3, "Aggiorna il catalogo dei pacchetti", "y", "Aggiornamenti"))));
-        System.out.println("  oggetto: " + mi.subject());
-        check("italiano: oggetto", mi.subject().equals("[mail.esempio.it] Urgente: Applica 2 correzioni di sicurezza, e un'altra cosa da fare - rapporto del 5 novembre 2026"));
-        check("italiano: rapporto mensile, data con il mese per esteso", mi.text().contains("Rapporto mensile, 5 novembre 2026 alle 20:15 UTC"));
-        check("italiano: html lang=it", mi.html().contains("<html lang=\"it\">"));
+        ReportMail.Context it = new ReportMail.Context("it", "mail.example.it", "admin@example.it", true, "monthly", WHEN);
+        PanelMail.Message mi = ReportMail.message(it, data(new JSONArray().put(item(1, "Apply 2 security fixes", "x", "Updates")).put(item(3, "Update the package catalog", "y", "Updates"))));
+        System.out.println("  subject: " + mi.subject());
+        check("Italian: subject, from it.json's templates", mi.subject().equals(I18n.t("it", "mail.report.subject.urgent", Map.of("server", "mail.example.it",
+                "title", "Apply 2 security fixes", "more", I18n.t("it", "mail.report.subject.more.one"),
+                "date", I18n.t("it", "mail.report.subject.date", Map.of("date", IT_DATE))))));
+        check("Italian: the month in Italian, not in English (" + IT_DATE + ")", mi.subject().contains(IT_DATE) && !mi.subject().contains("November"));
+        check("Italian: monthly report, date with the month in full", mi.text().contains(I18n.t("it", "mail.report.kind.monthly") + ", " + IT_WHEN));
+        check("Italian: html lang=it", mi.html().contains("<html lang=\"it\">"));
 
         ReportMail.Context noName = new ReportMail.Context("en", "", "admin@example.org", true, "weekly", WHEN);
-        check("senza nome del server: 'mail server', non parentesi vuote", ReportMail.message(noName, data(one)).subject().startsWith("[mail server] "));
+        check("without the server's name: 'mail server', not empty brackets", ReportMail.message(noName, data(one)).subject().startsWith("[mail server] "));
     }
 
-    // ===================== i codici =====================
+    // ===================== the codes =====================
 
     static void codes() {
-        System.out.println("\n== i codici ==");
+        System.out.println("\n== the codes ==");
         for (CodeMail.Kind k : CodeMail.Kind.values()) {
             for (String lang : List.of("en", "it")) {
                 PanelMail.Message m = CodeMail.message(k, lang, SERVER, "482913", 10, "203.0.113.7", WHEN);
                 String name = k + "/" + lang;
-                check(name + ": il codice nel testo e nell'HTML", m.text().contains("482913") && m.html().contains(">482913<"));
+                check(name + ": the code in the text and in the HTML", m.text().contains("482913") && m.html().contains(">482913<"));
                 Matcher d = Pattern.compile("\\b(\\d{6})\\b").matcher(m.text());
-                check(name + ": la prima cifra da sei nel testo e' il codice (le prove lo cercano cosi')", d.find() && d.group(1).equals("482913"));
-                check(name + ": il codice NON nell'oggetto", !m.subject().contains("482913"));
+                check(name + ": the first six-digit number in the text is the code (the tests look for it that way)", d.find() && d.group(1).equals("482913"));
+                check(name + ": the code NOT in the subject", !m.subject().contains("482913"));
                 String pre = m.html().substring(m.html().indexOf("display:none"), m.html().indexOf("</div>", m.html().indexOf("display:none")));
-                check(name + ": il codice NON nella riga di anteprima", !pre.contains("482913"));
-                check(name + ": l'oggetto dice il server", m.subject().startsWith("[" + SERVER + "] "));
-                check(name + ": l'IP di chi l'ha chiesto " + (k == CodeMail.Kind.EMAIL_CHANGE ? "NON c'e' (va a un indirizzo nuovo)" : "c'e'"),
+                check(name + ": the code NOT in the preview line", !pre.contains("482913"));
+                check(name + ": the subject says the server", m.subject().startsWith("[" + SERVER + "] "));
+                check(name + ": the IP of who asked for it " + (k == CodeMail.Kind.EMAIL_CHANGE ? "is NOT there (it goes to a new address)" : "is there"),
                         (k == CodeMail.Kind.EMAIL_CHANGE) != (m.text().contains("203.0.113.7") && m.html().contains("203.0.113.7")));
-                check(name + ": quando e' stato chiesto", flat(m.text()).contains(lang.equals("en") ? "5 November 2026 at 20:15 UTC" : "5 novembre 2026 alle 20:15 UTC"));
-                check(name + ": validita' in minuti", m.text().contains("10"));
-                check(name + ": nessun collegamento", !m.html().contains("<a ") && !m.html().contains("http"));
+                check(name + ": when it was asked for", flat(m.text()).contains(lang.equals("en") ? "5 November 2026 at 20:15 UTC" : IT_WHEN));
+                check(name + ": validity in minutes", m.text().contains("10"));
+                check(name + ": no link", !m.html().contains("<a ") && !m.html().contains("http"));
             }
         }
         PanelMail.Message en = CodeMail.message(CodeMail.Kind.LOGIN, "en", SERVER, "482913", 10, "203.0.113.7", WHEN);
-        check("accesso: oggetto", en.subject().equals("[mail.example.org] Your sign-in code for the mail control panel"));
+        check("sign-in: subject", en.subject().equals("[mail.example.org] Your sign-in code for the mail control panel"));
         PanelMail.Message ip6 = CodeMail.message(CodeMail.Kind.LOGIN, "en", SERVER, "482913", 10, "2001:db8:123:456::1", WHEN);
         Matcher d = Pattern.compile("\\b(\\d{6})\\b").matcher(ip6.text());
-        check("accesso da IPv6: la prima cifra da sei e' ancora il codice", d.find() && d.group(1).equals("482913"));
+        check("sign-in from IPv6: the first six-digit number is still the code", d.find() && d.group(1).equals("482913"));
     }
 
-    // ===================== i testi =====================
+    // ===================== the texts =====================
 
     /**
-     * Nessuna chiave di lingua scoperta (I18n.t restituisce la chiave quando il testo manca):
-     * si compongono tutte le forme nelle due lingue e si cerca "mail.report." / "mail.code." /
-     * "mail.common." nel risultato.
+     * No bare language key (I18n.t returns the key when the text is missing): every form is composed
+     * in both languages and "mail.report." / "mail.code." / "mail.common." is looked for in the
+     * result.
      */
     static void texts() {
-        System.out.println("\n== i testi ==");
+        System.out.println("\n== the texts ==");
         Pattern rawKey = Pattern.compile("\\bmail\\.(?:report|code|common)\\.[A-Za-z]");
         List<String> outputs = new ArrayList<>();
         for (String lang : List.of("en", "it")) {
@@ -355,13 +367,13 @@ public class PanelMailTest {
         }
         List<String> leaks = new ArrayList<>();
         for (String o : outputs) { Matcher x = rawKey.matcher(o); while (x.find()) leaks.add(o.substring(x.start(), Math.min(o.length(), x.start() + 50))); }
-        check(outputs.size() + " forme composte: nessuna chiave di lingua scoperta" + (leaks.isEmpty() ? "" : ": " + leaks.subList(0, Math.min(5, leaks.size()))), leaks.isEmpty());
-        check("nessuna forma dice ancora soltanto \"Control panel\"",
+        check(outputs.size() + " composed forms: no bare language key" + (leaks.isEmpty() ? "" : ": " + leaks.subList(0, Math.min(5, leaks.size()))), leaks.isEmpty());
+        check("no form still says just \"Control panel\"",
                 outputs.stream().noneMatch(o -> o.matches("(?s).*(?<!Mail )Control panel.*")));
-        check("nessuna forma ha una graffa rimasta da un segnaposto", outputs.stream().noneMatch(o -> o.matches("(?s).*\\{[A-Za-z]+\\}.*")));
+        check("no form has a brace left from a placeholder", outputs.stream().noneMatch(o -> o.matches("(?s).*\\{[A-Za-z]+\\}.*")));
     }
 
-    /** Con -Dpanelmail.dump=<cartella>: i messaggi composti, da aprire in un programma di posta. */
+    /** With -Dpanelmail.dump=<folder>: the composed messages, to open in a mail program. */
     static void dump() throws Exception {
         String dir = System.getProperty("panelmail.dump");
         if (dir == null) return;
@@ -374,7 +386,7 @@ public class PanelMailTest {
         write(d, "report-en.eml", ReportMail.message(new ReportMail.Context("en", SERVER, "admin@example.org", true, "weekly", WHEN), data(four)));
         write(d, "report-none-it.eml", ReportMail.message(new ReportMail.Context("it", SERVER, "admin@example.org", true, "weekly", WHEN), data(new JSONArray())));
         write(d, "code-login-en.eml", CodeMail.message(CodeMail.Kind.LOGIN, "en", SERVER, "482913", 10, "203.0.113.7", WHEN));
-        System.out.println("  scritti in " + d);
+        System.out.println("  written in " + d);
     }
 
     private static void write(java.nio.file.Path d, String name, PanelMail.Message m) throws Exception {
