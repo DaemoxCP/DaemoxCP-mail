@@ -97,6 +97,8 @@ public final class ReinstallJob {
                 out.println(I18n.tr("server.reinstall.job.inProcess", Map.of("daemon", daemon)));
                 out.flush();
                 I18n.clearCurrent();
+                // Lo script del jar che gira, come fa Main --reinstall (InstallScripts, reperto 169).
+                new org.mail_panel.scripts.FullMailServerScript().write_file();
                 return org.mail_panel.Main.runInstallation(host);
             }
             Run r;

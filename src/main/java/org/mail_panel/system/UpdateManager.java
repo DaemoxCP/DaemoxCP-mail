@@ -8121,12 +8121,9 @@ public final class UpdateManager {
                             "n", String.valueOf(stillUnprotected.size()),
                             "list", String.join(" ", stillUnprotected))))
                     .put("where", I18n.tr("server.um.x.updatesPage")));
-        JSONObject interrupted = PackageRecovery.notice();
-        if (!interrupted.isEmpty())
-            toDo.put(new JSONObject().put("urgency", 1)
-                    .put("title", I18n.tr("server.recovery.title"))
-                    .put("what", PackageRecovery.text(interrupted))
-                    .put("where", I18n.tr("server.um.x.updatesPage")));
+        // L'avviso di un lavoro interrotto; la reinstallazione con la sua urgenza e il suo titolo (reperto 172).
+        JSONObject interrupted = PackageRecovery.reportItem();
+        if (interrupted != null) toDo.put(interrupted);
         Set<String> byHand = unlockedByHand();
         List<String> loose = new ArrayList<>();
         JSONArray stack = pk.optJSONArray("packages");

@@ -618,21 +618,19 @@ public class Main {
     }
 
     private static void generateInstallScripts(MultiWindowTextGUI gui) {
-        // Generate timezone/DNS script
+        // Gli script si riscrivono a ogni avvio (InstallScripts.refreshAtStartup, prima del menu): qui
+        // si riscrivono ancora e si dice qualcosa solo se NON si scrivono. Prima, scritti solo «se
+        // mancano», la finestra compariva la prima volta; scritti sempre, comparirebbero due finestre
+        // da chiudere a ogni apertura del menu (reperto 172).
         SetTimeOnSystemScript timezoneScript = new SetTimeOnSystemScript();
         timezoneScript.write_file();
-        if (timezoneScript.writed) {
-            Welcome msg = new Welcome("Information", "Created setup_timezone_and_dns script");
-            msg.show(gui);
-        }
+        if (!timezoneScript.writed)
+            new Welcome("Attention", "Cannot write install_scripts/setup_timezone_and_dns.sh: see the panel log.").show(gui);
 
-        // Generate unified mail server installation script
         FullMailServerScript mailServerScript = new FullMailServerScript();
         mailServerScript.write_file();
-        if (mailServerScript.writed) {
-            Welcome msg = new Welcome("Information", "Created mail server install script");
-            msg.show(gui);
-        }
+        if (!mailServerScript.writed)
+            new Welcome("Attention", "Cannot write install_scripts/install_mail_server.sh: see the panel log.").show(gui);
     }
 
     /**

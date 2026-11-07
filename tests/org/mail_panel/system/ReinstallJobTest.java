@@ -20,6 +20,8 @@ import java.util.List;
  *      parte sotto daemon(8), cosi' ha un gruppo suo come davanti a un terminale vero);
  *  J3. un menu ucciso a meta' e un secondo menu aperto mentre lei lavora: il secondo segue quella
  *      in corso, non ne fa partire un'altra;
+ *  J5. senza daemon(8) (non FreeBSD): il menu la fa dentro di se', come prima, con lo script
+ *      riscritto dal suo jar (reperto 172);
  *  J4. la reinstallazione stessa uccisa con kill -9: il menu lo dice e non la da' per riuscita, e
  *      un «servizio» acceso col guardiano (UpdateManager.startInterruptionWatch, reperto 166)
  *      riprotegge i pacchetti da solo e scrive l'avviso con la via di ritorno. Lo stesso servizio
@@ -131,10 +133,27 @@ public class ReinstallJobTest {
             check("la segue fino in fondo e la da' per riuscita", code == 0 && out.contains("step 12") && out.contains("MENU RESULT true"));
             afterJob("J3", job, lockedBefore);
 
+            System.out.println("\n== J5. Senza daemon(8): la reinstallazione dentro il menu, come prima ==");
+            Files.writeString(panel.resolve("install_scripts/install_mail_server.sh"),
+                    "#!/bin/sh\n# uno script di una versione di prima\necho \"stale script ran\"\nexit 42\n");
+            List<String> noDaemon = new ArrayList<>(menuCommand());
+            noDaemon.add("no-daemon");
+            Process inside = new ProcessBuilder(noDaemon).directory(panel.toFile()).redirectErrorStream(true)
+                    .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null"))).start();
+            String insideOut = new String(inside.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            int insideCode = inside.waitFor();
+            echo(insideOut);
+            check("il menu dice che la fa dentro di se'", insideOut.contains("is not here: the reinstallation runs inside this menu"));
+            check("e la fa fino in fondo, riuscita", insideCode == 0 && insideOut.contains("step 12") && insideOut.contains("MENU RESULT true"));
+            check("con lo script del suo jar, non quello vecchio", !insideOut.contains("stale script ran") && Files.exists(panel.resolve("script-done")));
+            check("riprotetti, nessun elenco, turno libero", locked() == lockedBefore && !PackageQueue.statePresent() && takeAndRelease());
+            Files.deleteIfExists(panel.resolve("script-done"));
+
+
             System.out.println("\n== J4. La reinstallazione stessa uccisa con kill -9 ==");
             menu = startMenu("j4");
             job = waitJobStep(3);
-            check("durante J1-J3 il guardiano non ha toccato niente", !Files.exists(notice)
+            check("durante J1-J3 e J5 il guardiano non ha toccato niente", !Files.exists(notice)
                     && !Files.readString(serviceOut).contains("Interrupted package job detected"));
             sh("kill -9 " + job);
             out = new String(menu.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -306,6 +325,7 @@ public class ReinstallJobTest {
                 System.exit(0);
             }
             case "menu" -> {
+                if (a.length > 3 && a[3].equals("no-daemon")) ReinstallJob.daemon = "/nonexistent/daemon";
                 boolean ok = ReinstallJob.runFromMenu(a[2], System.out);
                 System.out.println("MENU RESULT " + ok);
                 System.exit(ok ? 0 : 1);
