@@ -6560,7 +6560,7 @@
   "server.su.rootWhy.nginx": "Root solo per il processo master: apre le porte web e legge le chiavi TLS, che sono solo di root. Le richieste le servono i processi worker come www.",
   "server.su.rootWhy.phpFpm": "Root solo per il processo master, che non esegue pagine: crea il socket della webmail di roundcube con gruppo www, così ci parlano solo nginx e Roundcube. Le pagine le esegue il pool come roundcube.",
   "server.su.rootWhy.fail2ban": "Root perché comanda il firewall pf (/dev/pf è solo di root) e legge i log della posta, che sono solo di root.",
-  "server.su.rootWhy.mailPanel": "Oggi gira tutto da root: gli serve per pacchetti, servizi, firewall, configurazioni e boot environment. La parte web non ne avrebbe bisogno: separarla, con un utente suo, è il prossimo lavoro.",
+  "server.su.rootWhy.mailPanel": "Root solo per la parte che amministra la macchina (pacchetti, servizi, firewall, configurazioni, boot environment), che non apre porte. La parte web, quella che risponde in rete, gira con l'utente mailpanel e le passa le richieste su un socket locale.",
   "su.poolsCaption": "I pool di php-fpm configurati, anche senza processi in questo momento",
   "su.colPool": "Pool",
   "su.colUser": "Utente",
@@ -6659,5 +6659,7 @@
   "server.search.step2": "[2/{total}] L'elenco delle vulnerabilità (pkg audit -F)",
   "server.search.step3": "[3/{total}] Le patch di FreeBSD (freebsd-update fetch)",
   "server.search.done": "Elenchi aggiornati: la scheda dice cosa c'è da fare. Non è stato installato niente.",
-  "uc.afterBranch": "Vedi cosa c'è da aggiornare"
+  "uc.afterBranch": "Vedi cosa c'è da aggiornare",
+  "server.su.panelLegacy": "Il pannello gira tutto da root: la parte web non è stata separata ({detail}).",
+  "server.rootPart.unavailable": "La parte del pannello che amministra il server non risponde: riprova fra qualche secondo."
 }

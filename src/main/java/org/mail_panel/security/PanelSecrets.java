@@ -70,15 +70,13 @@ public final class PanelSecrets {
     public static final Set<String> ROOT_ONLY = Set.of(MYSQL_ROOT_PASSWORD, ROUNDCUBE_DB_PASSWORD);
 
     /**
-     * L'utente a cui appartiene il file della parte web quando il pannello e' separato; null nel modo di
-     * oggi. Lo fissa la parte root: ogni volta che root riscrive quel file (un rename crea un file
-     * nuovo, di root), il file e il suo lock tornano subito di questo utente.
+     * Il gruppo della parte web del pannello separato. Col pannello separato (PanelSeparation) la cartella
+     * e' 0750 root:mailpanel e il file della web 0640 root:mailpanel: la web lo legge, non lo scrive mai (le
+     * chiavi le genera la root all'avvio, prima di avviarla). Ogni riscrittura da root crea un file nuovo
+     * (un rename): prende il gruppo e i permessi di quello che sostituisce, cosi' chiunque scriva (la root,
+     * il menu, un comando da console) lascia la web in grado di leggere. Il file di root resta 0600.
      */
-    private static volatile String webOwner;
-
-    public static void setWebOwner(String user) { webOwner = user; }
-
-    static String webOwner() { return webOwner; }
+    static final String WEB_GROUP = "mailpanel";
 
     static final Store WEB = new Store("panel-secrets.properties", "panel-secrets.lock", true);
     static final Store ROOT = new Store("root-secrets.properties", "root-secrets.lock", false);
@@ -148,15 +146,14 @@ public final class PanelSecrets {
             try {
                 if (runningAsRoot() || !Files.isDirectory(dir)) {
                     Files.createDirectories(dir);
-                    String owner = webOwner;
-                    if (owner == null) setPermissions(dir, "rwx------");
-                    else { setPermissions(dir, "rwxr-x---"); setOwner(dir, "root", owner); }
+                    setPermissions(dir, webGroup(dir) ? "rwxr-x---" : "rwx------");
                 }
                 Path lock = dir.resolve(lockName);
                 try (java.nio.channels.FileChannel ch = java.nio.channels.FileChannel.open(lock,
                         java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE);
                      java.nio.channels.FileLock ignored = ch.lock()) {
-                    ownForWeb(lock);
+                    setPermissions(lock, "rw-------");
+                    rootOnly(lock);
                     Properties p = readFile();
                     Properties changed = change.apply(p);
                     if (changed != null) store(changed);
@@ -177,22 +174,33 @@ public final class PanelSecrets {
                 p.store(w, web ? "FreeBSD Mail Panel secrets - the panel only, never in the database or the repository"
                                : "FreeBSD Mail Panel root secrets - root only, never in the database or the repository");
             }
-            ownForWeb(tmp);
+            // Il file della web, col pannello separato: il nuovo resta leggibile dal gruppo della web come
+            // quello che sostituisce. Prima del rename, cosi' non c'e' un istante in cui la web non legge.
+            boolean forWeb = web && Files.exists(file()) && webGroup(file());
+            if (forWeb) {
+                setGroup(tmp, WEB_GROUP);
+                setPermissions(tmp, "rw-r-----");
+            } else {
+                rootOnly(tmp);
+            }
             try {
                 Files.move(tmp, file(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
             } catch (AtomicMoveNotSupportedException e) {
                 Files.move(tmp, file(), StandardCopyOption.REPLACE_EXISTING);
             }
-            setPermissions(file(), "rw-------");
+            setPermissions(file(), forWeb ? "rw-r-----" : "rw-------");
             cache = p;
             cacheStamp = stamp();
         }
+    }
 
-        /** Il file della parte web, scritto da root col pannello separato, torna dell'utente della web. */
-        private void ownForWeb(Path p) throws IOException {
-            setPermissions(p, "rw-------");
-            String owner = webOwner;
-            if (web && owner != null && runningAsRoot()) setOwner(p, owner, owner);
+    /** Vero se il file e' del gruppo della parte web (il pannello separato l'ha aperto alla web). */
+    static boolean webGroup(Path p) {
+        try {
+            return WEB_GROUP.equals(Files.readAttributes(p, java.nio.file.attribute.PosixFileAttributes.class,
+                    java.nio.file.LinkOption.NOFOLLOW_LINKS).group().getName());
+        } catch (IOException | UnsupportedOperationException e) {
+            return false;
         }
     }
 
@@ -205,11 +213,18 @@ public final class PanelSecrets {
         }
     }
 
-    private static void setOwner(Path p, String user, String group) throws IOException {
-        var lookup = p.getFileSystem().getUserPrincipalLookupService();
-        Files.setOwner(p, lookup.lookupPrincipalByName(user));
+    /**
+     * Un file solo di root col gruppo di root. Su FreeBSD un file nuovo prende il gruppo della cartella
+     * (open(2)), e col pannello separato la cartella e' del gruppo della web: a 0600 il gruppo non legge
+     * comunque, ma chi guarda deve vedere root:wheel, e un chmod sbagliato domani non apre niente.
+     */
+    private static void rootOnly(Path p) throws IOException {
+        if (runningAsRoot() && webGroup(p)) setGroup(p, "wheel");
+    }
+
+    private static void setGroup(Path p, String group) throws IOException {
         Files.getFileAttributeView(p, java.nio.file.attribute.PosixFileAttributeView.class)
-                .setGroup(lookup.lookupPrincipalByGroupName(group));
+                .setGroup(p.getFileSystem().getUserPrincipalLookupService().lookupPrincipalByGroupName(group));
     }
 
     private static String get(String name) {

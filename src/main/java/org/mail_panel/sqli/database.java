@@ -18,10 +18,25 @@ public class database {
     static final int BUSY_TIMEOUT_MS = 15_000;
 
     public database() {
+        this(false);
+    }
+
+    /**
+     * @param readOnly la parte web del pannello separato (utente mailpanel): legge la configurazione e non
+     *                 la scrive mai. La cartella e il file sono di root (0750/0640 root:mailpanel): con
+     *                 SQLITE_OPEN_READONLY SQLite non prova nemmeno a creare un journal.
+     */
+    public database(boolean readOnly) {
         Connection conn = null;
         try {
             String url = "jdbc:sqlite:database/mail_panel.db";
-            conn = DriverManager.getConnection(url);
+            if (readOnly) {
+                org.sqlite.SQLiteConfig config = new org.sqlite.SQLiteConfig();
+                config.setReadOnly(true);
+                conn = DriverManager.getConnection(url, config.toProperties());
+            } else {
+                conn = DriverManager.getConnection(url);
+            }
             if (conn != null) {
                 try (Statement s = conn.createStatement()) {
                     s.execute("PRAGMA busy_timeout = " + BUSY_TIMEOUT_MS);

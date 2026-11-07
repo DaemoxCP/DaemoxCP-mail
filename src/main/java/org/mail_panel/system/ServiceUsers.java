@@ -57,6 +57,8 @@ public final class ServiceUsers {
 
     /** Nell'ordine: vince la prima che riconosce il processo. */
     static final List<Rule> RULES = List.of(
+            // La parte web del pannello separato (PanelSeparation) gira con mailpanel: da root e' un avviso.
+            new Rule("mail-panel", "freebsd-mail-panel[^ /]*\\.jar.* --web-part( |$)", false),
             new Rule("mail-panel", "freebsd-mail-panel[^ /]*\\.jar", true),
             new Rule("fail2ban", "fail2ban-server", true),
             new Rule("nginx", "^nginx: master process", true),
@@ -271,6 +273,11 @@ public final class ServiceUsers {
     /** Per la pagina: i servizi, i loro utenti, gli avvisi. */
     public static JSONObject state() {
         Findings f = now();
+        // Il pannello non separato: la pagina lo dice, col motivo. Solo qui e non nel registro all'avvio, dove
+        // l'ha gia' detto PanelSeparation.
+        String notSeparated = PanelSeparation.notSeparatedReason();
+        if (notSeparated != null && f.services().containsKey("mail-panel"))
+            f.problems().add(new Problem("panelLegacy", "mail-panel", "root", notSeparated));
         JSONArray services = new JSONArray();
         for (Service s : f.services().values()) {
             boolean warned = false;

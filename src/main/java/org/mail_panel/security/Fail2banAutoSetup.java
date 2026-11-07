@@ -478,13 +478,39 @@ public final class Fail2banAutoSetup {
             Path dir = Paths.get(NEWSYSLOG_DIR);
             if (!Files.isDirectory(dir)) Files.createDirectories(dir);
             Path conf = Paths.get(NEWSYSLOG_CONF);
-            if (Files.exists(conf)) return; // già presente
-            String content = "# Log rotation per mail-panel auth log (auto-generato dal pannello)\n"
-                + "/var/log/mail-panel-auth.log    root:wheel    640    7    1024    *    JC\n";
+            String content = newsyslogText(logOwner());
+            if (Files.exists(conf)) {
+                // Gia' presente. Si riscrive solo il file scritto dal pannello, e solo se il proprietario del
+                // registro e' cambiato: col pannello separato lo scrive la parte web (mailpanel), e il file
+                // che newsyslog ricrea a ogni rotazione deve restare suo, se no la web non scrive piu' e
+                // fail2ban non vede piu' i tentativi.
+                String now = Files.readString(conf, StandardCharsets.UTF_8);
+                if (now.equals(content) || !now.startsWith(NEWSYSLOG_HEADER)) return;
+                Files.writeString(conf, content, StandardCharsets.UTF_8);
+                LOGGER.info("[Fail2banAutoSetup] DONE: " + NEWSYSLOG_CONF + " recreates the log as " + logOwner());
+                return;
+            }
             Files.writeString(conf, content, StandardCharsets.UTF_8);
             LOGGER.info("[Fail2banAutoSetup] Wrote " + NEWSYSLOG_CONF);
         } catch (IOException e) {
             LOGGER.warning("[Fail2banAutoSetup] Cannot write newsyslog conf: " + e.getMessage());
+        }
+    }
+
+    static final String NEWSYSLOG_HEADER = "# Log rotation per mail-panel auth log (auto-generato dal pannello)\n";
+
+    /** La riga di newsyslog.conf(5): file, proprietario:gruppo, modo, copie, dimensione in KB, quando, flag. */
+    static String newsyslogText(String owner) {
+        return NEWSYSLOG_HEADER + LOG_FILE + "    " + owner + "    640    7    1024    *    JC\n";
+    }
+
+    /** Il proprietario del registro: mailpanel:wheel col pannello separato (PanelSeparation), se no root:wheel. */
+    static String logOwner() {
+        try {
+            String owner = Files.getOwner(Paths.get(LOG_FILE), java.nio.file.LinkOption.NOFOLLOW_LINKS).getName();
+            return (org.mail_panel.system.PanelSeparation.USER.equals(owner) ? owner : "root") + ":wheel";
+        } catch (IOException | UnsupportedOperationException e) {
+            return "root:wheel";
         }
     }
 

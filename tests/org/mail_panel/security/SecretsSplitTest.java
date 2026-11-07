@@ -17,9 +17,10 @@ import java.util.Properties;
  *     root-secrets.properties (0600), the others stay, and the second time nothing moves; a different
  *     value already in the root file wins;
  *  2. every secret goes to its own file when it is generated or written;
- *  3. as root on the VM (-De2e.vm=yes): with the separation on, a write by root gives the panel file and
- *     its lock back to the web user, the folder becomes 0750 root:<web user>, and the root file stays
- *     root's. The web user here is "nobody", which exists everywhere.
+ *  3. as root on the VM (-De2e.vm=yes): with the separation on (the folder and the panel file in the
+ *     web part's group, as PanelSeparation leaves them) a write by root keeps the panel file 0640
+ *     root:mailpanel, readable by the web part and never writable by it, and the folder 0750; the lock
+ *     and the root file stay 0600 root. The group mailpanel is created if missing, and removed after.
  *
  * Usage (on the VM):
  *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.SecretsSplitTest
@@ -94,16 +95,26 @@ public class SecretsSplitTest {
 
         if ("yes".equals(System.getProperty("e2e.vm")) && "root".equals(System.getProperty("user.name"))) {
             System.out.println("\n== 3. With the separation on, as root ==");
-            PanelSecrets.setWebOwner("nobody");
+            String g = PanelSecrets.WEB_GROUP;
+            boolean created = !org.mail_panel.util.Shell.run("pw", "groupshow", g).success()
+                    && org.mail_panel.util.Shell.run("pw", "groupadd", g).success();
             try {
+                // What PanelSeparation.prepareFiles does.
+                org.mail_panel.util.Shell.run("chgrp", g, dir.toString(), web.toString());
+                org.mail_panel.util.Shell.run("chmod", "750", dir.toString());
+                org.mail_panel.util.Shell.run("chmod", "640", web.toString());
                 PanelSecrets.setText(PanelSecrets.MYSQL_PASSWORD, "Panel-Pass-2");
-                check("the panel file goes back to the web user (" + owner(web) + ")", owner(web).equals("nobody:nobody") && mode(web).equals("rw-------"));
-                check("  and so does its lock (" + owner(dir.resolve("panel-secrets.lock")) + ")", owner(dir.resolve("panel-secrets.lock")).equals("nobody:nobody"));
-                check("the folder is 0750 root:<web user> (" + mode(dir) + " " + owner(dir) + ")", mode(dir).equals("rwxr-x---") && owner(dir).equals("root:nobody"));
+                check("a rewrite keeps the panel file 0640 root:" + g + " (" + mode(web) + " " + owner(web) + ")",
+                        owner(web).equals("root:" + g) && mode(web).equals("rw-r-----")
+                        && "Panel-Pass-2".equals(read(web).getProperty(PanelSecrets.MYSQL_PASSWORD)));
+                check("  its lock stays root's, 0600 (" + mode(dir.resolve("panel-secrets.lock")) + " " + owner(dir.resolve("panel-secrets.lock")) + ")",
+                        owner(dir.resolve("panel-secrets.lock")).startsWith("root:") && mode(dir.resolve("panel-secrets.lock")).equals("rw-------"));
+                check("the folder stays 0750 root:" + g + " (" + mode(dir) + " " + owner(dir) + ")", mode(dir).equals("rwxr-x---") && owner(dir).equals("root:" + g));
                 PanelSecrets.setText(PanelSecrets.MYSQL_ROOT_PASSWORD, "Root-Pass-3");
-                check("the root file stays root's, 0600 (" + owner(root) + ")", owner(root).startsWith("root:") && mode(root).equals("rw-------"));
+                check("the root file stays root's, 0600 (" + owner(root) + " " + mode(root) + ")",
+                        owner(root).startsWith("root:") && !owner(root).endsWith(":" + g) && mode(root).equals("rw-------"));
             } finally {
-                PanelSecrets.setWebOwner(null);
+                if (created) org.mail_panel.util.Shell.run("pw", "groupdel", g);
             }
         } else {
             System.out.println("\n  (part 3 skipped: it changes owners, turned on with -De2e.vm=yes as root on the VM)");

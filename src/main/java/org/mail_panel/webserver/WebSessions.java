@@ -188,6 +188,34 @@ public final class WebSessions {
         }
     }
 
+    /**
+     * La parte root del pannello separato: la sessione di una richiesta che le passa la web, per id. Deve
+     * esserci ancora (non scaduta, non revocata), essere dell'amministratore che dice la web, e lui deve
+     * essere attivo. Il ruolo e la conferma recente sono quelli del database. Il token non c'e' (null): la
+     * root non lo riceve mai, e l'ultima attivita' la aggiorna la web, che ha appena controllato il cookie.
+     */
+    public Optional<Current> forwarded(long sessionId, long adminId) {
+        LAST_CHECK_FAILED.set(false);
+        if (sessionId <= 0 || adminId <= 0) return Optional.empty();
+        Instant now = Instant.now();
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(
+                "SELECT admin_id, reauth_at FROM panel_sessions WHERE id = ? AND expires_at > ? AND last_seen_at > ?")) {
+            p.setLong(1, sessionId);
+            p.setObject(2, utc(now));
+            p.setObject(3, utc(now.minusSeconds(IDLE_SECONDS)));
+            try (ResultSet r = p.executeQuery()) {
+                if (!r.next() || r.getLong(1) != adminId) return Optional.empty();
+                Optional<AuthStore.Admin> admin = AuthStore.adminById(adminId);
+                if (admin.isEmpty()) return Optional.empty();
+                return Optional.of(new Current(sessionId, null, admin.get(), r.getObject(2, LocalDateTime.class)));
+            }
+        } catch (SQLException e) {
+            LAST_CHECK_FAILED.set(true);
+            LOGGER.log(Level.WARNING, "Forwarded session check failed", e);
+            return Optional.empty();
+        }
+    }
+
     private void touch(long id, Instant now) {
         try (PreparedStatement p = AuthStore.connection.get().prepareStatement("UPDATE panel_sessions SET last_seen_at = ? WHERE id = ?")) {
             p.setObject(1, utc(now));

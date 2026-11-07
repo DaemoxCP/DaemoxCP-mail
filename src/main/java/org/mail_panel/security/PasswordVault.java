@@ -46,10 +46,63 @@ public class PasswordVault {
     private final SecureRandom rng = new SecureRandom();
 
     private volatile SecretKey activeKey;
+    /** Data, dimensione e inode del file da cui viene activeKey: se cambiano, la chiave si rilegge. */
+    private volatile String keyStamp = stamp();
 
     private PasswordVault(SecretKey key) {
         this.key = key;
         this.activeKey = key;
+    }
+
+    /**
+     * La chiave attiva, riletta se il file e' cambiato. Col pannello separato la usano due processi (la
+     * parte root cifra le caselle nuove, la web decifra per la webmail) e la rotazione la fa uno solo: senza
+     * rileggere, l'altro continuerebbe con la chiave vecchia, e una casella cifrata cosi' non si
+     * decifrerebbe piu'. Costa uno stat del file a operazione.
+     */
+    private SecretKey activeKey() {
+        String now = stamp();
+        if (!now.equals(keyStamp) && !now.isEmpty()) {
+            synchronized (this) {
+                if (!now.equals(keyStamp)) {
+                    try {
+                        activeKey = new SecretKeySpec(readKeyFile(Paths.get(KEY_FILE)), "AES");
+                        LOGGER.info("[PasswordVault] master key changed on disk: reloaded from " + KEY_FILE);
+                    } catch (Exception e) {
+                        LOGGER.warning("[PasswordVault] master key changed on disk but unreadable, keeping the one in memory: " + e.getMessage());
+                    }
+                    keyStamp = now;
+                }
+            }
+        }
+        return activeKey;
+    }
+
+    private static String stamp() {
+        try {
+            java.nio.file.attribute.BasicFileAttributes a = Files.readAttributes(Paths.get(KEY_FILE),
+                    java.nio.file.attribute.BasicFileAttributes.class);
+            return a.lastModifiedTime().toMillis() + ":" + a.size() + ":" + a.fileKey();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** I 32 byte della chiave dal file: base64 (la forma scritta dal pannello) o byte grezzi. */
+    private static byte[] readKeyFile(Path keyPath) throws java.io.IOException {
+        byte[] raw = Files.readAllBytes(keyPath);
+        byte[] keyBytes;
+        String content = new String(raw, StandardCharsets.UTF_8).trim();
+        try {
+            keyBytes = Base64.getDecoder().decode(content);
+        } catch (IllegalArgumentException notBase64) {
+            keyBytes = raw;
+        }
+        if (keyBytes.length != KEY_SIZE_BYTES) {
+            throw new RuntimeException("Master key file has the wrong size: "
+                + keyBytes.length + " bytes (expected: " + KEY_SIZE_BYTES + ")");
+        }
+        return keyBytes;
     }
 
     /** Restituisce la path del file chiave master (per il backup). */
@@ -62,7 +115,7 @@ public class PasswordVault {
      * controllato — l'output è il valore di sicurezza più sensibile dell'applicazione.
      */
     public String exportKeyBase64() {
-        return Base64.getEncoder().encodeToString(activeKey.getEncoded());
+        return Base64.getEncoder().encodeToString(activeKey().getEncoded());
     }
 
     /**
@@ -111,19 +164,39 @@ public class PasswordVault {
             Path keyPath = Paths.get(KEY_FILE);
             if (Files.exists(keyPath)) {
                 Path backup = Paths.get(KEY_FILE + ".bak." + System.currentTimeMillis());
-                Files.copy(keyPath, backup);
+                // La copia nasce gia' 0600 e col gruppo di root: Files.copy la creava coi permessi
+                // dell'umask (0644) e solo dopo la chiudeva, e su FreeBSD col gruppo della cartella.
                 try {
-                    Files.setPosixFilePermissions(backup, PosixFilePermissions.fromString("rw-------"));
-                } catch (Exception ignored) {}
+                    Files.createFile(backup, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+                    if (PanelSecrets.webGroup(backup))
+                        Files.getFileAttributeView(backup, java.nio.file.attribute.PosixFileAttributeView.class).setGroup(
+                                backup.getFileSystem().getUserPrincipalLookupService().lookupPrincipalByGroupName("wheel"));
+                } catch (UnsupportedOperationException noPosix) {
+                    Files.createFile(backup);
+                }
+                Files.write(backup, Files.readAllBytes(keyPath), StandardOpenOption.TRUNCATE_EXISTING);
                 LOGGER.info("[PasswordVault] Old key backed up to " + backup);
             }
             String b64 = Base64.getEncoder().encodeToString(newKeyBytes);
-            Files.writeString(keyPath, b64, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            // Un file nuovo e un rename, non una riscrittura sul posto: l'altra parte del pannello separato
+            // legge la chiave in ogni momento, e a meta' scrittura avrebbe trovato un file vuoto. Il nuovo
+            // prende il gruppo e i permessi del vecchio: col pannello separato e' 0640 root:mailpanel.
+            Path tmp = keyPath.resolveSibling(keyPath.getFileName() + ".tmp");
+            Files.deleteIfExists(tmp);
+            Files.writeString(tmp, b64, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            String perms = "rw-------";
             try {
-                Files.setPosixFilePermissions(keyPath, PosixFilePermissions.fromString("rw-------"));
-            } catch (Exception ignored) {}
+                Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString(perms));
+                if (Files.exists(keyPath) && PanelSecrets.webGroup(keyPath)) {
+                    Files.getFileAttributeView(tmp, java.nio.file.attribute.PosixFileAttributeView.class).setGroup(
+                            tmp.getFileSystem().getUserPrincipalLookupService().lookupPrincipalByGroupName(PanelSecrets.WEB_GROUP));
+                    perms = "rw-r-----";
+                    Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString(perms));
+                }
+            } catch (UnsupportedOperationException ignored) {}
+            Files.move(tmp, keyPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
             this.activeKey = new SecretKeySpec(newKeyBytes, "AES");
+            this.keyStamp = stamp();
             LOGGER.info("[PasswordVault] New master key active and saved to " + KEY_FILE);
         } catch (Exception e) {
             throw new RuntimeException("persistNewKey failed: " + e.getMessage(), e);
@@ -153,7 +226,7 @@ public class PasswordVault {
             byte[] iv = new byte[GCM_IV_LEN];
             rng.nextBytes(iv);
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, activeKey, new GCMParameterSpec(GCM_TAG_BITS, iv));
+            cipher.init(Cipher.ENCRYPT_MODE, activeKey(), new GCMParameterSpec(GCM_TAG_BITS, iv));
             byte[] ct = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
             // Concatena IV || ciphertext+tag
             byte[] out = new byte[iv.length + ct.length];
@@ -170,7 +243,7 @@ public class PasswordVault {
      * Lancia RuntimeException se il blob è corrotto o cifrato con un'altra chiave.
      */
     public String decrypt(String encoded) {
-        return decryptWithKey(encoded, activeKey.getEncoded());
+        return decryptWithKey(encoded, activeKey().getEncoded());
     }
 
     /** Decifra con una chiave esplicita (usato durante la rotazione: decripta con la vecchia chiave). */
@@ -320,19 +393,8 @@ public class PasswordVault {
         try {
             Path keyPath = Paths.get(KEY_FILE);
             if (Files.exists(keyPath)) {
-                byte[] raw = Files.readAllBytes(keyPath);
                 // Il file può essere base64 (preferred) o raw bytes
-                byte[] keyBytes;
-                String content = new String(raw, StandardCharsets.UTF_8).trim();
-                try {
-                    keyBytes = Base64.getDecoder().decode(content);
-                } catch (IllegalArgumentException notBase64) {
-                    keyBytes = raw;
-                }
-                if (keyBytes.length != KEY_SIZE_BYTES) {
-                    throw new RuntimeException("Master key file has the wrong size: "
-                        + keyBytes.length + " bytes (expected: " + KEY_SIZE_BYTES + ")");
-                }
+                byte[] keyBytes = readKeyFile(keyPath);
                 LOGGER.info("[PasswordVault] Master key loaded from " + KEY_FILE);
                 return new PasswordVault(new SecretKeySpec(keyBytes, "AES"));
             }
