@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * The check of the services' users (ServiceUsers.examine) on ps outputs written here: the VM's
+ * The check of the users that run the services (ServiceUsers.examine) on ps outputs written here: the VM's
  * before the migration (nginx and the www pool with the same user), the one after, and a fault
  * planted for every warning, with the cases that must NOT warn (the Postfix and Dovecot processes
  * that run as root by design). It calls nothing: it runs anywhere.

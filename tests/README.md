@@ -356,7 +356,7 @@ and does not unlock, a reading of the protections that does not answer, a re-loc
 blowing up halfway. For each one: whether the script can start, what stays protected, whether the
 list on disk (and the job record next to it) is closed or stays, whether the turn is freed.
 
-**PackageTurnAcrossProcessesTest** — the packages' turn across processes: a second real process
+**PackageTurnAcrossProcessesTest** — the turn of the packages across processes: a second real process
 (`TurnHolder`) holds it, and this one does not take it, does not lock again the other's list at
 start, does not apply the locks rule (and says so); with the other killed by kill -9, the list is
 locked again with the notice naming the interrupted job. Then `lockf(1)` against the panel, in both
@@ -374,7 +374,7 @@ only if it belongs to the same user). It runs anywhere, but it is run on the VM 
 **PendingDbPasswordE2ETest** — the same with real MySQL and the real body of the installation
 (`Main.installOnTurn`): in place of `install_mail_server.sh` a planted script that exits before
 MySQL, fails after it, succeeds, or kills the panel with kill -9 before or after changing the
-password; then the start (`settleAtStartup`), also with the packages' turn held by another process
+password; then the start (`settleAtStartup`), also with the turn of the packages held by another process
 and with MySQL not answering (port 1). After every round: does the panel get into MySQL
 (`Main.connectFromConfig`)? Every round has its own folder, SQLite and secrets file, and a MySQL
 test user (`e2e_pending`) removed at the end; it reads root's password from the real secrets file.
@@ -519,7 +519,7 @@ reaper of the command and its descendants, and also waits for the redis just res
 deadline, exits with 124 and kills redis (`redis is not running`). With `timeout -f 60`: exit 0 in
 4 seconds, redis running.
 
-**PkgBranchTest** — the packages' branch, quarterly or latest (PkgBranch). The fake system does
+**PkgBranchTest** — the branch of the packages, quarterly or latest (PkgBranch). The fake system does
 what pkg does (libpkg/pkg_config.c, read on 03/10/2026): it starts from the /etc/pkg/FreeBSD.conf of
 FreeBSD 15.0 RELEASE (quarterly, kernel modules with the minor version, FreeBSD-base off) and reads
 the files of /usr/local/etc/pkg/repos in alphabetical order, with every block overwriting the fields
@@ -556,7 +556,7 @@ the requests, the token also in "Delete mailbox"; dark theme and phone.
 
 **software-versions-browser-test.js** — Home: the Version column of "Mail services" (with the MySQL
 and Redis rows), "Other software", the "to restart" notes, a version with HTML inside that stays
-text, the buttons' names for screen readers, the question before stopping a service or restarting
+text, the names of the buttons for screen readers, the question before stopping a service or restarting
 MySQL (cancelled, nothing starts), the CSRF token to /api/service, the re-reading after every
 command; dark theme and phone, where the tables become cards.
 

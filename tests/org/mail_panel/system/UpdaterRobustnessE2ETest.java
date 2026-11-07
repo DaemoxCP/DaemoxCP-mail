@@ -137,7 +137,7 @@ public class UpdaterRobustnessE2ETest {
         for (int i = 0; envs != null && i < envs.length(); i++)
             if (!created.isEmpty() && created.get(0).equals(envs.getJSONObject(i).optString("name")))
                 labelled = envs.getJSONObject(i).optString("origin").equals(I18n.tr("server.um.bootEnvironments.packagesOrigin"));
-        check("M1 the boot environments tab presents it as the packages' way back", labelled);
+        check("M1 the boot environments tab presents it as the way back of the packages", labelled);
         check("M1 the log says how to go back", !created.isEmpty() && log.contains("bectl activate " + created.get(0)));
         List<String> inside = PackageWayBack.dataInside();
         System.out.println("  data inside the boot environment: " + inside);
@@ -482,7 +482,7 @@ public class UpdaterRobustnessE2ETest {
             }
             case "m7-after" -> m7After();
             case "be-label" -> {
-                // How the tab and the report describe a packages' way back. It touches no packages
+                // How the tab and the report describe a way back of the packages. It touches no packages
                 // nor repositories: it creates a boot environment with the right name, asks
                 // bootEnvironments() and removes it.
                 String n = "packages-before-2000-01-01-000000-label-test";
@@ -496,7 +496,7 @@ public class UpdaterRobustnessE2ETest {
                             explain = envs.getJSONObject(i).optString("explanation");
                         }
                     System.out.println("  " + n + ": " + origin + " / " + explain);
-                    check("a packages' way back presents itself as such",
+                    check("a way back of the packages presents itself as such",
                             origin.equals(I18n.tr("server.um.bootEnvironments.packagesOrigin"))
                             && explain.equals(I18n.tr("server.um.bootEnvironments.packagesExplain")));
                 } finally {
@@ -584,7 +584,7 @@ public class UpdaterRobustnessE2ETest {
         return sh("bectl list -H | cut -f1 | sort");
     }
 
-    /** The packages' boot environments that appeared during the test. */
+    /** The boot environments of the packages that appeared during the test. */
     static List<String> newOwn(String before) {
         List<String> r = new ArrayList<>();
         for (String n : bootEnvironments().split("\n"))
