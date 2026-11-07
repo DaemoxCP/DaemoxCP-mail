@@ -86,8 +86,16 @@ public class ServiceUsersTest {
         check("mysqld as root: root warning on mysql (" + codes(f) + ")", codes(f).equals("root:mysql"));
         f = ex(AFTER.replace("postfix 64955 64913 pickup", "root    64955 64913 pickup"), POOL_AFTER, "", false);
         check("Postfix's pickup as root: warning (" + codes(f) + ")", codes(f).equals("root:postfix"));
-        f = ex(AFTER + "root    64999 64913 local -t unix\nroot    65001 59971 dovecot/auth\n", POOL_AFTER, "", false);
-        check("Postfix's local and Dovecot's auth as root: no warning, that is how they are built (" + codes(f) + ")", f.problems().isEmpty());
+        f = ex(AFTER + "root    64999 64913 local -t unix\n", POOL_AFTER, "", false);
+        check("Postfix's local as root: no warning, that is how it is built (" + codes(f) + ")", f.problems().isEmpty());
+        // Measured on 07/11/2026: Dovecot 2.3 runs auth-worker as root by default, and it only looks
+        // passwords up in MySQL. As the internal user it is right; as root it is a warning.
+        f = ex(AFTER + "dovecot 65001 59971 dovecot/auth\ndovecot 65002 59971 dovecot/auth -w\n", POOL_AFTER, "", false);
+        check("Dovecot's auth and auth-worker as dovecot: no warning (" + codes(f) + ")", f.problems().isEmpty());
+        f = ex(AFTER + "dovecot 65001 59971 dovecot/auth\nroot    65002 59971 dovecot/auth -w\n", POOL_AFTER, "", false);
+        check("Dovecot's auth-worker as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
+        f = ex(AFTER + "root    65001 59971 dovecot/auth\n", POOL_AFTER, "", false);
+        check("Dovecot's auth as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER + "root    65003 59971 dovecot/imap\n", POOL_AFTER, "", false);
         check("a Dovecot imap as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER.replace("www     37741 36807 nginx: worker", "root    37741 36807 nginx: worker"), POOL_AFTER, "", false);

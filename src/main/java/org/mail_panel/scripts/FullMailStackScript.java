@@ -204,9 +204,42 @@ public class FullMailStackScript {
                 sleep 2
             done
 
+            # MySQL da root: la password viene dal pannello (MYSQL_ROOT_PASSWORD, dal file dei segreti) e
+            # sta in un file di opzioni 600 in una cartella 700, mai sulla riga di comando che "ps" mostra
+            # a tutti. Un MySQL appena installato lascia root SENZA password, e finche' resta cosi' entra
+            # come root chiunque abbia un utente sulla macchina: la si imposta adesso, prima di creare
+            # qualunque cosa, come fa l'installazione completa (FullMailServerScript).
+            if [ -z "${MYSQL_ROOT_PASSWORD}" ]; then
+                echo "Error: MYSQL_ROOT_PASSWORD not in the environment"
+                exit 1
+            fi
+            MYSQL_WORK=$(mktemp -d /var/tmp/mailpanel-all.XXXXXXXX) || exit 1
+            trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
+            if mysql --no-defaults -u root --password= -e "SELECT 1" >/dev/null 2>&1; then
+                echo "Fresh MySQL: setting the root password"
+                if ! mysql --no-defaults -u root --password= << EOROOT
+            ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
+            EOROOT
+                then
+                    echo "Error: cannot set the MySQL root password"
+                    exit 1
+                fi
+            fi
+            cat > "$MYSQL_WORK/root.cnf" << EOCNF
+            [client]
+            user=root
+            password="${MYSQL_ROOT_PASSWORD}"
+            EOCNF
+            chmod 600 "$MYSQL_WORK/root.cnf"
+            mysql_root() { mysql --defaults-extra-file="$MYSQL_WORK/root.cnf" "$@"; }
+            if ! mysql_root -e "SELECT 1" >/dev/null 2>&1; then
+                echo "Error: the MySQL root password does not work: MySQL had one the panel does not know"
+                exit 1
+            fi
+
             MAILSERVER_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
 
-            mysql -u root << SQLEOF
+            mysql_root << SQLEOF
             CREATE DATABASE IF NOT EXISTS mailpanel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
             CREATE USER IF NOT EXISTS 'mailpanel'@'localhost' IDENTIFIED BY '${MAILSERVER_PASS}';
             CREATE USER IF NOT EXISTS 'mailpanel'@'127.0.0.1' IDENTIFIED BY '${MAILSERVER_PASS}';
@@ -700,7 +733,7 @@ RCCONF
 
             # Prima tutta la webmail, codice compreso, era di www: scrivibile da nginx.
 """ + org.mail_panel.system.RoundcubeUser.shellOwnership() + """
-            mysql -u root roundcubemail < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
+            mysql_root roundcubemail < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
 
             # ============ Start All Services ============
             echo ""

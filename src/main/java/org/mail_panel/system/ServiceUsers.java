@@ -66,8 +66,10 @@ public final class ServiceUsers {
             new Rule("postfix", "/libexec/postfix/master( |$)", true),
             new Rule("dovecot", "^/usr/local/sbin/dovecot( |$)", true),
             // Questi Dovecot li tiene root per come e' fatto: leggono la configurazione, scrivono il
-            // log, autenticano, consegnano a utenti diversi.
-            new Rule("dovecot", "^dovecot/(config|log|auth|auth-worker|ssl-params|lmtp|doveadm-server)( |$)", true),
+            // log, consegnano a utenti diversi. L'autenticazione no: auth gira gia' come dovecot, e
+            // auth-worker ("dovecot/auth -w") cerca le password in MySQL, quindi root non gli serve
+            // (DovecotAuthWorker lo sposta all'avvio): se lo si vede da root e' un avviso.
+            new Rule("dovecot", "^dovecot/(config|log|ssl-params|lmtp|doveadm-server)( |$)", true),
             new Rule("dovecot", "^dovecot/", false),
             new Rule("mysql", "/libexec/mysqld( |$)|/bin/mysqld_safe( |$)", false),
             new Rule("redis", "redis-server", false),
