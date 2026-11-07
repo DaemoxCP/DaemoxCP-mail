@@ -735,6 +735,46 @@ mailbox's webmail, a service, the reboot, the vault, the firewall; the body put 
 the handler; the changed role holding at once; the removed administrator out; the refusals in the
 log.
 
+**RootChannelTest** — the channel between the two parts of the separated panel,
+without a database: a request goes and comes back the same; the
+headers outside the short list (Cookie, X-CSRF-Token, Authorization, Host, the proxies' ones) never
+pass; a field out of shape refuses the whole request (".." or an encoded dot, an unknown method, a
+client address that is not an IP, no administrator or session, a body over the limit); the socket is
+0660 and a connection from another user gets nothing; the in-memory exchange enforces the declared
+length, HEAD has no body, and a handler that answers nothing or throws gives a 500.
+
+**SeparatedPanelTest** — the two parts together, in one JVM with the test MySQL: a WEB_PART server on
+a port, a ROOT_PART server without one, the socket between them. A signed-in API reaches the root
+part with who asked and never the cookie, the token or the CSRF token; what the web part refuses (no
+session, no CSRF token, no permission) never reaches the root; the account API stays in the web part.
+Then requests forged on the socket, as a broken-into web part would send them: a viewer's session
+asking to create an administrator gets 403 and creates nothing, someone else's administrator id or a
+revoked session 401, a public route, a page or the account API 404; the role is the database's. A
+Set-Cookie from the root never reaches the browser, and with the root gone the web answers 503.
+
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RootChannelTest
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SeparatedPanelTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelSeparationTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.SecretsSplitTest
+
+**PanelSeparationTest** — the root part's preparation: a user mailpanel that is not the panel's
+(another comment, home or shell, a password, uid 0, another group, other members in the group) is
+refused with its reason; the daemon(8) line; as root on the VM, a folder opened to the web part is
+0750 root:mailpanel with its data files 0640, every other file only root's and back in root's group,
+and a symbolic link where a data file should be is refused.
+
+**separation-service-test.sh** — the separated panel as the real service on the VM, as root, with
+the jar to test installed in the panel folder and the compiled tests in a folder mailpanel can read:
+
+    sh tests/separation-service-test.sh /home/panel /var/tmp/sep-tests
+
+Who runs what and who listens (the web part as mailpanel on 2096, the root part on no port), every
+shared file's permissions, what mailpanel can and cannot read or write, a sign-in with a console code
+and the API through the web part, requests forged on the real socket, a second start with no DONE and
+no WARNING; then the planted faults, each put back: the user mailpanel someone else's, the jar
+unreadable by mailpanel, the web part killed every time it starts (the panel goes back to serving
+everything as root), the root part killed with -9 (the next start stops the web part left behind).
+
 **CsrfFilterTest** — the CSRF token checked once for all the routes (the filter of
 SSLMailServer.context), on the real server. Twenty-five authenticated routes accepted POST without
 asking for it; the probe is one of them, /api/timezone-diag, with a request the handler refuses

@@ -308,6 +308,7 @@ tar -cpf "$WORK/panel-dir.tar" -C "${PANEL_DIR%/*}" "${PANEL_DIR##*/}" 2>> "$WOR
 cp -p "$JAR" "$WORK/previous.jar"
 ls -1 /var/log/nginx > "$WORK/nginx-logs-before.txt" 2>/dev/null
 stat -f '%Su:%Sg %N' /var/log/php_errors.log > "$WORK/php-errors-owner-before.txt" 2>/dev/null
+stat -f '%Su:%Sg %N' /var/log/mail-panel-auth.log > "$WORK/auth-log-owner-before.txt" 2>/dev/null
 say "Copia della cartella del pannello: $WORK/panel-dir.tar"
 
 # --- 4. il jar nuovo e il primo avvio -----------------------------------------------------------
@@ -335,7 +336,8 @@ segment() {
 }
 
 # Avvia (o riavvia) e aspetta la fine dell'avvio: la riga del server partito arriva dopo le
-# migrazioni del thread principale, quella dell'ACME dopo AcmeUser e ServiceUsers.
+# migrazioni del thread principale, quella dell'ACME dopo AcmeUser e ServiceUsers. Col pannello
+# separato (PanelSeparation) la riga e' quella della parte root pronta: la porta la tiene la web.
 boot() {
     mark="=== upgrade-panel.sh $STAMP: $1 ==="
     f=$(rc_setting mailpanel_log)
@@ -346,7 +348,7 @@ boot() {
     i=0
     while [ $i -lt $BOOT_TIMEOUT ]; do
         segment "$mark" > "$WORK/$1.log"
-        grep -q "Mail Panel server started on port" "$WORK/$1.log" \
+        grep -qE "Mail Panel server started on port|Mail Panel root part ready" "$WORK/$1.log" \
             && grep -q "\[ACME\] Checking certificate status at startup" "$WORK/$1.log" && return 0
         if [ $i -ge 20 ] && ! service mailpanel status >/dev/null 2>&1; then
             fail "il pannello si e' spento durante l'avvio: $WORK/$1.log"

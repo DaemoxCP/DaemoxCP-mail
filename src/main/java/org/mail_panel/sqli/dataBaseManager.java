@@ -36,6 +36,25 @@ public class dataBaseManager {
         migrateSecrets();
     }
 
+    private dataBaseManager(boolean readOnly) {
+        this.database_ = new HashMap<Integer, database>();
+        this.database_.putIfAbsent(1, new database(readOnly));
+    }
+
+    /**
+     * Per la parte web del pannello separato: SQLite in sola lettura, niente permessi da sistemare ne'
+     * segreti da spostare (lo fa la root a ogni avvio, prima di avviarla).
+     */
+    public static dataBaseManager readOnly() {
+        return new dataBaseManager(true);
+    }
+
+    /** Vero se il file e' del gruppo della parte web del pannello separato. */
+    private static boolean webGroup(java.nio.file.Path p) throws java.io.IOException {
+        return org.mail_panel.system.PanelSeparation.GROUP.equals(java.nio.file.Files.readAttributes(p,
+                java.nio.file.attribute.PosixFileAttributes.class, java.nio.file.LinkOption.NOFOLLOW_LINKS).group().getName());
+    }
+
     // ========== Segreti: nel file dei segreti, non in SQLite ==========
 
     /*
@@ -153,11 +172,16 @@ public class dataBaseManager {
         java.nio.file.Path dir = java.nio.file.Paths.get("database");
         try {
             if (!java.nio.file.Files.isDirectory(dir)) java.nio.file.Files.createDirectories(dir);
-            java.nio.file.Files.setPosixFilePermissions(dir, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+            // Col pannello separato la cartella e il database sono del gruppo della parte web, che li legge
+            // (PanelSeparation): quel gruppo continua a leggere, nessun altro. Chi gira da root senza sapere
+            // della separazione (il menu, un comando da console) la lasciava chiusa alla web.
+            boolean web = webGroup(dir);
+            java.nio.file.Files.setPosixFilePermissions(dir, java.nio.file.attribute.PosixFilePermissions.fromString(web ? "rwxr-x---" : "rwx------"));
             for (String f : new String[]{"mail_panel.db", "mail_panel.db-journal", "mail_panel.db-wal", "mail_panel.db-shm"}) {
                 java.nio.file.Path p = dir.resolve(f);
                 if (java.nio.file.Files.exists(p))
-                    java.nio.file.Files.setPosixFilePermissions(p, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+                    java.nio.file.Files.setPosixFilePermissions(p, java.nio.file.attribute.PosixFilePermissions.fromString(
+                            web && f.equals("mail_panel.db") && webGroup(p) ? "rw-r-----" : "rw-------"));
             }
         } catch (java.io.IOException | UnsupportedOperationException e) {
             // File system senza permessi POSIX, o non nostri: restano come sono

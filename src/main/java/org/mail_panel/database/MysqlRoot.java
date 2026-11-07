@@ -192,14 +192,14 @@ public final class MysqlRoot {
         boolean socketOpen = entersWith(options(null));
         boolean tcpOpen = entersWith(tcpOptions(null));
         if (withPassword && !socketOpen && !tcpOpen) {
-            LOGGER.info("[MysqlRoot] DONE: root@" + String.join(", root@", hosts) + " has a password now, kept in the panel"
+            LOGGER.info("[MysqlRoot] DONE: root@" + String.join(", root@", hosts) + " has a password now, kept in the root"
                     + " secrets file; without it MySQL refuses root, from the socket and from 127.0.0.1");
             return Outcome.DONE;
         }
         if (!withPassword && !socketOpen) {
             LOGGER.severe("[MysqlRoot] LOCKED_OUT: root refuses both the password of the panel secrets file and no password"
                     + " (ALTER USER exit " + alter.exitCode() + "): the password to try by hand is mysql_root_password in "
-                    + PanelSecrets.location());
+                    + PanelSecrets.location(PanelSecrets.MYSQL_ROOT_PASSWORD));
             return Outcome.LOCKED_OUT;
         }
         LOGGER.warning("[MysqlRoot] NOT_APPLIED: ALTER USER exit " + alter.exitCode() + " (" + firstLine(alter.outputTrim())

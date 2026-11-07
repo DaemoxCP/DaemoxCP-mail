@@ -4,8 +4,10 @@
 # Le copie di config.inc.php vanno in /root/rcdb, la cartella del banco.
 # Ognuno si pianta prima di avviare il pannello e si toglie dopo, a mano.
 F=/usr/local/etc/mail-panel/panel-secrets.properties
+R=/usr/local/etc/mail-panel/root-secrets.properties
 C=/usr/local/www/roundcube/config/config.inc.php
-secret() { grep "^$1=" "$F" | cut -d= -f2- | sed 's/\\//g'; }
+# La password di root sta nel file di root dal passo 1 della separazione; prima stava nel file del pannello.
+secret() { for x in "$R" "$F"; do [ -f "$x" ] && v=$(grep "^$1=" "$x" | cut -d= -f2- | sed 's/\\//g') && [ -n "$v" ] && { echo "$v"; return; }; done; }
 W=$(mktemp -d /var/tmp/rcdb-fault.XXXXXX); trap 'rm -rf "$W"' EXIT
 printf "[client]\nuser=root\npassword=\"%s\"\n" "$(secret mysql_root_password)" > "$W/root.cnf"
 sql() { mysql --defaults-extra-file="$W/root.cnf" -N -B -e "$1"; }

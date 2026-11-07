@@ -358,6 +358,15 @@ public class Main {
     }
 
     public static void main(String[] args) throws InterruptedException, IOException {
+        // La parte web del pannello separato: la avvia la parte root con
+        // daemon(8) e l'utente mailpanel (PanelSeparation). Niente di quello che segue: migrazioni, script,
+        // contenuti e SQLite in scrittura sono lavoro della root, che li ha gia' fatti.
+        for (String a : args) {
+            if ("--web-part".equals(a)) {
+                System.exit(startWebPart() ? 0 : 1);
+                return;
+            }
+        }
         String directoryPath = "./database/";
         try {
             createDirectoryIfNotExists(directoryPath);
@@ -375,6 +384,22 @@ public class Main {
         org.mail_panel.system.PathMigration.run();
         // Lo script di avvio scritto dal pannello cita i file che PathMigration ha appena rinominato.
         org.mail_panel.system.RcScriptRepair.ensureAtBoot();
+        // I segreti solo di root (le password di root di MySQL e dell'utente MySQL di Roundcube) escono dal
+        // file del pannello e vanno in quello di root: la parte web, che gira con l'utente mailpanel, non li
+        // deve poter leggere. Solo da root; al secondo avvio non c'e'
+        // niente da spostare.
+        if ("root".equals(System.getProperty("user.name"))) {
+            java.util.logging.Logger log = java.util.logging.Logger.getLogger(Main.class.getName());
+            try {
+                java.util.List<String> moved = org.mail_panel.security.PanelSecrets.splitRootSecrets();
+                if (!moved.isEmpty())
+                    log.info("[RootSecrets] DONE: " + String.join(", ", moved) + " moved to "
+                            + org.mail_panel.security.PanelSecrets.location(org.mail_panel.security.PanelSecrets.MYSQL_ROOT_PASSWORD) + ", readable only by root");
+            } catch (RuntimeException e) {
+                log.warning("[RootSecrets] the root-only secrets could not be moved out of the panel secrets file: "
+                        + e.getMessage());
+            }
+        }
         MailPanelContent.generateAllContent();
 
         // Se una manutenzione dei pacchetti non e' arrivata in fondo (pannello ucciso, crash,
@@ -1182,9 +1207,23 @@ public class Main {
                 // gia' acceso. Da quando puo' riaccendersi da solo dopo l'aggiornamento della
                 // JVM, capita di lanciarlo credendolo spento — e una traccia di stack Java non
                 // e' una risposta a "che e' successo?". Qui si dice chi occupa la porta.
+                // Il pannello separato: la parte web con l'utente mailpanel sulla porta, questa parte root
+                // senza porte. Se una condizione manca si resta come oggi, e lo si dice (PanelSeparation).
+                SSLMailServer.Mode mode = SSLMailServer.Mode.LEGACY;
+                String notSeparated = org.mail_panel.system.PanelSeparation.prepare(port, setupRequired, mysqlAvailable);
+                if (notSeparated == null) mode = SSLMailServer.Mode.ROOT_PART;
+                else separationNotApplied(notSeparated);
                 SSLMailServer server;
                 try {
-                    server = new SSLMailServer(port, certContent, keyContent);
+                    server = new SSLMailServer(port, certContent, keyContent, mode);
+                    if (mode == SSLMailServer.Mode.ROOT_PART) {
+                        final SSLMailServer root = server;
+                        String failed = org.mail_panel.system.PanelSeparation.startWebPart(port, root::serveForwarded);
+                        if (failed != null) {
+                            separationNotApplied(failed);
+                            server.becomeLegacy();
+                        }
+                    }
                 } catch (java.net.BindException be) {
                     System.out.println();
                     System.out.println(ANSI_YELLOW + "Port " + port + " is already in use: "
@@ -1221,7 +1260,11 @@ public class Main {
                     System.out.println("Applying the package lock rule failed: " + e.getMessage());
                 }
 
-                System.out.println(ANSI_GREEN + "Mail Panel Server started on port " + port + ANSI_RESET);
+                if (server.mode() == SSLMailServer.Mode.ROOT_PART)
+                    System.out.println(ANSI_GREEN + "Mail Panel started: the web part answers on port " + port + " as "
+                            + org.mail_panel.system.PanelSeparation.USER + ", this root part on no port" + ANSI_RESET);
+                else
+                    System.out.println(ANSI_GREEN + "Mail Panel Server started on port " + port + ANSI_RESET);
                 System.out.println(ANSI_GREEN + "Open your browser: https://" + host + ":" + port + ANSI_RESET);
                 System.out.println();
                 System.out.println("Press ENTER to stop the server.");
@@ -1232,6 +1275,8 @@ public class Main {
                 Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                     System.out.println();
                     System.out.println(ANSI_YELLOW + "Shutting down server..." + ANSI_RESET);
+                    // Prima la parte web, che senza la root non servirebbe piu' le API.
+                    org.mail_panel.system.PanelSeparation.stop();
                     finalServer.stop();
                 }));
 
@@ -1264,6 +1309,84 @@ public class Main {
         }
         // Nessuna riga di configurazione in tabella, o un'eccezione: il server non e' partito.
         return false;
+    }
+
+    /**
+     * La separazione non si fa: un avviso nel registro, tranne quando e' una scelta (spenta a mano) o non
+     * e' il servizio (il menu, che gira da root con un terminale davanti).
+     */
+    private static void separationNotApplied(String why) {
+        java.util.logging.Logger log = java.util.logging.Logger.getLogger(Main.class.getName());
+        String text = "[PanelSeparation] NOT_APPLIED: " + why + "; the panel serves everything as root, as before";
+        // Stati attesi, non guasti: spenta a mano, installazione non finita, il menu senza root.
+        boolean expected = why.startsWith("switched off") || why.startsWith("the first installation")
+                || why.startsWith("the panel is not running as root");
+        if (expected || !nonInteractive) log.info(text);
+        else log.warning(text);
+    }
+
+    /**
+     * La parte web del pannello separato, con l'utente mailpanel: la porta del pannello, i filtri, l'accesso,
+     * le pagine e le rotte pubbliche; le API di chi ha fatto l'accesso le passa alla parte root
+     * (SSLMailServer in modo WEB_PART). SQLite in sola lettura: la configurazione la scrive solo root.
+     *
+     * @return falso se non e' partita: daemon(8) la riavvia, e la root dopo ANSWER_SECONDS torna al modo di oggi
+     */
+    private static boolean startWebPart() {
+        nonInteractive = true;
+        if ("root".equals(System.getProperty("user.name"))) {
+            System.err.println("--web-part is the panel's web part: the root part starts it as the user "
+                    + org.mail_panel.system.PanelSeparation.USER + ", never as root.");
+            return false;
+        }
+        try {
+            dbManager = dataBaseManager.readOnly();
+            String certContent, keyContent, host, mysqlHost, mysqlPort, mysqlUser, mysqlDatabase;
+            int port;
+            try (ResultSet result = dbManager.get_data_config()) {
+                if (result == null || !result.next()) {
+                    System.err.println("Web part: no panel configuration in SQLite");
+                    return false;
+                }
+                certContent = result.getString("mail_panel_ssl_cert");
+                port = Integer.parseInt(result.getString("mail_panel_port"));
+                host = result.getString("mail_panel_host");
+                mysqlHost = result.getString("mysql_host");
+                mysqlPort = result.getString("mysql_port");
+                mysqlUser = result.getString("mysql_user");
+                mysqlDatabase = result.getString("mysql_database");
+            }
+            keyContent = dbManager.panelTlsKey();
+            if (certContent == null || certContent.isBlank() || keyContent == null || keyContent.isBlank()) {
+                System.err.println("Web part: the panel's TLS certificate or key is missing");
+                return false;
+            }
+            mailDatabase = new MailDatabase();
+            mailDatabase.setPasswordSource(dbManager::mysqlPassword);
+            mailDatabase.setCredentials(mysqlUser, dbManager.mysqlPassword());
+            mailDatabase.setHost(mysqlHost);
+            mailDatabase.setPort(Integer.parseInt(mysqlPort));
+            mailDatabase.setDatabase(mysqlDatabase);
+            if (mailDatabase.connect()) {
+                mysqlAvailable = true;
+                setupRequired = !mailDatabase.hasAdminUser();
+            } else {
+                System.out.println("[WARNING] Web part: could not connect to MySQL");
+            }
+            SSLMailServer server = new SSLMailServer(port, certContent, keyContent, SSLMailServer.Mode.WEB_PART);
+            server.start();
+            System.out.println("Web part listening on https://" + host + ":" + port + " as " + System.getProperty("user.name")
+                    + " (pid " + ProcessHandle.current().pid() + ")");
+            System.out.flush();
+            Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
+            try { new java.util.concurrent.CountDownLatch(1).await(); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            return true;
+        } catch (Exception e) {
+            System.err.println("Web part: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
     }
 
     private static void setupMySQLDatabase() {

@@ -52,11 +52,17 @@ trap cleanup EXIT HUP INT TERM
 ROOT_PW=""
 if [ -f ./installed-mysql-root-password ]; then
     ROOT_PW=$(cat ./installed-mysql-root-password)
-elif [ -f /usr/local/etc/mail-panel/panel-secrets.properties ]; then
+else
     # The panel writes the file with java.util.Properties, which escapes ! # = : with a backslash:
     # read as it is, the password would be wrong. The generator's alphabet has no backslash, so
     # dropping the escapes gives the password back.
-    ROOT_PW=$(sed -n 's/^mysql_root_password=//p' /usr/local/etc/mail-panel/panel-secrets.properties | sed 's/\\\(.\)/\1/g')
+    # Since the panel split its secrets the root password is in
+    # root-secrets.properties; on a server not split yet it is still in panel-secrets.properties.
+    for f in /usr/local/etc/mail-panel/root-secrets.properties /usr/local/etc/mail-panel/panel-secrets.properties; do
+        [ -f "$f" ] || continue
+        ROOT_PW=$(sed -n 's/^mysql_root_password=//p' "$f" | sed 's/\\\(.\)/\1/g')
+        [ -n "$ROOT_PW" ] && break
+    done
 fi
 if [ -z "$ROOT_PW" ]; then
     echo "MySQL root password not found"; exit 2

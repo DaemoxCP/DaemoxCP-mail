@@ -6560,7 +6560,7 @@
   "server.su.rootWhy.nginx": "Root only for the master process: it opens the web ports and reads the TLS keys, which only root can read. Requests are served by the worker processes as www.",
   "server.su.rootWhy.phpFpm": "Root only for the master process, which runs no pages: it creates the webmail's socket owned by roundcube with group www, so only nginx and Roundcube can use it. Pages run in the pool as roundcube.",
   "server.su.rootWhy.fail2ban": "Root because it controls the pf firewall (/dev/pf is root only) and reads the mail logs, which only root can read.",
-  "server.su.rootWhy.mailPanel": "Today everything runs as root: it needs root for packages, services, firewall, configurations and boot environments. The web part would not: separating it, with a user of its own, is the next job.",
+  "server.su.rootWhy.mailPanel": "Root only for the part that manages the machine (packages, services, firewall, configurations, boot environments), which opens no ports. The web part, the one that answers on the network, runs as the mailpanel user and hands it the requests on a local socket.",
   "su.poolsCaption": "The configured php-fpm pools, even without processes right now",
   "su.colPool": "Pool",
   "su.colUser": "User",
@@ -6659,5 +6659,11 @@
   "server.search.step2": "[2/{total}] The vulnerability list (pkg audit -F)",
   "server.search.step3": "[3/{total}] The FreeBSD patches (freebsd-update fetch)",
   "server.search.done": "Lists updated: the card says what there is to do. Nothing was installed.",
-  "uc.afterBranch": "See what needs updating"
+  "uc.afterBranch": "See what needs updating",
+  "server.su.panelLegacy": "The panel runs entirely as root: the web part was not separated ({detail}).",
+  "server.rootPart.unavailable": "The part of the panel that manages the server does not answer: try again in a few seconds.",
+  "server.paths.panelWebLog": "Panel web part log",
+  "server.paths.panelWebLogDesc": "What the web part writes, which runs as the mailpanel user: sign-ins, pages, requests handed to the root part",
+  "server.paths.rootSocket": "Root part socket",
+  "server.paths.rootSocketDesc": "Where the web part hands the signed-in requests to the root part, which opens no network ports"
 }
