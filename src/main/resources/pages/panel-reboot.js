@@ -38,6 +38,17 @@ function panelRebootButton(className, icon, label, action) {
     return b;
 }
 
+// Quando il contenuto della finestra cambia, il pulsante premuto puo' sparire: il fuoco andrebbe fuori
+// dalla finestra, ed Esc non la chiuderebbe piu' (Bootstrap ascolta i tasti sulla finestra). Si rimette
+// sul pulsante di chiusura (r9: il fuoco non si perde mai).
+function panelRebootKeepFocus() {
+    var modal = document.getElementById('panelRebootModal');
+    if (modal && modal.classList.contains('show') && !modal.contains(document.activeElement)) {
+        var close = modal.querySelector('.btn-close');
+        if (close) close.focus();
+    }
+}
+
 function panelRebootWhy(r) {
     if (r.state === 'needed') return t('rb.needed', { installed: r.installedKernel, running: r.runningKernel });
     if (r.state === 'advised') return t('rb.advised');
@@ -126,6 +137,7 @@ function panelRebootGo() {
             panelRebootButton('btn btn-outline-secondary touch-target', 'fa-ban', t('rb.cancel'), 'panelRebootCancel()'));
         go.hidden = true;
         document.getElementById('panelRebootWhen').hidden = true;
+        panelRebootKeepFocus();
         panelRebootRefresh();
         panelRebootWatch();
     });
@@ -138,6 +150,7 @@ function panelRebootCancel() {
         var body = document.getElementById('panelRebootBody');
         if (body) body.replaceChildren(panelRebootEl('div', 'alert alert-' + (r.success ? 'success' : 'danger') + ' mb-0',
             r.success ? t('rb.cancelled') : (r.error || t('common.errorShort'))));
+        panelRebootKeepFocus();
         panelRebootRefresh();
     });
 }

@@ -139,6 +139,7 @@ const allErrors = [], allDialogs = [];
     await page.waitForSelector('#panelAskModal.show');
     const ask = await page.innerText('#panelAskModal .modal-content');
     check('the confirmation shows the exact plan', /libX11: 1\.8\.12,1 → 1\.8\.14,1/.test(ask) && /brotli/.test(ask) && /Update 2 packages/.test(ask));
+    await page.waitForFunction(() => document.getElementById('panelAskModal').contains(document.activeElement), null, { timeout: 2000 }).catch(() => {});
     check('  it is labelled, with the focus inside', await page.$eval('#panelAskModal', m => m.getAttribute('aria-labelledby') === 'panelAskTitle'
         && m.contains(document.activeElement)));
     await page.click('#panelAskGo');
@@ -174,6 +175,7 @@ const allErrors = [], allDialogs = [];
     await page.click('#panelRebootBody button');
     await page.waitForFunction(() => /cancelled/.test(document.getElementById('panelRebootBody').innerText), null, { timeout: 10000 });
     check('cancelled: reboot_cancel', calls.some(c => c.action === 'reboot_cancel'));
+    check('  the focus stays inside the window (the pressed button is gone)', await page.$eval('#panelRebootModal', m => m.contains(document.activeElement)));
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.getElementById('panelRebootModal').classList.contains('show'), null, { timeout: 5000 }).catch(() => {});
     check('Escape closes the window', await page.$eval('#panelRebootModal', m => !m.classList.contains('show')));
