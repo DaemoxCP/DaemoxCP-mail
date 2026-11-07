@@ -12,20 +12,21 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * La via di ritorno della reinstallazione completa dal menu, nelle due parti che non chiedono
- * bectl (quella con bectl vero e' ReinstallWayBackE2ETest, sul clone):
+ * The way back of the full reinstallation from the menu, in the two parts that do not ask for
+ * bectl (the one with real bectl is ReinstallWayBackE2ETest, on the clone):
  *
- *  1. Il passo in mezzo di InstallLocks.prepare (dove la reinstallazione crea il boot environment)
- *     gira col turno gia' preso e PRIMA di ogni sblocco: il boot environment ha i pacchetti protetti
- *     com'erano e nessun elenco aperto. Se il passo rifiuta (il boot environment non si crea) o
- *     esplode, non si sblocca niente, l'elenco non si scrive e il turno si libera.
- *  2. Main.installOnTurn dice se lo script e' arrivato alla fase 1 (ha cominciato a cambiare il
- *     sistema): uno script piantato che si ferma prima (come per Roundcube non configurato) no, uno
- *     che stampa la fase 1 e poi fallisce o riesce si'. E' cio' che decide se il boot environment
- *     resta. Il corpo vero, in un processo figlio con cartella, SQLite e segreti suoi; MySQL non
- *     serve (porta 1: la password resta in attesa, PendingDbPassword).
+ *  1. The middle step of InstallLocks.prepare (where the reinstallation creates the boot
+ *     environment) runs with the turn already taken and BEFORE any unlock: the boot environment has
+ *     the protected packages as they were and no open list. If the step refuses (the boot
+ *     environment is not created) or blows up, nothing is unlocked, the list is not written and the
+ *     turn is freed.
+ *  2. Main.installOnTurn says whether the script reached phase 1 (it started changing the system):
+ *     a planted script that stops before (as for an unconfigured Roundcube) did not, one that prints
+ *     phase 1 and then fails or succeeds did. It is what decides whether the boot environment stays.
+ *     The real body, in a child process with its own folder, SQLite and secrets; MySQL is not needed
+ *     (port 1: the password stays pending, PendingDbPassword).
  *
- * Uso: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallWayBackTest
+ * Usage: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallWayBackTest
  */
 public class InstallWayBackTest {
 
@@ -42,63 +43,63 @@ public class InstallWayBackTest {
         PackageQueue.list = d.resolve("mail-panel-maintenance-locks");
         PackageQueue.turnLock = d.resolve("package-turn.lock");
         try {
-            System.out.println("== Il passo della via di ritorno: col turno, prima dello sblocco ==");
+            System.out.println("== The way-back step: with the turn, before the unlock ==");
             InstallLocksTest.FakePkg p = new InstallLocksTest.FakePkg().with("mysql84-server", "nginx", "dovecot");
             boolean[] turnHeld = {false};
             long[] lockedThen = {-1};
             boolean[] listThen = {true};
             InstallLocksTest.FakePkg pkg = p;
-            InstallLocks.Start s = InstallLocks.prepare("prova", p, () -> {
+            InstallLocks.Start s = InstallLocks.prepare("test", p, () -> {
                 turnHeld[0] = PackageQueue.holder() != null;
                 lockedThen[0] = pkg.lockedCount();
                 listThen[0] = PackageQueue.statePresent();
                 return null;
             });
-            check("il passo trova il turno gia' preso", turnHeld[0]);
-            check("e i tre pacchetti ancora protetti", lockedThen[0] == 3);
-            check("e nessun elenco di sblocchi su disco", !listThen[0]);
-            check("poi l'installazione parte e sblocca", s.refusal() == null && s.held() != null && p.lockedCount() == 0);
+            check("the step finds the turn already taken", turnHeld[0]);
+            check("and the three packages still protected", lockedThen[0] == 3);
+            check("and no list of unlocks on disk", !listThen[0]);
+            check("then the installation starts and unlocks", s.refusal() == null && s.held() != null && p.lockedCount() == 0);
             InstallLocks.finish(s.held(), p, false);
-            check("alla fine riprotetti e turno libero", p.lockedCount() == 3 && PackageQueue.holder() == null);
+            check("at the end locked again and the turn free", p.lockedCount() == 3 && PackageQueue.holder() == null);
 
-            System.out.println("\n== Il passo rifiuta (il boot environment non si crea) ==");
+            System.out.println("\n== The step refuses (the boot environment is not created) ==");
             p = new InstallLocksTest.FakePkg().with("mysql84-server", "nginx");
-            s = InstallLocks.prepare("prova", p, () -> "prova: il boot environment non si crea");
-            check("l'installazione non parte, col motivo del passo", s.held() == null && "prova: il boot environment non si crea".equals(s.refusal()));
-            check("niente sbloccato", p.unlockCalls() == 0 && p.lockedCount() == 2);
-            check("nessun elenco su disco", !Files.exists(PackageQueue.list));
-            check("il turno e' libero", PackageQueue.holder() == null && takeAndRelease());
+            s = InstallLocks.prepare("test", p, () -> "test: the boot environment is not created");
+            check("the installation does not start, with the step's reason", s.held() == null && "test: the boot environment is not created".equals(s.refusal()));
+            check("nothing unlocked", p.unlockCalls() == 0 && p.lockedCount() == 2);
+            check("no list on disk", !Files.exists(PackageQueue.list));
+            check("the turn is free", PackageQueue.holder() == null && takeAndRelease());
 
-            System.out.println("\n== Il passo esplode ==");
+            System.out.println("\n== The step blows up ==");
             p = new InstallLocksTest.FakePkg().with("mysql84-server");
-            s = InstallLocks.prepare("prova", p, () -> { throw new IllegalStateException("prova: bectl esplode"); });
-            check("l'installazione non parte", s.held() == null && s.refusal() != null && s.refusal().contains("bectl esplode"));
-            check("niente sbloccato, nessun elenco, turno libero", p.unlockCalls() == 0 && !Files.exists(PackageQueue.list) && takeAndRelease());
+            s = InstallLocks.prepare("test", p, () -> { throw new IllegalStateException("test: bectl blows up"); });
+            check("the installation does not start", s.held() == null && s.refusal() != null && s.refusal().contains("bectl blows up"));
+            check("nothing unlocked, no list, the turn free", p.unlockCalls() == 0 && !Files.exists(PackageQueue.list) && takeAndRelease());
 
-            System.out.println("\n== Lo script si ferma prima della fase 1 ==");
+            System.out.println("\n== The script stops before phase 1 ==");
             String out = run(d.resolve("early"), "early");
-            check("non ha cambiato niente", out.contains("TOUCHED false") && out.contains("RESULT false"));
+            check("it changed nothing", out.contains("TOUCHED false") && out.contains("RESULT false"));
 
-            System.out.println("\n== Lo script arriva alla fase 1 e fallisce ==");
+            System.out.println("\n== The script reaches phase 1 and fails ==");
             out = run(d.resolve("phase1-fail"), "phase1-fail");
-            check("ha cominciato a cambiare il sistema", out.contains("TOUCHED true") && out.contains("RESULT false"));
+            check("it started changing the system", out.contains("TOUCHED true") && out.contains("RESULT false"));
 
-            System.out.println("\n== Lo script arriva in fondo ==");
+            System.out.println("\n== The script reaches the end ==");
             out = run(d.resolve("phase1-ok"), "phase1-ok");
-            check("ha cambiato il sistema", out.contains("TOUCHED true") && out.contains("RESULT true"));
+            check("it changed the system", out.contains("TOUCHED true") && out.contains("RESULT true"));
 
-            System.out.println("\n== Lo script nomina le fasi solo nei controlli, senza la riga della fase 1 ==");
+            System.out.println("\n== The script names the phases only in the checks, without the phase 1 line ==");
             out = run(d.resolve("other-phase"), "other-phase");
-            check("non conta come cambiamento", out.contains("TOUCHED false"));
+            check("it does not count as a change", out.contains("TOUCHED false"));
         } finally {
             removeTree(d);
         }
-        System.out.println(failed == 0 ? "\nTutte le prove passate." : "\n" + failed + " prove FALLITE.");
+        System.out.println(failed == 0 ? "\nAll checks passed." : "\n" + failed + " checks FAILED.");
         System.exit(failed == 0 ? 0 : 1);
     }
 
     static boolean takeAndRelease() {
-        String r = PackageQueue.take("check", "controllo");
+        String r = PackageQueue.take("check", "check");
         PackageQueue.release("check");
         return r == null;
     }
@@ -111,7 +112,7 @@ public class InstallWayBackTest {
             case "other-phase" -> "echo \"Checking: PHASE 1 comes after the checks\"\nexit 1\n";
             default -> throw new IllegalArgumentException(kind);
         };
-        return "#!/bin/sh\n# prova: piantato al posto di install_mail_server.sh\n" + body;
+        return "#!/bin/sh\n# test: planted in place of install_mail_server.sh\n" + body;
     }
 
     static String run(Path dir, String kind) throws Exception {
@@ -138,10 +139,10 @@ public class InstallWayBackTest {
         Main.dbManager.ensureRoundcubeColumns();
         Main.dbManager.ensurePostfixColumn();
         if (Main.dbManager.check_tables() < 1) { Main.dbManager.create_tables(); Main.dbManager.insert_data_default(); }
-        Main.dbManager.update_mysql_config("127.0.0.1", "1", "e2e_nobody", "E2eNessuna1", "e2e_nobody");
+        Main.dbManager.update_mysql_config("127.0.0.1", "1", "e2e_nobody", "E2eNobody1", "e2e_nobody");
         Files.createDirectories(cwd.resolve("install_scripts"));
         Files.writeString(cwd.resolve("install_scripts/install_mail_server.sh"), plantedScript(a[1]));
-        if (PackageQueue.take("reinstall", "installazione di prova") != null) { System.out.println("TURN?"); System.exit(1); }
+        if (PackageQueue.take("reinstall", "test installation") != null) { System.out.println("TURN?"); System.exit(1); }
         AtomicBoolean touched = new AtomicBoolean(false);
         boolean ok;
         try {

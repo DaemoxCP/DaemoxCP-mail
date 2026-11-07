@@ -8,41 +8,43 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Un lavoro alla volta sui pacchetti, e l'elenco per riproteggerli scritto davvero.
+ * One package job at a time, and the list to lock them again really written.
  *
- * Revisione sul PR degli aggiornamenti: due aggiornamenti approvati da due schede
- * partivano insieme e si sovrascrivevano l'elenco su disco; e se l'elenco non si poteva scrivere
- * (disco pieno, /var/db non scrivibile) il lavoro sbloccava lo stesso. Qui si prova che il turno
- * lo prende uno solo anche con molti che ci provano nello stesso istante, che si libera anche se
- * il lavoro fallisce, e che l'elenco non sovrascrive quello di un lavoro interrotto e, se non si
- * scrive, lo dice.
+ * A review of the updates PR: two updates approved from two cards started together and
+ * overwrote each other's list on disk; and if the list could not be written (full disk, /var/db
+ * not writable) the job unlocked all the same. Here it is tested that only one takes the turn
+ * even with many trying at the same instant, that it is freed even if the job fails, and that the
+ * list does not overwrite an interrupted job's and, if it cannot be written, says so.
+ *
+ * The panel's messages are read in English (I18n.setCurrent): outside a request it writes Italian.
  */
 public class PackageQueueTest {
 
     private static int failed = 0;
 
     public static void main(String[] args) throws Exception {
-        // L'elenco in una cartella di prova, non in /var/db.
-        Path d = Files.createTempDirectory("prova-turno");
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        // The list in a test folder, not in /var/db.
+        Path d = Files.createTempDirectory("turn-test");
         Path f = d.resolve("mail-panel-maintenance-locks");
         PackageQueue.list = f;
-        // E il lock del turno fra processi: senza, la prova prenderebbe quello vero, e su una
-        // macchina col pannello acceso lo troverebbe preso (o lo terrebbe ai suoi lavori).
+        // And the turn's lock between processes: without it, the test would take the real one, and
+        // on a machine with the panel running it would find it taken (or hold it from its jobs).
         PackageQueue.turnLock = d.resolve("package-turn.lock");
 
-        // --- Il turno ---
-        real("libero all'inizio", PackageQueue.holder() == null);
-        real("il primo lo prende", PackageQueue.take("a", "manutenzione") == null);
-        String no = PackageQueue.take("b", "aggiornamento di kafka");
-        real("il secondo no, e il messaggio dice chi lo tiene", no != null && no.contains("(manutenzione"));
-        real("nemmeno per le protezioni, mentre un lavoro gira",
-            PackageQueue.takeForLocks("c", "protezione dei pacchetti") != null);
+        // --- The turn ---
+        real("free at the start", PackageQueue.holder() == null);
+        real("the first one takes it", PackageQueue.take("a", "maintenance") == null);
+        String no = PackageQueue.take("b", "kafka update");
+        real("the second one does not, and the message says who holds it", no != null && no.contains("(maintenance"));
+        real("not even for the locks, while a job runs",
+            PackageQueue.takeForLocks("c", "package protection") != null);
         PackageQueue.release("b");
-        real("chi non lo tiene non puo' liberarlo", PackageQueue.holder() != null);
+        real("whoever does not hold it cannot free it", PackageQueue.holder() != null);
         PackageQueue.release("a");
-        real("chi lo tiene lo libera", PackageQueue.holder() == null);
+        real("whoever holds it frees it", PackageQueue.holder() == null);
 
-        // Molti nello stesso istante: uno solo lo prende.
+        // Many at the same instant: only one takes it.
         int n = 64;
         CountDownLatch via = new CountDownLatch(1), finished = new CountDownLatch(n);
         AtomicInteger taken = new AtomicInteger();
@@ -51,66 +53,66 @@ public class PackageQueueTest {
             Thread.ofPlatform().start(() -> {
                 try {
                     via.await();
-                    if (PackageQueue.take(id, "lavoro " + id) == null) taken.incrementAndGet();
+                    if (PackageQueue.take(id, "job " + id) == null) taken.incrementAndGet();
                 } catch (InterruptedException ignored) {
                 } finally { finished.countDown(); }
             });
         }
         via.countDown();
         finished.await(10, TimeUnit.SECONDS);
-        real(n + " insieme: uno solo prende il turno", taken.get() == 1);
+        real(n + " together: only one takes the turn", taken.get() == 1);
         String keeps = PackageQueue.holder();
-        PackageQueue.release(keeps.substring("lavoro ".length(), keeps.indexOf(',')));
-        real("e poi lo libera", PackageQueue.holder() == null);
+        PackageQueue.release(keeps.substring("job ".length(), keeps.indexOf(',')));
+        real("and then frees it", PackageQueue.holder() == null);
 
-        // avvia: il turno si libera quando il lavoro finisce, anche se fallisce.
+        // start: the turn is freed when the job ends, even if it fails.
         CountDownLatch inside = new CountDownLatch(1), leave = new CountDownLatch(1);
-        real("lavoro lungo: prende il turno", PackageQueue.take("lungo", "lavoro lungo") == null);
-        PackageQueue.start("lungo", "prova-lungo", () -> {
+        real("long job: takes the turn", PackageQueue.take("long", "long job") == null);
+        PackageQueue.start("long", "test-long", () -> {
             inside.countDown();
             try { leave.await(); } catch (InterruptedException ignored) { }
         });
         inside.await(5, TimeUnit.SECONDS);
-        real("mentre gira, il turno resta suo", PackageQueue.take("other", "other") != null);
+        real("while it runs, the turn stays its own", PackageQueue.take("other", "other") != null);
         leave.countDown();
-        real("finito il lavoro, il turno si libera", waitUntilFree());
+        real("once the job is over, the turn is freed", waitUntilFree());
 
-        Thread.setDefaultUncaughtExceptionHandler((t, x) -> { });   // l'eccezione voluta non sporca l'uscita
-        real("lavoro che fallisce: prende il turno", PackageQueue.take("broken", "lavoro rotto") == null);
-        PackageQueue.start("broken", "prova-rotto", () -> { throw new IllegalStateException("prova"); });
-        real("anche se fallisce, il turno si libera", waitUntilFree());
+        Thread.setDefaultUncaughtExceptionHandler((t, x) -> { });   // the wanted exception does not dirty the output
+        real("job that fails: takes the turn", PackageQueue.take("broken", "broken job") == null);
+        PackageQueue.start("broken", "test-broken", () -> { throw new IllegalStateException("test"); });
+        real("even if it fails, the turn is freed", waitUntilFree());
 
-        // --- L'elenco su disco ---
-        real("elenco nuovo: scritto", PackageQueue.writeState(List.of("kafka", "librdkafka")) == null);
-        real("elenco nuovo: contenuto giusto", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
+        // --- The list on disk ---
+        real("new list: written", PackageQueue.writeState(List.of("kafka", "librdkafka")) == null);
+        real("new list: right content", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
         String e = PackageQueue.writeState(f, List.of("nginx"));
-        real("elenco gia' presente: rifiutato", e != null && e.contains("esiste già"));
-        real("elenco gia' presente: NON sovrascritto", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
-        Path withoutFolder = d.resolve("non-esiste").resolve("mail-panel-maintenance-locks");
+        real("list already there: refused", e != null && e.contains("already exists"));
+        real("list already there: NOT overwritten", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
+        Path withoutFolder = d.resolve("does-not-exist").resolve("mail-panel-maintenance-locks");
         e = PackageQueue.writeState(withoutFolder, List.of("nginx"));
-        real("cartella che non c'e': rifiutato, e dice perche'", e != null && e.startsWith("non riesco a scrivere"));
-        real("cartella che non c'e': nessun file lasciato", !Files.exists(withoutFolder));
+        real("folder that is not there: refused, and it says why", e != null && e.startsWith("I cannot write"));
+        real("folder that is not there: no file left", !Files.exists(withoutFolder));
 
-        // Con l'elenco di un lavoro non chiuso su disco, quei pacchetti potrebbero essere ancora
-        // sbloccati: nessun lavoro che installa o aggiorna parte. Rimettere le protezioni si',
-        // perche' e' proprio il rimedio.
-        String e2 = PackageQueue.take("upd", "aggiornamento dei pacchetti non protetti");
-        real("elenco aperto: un aggiornamento non parte", e2 != null && e2.contains("non si è chiuso"));
-        real("elenco aperto: e il turno non resta preso", PackageQueue.holder() == null);
-        real("elenco aperto: le protezioni si possono rimettere",
-            PackageQueue.takeForLocks("lock", "protezione dei pacchetti") == null);
+        // With the list of an unfinished job on disk, those packages might still be unlocked: no job
+        // that installs or upgrades starts. Putting the protections back does, because that is the
+        // very remedy.
+        String e2 = PackageQueue.take("upd", "update of the unprotected packages");
+        real("open list: an update does not start", e2 != null && e2.contains("did not finish"));
+        real("open list: and the turn does not stay taken", PackageQueue.holder() == null);
+        real("open list: the protections can be put back",
+            PackageQueue.takeForLocks("lock", "package protection") == null);
         PackageQueue.release("lock");
         PackageQueue.deleteState();
-        real("elenco chiuso: l'aggiornamento parte", PackageQueue.take("upd", "aggiornamento") == null);
+        real("list closed: the update starts", PackageQueue.take("upd", "update") == null);
         PackageQueue.release("upd");
 
-        // Il file del lock fra processi resta (e' il lock che conta, non il file): e' quello
-        // della cartella di prova, non quello di /var/db/mailpanel.
-        real("il lock del turno e' quello della cartella di prova, non quello in /var/db",
+        // The file of the lock between processes stays (the lock is what counts, not the file): it is
+        // the test folder's, not the one in /var/db/mailpanel.
+        real("the turn's lock is the test folder's, not the one in /var/db",
             Files.exists(PackageQueue.turnLock) && PackageQueue.turnLock.getParent().equals(d));
         Files.deleteIfExists(PackageQueue.turnLock);
         Files.delete(d);
-        System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
+        System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);
     }
 

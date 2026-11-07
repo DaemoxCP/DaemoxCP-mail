@@ -20,22 +20,22 @@ import java.security.cert.X509Certificate;
 import java.util.concurrent.Executors;
 
 /**
- * /api/versions e /api/service sul server VERO (SSLMailServer), via HTTPS, con una sessione come
- * quella del login e il MySQL di prova. Non parte nient'altro del pannello: si accende solo il
- * server HTTP con le sue rotte, senza i gestori (ACME, DKIM, rapporto) che toccherebbero il sistema.
+ * /api/versions and /api/service on the REAL server (SSLMailServer), over HTTPS, with a session like
+ * the login's and the test MySQL. Nothing else of the panel starts: only the HTTP server with its
+ * routes is switched on, without the handlers (ACME, DKIM, report) that would touch the system.
  *
- * Si controlla: senza sessione 401; con la sessione le versioni, con MySQL letto dal server vero;
- * la lettura tenuta trenta secondi e "fresh" che non rilegge prima di tre; parametri e metodi
- * sbagliati rifiutati; /api/service senza token CSRF o con un token sbagliato 403, scritto nel
- * registro di audit; con il token giusto la richiesta passa (e un servizio sconosciuto e' 400);
- * un'azione su un servizio finisce nel registro e fa rileggere le versioni.
+ * It checks: without a session 401; with the session the versions, with MySQL read from the real
+ * server; the read kept thirty seconds and "fresh" that does not read again before three; wrong
+ * parameters and methods refused; /api/service without a CSRF token or with a wrong token 403,
+ * written to the audit log; with the right token the request passes (and an unknown service is
+ * 400); an action on a service ends up in the log and makes the versions be read again.
  *
- * Il servizio usato per l'azione e' redis, e l'esito del restart NON si pretende: redis lo
- * installa l'installatore di questo stesso pannello, quindi su una macchina col server di posta
- * installato quel restart riesce, mentre su una macchina nuda fallisce. Si pretende invece la
- * cosa che deve valere sempre: che la risposta e il registro di audit dicano lo stesso esito.
+ * The service used for the action is redis, and the outcome of the restart is NOT required: redis
+ * is installed by this same panel's installer, so on a machine with the mail server installed that
+ * restart succeeds, while on a bare machine it fails. What is required instead is the thing that
+ * must always hold: that the response and the audit log say the same outcome.
  *
- * Uso (con il MySQL di prova del README.md; lo schema se lo prepara da sola):
+ * Usage (with the test MySQL of README.md; it prepares the schema by itself):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova \
  *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.VersionsApiTest
  */
@@ -44,7 +44,7 @@ public class VersionsApiTest {
     static int failed = 0;
 
     static void real(String what, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
@@ -65,10 +65,10 @@ public class VersionsApiTest {
     }
 
     /**
-     * Una POST a cui il server risponde prima di leggerne il corpo (405, 401: come in tutto il
-     * pannello) su una connessione tutta sua. Sulla connessione condivisa la richiesta successiva
-     * a volte trovava il socket chiuso dal server e il client, su una POST, non riprova: "HTTP/1.1
-     * header parser received no bytes", una volta su venti. Non e' quello che si sta provando.
+     * A POST the server answers before reading its body (405, 401: as in the whole panel) on a
+     * connection of its own. On the shared connection the next request sometimes found the socket
+     * closed by the server and the client, on a POST, does not retry: "HTTP/1.1 header parser
+     * received no bytes", once in twenty. It is not what is being tested.
      */
     static HttpResponse<String> askSeparately(String method, String path, String body, boolean withSession) throws Exception {
         try (HttpClient onlyOne = HttpClient.newBuilder().sslContext(http.sslContext()).build()) {
@@ -77,16 +77,16 @@ public class VersionsApiTest {
     }
 
     /**
-     * L'esito che il registro attribuisce a quell'azione: il pannello scrive
-     * {@code service=<nome>} e ci aggiunge {@code (failed)} solo se non e' riuscita
-     * (SSLMailServer, "service=" + service + (success ? "" : " (failed)")). Quindi l'assenza
-     * di quella parola E' il "riuscito", e va letta sulla riga, non su tutto il file: un
-     * {@code contains("service=redis")} sarebbe vero anche per "service=redis (failed)".
+     * The outcome the log gives to that action: the panel writes {@code service=<name>} and adds
+     * {@code (failed)} only if it did not succeed (SSLMailServer, "service=" + service + (success ?
+     * "" : " (failed)")). So the absence of that word IS the "succeeded", and it must be read on the
+     * line, not on the whole file: a {@code contains("service=redis")} would also be true for
+     * "service=redis (failed)".
      */
     static boolean outcomeInRegistry(Path log, String action) throws Exception {
         for (String line : Files.readString(log).split("\n"))
             if (line.contains(action)) return !line.contains("(failed)");
-        throw new IllegalStateException("nel registro non c'e' nessuna riga " + action);
+        throw new IllegalStateException("the log has no line " + action);
     }
 
     static boolean waitForLine(Path log, String text) throws Exception {
@@ -100,21 +100,21 @@ public class VersionsApiTest {
     public static void main(String[] args) throws Exception {
         String port = System.getProperty("mysql.port");
         if (port == null) {
-            System.out.println("MySQL non indicato (-Dmysql.port=...): questa prova ha bisogno del MySQL di prova, la salto.");
+            System.out.println("MySQL not given (-Dmysql.port=...): this test needs the test MySQL, skipped.");
             return;
         }
-        // Prima di creare il client: il certificato di prova e' per localhost, si chiama 127.0.0.1.
+        // Before creating the client: the test certificate is for localhost, it is called as 127.0.0.1.
         System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
-        Path folder = Files.createTempDirectory("api-versioni");
+        Path folder = Files.createTempDirectory("versions-api");
         Path log = folder.resolve("audit.log");
 
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
-        real("connessione a MySQL", db.connect());
-        // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.
-        // Scritta prima che le tabelle esistessero, non si salvava e il pannello
-        // scriveva nel registro vero.
+        real("connection to MySQL", db.connect());
+        // The schema BEFORE the entry, and the entry read back: see TestSessions.auditLogTo.
+        // Written before the tables existed, it was not saved and the panel wrote to the real
+        // log.
         TestSessions.auditLogTo(db, log);
         Main.mailDatabase = db;
         Main.mysqlAvailable = true;
@@ -127,7 +127,7 @@ public class VersionsApiTest {
                 "-subj", "/CN=localhost", "-keyout", folder.resolve("k.pem").toString(), "-out", folder.resolve("c.pem").toString())
                 .redirectErrorStream(true).start();
         cert.getInputStream().readAllBytes();
-        real("certificato di prova", cert.waitFor() == 0);
+        real("test certificate", cert.waitFor() == 0);
         SSLMailServer srv = new SSLMailServer(0, Files.readString(folder.resolve("c.pem")), Files.readString(folder.resolve("k.pem")));
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);
@@ -146,60 +146,60 @@ public class VersionsApiTest {
 
         try {
             System.out.println("\n== /api/versions ==");
-            real("senza sessione: 401", ask("GET", "/api/versions", null, false).statusCode() == 401);
+            real("without a session: 401", ask("GET", "/api/versions", null, false).statusCode() == 401);
             HttpResponse<String> r = ask("GET", "/api/versions", null, true);
             JSONObject j = new JSONObject(r.body());
             String mysql = db.serverVersion();
             JSONObject line = j.getJSONObject("services").getJSONObject("mysql");
-            real("con la sessione: 200 e le sette righe dei servizi", r.statusCode() == 200 && j.getBoolean("success")
+            real("with the session: 200 and the seven service rows", r.statusCode() == 200 && j.getBoolean("success")
                     && j.getJSONObject("services").length() == 7);
-            real("MySQL letto dal server vero, in esecuzione: " + line.optString("version"),
+            real("MySQL read from the real server, running: " + line.optString("version"),
                     mysql != null && mysql.equals(line.optString("version")) && line.optBoolean("running"));
             String read = j.getString("readAt");
-            real("seconda richiesta: la stessa lettura (" + read + ")",
+            real("second request: the same read (" + read + ")",
                     new JSONObject(ask("GET", "/api/versions", null, true).body()).getString("readAt").equals(read));
-            real("\"fresh\" entro tre secondi: la stessa lettura",
+            real("\"fresh\" within three seconds: the same read",
                     new JSONObject(ask("GET", "/api/versions?fresh=1", null, true).body()).getString("readAt").equals(read));
             real("fresh=2: 400", ask("GET", "/api/versions?fresh=2", null, true).statusCode() == 400);
-            // Il token CSRF si guarda prima di tutto (il filtro di ogni rotta): senza, 403; con, il 405 del gestore
+            // The CSRF token is looked at first of all (every route's filter): without it, 403; with it, the handler's 405
             real("POST without the CSRF token: 403", askSeparately("POST", "/api/versions", "{}", true).statusCode() == 403);
             real("POST with the token: 405", askSeparately("POST", "/api/versions", "{\"csrf_token\":\"" + csrf + "\"}", true).statusCode() == 405);
 
-            System.out.println("\n== /api/service: il token CSRF ==");
+            System.out.println("\n== /api/service: the CSRF token ==");
             HttpResponse<String> without = ask("POST", "/api/service", "{\"service\":\"redis\",\"action\":\"stop\"}", true);
-            real("senza token: 403", without.statusCode() == 403);
-            real("con un token sbagliato: 403", ask("POST", "/api/service",
-                    "{\"service\":\"redis\",\"action\":\"stop\",\"csrf_token\":\"sbagliato\"}", true).statusCode() == 403);
-            // sendCsrfError risponde e POI scrive il registro: si aspetta la riga, al massimo due secondi.
-            real("e il registro di audit lo dice (CSRF_FAILURE)", waitForLine(log, "CSRF_FAILURE"));
+            real("without a token: 403", without.statusCode() == 403);
+            real("with a wrong token: 403", ask("POST", "/api/service",
+                    "{\"service\":\"redis\",\"action\":\"stop\",\"csrf_token\":\"wrong\"}", true).statusCode() == 403);
+            // sendCsrfError answers and THEN writes the log: it waits for the line, two seconds at most.
+            real("and the audit log says so (CSRF_FAILURE)", waitForLine(log, "CSRF_FAILURE"));
             HttpResponse<String> unknown = ask("POST", "/api/service",
                     "{\"service\":\"sshd\",\"action\":\"stop\",\"csrf_token\":\"" + csrf + "\"}", true);
-            real("con il token giusto passa: un servizio che non si governa da qui e' 400", unknown.statusCode() == 400
+            real("with the right token it passes: a service not governed from here is 400", unknown.statusCode() == 400
                     && unknown.body().contains("Invalid service"));
-            real("senza sessione, anche con il token: 401", askSeparately("POST", "/api/service",
+            real("without a session, even with the token: 401", askSeparately("POST", "/api/service",
                     "{\"service\":\"redis\",\"action\":\"restart\",\"csrf_token\":\"" + csrf + "\"}", false).statusCode() == 401);
 
-            System.out.println("\n== Un'azione: registro e versioni rilette ==");
-            Thread.sleep(1100);   // letteAlle ha i secondi: una nuova lettura deve potersi distinguere
+            System.out.println("\n== An action: the log and the versions read again ==");
+            Thread.sleep(1100);   // readAt has the seconds: a new read must be told apart
             HttpResponse<String> action = ask("POST", "/api/service",
                     "{\"service\":\"redis\",\"action\":\"restart\",\"csrf_token\":\"" + csrf + "\"}", true);
-            // Non si pretende che redis FALLISCA. Lo pretendeva, con il commento "qui non
-            // c'e' redis": ma redis lo installa l'installatore di questo stesso pannello, e
-            // su una macchina con il server di posta installato "service redis restart"
-            // riesce. Due controlli su due cadevano, su un difetto che non c'era.
+            // It is not required that redis FAILS. It used to be, with the comment "redis is not
+            // here": but redis is installed by this same panel's installer, and on a machine with
+            // the mail server installed "service redis restart" succeeds. Two checks out of two
+            // fell, on a defect that was not there.
             //
-            // L'invariante vero e' un altro, e vale su qualunque macchina: la risposta e il
-            // registro devono dire LA STESSA COSA. Se divergessero, chi legge l'audit log
-            // crederebbe riuscito quello che e' fallito, o il contrario.
+            // The real invariant is another, and it holds on any machine: the response and the log
+            // must say THE SAME THING. If they diverged, whoever reads the audit log would believe
+            // successful what failed, or the other way round.
             boolean succeeded = new JSONObject(action.body()).getBoolean("success");
-            real("redis restart: risposta 200, esito " + (succeeded ? "riuscito" : "non riuscito")
-                    + " (dipende da questa macchina, e va bene)", action.statusCode() == 200);
-            real("nel registro c'e' SERVICE_RESTART di redis", waitForLine(log, "SERVICE_RESTART")
+            real("redis restart: response 200, outcome " + (succeeded ? "succeeded" : "not succeeded")
+                    + " (it depends on this machine, and that is fine)", action.statusCode() == 200);
+            real("the log has redis's SERVICE_RESTART", waitForLine(log, "SERVICE_RESTART")
                     && waitForLine(log, "service=redis"));
-            real("e il registro dice lo STESSO esito della risposta",
+            real("and the log says the SAME outcome as the response",
                     outcomeInRegistry(log, "SERVICE_RESTART") == succeeded);
             String after = new JSONObject(ask("GET", "/api/versions", null, true).body()).getString("readAt");
-            real("dopo l'azione le versioni si rileggono, anche senza fresh: " + after, !after.equals(read));
+            real("after the action the versions are read again, even without fresh: " + after, !after.equals(read));
         } finally {
             https.stop(0);
             db.close();
@@ -209,7 +209,7 @@ public class VersionsApiTest {
             Files.deleteIfExists(folder);
         }
 
-        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         System.exit(failed == 0 ? 0 : 1);
     }
 }

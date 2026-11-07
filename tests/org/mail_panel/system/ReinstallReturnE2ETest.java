@@ -11,19 +11,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Tornare al server di prima di una reinstallazione senza perdere la posta arrivata dopo
- * (ReinstallReturn, reperto 169), con bectl vero, senza riavviare.
+ * Going back to the server before a reinstallation without losing the mail that arrived after it
+ * (ReinstallReturn, reperto 169), with real bectl, without restarting.
  *
- * Una casella di prova in /var/vmail con cinque messaggi «di prima» e un file di Dovecot; la via di
- * ritorno della reinstallazione; poi quello che fa una reinstallazione: i cinque cancellati, tre
- * messaggi nuovi arrivati dopo, il file di Dovecot cambiato. Il ritorno:
- *  - nella via di ritorno ci sono i cinque di prima E i tre nuovi;
- *  - il file di Dovecot e' quello di allora (un file che c'e' gia' non si sovrascrive);
- *  - la via di ritorno e' quella del prossimo avvio (bectl: R);
- *  - posta ferma fino al riavvio (Postfix e Dovecot spenti, come deve);
- *  - i rifiuti: un nome che non e' di una reinstallazione, una che non c'e' piu'; e li' la posta resta su.
- * Poi tutto rimesso: il boot environment di adesso di nuovo per il prossimo avvio, la via di ritorno
- * tolta, la casella di prova tolta, la posta riaccesa. SOLO su un clone di prova, -De2e.vm=yes, root.
+ * A test mailbox in /var/vmail with five "old" messages and a Dovecot file; the reinstallation's
+ * way back; then what a reinstallation does: the five deleted, three new messages arrived later,
+ * the Dovecot file changed. The way back:
+ *  - in the way back there are the five old ones AND the three new ones;
+ *  - the Dovecot file is the one of back then (a file already there is not overwritten);
+ *  - the way back is the one of the next start (bectl: R);
+ *  - mail stopped until the restart (Postfix and Dovecot off, as it must be);
+ *  - the refusals: a name that is not a reinstallation's, one that is no longer there; and there
+ *    the mail stays up.
+ * Then everything put back: the current boot environment again for the next start, the way back
+ * removed, the test mailbox removed, mail on again. ONLY on a test clone, -De2e.vm=yes, root.
  *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallReturnE2ETest
  */
 public class ReinstallReturnE2ETest {
@@ -46,16 +47,16 @@ public class ReinstallReturnE2ETest {
 
     public static void main(String[] args) throws Exception {
         if (!"yes".equals(System.getProperty("e2e.vm"))) {
-            System.out.println("SALTATA: serve -De2e.vm=yes (un clone di prova sulla VM FreeBSD, da root).");
+            System.out.println("SKIPPED: it needs -De2e.vm=yes (a test clone on the FreeBSD VM, as root).");
             System.exit(0);
         }
         for (String n : sh("bectl list -H | cut -f1").split("\n"))
             if (PackageWayBack.REINSTALL_OWN.matcher(n.trim()).matches()) {
-                System.out.println("FERMATA: c'e' gia' una via di ritorno di reinstallazione (" + n.trim() + ").");
+                System.out.println("STOPPED: there is already a reinstallation way back (" + n.trim() + ").");
                 System.exit(2);
             }
         if (!PackageWayBack.dataInside().contains("/var/vmail")) {
-            System.out.println("FERMATA: /var/vmail non sta nel boot environment, qui non c'e' niente da fondere.");
+            System.out.println("STOPPED: /var/vmail is not in the boot environment, there is nothing to merge here.");
             System.exit(2);
         }
         I18n.setCurrent("en");
@@ -69,83 +70,83 @@ public class ReinstallReturnE2ETest {
             String[] f = line.split("\t");
             if (f.length >= 2 && (f[1].contains("R") || f[1].contains("T"))) nextBoot = f[0].trim();
         }
-        System.out.println("in uso: " + running + ", al prossimo avvio: " + nextBoot);
+        System.out.println("in use: " + running + ", at the next start: " + nextBoot);
         List<String> log = new ArrayList<>();
         String name = "";
         try {
             for (String sub : List.of("cur", "new", "tmp")) Files.createDirectories(PROBE.resolve(sub));
             for (int i = 1; i <= 5; i++)
-                Files.writeString(PROBE.resolve("cur/1700000000.M" + i + "P1.e2e:2,S"), "From: prova\nSubject: di prima " + i + "\n\nmessaggio di prima\n");
-            Files.writeString(PROBE.resolve("dovecot-uidlist"), "3 V1 N6 di prima\n");
+                Files.writeString(PROBE.resolve("cur/1700000000.M" + i + "P1.e2e:2,S"), "From: test\nSubject: from before " + i + "\n\nold message\n");
+            Files.writeString(PROBE.resolve("dovecot-uidlist"), "3 V1 N6 from before\n");
             sh("chown -R vmail:vmail /var/vmail/e2e-way-back.test 2>/dev/null");
 
             PackageWayBack.Prepared p = PackageWayBack.beforeInstallation(log::add);
             name = p.name();
-            check("la via di ritorno della reinstallazione c'e': " + name, PackageWayBack.REINSTALL_OWN.matcher(name).matches());
+            check("the reinstallation's way back is there: " + name, PackageWayBack.REINSTALL_OWN.matcher(name).matches());
 
-            // Quello che fa una reinstallazione, e la posta che arriva dopo.
+            // What a reinstallation does, and the mail that arrives after it.
             for (int i = 1; i <= 5; i++) Files.delete(PROBE.resolve("cur/1700000000.M" + i + "P1.e2e:2,S"));
             for (int i = 1; i <= 3; i++)
-                Files.writeString(PROBE.resolve("new/1800000000.M" + i + "P2.e2e"), "From: prova\nSubject: arrivato dopo " + i + "\n\nmessaggio nuovo\n");
-            Files.writeString(PROBE.resolve("dovecot-uidlist"), "3 V2 N1 di dopo\n");
-            // Come una consegna vera: i messaggi nuovi sono di vmail (prima della correzione erano di root,
-            // e il controllo dei proprietari non poteva passare).
+                Files.writeString(PROBE.resolve("new/1800000000.M" + i + "P2.e2e"), "From: test\nSubject: arrived after " + i + "\n\nnew message\n");
+            Files.writeString(PROBE.resolve("dovecot-uidlist"), "3 V2 N1 from after\n");
+            // Like a real delivery: the new messages belong to vmail (before the fix they were root's,
+            // and the owners check could not pass).
             sh("chown -R vmail:vmail /var/vmail/e2e-way-back.test 2>/dev/null");
 
-            System.out.println("\n== I rifiuti ==");
+            System.out.println("\n== The refusals ==");
             boolean postfixUp = up("postfix");
             JSONObject r = ReinstallReturn.goBack("packages-before-2026-11-06-120000-e2e", log::add);
-            check("un nome che non e' di una reinstallazione", !r.optBoolean("success") && r.optString("error").contains("not the way back of a complete reinstallation"));
+            check("a name that is not a reinstallation's", !r.optBoolean("success") && r.optString("error").contains("not the way back of a complete reinstallation"));
             r = ReinstallReturn.goBack("reinstall-before-2000-01-01-000000", log::add);
-            check("una che non c'e' piu'", !r.optBoolean("success") && r.optString("error").contains("not there any more"));
-            check("e la posta resta come era", up("postfix") == postfixUp);
+            check("one that is no longer there", !r.optBoolean("success") && r.optString("error").contains("not there any more"));
+            check("and the mail stays as it was", up("postfix") == postfixUp);
 
-            System.out.println("\n== Il ritorno ==");
+            System.out.println("\n== The way back ==");
             log.clear();
             r = ReinstallReturn.goBack(name, log::add);
             for (String l : log) System.out.println("      | " + l);
-            check("riuscito", r.optBoolean("success"));
-            check("e dice quanti file ha aggiunto (almeno i tre nuovi): " + r.optInt("merged"), r.optInt("merged") >= 3);
+            check("succeeded", r.optBoolean("success"));
+            check("and it says how many files it added (at least the three new ones): " + r.optInt("merged"), r.optInt("merged") >= 3);
             String state = "";
             for (String line : sh("bectl list -H").split("\n")) {
                 String[] f = line.split("\t");
                 if (f.length >= 2 && f[0].trim().equals(name)) state = f[1].trim();
             }
-            check("la via di ritorno e' quella del prossimo avvio (" + state + ")", state.contains("R"));
-            check("la posta e' ferma fino al riavvio", !up("postfix") && !up("dovecot"));
+            check("the way back is the one of the next start (" + state + ")", state.contains("R"));
+            check("mail is stopped until the restart", !up("postfix") && !up("dovecot"));
             Path mnt = Files.createTempDirectory(Path.of("/var/tmp"), "e2e-way-back-check");
-            check("si monta per guardarci dentro", Shell.runShell(Duration.ofSeconds(120), "bectl mount " + name + " " + mnt).success());
+            check("it is mounted to look inside", Shell.runShell(Duration.ofSeconds(120), "bectl mount " + name + " " + mnt).success());
             Path inside = Path.of(mnt + PROBE.toString());
             int oldOnes = 0, newOnes = 0;
             for (int i = 1; i <= 5; i++) if (Files.exists(inside.resolve("cur/1700000000.M" + i + "P1.e2e:2,S"))) oldOnes++;
             for (int i = 1; i <= 3; i++) if (Files.exists(inside.resolve("new/1800000000.M" + i + "P2.e2e"))) newOnes++;
-            check("dentro ci sono i cinque messaggi di prima", oldOnes == 5);
-            check("e i tre arrivati dopo", newOnes == 3);
-            check("il file di Dovecot e' quello di allora", Files.readString(inside.resolve("dovecot-uidlist")).contains("di prima"));
-            check("proprietario e permessi conservati", sh("stat -f %Su " + inside.resolve("new/1800000000.M1P2.e2e")).equals("vmail")
+            check("inside there are the five old messages", oldOnes == 5);
+            check("and the three that arrived later", newOnes == 3);
+            check("the Dovecot file is the one of back then", Files.readString(inside.resolve("dovecot-uidlist")).contains("from before"));
+            check("owner and permissions kept", sh("stat -f %Su " + inside.resolve("new/1800000000.M1P2.e2e")).equals("vmail")
                     || sh("id vmail >/dev/null 2>&1 || echo nouser").equals("nouser"));
             Shell.runShell(Duration.ofSeconds(120), "bectl umount " + name);
             Files.deleteIfExists(mnt);
         } finally {
-            // Rimettere. bectl activate PROMUOVE un clone: dopo il ritorno la via di ritorno possiede lo
-            // snapshot e il boot environment in uso dipende da lei. Quindi: prima si riattiva quello in uso
-            // (torna a possedere il suo snapshot), poi si toglie la via di ritorno (adesso e' una foglia),
-            // poi il prossimo avvio torna quello di prima, che non e' un clone e non si promuove.
+            // Putting back. bectl activate PROMOTES a clone: after the way back the way back owns the
+            // snapshot and the boot environment in use depends on it. So: first the one in use is
+            // activated again (it owns its snapshot again), then the way back is removed (now it is a
+            // leaf), then the next start goes back to the old one, which is not a clone and is not promoted.
             if (!name.isEmpty() && !running.isEmpty()) System.out.println("      | " + sh("bectl activate " + running + " 2>&1"));
-            if (!name.isEmpty()) System.out.println("      | tolta la via di ritorno: " + (PackageWayBack.destroy(name) == null));
+            if (!name.isEmpty()) System.out.println("      | way back removed: " + (PackageWayBack.destroy(name) == null));
             if (!nextBoot.isEmpty()) System.out.println("      | " + sh("bectl activate " + nextBoot + " 2>&1"));
             sh("rm -rf /var/vmail/e2e-way-back.test");
             sh("service dovecot start >/dev/null 2>&1; service postfix start >/dev/null 2>&1");
         }
-        check("alla fine: la posta di nuovo su, la casella di prova tolta", up("postfix") && up("dovecot") && !Files.exists(PROBE));
+        check("at the end: mail up again, the test mailbox removed", up("postfix") && up("dovecot") && !Files.exists(PROBE));
         String after = "";
         for (String line : sh("bectl list -H").split("\n")) {
             String[] f = line.split("\t");
             if (f.length >= 2 && f[1].contains("R")) after = f[0].trim();
         }
-        check("il prossimo avvio e' di nuovo " + nextBoot, after.equals(nextBoot) || nextBoot.isEmpty());
-        check("nessuna via di ritorno rimasta", !sh("bectl list -H | cut -f1").contains("reinstall-before-"));
-        System.out.println(failed == 0 ? "\nTutte le prove passate." : "\n" + failed + " prove FALLITE.");
+        check("the next start is " + nextBoot + " again", after.equals(nextBoot) || nextBoot.isEmpty());
+        check("no way back left", !sh("bectl list -H | cut -f1").contains("reinstall-before-"));
+        System.out.println(failed == 0 ? "\nAll checks passed." : "\n" + failed + " checks FAILED.");
         System.exit(failed == 0 ? 0 : 1);
     }
 }
