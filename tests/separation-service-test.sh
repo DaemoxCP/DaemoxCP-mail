@@ -70,6 +70,7 @@ login() {
 
 get() { curl -sk -A "$UA" -b "$JAR_COOKIES" -o /var/tmp/sep-body -w '%{http_code}' "$BASE$1"; }
 post() { curl -sk -A "$UA" -b "$JAR_COOKIES" -H 'Content-Type: application/json' ${3:+-H "X-CSRF-Token: $3"} -d "$2" -o /var/tmp/sep-body -w '%{http_code}' "$BASE$1"; }
+del() { curl -sk -A "$UA" -b "$JAR_COOKIES" -H "X-CSRF-Token: $CSRF" -X DELETE -o /var/tmp/sep-body -w '%{http_code}' "$BASE$1"; }
 probe_root() { "$JAVA" -cp "$TESTS:$JAR" org.mail_panel.webserver.RootSocketProbe "$@"; }
 probe_web() { as_web "$JAVA" -cp "$TESTS:$JAR" org.mail_panel.webserver.RootSocketProbe "$@"; }
 
@@ -152,10 +153,34 @@ check "  and the page does not say it runs entirely as root" "$(is "$(has "$B" p
 c=$(post "/api/updates" '{"action":"service_users"}' ""); check "the same without the CSRF token: 403 ($c)" "$(is "$c" 403)"
 
 echo
+echo "== 3b. What the web part serves by itself =="
+WEBLOG=/var/db/mailpanel/panel-web.log
+WM=$(stat -f %z $WEBLOG)
+D=sep-test-$$.example
+c=$(post "/api/domains" "{\"domain\":\"$D\",\"description\":\"separation test\"}" "$CSRF"); DID=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' /var/tmp/sep-body)
+check "add a test domain: $c (id $DID)" "$(is "$c" 200)"
+c=$(post "/api/mailboxes" "{\"email\":\"probe@$D\",\"password\":\"Sep-Test-Password-2026x\",\"name\":\"Probe\",\"quota_mb\":10}" "$CSRF"); MID=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' /var/tmp/sep-body)
+check "add a test mailbox: $c (id $MID, $(cut -c1-120 /var/tmp/sep-body))" "$(is "$c" 200)"
+[ -d "/var/vmail/$D/probe/Maildir/cur" ] && [ -d "/var/vmail/$D/probe/Maildir/new" ] && [ -d "/var/vmail/$D/probe/Maildir/tmp" ]; r=$?
+check "the root part made its mail folders (the mail-folders operation)" $r
+check "  owned by vmail ($(stat -f %Su /var/vmail/$D/probe/Maildir 2>/dev/null))" "$(is "$(stat -f %Su /var/vmail/$D/probe/Maildir 2>/dev/null)" vmail)"
+c=$(post "/api/mailboxes" "{\"action\":\"reveal_password\",\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
+check "the password comes back from the vault, read by the web part ($c)" "$(has "$B" "Sep-Test-Password-2026x")"
+for p in /api/domains /api/mailboxes "/api/statistics?days=7" /api/mailconfig /api/theme; do
+    c=$(get "$p"); check "GET $p: $c" "$(is "$c" 200)"
+done
+c=$(post "/api/apple-profile" '{"action":"status"}' "$CSRF"); check "POST /api/apple-profile status: $c" "$(is "$c" 200)"
+c=$(del "/api/mailboxes?id=$MID"); check "remove the test mailbox: $c" "$(is "$c" 200)"
+c=$(del "/api/domains?id=$DID"); check "remove the test domain: $c" "$(is "$c" 200)"
+rm -rf "/var/vmail/$D"
+PROBLEMS=$(tail -c +$((WM + 1)) $WEBLOG | grep -E "Permission denied|AccessDenied|Exception|SEVERE|refused" | head -3)
+check "nothing went wrong in the web part ($PROBLEMS)" "$(is "$PROBLEMS" "")"
+
+echo
 echo "== 4. The root socket =="
 S=$RUN/root.sock
-R=$(probe_root "$S" /api/domains GET /api/domains 1 1); check "root's own client gets no answer ($R)" "$(has "$R" "NO ANSWER")"
-R=$(probe_web "$S" /api/domains GET /api/domains 1 999999999); check "mailpanel with a session that does not exist: 401 ($R)" "$(has "$R" "401 ")"
+R=$(probe_root "$S" /api/logs GET /api/logs 1 1); check "root's own client gets no answer ($R)" "$(has "$R" "NO ANSWER")"
+R=$(probe_web "$S" /api/logs GET /api/logs 1 999999999); check "mailpanel with a session that does not exist: 401 ($R)" "$(has "$R" "401 ")"
 R=$(probe_web "$S" /api/account GET /api/account 1 1); check "mailpanel asking the account API: 404 ($R)" "$(has "$R" "404 ")"
 R=$(probe_web "$S" /api/login POST /api/login 1 1 '{"action":"console_verify"}'); check "mailpanel asking a public route: 404 ($R)" "$(has "$R" "404 ")"
 rm -f "$JAR_COOKIES" /var/tmp/sep-body

@@ -1334,6 +1334,8 @@ public class Main {
      */
     private static boolean startWebPart() {
         nonInteractive = true;
+        // Da qui la parte web non lancia comandi di sistema, salvo i pochi suoi (Shell.webPartOnly).
+        org.mail_panel.util.Shell.webPartOnly();
         if ("root".equals(System.getProperty("user.name"))) {
             System.err.println("--web-part is the panel's web part: the root part starts it as the user "
                     + org.mail_panel.system.PanelSeparation.USER + ", never as root.");

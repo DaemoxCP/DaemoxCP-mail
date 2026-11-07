@@ -6665,5 +6665,6 @@
   "server.paths.panelWebLog": "Panel web part log",
   "server.paths.panelWebLogDesc": "What the web part writes, which runs as the mailpanel user: sign-ins, pages, requests handed to the root part",
   "server.paths.rootSocket": "Root part socket",
-  "server.paths.rootSocketDesc": "Where the web part hands the signed-in requests to the root part, which opens no network ports"
+  "server.paths.rootSocketDesc": "Where the web part hands the signed-in requests to the root part, which opens no network ports",
+  "server.rootPart.refused": "The request does not have the shape the panel expects: nothing was changed."
 }

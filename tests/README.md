@@ -750,7 +750,10 @@ session, no CSRF token, no permission) never reaches the root; the account API s
 Then requests forged on the socket, as a broken-into web part would send them: a viewer's session
 asking to create an administrator gets 403 and creates nothing, someone else's administrator id or a
 revoked session 401, a public route, a page or the account API 404; the role is the database's. A
-Set-Cookie from the root never reaches the browser, and with the root gone the web answers 503.
+Set-Cookie from the root never reaches the browser, and with the root gone the web answers 503. The
+routes the web part serves by itself (domains, mailboxes...) never reach the root, and the root refuses
+them on its socket; its one operation, mail-folders, is refused to a viewer, with GET, with a body,
+without a live session, and an operation that is not in the list.
 
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RootChannelTest
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SeparatedPanelTest
@@ -766,6 +769,20 @@ domain with a command in its name and a mailbox "..", the good ones between quot
 record name (test MySQL, as root). With the jar before the fix both planted commands reached root.
 
     java -De2e.vm=yes $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.RootDistrustsDataTest
+
+**RootGateTest** — the root part's closed list (RootGate), before any handler: routes and methods, the
+shape of every value (control characters, field names, lengths, nesting), the strict shapes of the
+fields that end up in commands and configurations (a host name starting with a dash, an IP with a
+command after it, jails, ports, packages, services, countries, logs, PEM blocks with something else
+inside); from the project folder, every call the pages make to a root route uses a method in the list.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.RootGateTest
+
+**WebPartShellTest** — in the web part Shell runs no system command except dig, sendmail, postconf -h
+and hostname: the root part's commands are refused through Shell.run, Shell.runShell and applyPath, the
+web part's own pass.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.util.WebPartShellTest
 
 **HeadRequestTest** — HEAD on the real server, without MySQL. Before, every handler sent the body's
 length and then wrote the body: Java's HTTP server logged a warning for the length and refused the
@@ -790,8 +807,9 @@ the jar to test installed in the panel folder and the compiled tests in a folder
 
 Who runs what and who listens (the web part as mailpanel on 2096, the root part on no port), every
 shared file's permissions, what mailpanel can and cannot read or write, a sign-in with a console code
-and the API through the web part, requests forged on the real socket, a second start with no DONE and
-no WARNING; then the planted faults, each put back: the user mailpanel someone else's, the jar
+and the API through the web part, the routes the web part serves by itself (a test domain and mailbox
+added and removed, their mail folders made by the root part as vmail, the password read back from the
+vault by the web part), requests forged on the real socket, a second start with no DONE and no WARNING; then the planted faults, each put back: the user mailpanel someone else's, the jar
 unreadable by mailpanel, the web part killed every time it starts (the panel goes back to serving
 everything as root), the root part killed with -9 (the next start stops the web part left behind).
 

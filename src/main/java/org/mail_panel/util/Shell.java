@@ -49,6 +49,39 @@ public final class Shell {
 
     private static final Logger LOGGER = Logger.getLogger(Shell.class.getName());
 
+    /**
+     * La parte web del pannello separato: niente comandi di sistema, salvo
+     * i pochi che le servono e non cambiano niente. Il sistema operativo le negherebbe comunque quello che
+     * vuole root; qui un comando che la web non deve lanciare si ferma prima, e il registro dice quale, cosi'
+     * un'operazione dimenticata nella parte web si vede invece di fallire in silenzio.
+     */
+    private static volatile boolean webPart;
+
+    /** I programmi che la parte web lancia: dig (blacklist), sendmail (i codici d'accesso), il nome del server. */
+    static final java.util.Set<String> WEB_PART_PROGRAMS = java.util.Set.of("dig", "drill", "host", "sendmail", "postconf", "hostname");
+    /** Le righe di shell che la parte web lancia (PanelMail, il nome nel mittente). */
+    static final java.util.Set<String> WEB_PART_SHELL = java.util.Set.of("postconf -h myhostname 2>/dev/null", "hostname");
+
+    /** Da chiamare all'avvio della parte web, prima di servire richieste. Non si torna indietro. */
+    public static void webPartOnly() {
+        webPart = true;
+    }
+
+    /** Fermo se la parte web chiede un comando che non e' suo. */
+    static void allowed(List<String> cmd) {
+        if (!webPart || cmd == null || cmd.isEmpty()) return;
+        String prog = cmd.get(0);
+        boolean ok;
+        if (cmd.size() >= 3 && (prog.equals("sh") || prog.equals("/bin/sh")) && cmd.get(1).equals("-c"))
+            ok = WEB_PART_SHELL.contains(cmd.get(2));
+        else
+            ok = WEB_PART_PROGRAMS.contains(prog.substring(prog.lastIndexOf('/') + 1));
+        if (ok) return;
+        LOGGER.warning("[WebPart] refused to run " + prog + (cmd.size() > 1 ? " " + cmd.get(1) : "")
+                + ": the web part runs no system command");
+        throw new SecurityException("the web part runs no system command: " + prog);
+    }
+
     /** Default timeout se non specificato. */
     public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
 
@@ -147,6 +180,7 @@ public final class Shell {
      */
     public static void applyPath(ProcessBuilder pb) {
         if (pb == null) return;
+        allowed(pb.command());
         pb.environment().put("PATH", FULL_PATH);
         java.util.List<String> cmd = pb.command();
         if (cmd == null || cmd.isEmpty()) return;

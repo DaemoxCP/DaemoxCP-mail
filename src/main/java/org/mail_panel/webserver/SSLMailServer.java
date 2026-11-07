@@ -55,11 +55,31 @@ public class SSLMailServer {
     public enum Mode { LEGACY, ROOT_PART, WEB_PART }
 
     /**
-     * Le API che restano nella parte web: usano la memoria del suo processo (le sfide delle passkey, il
-     * token della sessione corrente per l'elenco e la revoca delle sessioni). Tutte le altre API vanno
-     * alla root.
+     * Le API che la parte web serve da se', con l'utente mailpanel:
+     * <ul>
+     *   <li>/api/account usa la memoria del suo processo (le sfide delle passkey, il token della sessione);</li>
+     *   <li>le altre non hanno bisogno di root: MySQL, SQLite in lettura, la chiave del vault in lettura, la
+     *       rete. Domini e caselle chiedono alla root una sola cosa, l'operazione chiusa «mail-folders»
+     *       (ROOT_OPERATIONS), senza parametri.</li>
+     * </ul>
+     * Tutte le altre API vanno alla root.
      */
-    static final java.util.Set<String> WEB_LOCAL_API = java.util.Set.of("/api/account");
+    static final java.util.Set<String> WEB_LOCAL_API = java.util.Set.of("/api/account", "/api/theme", "/api/domains",
+            "/api/mailboxes", "/api/mailconfig", "/api/webmail", "/api/statistics", "/api/apple-profile", "/apple-profile",
+            "/api/blacklist_check");
+
+    /**
+     * Le operazioni che la parte web chiede alla root per nome, senza parametri, invece di passarle una
+     * richiesta: il nome, chi la puo' chiedere (uno dei permessi), cosa fa. La root rilegge la sessione e il
+     * ruolo dal database come per le richieste inoltrate.
+     */
+    private record RootOperation(java.util.Set<String> anyOf, Runnable work) {}
+
+    private Map<String, RootOperation> rootOperations() {
+        // mail-folders: le cartelle della posta delle caselle (dai nomi di MySQL, ricontrollati da SafeNames)
+        // e il reload di Postfix e Dovecot, dopo aver aggiunto o tolto un dominio o una casella.
+        return Map.of("mail-folders", new RootOperation(java.util.Set.of(DOMAINS, MAILBOXES), this::regenerateMailConfigs));
+    }
 
     /** Il server HTTPS; null nella parte root, che non ha porte (lo crea becomeLegacy se serve). */
     private HttpsServer server;
@@ -769,6 +789,8 @@ public class SSLMailServer {
         }
         server.start();
         if (mode == Mode.WEB_PART) {
+            // I gestori della web che lo usano (il controllo delle blacklist): MySQL e rete, niente root.
+            if (Main.mailDatabase != null && Main.mysqlAvailable) this.dnsGenerator = new DnsRecordsGenerator(Main.mailDatabase);
             LOGGER.info("Mail Panel web part started on port " + port + " as " + System.getProperty("user.name")
                     + ": the signed-in API go to the root part");
             return;
@@ -1130,6 +1152,10 @@ public class SSLMailServer {
      * controllo del permesso di ogni richiesta (accessAllowed) e lo stesso gestore di oggi.
      */
     public void serveForwarded(RootChannel.Request r, ForwardedExchange exchange) throws IOException {
+        if (r.route().startsWith("/op/")) {
+            serveOperation(r, exchange);
+            return;
+        }
         Access access = routes.get(r.route());
         HttpHandler handler = handlers.get(r.route());
         I18n.setCurrent(I18n.LANGUAGES.contains(r.lang()) ? r.lang() : I18n.FALLBACK_LANGUAGE);
@@ -1139,6 +1165,15 @@ public class SSLMailServer {
                 LOGGER.warning("Root part: forwarded request refused (route " + r.route() + ", path " + r.path() + ")");
                 logAudit("FORWARD_REFUSED", r.clientIp(), "route=" + r.route() + " path=" + r.path());
                 sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
+                return;
+            }
+            // L'elenco chiuso (RootGate): il metodo della rotta, la forma di ogni valore, quella stretta dei
+            // parametri che finiscono in comandi e configurazioni. Il motivo nel registro, mai il valore.
+            String refused = RootGate.check(r);
+            if (refused != null) {
+                LOGGER.warning("Root part: forwarded request refused: " + refused);
+                logAudit("FORWARD_REFUSED", r.clientIp(), "route=" + r.route() + " " + refused);
+                sendJsonError(exchange, 400, I18n.tr("server.rootPart.refused"));
                 return;
             }
             Optional<WebSessions.Current> session = Main.sessions.forwarded(r.sessionId(), r.adminId());
@@ -1156,6 +1191,65 @@ public class SSLMailServer {
         } finally {
             I18n.clearCurrent();
             forgetCurrentSession();
+        }
+    }
+
+    /**
+     * La parte root: un'operazione chiusa (rootOperations) chiesta dalla web. Solo POST, nessun corpo, il
+     * percorso uguale al nome; la sessione deve esserci ancora, e il ruolo dal database deve avere uno dei
+     * permessi dell'operazione.
+     */
+    private void serveOperation(RootChannel.Request r, ForwardedExchange exchange) throws IOException {
+        I18n.setCurrent(I18n.LANGUAGES.contains(r.lang()) ? r.lang() : I18n.FALLBACK_LANGUAGE);
+        try {
+            RootOperation op = rootOperations().get(r.route().substring("/op/".length()));
+            if (mode != Mode.ROOT_PART || op == null || !"POST".equals(r.method()) || !r.route().equals(r.path())
+                    || r.body().length > 0 || r.query() != null) {
+                LOGGER.warning("Root part: operation refused (" + r.method() + " " + r.route() + ")");
+                logAudit("FORWARD_REFUSED", r.clientIp(), "operation=" + r.route());
+                sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
+                return;
+            }
+            Optional<WebSessions.Current> session = Main.sessions.forwarded(r.sessionId(), r.adminId());
+            if (session.isEmpty()) {
+                sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
+                return;
+            }
+            if (op.anyOf().stream().noneMatch(p -> AuthStore.may(session.get().admin(), p))) {
+                logAudit("PERMISSION_DENIED", r.clientIp(), "user=" + session.get().admin().username() + " operation=" + r.route());
+                sendJsonError(exchange, 403, I18n.tr("server.access.forbidden"));
+                return;
+            }
+            op.work().run();
+            sendJsonResponse(exchange, new JSONObject().put("success", true));
+        } finally {
+            I18n.clearCurrent();
+        }
+    }
+
+    /**
+     * La parte web chiede alla root un'operazione chiusa, per chi ha fatto la richiesta in corso (la sessione
+     * del thread). Se la root non risponde lo si dice nel registro: il cambiamento in MySQL c'e' comunque, e le
+     * cartelle le crea Dovecot al primo accesso.
+     */
+    @SuppressWarnings("unchecked")
+    private void askRoot(String operation) {
+        Object[] cached = CURRENT_SESSION.get();
+        Optional<WebSessions.Current> s = cached == null ? Optional.empty() : (Optional<WebSessions.Current>) cached[1];
+        if (s.isEmpty()) {
+            LOGGER.warning("Web part: root operation " + operation + " asked outside a signed-in request: not sent");
+            return;
+        }
+        HttpExchange ex = (HttpExchange) cached[0];
+        String route = "/op/" + operation;
+        RootChannel.Request req = new RootChannel.Request(route, "POST", route, null, Map.of(), getClientIp(ex), I18n.current(),
+                s.get().admin().id(), s.get().id(), null);
+        try (RootChannel.Exchange answer = RootChannel.send(org.mail_panel.system.PanelSeparation.socket(), req)) {
+            String body = new String(answer.body().readAllBytes(), StandardCharsets.UTF_8);
+            if (answer.head().status() != 200)
+                LOGGER.warning("Web part: the root part refused " + operation + " (" + answer.head().status() + " " + body + ")");
+        } catch (IOException e) {
+            LOGGER.warning("Web part: the root part did not do " + operation + ": " + e.getMessage());
         }
     }
 
@@ -2859,6 +2953,11 @@ public class SSLMailServer {
     }
 
     private void regenerateMailConfigs() {
+        // Nella parte web niente script: lo chiede alla root, che lo compone dai nomi di MySQL ricontrollati.
+        if (mode == Mode.WEB_PART) {
+            askRoot("mail-folders");
+            return;
+        }
         try {
             if (Main.mailDatabase != null && Main.mysqlAvailable) {
                 String script = new ConfigRegeneratorScript(Main.mailDatabase).getScriptContent();
