@@ -44,6 +44,10 @@ passata.
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.InstallScriptsTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.InstallScriptVersionTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ReinstallReturnE2ETest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.NoBootEnvironmentTest
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InterruptionReportTest
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LockMarksTest
+    expect tests/menu-way-back.exp <chiave ssh> <host del clone> <cartella del pannello sul clone> <jar>
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.AliasMessagesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.PasswordGeneratorTest
@@ -396,6 +400,25 @@ sulla VM: si ferma sempre prima della fase 1, e rimette rc.conf.
 **ReinstallReturnE2ETest** — tornare alla via di ritorno di una reinstallazione con la posta arrivata dopo
 fusa dentro (`ReinstallReturn`, reperto 170), con bectl vero e senza riavviare; tutto rimesso nell'ordine
 giusto (bectl activate promuove). Solo su un clone.
+
+**NoBootEnvironmentTest** — un sistema senza boot environment (un bectl finto davanti nel PATH che
+fallisce sempre): la via di ritorno non si crea e lo si dice, lo spazio non si misura, il ritorno rifiuta
+ogni nome, la scheda dice che non ci sono (reperto 172).
+
+**InterruptionReportTest** — la reinstallazione interrotta nel rapporto periodico: la cosa piu' urgente,
+col suo titolo e il comando per tornare indietro; un lavoro qualunque resta com'era. Con `-De2e.vm=yes`
+anche i dati veri del rapporto (`UpdateManager.reportData`). Reperto 172.
+
+**LockMarksTest** — il cartello «bloccato dal pannello» su tutti e soli i bloccati. Con `-De2e.vm=yes`
+anche la prova 5, che sblocca TUTTI i pacchetti (solo su un clone) e rimette blocchi e cartelli come li ha
+trovati: senza nessun bloccato `pkg lock -l` esce con 1, e i cartelli rimasti non se ne andavano mai
+(reperto 173).
+
+**menu-way-back.exp** — la voce 6 del menu a schermo, in un terminale vero (`ssh -tt`), con expect: va
+preparata sul clone una copia del pannello, una via di ritorno vera (`MakeReinstallWayBack`) e l'avviso di
+una reinstallazione interrotta; dopo, la via di ritorno e' quella del prossimo avvio e la posta e' ferma,
+e va rimesso tutto (reperto 174). Lanterna ridisegna solo le celle che cambiano: si aspetta una riga che
+arriva intera, non una qualunque.
 
 `ReinstallJobTest` vuole la classe ombra di `FullMailServerScript` (`tests/planted`) davanti al jar: la
 reinstallazione riscrive sempre lo script dal suo jar, e senza l'ombra eseguirebbe quello vero (la prova lo

@@ -564,12 +564,17 @@ public final class UpdateManager {
      * protetti dal pannello l'annotazione stava su uno, redis: il cartello spariva proprio dai
      * pacchetti che il pannello aveva aggiornato.
      *
-     * Costa due letture (pkg lock -l, pkg query) e un comando per ogni cartello da cambiare,
-     * quindi a regime nessuno. Se una delle due letture fallisce non si tocca niente: con
-     * l'elenco dei blocchi vuoto per un errore, i cartelli si toglierebbero da tutti.
+     * Costa due letture (pkg query) e un comando per ogni cartello da cambiare, quindi a regime
+     * nessuno. Se una delle due letture fallisce non si tocca niente: con l'elenco dei blocchi
+     * vuoto per un errore, i cartelli si toglierebbero da tutti.
+     *
+     * I bloccati si leggono con pkg query e non con "pkg lock -l": misurato sulla VM il 07/11/2026
+     * (pkg 2.8.4), senza nessun pacchetto bloccato "pkg lock -l" esce con 1 («No locked packages
+     * were found»), cioe' come un errore, e qui si fermava tutto: i cartelli rimasti sui pacchetti
+     * sbloccati non se ne andavano piu' (reperto 173). Lo stesso tranello di InstallLocks.real().
      */
     static int[] syncLockMarks() {
-        Shell.Result lock = Shell.runShell(Duration.ofSeconds(30), "pkg lock -l");
+        Shell.Result lock = Shell.runShell(Duration.ofSeconds(30), "pkg query -e '%k = 1' '%n-%v'");
         Shell.Result annotations = Shell.runShell(Duration.ofSeconds(60), "pkg query -a '%n %At %Av'");
         if (!lock.success() || !annotations.success()) {
             LOGGER.warning("Lock marks not updated: cannot read the locks or the annotations");

@@ -98,10 +98,12 @@ public final class PackageWayBack {
     }
 
     /**
-     * Lo spazio libero che la reinstallazione vuole prima di partire. Misurato sulla VM il 06/11/2026
-     * (reperto 170): con i pacchetti gia' installati la reinstallazione ha scritto 54 MB netti; con
-     * pacchetti da scaricare e installare sono molti di piu'. Un disco che si riempie a meta' lascia
-     * la posta spenta peggio di una reinstallazione che non parte.
+     * Lo spazio libero che la reinstallazione vuole prima di partire. Misurato sulla VM: con i
+     * pacchetti gia' installati la reinstallazione ha scritto 54 MB netti (06/11/2026, reperto 170);
+     * con gli undici pacchetti principali da scaricare e reinstallare, e la cache di pkg vuota, 358 MB,
+     * di cui 81 di cache (07/11/2026, reperto 174). 1 GB e' quasi tre volte il caso peggiore misurato,
+     * per i picchi durante l'estrazione e per la posta che intanto arriva. Un disco che si riempie a
+     * meta' lascia la posta spenta peggio di una reinstallazione che non parte.
      */
     static long reinstallMinFree = 1L << 30;
 
