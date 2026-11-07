@@ -25,7 +25,10 @@ step "nessuna finestra «Created ... script» da chiudere: subito le voci del me
 step "c'e' la voce 6" "6\\) Go back to the server before"
 send "\033\[B\033\[B\033\[B\033\[B\033\[B"
 send "\r"
-step "la conferma" "Go back to the server as it was before"
+# Lanterna ridisegna solo le celle che cambiano: una frase sopra il menu arriva a pezzi se alcune
+# lettere coincidono con quelle sotto («Go b» + «ck»). Questa, con lo schermo 80x24 di ssh -tt,
+# arriva intera.
+step "la conferma" "arrived after it is kept"
 send "\t"
 send "\r"
 step "il ritorno parte" "\\\[WAY BACK\\\] reinstall-before-"

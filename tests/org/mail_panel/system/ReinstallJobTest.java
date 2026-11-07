@@ -325,7 +325,16 @@ public class ReinstallJobTest {
                 System.exit(0);
             }
             case "menu" -> {
-                if (a.length > 3 && a[3].equals("no-daemon")) ReinstallJob.daemon = "/nonexistent/daemon";
+                if (a.length > 3 && a[3].equals("no-daemon")) {
+                    ReinstallJob.daemon = "/nonexistent/daemon";
+                    // Senza daemon la reinstallazione gira in questo processo, che come il menu vero ha
+                    // la configurazione del pannello aperta (Main.main la apre prima del menu).
+                    Main.dbManager = new dataBaseManager();
+                    Main.dbManager.ensureMailHostnameColumn();
+                    Main.dbManager.ensureSslChainColumn();
+                    Main.dbManager.ensureRoundcubeColumns();
+                    Main.dbManager.ensurePostfixColumn();
+                }
                 boolean ok = ReinstallJob.runFromMenu(a[2], System.out);
                 System.out.println("MENU RESULT " + ok);
                 System.exit(ok ? 0 : 1);

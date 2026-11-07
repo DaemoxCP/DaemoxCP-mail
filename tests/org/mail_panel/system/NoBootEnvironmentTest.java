@@ -51,7 +51,14 @@ public class NoBootEnvironmentTest {
     static void child() {
         I18n.setCurrent("en");
         List<String> log = new ArrayList<>();
-        PackageWayBack.Prepared p = PackageWayBack.beforeInstallation(log::add);
+        PackageWayBack.Prepared p;
+        try {
+            p = PackageWayBack.beforeInstallation(log::add);
+        } catch (IllegalStateException e) {
+            // Il guasto NB1 (reperto 172) arrivava qui: un'eccezione al posto del controllo.
+            check("la via di ritorno non si crea, senza eccezioni: " + e.getMessage(), false);
+            p = new PackageWayBack.Prepared("", "");
+        }
         check("la via di ritorno non si crea, senza eccezioni", p.name().isEmpty());
         check("e lo dice", String.join("\n", log).contains("no ZFS boot environments"));
         log.clear();

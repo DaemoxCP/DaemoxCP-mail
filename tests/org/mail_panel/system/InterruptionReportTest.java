@@ -59,7 +59,9 @@ public class InterruptionReportTest {
             } catch (RuntimeException e) {
                 text = "ERRORE: " + e;
             }
-            check("il testo del rapporto la contiene", text.contains("mail may be stopped") && text.contains("bectl activate"));
+            // Il testo va a capo a 72 colonne: si confronta con gli spazi normalizzati.
+            String flat = text.replaceAll("\\s+", " ");
+            check("il testo del rapporto la contiene", flat.contains("mail may be stopped") && flat.contains("bectl activate reinstall-before-2026-11-06-120000"));
 
             if ("yes".equals(System.getProperty("e2e.vm"))) {
                 JSONArray toDo = UpdateManager.reportData(false).optJSONArray("toDo");
