@@ -61,6 +61,7 @@ function panelRebootRefresh() {
     if (!box) return Promise.resolve(null);
     return panelRebootApi('reboot_state').then(function (r) {
         panelReboot.state = r;
+        document.dispatchEvent(new CustomEvent('panel:reboot', { detail: r }));
         if (!r || !r.success || (r.state === 'none' && !r.scheduled)) {
             box.hidden = true;
             box.replaceChildren();
@@ -217,4 +218,10 @@ function panelAskYes() {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('panelAskModal')).hide();
 }
 
-document.addEventListener('DOMContentLoaded', panelRebootRefresh);
+// Le finestre stanno in un <template> (Layout.rebootFrame) e si mettono in fondo alla pagina: dentro la
+// pagina, prima del suo titolo, i loro <h2> venivano prima di quello della pagina.
+document.addEventListener('DOMContentLoaded', function () {
+    var tpl = document.getElementById('panelRebootTemplates');
+    if (tpl) document.body.appendChild(tpl.content.cloneNode(true));
+    panelRebootRefresh();
+});

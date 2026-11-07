@@ -12381,6 +12381,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             catch (e) { r = { success: false, error: t('common.networkError', { message: e.message }) }; }
             // Un'altra lettura della pagina e' in corso: si riprova fra poco invece di mostrare un errore.
             if (!r.success && r.error === t('up.busy')) { setTimeout(pkOverview, 1500); return; }
+            // «Aggiorna il server» usa questa lettura invece di rifarla (reperto 186): e' la piu' pesante.
+            document.dispatchEvent(new CustomEvent('upd:packages', { detail: r }));
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; return; }
             const s = r.summary || {};
             let h = '<div class="d-flex flex-wrap gap-1 mb-2">'

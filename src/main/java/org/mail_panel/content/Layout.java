@@ -247,6 +247,7 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
     }
 
     private static final String REBOOT_MODALS = """
+<template id="panelRebootTemplates">
 <div class="modal fade" id="panelRebootModal" tabindex="-1" aria-labelledby="panelRebootTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
@@ -288,6 +289,7 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
         </div>
     </div>
 </div>
+</template>
 """;
 
     private static final String REBOOT_SCRIPT = PageAssets.script(readPage("pages/panel-reboot.js"), false);

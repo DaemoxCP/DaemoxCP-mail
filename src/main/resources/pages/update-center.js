@@ -43,22 +43,37 @@
             return li;
         }
 
-        async function ucLoad() {
+        // Legge lo stato di FreeBSD; il resto arriva dalle letture che le schede qui sotto fanno comunque
+        // (pacchetti, ramo, riavvio): rileggerli qui raddoppiava la lettura piu' pesante della pagina.
+        // «Rileggi» chiede a quelle schede di rileggere.
+        async function ucLoad(all) {
             const state = document.getElementById('ucState');
             state.textContent = t('uc.reading');
-            [uc.os, uc.pk, uc.branch] = [await updApi('os_status'), await updApi('packages_overview'), await updApi('branch_status')];
-            uc.reboot = typeof panelRebootRefresh === 'function' ? await panelRebootRefresh() : null;
+            if (all) {
+                pkOverview();
+                branchStatus();
+                if (typeof panelRebootRefresh === 'function') panelRebootRefresh();
+            }
+            uc.os = await updApi('os_status');
             ucRender();
             state.textContent = '';
         }
 
+        document.addEventListener('upd:packages', e => { uc.pk = e.detail; ucRender(); });
+        document.addEventListener('upd:branch', e => { uc.branch = e.detail; ucRender(); });
+        document.addEventListener('panel:reboot', e => { uc.reboot = e.detail; ucRender(); });
+
         function ucRender() {
             const list = document.getElementById('ucList');
+            if (!list) return;
             list.replaceChildren();
             const os = uc.os || {}, pk = uc.pk || {}, br = uc.branch || {}, rb = uc.reboot || {};
+            const reading = title => ucRow('info', title, t('uc.reading'));
 
             // 1. Il sistema di base
-            if (!os.success) {
+            if (!uc.os) {
+                list.append(reading(t('uc.os')));
+            } else if (!os.success) {
                 list.append(ucRow('error', t('uc.os'), os.error || t('common.errorShort')));
             } else if (!os.updatableWithFreebsdUpdate) {
                 list.append(ucRow('info', t('uc.os'), os.updatesNote || ''));
@@ -75,7 +90,9 @@
             const rows = pk.packages || [];
             const stack = rows.filter(p => p.update && p.locked);
             const plain = (sum.updates || 0) - stack.length;
-            if (!pk.success) {
+            if (!uc.pk) {
+                list.append(reading(t('uc.packages')));
+            } else if (!pk.success) {
                 list.append(ucRow('error', t('uc.packages'), pk.error || t('common.errorShort')));
             } else if (plain > 0) {
                 list.append(ucRow('todo', t('uc.packages'), tn('uc.packagesTodo', plain)
@@ -108,13 +125,17 @@
             }
 
             // 4. Il ramo
-            if (br.success) {
+            if (!uc.branch) {
+                list.append(reading(t('uc.branch')));
+            } else if (br.success) {
                 const b = ucButton('btn-outline-secondary', 'fa-code-branch', t('uc.branchGo'), 'ucGoBranch()');
                 list.append(ucRow('info', t('uc.branch'), t('uc.branchNow', { branch: br.branch || '?' }), [b]));
             }
 
             // 5. Il riavvio
-            if (rb && rb.success) {
+            if (!uc.reboot) {
+                list.append(reading(t('uc.reboot')));
+            } else if (rb.success) {
                 if (rb.state === 'needed' || rb.state === 'advised') {
                     list.append(ucRow('todo', t('uc.reboot'), rb.state === 'needed'
                         ? t('rb.needed', { installed: rb.installedKernel, running: rb.runningKernel }) : t('rb.advised'),
@@ -135,7 +156,7 @@
             pre.textContent = '';
             const r = await updApi('updates_search', { confirm: 'SEARCH' });
             if (!r.success) { state.textContent = r.error || t('common.errorShort'); return; }
-            ucFollow(r.jobId, () => { ucLoad(); osState(); pkOverview(); });
+            ucFollow(r.jobId, () => { ucLoad(true); osState(); });
         }
 
         // L'esito di un lavoro: in un posto suo, che la rilettura della scheda non copre.
@@ -197,7 +218,7 @@
             pre.hidden = false;
             ucOutcome(true, '');
             state.textContent = t('up.upgradingKeepOpen');
-            ucFollow(a.jobId, () => { ucLoad(); pkOverview(); });
+            ucFollow(a.jobId, () => { ucLoad(true); });
         }
 
         function ucShow() {

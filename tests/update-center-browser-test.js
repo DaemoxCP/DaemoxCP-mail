@@ -91,8 +91,10 @@ async function open(ctx, name, lang, o = {}) {
     return { page, calls, errors, dialogs };
 }
 
+// Ready when every row has its data: the card fills in as the other cards' reads arrive.
 const centerReady = page => page.waitForFunction(() => document.querySelectorAll('#ucList > li').length >= 5
-    && document.getElementById('ucState').textContent === '', null, { timeout: 20000 });
+    && document.getElementById('ucState').textContent === '' && !document.getElementById('ucList').textContent.includes(t('uc.reading')),
+    null, { timeout: 20000 });
 const allErrors = [], allDialogs = [];
 
 (async () => {
@@ -130,6 +132,8 @@ const allErrors = [], allDialogs = [];
     check('mail server: dovecot with its button, Java with its procedure', /dovecot-mysql: 2\.3\.21\.1_3 → 2\.3\.21\.1_4/.test(rows[2])
         && await page.$('#ucList button[data-pkg="dovecot-mysql"]') !== null && /Java update procedure/.test(rows[2]));
     check('branch and restart', /quarterly branch/.test(rows[3]) && /needs a restart/.test(rows[4]));
+    check('one read each of packages and branch when the page opens (the card reuses the cards\' reads)',
+        calls.filter(c => c.action === 'packages_overview').length === 1 && calls.filter(c => c.action === 'branch_status').length === 1);
     check('the state in words too, not only by color', await page.$$eval('#ucList .visually-hidden', s => s.map(x => x.textContent).join(' '))
         .then(x => /to do/.test(x) && /information/.test(x)));
     if (shots) await page.locator('#update-center').screenshot({ path: path.join(shots, 'update-center.png') });
