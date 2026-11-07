@@ -1,8 +1,10 @@
 package org.mail_panel.scripts;
 
 import org.mail_panel.database.MailDatabase;
+import org.mail_panel.security.SafeNames;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Generates script to regenerate Postfix and Dovecot configs
@@ -12,6 +14,8 @@ import java.util.List;
  * so this script mainly creates maildir directories and reloads services.
  */
 public class ConfigRegeneratorScript {
+
+    private static final Logger LOGGER = Logger.getLogger(ConfigRegeneratorScript.class.getName());
 
     private final MailDatabase mailDb;
 
@@ -39,13 +43,29 @@ public class ConfigRegeneratorScript {
             // Create maildir directories
             script.append("# Create maildir directories\n");
             script.append("echo 'Creating maildir directories...'\n");
+            // I nomi vengono da MySQL, che col pannello separato scrive anche la parte web: questo script lo
+            // esegue root, quindi un nome entra solo se ha la forma di un dominio o di una casella (SafeNames),
+            // e comunque fra apici. Un nome che non passa si salta, e lo si dice senza ripeterlo nello script.
+            // Le tre cartelle una per una: /bin/sh di FreeBSD non espande {cur,new,tmp}, e creava una cartella
+            // con quel nome.
             for (MailDatabase.Domain domain : domains) {
-                script.append("mkdir -p /var/vmail/").append(domain.domain).append("\n");
+                if (!SafeNames.domain(domain.domain)) {
+                    LOGGER.warning("[ConfigRegenerator] domain id " + domain.id + " has a name that is not a domain: skipped");
+                    script.append("echo '[WARNING] a domain with an invalid name was skipped (see the panel log)'\n");
+                    continue;
+                }
+                script.append("mkdir -p '/var/vmail/").append(domain.domain).append("'\n");
                 List<MailDatabase.Mailbox> mailboxes = mailDb.getMailboxes(domain.id);
                 for (MailDatabase.Mailbox mb : mailboxes) {
-                    String user = mb.email.split("@")[0];
-                    script.append("mkdir -p /var/vmail/").append(domain.domain)
-                          .append("/").append(user).append("/Maildir/{cur,new,tmp}\n");
+                    String user = mb.email == null ? null : mb.email.split("@")[0];
+                    if (!SafeNames.localPart(user)) {
+                        LOGGER.warning("[ConfigRegenerator] mailbox id " + mb.id + " has a name that is not an address: skipped");
+                        script.append("echo '[WARNING] a mailbox with an invalid name was skipped (see the panel log)'\n");
+                        continue;
+                    }
+                    String maildir = "/var/vmail/" + domain.domain + "/" + user + "/Maildir/";
+                    script.append("mkdir -p '").append(maildir).append("cur' '").append(maildir).append("new' '")
+                          .append(maildir).append("tmp'\n");
                 }
             }
             script.append("chown -R vmail:vmail /var/vmail\n");
@@ -79,7 +99,9 @@ public class ConfigRegeneratorScript {
             script.append("echo 'Configuration regenerated successfully'\n");
 
         } catch (SQLException e) {
-            script.append("echo 'Error: ").append(e.getMessage()).append("'\n");
+            // Il messaggio non entra nello script: potrebbe contenere apici, e lo script lo esegue root.
+            LOGGER.warning("[ConfigRegenerator] the mail data could not be read: " + e.getMessage());
+            script.append("echo 'Error: the mail data could not be read from MySQL (see the panel log)'\n");
             script.append("exit 1\n");
         }
 

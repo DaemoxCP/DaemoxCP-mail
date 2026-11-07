@@ -1169,9 +1169,16 @@ public class AcmeManager {
                     I18n.tr("server.acme.noChallenge"), null);
             }
 
-            // Verify TXT record exists using dig
-            String verifyCmd = "dig +short TXT " + txtDomain + " @1.1.1.1";
-            String digOutput = executeCommand(verifyCmd).trim();
+            // Verify TXT record exists using dig. Il nome del record non si prende da MySQL (dns_challenge_domain):
+            // col pannello separato MySQL lo scrive anche la parte web, e il nome finiva in un comando di shell
+            // eseguito da root. E' sempre _acme-challenge.<nome> (RFC 8555, 8.4), e il nome e' gia' controllato
+            // qui sopra; dig parte senza shell.
+            String challengeName = "_acme-challenge." + hostname;
+            if (txtDomain != null && !txtDomain.equalsIgnoreCase(challengeName))
+                java.util.logging.Logger.getLogger(AcmeManager.class.getName()).warning("[ACME] the saved challenge record " + (SafeNames.domain(txtDomain.replace("_", "x")) ? txtDomain : "(invalid name)")
+                        + " is not " + challengeName + ": checking " + challengeName);
+            String digOutput = org.mail_panel.util.Shell.run(java.time.Duration.ofSeconds(30),
+                    "dig", "+short", "TXT", challengeName, "@1.1.1.1").outputTrim();
 
             if (digOutput.isEmpty() || !digOutput.contains(expectedValue)) {
                 return new CertificateResult(false,

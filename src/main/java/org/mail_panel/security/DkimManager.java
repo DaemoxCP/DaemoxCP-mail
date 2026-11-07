@@ -21,6 +21,7 @@ import java.util.Base64;
 public class DkimManager {
 
     // DKIM key storage paths
+    private static final java.util.logging.Logger LOGGER = java.util.logging.Logger.getLogger(DkimManager.class.getName());
     private static final String DKIM_KEY_DIR = "/usr/local/etc/mail/dkim";
     private static final String RSPAMD_DKIM_CONFIG = "/usr/local/etc/rspamd/local.d/dkim_signing.conf";
 
@@ -192,6 +193,20 @@ public class DkimManager {
     }
 
     /**
+     * Il file della chiave di un dominio con un selettore. Dominio e selettore vengono da MySQL, che col
+     * pannello separato scrive anche la parte web: qui, dove root ne fa un percorso, devono avere la forma di un
+     * dominio e di un selettore (SafeNames), e il file deve restare nella cartella delle chiavi. Prima un dominio
+     * come {@code ../x} faceva scrivere o cancellare a root un file fuori dalla cartella.
+     *
+     * @throws IllegalArgumentException se uno dei due nomi non passa
+     */
+    static Path keyFile(String domain, String selector) {
+        if (!SafeNames.domain(domain) || !SafeNames.selector(selector))
+            throw new IllegalArgumentException("invalid DKIM domain or selector");
+        return SafeNames.under(Paths.get(DKIM_KEY_DIR), domain + "." + selector + ".key");
+    }
+
+    /**
      * Write private key to filesystem for Rspamd to use
      */
     private void writePrivateKeyFile(String domain, String selector, String privateKeyPem) throws IOException {
@@ -200,7 +215,7 @@ public class DkimManager {
         Files.createDirectories(keyDir);
 
         // Write private key file
-        Path keyFile = keyDir.resolve(domain + "." + selector + ".key");
+        Path keyFile = keyFile(domain, selector);
         Files.writeString(keyFile, privateKeyPem);
 
         // Set secure permissions (readable only by rspamd user)
@@ -244,7 +259,12 @@ public class DkimManager {
         // Get all domains with DKIM configured
         for (MailDatabase.Domain domain : database.getDomains()) {
             if (domain.hasDkim && domain.dkimPrivateKey != null) {
-                String keyPath = DKIM_KEY_DIR + "/" + domain.domain + "." + domain.dkimSelector + ".key";
+                // Dominio e selettore da MySQL dentro la configurazione di rspamd: solo con la loro forma.
+                if (!SafeNames.domain(domain.domain) || !SafeNames.selector(domain.dkimSelector)) {
+                    LOGGER.warning("[DKIM] domain id " + domain.id + " has an invalid name or selector: left out of the signing configuration");
+                    continue;
+                }
+                String keyPath = keyFile(domain.domain, domain.dkimSelector).toString();
                 config.append("    ").append(domain.domain).append(" {\n");
                 config.append("        path = \"").append(keyPath).append("\";\n");
                 config.append("        selector = \"").append(domain.dkimSelector).append("\";\n");
@@ -943,7 +963,7 @@ public class DkimManager {
 
             // Cancella file su disco della chiave previous
             try {
-                Path prevKey = Paths.get(DKIM_KEY_DIR, d.domain + "." + prevSelector + ".key");
+                Path prevKey = keyFile(d.domain, prevSelector);
                 Files.deleteIfExists(prevKey);
             } catch (Exception ignore) {}
 
@@ -1022,7 +1042,7 @@ public class DkimManager {
 
             // Cancella file della chiave pending
             try {
-                Path pendingKey = Paths.get(DKIM_KEY_DIR, d.domain + "." + pendingSelector + ".key");
+                Path pendingKey = keyFile(d.domain, pendingSelector);
                 Files.deleteIfExists(pendingKey);
             } catch (Exception ignore) {}
 
@@ -1119,8 +1139,11 @@ public class DkimManager {
             info.dnsRecordValue = buildDkimDnsRecord(domain.dkimPublicKey);
 
             // Check if key file exists
-            Path keyFile = Paths.get(DKIM_KEY_DIR, domain.domain + "." + info.selector + ".key");
-            info.keyFileExists = Files.exists(keyFile);
+            try {
+                info.keyFileExists = Files.exists(keyFile(domain.domain, info.selector));
+            } catch (IllegalArgumentException invalid) {
+                info.keyFileExists = false;
+            }
         }
 
         return info;
@@ -1138,7 +1161,7 @@ public class DkimManager {
 
             // Delete key file
             String selector = domain.dkimSelector != null ? domain.dkimSelector : "mail";
-            Path keyFile = Paths.get(DKIM_KEY_DIR, domain.domain + "." + selector + ".key");
+            Path keyFile = keyFile(domain.domain, selector);
             Files.deleteIfExists(keyFile);
 
             // Clear from database

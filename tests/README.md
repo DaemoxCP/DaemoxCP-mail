@@ -757,6 +757,16 @@ Set-Cookie from the root never reaches the browser, and with the root gone the w
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelSeparationTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.SecretsSplitTest
 
+**RootDistrustsDataTest** — the root part does not trust the names it reads from MySQL, which the
+web part can write. Names planted straight into MySQL, as a
+broken-into web part would: SafeNames' shapes; DKIM key paths with ".." or a quote refused; Sieve with
+a mailbox ".." refused and nothing written (as root); the mail configuration script leaving out a
+domain with a command in its name and a mailbox "..", the good ones between quotes and sh -n happy
+(test MySQL); the certificate's DNS challenge check not running a command planted in the saved
+record name (test MySQL, as root). With the jar before the fix both planted commands reached root.
+
+    java -De2e.vm=yes $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.RootDistrustsDataTest
+
 **HeadRequestTest** — HEAD on the real server, without MySQL. Before, every handler sent the body's
 length and then wrote the body: Java's HTTP server logged a warning for the length and refused the
 write, and the sign-in page logged it as SEVERE (seen on the real server with one `curl -I`). Now a
