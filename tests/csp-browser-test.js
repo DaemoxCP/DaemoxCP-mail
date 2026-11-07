@@ -1,32 +1,32 @@
-// Ogni pagina del pannello in Chromium con la stessa Content-Security-Policy che manda il server
-// (SecurityHeaders, senza 'unsafe-inline': reperto 178), col server simulato. Per ogni pagina:
-//  - nessuna violazione della politica (un <script> o uno <style> in linea, un style="", una
-//    risorsa da fuori: il browser li rifiuta e lo dice con securitypolicyviolation);
-//  - nessun attributo on... rimasto (un gestore in linea il browser lo rifiuta solo quando
-//    l'evento arriva: si cerca nel DOM);
-//  - ogni data-on-* (panel-actions.js) si analizza e chiama solo funzioni del pannello e metodi
-//    ammessi, e ogni data-style e' applicato;
-//  - le funzioni che gli script chiamano dall'HTML che costruiscono dopo (data-on-* dentro le loro
-//    stringhe) esistono nella pagina come funzioni del pannello.
-// Le API rispondono {success:false}: qui conta la politica, non i dati. Gli errori degli script
-// per i dati mancanti si stampano ma non contano, salvo quelli di panel-actions.
+// Every page of the panel in Chromium with the same Content-Security-Policy the server sends
+// (SecurityHeaders, without 'unsafe-inline': reperto 178), with the simulated server. For every page:
+//  - no policy violation (an inline <script> or <style>, a style="", a resource from outside: the
+//    browser refuses them and says so with securitypolicyviolation);
+//  - no on... attribute left (the browser refuses an inline handler only when the event arrives:
+//    it is looked for in the DOM);
+//  - every data-on-* (panel-actions.js) parses and calls only panel functions and allowed methods,
+//    and every data-style is applied;
+//  - the functions the scripts call from the HTML they build later (data-on-* inside their strings)
+//    exist in the page as panel functions.
+// The APIs answer {success:false}: what counts here is the policy, not the data. The scripts'
+// errors for the missing data are printed but do not count, except those of panel-actions.
 //
-// Uso (dalla radice del progetto, dopo mvn package):
+// Usage (from the project root, after mvn package):
 //   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java \
 //     && java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator $D >/dev/null
 //   NODE_PATH=$(npm root -g) node tests/csp-browser-test.js $D
-// Sul Mac col Chrome installato: CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome".
+// On the Mac with the installed Chrome: CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome".
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
 const pageList = process.argv[2];
 const resourceList = path.join(__dirname, '..', 'src', 'main', 'resources');
-const BASE = 'http://pannello.test';
+const BASE = 'http://panel.test';
 const CSP = fs.readFileSync(path.join(pageList, 'csp.txt'), 'utf8').trim();
 let failedOnes = 0;
 function real(whatItem, ok) {
-    console.log((ok ? '  OK   ' : '  FALLITO ') + whatItem);
+    console.log((ok ? '  OK   ' : '  FAILED ') + whatItem);
     if (!ok) failedOnes++;
 }
 
@@ -36,14 +36,14 @@ function file(route, f) {
     return route.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
 }
 
-// I gestori e gli stili in linea nell'HTML che gli script costruiscono dopo (on...= e style= dentro
-// le loro stringhe): nella pagina appena aperta non ci sono ancora, e il browser li rifiuterebbe solo
-// quando quel pezzo compare. Si cercano nel testo degli script.
+// The inline handlers and styles in the HTML the scripts build later (on...= and style= inside
+// their strings): they are not in the freshly opened page yet, and the browser would refuse them
+// only when that piece appears. They are looked for in the scripts' text.
 function builtInline(js) {
     return [...js.matchAll(/(?<![-\w.$])(on[a-z]+|style)=\\{0,2}["']/g)].map(m => js.slice(Math.max(0, m.index - 40), m.index + 30).replace(/\s+/g, ' '));
 }
 
-// Le funzioni che gli script chiamano dall'HTML che costruiscono: data-on-*="nome(" dentro le stringhe.
+// The functions the scripts call from the HTML they build: data-on-*="name(" inside the strings.
 function builtNames(js) {
     const names = new Set();
     for (const m of js.matchAll(/data-on-[a-z]+=\\?["']([^"'\\]*?)([A-Za-z_$][\w$]*)\s*\(/g)) {
@@ -63,14 +63,14 @@ async function served(route) {
     const name = p.slice(1) || 'index';
     const f = path.join(pageList, name + '.html');
     if (!/^[a-z]+$/.test(name) || !fs.existsSync(f)) return route.fulfill({ status: 404, body: '' });
-    const html = fs.readFileSync(f, 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-prova').replace(/\{\{THEME\}\}/g, 'light')
-        .replace(/\{\{COLOR_SCHEME\}\}/g, 'light').replace(/\{\{MAIL_HOSTNAME\}\}/g, 'mail.prova.test')
-        .replace(/\{\{ROUNDCUBE_DOMAIN\}\}/g, 'webmail.prova.test').replace(/\{\{[A-Z_]+\}\}/g, 'x');
+    const html = fs.readFileSync(f, 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-test').replace(/\{\{THEME\}\}/g, 'light')
+        .replace(/\{\{COLOR_SCHEME\}\}/g, 'light').replace(/\{\{MAIL_HOSTNAME\}\}/g, 'mail.example.test')
+        .replace(/\{\{ROUNDCUBE_DOMAIN\}\}/g, 'webmail.example.test').replace(/\{\{[A-Z_]+\}\}/g, 'x');
     return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html, headers: { 'Content-Security-Policy': CSP } });
 }
 
 (async () => {
-    real('la politica non ha unsafe-inline, unsafe-eval ne\' sorgenti da fuori', !/unsafe-|https?:|\*/.test(CSP) && /script-src 'self';/.test(CSP));
+    real('the policy has no unsafe-inline, unsafe-eval or sources from outside', !/unsafe-|https?:|\*/.test(CSP) && /script-src 'self';/.test(CSP));
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }).catch(() => chromium.launch());
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await ctx.route('**/*', served);
@@ -90,8 +90,8 @@ async function served(route) {
         const html = fs.readFileSync(path.join(pageList, name + '.html'), 'utf8');
         const js = [...html.matchAll(/<script src="\/assets\/([^"]+)"/g)].map(m => fs.readFileSync(path.join(pageList, 'assets', m[1]), 'utf8')).join('\n');
         const r = await page.evaluate(names => {
-            // Senza panel-actions (la testa non lo carica) i gestori non partono: lo si dice, senza
-            // fermare la prova sulla prima chiamata.
+            // Without panel-actions (the head does not load it) the handlers do not start: it is
+            // said, without stopping the test at the first call.
             const loaded = typeof window.panelActionsCheck === 'function' && typeof window.panelStyleApplied === 'function';
             const check = loaded ? window.panelActionsCheck : () => ['panel-actions is not loaded'];
             const applied = loaded ? window.panelStyleApplied : () => false;
@@ -112,19 +112,19 @@ async function served(route) {
             const missing = loaded ? names.filter(n => check(n + '()').some(p => p.includes('not a function'))) : names;
             return { violations: window.__violations, inline, actions, styles, missing, checked: loaded };
         }, builtNames(js));
-        real('panel-actions caricato', r.checked);
-        real('nessuna violazione della politica' + (r.violations.length ? ': ' + r.violations.slice(0, 3).join(' | ') : ''), r.violations.length === 0);
-        real('nessun gestore o stile in linea nel DOM' + (r.inline.length ? ': ' + r.inline.slice(0, 5).join(', ') : ''), r.inline.length === 0);
-        real('ogni data-on-* chiama funzioni del pannello' + (r.actions.length ? ': ' + r.actions.slice(0, 3).join(' | ') : ''), r.actions.length === 0);
-        real('ogni data-style e\' applicato' + (r.styles.length ? ': ' + r.styles.slice(0, 3).join(' | ') : ''), r.styles.length === 0);
+        real('panel-actions loaded', r.checked);
+        real('no policy violation' + (r.violations.length ? ': ' + r.violations.slice(0, 3).join(' | ') : ''), r.violations.length === 0);
+        real('no inline handler or style in the DOM' + (r.inline.length ? ': ' + r.inline.slice(0, 5).join(', ') : ''), r.inline.length === 0);
+        real('every data-on-* calls panel functions' + (r.actions.length ? ': ' + r.actions.slice(0, 3).join(' | ') : ''), r.actions.length === 0);
+        real('every data-style is applied' + (r.styles.length ? ': ' + r.styles.slice(0, 3).join(' | ') : ''), r.styles.length === 0);
         const inlineBuilt = builtInline(js);
-        real('nessun gestore o stile in linea nell\'HTML che gli script costruiscono' + (inlineBuilt.length ? ': ' + inlineBuilt.slice(0, 2).join(' | ') : ''), inlineBuilt.length === 0);
-        real('le funzioni chiamate dall\'HTML costruito dagli script esistono' + (r.missing.length ? ': ' + r.missing.join(', ') : ''), r.missing.length === 0);
-        real('nessun errore di panel-actions' + (actionErrors.length ? ': ' + actionErrors.slice(0, 3).join(' | ') : ''), actionErrors.length === 0);
-        if (pageErrors.length) console.log('    (errori della pagina coi dati finti, non contano: ' + pageErrors.length + ', il primo: ' + pageErrors[0].slice(0, 140) + ')');
+        real('no inline handler or style in the HTML the scripts build' + (inlineBuilt.length ? ': ' + inlineBuilt.slice(0, 2).join(' | ') : ''), inlineBuilt.length === 0);
+        real('the functions called from the HTML the scripts build exist' + (r.missing.length ? ': ' + r.missing.join(', ') : ''), r.missing.length === 0);
+        real('no panel-actions error' + (actionErrors.length ? ': ' + actionErrors.slice(0, 3).join(' | ') : ''), actionErrors.length === 0);
+        if (pageErrors.length) console.log('    (page errors with the fake data, they do not count: ' + pageErrors.length + ', the first: ' + pageErrors[0].slice(0, 140) + ')');
         await page.close();
     }
     await browser.close();
-    console.log(failedOnes === 0 ? '\nTUTTO VERDE' : '\n' + failedOnes + ' CONTROLLI FALLITI');
+    console.log(failedOnes === 0 ? '\nALL GREEN' : '\n' + failedOnes + ' CHECKS FAILED');
     process.exit(failedOnes === 0 ? 0 : 1);
 })();

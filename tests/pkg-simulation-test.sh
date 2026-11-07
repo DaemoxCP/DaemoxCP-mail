@@ -1,23 +1,23 @@
 #!/bin/sh
-# Prova la simulazione su COPIA del database di pkg, contro un pkg finto.
+# Tests the simulation on a COPY of pkg's database, against a fake pkg.
 #
-# Il punto da dimostrare non si vede leggendo il codice: che lo sblocco avvenga nella copia e
-# non nel database vero, che le dipendenze protette nominate da pkg vengano aggiunte, e che la
-# copia sparisca alla fine. Sul server non si prova giocando con i lock veri; qui un pkg finto
-# risponde solo ai comandi che PackagePlan usa e tiene i "lock" come file in $FINTO_DB/locked.
+# What must be shown cannot be seen by reading the code: that the unlock happens in the copy and
+# not in the real database, that the protected dependencies pkg names get added, and that the copy
+# vanishes at the end. On the server it is not tested by playing with the real locks; here a fake
+# pkg answers only the commands PackagePlan uses and keeps the "locks" as files in $FAKE_DB/locked.
 #
-# Da eseguire dalla radice del progetto, DOPO aver costruito il jar e compilato le prove.
+# To be run from the project root, AFTER building the jar and compiling the tests.
 set -e
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/db/locked"
 touch "$TMP/db/locked/kafka" "$TMP/db/locked/openjdk21" "$TMP/db/locked/nginx"
-# Il caso del gemello di famiglia: mysql84-client protetto, e postfix-mysql da aggiornare.
+# The family-twin case: mysql84-client protected, and postfix-mysql to upgrade.
 touch "$TMP/db/locked/mysql84-client" "$TMP/db/locked/mysql84-server" "$TMP/db/locked/postfix-mysql"
-cat > "$TMP/bin/pkg" <<'FINTO'
+cat > "$TMP/bin/pkg" <<'FAKE'
 #!/bin/sh
-DB="$FINTO_DB"
-if [ "$1" = "config" ]; then echo "$FINTO_DB"; exit 0; fi
+DB="$FAKE_DB"
+if [ "$1" = "config" ]; then echo "$FAKE_DB"; exit 0; fi
 if [ "$1" = "-o" ]; then DB="${2#PKG_DBDIR=}"; shift 2; fi
 case "$1" in
   query)
@@ -26,7 +26,7 @@ case "$1" in
             pkg) echo "2.1.0" ;;
             mysql84-client) echo "${V_INST:-8.4.11_1}" ;;
           esac ;;
-      # L'elenco degli installati, per il riconoscimento del gemello di famiglia.
+      # The list of installed packages, to recognise the family twin.
       %n) echo "kafka"; echo "openjdk21"; echo "nginx"; echo "postfix-mysql"
           echo "mysql84-client"; echo "mysql84-server"; echo "python312" ;;
     esac
@@ -40,8 +40,8 @@ case "$1" in
   version)
     if [ "$2" = "-t" ]; then
       if [ "$3" = "$4" ]; then echo "="; exit 0; fi
-      basso=$(printf '%s\n%s\n' "$3" "$4" | sort -V | head -1)
-      if [ "$basso" = "$3" ]; then echo "<"; else echo ">"; fi
+      low=$(printf '%s\n%s\n' "$3" "$4" | sort -V | head -1)
+      if [ "$low" = "$3" ]; then echo "<"; else echo ">"; fi
       exit 0
     fi ;;
   unlock) rm -f "$DB/locked/$3"; exit 0 ;;
@@ -58,10 +58,10 @@ case "$1" in
           fi ;;
         nginx) echo "Your packages are up to date." ;;
         postfix-mysql)
-          # Per pkg un pacchetto protetto e' "non disponibile": se mysql84-client e'
-          # protetto, cerca un altro fornitore della stessa libreria e propone
-          # mysql97-client. Sbloccato, torna a usare quello che c'e'.
-          if [ "${MYSQL97:-se-protetto}" = "sempre" ] || [ -f "$DB/locked/mysql84-client" ]; then
+          # For pkg a protected package is "unavailable": if mysql84-client is protected, it
+          # looks for another provider of the same library and proposes mysql97-client.
+          # Unlocked, it goes back to using the one that is there.
+          if [ "${MYSQL97:-if-locked}" = "always" ] || [ -f "$DB/locked/mysql84-client" ]; then
             printf 'Installed packages to be UPGRADED:\n\tpostfix-mysql: 3.11.7_1,1 -> 3.11.7_3,1\n\n'
             printf 'New packages to be INSTALLED:\n\tmysql97-client: 9.7.2\n\n'
             printf 'Number of packages to be upgraded: 1\nNumber of packages to be installed: 1\n'
@@ -72,24 +72,24 @@ case "$1" in
     done
     exit 0 ;;
 esac
-echo "pkg finto: comando non previsto: $*" >&2
+echo "fake pkg: unexpected command: $*" >&2
 exit 1
-FINTO
+FAKE
 chmod +x "$TMP/bin/pkg"
-FINTO_DB="$TMP/db" PATH="$TMP/bin:$PATH" \
-    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest simulazione
+FAKE_DB="$TMP/db" PATH="$TMP/bin:$PATH" \
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest simulation
 
-# Il gemello di famiglia, due casi che hanno bisogno di un pkg finto diverso. Ogni lancio
-# riparte da uno stato pulito dei lock: il primo sblocca mysql84-client nella COPIA, non qui,
-# ma il terzo lo vuole davvero non protetto.
+# The family twin, two cases that need a different fake pkg. Every run starts again from a clean
+# state of the locks: the first unlocks mysql84-client in the COPY, not here, but the third
+# really wants it unprotected.
 touch "$TMP/db/locked/mysql84-client"
 echo
-echo "--- il gemello protetto, ma col catalogo piu' recente ---"
-FINTO_DB="$TMP/db" PATH="$TMP/bin:$PATH" V_CAT="8.4.12" \
-    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest famiglia-catalogo-nuovo
+echo "--- the protected twin, but with a newer catalog ---"
+FAKE_DB="$TMP/db" PATH="$TMP/bin:$PATH" V_CAT="8.4.12" \
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest family-new-catalog
 
 echo
-echo "--- il gemello installato ma NON protetto: conflitto vero ---"
+echo "--- the twin installed but NOT protected: a real conflict ---"
 rm -f "$TMP/db/locked/mysql84-client"
-FINTO_DB="$TMP/db" PATH="$TMP/bin:$PATH" MYSQL97="sempre" \
-    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest famiglia-conflitto-vero
+FAKE_DB="$TMP/db" PATH="$TMP/bin:$PATH" MYSQL97="always" \
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackagePlanTest family-real-conflict

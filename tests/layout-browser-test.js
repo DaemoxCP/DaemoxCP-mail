@@ -15,6 +15,8 @@ const csp = require('./browser-csp');
 const pages = process.argv[2];
 const shots = process.argv[3];
 const resources = path.join(__dirname, '..', 'src', 'main', 'resources');
+// The Italian page is checked against the texts of it.json, never written here.
+const IT = JSON.parse(fs.readFileSync(path.join(resources, 'lang', 'it.json'), 'utf8'));
 const BASE = 'http://panel.test';
 let failed = 0;
 function check(what, ok) {
@@ -70,9 +72,9 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     console.log('\n== The sidebar ==');
     await page.goto(BASE + '/home');
     const sections = await page.$$eval('.sidebar-section-title', e => e.map(x => x.textContent.trim()));
-    check('four sections: ' + sections.join(', '), JSON.stringify(sections) === JSON.stringify(['Posta', 'DNS e certificati', 'Sicurezza', 'Sistema']));
+    check('four sections: ' + sections.join(', '), JSON.stringify(sections) === JSON.stringify(['nav.section.mail', 'nav.section.dns', 'nav.section.security', 'nav.section.system'].map(k => IT[k])));
     const items = await page.$$eval('.sidebar-link', e => e.map(x => x.textContent.trim()));
-    check(items.length + ' items, from Dashboard to Impostazioni', items.length === 17 && items[0] === 'Dashboard' && items[items.length - 1] === 'Impostazioni');
+    check(items.length + ' items, from Dashboard to Settings', items.length === 17 && items[0] === 'Dashboard' && items[items.length - 1] === IT['nav.settings']);
     check('the pages no link reached before are in the menu (queue, limits, statistics, admins)', await page.evaluate(() =>
         ['/queue', '/ratelimits', '/statistics', '/admins'].every(h => document.querySelector('.sidebar-link[href="' + h + '"]'))));
     check('Dashboard marked as the current page', await page.getAttribute('.sidebar-link.active', 'href') === '/home'
@@ -86,10 +88,10 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     if (shots) await page.screenshot({ path: path.join(shots, 'frame-home.png') });
 
     await page.goto(BASE + '/updates');
-    check('Updates: active item and "Sistema > Aggiornamenti" on top', await page.getAttribute('.sidebar-link.active', 'href') === '/updates'
-        && await text(page, '.topbar-title') === 'Sistema › Aggiornamenti');
+    check('Updates: active item and "System > Updates" on top', await page.getAttribute('.sidebar-link.active', 'href') === '/updates'
+        && await text(page, '.topbar-title') === IT['nav.section.system'] + ' › ' + IT['nav.updates']);
     await page.goto(BASE + '/queue');
-    check('Queue: "Posta > Coda di posta" on top', await text(page, '.topbar-title') === 'Posta › Coda di posta');
+    check('Queue: "Mail > Mail queue" on top', await text(page, '.topbar-title') === IT['nav.section.mail'] + ' › ' + IT['nav.queue']);
 
     console.log('\n== Skip to content ==');
     await page.goto(BASE + '/dns');

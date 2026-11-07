@@ -1,21 +1,21 @@
 #!/bin/sh
-# Genera tutte le pagine del pannello e ne controlla il JavaScript con un parser vero,
-# poi la struttura dell'HTML (in fondo).
+# Generates every page of the panel and checks its JavaScript with a real parser, then the
+# structure of the HTML (at the end).
 #
-# Trova la classe di errore che il compilatore Java NON vede: dentro un text block la
-# sequenza barra-n e' un escape Java, diventa un a capo vero e spezza la stringa
-# JavaScript. Il browser si ferma li' e l'intera pagina resta senza script — tutti gli
-# indicatori girano e sembra che le chiamate non finiscano, mentre non sono partite.
+# It finds the class of error the Java compiler does NOT see: inside a text block the
+# backslash-n sequence is a Java escape, it becomes a real newline and breaks the JavaScript
+# string. The browser stops there and the whole page is left without scripts — every spinner
+# turns and it looks as if the calls never finish, while they never started.
 #
-# Da eseguire dalla radice del progetto, PRIMA di consegnare un jar.
+# To be run from the project root, BEFORE handing over a jar.
 set -e
 
-# Si RICOSTRUISCE il jar prima di guardarlo.
+# The jar is BUILT AGAIN before looking at it.
 #
-# Senza questa riga, se la compilazione fallisce il controllo gira sul jar VECCHIO e
-# annuncia "tutte valide" mentre il sorgente e' rotto. E' successo il 03/09/2026: il
-# messaggio verde arrivava da un jar di venti minuti prima. Un controllo che misura una
-# cosa diversa da quella che sembra misurare e' peggio di nessun controllo.
+# Without this line, if the build fails the check runs on the OLD jar and announces "all valid"
+# while the source is broken. It happened on 03/09/2026: the green message came from a jar twenty
+# minutes old. A check that measures something other than what it seems to measure is worse than
+# no check.
 mvn -o -q package -DskipTests
 
 DIR=$(mktemp -d)
@@ -34,63 +34,63 @@ for f in "$DIR"/*.js; do
     if node --check "$f" 2>/dev/null; then
         printf "  OK       %s\n" "$n"
     else
-        printf "  ERRORE   %s\n" "$n"; node --check "$f" 2>&1 | sed -n '2,4p' | sed 's/^/           /'
+        printf "  ERROR    %s\n" "$n"; node --check "$f" 2>&1 | sed -n '2,4p' | sed 's/^/           /'
         ko=$((ko+1))
     fi
 done
-# La struttura: ogni elemento aperto va chiuso, e il footer sta direttamente nel <body>.
+# The structure: every element opened must be closed, and the footer sits directly in <body>.
 #
-# Il controllo del JavaScript qui sopra non la vede, e nemmeno il browser la segnala: l'HTML
-# rotto lo ripara in silenzio, a modo suo. Il 26/09/2026 la pagina /firewall non chiudeva il
-# suo contenitore, e il footer finiva dentro il riquadro largo 1200px invece che a tutta pagina.
+# The JavaScript check above does not see it, and the browser does not report it either: it
+# repairs broken HTML silently, in its own way. On 26/09/2026 the /firewall page did not close its
+# container, and the footer ended up inside the 1200px box instead of across the whole page.
 if python3 - "$DIR" <<'PY'
 import sys, glob, os
 from html.parser import HTMLParser
 
-VUOTI = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 
-class Struttura(HTMLParser):
-    # script e style: HTMLParser ne passa il contenuto come testo, i tag dentro le stringhe JS non contano.
+class Structure(HTMLParser):
+    # script and style: HTMLParser passes their content as text, the tags inside JS strings do not count.
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.pila, self.guai = [], []
+        self.stack, self.troubles = [], []
     def handle_starttag(self, tag, attrs):
-        if tag == "footer" and [t for t, _ in self.pila] != ["html", "body"]:
-            self.guai.append("footer dentro " + " > ".join(e for _, e in self.pila))
-        if tag not in VUOTI:
+        if tag == "footer" and [t for t, _ in self.stack] != ["html", "body"]:
+            self.troubles.append("footer inside " + " > ".join(e for _, e in self.stack))
+        if tag not in VOID:
             a = dict(attrs)
-            nome = tag + ("." + a["class"].split()[0] if a.get("class") else "") + ("#" + a["id"] if a.get("id") else "")
-            self.pila.append((tag, "%s (riga %d)" % (nome, self.getpos()[0])))
+            name = tag + ("." + a["class"].split()[0] if a.get("class") else "") + ("#" + a["id"] if a.get("id") else "")
+            self.stack.append((tag, "%s (line %d)" % (name, self.getpos()[0])))
     def handle_endtag(self, tag):
-        for i in range(len(self.pila) - 1, -1, -1):
-            if self.pila[i][0] == tag:
-                if i != len(self.pila) - 1:
-                    self.guai.append("</%s> alla riga %d chiude anche %s"
-                                     % (tag, self.getpos()[0], ", ".join(e for _, e in self.pila[i + 1:])))
-                del self.pila[i:]
+        for i in range(len(self.stack) - 1, -1, -1):
+            if self.stack[i][0] == tag:
+                if i != len(self.stack) - 1:
+                    self.troubles.append("</%s> at line %d also closes %s"
+                                         % (tag, self.getpos()[0], ", ".join(e for _, e in self.stack[i + 1:])))
+                del self.stack[i:]
                 return
-        self.guai.append("</%s> alla riga %d senza apertura" % (tag, self.getpos()[0]))
+        self.troubles.append("</%s> at line %d without an opening" % (tag, self.getpos()[0]))
 
-rotte = 0
-pagine = sorted(glob.glob(sys.argv[1] + "/*.html"))
-for f in pagine:
-    p = Struttura()
+broken = 0
+pages = sorted(glob.glob(sys.argv[1] + "/*.html"))
+for f in pages:
+    p = Structure()
     p.feed(open(f, encoding="utf-8").read())
     p.close()
-    guai = p.guai + (["restano aperti: " + ", ".join(e for _, e in p.pila)] if p.pila else [])
-    if guai:
-        rotte += 1
-        print("  STRUTTURA %s" % os.path.basename(f)[:-5])
-        for g in guai[:5]:
+    troubles = p.troubles + (["still open: " + ", ".join(e for _, e in p.stack)] if p.stack else [])
+    if troubles:
+        broken += 1
+        print("  STRUCTURE %s" % os.path.basename(f)[:-5])
+        for g in troubles[:5]:
             print("           " + g)
 print()
-print("STRUTTURA A POSTO IN TUTTE LE %d PAGINE" % len(pagine) if rotte == 0
-      else "%d PAGINE SU %d CON LA STRUTTURA ROTTA" % (rotte, len(pagine)))
-sys.exit(1 if rotte else 0)
+print("STRUCTURE IN PLACE IN ALL %d PAGES" % len(pages) if broken == 0
+      else "%d PAGES OF %d WITH A BROKEN STRUCTURE" % (broken, len(pages)))
+sys.exit(1 if broken else 0)
 PY
-then strutturaRotta=0; else strutturaRotta=1; fi
+then brokenStructure=0; else brokenStructure=1; fi
 
 rm -rf "$DIR"
 echo
-if [ "$ko" -eq 0 ]; then echo "TUTTE LE $tot PAGINE HANNO JAVASCRIPT VALIDO"; else echo "$ko PAGINE SU $tot CON JAVASCRIPT ROTTO"; fi
-if [ "$ko" -ne 0 ] || [ "$strutturaRotta" -ne 0 ]; then exit 1; fi
+if [ "$ko" -eq 0 ]; then echo "ALL $tot PAGES HAVE VALID JAVASCRIPT"; else echo "$ko PAGES OF $tot WITH BROKEN JAVASCRIPT"; fi
+if [ "$ko" -ne 0 ] || [ "$brokenStructure" -ne 0 ]; then exit 1; fi

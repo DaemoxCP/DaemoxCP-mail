@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""I nomi dei campi della RISPOSTA attraversano due parti: il server li mette in un JSON, il
-JavaScript della pagina li legge con un punto. Rinominato su un lato solo, la lettura
-restituisce undefined e la funzione muore in silenzio.
+"""The names of the RESPONSE fields cross two parts: the server puts them in a JSON, the page's
+JavaScript reads them with a dot. Renamed on one side only, the read returns undefined and the
+function dies silently.
 
-E' il difetto che il 17 ottobre 2026 ha reso morto "Esegui ora" nella pagina Cron:
-CronManagement mandava exitCode e output, la pagina leggeva e.codice ed e.uscita, e
-"undefined === 0" e' falso, quindi ogni lavoro riuscito veniva dichiarato in errore. Compilava,
-nessun avviso. Il compagno di questa rete e' tests/check_api.py, che fa la stessa cosa
-nell'altro senso (i parametri che la pagina MANDA e la rotta legge).
+It is the defect that on 17 October 2026 killed "Run now" in the Cron page: CronManagement sent
+exitCode and output, the page read e.codice and e.uscita, and "undefined === 0" is false, so every
+successful job was declared in error. It compiled, no warning. This net's companion is
+tests/check_api.py, which does the same thing the other way round (the parameters the page SENDS
+and the route reads).
 
-Come funziona:
-  1. dalle rotte: case "azione" -> quali metodi del server costruiscono la risposta;
-  2. dal server: le chiavi che quei metodi mettono, piu' quelle dei metodi che chiamano
-     (un livello, perche' una risposta e' fatta di oggetti annidati);
-  3. dalla pagina: nella funzione che chiama updApi('azione'), i campi letti dalla
-     variabile che riceve la risposta.
-Si segnala un campo letto che nessuno mette.
+How it works:
+  1. from the routes: case "action" -> which server methods build the response;
+  2. from the server: the keys those methods put, plus those of the methods they call (one
+     level, because a response is made of nested objects);
+  3. from the page: in the function that calls updApi('action'), the fields read from the
+     variable that receives the response.
+A field read that nobody puts is reported.
 
-L'approssimazione e' VOLUTA e sta tutta da un lato: l'insieme delle chiavi del server e'
-piu' largo del vero (si prendono anche quelle dei metodi chiamati). Cosi' la rete non urla
-per gli oggetti annidati, e resta vera quando dice "questa chiave non la mette nessuno".
+The approximation is ON PURPOSE and all on one side: the set of the server's keys is wider than
+the truth (the keys of the called methods are taken too). So the net does not shout for nested
+objects, and stays true when it says "nobody puts this key".
 
-Si lancia dalla radice del progetto:  python3 tests/check_response.py
-Gira sul Mac: legge dei file del repository e non tocca il sistema.
+Run from the project root:  python3 tests/check_response.py
+It runs on the Mac: it reads files of the repository and does not touch the system.
 """
 import os
 import re
@@ -31,19 +31,19 @@ import sys
 root = sys.argv[1] if len(sys.argv) > 1 else "."
 PAGE = os.path.join(root, "src/main/java/org/mail_panel/content/MailPanelContent.java")
 ROUTES = os.path.join(root, "src/main/java/org/mail_panel/webserver/SSLMailServer.java")
-# Tutte le classi del progetto fuori dalla pagina: le rotte chiamano anche Autoconfig, AppleProfile,
-# PeriodicReport, AutoDns. Con le sole cinque classi di prima, un'azione di quelle risultava
-# "non verificabile" o, peggio, attribuita a un metodo omonimo di un'altra rotta.
+# All the project's classes outside the page: the routes also call Autoconfig, AppleProfile,
+# PeriodicReport, AutoDns. With only the five classes of before, an action of those showed as
+# "not verifiable" or, worse, attributed to a same-named method of another route.
 import glob as _g
 SERVER = sorted(os.path.relpath(f, root) for f in _g.glob(os.path.join(root, "src/main/java/org/mail_panel/**/*.java"), recursive=True)
                 if "/content/" not in f)
 CLASSES = sorted({os.path.splitext(os.path.basename(f))[0] for f in SERVER}, key=len, reverse=True)
 
-# La busta che ogni risposta ha, messa dai percorsi comuni e non dal metodo dell'azione.
+# The envelope every response has, put by the common paths and not by the action's method.
 ENVELOPE = {"success", "error", "jobId", "async", "job", "warning"}
 
 page = open(PAGE, encoding="utf-8", errors="replace").read()
-# E le pagine scritte come file a parte (vedi check_api.py: lo stesso buco).
+# And the pages written as separate files (see check_api.py: the same hole).
 import glob as _glob
 for _f in sorted(_glob.glob(os.path.join(root, "src/main/resources/pages/*.js"))):
     page += "\n" + open(_f, encoding="utf-8", errors="replace").read()
@@ -56,7 +56,7 @@ for rel in SERVER:
 
 
 def method_body(text, name):
-    """I corpi di un metodo e dei suoi overload, bilanciando le graffe dalla firma. '' se non c'e'."""
+    """The bodies of a method and its overloads, balancing the braces from the signature. '' if it is not there."""
     bodies = []
     for m in re.finditer(r"\b(?:JSONObject|JSONArray|String|boolean|int|long)\s+" + re.escape(name) + r"\s*\(", text):
         i = text.find("{", m.end())
@@ -76,7 +76,7 @@ def method_body(text, name):
 
 
 def keys_of(name, depth=1, seen=None):
-    """Le chiavi che il metodo mette, piu' quelle dei metodi che chiama (un livello)."""
+    """The keys the method puts, plus those of the methods it calls (one level)."""
     seen = seen or set()
     if name in seen or depth < 0:
         return set()
@@ -93,7 +93,7 @@ def keys_of(name, depth=1, seen=None):
     return outside
 
 
-# --- 1. azione -> metodi del server ---
+# --- 1. action -> server methods ---
 CASE = re.compile(r'case\s+"([a-z0-9_]+)"\s*->')
 cases = [(m.group(1), m.start()) for m in CASE.finditer(routes)]
 methods = {}
@@ -101,17 +101,17 @@ in_block = {}
 for n, (action, start) in enumerate(cases):
     end = cases[n + 1][1] if n + 1 < len(cases) else len(routes)
     block = routes[start:end]
-    # la risposta puo' essere costruita nella rotta stessa: response.put("chiave", ...)
+    # the response can be built in the route itself: response.put("key", ...)
     in_block.setdefault(action, set()).update(re.findall(r'\.put\("([A-Za-z_][A-Za-z0-9_]*)"', block))
     methods.setdefault(action, set()).update(
         re.findall(r"\b(?:" + "|".join(CLASSES) + r")\.([a-zA-Z_][A-Za-z0-9_]*)\s*\(", block)
-        # e i metodi chiamati su un'istanza (autoDns.create(...)): conta solo se il metodo esiste
-        # in una classe del progetto, cioe' se chiavi_di trova il suo corpo
+        # and the methods called on an instance (autoDns.create(...)): it counts only if the method
+        # exists in a class of the project, that is if keys_of finds its body
         + [n for n in re.findall(r"\b[a-z][A-Za-z0-9_]*\.([a-z][A-Za-z0-9_]*)\s*\(", block)
            if n not in ("put", "opt", "optString", "optInt", "optLong", "optBoolean", "optJSONArray", "optJSONObject",
                         "getString", "getInt", "getBoolean", "has", "equals", "length", "isEmpty", "trim", "toString")])
 
-# --- 2. la pagina: funzione che chiama updApi('azione') -> campi letti ---
+# --- 2. the page: function that calls updApi('action') -> fields read ---
 FUNCTION = re.compile(r"(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 starts = [(m.group(1), m.start()) for m in FUNCTION.finditer(page)]
 read_fields = {}
@@ -123,37 +123,36 @@ for n, (fn_name, start) in enumerate(starts):
         fields = set(re.findall(r"\b" + re.escape(var) + r"\.([A-Za-z_][A-Za-z0-9_]*)", body))
         read_fields.setdefault(action, set()).update(fields)
 
-print(f"  azioni con una risposta letta dalla pagina: {len(read_fields)}")
+print(f"  actions with a response read by the page: {len(read_fields)}")
 failures = []
 for action in sorted(read_fields):
     if action not in methods or not methods[action]:
-        # Nessun metodo riconosciuto: la risposta e' costruita nella rotta stessa. Non si
-        # puo' dire niente, e si dice che non si puo'.
-        print(f"    --  {action}: risposta costruita nella rotta, non verificabile qui")
+        # No method recognised: the response is built in the route itself. Nothing can be said,
+        # and it says that nothing can.
+        print(f"    --  {action}: response built in the route, not verifiable here")
         continue
     available = set(ENVELOPE) | in_block.get(action, set())
     for method in methods[action]:
         available |= keys_of(method)
     for k in sorted(read_fields[action] - available):
-        failures.append(f'la pagina legge "{k}" dalla risposta di "{action}", che nessuno mette '
-                      f"(metodi: {', '.join(sorted(methods[action]))})")
+        failures.append(f'the page reads "{k}" from the response of "{action}", which nobody puts '
+                      f"(methods: {', '.join(sorted(methods[action]))})")
 
-# --- 2. e i FINTI delle prove non devono mandare nomi che il server non manda ---
+# --- 2. and the tests' FAKES must not send names the server does not send ---
 #
-# Era il terzo lato dello stesso nome, e il piu' insidioso: i finti di
-# packages-browser-test.js, english-pages-browser-test.js e pkg-branch-browser-test.js
-# mandavano "spiegazione" mentre il server manda "explanation", quindi le prove erano VERDI
-# contro una pagina morta. Dodici letture di "spiegazione", tre di "descrizione", due di
-# "problemi", quattro di "motivo", due di "uscita": ventitre' campi che in produzione erano
-# undefined, e nessuna prova poteva dirlo perche' le prove si parlavano da sole.
+# It was the third side of the same name, and the most insidious: the fakes of
+# packages-browser-test.js, english-pages-browser-test.js and pkg-branch-browser-test.js sent
+# "spiegazione" while the server sends "explanation", so the tests were GREEN against a dead
+# page. Twelve reads of "spiegazione", three of "descrizione", two of "problemi", four of
+# "motivo", two of "uscita": twenty-three fields that in production were undefined, and no test
+# could say so because the tests were talking to themselves.
 #
-# Si guarda dentro gli oggetti passati a json(route, ...) e nelle costanti MAIUSCOLE che i
-# finti usano come risposta: quelle sono la forma della risposta, e devono essere la forma
-# vera.
+# It looks inside the objects passed to json(route, ...) and in the UPPERCASE constants the fakes
+# use as a response: those are the shape of the response, and must be the real shape.
 import glob
 
-# Risposte che il server NON costruisce con .put(...), quindi il vocabolario non le vede.
-# Ognuna misurata il 23/10/2026: i firewall e la rotazione DKIM le compongono altrove.
+# Responses the server does NOT build with .put(...), so the vocabulary does not see them.
+# Each measured on 23/10/2026: the firewalls and the DKIM rotation compose them elsewhere.
 OUT_OF_VOCABULARY = {
     "panel_bl_cidrs", "panel_wl_cidrs", "panel_geo_bl", "panel_geo_wl",
     "last_rotation_at_ms", "next_rotation_at_ms", "live_state_all", "strength_label",
@@ -192,16 +191,16 @@ for f in sorted(glob.glob(os.path.join(root, "tests/*.js"))):
             if k in vocabulary or k in actions or k in OUT_OF_VOCABULARY:
                 continue
             fakes.setdefault(k, set()).add(os.path.basename(f))
-print(f"  nomi che i finti mandano e il server no: {len(fakes)}")
+print(f"  names the fakes send and the server does not: {len(fakes)}")
 for k, files in sorted(fakes.items()):
-    failures.append(f'un finto manda "{k}", che il server non mette da nessuna parte: '
+    failures.append(f'a fake sends "{k}", which the server puts nowhere: '
                   f"{', '.join(sorted(files))}")
 
-print(f"  campi letti e mai messi: {len(failures)}")
+print(f"  fields read and never put: {len(failures)}")
 if failures:
     print()
     for g in failures:
         print(f"    NO  {g}")
-    print(f"\n{len(failures)} GUASTI")
+    print(f"\n{len(failures)} FAULTS")
     sys.exit(1)
-print("\nTUTTO OK")
+print("\nALL OK")

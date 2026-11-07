@@ -13,15 +13,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * I commenti rovinati dalle rinomine fatte sul testo tornano a posto all'avvio
- * (CommentRepair.repair), in una cartella temporanea.
+ * The comments damaged by the renames made on the text are put right at start
+ * (CommentRepair.repair), in a temporary folder.
  *
- * I file "di prima" si costruiscono da quelli che il codice di oggi scrive, rimettendo le righe
- * rovinate prese dal file di dati: la prova non scrive nessuna riga rovinata. Dopo la
- * riparazione ogni file deve essere identico byte per byte a quello di oggi, con gli stessi
- * permessi; una seconda passata non deve trovare niente; le righe dell'amministratore, un file
- * che non c'e' e una riga rovinata che non e' un commento restano come sono. L'effetto sui file
- * veri lo misura la prova sulla VM (reperti).
+ * The "old" files are built from those today's code writes, putting back the damaged lines taken
+ * from the data file: the test writes no damaged line. After the repair every file must be
+ * identical byte for byte to today's, with the same permissions; a second pass must find nothing;
+ * the administrator's lines, a file that is not there and a damaged line that is not a comment stay
+ * as they are. The effect on the real files is measured by the test on the VM (reperti).
  *
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.CommentRepairTest
  */
@@ -30,26 +29,26 @@ public class CommentRepairTest {
     static int failed = 0;
 
     static void check(String what, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
-    /** Il corpo di un here-document dello script: quello che finisce nel file sul server. */
+    /** The body of a here-document of the script: what ends up in the file on the server. */
     static String heredoc(String script, String end) {
         int start = script.indexOf("<< '" + end + "'\n");
         if (start < 0) start = script.indexOf("<< " + end + "\n");
         start = script.indexOf('\n', start) + 1;
         int stop = script.indexOf("\n" + end + "\n", start);
         if (stop < 0) {
-            // here-document rientrato (RoundcubeScript): la riga di chiusura ha davanti degli spazi
+            // indented here-document (RoundcubeScript): the closing line has spaces in front
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("\n[ \t]*" + end + "\n").matcher(script);
-            if (!m.find(start)) throw new IllegalStateException("here-document " + end + " non trovato");
+            if (!m.find(start)) throw new IllegalStateException("here-document " + end + " not found");
             stop = m.start();
         }
         return script.substring(start, stop + 1);
     }
 
-    /** Il testo di prima: ogni riga giusta, col suo rientro, torna quella rovinata. */
+    /** The old text: every right line, with its indentation, goes back to the damaged one. */
     static String damaged(String today, Map<String, String> pairs) {
         Map<String, String> back = new LinkedHashMap<>();
         pairs.forEach((bad, good) -> back.put(good, bad));
@@ -61,8 +60,8 @@ public class CommentRepairTest {
         String full = new FullMailServerScript().getScriptContent();
         String roundcube = new RoundcubeScript().getScriptContent();
 
-        System.out.println("\n== Il file di dati ==");
-        check("damagedComments: " + pairs.size() + " righe, tutte commento rovinato -> commento diverso",
+        System.out.println("\n== The data file ==");
+        check("damagedComments: " + pairs.size() + " lines, all damaged comment -> different comment",
                 pairs.size() == LegacyNames.pairs(CommentRepair.SECTION).size() && pairs.size() > 20
                         && pairs.entrySet().stream().allMatch(e -> !e.getKey().equals(e.getValue())));
         String today = full + roundcube + Fail2banManager.PERMABAN_HEADER;
@@ -71,12 +70,12 @@ public class CommentRepairTest {
             if (!today.lines().map(String::strip).toList().contains(good)) missing.add(good);
             if (today.lines().map(String::strip).toList().contains(bad)) stillThere.add(bad);
         });
-        missing.forEach(x -> System.out.println("        non scritta dal codice: " + x));
-        stillThere.forEach(x -> System.out.println("        ancora scritta dal codice: " + x));
-        check("ogni riga giusta e' quella che il codice di oggi scrive", missing.isEmpty());
-        check("nessuna riga rovinata e' ancora scritta dal codice", stillThere.isEmpty());
+        missing.forEach(x -> System.out.println("        not written by the code: " + x));
+        stillThere.forEach(x -> System.out.println("        still written by the code: " + x));
+        check("every right line is the one today's code writes", missing.isEmpty());
+        check("no damaged line is still written by the code", stillThere.isEmpty());
 
-        // I file come li scrive il codice di oggi, con i nomi che hanno sul server.
+        // The files as today's code writes them, with the names they have on the server.
         Map<String, String> files = new LinkedHashMap<>();
         files.put("php.ini", heredoc(full, "PHPINIEOF"));
         files.put("php-errors.conf", heredoc(full, "PHPLOGEOF"));
@@ -86,7 +85,7 @@ public class CommentRepairTest {
         files.put("install_mail_server.sh", full);
         files.put("install_roundcube.sh", roundcube);
 
-        System.out.println("\n== Un server installato prima ==");
+        System.out.println("\n== A server installed before ==");
         Path dir = Files.createTempDirectory("comment-repair");
         List<Path> paths = new ArrayList<>();
         int damagedFiles = 0;
@@ -98,50 +97,50 @@ public class CommentRepairTest {
             Files.setPosixFilePermissions(p, PosixFilePermissions.fromString("rw-r-----"));
             paths.add(p);
         }
-        check("i file di prima hanno davvero le righe rovinate (" + damagedFiles + " su " + files.size() + ")",
+        check("the old files really have the damaged lines (" + damagedFiles + " of " + files.size() + ")",
                 damagedFiles == files.size());
 
-        // php.ini: l'amministratore ha aggiunto una riga e un suo commento; il file e' un collegamento.
+        // php.ini: the administrator added a line and a comment of their own; the file is a link.
         Path realIni = dir.resolve("php.ini.real");
-        String adminIni = Files.readString(dir.resolve("php.ini")) + "; il mio commento\nmemory_limit = 512M\n";
+        String adminIni = Files.readString(dir.resolve("php.ini")) + "; my comment\nmemory_limit = 512M\n";
         Files.writeString(realIni, adminIni);
         Files.setPosixFilePermissions(realIni, PosixFilePermissions.fromString("rw-r-----"));
         Files.delete(dir.resolve("php.ini"));
         Files.createSymbolicLink(dir.resolve("php.ini"), realIni.getFileName());
 
-        // Una riga rovinata che non e' un commento: un echo che la stampa.
+        // A damaged line that is not a comment: an echo that prints it.
         String bad = pairs.keySet().iterator().next();
         Path echo = dir.resolve("echo.sh");
         Files.writeString(echo, "echo \"" + bad + "\"\n");
         paths.add(echo);
-        paths.add(dir.resolve("non-esiste.conf"));
+        paths.add(dir.resolve("does-not-exist.conf"));
 
         List<String> problems = new ArrayList<>();
         List<String> done = CommentRepair.repair(paths, problems);
         problems.forEach(x -> System.out.println("        " + x));
-        check("riparati " + done.size() + " file, senza errori", done.size() == files.size() && problems.isEmpty());
+        check("repaired " + done.size() + " files, without errors", done.size() == files.size() && problems.isEmpty());
         for (Map.Entry<String, String> e : files.entrySet()) {
             if (e.getKey().equals("php.ini")) continue;
             Path p = dir.resolve(e.getKey());
-            check("  " + e.getKey() + " identico a quello di oggi, permessi rw-r-----",
+            check("  " + e.getKey() + " identical to today's, permissions rw-r-----",
                     Files.readString(p).equals(e.getValue())
                             && PosixFilePermissions.toString(Files.getPosixFilePermissions(p)).equals("rw-r-----"));
         }
-        check("php.ini: sistemato il file vero, le righe dell'amministratore restano, il collegamento resta",
+        check("php.ini: the real file fixed, the administrator's lines stay, the link stays",
                 Files.isSymbolicLink(dir.resolve("php.ini"))
-                        && Files.readString(realIni).equals(files.get("php.ini") + "; il mio commento\nmemory_limit = 512M\n")
+                        && Files.readString(realIni).equals(files.get("php.ini") + "; my comment\nmemory_limit = 512M\n")
                         && PosixFilePermissions.toString(Files.getPosixFilePermissions(realIni)).equals("rw-r-----"));
-        check("una riga rovinata fuori da un commento non si tocca",
+        check("a damaged line outside a comment is not touched",
                 Files.readString(echo).equals("echo \"" + bad + "\"\n"));
         try (var s = Files.list(dir)) {
-            check("nessun file temporaneo rimasto", s.noneMatch(p -> p.getFileName().toString().endsWith(".tmp")));
+            check("no temporary file left", s.noneMatch(p -> p.getFileName().toString().endsWith(".tmp")));
         }
 
-        System.out.println("\n== Al secondo avvio ==");
+        System.out.println("\n== At the second start ==");
         List<String> again = CommentRepair.repair(paths, problems);
-        check("una seconda passata non trova niente", again.isEmpty() && problems.isEmpty());
+        check("a second pass finds nothing", again.isEmpty() && problems.isEmpty());
 
-        System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
+        System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);
     }
 }

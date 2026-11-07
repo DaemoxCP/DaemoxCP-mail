@@ -4,22 +4,22 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Il piano dipende da cio' che e' nella cache di pkg, quindi va riletto dopo lo scaricamento.
+ * The plan depends on what is in pkg's cache, so it must be read again after the download.
  *
- * Misurato sulla VM FreeBSD 15.1 il 23/10/2026, due volte sullo stesso pacchetto e sullo
- * stesso catalogo, a due minuti di distanza:
+ * Measured on the FreeBSD 15.1 VM on 23/10/2026, twice on the same package and the same catalog,
+ * two minutes apart:
  *
- *   senza i file in /var/cache/pkg -> 3 cambi (installa lmdb0, installa mysql97-client,
- *                                     aggiorna postfix-mysql)
- *   con i file in /var/cache/pkg   -> 4 cambi, gli stessi piu' "rimuove lmdb 1.0.2,1"
+ *   without the files in /var/cache/pkg -> 3 changes (installs lmdb0, installs mysql97-client,
+ *                                          upgrades postfix-mysql)
+ *   with the files in /var/cache/pkg    -> 4 changes, the same plus "removes lmdb 1.0.2,1"
  *
- * Il controllo di integrita' di pkg vede i conflitti sui file solo quando i pacchetti sono
- * scaricati. E il pannello RIFIUTA i piani che rimuovono pacchetti: quel rifiuto veniva
- * scavalcato ogni volta che i pacchetti non erano ancora scaricati, cioe' al primo tentativo.
+ * pkg's integrity check sees the conflicts on files only when the packages are downloaded. And the
+ * panel REFUSES the plans that remove packages: that refusal was bypassed every time the packages
+ * were not downloaded yet, that is at the first try.
  *
- * Qui si prova il confronto fra due piani: dev'essere insensibile a cio' che cambia per
- * forza fra la scheda e l'esecuzione (le protezioni da togliere) e sensibile a cio' che
- * conta (i cambiamenti).
+ * Here the comparison between two plans is tested: it must be blind to what necessarily changes
+ * between the card and the run (the protections to remove) and sensitive to what matters (the
+ * changes).
  */
 public class PlanAfterFetchTest {
 
@@ -27,7 +27,7 @@ public class PlanAfterFetchTest {
 
     public static void main(String[] args) {
 
-        // Il piano approvato: postfix-mysql era protetto, quindi andava sbloccato.
+        // The approved plan: postfix-mysql was protected, so it had to be unlocked.
         JSONObject approved = new JSONObject()
                 .put("measured", true)
                 .put("unlockedPackages", new JSONArray().put("postfix-mysql"))
@@ -36,8 +36,8 @@ public class PlanAfterFetchTest {
                         .put(change("install", "mysql97-client", "", "9.7.2"))
                         .put(change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1")));
 
-        // Lo stesso piano ricalcolato DOPO lo sblocco vero: niente piu' da sbloccare, e i
-        // cambiamenti arrivano in un altro ordine perche' li elenca un'altra simulazione.
+        // The same plan computed again AFTER the real unlock: nothing left to unlock, and the
+        // changes come in another order because another simulation lists them.
         JSONObject afterUnlock = new JSONObject()
                 .put("measured", true)
                 .put("unlockedPackages", new JSONArray())
@@ -46,7 +46,7 @@ public class PlanAfterFetchTest {
                         .put(change("install", "mysql97-client", "", "9.7.2"))
                         .put(change("install", "lmdb0", "", "0.9.35")));
 
-        // Il piano con la rimozione che compare solo dopo lo scaricamento.
+        // The plan with the removal that appears only after the download.
         JSONObject grown = new JSONObject()
                 .put("measured", true)
                 .put("unlockedPackages", new JSONArray())
@@ -60,70 +60,70 @@ public class PlanAfterFetchTest {
         String afterSignature = PackagePlan.changesSignature(afterUnlock);
         String grownSignature = PackagePlan.changesSignature(grown);
 
-        check("lo sblocco gia' avvenuto non cambia la firma dei cambiamenti", approvedSignature.equals(afterSignature));
-        check("e nemmeno l'ordine in cui la simulazione li elenca", approvedSignature.equals(afterSignature));
-        check("una rimozione in piu' la cambia", !approvedSignature.equals(grownSignature));
-        check("la firma e' 16 cifre esadecimali", approvedSignature.matches("[0-9a-f]{16}"));
+        check("the unlock already done does not change the changes' signature", approvedSignature.equals(afterSignature));
+        check("nor does the order in which the simulation lists them", approvedSignature.equals(afterSignature));
+        check("one more removal changes it", !approvedSignature.equals(grownSignature));
+        check("the signature is 16 hex digits", approvedSignature.matches("[0-9a-f]{16}"));
 
-        // La firma INTERA, invece, cambierebbe per il solo sblocco: e' il motivo per cui ne
-        // serve una sui soli cambiamenti. Se un giorno qualcuno confrontasse quella, il
-        // lavoro si fermerebbe sempre, e per il motivo sbagliato.
-        check("la firma intera cambia per il solo sblocco, e non andrebbe usata qui",
+        // The WHOLE signature, instead, would change for the unlock alone: that is why one on the
+        // changes alone is needed. If one day somebody compared that one, the job would always
+        // stop, and for the wrong reason.
+        check("the whole signature changes for the unlock alone, and must not be used here",
              !PackagePlan.signature(approved).equals(PackagePlan.signature(afterUnlock)));
 
-        // Una versione di arrivo diversa e' un piano diverso.
+        // A different target version is a different plan.
         JSONObject otherVersion = new JSONObject()
                 .put("measured", true).put("unlockedPackages", new JSONArray())
                 .put("changes", new JSONArray()
                         .put(change("install", "lmdb0", "", "0.9.35"))
                         .put(change("install", "mysql97-client", "", "9.7.2"))
                         .put(change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.8,1")));
-        check("una versione di arrivo diversa cambia la firma",
+        check("a different target version changes the signature",
              !approvedSignature.equals(PackagePlan.changesSignature(otherVersion)));
 
-        // Un pacchetto in meno nel piano e' un piano diverso: il controllo guarda in
-        // entrambe le direzioni, non solo le aggiunte.
+        // One package less in the plan is a different plan: the check looks in both directions,
+        // not only at the additions.
         JSONObject reduced = new JSONObject()
                 .put("measured", true).put("unlockedPackages", new JSONArray())
                 .put("changes", new JSONArray()
                         .put(change("upgrade", "postfix-mysql", "3.11.7_1,1", "3.11.7_3,1")));
-        check("un cambiamento in meno cambia la firma", !approvedSignature.equals(PackagePlan.changesSignature(reduced)));
+        check("one change less changes the signature", !approvedSignature.equals(PackagePlan.changesSignature(reduced)));
 
-        // Piani vuoti: nessuna eccezione, e due vuoti si somigliano.
-        check("un piano senza cambiamenti ha una firma stabile",
+        // Empty plans: no exception, and two empty ones look alike.
+        check("a plan without changes has a stable signature",
              PackagePlan.changesSignature(new JSONObject()).equals(
                      PackagePlan.changesSignature(new JSONObject().put("changes", new JSONArray()))));
 
-        // Le righe da mostrare: una per cambiamento, leggibili, in ordine stabile.
+        // The lines to show: one per change, readable, in a stable order.
         java.util.List<String> lines = PackagePlan.changesInLines(grown);
-        check("le righe da mostrare sono una per cambiamento", lines.size() == 4);
-        check("  e nominano il pacchetto e le versioni",
+        check("the lines to show are one per change", lines.size() == 4);
+        check("  and they name the package and the versions",
              lines.toString().contains("postfix-mysql 3.11.7_1,1 -> 3.11.7_3,1"));
-        check("  la rimozione compare con la versione che c'e' adesso",
+        check("  the removal appears with the version that is there now",
              lines.toString().contains("lmdb 1.0.2,1"));
-        check("  e l'ordine non dipende da quello della simulazione",
+        check("  and the order does not depend on the simulation's",
              lines.equals(PackagePlan.changesInLines(reorder(grown))));
 
-        // ===== I tre lavori sui pacchetti chiedono TUTTI la firma =====
+        // ===== The three package jobs ALL ask for the signature =====
         //
-        // Era l'invariante che mancava: l'aggiornamento dei non protetti partiva senza, cioe'
-        // eseguiva un "pkg upgrade -y" che nessuno aveva approvato riga per riga. Il controllo
-        // avviene prima di prendere il turno e prima di toccare pkg, quindi si prova qui.
+        // It was the missing invariant: the update of the unprotected ones started without it, that
+        // is it ran a "pkg upgrade -y" nobody had approved line by line. The check happens before
+        // taking the turn and before touching pkg, so it is tested here.
         for (String signature : new String[]{"", "   ", "abc", "ZZZZZZZZZZZZZZZZ", "0123456789abcde",
                                          "0123456789abcdef0", "0123456789ABCDEF"}) {
-            check("l'aggiornamento dei non protetti rifiuta la firma \"" + signature + "\"",
+            check("the update of the unprotected ones refuses the signature \"" + signature + "\"",
                  !UpdateManager.startUnlockedPackagesUpdate(signature).optBoolean("success"));
-            check("  la manutenzione rifiuta la stessa",
+            check("  the maintenance refuses the same",
                  !UpdateManager.startMaintenance(signature).optBoolean("success"));
-            check("  e l'aggiornamento guidato pure",
+            check("  and the guided update too",
                  !UpdateManager.startGuidedUpdate("nginx", signature).optBoolean("success"));
         }
-        check("e senza firma del tutto (null) non parte niente",
+        check("and with no signature at all (null) nothing starts",
              !UpdateManager.startUnlockedPackagesUpdate(null).optBoolean("success")
              && !UpdateManager.startMaintenance(null).optBoolean("success")
              && !UpdateManager.startGuidedUpdate("nginx", null).optBoolean("success"));
 
-        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 
@@ -131,7 +131,7 @@ public class PlanAfterFetchTest {
         return new JSONObject().put("type", type).put("name", name).put("from", from).put("to", a);
     }
 
-    /** Lo stesso piano con i cambiamenti all'incontrario. */
+    /** The same plan with the changes the other way round. */
     private static JSONObject reorder(JSONObject plan) {
         JSONArray c = plan.getJSONArray("changes"), r = new JSONArray();
         for (int i = c.length() - 1; i >= 0; i--) r.put(c.get(i));

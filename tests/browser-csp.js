@@ -1,21 +1,21 @@
-// La Content-Security-Policy del pannello nelle prove da browser col server simulato (reperto 178).
-// Gli script e gli stili delle pagine sono file in assets/ (PageAssets), la politica e' quella di
-// csp.txt (PageGenerator la scrive da SecurityHeaders, la stessa del server), e una violazione o un
-// errore di panel-actions finisce fra gli errori della pagina, che ogni prova vuole vuoti.
+// The panel's Content-Security-Policy in the browser tests with the simulated server (reperto 178).
+// The pages' scripts and styles are files in assets/ (PageAssets), the policy is the one in csp.txt
+// (PageGenerator writes it from SecurityHeaders, the same as the server's), and a violation or a
+// panel-actions error ends up among the page errors, which every test wants empty.
 const fs = require('fs');
 const path = require('path');
 
-// L'intestazione da mandare con le pagine.
+// The header to send with the pages.
 exports.headers = dir => ({ 'Content-Security-Policy': fs.readFileSync(path.join(dir, 'csp.txt'), 'utf8').trim() });
 
-// Un file di assets/ (/assets/<impronta>.js o /assets/open/<impronta>.css), come lo serve il pannello.
+// A file of assets/ (/assets/<fingerprint>.js or /assets/open/<fingerprint>.css), as the panel serves it.
 exports.asset = (route, dir, p) => {
     const f = path.join(dir, p.replace(/^\/+/, ''));
     if (!/^\/assets\/(open\/)?[0-9a-f]{20}\.(js|css)$/.test(p) || !fs.existsSync(f)) return route.fulfill({ status: 404, body: '' });
     return route.fulfill({ status: 200, contentType: p.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8', body: fs.readFileSync(f) });
 };
 
-// Le violazioni della politica (Chrome le scrive in console) e gli errori di panel-actions.
+// The policy violations (Chrome writes them in the console) and the panel-actions errors.
 exports.watch = (page, errors) => page.on('console', m => {
     if (m.type() === 'error' && /Content Security Policy|\[panel-actions\]/.test(m.text())) errors.push(m.text());
 });

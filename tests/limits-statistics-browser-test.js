@@ -23,6 +23,8 @@ const csp = require('./browser-csp');
 const pages = process.argv[2];
 const shots = process.argv[3];
 const resources = path.join(__dirname, '..', 'src', 'main', 'resources');
+// The Italian page is checked against the texts of it.json, never written here.
+const IT = JSON.parse(fs.readFileSync(path.join(resources, 'lang', 'it.json'), 'utf8'));
 const BASE = 'http://panel.test';
 let failed = 0;
 function check(what, ok) {
@@ -62,12 +64,12 @@ async function serve(route) {
         const body = JSON.parse(req.postData() || '{}');
         posts.push(body);
         if (body.csrf_token !== 'csrf-test') return route.fulfill({ status: 403, contentType: 'application/json', body: '{"success":false,"error":"csrf"}' });
-        if (body.action === 'save_global') return json({ success: true, message: 'Limiti globali salvati: ' + body.hourly + " all'ora, " + body.daily + ' al giorno.' });
+        if (body.action === 'save_global') return json({ success: true, message: 'Global limits saved: ' + body.hourly + ' per hour, ' + body.daily + ' per day.' });
         if (body.action === 'save_mailbox') {
             const l = limits.find(x => x.target_id === body.mailbox_id);
             if (l) Object.assign(l, { hourly_limit: body.hourly, daily_limit: body.daily, enabled: body.enabled });
             else limits.push({ id: 9, email: XSS + '@example.com', target_id: body.mailbox_id, hourly_limit: body.hourly, daily_limit: body.daily, max_recipients: 50, enabled: body.enabled });
-            return json({ success: true, message: 'Limite della casella salvato.' });
+            return json({ success: true, message: 'Mailbox limit saved.' });
         }
         if (body.action === 'delete') {
             limits = limits.filter(x => x.id !== body.id);
@@ -108,24 +110,24 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     console.log('\n== Sending limits, in Italian ==');
     await page.goto(BASE + '/ratelimits');
     await page.waitForSelector('#limitsBody [data-limit-edit]');
-    check('title and the notice that the limits are not applied', (await text(page, 'h2')) === 'Limiti di invio'
-        && (await text(page, '.alert-warning')).includes('salvati ma non ancora applicati'));
+    check('title and the notice that the limits are not applied', (await text(page, 'h2')) === IT['rl.title']
+        && (await text(page, '.alert-warning')).includes(IT['rl.notEnforced.html'].replace(/<[^>]+>/g, '').split(':')[0]));
     check('global limits read: 30, 300, 25 MB', await page.inputValue('#globalHourly') === '30' && await page.inputValue('#globalDaily') === '300'
         && await page.inputValue('#globalMaxSize') === '25');
     await page.fill('#globalHourly', '40');
-    await page.click('text=Salva i limiti globali');
+    await page.click('text=' + IT['rl.saveGlobal']);
     await page.waitForSelector('#rlMsg .alert-success');
     check('save_global with the values and the CSRF token', posts.length === 1 && posts[0].action === 'save_global' && posts[0].hourly === 40
         && posts[0].daily === 300 && posts[0].max_size_mb === 25 && posts[0].csrf_token === 'csrf-test');
-    check('the answer shown', (await text(page, '#rlMsg')).startsWith('Limiti globali salvati: 40'));
+    check('the answer shown', (await text(page, '#rlMsg')).startsWith('Global limits saved: 40'));
 
-    await page.click('text=Nuovo limite');
+    await page.click('text=' + IT['rl.new']);
     await page.waitForSelector('#addLimitModal.show');
     await page.waitForFunction(() => document.querySelectorAll('#limitMailbox option').length === 3);
     check('the mailbox list: the address with HTML is an option text, not an element', await page.locator('#limitMailbox img').count() === 0
         && (await page.$$eval('#limitMailbox option', o => o.map(x => x.textContent))).includes(XSS + '@example.com'));
     await page.click('#addLimitModal .btn-primary');
-    check('no mailbox chosen: said in the window, nothing sent', (await text(page, '#limitErr')) === 'Scegli una casella.' && posts.length === 1);
+    check('no mailbox chosen: said in the window, nothing sent', (await text(page, '#limitErr')) === IT['rl.chooseMailboxFirst'] && posts.length === 1);
     await page.selectOption('#limitMailbox', '12');
     await page.fill('#limitHourly', '5');
     await page.fill('#limitDaily', '50');
@@ -192,7 +194,7 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     await page.waitForFunction(() => document.getElementById('totalSent').textContent !== '-');
     const itNumber = await page.evaluate(() => (5678).toLocaleString('it', { notation: 'compact', maximumFractionDigits: 1 }));
     check('title in Italian, numbers formatted the Italian way (' + itNumber + ')',
-        (await text(page, 'h2')) === 'Statistiche della posta' && (await text(page, '#totalReceived')) === itNumber
+        (await text(page, 'h2')) === IT['st.title'] && (await text(page, '#totalReceived')) === itNumber
         && (await text(page, '#rspamdShare')) === '7,5%');
 
     console.log('\n== On a phone ==');

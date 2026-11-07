@@ -111,22 +111,21 @@ public class LoginRoutesTest {
         System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
         System.setProperty("jdk.httpclient.allowRestrictedHeaders", "host");
         Path dir = Files.createTempDirectory("login-routes");
-        // Il file dei segreti va scelto ADESSO, prima che qualunque cosa tocchi PanelSecrets:
-        // quella classe legge questa proprieta' una volta sola, quando viene caricata, e
-        // TestSessions.prepare la rispetta se c'e' gia'. Spostare la cartella DOPO -- com'era
-        // in un primo giro -- vuol dire creare gli amministratori con una chiave e cercarli
-        // con un'altra: il blind index dell'email non combacia piu', adminByEmail non trova
-        // nessuno, e la prova cade su "only the real one gets an email" senza che niente dica
-        // perche'.
+        // The secrets file must be chosen NOW, before anything touches PanelSecrets: that class
+        // reads this property only once, when it is loaded, and TestSessions.prepare respects it if
+        // it is already there. Moving the folder AFTER -- as in a first run -- means creating the
+        // administrators with one key and looking for them with another: the email's blind index no
+        // longer matches, adminByEmail finds nobody, and the test falls on "only the real one gets
+        // an email" without anything saying why.
         System.setProperty("mailpanel.secrets.dir", dir.resolve("secrets").toString());
 
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(mysqlPort), System.getProperty("mysql.database", "mailpanel_prova"));
         check("connected to MySQL", db.connect());
-        // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.
-        // Scritta prima che le tabelle esistessero, non si salvava e il pannello
-        // scriveva nel registro vero.
+        // The schema BEFORE the entry, and the entry read back: see TestSessions.auditLogTo.
+        // Written before the tables existed, it was not saved and the panel wrote to the real
+        // log.
         TestSessions.auditLogTo(db, dir.resolve("audit.log"));
         TestSessions.prepare(db);
         Main.mysqlAvailable = true;
@@ -153,12 +152,12 @@ public class LoginRoutesTest {
         cert.getInputStream().readAllBytes();
         check("test certificate", cert.waitFor() == 0);
 
-        // Il pannello adesso guarda l'intestazione Host (HostCheck), e queste richieste
-        // arrivano col NOME -- panel.example.test, che e' anche l'rpId delle passkey, e per
-        // questo non puo' essere un indirizzo. Quel nome va dichiarato, perche' e' quello che
-        // un pannello raggiunto per nome ha scritto nella propria configurazione: prima
-        // nessuno lo chiedeva e la prova girava senza. update_panel_config mette la chiave TLS
-        // nel file dei segreti, che e' gia' nella cartella di prova scelta in cima.
+        // The panel now looks at the Host header (HostCheck), and these requests arrive with the
+        // NAME -- panel.example.test, which is also the passkeys' rpId, and for that reason cannot
+        // be an address. That name must be declared, because it is the one a panel reached by name
+        // has written in its own configuration: before, nobody asked for it and the test ran
+        // without it. update_panel_config puts the TLS key in the secrets file, which is already in
+        // the test folder chosen at the top.
         Main.dbManager = new org.mail_panel.sqli.dataBaseManager();
         Main.dbManager.create_tables();
         Main.dbManager.insert_data_default();
@@ -331,22 +330,22 @@ public class LoginRoutesTest {
             HttpResponse<String> pkAgain = ask("POST", "/api/login", new JSONObject().put("action", "passkey_verify").put("request", opt.getString("request"))
                     .put("credential", new JSONObject(assertion)).put("csrf_token", token).toString(), "Cookie", preCookie);
             check("the same assertion again: 401, no cookie", pkAgain.statusCode() == 401 && cookieValue(pkAgain, WebSessions.COOKIE) == null);
-            // Aperto per INDIRIZZO invece che col nome. Da quando il pannello guarda l'Host
-            // (HostCheck) sono due cose distinte, e qui si provano entrambe.
+            // Opened by ADDRESS instead of by name. Since the panel looks at the Host (HostCheck)
+            // these are two different things, and both are checked here.
             //
-            // 1) Col nome configurato, un Host che e' un indirizzo non arriva nemmeno al
-            //    gestore: 421, e il corpo non e' JSON. Prima questa riga ci costruiva sopra un
-            //    JSONObject e la prova si spaccava con "A JSONObject text must begin with '{'".
+            // 1) With the configured name, a Host that is an address does not even reach the
+            //    handler: 421, and the body is not JSON. Before, this line built a JSONObject on it
+            //    and the test broke with "A JSONObject text must begin with '{'".
             String body = "{\"action\":\"passkey_options\",\"csrf_token\":\"" + token + "\"}";
             HttpResponse<String> byAddress = ask("POST", "/api/login", body,
                     "Cookie", preCookie, "Host", "127.0.0.1:" + port);
             check("opened by IP address while the panel answers to a name: 421, before the handler",
                     byAddress.statusCode() == 421);
 
-            // 2) E con l'indirizzo configurato a wildcard -- quello che scrive l'installatore --
-            //    un Host che e' un indirizzo viene servito, e allora e' il gestore delle
-            //    passkey a dire che gli serve un nome. E' la proprieta' che questa riga
-            //    provava da sempre, e va provata nella condizione in cui esiste ancora.
+            // 2) And with the address configured as a wildcard -- the one the installer writes --
+            //    a Host that is an address is served, and then it is the passkey handler that says
+            //    it needs a name. It is the property this line always checked, and it must be
+            //    checked in the condition where it still exists.
             Main.dbManager.update_panel_config("0.0.0.0", "0", Files.readString(dir.resolve("c.pem")),
                     Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
             try {

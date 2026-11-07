@@ -1,32 +1,30 @@
 #!/bin/sh
-# Un login vero sul server di posta appena installato: IMAP sulla 993 e SMTP sulla 587.
+# A real login on the mail server just installed: IMAP on 993 and SMTP on 587.
 #
-# Perche' esiste: il 24/10/2026 un'installazione da zero ha messo un Dovecot senza supporto
-# MySQL, e nessun controllo se n'e' accorto. Tutti i servizi risultavano attivi, `doveconf -n`
-# accettava la configurazione, le porte erano in ascolto; il guasto compariva solo alla prima
-# connessione di qualcuno, nel registro:
+# Why it exists: on 24/10/2026 an installation from scratch put in a Dovecot without MySQL support,
+# and no check noticed. All services showed as running, `doveconf -n` accepted the configuration,
+# the ports were listening; the fault showed only at somebody's first connection, in the log:
 #     auth: Fatal: Support not compiled in for passdb driver 'sql'
 #     imap-login: Disconnected: Auth process broken
-# «Il servizio gira» non dice niente su «una casella entra». Questa sonda lo chiede davvero.
+# "The service runs" says nothing about "a mailbox gets in". This probe really asks.
 #
-# Che cosa fa, e che cosa lascia:
-#  - crea un dominio e una casella di prova (login-probe.test, che nessuno puo' possedere:
-#    .test e' riservato) nel database della posta, con una password casuale;
-#  - prova `doveadm auth test`, un LOGIN IMAP sulla 993 e un AUTH PLAIN sulla 587 dopo
-#    STARTTLS, cioe' i due ingressi delle caselle (la 587 passa per l'autenticazione di
-#    Dovecot: smtpd_sasl_type = dovecot);
-#  - mostra le righe di /var/log/maillog scritte nel frattempo;
-#  - alla fine toglie casella, dominio e la cartella di posta creata dal login.
+# What it does, and what it leaves:
+#  - it creates a test domain and mailbox (login-probe.test, which nobody can own: .test is
+#    reserved) in the mail database, with a random password;
+#  - it tries `doveadm auth test`, an IMAP LOGIN on 993 and an AUTH PLAIN on 587 after STARTTLS,
+#    that is the two ways into the mailboxes (587 goes through Dovecot's authentication:
+#    smtpd_sasl_type = dovecot);
+#  - it shows the lines of /var/log/maillog written meanwhile;
+#  - at the end it removes mailbox, domain and the mail folder created by the login.
 #
-# La password di prova passa sulla riga di comando di doveadm e openssl: e' una credenziale
-# usa e getta che la sonda crea e cancella, su una macchina di prova. Non usarla su un server
-# con utenti veri.
+# The test password goes on the command line of doveadm and openssl: it is a throwaway credential
+# the probe creates and deletes, on a test machine. Do not use it on a server with real users.
 #
-# Uso, da root, sulla macchina installata:
-#   sh tests/mail-login-probe.sh [database]          (predefinito: mailserver)
-# La password di root di MySQL si prende da ./installed-mysql-root-password (la scrive
-# InstallFromScratch) o, se non c'e', dal file dei segreti del pannello.
-# Codice d'uscita: 0 se entrano tutti e tre, 1 altrimenti.
+# Usage, as root, on the installed machine:
+#   sh tests/mail-login-probe.sh [database]          (default: mailserver)
+# The MySQL root password is taken from ./installed-mysql-root-password (InstallFromScratch writes
+# it) or, if it is not there, from the panel's secrets file.
+# Exit code: 0 if all three get in, 1 otherwise.
 
 DB="${1:-mailserver}"
 DOMAIN="login-probe.test"

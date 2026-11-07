@@ -114,9 +114,9 @@ public class QueueApiTest {
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
         check("connected to MySQL", db.connect());
-        // Lo schema PRIMA della voce, e la voce riletta: vedi TestSessions.auditLogTo.
-        // Scritta prima che le tabelle esistessero, non si salvava e il pannello
-        // scriveva nel registro vero.
+        // The schema BEFORE the entry, and the entry read back: see TestSessions.auditLogTo.
+        // Written before the tables existed, it was not saved and the panel wrote to the real
+        // log.
         TestSessions.auditLogTo(db, audit);
         Main.mailDatabase = db;
         Main.mysqlAvailable = true;
@@ -197,7 +197,7 @@ public class QueueApiTest {
             JSONObject inj = new JSONObject(send("POST", "/api/queue",
                     "{\"action\":\"remove\",\"id\":\"3A1F2B4C5D; rm -rf /\",\"csrf_token\":\"" + csrf + "\"}", it).body());
             check("a bad ID with the token: refused in Italian (" + inj.optString("message") + ")", !inj.optBoolean("success")
-                    && inj.optString("message").equals("Identificativo di coda non valido.") && !postsuperRan());
+                    && inj.optString("message").equals(org.mail_panel.i18n.I18n.t("it", "server.queue.badId")) && !postsuperRan());
             JSONObject unknown = new JSONObject(send("POST", "/api/queue",
                     "{\"action\":\"purge_deferred\",\"csrf_token\":\"" + csrf + "\"}", en).body());
             check("an action that no longer exists: refused", !unknown.optBoolean("success")

@@ -1,8 +1,8 @@
 #!/usr/bin/expect -f
-# La voce 6 del menu del pannello, a schermo, dentro un terminale vero (ssh -tt) sul clone di prova:
-# l'avviso all'apertura (una reinstallazione interrotta), la voce 6, la conferma (Cancel e' il
-# predefinito: Tab e poi Invio per OK), il ritorno, «no» al riavvio, Invio, e l'uscita dal menu.
-# Uso, dal Mac: expect tests/menu-way-back.exp <chiave ssh> <host> <cartella del pannello sul clone> <jar>
+# Item 6 of the panel's on-screen menu, inside a real terminal (ssh -tt) on the test clone: the
+# notice at opening (an interrupted reinstallation), item 6, the confirmation (Cancel is the
+# default: Tab then Enter for OK), the way back, "no" to the restart, Enter, and leaving the menu.
+# Usage, from the Mac: expect tests/menu-way-back.exp <ssh key> <host> <panel folder on the clone> <jar>
 set timeout 90
 set key [lindex $argv 0]
 set host [lindex $argv 1]
@@ -13,34 +13,33 @@ spawn ssh -tt -i $key -o BatchMode=yes root@$host "cd $dir && TERM=xterm exec ja
 proc step {what pattern} {
     expect {
         -re $pattern { puts "  OK   $what" }
-        timeout { puts "  FAILED $what (non arrivato: $pattern)"; exit 1 }
-        eof { puts "  FAILED $what (il menu e' uscito)"; exit 1 }
+        timeout { puts "  FAILED $what (did not arrive: $pattern)"; exit 1 }
+        eof { puts "  FAILED $what (the menu exited)"; exit 1 }
     }
 }
-step "il menu si apre col benvenuto" "Welcome to FreeBSD Mail Panel"
+step "the menu opens with the welcome" "Welcome to FreeBSD Mail Panel"
 send "\r"
-step "l'avviso: l'ultima reinstallazione non e' finita, scegli 6 o 4" "did not finish"
+step "the notice: the last reinstallation did not finish, choose 6 or 4" "did not finish"
 send "\r"
-step "nessuna finestra «Created ... script» da chiudere: subito le voci del menu" "Select an option"
-step "c'e' la voce 6" "6\\) Go back to the server before"
+step "no \"Created ... script\" window to close: the menu items at once" "Select an option"
+step "item 6 is there" "6\\) Go back to the server before"
 send "\033\[B\033\[B\033\[B\033\[B\033\[B"
 send "\r"
-# Lanterna ridisegna solo le celle che cambiano: una frase sopra il menu arriva a pezzi se alcune
-# lettere coincidono con quelle sotto («Go b» + «ck»). Questa, con lo schermo 80x24 di ssh -tt,
-# arriva intera.
-step "la conferma" "arrived after it is kept"
+# Lanterna redraws only the cells that change: a sentence above the menu arrives in pieces if some
+# letters match those below ("Go b" + "ck"). This one, with ssh -tt's 80x24 screen, arrives whole.
+step "the confirmation" "arrived after it is kept"
 send "\t"
 send "\r"
-step "il ritorno parte" "\\\[WAY BACK\\\] reinstall-before-"
-step "e attiva la via di ritorno per il prossimo avvio" "is the system of the next start"
-step "chiede se riavviare" "Restart the server now"
+step "the way back starts" "\\\[WAY BACK\\\] reinstall-before-"
+step "and activates the way back for the next start" "is the system of the next start"
+step "it asks whether to restart" "Restart the server now"
 send "no\r"
-step "non riavvia, e dice come farlo dopo" "Not restarted"
-step "aspetta Invio" "Press ENTER"
+step "it does not restart, and says how to do it later" "Not restarted"
+step "it waits for Enter" "Press ENTER"
 send "\r"
-step "torna al menu" "Select an option"
+step "back to the menu" "Select an option"
 send "\t"
 send "\r"
 expect eof
-puts "  OK   uscito dal menu"
+puts "  OK   left the menu"
 exit 0

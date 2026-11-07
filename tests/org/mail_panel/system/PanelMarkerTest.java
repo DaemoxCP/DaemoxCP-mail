@@ -9,14 +9,13 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Le firme dei file del pannello passano all'inglese all'avvio (PanelMarker.migrate), in
- * cartelle temporanee e con un nginx finto che dice quali cartelle include.
+ * The signatures of the panel's files move to English at start (PanelMarker.migrate), in temporary
+ * folders and with a fake nginx that says which folders it includes.
  *
- * I file "di prima" si costruiscono da quelli di oggi rimettendo la firma di prima presa dal file
- * di dati: la prova non scrive nessun nome vecchio. Dopo la migrazione ogni file deve essere
- * identico byte per byte a quello che il codice di oggi scrive da zero, con gli stessi permessi;
- * una seconda passata non deve trovare niente. L'effetto sui servizi veri lo misura la prova
- * sulla VM (reperti).
+ * The "old" files are built from today's by putting back the old signature taken from the data
+ * file: the test writes no old name. After the migration every file must be identical byte for
+ * byte to the one today's code writes from scratch, with the same permissions; a second pass must
+ * find nothing. The effect on the real services is measured by the test on the VM (reperti).
  *
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelMarkerTest
  */
@@ -26,7 +25,7 @@ public class PanelMarkerTest {
     static final PrintStream OUT = System.out;
 
     static void check(String what, boolean ok) {
-        OUT.println((ok ? "  OK   " : "  FALLITO ") + what);
+        OUT.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
@@ -41,7 +40,7 @@ public class PanelMarkerTest {
 
     static String before(String now, String signature) { return now.replace(PanelMarker.WRITTEN, signature); }
 
-    /** Un server: le cartelle di fail2ban, due cartelle di nginx e dovecot.conf. */
+    /** A server: fail2ban's folders, two nginx folders and dovecot.conf. */
     static final class Server {
         final Path root, f2b, filter, jail, defaultFolder, otherFolder, dovecot;
         List<String> folders;
@@ -99,53 +98,53 @@ public class PanelMarkerTest {
     }
 
     public static void main(String[] args) throws Exception {
-        OUT.println("\n== Le firme ==");
-        check("due firme di prima nel file di dati, quella di adesso diversa da tutte e due",
+        OUT.println("\n== The signatures ==");
+        check("two old signatures in the data file, today's different from both",
                 OLD.size() == 2 && !OLD.contains(PanelMarker.WRITTEN));
-        check("il codice di oggi firma i tre file della 443",
+        check("today's code signs the three files of the 443",
                 CONF.contains(PanelMarker.WRITTEN) && WebProtection.filter().contains(PanelMarker.WRITTEN)
                         && WebProtection.jail().contains(PanelMarker.WRITTEN));
 
-        OUT.println("\n== Un server senza niente di prima ==");
+        OUT.println("\n== A server with nothing old ==");
         Server s = new Server();
         PanelMarker.Report r = s.run();
-        check("niente file: NOTHING, e nginx -T non si lancia", r.outcome() == PanelMarker.Outcome.NOTHING && s.nginxCalls == 0);
+        check("no files: NOTHING, and nginx -T is not run", r.outcome() == PanelMarker.Outcome.NOTHING && s.nginxCalls == 0);
         s.write(s.defaultFolder.resolve(WebProtection.FILE_NAME), CONF, "rw-r--r--");
         s.write(s.filter, WebProtection.filter(), "rw-r--r--");
         s.write(s.jail, WebProtection.jail(), "rw-r-----");
         s.write(s.dovecot, DOVECOT_CONF, "rw-r-----");
         r = s.run();
-        check("file gia' con la firma di adesso: NOTHING, e nginx -T non si lancia",
+        check("files already with today's signature: NOTHING, and nginx -T is not run",
                 r.outcome() == PanelMarker.Outcome.NOTHING && s.nginxCalls == 0);
         s.close();
 
-        OUT.println("\n== Un server installato prima: le firme cambiano ==");
+        OUT.println("\n== A server installed before: the signatures change ==");
         s = new Server();
         s.writeOld(true, true, true);
         String jailBefore = s.read(s.jail);
         r = s.run();
-        check("esito DONE: " + r.detail(), r.outcome() == PanelMarker.Outcome.DONE);
-        check("il file di nginx e' quello che il pannello scrive oggi",
+        check("outcome DONE: " + r.detail(), r.outcome() == PanelMarker.Outcome.DONE);
+        check("the nginx file is the one the panel writes today",
                 CONF.equals(s.read(s.defaultFolder.resolve(WebProtection.FILE_NAME))));
-        check("filtro e jail sono quelli di oggi", WebProtection.filter().equals(s.read(s.filter))
+        check("filter and jail are today's", WebProtection.filter().equals(s.read(s.filter))
                 && WebProtection.jail().equals(s.read(s.jail)));
-        check("dovecot.conf ha la firma di adesso, e il resto com'era", DOVECOT_CONF.equals(s.read(s.dovecot)));
-        check("  e cambia solo la riga della firma", PanelMarker.withoutComments(jailBefore).equals(PanelMarker.withoutComments(s.read(s.jail))));
-        check("i permessi restano (jail 0640, filtro 0644, dovecot.conf 0640)",
+        check("dovecot.conf has today's signature, and the rest as it was", DOVECOT_CONF.equals(s.read(s.dovecot)));
+        check("  and only the signature line changes", PanelMarker.withoutComments(jailBefore).equals(PanelMarker.withoutComments(s.read(s.jail))));
+        check("the permissions stay (jail 0640, filter 0644, dovecot.conf 0640)",
                 "rw-r-----".equals(s.perms(s.jail)) && "rw-r--r--".equals(s.perms(s.filter)) && "rw-r-----".equals(s.perms(s.dovecot)));
-        check("nessun file temporaneo lasciato", !s.leftovers());
+        check("no temporary file left", !s.leftovers());
         int calls = s.nginxCalls;
         r = s.run();
-        check("una seconda volta: NOTHING, e nginx -T non si lancia", r.outcome() == PanelMarker.Outcome.NOTHING && s.nginxCalls == calls);
+        check("a second time: NOTHING, and nginx -T is not run", r.outcome() == PanelMarker.Outcome.NOTHING && s.nginxCalls == calls);
         s.close();
 
-        OUT.println("\n== Il file di nginx dove lo dice nginx ==");
+        OUT.println("\n== The nginx file where nginx says it is ==");
         s = new Server();
         s.writeOld(false, true, false);
         s.write(s.otherFolder.resolve(WebProtection.FILE_NAME), before(CONF, OLD.get(1)), "rw-r--r--");
         s.folders = List.of(s.otherFolder.toString());
         r = s.run();
-        check("in un'altra cartella inclusa: DONE e il file e' quello di oggi",
+        check("in another included folder: DONE and the file is today's",
                 r.outcome() == PanelMarker.Outcome.DONE && CONF.equals(s.read(s.otherFolder.resolve(WebProtection.FILE_NAME))));
         s.close();
 
@@ -155,40 +154,40 @@ public class PanelMarkerTest {
         s.write(elsewhere, before(CONF, OLD.get(1)), "rw-r--r--");
         Files.createSymbolicLink(s.defaultFolder.resolve(WebProtection.FILE_NAME), elsewhere);
         r = s.run();
-        check("un collegamento si segue: cambia il file a cui punta, il collegamento resta",
+        check("a link is followed: the file it points to changes, the link stays",
                 r.outcome() == PanelMarker.Outcome.DONE && CONF.equals(s.read(elsewhere))
                         && Files.isSymbolicLink(s.defaultFolder.resolve(WebProtection.FILE_NAME)));
         s.close();
 
-        OUT.println("\n== Quando qualcosa non va ==");
+        OUT.println("\n== When something goes wrong ==");
         s = new Server();
         s.writeOld(true, true, true);
         s.folders = null;
         String filterBefore = s.read(s.filter);
         r = s.run();
-        check("nginx -T fallisce: NGINX_UNREADABLE, la 443 non si tocca", r.outcome() == PanelMarker.Outcome.NGINX_UNREADABLE
+        check("nginx -T fails: NGINX_UNREADABLE, the 443 is not touched", r.outcome() == PanelMarker.Outcome.NGINX_UNREADABLE
                 && filterBefore.equals(s.read(s.filter)) && s.read(s.jail).contains(OLD.get(0)));
-        check("  ma dovecot.conf, che non dipende da nginx, si", DOVECOT_CONF.equals(s.read(s.dovecot)));
+        check("  but dovecot.conf, which does not depend on nginx, is", DOVECOT_CONF.equals(s.read(s.dovecot)));
         s.folders = List.of(s.defaultFolder.toString());
         r = s.run();
-        check("  e all'avvio dopo, con nginx che risponde, si fa il resto", r.outcome() == PanelMarker.Outcome.DONE
+        check("  and at the next start, with nginx answering, the rest is done", r.outcome() == PanelMarker.Outcome.DONE
                 && WebProtection.jail().equals(s.read(s.jail)) && CONF.equals(s.read(s.defaultFolder.resolve(WebProtection.FILE_NAME))));
         s.close();
 
         s = new Server();
         s.writeOld(true, true, false);
-        // Il file temporaneo di nginx non si puo' creare: al suo posto c'e' una cartella piena.
+        // nginx's temporary file cannot be created: in its place there is a full folder.
         Path blocker = s.defaultFolder.resolve("." + WebProtection.FILE_NAME + ".mailpanel.tmp");
         Files.createDirectories(blocker);
         Files.writeString(blocker.resolve("x"), "x");
         r = s.run();
-        check("il file di nginx non si puo' scrivere: PARTIAL, e filtro e jail restano con la firma di prima",
+        check("the nginx file cannot be written: PARTIAL, and filter and jail keep the old signature",
                 r.outcome() == PanelMarker.Outcome.PARTIAL && s.read(s.filter).contains(OLD.get(0)) && s.read(s.jail).contains(OLD.get(0)));
-        check("  (cosi' all'avvio dopo si riprova tutto: " + r.detail() + ")", s.read(s.defaultFolder.resolve(WebProtection.FILE_NAME)).contains(OLD.get(1)));
+        check("  (so at the next start everything is tried again: " + r.detail() + ")", s.read(s.defaultFolder.resolve(WebProtection.FILE_NAME)).contains(OLD.get(1)));
         Files.delete(blocker.resolve("x"));
         Files.delete(blocker);
         r = s.run();
-        check("  e tolto l'ostacolo va a fine", r.outcome() == PanelMarker.Outcome.DONE && WebProtection.jail().equals(s.read(s.jail)));
+        check("  and with the obstacle removed it goes to the end", r.outcome() == PanelMarker.Outcome.DONE && WebProtection.jail().equals(s.read(s.jail)));
         s.close();
 
         s = new Server();
@@ -197,20 +196,20 @@ public class PanelMarkerTest {
         s.write(s.defaultFolder.resolve(WebProtection.FILE_NAME), CONF, "rw-r--r--");
         r = s.run();
         String after = s.read(s.jail);
-        check("la firma cambia solo nelle righe di commento: la riga del commento si', l'altra no",
+        check("the signature changes only in comment lines: the comment line yes, the other no",
                 r.outcome() == PanelMarker.Outcome.DONE && after.startsWith("# " + PanelMarker.WRITTEN + ".\n")
                         && after.contains("logpath = /var/log/" + OLD.get(0) + "\n"));
         s.close();
 
         s = new Server();
-        s.write(s.jail, "# il mio file\n[" + WebProtection.NAME + "]\nenabled = true\n", "rw-r-----");
-        s.write(s.dovecot, "# il mio dovecot\nprotocols = imap\n", "rw-r-----");
+        s.write(s.jail, "# my file\n[" + WebProtection.NAME + "]\nenabled = true\n", "rw-r-----");
+        s.write(s.dovecot, "# my dovecot\nprotocols = imap\n", "rw-r-----");
         r = s.run();
-        check("file senza firma (scritti a mano): NOTHING, non si toccano", r.outcome() == PanelMarker.Outcome.NOTHING
-                && s.read(s.jail).startsWith("# il mio file") && s.read(s.dovecot).startsWith("# il mio dovecot"));
+        check("files without a signature (written by hand): NOTHING, they are not touched", r.outcome() == PanelMarker.Outcome.NOTHING
+                && s.read(s.jail).startsWith("# my file") && s.read(s.dovecot).startsWith("# my dovecot"));
         s.close();
 
-        OUT.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        OUT.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         System.exit(failed == 0 ? 0 : 1);
     }
 }

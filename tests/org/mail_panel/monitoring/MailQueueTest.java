@@ -202,7 +202,7 @@ public class MailQueueTest {
         I18n.setCurrent("it");
         r.answer("postsuper -d", 0, "postsuper: 3A1F2B4C5D: removed\n");
         check("the same message in the request language", mq.removeMessage("3A1F2B4C5D").message
-                .equals("Messaggio 3A1F2B4C5D eliminato dalla coda."));
+                .equals(I18n.t("it", "server.queue.removed", Map.of("id", "3A1F2B4C5D"))));
         I18n.clearCurrent();
 
         System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));

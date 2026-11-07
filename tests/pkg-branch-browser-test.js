@@ -1,13 +1,13 @@
-// La scheda "Ramo dei pacchetti" della pagina Aggiornamenti in Chromium, con il server simulato:
-// la logica vera (pkg -vv, il file del pannello, i ripristini) la prova PkgBranchTest. Qui si
-// controlla che la scheda si legga da sola, mostri ramo e repository solo come testo, chieda
-// l'anteprima, pretenda il nome del ramo scritto a mano, mandi impronta e token CSRF, segua il
-// lavoro fino all'esito e dica gli errori.
+// The "Package branch" card of the Updates page in Chromium, on the English page, with the
+// simulated server: the real logic (pkg -vv, the panel's file, the restores) is tested by
+// PkgBranchTest. Here it is checked that the card reads itself, shows branch and repositories only
+// as text, asks for the preview, wants the branch name typed by hand, sends fingerprint and CSRF
+// token, follows the job to its outcome and says the errors.
 //
-// Uso (dalla radice del progetto, dopo mvn package):
+// Usage (from the project root, after mvn package):
 //   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java \
 //     && java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator $D >/dev/null
-//   NODE_PATH=$(npm root -g) node tests/pkg-branch-browser-test.js $D [cartella-per-le-foto]
+//   NODE_PATH=$(npm root -g) node tests/pkg-branch-browser-test.js $D [screenshot-folder]
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -16,10 +16,10 @@ const csp = require('./browser-csp');
 const pageList = process.argv[2];
 const photos = process.argv[3];
 const resourceList = path.join(__dirname, '..', 'src', 'main', 'resources');
-const BASE = 'http://pannello.test';
+const BASE = 'http://panel.test';
 let failedOnes = 0;
 function real(whatItem, ok) {
-    console.log((ok ? '  OK   ' : '  FALLITO ') + whatItem);
+    console.log((ok ? '  OK   ' : '  FAILED ') + whatItem);
     if (!ok) failedOnes++;
 }
 
@@ -28,18 +28,18 @@ let branchNow = 'quarterly', changeSucceeds = true, readings = 0, rounds = 0;
 function stateValue() {
     const latest = branchNow === 'latest';
     return { success: true, branch: branchNow, changeable: true, destination: [latest ? 'quarterly' : 'latest'],
-        explanation: latest ? 'Ramo continuo: le versioni arrivano appena il port e\' aggiornato e compilato.'
-                            : 'Ramo trimestrale: si stacca dallo sviluppo dei port a gennaio, aprile, luglio e ottobre.',
+        explanation: latest ? 'Rolling branch: versions arrive as soon as the port is updated and built.'
+                            : 'Quarterly branch: it branches off the ports development in January, April, July and October.',
         fingerprint: latest ? 'bbbbbbbbbbbbbbbb' : 'aaaaaaaaaaaaaaaa',
         file: '/usr/local/etc/pkg/repos/zz-panel-branch.conf', panelOwnedFile: latest,
         repository: [
-            { name: 'FreeBSD-ports', role: 'Pacchetti (port)', branch: branchNow, enabled: true, type: 'packages',
+            { name: 'FreeBSD-ports', role: 'Packages (ports)', branch: branchNow, enabled: true, type: 'packages',
               url: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/' + branchNow },
-            { name: 'FreeBSD-ports-kmods', role: 'Moduli del kernel', branch: branchNow, enabled: true, type: 'modules',
+            { name: 'FreeBSD-ports-kmods', role: 'Kernel modules', branch: branchNow, enabled: true, type: 'modules',
               url: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/kmods_' + branchNow + '_0' },
-            { name: 'FreeBSD-base', role: 'Sistema base', branch: 'release', enabled: false, type: 'base',
+            { name: 'FreeBSD-base', role: 'Base system', branch: 'release', enabled: false, type: 'base',
               url: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/base_release_0' },
-            { name: 'mio<b>repo</b>', role: 'Repository non ufficiale', branch: '', enabled: true, type: 'external',
+            { name: 'my<b>repo</b>', role: 'Unofficial repository', branch: '', enabled: true, type: 'external',
               url: 'file:///usr/local/<img src=x onerror="window.injectedRan=1">' },
         ] };
 }
@@ -51,7 +51,7 @@ async function served(route) {
     const url = new URL(req.url());
     const p = url.pathname;
     if (p === '/updates') {
-        const html = fs.readFileSync(path.join(pageList, 'updates.html'), 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-prova');
+        const html = fs.readFileSync(path.join(pageList, 'updates.en.html'), 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-test');
         return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html, headers: csp.headers(pageList) });
     }
     // The script dictionary (t() and the texts), as the panel serves it.
@@ -64,26 +64,26 @@ async function served(route) {
         return route.fulfill({ status: 200, contentType: kindValue, body: fs.readFileSync(f) });
     }
     const bodyText = req.postData() ? JSON.parse(req.postData()) : null;
-    requests.push({ metodo: req.method(), path: p, body: bodyText });
+    requests.push({ method: req.method(), path: p, body: bodyText });
     if (p !== '/api/updates' || !bodyText) return json(route, { success: true });
     switch (bodyText.action) {
         case 'branch_status': readings++; return json(route, stateValue());
         case 'branch_preview': return json(route, { success: true, possible: true, from: branchNow, destination: bodyText.destination,
             fingerprint: stateValue().fingerprint, file: '/usr/local/etc/pkg/repos/zz-panel-branch.conf',
             changes: [{ name: 'FreeBSD-ports', from: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/quarterly', to: 'pkg+https://pkg.FreeBSD.org/${ABI}/latest' }],
-            warnings: ['Non si aggiorna nessun pacchetto: cambia da dove pkg li prende.', 'Su latest il prossimo aggiornamento puo\' portare versioni maggiori nuove.'],
+            warnings: ['No package is updated: it changes where pkg takes them from.', 'On latest the next update can bring new major versions.'],
             content: '# Written by the mail panel\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', howToReturn: '' });
         case 'branch_change':
-            if (!changeSucceeds) return json(route, { success: false, error: 'C\'e\' gia\' un lavoro sui pacchetti in corso (aggiornamento di nginx).' });
+            if (!changeSucceeds) return json(route, { success: false, error: 'A package job is already running (nginx update).' });
             rounds = 0;
-            return json(route, { success: true, jobId: 'ramo-1', async: true });
+            return json(route, { success: true, jobId: 'branch-1', async: true });
         case 'job_status':
             rounds++;
-            if (rounds < 2) return json(route, { success: true, job: { status: 'running', consoleLog: '[12:00:00] [3/3] Scarico il catalogo del ramo latest (pkg update -f)...\n' } });
+            if (rounds < 2) return json(route, { success: true, job: { status: 'running', consoleLog: '[12:00:00] [3/3] Downloading the catalog of the latest branch (pkg update -f)...\n' } });
             branchNow = 'latest';
             return json(route, { success: true, job: { status: 'completed', elapsedSeconds: 9, errorMessage: '',
-                result: 'Adesso i pacchetti arrivano dal ramo latest, e il suo catalogo e\' scaricato. Nessun pacchetto e\' stato cambiato. 2 pacchetti si possono aggiornare.',
-                consoleLog: '[12:00:00] [3/3] Scarico il catalogo...\n[12:00:09] All repositories are up to date.\n' } });
+                result: 'Packages now come from the latest branch, and its catalog is downloaded. No package was changed. 2 packages can be upgraded.',
+                consoleLog: '[12:00:00] [3/3] Downloading the catalog...\n[12:00:09] All repositories are up to date.\n' } });
         default: return json(route, { success: true });
     }
 }
@@ -98,69 +98,69 @@ async function served(route) {
     csp.watch(page, errorList);
     page.on('console', m => { if (m.type() === 'error') errorList.push(m.text()); });
 
-    console.log('\n== La scheda si legge da sola ==');
+    console.log('\n== The card reads itself ==');
     await page.goto(BASE + '/updates');
     await page.waitForSelector('#branch-body table');
     const textValue = await page.textContent('#branch-body');
-    real('ramo quarterly, con la spiegazione', textValue.includes('I pacchetti arrivano dal ramo quarterly') && textValue.includes('Ramo trimestrale'));
+    real('quarterly branch, with the explanation', textValue.includes('Packages come from the quarterly branch') && textValue.includes('Quarterly branch'));
     const lineItems = await page.$$eval('#branch-body tbody tr', tr => tr.map(r => r.cells[0].textContent));
-    real('i quattro repository, anche quello non ufficiale: ' + lineItems.join(', '), lineItems.length === 4 && lineItems[3] === 'mio<b>repo</b>');
-    real('nomi e indirizzi restano testo: nessun <b>, nessun <img>', await page.locator('#branch-body b, #branch-body img').count() === 0
+    real('the four repositories, the unofficial one too: ' + lineItems.join(', '), lineItems.length === 4 && lineItems[3] === 'my<b>repo</b>');
+    real('names and addresses stay text: no <b>, no <img>', await page.locator('#branch-body b, #branch-body img').count() === 0
         && await page.evaluate(() => window.injectedRan) === undefined);
-    real('di serie: "nessun file del pannello"', textValue.includes('Nessun file del pannello'));
-    real('il pulsante per passare a latest', await page.locator('#branch-body button', { hasText: 'Passa al ramo latest' }).count() === 1);
+    real('out of the box: "no panel file"', textValue.includes('No panel file'));
+    real('the button to switch to latest', await page.locator('#branch-body button', { hasText: 'Switch to the latest branch' }).count() === 1);
     if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-card.png') });
 
-    console.log('\n== Anteprima e conferma ==');
-    await page.click('#branch-body button:has-text("Passa al ramo latest")');
+    console.log('\n== Preview and confirmation ==');
+    await page.click('#branch-body button:has-text("Switch to the latest branch")');
     await page.waitForSelector('#branch-confirm');
     const previewText = await page.textContent('#branch-preview');
-    real('l\'anteprima: cosa cambia, gli warnings, il file che si scrive', previewText.includes('Passare dal ramo quarterly al ramo latest')
-        && previewText.includes('pkg+https://pkg.FreeBSD.org/${ABI}/latest') && previewText.includes('Non si aggiorna nessun pacchetto')
+    real('the preview: what changes, the warnings, the file being written', previewText.includes('Switch from the quarterly branch to the latest branch')
+        && previewText.includes('pkg+https://pkg.FreeBSD.org/${ABI}/latest') && previewText.includes('No package is updated')
         && previewText.includes('zz-panel-branch.conf'));
-    real('"Cambia ramo" spento finche\' non si scrive latest', await page.isDisabled('#branch-go'));
+    real('"Change branch" off until latest is typed', await page.isDisabled('#branch-go'));
     await page.fill('#branch-confirm', 'Latest');
-    real('scritto diverso (Latest): resta spento', await page.isDisabled('#branch-go'));
+    real('typed differently (Latest): it stays off', await page.isDisabled('#branch-go'));
     await page.fill('#branch-confirm', 'latest');
-    real('scritto giusto: si accende', await page.isEnabled('#branch-go'));
+    real('typed right: it turns on', await page.isEnabled('#branch-go'));
     if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-preview-shot.png') });
 
-    console.log('\n== Il cambio, seguito fino all\'esito ==');
+    console.log('\n== The change, followed to its outcome ==');
     await page.click('#branch-go');
     const post = requests.find(r => r.body && r.body.action === 'branch_change');
-    real('la richiesta: ramo, conferma, fingerprint dell\'anteprima, token CSRF', post && post.body.destination === 'latest'
-        && post.body.confirm === 'latest' && post.body.fingerprint === 'aaaaaaaaaaaaaaaa' && post.body.csrf_token === 'csrf-prova');
-    await page.waitForFunction(() => document.getElementById('branch-outcome').textContent.includes('Adesso i pacchetti arrivano'), null, { timeout: 15000 });
-    real('il registro del lavoro si vede', (await page.textContent('#branch-log')).includes('All repositories are up to date'));
-    real('l\'esito, in verde', await page.locator('#branch-outcome .alert-success').count() === 1);
-    await page.waitForFunction(() => document.getElementById('branch-body').textContent.includes('dal ramo latest'));
-    real('la scheda si rilegge da sola: ora latest, con il file del pannello', readings === 2
-        && (await page.textContent('#branch-body')).includes('Il ramo lo decide il file del pannello'));
+    real('the request: branch, confirmation, the preview\'s fingerprint, CSRF token', post && post.body.destination === 'latest'
+        && post.body.confirm === 'latest' && post.body.fingerprint === 'aaaaaaaaaaaaaaaa' && post.body.csrf_token === 'csrf-test');
+    await page.waitForFunction(() => document.getElementById('branch-outcome').textContent.includes('Packages now come from'), null, { timeout: 15000 });
+    real('the job log can be seen', (await page.textContent('#branch-log')).includes('All repositories are up to date'));
+    real('the outcome, in green', await page.locator('#branch-outcome .alert-success').count() === 1);
+    await page.waitForFunction(() => document.getElementById('branch-body').textContent.includes('the latest branch'));
+    real('the card reads itself again: now latest, with the panel\'s file', readings === 2
+        && (await page.textContent('#branch-body')).includes('The branch is decided by the panel\'s file'));
     if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-after.png') });
 
-    console.log('\n== Un cambio che non parte ==');
+    console.log('\n== A change that does not start ==');
     changeSucceeds = false;
-    await page.click('#branch-body button:has-text("Passa al ramo quarterly")');
+    await page.click('#branch-body button:has-text("Switch to the quarterly branch")');
     await page.waitForSelector('#branch-confirm');
     await page.fill('#branch-confirm', 'quarterly');
     await page.click('#branch-go');
     await page.waitForSelector('#branch-outcome .alert-danger');
-    real('l\'errore del server, in rosso: ' + await page.textContent('#branch-outcome'), (await page.textContent('#branch-outcome')).includes('lavoro sui pacchetti in corso'));
-    real('e si puo\' riprovare', await page.isEnabled('#branch-go'));
+    real('the server\'s error, in red: ' + await page.textContent('#branch-outcome'), (await page.textContent('#branch-outcome')).includes('package job is already running'));
+    real('and it can be tried again', await page.isEnabled('#branch-go'));
 
-    console.log('\n== Tema scuro e telefono ==');
+    console.log('\n== Dark theme and phone ==');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
-    await page.waitForTimeout(600);   // il cambio di tema ha una transizione
+    await page.waitForTimeout(600);   // the theme change has a transition
     if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-dark.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
     await page.waitForTimeout(300);
     const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-    real('sul telefono la pagina non scorre di lato: ' + pageWidth + 'px', pageWidth <= 390);
+    real('on the phone the page does not scroll sideways: ' + pageWidth + 'px', pageWidth <= 390);
     if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-phone.png') });
 
-    real('nessun errore nella pagina' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
+    real('no error in the page' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
     await browser.close();
-    console.log('\n' + (failedOnes === 0 ? 'TUTTO VERDE' : failedOnes + ' CONTROLLI FALLITI'));
+    console.log('\n' + (failedOnes === 0 ? 'ALL GREEN' : failedOnes + ' CHECKS FAILED'));
     process.exit(failedOnes ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });
