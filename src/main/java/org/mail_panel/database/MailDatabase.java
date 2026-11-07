@@ -230,9 +230,9 @@ public class MailDatabase {
 
     /**
      * CREATE USER con la password come parametro. MySQL non accetta un segnaposto in IDENTIFIED BY
-     * quando prepara lui l'istruzione; Connector/J pero' prepara dalla parte del client (il
-     * predefinito, useServerPrepStmts=false) e mette il valore fra apici con il suo escape, apici e
-     * barre rovesciate compresi. Prima la password entrava nel testo con il solo raddoppio degli apici.
+     * quando prepara lui l'istruzione; Connector/J pero', se non gli si chiede altro, prepara dalla
+     * parte del client e mette il valore fra apici con il suo escape, apici e barre rovesciate
+     * compresi. Prima la password entrava nel testo con il solo raddoppio degli apici.
      */
     private void createUser(String statement, String password) throws SQLException {
         try (PreparedStatement ps = getConnection().prepareStatement(statement)) {
