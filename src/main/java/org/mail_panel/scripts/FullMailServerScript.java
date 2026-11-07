@@ -67,6 +67,8 @@ ROUNDCUBE_SSL_CHAIN="${10}"
 #   MYSQL_PASSWORD        quella dell'utente del pannello
 #   MYSQL_ROOT_PASSWORD   quella di root, generata dal pannello e tenuta nel file dei segreti
 # Chi lancia questo script a mano deve esportarle.
+# Dall'ambiente arriva anche ROUNDCUBE_DB_PASSWORD, quella dell'utente MySQL della webmail
+# (roundcube), anche lei nel file dei segreti: la webmail non entra piu' come il pannello.
 
 # Colors. Con printf, non fra apici: l'echo di /bin/sh su FreeBSD non interpreta \\033, e il log
 # dell'installazione mostrava "\\033[1;33m[PHASE 6/10]" scritto a lettere (33 righe, misurato).
@@ -158,6 +160,11 @@ fi
 
 if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
     echo "${RED}Error: MYSQL_ROOT_PASSWORD not in the environment${NC}"
+    exit 1
+fi
+
+if [ -z "$ROUNDCUBE_DB_PASSWORD" ]; then
+    echo "${RED}Error: ROUNDCUBE_DB_PASSWORD not in the environment${NC}"
     exit 1
 fi
 
@@ -1067,13 +1074,20 @@ echo "${GREEN}  Rspamd configured${NC}"
 echo ""
 echo "${YELLOW}[PHASE 9/10] Configuring Roundcube...${NC}"
 
-# Create Roundcube database
-mysql --defaults-extra-file="$MYSQL_ROOT_CNF" << ROUNDCUBE_DB
+# Il database di Roundcube, e il suo utente MySQL: roundcube, coi privilegi su roundcubemail e
+# basta. Prima la webmail entrava come l'utente del pannello, che ha anche il database della
+# posta (caselle, hash delle password, amministratori): chi prendeva la webmail leggeva la
+# password in config.inc.php e con quella tutto il resto. Su una reinstallazione l'utente del
+# pannello perde i privilegi su roundcubemail che gli aveva dato la versione di prima.
+if ! mysql --defaults-extra-file="$MYSQL_ROOT_CNF" << ROUNDCUBE_DB
 CREATE DATABASE IF NOT EXISTS roundcubemail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-GRANT ALL PRIVILEGES ON roundcubemail.* TO '$MYSQL_USER'@'localhost';
-GRANT ALL PRIVILEGES ON roundcubemail.* TO '$MYSQL_USER'@'127.0.0.1';
+""" + org.mail_panel.system.RoundcubeDbUser.shellAccountSql("$ROUNDCUBE_DB_PASSWORD", "$MYSQL_USER") + """
 FLUSH PRIVILEGES;
 ROUNDCUBE_DB
+then
+    echo "${RED}  ERROR: cannot create the webmail database or its MySQL user.${NC}"
+    exit 1
+fi
 
 if [ -f /usr/local/www/roundcube/SQL/mysql.initial.sql ]; then
     # Le tabelle di Roundcube le fa root, dal file di credenziali: "-p$MYSQL_PASSWORD"
@@ -1086,7 +1100,7 @@ ROUNDCUBE_DES_KEY=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)
 
 cat > /usr/local/www/roundcube/config/config.inc.php << ROUNDCUBE_CONFIG
 <?php
-\\$config['db_dsnw'] = 'mysql://$MYSQL_USER:$MYSQL_PASSWORD@127.0.0.1/roundcubemail';
+\\$config['db_dsnw'] = 'mysql://roundcube:$ROUNDCUBE_DB_PASSWORD@127.0.0.1/roundcubemail';
 \\$config['imap_host'] = 'ssl://127.0.0.1:993';
 \\$config['imap_auth_type'] = 'LOGIN';
 \\$config['imap_conn_options'] = array(
