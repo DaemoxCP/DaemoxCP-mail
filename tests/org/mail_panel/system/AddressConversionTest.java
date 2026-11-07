@@ -19,16 +19,16 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * Trasformare un alias in casella e una casella in alias (AddressTransform e MailDatabase).
+ * Turning an alias into a mailbox and a mailbox into an alias (AddressTransform and MailDatabase).
  *
- * Prima parte, senza database: quando si puo' e quando no (raccolte, nomi che uscirebbero da
- * /var/vmail, domini non del pannello, indirizzi che sono gia' caselle), le destinazioni (valide,
- * esistenti se sono sui domini del pannello, senza giri che tornano all'indirizzo), la posta sul
- * disco (contata, messa da parte, rimessa a posto), l'impronta dell'anteprima.
+ * First part, without a database: when it can be done and when not (catch-alls, names that would
+ * leave /var/vmail, domains that are not the panel's, addresses that are already mailboxes), the
+ * destinations (valid, existing if they are on the panel's domains, without loops that come back to
+ * the address), the mail on disk (counted, set aside, put back), the preview's fingerprint.
  *
- * Seconda parte, su un MySQL vero (lo stesso del pannello: mysql80-server): le due transazioni,
- * guardate con le stesse query che usa Postfix. Che una trasformazione a meta' non resti mai:
- * se l'ultimo passo fallisce, il database torna com'era. Si salta se MySQL non e' indicato:
+ * Second part, on a real MySQL (the same as the panel: mysql80-server): the two transactions, looked
+ * at with the same queries Postfix uses. That a half-done conversion never stays: if the last step
+ * fails, the database goes back as it was. It is skipped if MySQL is not given:
  *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_prova
  */
 public class AddressConversionTest {
@@ -36,7 +36,7 @@ public class AddressConversionTest {
     static int failed = 0;
 
     static void real(String what, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
@@ -64,7 +64,7 @@ public class AddressConversionTest {
                 m == null ? null : new AddressTransform.Losses(false, List.of(), 0));
     }
 
-    /** Una rete finta: domini del pannello, caselle che ricevono, alias attivi. */
+    /** A fake network: the panel's domains, receiving mailboxes, active aliases. */
     static final class FakeNetwork implements AddressTransform.Network {
         final Set<String> domains;
         final Set<String> mailboxes;
@@ -88,7 +88,8 @@ public class AddressConversionTest {
     }
 
     public static void main(String[] a) throws Exception {
-        Path root = Files.createTempDirectory("prova-trasforma");
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        Path root = Files.createTempDirectory("transform-test");
         try {
             AddressTransform.vmail = root.resolve("vmail");
             AddressTransform.sieve = root.resolve("sieve");
@@ -99,127 +100,127 @@ public class AddressConversionTest {
         } finally {
             try (Stream<Path> s = Files.walk(root)) { s.sorted((x, y) -> y.compareTo(x)).forEach(p -> p.toFile().delete()); }
         }
-        System.out.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         if (failed > 0) System.exit(1);
     }
 
     static void rules() {
-        System.out.println("\n== Alias -> casella: quando si puo' ==");
+        System.out.println("\n== Alias -> mailbox: when it can be done ==");
         List<MailDatabase.Alias> oneAlias = List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true));
-        real("una raccolta (@domain-d.test) no: non ha un nome prima della @",
-                AddressTransform.noMailboxReason(state("@domain-d.test", true, null, oneAlias, List.of())).contains("raccolta"));
-        real("\"..@domain-d.test\" no: come percorso uscirebbe da /var/vmail",
+        real("a catch-all (@domain-d.test) no: it has no name before the @",
+                AddressTransform.noMailboxReason(state("@domain-d.test", true, null, oneAlias, List.of())).contains("catch-all"));
+        real("\"..@domain-d.test\" no: as a path it would leave /var/vmail",
                 AddressTransform.noMailboxReason(state("..@domain-d.test", true, null, oneAlias, List.of())) != null);
-        real("un dominio che non e' del pannello no",
-                AddressTransform.noMailboxReason(state("dmarc@altro.it", false, null, oneAlias, List.of())).contains("non è fra i domini"));
-        real("un indirizzo che e' gia' una casella no",
-                AddressTransform.noMailboxReason(state("dmarc@domain-d.test", true, mailbox(5, "dmarc@domain-d.test"), oneAlias, List.of())).contains("già una casella"));
-        real("un indirizzo senza alias no",
-                AddressTransform.noMailboxReason(state("dmarc@domain-d.test", true, null, List.of(), List.of())).contains("non ha alias"));
+        real("a domain that is not the panel's no",
+                AddressTransform.noMailboxReason(state("dmarc@other.example", false, null, oneAlias, List.of())).contains("not one of the panel's domains"));
+        real("an address that is already a mailbox no",
+                AddressTransform.noMailboxReason(state("dmarc@domain-d.test", true, mailbox(5, "dmarc@domain-d.test"), oneAlias, List.of())).contains("already a mailbox"));
+        real("an address without aliases no",
+                AddressTransform.noMailboxReason(state("dmarc@domain-d.test", true, null, List.of(), List.of())).contains("has no alias"));
         AddressTransform.AddressState ok = state("dmarc@domain-d.test", true, null,
-                List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true), alias(2, "dmarc@domain-d.test", "vecchio@x.it", false)),
+                List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true), alias(2, "dmarc@domain-d.test", "old@x.it", false)),
                 List.of(alias(3, "postmaster@domain-d.test", "dmarc@domain-d.test", true)));
-        real("dmarc@domain-d.test -> owner@example.net: si puo'", AddressTransform.noMailboxReason(ok) == null);
+        real("dmarc@domain-d.test -> owner@example.net: it can be done", AddressTransform.noMailboxReason(ok) == null);
         JSONObject preview = AddressTransform.previewToMailbox(ok, ZoneId.of("Europe/Rome"));
-        real("l'anteprima elenca le destinazioni (anche quella disattiva) e chi arriva qui", preview.getBoolean("possible")
+        real("the preview lists the destinations (the inactive one too) and who arrives here", preview.getBoolean("possible")
                 && preview.getJSONArray("destinations").length() == 2 && preview.getJSONArray("towardsHere").getJSONObject(0).getString("source").equals("postmaster@domain-d.test"));
         String before = AddressTransform.fingerprint(ok);
         AddressTransform.AddressState changed = state("dmarc@domain-d.test", true, null,
-                List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true), alias(2, "dmarc@domain-d.test", "vecchio@x.it", true)),
+                List.of(alias(1, "dmarc@domain-d.test", "owner@example.net", true), alias(2, "dmarc@domain-d.test", "old@x.it", true)),
                 ok.towardsHere());
-        real("l'fingerprint cambia se un alias cambia (riattivato)", !before.equals(AddressTransform.fingerprint(changed)));
-        real("e non cambia se non cambia niente", before.equals(AddressTransform.fingerprint(ok)));
+        real("the fingerprint changes if an alias changes (turned back on)", !before.equals(AddressTransform.fingerprint(changed)));
+        real("and it does not change if nothing changes", before.equals(AddressTransform.fingerprint(ok)));
 
-        System.out.println("\n== Casella -> alias: cosa si perde ==");
+        System.out.println("\n== Mailbox -> alias: what is lost ==");
         MailDatabase.Mailbox m = mailbox(7, "info@domain-d.test");
         m.receiveEnabled = false;
         AddressTransform.AddressState c = new AddressTransform.AddressState("info@domain-d.test", true, m,
-                List.of(alias(4, "info@domain-d.test", "info@domain-d.test", true), alias(5, "info@domain-d.test", "capo@x.it", true)),
+                List.of(alias(4, "info@domain-d.test", "info@domain-d.test", true), alias(5, "info@domain-d.test", "boss@x.it", true)),
                 List.of(), AddressTransform.MailContent.NONE,
                 new AddressTransform.Losses(true, List.of("owner@example.net", "info@domain-d.test"), 3));
         JSONObject aa = AddressTransform.previewToAlias(c, ZoneId.of("Europe/Rome"));
         JSONObject per = aa.getJSONObject("losses");
-        real("risposta automatica, 3 filtri, inoltri e solo invio", per.getBoolean("autoReply") && per.getInt("filters") == 3
+        real("auto-reply, 3 filters, forwards and send-only", per.getBoolean("autoReply") && per.getInt("filters") == 3
                 && per.getJSONArray("forwards").length() == 2 && per.getBoolean("sendOnly"));
-        real("le destinazioni proposte sono gli inoltri della casella, senza se stessa",
+        real("the proposed destinations are the mailbox's forwards, without itself",
                 aa.getJSONArray("proposals").toList().equals(List.of("owner@example.net")));
-        real("l'alias su se stessa e' segnalato (se ne andra'), gli altri restano", aa.getBoolean("copy")
-                && aa.getJSONArray("alreadyForwarded").getJSONObject(0).getString("destination").equals("capo@x.it"));
-        real("su un alias (non casella): non si puo'", !AddressTransform.previewToAlias(ok, ZoneId.of("Europe/Rome")).getBoolean("possible"));
+        real("the alias to itself is pointed out (it will go away), the others stay", aa.getBoolean("copy")
+                && aa.getJSONArray("alreadyForwarded").getJSONObject(0).getString("destination").equals("boss@x.it"));
+        real("on an alias (not a mailbox): it cannot be done", !AddressTransform.previewToAlias(ok, ZoneId.of("Europe/Rome")).getBoolean("possible"));
     }
 
     static void destinations() {
-        System.out.println("\n== Casella -> alias: le destinazioni ==");
+        System.out.println("\n== Mailbox -> alias: the destinations ==");
         AddressTransform.AddressState s = state("info@domain-d.test", true, mailbox(7, "info@domain-d.test"), List.of(), List.of());
         FakeNetwork r = new FakeNetwork(Set.of("domain-d.test", "domain-c.test"), Set.of("owner@domain-d.test", "info@domain-d.test"));
-        r.route("vendite@domain-d.test", "owner@domain-d.test");
-        real("nessuna destinazione: no", error(s, new JSONArray(), r).contains("almeno una"));
-        real("l'indirizzo stesso: no", error(s, new JSONArray().put("info@domain-d.test"), r).contains("stesso"));
-        real("un indirizzo non valido: no", error(s, new JSONArray().put("non un indirizzo"), r).contains("non è un indirizzo valido"));
-        real("su un tuo dominio ma inesistente: no (la posta verrebbe rifiutata)",
-                error(s, new JSONArray().put("nessuno@domain-d.test"), r).contains("verrebbe rifiutata"));
-        real("una tua casella: si'", error(s, new JSONArray().put("owner@domain-d.test"), r) == null);
-        real("un tuo alias attivo: si'", error(s, new JSONArray().put("vendite@domain-d.test"), r) == null);
+        r.route("sales@domain-d.test", "owner@domain-d.test");
+        real("no destination: no", error(s, new JSONArray(), r).contains("At least one"));
+        real("the address itself: no", error(s, new JSONArray().put("info@domain-d.test"), r).contains("itself"));
+        real("an invalid address: no", error(s, new JSONArray().put("not an address"), r).contains("is not a valid address"));
+        real("on one of your domains but not existing: no (the mail would be rejected)",
+                error(s, new JSONArray().put("nobody@domain-d.test"), r).contains("would be rejected"));
+        real("one of your mailboxes: yes", error(s, new JSONArray().put("owner@domain-d.test"), r) == null);
+        real("one of your active aliases: yes", error(s, new JSONArray().put("sales@domain-d.test"), r) == null);
         r.route("@domain-c.test", "owner@domain-d.test");
-        real("un indirizzo qualsiasi di un dominio con raccolta: si'", error(s, new JSONArray().put("chiunque@domain-c.test"), r) == null);
-        real("un indirizzo esterno: si'", error(s, new JSONArray().put("owner@example.net"), r) == null);
+        real("any address of a domain with a catch-all: yes", error(s, new JSONArray().put("anyone@domain-c.test"), r) == null);
+        real("an outside address: yes", error(s, new JSONArray().put("owner@example.net"), r) == null);
         JSONArray many = new JSONArray();
-        for (int k = 0; k < 21; k++) many.put("persona" + k + "@esterno.it");
-        real("piu' di 20: no", error(s, many, r).contains("Al massimo"));
-        r.route("giro@domain-d.test", "info@domain-d.test");
-        String g = error(s, new JSONArray().put("giro@domain-d.test"), r);
-        real("un alias che riporta all'indirizzo: no, con la strada: " + g, g != null && g.contains("giro@domain-d.test -> info@domain-d.test"));
+        for (int k = 0; k < 21; k++) many.put("person" + k + "@outside.example");
+        real("more than 20: no", error(s, many, r).contains("At most"));
+        r.route("loop@domain-d.test", "info@domain-d.test");
+        String g = error(s, new JSONArray().put("loop@domain-d.test"), r);
+        real("an alias that leads back to the address: no, with the path: " + g, g != null && g.contains("loop@domain-d.test -> info@domain-d.test"));
         r.route("a@domain-d.test", "b@domain-d.test").route("b@domain-d.test", "info@domain-d.test");
-        real("anche a due passi", error(s, new JSONArray().put("a@domain-d.test"), r).contains("a@domain-d.test -> b@domain-d.test -> info@domain-d.test"));
+        real("even in two steps", error(s, new JSONArray().put("a@domain-d.test"), r).contains("a@domain-d.test -> b@domain-d.test -> info@domain-d.test"));
         AddressTransform.AddressState withAlias = state("info@domain-d.test", true, mailbox(7, "info@domain-d.test"),
-                List.of(alias(9, "info@domain-d.test", "giro@domain-d.test", true)), List.of());
-        real("e anche se il giro passa da un alias che l'indirizzo ha gia'",
-                error(withAlias, new JSONArray().put("owner@example.net"), r).contains("giro@domain-d.test"));
+                List.of(alias(9, "info@domain-d.test", "loop@domain-d.test", true)), List.of());
+        real("and even if the loop goes through an alias the address already has",
+                error(withAlias, new JSONArray().put("owner@example.net"), r).contains("loop@domain-d.test"));
         try {
             List<String> d = AddressTransform.destinations(s, new JSONArray().put(" Owner@Domain-d.test ").put("owner@domain-d.test"), r);
-            real("spazi e maiuscole tolti, doppioni una volta sola: " + d, d.equals(List.of("owner@domain-d.test")));
+            real("spaces and upper case removed, duplicates once: " + d, d.equals(List.of("owner@domain-d.test")));
         } catch (Exception e) {
-            real("spazi e maiuscole: " + e.getMessage(), false);
+            real("spaces and upper case: " + e.getMessage(), false);
         }
     }
 
     static void disk(Path root) throws Exception {
-        System.out.println("\n== La posta sul disco ==");
+        System.out.println("\n== The mail on disk ==");
         Path dir = AddressTransform.vmail.resolve("domain-d.test").resolve("dmarc");
-        for (String f : new String[] { "cur/1.M1", "new/2.M2", ".Archivio/cur/3.M3", ".Archivio/new/4.M4", "dovecot-uidlist", "tmp/5.M5" }) {
+        for (String f : new String[] { "cur/1.M1", "new/2.M2", ".Archive/cur/3.M3", ".Archive/new/4.M4", "dovecot-uidlist", "tmp/5.M5" }) {
             Path p = dir.resolve(f);
             Files.createDirectories(p.getParent());
             Files.writeString(p, "x".repeat(100));
         }
         Path filters = AddressTransform.sieve.resolve("domain-d.test").resolve("dmarc").resolve(".dovecot.sieve");
         Files.createDirectories(filters.getParent());
-        Files.writeString(filters, "redirect \"vecchio@x.it\";\n");
+        Files.writeString(filters, "redirect \"old@x.it\";\n");
         AddressTransform.MailContent p = AddressTransform.mail("dmarc@domain-d.test");
-        real("4 messaggi (cur e new, anche nelle cartelle; non tmp, non i file di Dovecot), 400 byte, e i filtri: "
+        real("4 messages (cur and new, also in the folders; not tmp, not Dovecot's files), 400 bytes, and the filters: "
                 + p.messages() + ", " + p.totalBytes(), p.present() && p.messages() == 4 && p.totalBytes() == 400 && p.filters());
-        real("un indirizzo senza cartella: niente", !AddressTransform.mail("nessuno@domain-d.test").present());
-        real("\"..@domain-d.test\" non diventa un percorso", AddressTransform.folder(AddressTransform.vmail, "..@domain-d.test") == null
+        real("an address without a folder: nothing", !AddressTransform.mail("nobody@domain-d.test").present());
+        real("\"..@domain-d.test\" does not become a path", AddressTransform.folder(AddressTransform.vmail, "..@domain-d.test") == null
                 && AddressTransform.folder(AddressTransform.vmail, ".to@domain-d.test") == null);
         List<Path[]> moved = AddressTransform.archive("dmarc@domain-d.test", 1_790_000_000_000L);
-        real("messa da parte: posta e filtri in .panel-archive, con la data", moved.size() == 2 && !Files.exists(dir)
+        real("set aside: mail and filters in .panel-archive, with the date", moved.size() == 2 && !Files.exists(dir)
                 && moved.get(0)[1].toString().contains(".panel-archive/domain-d.test/dmarc-20260921T")
                 && moved.get(1)[1].getFileName().toString().endsWith("-filters")
                 && Files.exists(moved.get(0)[1].resolve("cur/1.M1")) && Files.exists(moved.get(1)[1].resolve(".dovecot.sieve")));
         AddressTransform.restore(moved);
-        real("e rimessa a posto, se il resto non riesce", Files.exists(dir.resolve("cur/1.M1")) && Files.exists(filters));
+        real("and put back, if the rest does not succeed", Files.exists(dir.resolve("cur/1.M1")) && Files.exists(filters));
         List<Path[]> first = AddressTransform.archive("dmarc@domain-d.test", 1_790_000_000_000L);
         Files.createDirectories(dir.resolve("cur"));
         Files.writeString(dir.resolve("cur/6.M6"), "y");
         List<Path[]> second = AddressTransform.archive("dmarc@domain-d.test", 1_790_000_000_000L);
-        real("due archiviazioni nello stesso secondo non si sovrascrivono: " + second.get(0)[1].getFileName(),
+        real("two archivings in the same second do not overwrite each other: " + second.get(0)[1].getFileName(),
                 !first.get(0)[1].equals(second.get(0)[1]) && Files.exists(first.get(0)[1].resolve("cur/1.M1"))
                 && Files.exists(second.get(0)[1].resolve("cur/6.M6")));
     }
 
-    // ===================== Su MySQL =====================
+    // ===================== On MySQL =====================
 
     static String postfixAlias(Connection c, String address) throws SQLException {
-        // Le query di mysql-virtual-aliases.cf e mysql-virtual-mailboxes.cf (FullMailServerScript).
+        // The queries of mysql-virtual-aliases.cf and mysql-virtual-mailboxes.cf (FullMailServerScript).
         List<String> d = new ArrayList<>();
         try (PreparedStatement p = c.prepareStatement("SELECT destination FROM aliases WHERE source=? AND active=1 ORDER BY destination")) {
             p.setString(1, address);
@@ -246,54 +247,54 @@ public class AddressConversionTest {
     static void database() throws Exception {
         String port = System.getProperty("mysql.port");
         if (port == null) {
-            System.out.println("\n== MySQL non indicato (-Dmysql.port=...): salto la parte sul database ==");
+            System.out.println("\n== MySQL not given (-Dmysql.port=...): the database part is skipped ==");
             return;
         }
-        System.out.println("\n== Su MySQL " + port + ": le due trasformazioni, come le vede Postfix ==");
+        System.out.println("\n== On MySQL " + port + ": the two conversions, as Postfix sees them ==");
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_prova"));
-        if (!db.connect()) { real("connessione a MySQL", false); return; }
+        if (!db.connect()) { real("connection to MySQL", false); return; }
         db.dropAllTables();
         db.createSchema();
         Connection c = db.getConnection();
         try (var st = c.createStatement(); ResultSet r = st.executeQuery("SELECT VERSION()")) { r.next(); System.out.println("  MySQL " + r.getString(1)); }
 
-        int dom = db.addDomain("domain-d.test", "prova");
+        int dom = db.addDomain("domain-d.test", "test");
         db.addAlias(dom, "dmarc@domain-d.test", "owner@example.net");
         db.addAlias(dom, "postmaster@domain-d.test", "dmarc@domain-d.test");
-        real("prima: dmarc@ e' solo alias", postfixAlias(c, "dmarc@domain-d.test").equals("owner@example.net")
+        real("before: dmarc@ is only an alias", postfixAlias(c, "dmarc@domain-d.test").equals("owner@example.net")
                 && postfixMailbox(c, "dmarc@domain-d.test").isEmpty());
 
-        int id = db.transformAliasToMailbox(dom, "dmarc@domain-d.test", "Una-password-lunga-42", "DMARC", 512, false);
-        real("dopo: casella (domain-d.test/dmarc/), e nessun alias con quella sorgente", id > 0
+        int id = db.transformAliasToMailbox(dom, "dmarc@domain-d.test", "A-long-password-42", "DMARC", 512, false);
+        real("after: a mailbox (domain-d.test/dmarc/), and no alias with that source", id > 0
                 && postfixMailbox(c, "dmarc@domain-d.test").equals("domain-d.test/dmarc/") && postfixAlias(c, "dmarc@domain-d.test").isEmpty());
-        real("postmaster@ -> dmarc@ resta: arriva nella casella", postfixAlias(c, "postmaster@domain-d.test").equals("dmarc@domain-d.test"));
+        real("postmaster@ -> dmarc@ stays: it arrives in the mailbox", postfixAlias(c, "postmaster@domain-d.test").equals("dmarc@domain-d.test"));
         MailDatabase.Mailbox m = db.getMailbox(id);
-        real("la password e' un hash bcrypt (quello che Dovecot verifica), quota e nome salvati",
+        real("the password is a bcrypt hash (what Dovecot checks), quota and name saved",
                 count(c, "SELECT COUNT(*) FROM mailboxes WHERE id=? AND password LIKE '$2a$%'", id) == 1 && m.quotaMb == 512 && "DMARC".equals(m.name));
 
-        db.addAlias(dom, "info@domain-d.test", "capo@esterno.it");
-        db.addAlias(dom, "info@domain-d.test", "segreteria@esterno.it");
-        int id2 = db.transformAliasToMailbox(dom, "info@domain-d.test", "Una-password-lunga-42", "", 1024, true);
-        real("tenendo gli inoltri: le destinazioni restano e la casella ne riceve una copia (info@ -> info@)",
-                id2 > 0 && postfixAlias(c, "info@domain-d.test").equals("capo@esterno.it,info@domain-d.test,segreteria@esterno.it"));
+        db.addAlias(dom, "info@domain-d.test", "boss@outside.example");
+        db.addAlias(dom, "info@domain-d.test", "office@outside.example");
+        int id2 = db.transformAliasToMailbox(dom, "info@domain-d.test", "A-long-password-42", "", 1024, true);
+        real("keeping the forwards: the destinations stay and the mailbox gets a copy (info@ -> info@)",
+                id2 > 0 && postfixAlias(c, "info@domain-d.test").equals("boss@outside.example,info@domain-d.test,office@outside.example"));
 
         boolean refused;
         int before = count(c, "SELECT COUNT(*) FROM aliases");
         try {
-            db.transformAliasToMailbox(dom, "dmarc@domain-d.test", "Una-password-lunga-42", "", 1024, false);
+            db.transformAliasToMailbox(dom, "dmarc@domain-d.test", "A-long-password-42", "", 1024, false);
             refused = false;
         } catch (SQLException e) {
             refused = true;
         }
-        real("una seconda casella con lo stesso indirizzo: rifiutata dal vincolo UNIQUE, alias intatti",
+        real("a second mailbox with the same address: refused by the UNIQUE constraint, aliases untouched",
                 refused && count(c, "SELECT COUNT(*) FROM aliases") == before);
 
-        System.out.println("\n== Casella -> alias, su MySQL ==");
+        System.out.println("\n== Mailbox -> alias, on MySQL ==");
         db.createForwardingRule(id, "owner@example.net", true);
         db.createSieveFilter(id, "Spam", 1, "[]", "[]");
-        db.saveAutoResponder(id, true, "Assente", "Torno lunedi'", null, null, 24);
+        db.saveAutoResponder(id, true, "Away", "Back on Monday", null, null, 24);
         try (PreparedStatement p = c.prepareStatement("INSERT INTO rate_limits (target_type, target_id) VALUES ('mailbox', ?)")) {
             p.setInt(1, id);
             p.executeUpdate();
@@ -304,48 +305,48 @@ public class AddressConversionTest {
 
         int linesBefore = count(c, "SELECT COUNT(*) FROM aliases");
         try {
-            // L'ultimo passo (la casella) fallisce: id giusto, indirizzo sbagliato.
-            db.transformMailboxToAlias(id, dom, "altro@domain-d.test", List.of("x@esterno.it"));
+            // The last step (the mailbox) fails: right id, wrong address.
+            db.transformMailboxToAlias(id, dom, "other@domain-d.test", List.of("x@outside.example"));
             refused = false;
         } catch (SQLException e) {
             refused = true;
         }
-        real("se l'ultimo passo fallisce, niente resta a meta': alias, limite e casella com'erano", refused
+        real("if the last step fails, nothing stays half-done: aliases, limit and mailbox as they were", refused
                 && count(c, "SELECT COUNT(*) FROM aliases") == linesBefore
-                && count(c, "SELECT COUNT(*) FROM aliases WHERE source='altro@domain-d.test'") == 0
+                && count(c, "SELECT COUNT(*) FROM aliases WHERE source='other@domain-d.test'") == 0
                 && count(c, "SELECT COUNT(*) FROM rate_limits WHERE target_id=?", id) == 1
                 && postfixMailbox(c, "dmarc@domain-d.test").equals("domain-d.test/dmarc/"));
 
         db.transformMailboxToAlias(id, dom, "dmarc@domain-d.test", List.of("owner@example.net", "postmaster@domain-c.test"));
-        real("dopo: niente casella, alias verso le due destinazioni (quella disattiva riattivata)",
+        real("after: no mailbox, an alias towards the two destinations (the inactive one turned back on)",
                 postfixMailbox(c, "dmarc@domain-d.test").isEmpty()
                 && postfixAlias(c, "dmarc@domain-d.test").equals("owner@example.net,postmaster@domain-c.test"));
-        real("l'alias su se stessa se n'e' andato (senza casella porterebbe al nulla)",
+        real("the alias to itself went away (without the mailbox it would lead nowhere)",
                 count(c, "SELECT COUNT(*) FROM aliases WHERE source='dmarc@domain-d.test' AND destination='dmarc@domain-d.test'") == 0);
-        real("inoltri, filtri, risposta automatica e limite di invio se ne sono andati con la casella",
+        real("forwards, filters, auto-reply and sending limit went away with the mailbox",
                 count(c, "SELECT COUNT(*) FROM forwarding_rules WHERE mailbox_id=?", id) == 0
                 && count(c, "SELECT COUNT(*) FROM sieve_filters WHERE mailbox_id=?", id) == 0
                 && count(c, "SELECT COUNT(*) FROM auto_responders WHERE mailbox_id=?", id) == 0
                 && count(c, "SELECT COUNT(*) FROM rate_limits WHERE target_type='mailbox' AND target_id=?", id) == 0);
-        real("postmaster@ -> dmarc@ continua: ora va alle destinazioni dell'alias",
+        real("postmaster@ -> dmarc@ goes on: now it goes to the alias's destinations",
                 postfixAlias(c, "postmaster@domain-d.test").equals("dmarc@domain-d.test"));
 
-        System.out.println("\n== Andata e ritorno, con lo stato letto dal database ==");
+        System.out.println("\n== There and back, with the state read from the database ==");
         AddressTransform.AddressState s = AddressTransform.state(db, "dmarc@domain-d.test");
-        real("dmarc@ si puo' ritrasformare in casella", AddressTransform.noMailboxReason(s) == null && s.towardsHere().size() == 1);
+        real("dmarc@ can be turned into a mailbox again", AddressTransform.noMailboxReason(s) == null && s.towardsHere().size() == 1);
         AddressTransform.AddressState si = AddressTransform.state(db, "info@domain-d.test");
         try {
             AddressTransform.destinations(si, new JSONArray().put("postmaster@domain-d.test"), AddressTransform.network(db));
-            real("info@ verso postmaster@ (che va a dmarc@, alias): si' dal database", true);
+            real("info@ towards postmaster@ (which goes to dmarc@, an alias): yes from the database", true);
         } catch (IllegalArgumentException e) {
-            real("info@ verso postmaster@: " + e.getMessage(), false);
+            real("info@ towards postmaster@: " + e.getMessage(), false);
         }
-        db.addAlias(dom, "giro@domain-d.test", "info@domain-d.test");
+        db.addAlias(dom, "loop@domain-d.test", "info@domain-d.test");
         try {
-            AddressTransform.destinations(si, new JSONArray().put("giro@domain-d.test"), AddressTransform.network(db));
-            real("info@ verso giro@ (che torna a info@): doveva essere rifiutato", false);
+            AddressTransform.destinations(si, new JSONArray().put("loop@domain-d.test"), AddressTransform.network(db));
+            real("info@ towards loop@ (which comes back to info@): it should have been refused", false);
         } catch (IllegalArgumentException e) {
-            real("info@ verso giro@ (che torna a info@): rifiutato dal database", e.getMessage().contains("giro@domain-d.test -> info@domain-d.test"));
+            real("info@ towards loop@ (which comes back to info@): refused by the database", e.getMessage().contains("loop@domain-d.test -> info@domain-d.test"));
         }
         db.close();
     }
