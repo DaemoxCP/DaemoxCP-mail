@@ -738,7 +738,6 @@ public class SSLMailServer {
         //  - quando una richiesta blocca su I/O (es. fail2ban-client, shell command,
         //    query DB), il carrier thread va a servirne un'altra → niente starvation
         //  - memoria: ~200 byte/virtual thread vs ~1MB/thread piattaforma
-        server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
         if (mode == Mode.ROOT_PART) {
             // Nessuna porta e nessuna sessione: quelle le tiene la parte web. Qui le riparazioni e i
             // lavori in background, come oggi; le API arrivano dal socket (serveForwarded).
@@ -747,6 +746,7 @@ public class SSLMailServer {
                     + org.mail_panel.system.PanelSeparation.socket());
             return;
         }
+        server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
         // Le sessioni sono di questo avvio del jar (reperto 184): quelle di prima non valgono gia'
         // piu' (WebSessions ha una chiave nuova), e qui si tolgono anche dal database. La porta e'
         // gia' presa (il costruttore): un secondo processo che non puo' servire non tocca niente.

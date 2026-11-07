@@ -80,6 +80,7 @@ public final class PanelSeparation {
     private static volatile boolean rootPart;
     private static volatile String notSeparated = "not started yet";
     private static volatile RootChannel channel;
+    private static boolean hookAdded;
 
     private PanelSeparation() {}
 
@@ -315,6 +316,13 @@ public final class PanelSeparation {
         } else {
             active = true;
             notSeparated = null;
+            // Se la root si spegne per qualunque motivo (anche un errore subito dopo, prima che Main registri
+            // il suo arresto), la web si ferma con lei: da sola risponderebbe 503 a ogni API. Misurato sulla
+            // VM il 07/11/2026: un errore nella root dopo questo punto lasciava la web orfana.
+            if (!hookAdded) {
+                hookAdded = true;
+                Runtime.getRuntime().addShutdownHook(new Thread(PanelSeparation::stop, "web-part-stop"));
+            }
         }
         return why;
     }
@@ -403,7 +411,7 @@ public final class PanelSeparation {
     }
 
     /** Ferma la web: SIGTERM al supervisore, che lo passa alla web e non la riavvia (daemon(8)). */
-    public static void stop() {
+    public static synchronized void stop() {
         active = false;
         stopSupervisor();
         RootChannel c = channel;
