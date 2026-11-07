@@ -1,34 +1,35 @@
 package org.mail_panel.system;
 
 /**
- * Le impostazioni del rapporto periodico salvate prima del 24/10/2026 valgono ancora.
+ * The periodic report settings saved before 24/10/2026 still hold.
  *
- * Fino a quel giorno la frequenza e il prefisso dell'esito fallito si salvavano coi nomi di
- * prima (file di dati: reportFrequencies, reportFailedPrefix). Adesso i codici sono in inglese;
- * una pianificazione gia' fatta non deve smettere di partire, e un fallimento gia' registrato
- * deve ancora fermare i tentativi ravvicinati. I nomi di prima si prendono dal file di dati.
+ * Until that day the frequency and the failed-outcome prefix were saved with the old names (data
+ * file: reportFrequencies, reportFailedPrefix). Now the codes are in English; a schedule already
+ * made must not stop running, and a failure already recorded must still stop close retries. The
+ * old names are taken from the data file.
  */
 public class ReportCompatTest {
 
     private static int failures = 0;
 
     public static void main(String[] args) {
-        check("il file di dati ha le tre frequenze di prima", LegacyNames.pairs("reportFrequencies").size() == 3);
+        org.mail_panel.i18n.I18n.setCurrent("en");   // the panel's texts, shown below, in English
+        check("the data file has the three old frequencies", LegacyNames.pairs("reportFrequencies").size() == 3);
         for (String[] p : LegacyNames.pairs("reportFrequencies"))
-            check(p[0] + " si legge " + p[1], p[1].equals(PeriodicReport.normalizedFrequency(p[0])));
+            check(p[0] + " reads as " + p[1], p[1].equals(PeriodicReport.normalizedFrequency(p[0])));
         String oldPrefix = LegacyNames.oldNamesOf("reportFailedPrefix", "failed: ").stream().findFirst().orElse("");
-        check("il file di dati ha il prefisso di prima", !oldPrefix.isEmpty() && !oldPrefix.equals("failed: "));
-        check("un valore gia' nuovo resta", "weekly".equals(PeriodicReport.normalizedFrequency("weekly")));
-        check("un fallimento di oggi si riconosce", PeriodicReport.isFailedOutcome("failed: auth"));
-        check("e anche uno salvato col prefisso vecchio", PeriodicReport.isFailedOutcome(oldPrefix + "auth"));
-        check("un invio riuscito no", !PeriodicReport.isFailedOutcome("Consegnato a gmail.com"));
-        // La pagina riceve il testo del file di lingua, non il codice salvato, qualunque
-        // prefisso ci sia sul disco.
+        check("the data file has the old prefix", !oldPrefix.isEmpty() && !oldPrefix.equals("failed: "));
+        check("a value that is already new stays", "weekly".equals(PeriodicReport.normalizedFrequency("weekly")));
+        check("a failure of today is recognised", PeriodicReport.isFailedOutcome("failed: auth"));
+        check("and so is one saved with the old prefix", PeriodicReport.isFailedOutcome(oldPrefix + "auth"));
+        check("a successful send is not", !PeriodicReport.isFailedOutcome("Delivered to gmail.com"));
+        // The page receives the language file's text, not the saved code, whatever prefix is on
+        // the disk.
         String shown = org.mail_panel.i18n.I18n.tr("server.rp.lastFailed", java.util.Map.of("error", "auth"));
-        check("la pagina riceve l'esito come testo tradotto (" + shown + ")", shown.equals(PeriodicReport.shownOutcome("failed: auth")));
-        check("  anche per il prefisso vecchio", shown.equals(PeriodicReport.shownOutcome(oldPrefix + "auth")));
-        check("  e un esito che non e' un fallimento passa com'e'", "Consegnato".equals(PeriodicReport.shownOutcome("Consegnato")));
-        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        check("the page receives the outcome as translated text (" + shown + ")", shown.equals(PeriodicReport.shownOutcome("failed: auth")));
+        check("  for the old prefix too", shown.equals(PeriodicReport.shownOutcome(oldPrefix + "auth")));
+        check("  and an outcome that is not a failure passes as it is", "Delivered".equals(PeriodicReport.shownOutcome("Delivered")));
+        System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 

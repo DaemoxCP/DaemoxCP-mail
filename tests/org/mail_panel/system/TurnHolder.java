@@ -5,16 +5,16 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Un altro processo del pannello che tiene il turno dei lavori sui pacchetti: per le prove del
- * turno fra processi (PackageTurnAcrossProcessesTest, e a mano sulla VM).
+ * Another panel process holding the turn of the package jobs: for the tests of the turn across
+ * processes (PackageTurnAcrossProcessesTest, and by hand on the VM).
  *
- * Prende il turno con PackageQueue.take, cioe' come un lavoro vero; se gli si da' un elenco di
- * pacchetti lo scrive su disco come un lavoro che li ha sbloccati. Scrive "HELD" quando lo tiene,
- * poi aspetta che lo stdin si chiuda (o di essere ucciso) e rilascia.
+ * It takes the turn with PackageQueue.take, that is like a real job; given a list of packages it
+ * writes it to disk like a job that unlocked them. It prints "HELD" when it holds it, then waits
+ * for stdin to close (or to be killed) and releases.
  *
- * Uso: java -cp tests:<jar> org.mail_panel.system.TurnHolder <elenco> <descrizione> [pacchetto...]
- *      <elenco> e' il percorso dell'elenco ("-" per quello vero, /var/db/mail-panel-maintenance-locks):
- *      il file del turno gli sta accanto.
+ * Usage: java -cp tests:<jar> org.mail_panel.system.TurnHolder <list> <description> [package...]
+ *        <list> is the list's path ("-" for the real one, /var/db/mail-panel-maintenance-locks):
+ *        the turn file sits next to it.
  */
 public class TurnHolder {
     public static void main(String[] args) throws Exception {

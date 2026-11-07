@@ -11,15 +11,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Un sistema SENZA boot environment (UFS, o ZFS senza bectl): la reinstallazione e il ritorno non si
- * rompono e lo dicono (reperto 172). Lo si simula con un bectl finto davanti nel PATH che fallisce
- * sempre (Shell mette il PATH ereditato prima delle cartelle di sistema), in un processo figlio.
- *  - la via di ritorno della reinstallazione non si crea e lo si dice, senza fermare niente;
- *  - il controllo dello spazio non si fa (non c'e' niente da tenere occupato);
- *  - dopo l'installazione non si tocca niente;
- *  - il ritorno: nessuna via di ritorno, e un nome qualunque e' rifiutato;
- *  - la scheda dei boot environment dice che non ci sono.
- * Uso: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.NoBootEnvironmentTest
+ * A system WITHOUT boot environments (UFS, or ZFS without bectl): reinstalling and going back do not
+ * break and say so (reperto 172). It is simulated with a fake bectl first in the PATH that always
+ * fails (Shell puts the inherited PATH before the system folders), in a child process.
+ *  - the reinstall's way back is not created and that is said, without stopping anything;
+ *  - the space check is not done (there is nothing to keep occupied);
+ *  - after the installation nothing is touched;
+ *  - going back: no way back, and any name is refused;
+ *  - the boot environments card says there are none.
+ * Usage: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.NoBootEnvironmentTest
  */
 public class NoBootEnvironmentTest {
 
@@ -44,7 +44,7 @@ public class NoBootEnvironmentTest {
             pb.environment().put("PATH", d + ":" + System.getenv("PATH"));
             code = pb.start().waitFor();
         } finally {
-            // Prima c'era System.exit dentro il try: il finally non girava e la cartella restava in /tmp.
+            // System.exit used to be inside the try: the finally did not run and the folder stayed in /tmp.
             Files.deleteIfExists(d.resolve("bectl"));
             Files.deleteIfExists(d);
         }
@@ -58,22 +58,22 @@ public class NoBootEnvironmentTest {
         try {
             p = PackageWayBack.beforeInstallation(log::add);
         } catch (IllegalStateException e) {
-            // Il guasto NB1 (reperto 172) arrivava qui: un'eccezione al posto del controllo.
-            check("la via di ritorno non si crea, senza eccezioni: " + e.getMessage(), false);
+            // The NB1 fault (reperto 172) ended up here: an exception instead of the check.
+            check("the way back is not created, without exceptions: " + e.getMessage(), false);
             p = new PackageWayBack.Prepared("", "");
         }
-        check("la via di ritorno non si crea, senza eccezioni", p.name().isEmpty());
-        check("e lo dice", String.join("\n", log).contains("no ZFS boot environments"));
+        check("the way back is not created, without exceptions", p.name().isEmpty());
+        check("and it says so", String.join("\n", log).contains("no ZFS boot environments"));
         log.clear();
-        check("il controllo dello spazio non ferma niente", PackageWayBack.reinstallSpace(log::add) == null && log.isEmpty());
+        check("the space check stops nothing", PackageWayBack.reinstallSpace(log::add) == null && log.isEmpty());
         PackageWayBack.afterInstallation(log::add, p, true);
-        check("dopo l'installazione non si tocca niente", log.isEmpty());
-        check("il ritorno: nessuna via di ritorno", ReinstallReturn.latest().isEmpty());
+        check("after the installation nothing is touched", log.isEmpty());
+        check("going back: no way back", ReinstallReturn.latest().isEmpty());
         JSONObject r = ReinstallReturn.goBack("reinstall-before-2026-11-06-120000", log::add);
-        check("e un nome qualunque e' rifiutato", !r.optBoolean("success") && r.optString("error").contains("not there any more"));
+        check("and any name is refused", !r.optBoolean("success") && r.optString("error").contains("not there any more"));
         JSONObject be = UpdateManager.bootEnvironments();
-        check("la scheda dice che non ci sono boot environment", !be.optBoolean("success") && !be.optString("error").isEmpty());
-        System.out.println(failed == 0 ? "\nTutte le prove passate." : "\n" + failed + " prove FALLITE.");
+        check("the card says there are no boot environments", !be.optBoolean("success") && !be.optString("error").isEmpty());
+        System.out.println(failed == 0 ? "\nAll checks passed." : "\n" + failed + " checks FAILED.");
         System.exit(failed == 0 ? 0 : 1);
     }
 }

@@ -8,22 +8,22 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * La rimozione di un pacchetto si ferma o va avanti secondo il verdetto del jar (panelUsage).
+ * Removing a package stops or goes on according to the jar's verdict (panelUsage).
  *
- * Il 25/10/2026 i verdetti sono passati all'inglese su due lati (chi li produce e la pagina), ma
- * non sul terzo: la guardia della rimozione cercava ancora il prefisso italiano del verdetto delle
- * librerie, e da allora la rimozione di una libreria che il pannello non usa veniva rifiutata. La
- * compilazione non lo vede. Qui: i verdetti che la guardia accetta sono esattamente quelli voluti,
- * e ognuno e' uno di quelli che panelUsage produce davvero (letto dal sorgente).
+ * On 25/10/2026 the verdicts moved to English on two sides (whoever produces them and the page),
+ * but not on the third: the removal guard still looked for the Italian prefix of the libraries
+ * verdict, and from then on removing a library the panel does not use was refused. The compiler
+ * does not see it. Here: the verdicts the guard accepts are exactly the intended ones, and each is
+ * one that panelUsage really produces (read from the source).
  *
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.JarVerdictTest &lt;radice dei sorgenti&gt;
+ *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.JarVerdictTest &lt;source root&gt;
  */
 public class JarVerdictTest {
 
     static int failed = 0;
 
     static void check(String what, boolean ok) {
-        System.out.println((ok ? "  OK   " : "  FALLITO ") + what);
+        System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
@@ -33,7 +33,7 @@ public class JarVerdictTest {
         Path root = Path.of(args.length > 0 ? args[0] : ".");
         String src = Files.readString(root.resolve("src/main/java/org/mail_panel/system/UpdateManager.java"));
 
-        // I verdetti che panelUsage produce: le stringhe assegnate a "verdict" nel suo corpo.
+        // The verdicts panelUsage produces: the strings assigned to "verdict" in its body.
         int from = src.indexOf("static JSONObject panelUsage(");
         int to = from < 0 ? -1 : src.indexOf("\n    }\n", from);
         String body = from < 0 || to < 0 ? "" : src.substring(from, to);
@@ -43,16 +43,16 @@ public class JarVerdictTest {
             Matcher q = Pattern.compile("\"([A-Z_]+)\"").matcher(m.group());
             while (q.find()) produced.add(q.group(1));
         }
-        check("dal sorgente, i verdetti di panelUsage: " + produced, produced.size() >= 5);
+        check("from the source, panelUsage's verdicts: " + produced, produced.size() >= 5);
 
         for (String v : produced)
-            check((ACCEPTED.contains(v) ? "lascia procedere " : "ferma ") + v,
+            check((ACCEPTED.contains(v) ? "lets it proceed " : "stops ") + v,
                     UpdateManager.removableByJarVerdict(v) == ACCEPTED.contains(v));
-        check("ognuno di quelli che lasciano procedere viene da panelUsage", produced.containsAll(ACCEPTED));
-        check("un verdetto vuoto o sconosciuto ferma", !UpdateManager.removableByJarVerdict("")
+        check("each of those that let it proceed comes from panelUsage", produced.containsAll(ACCEPTED));
+        check("an empty or unknown verdict stops", !UpdateManager.removableByJarVerdict("")
                 && !UpdateManager.removableByJarVerdict(null) && !UpdateManager.removableByJarVerdict("absent"));
 
-        System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
+        System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);
     }
 }

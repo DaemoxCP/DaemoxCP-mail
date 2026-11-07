@@ -27,29 +27,29 @@ final class TestSessions {
     /**
      * Where the panel must write its audit log for this test, checking that it stuck.
      *
-     * <p>Serve perche' {@code db.setSetting} non fallisce rumorosamente: su un database dove
-     * {@code panel_settings} non esiste ancora stampa "Failed to set setting" e torna, e il
-     * pannello continua a scrivere nel registro VERO, {@code /var/log/mail-panel-auth.log}.
-     * La prova poi conta zero righe nel proprio file e dice "manca una voce nel registro di
-     * audit", che e' la cosa sbagliata: il registro c'era, solo da un'altra parte.
+     * <p>It is needed because {@code db.setSetting} does not fail loudly: on a database where
+     * {@code panel_settings} does not exist yet it prints "Failed to set setting" and returns, and
+     * the panel keeps writing to the REAL log, {@code /var/log/mail-panel-auth.log}. The test then
+     * counts zero lines in its own file and says "an audit log entry is missing", which is the
+     * wrong thing: the log was there, just somewhere else.
      *
-     * <p>Succedeva a tutte le prove che chiamavano {@code setSetting} PRIMA di
-     * {@link #prepare} o {@link #open}, cioe' prima che lo schema esistesse. Misurato: su un
-     * database appena creato il PRIMO giro era rosso e il secondo verde, perche' il primo la
-     * tabella la lasciava creata. Cinque prove su undici si comportavano cosi'.
+     * <p>It happened to every test that called {@code setSetting} BEFORE {@link #prepare} or
+     * {@link #open}, that is before the schema existed. Measured: on a freshly created database the
+     * FIRST run was red and the second green, because the first left the table created. Five tests
+     * out of eleven behaved like that.
      *
-     * <p>Quindi qui lo schema c'e' per forza, e se la voce non si rilegge si grida subito
-     * invece di misurare un'altra cosa.
+     * <p>So here the schema is there for sure, and if the entry does not read back it shouts at
+     * once instead of measuring something else.
      */
     static void auditLogTo(MailDatabase db, java.nio.file.Path log) throws Exception {
         prepare(db);
         db.setSetting("audit_log_file_path", log.toString());
         String read = db.getSetting("audit_log_file_path", null);
         if (!log.toString().equals(read))
-            throw new IllegalStateException("il pannello non scriverebbe il registro in "
-                    + log + " ma in " + read + ": la voce audit_log_file_path non si e'"
-                    + " salvata (schema non ancora creato?), e la prova misurerebbe il file"
-                    + " sbagliato");
+            throw new IllegalStateException("the panel would not write the log to "
+                    + log + " but to " + read + ": the audit_log_file_path entry was not"
+                    + " saved (schema not created yet?), and the test would measure the wrong"
+                    + " file");
     }
 
     /** The id of the administrator with that name, created (superadmin) if it is not there. */

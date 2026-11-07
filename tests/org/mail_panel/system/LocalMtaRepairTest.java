@@ -3,16 +3,16 @@ package org.mail_panel.system;
 import java.io.PrintStream;
 
 /**
- * Che cosa fa il pannello, all'avvio, su un server installato prima che l'installatore rendesse
- * Postfix l'MTA locale (LocalMtaRepair.decide). La decisione e' separata dal sistema apposta:
- * qui si provano le configurazioni che i tre script di `main` lasciavano davvero, piu' i casi
- * limite. L'effetto vero su una macchina lo misura la prova sulla VM (reperti).
+ * What the panel does, at start, on a server installed before the installer made Postfix the
+ * local MTA (LocalMtaRepair.decide). The decision is kept apart from the system on purpose: here
+ * the configurations that the three scripts of `main` really left are checked, plus the edge
+ * cases. The real effect on a machine is measured by the run on the VM (reperti).
  *
- * Il caso che conta e' il primo: l'installazione completa di main lasciava myorigin = $mydomain
- * (il nome del server) e mydestination = localhost. Attivare mailer.conf cosi' com'e' fa
- * rimbalzare la posta di sistema (punto 67): prima va myorigin = localhost.
+ * The case that matters is the first: the full installation of main left myorigin = $mydomain
+ * (the server's name) and mydestination = localhost. Enabling mailer.conf as it is bounces the
+ * system mail (point 67): first myorigin = localhost.
  *
- * Si lancia ovunque (non chiama niente):
+ * Runs anywhere (it calls nothing):
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LocalMtaRepairTest
  */
 public class LocalMtaRepairTest {
@@ -21,7 +21,7 @@ public class LocalMtaRepairTest {
     static final PrintStream OUT = System.out;
 
     static void check(String what, boolean ok) {
-        OUT.println((ok ? "  OK   " : "  FALLITO ") + what);
+        OUT.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
 
@@ -36,50 +36,51 @@ public class LocalMtaRepairTest {
     }
 
     public static void main(String[] args) {
-        OUT.println("\n== I server che lasciava main ==");
-        check("installazione completa (myorigin = nome del server, mydestination = localhost): "
-                + "PRIMA myorigin = localhost, poi mailer.conf",
-                act(true, null, "mail.prova.local", "localhost", "local:mail.prova.local")
+        org.mail_panel.i18n.I18n.setCurrent("en");   // the panel's reasons, printed below, in English
+        OUT.println("\n== The servers main left behind ==");
+        check("full installation (myorigin = server name, mydestination = localhost): "
+                + "FIRST myorigin = localhost, then mailer.conf",
+                act(true, null, "mail.test.local", "localhost", "local:mail.test.local")
                         == LocalMtaRepair.Action.SET_MYORIGIN_THEN_ACTIVATE);
-        check("componente «postfix» dopo il nome vero (mydestination predefinito, il nome e' locale): "
-                + "mailer.conf e basta",
-                act(true, null, "mail.prova.local", "mail.prova.local, localhost.mail.prova.local, localhost",
-                        "local:mail.prova.local") == LocalMtaRepair.Action.ACTIVATE);
-        check("pulsante «all» (consegna locale spenta): NON si attiva, la posta di sistema rimbalzerebbe",
+        check("«postfix» component after the real name (default mydestination, the name is local): "
+                + "mailer.conf only",
+                act(true, null, "mail.test.local", "mail.test.local, localhost.mail.test.local, localhost",
+                        "local:mail.test.local") == LocalMtaRepair.Action.ACTIVATE);
+        check("«all» button (local delivery off): NOT enabled, the system mail would bounce",
                 act(true, null, "localhost", "", "error:no local mail delivery")
                         == LocalMtaRepair.Action.REFUSE);
-        // Il caso precedente lo rifiuterebbe anche la regola su mydestination vuoto: questo no.
-        // Senza, il controllo su local_transport non era mai messo alla prova (un jar senza quel
-        // controllo passava tutta la prova, misurato il 29/10/2026).
-        check("consegna locale spenta anche con localhost in mydestination: NON si attiva",
+        // The rule on an empty mydestination would refuse the previous case too: not this one.
+        // Without it, the check on local_transport was never put to the test (a jar without that
+        // check passed the whole test, measured on 29/10/2026).
+        check("local delivery off even with localhost in mydestination: NOT enabled",
                 act(true, null, "localhost", "localhost", "error:no local mail delivery")
                         == LocalMtaRepair.Action.REFUSE);
 
-        OUT.println("\n== Gia' a posto, o niente da fare ==");
-        check("mailer.conf gia' per Postfix: niente",
-                act(true, POSTFIX, "mail.prova.local", "localhost", "local:x") == LocalMtaRepair.Action.NOTHING);
-        check("Postfix non installato: niente, anche con mailer.conf assente",
+        OUT.println("\n== Already fine, or nothing to do ==");
+        check("mailer.conf already for Postfix: nothing",
+                act(true, POSTFIX, "mail.test.local", "localhost", "local:x") == LocalMtaRepair.Action.NOTHING);
+        check("Postfix not installed: nothing, even with mailer.conf missing",
                 act(false, null, "", "", "") == LocalMtaRepair.Action.NOTHING);
-        check("installato da questo ramo (myorigin = localhost): mailer.conf gia' giusto, niente",
-                act(true, POSTFIX, "localhost", "localhost", "local:mail.prova.local") == LocalMtaRepair.Action.NOTHING);
+        check("installed by this branch (myorigin = localhost): mailer.conf already right, nothing",
+                act(true, POSTFIX, "localhost", "localhost", "local:mail.test.local") == LocalMtaRepair.Action.NOTHING);
 
-        OUT.println("\n== Casi limite ==");
-        check("mailer.conf che passa a dma conta come da riparare",
+        OUT.println("\n== Edge cases ==");
+        check("a mailer.conf handing over to dma counts as to repair",
                 act(true, DMA, "localhost", "localhost", "local:x") == LocalMtaRepair.Action.ACTIVATE);
-        check("una riga commentata non conta: '#sendmail /usr/local/sbin/sendmail'",
+        check("a commented line does not count: '#sendmail /usr/local/sbin/sendmail'",
                 act(true, "#sendmail\t/usr/local/sbin/sendmail\n" + DMA, "localhost", "localhost", "local:x")
                         == LocalMtaRepair.Action.ACTIVATE);
-        check("mydestination senza localhost e myorigin non locale: NON si attiva",
-                act(true, null, "mail.prova.local", "example.org", "local:x") == LocalMtaRepair.Action.REFUSE);
-        check("maiuscole e virgole: Mail.Prova.Local e' in 'localhost,mail.prova.local'",
-                act(true, null, "Mail.Prova.Local", "localhost,mail.prova.local", "local:x")
+        check("mydestination without localhost and a non-local myorigin: NOT enabled",
+                act(true, null, "mail.test.local", "example.org", "local:x") == LocalMtaRepair.Action.REFUSE);
+        check("capitals and commas: Mail.Test.Local is in 'localhost,mail.test.local'",
+                act(true, null, "Mail.Test.Local", "localhost,mail.test.local", "local:x")
                         == LocalMtaRepair.Action.ACTIVATE);
-        check("mydestination vuoto con consegna accesa: NON si attiva",
-                act(true, null, "mail.prova.local", "", "local:x") == LocalMtaRepair.Action.REFUSE);
-        check("local_transport vuoto (postconf non ha risposto) non e' 'spenta': decide il resto",
+        check("empty mydestination with delivery on: NOT enabled",
+                act(true, null, "mail.test.local", "", "local:x") == LocalMtaRepair.Action.REFUSE);
+        check("empty local_transport (postconf did not answer) is not 'off': the rest decides",
                 act(true, null, "localhost", "localhost", "") == LocalMtaRepair.Action.ACTIVATE);
 
-        OUT.println("\n" + (failed == 0 ? "TUTTO VERDE" : failed + " CONTROLLI FALLITI"));
+        OUT.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         System.exit(failed == 0 ? 0 : 1);
     }
 }

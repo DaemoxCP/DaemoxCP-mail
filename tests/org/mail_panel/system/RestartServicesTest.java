@@ -3,15 +3,15 @@ package org.mail_panel.system;
 import java.util.List;
 
 /**
- * I servizi che si riavviano dopo aver aggiornato un pacchetto.
+ * The services restarted after updating a package.
  *
- * Misurato su latest il 24/10/2026: aggiornamento guidato di clamav 1.5.4_1,1 -> 1.5.4_2,1,
- * «clamav in servizio», ma riavviato solo clamd. freshclam, che viene dallo stesso pacchetto e
- * carica la stessa libclamav, girava ancora col programma di prima: avviato alle 10:48, pacchetto
- * aggiornato alle 14:58, e procstat non trovava piu' il suo eseguibile. La tabella pacchetto ->
- * servizio dava un servizio solo per pacchetto.
+ * Measured on latest on 24/10/2026: guided update of clamav 1.5.4_1,1 -> 1.5.4_2,1, "clamav in
+ * service", but only clamd restarted. freshclam, which comes from the same package and loads the
+ * same libclamav, was still running the old program: started at 10:48, package updated at 14:58,
+ * and procstat no longer found its executable. The package -> service table gave a single service
+ * per package.
  *
- * La parte diretta della tabella non chiede niente a pkg, quindi questa prova gira ovunque.
+ * The direct part of the table asks pkg nothing, so this test runs anywhere.
  */
 public class RestartServicesTest {
 
@@ -19,15 +19,15 @@ public class RestartServicesTest {
 
     public static void main(String[] args) {
         List<String> clamav = UpdateManager.servicesToRestart("clamav");
-        check("clamav: si riavvia clamd " + clamav, clamav.contains("clamav_clamd"));
-        check("clamav: e anche freshclam", clamav.contains("clamav_freshclam"));
-        check("clamav: una volta ciascuno", clamav.stream().distinct().count() == clamav.size());
-        check("nginx: solo nginx " + UpdateManager.servicesToRestart("nginx"),
+        check("clamav: clamd restarts " + clamav, clamav.contains("clamav_clamd"));
+        check("clamav: and freshclam too", clamav.contains("clamav_freshclam"));
+        check("clamav: once each", clamav.stream().distinct().count() == clamav.size());
+        check("nginx: only nginx " + UpdateManager.servicesToRestart("nginx"),
                 UpdateManager.servicesToRestart("nginx").contains("nginx")
                 && !UpdateManager.servicesToRestart("nginx").contains("clamav_freshclam"));
-        check("un pacchetto che non fa girare niente: nessun servizio diretto",
+        check("a package that runs nothing: no direct service",
                 !UpdateManager.servicesToRestart("xorgproto").contains("clamav_clamd"));
-        System.out.println(failures == 0 ? "\nTUTTO OK" : "\n" + failures + " PROVE FALLITE");
+        System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }
 
