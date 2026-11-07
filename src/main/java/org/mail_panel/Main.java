@@ -375,6 +375,22 @@ public class Main {
         org.mail_panel.system.PathMigration.run();
         // Lo script di avvio scritto dal pannello cita i file che PathMigration ha appena rinominato.
         org.mail_panel.system.RcScriptRepair.ensureAtBoot();
+        // I segreti solo di root (le password di root di MySQL e dell'utente MySQL di Roundcube) escono dal
+        // file del pannello e vanno in quello di root: la parte web, che gira con l'utente mailpanel, non li
+        // deve poter leggere. Solo da root; al secondo avvio non c'e'
+        // niente da spostare.
+        if ("root".equals(System.getProperty("user.name"))) {
+            java.util.logging.Logger log = java.util.logging.Logger.getLogger(Main.class.getName());
+            try {
+                java.util.List<String> moved = org.mail_panel.security.PanelSecrets.splitRootSecrets();
+                if (!moved.isEmpty())
+                    log.info("[RootSecrets] DONE: " + String.join(", ", moved) + " moved to "
+                            + org.mail_panel.security.PanelSecrets.location(org.mail_panel.security.PanelSecrets.MYSQL_ROOT_PASSWORD) + ", readable only by root");
+            } catch (RuntimeException e) {
+                log.warning("[RootSecrets] the root-only secrets could not be moved out of the panel secrets file: "
+                        + e.getMessage());
+            }
+        }
         MailPanelContent.generateAllContent();
 
         // Se una manutenzione dei pacchetti non e' arrivata in fondo (pannello ucciso, crash,

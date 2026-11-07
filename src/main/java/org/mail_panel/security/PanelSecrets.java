@@ -57,92 +57,143 @@ public final class PanelSecrets {
     /** La chiave privata TLS (PEM) del pannello (prima stava nel database SQLite di configurazione). */
     public static final String PANEL_TLS_KEY = "panel_tls_key";
 
-    /** La cartella del file; i test la spostano in una cartella temporanea. */
+    /** La cartella dei file; i test la spostano in una cartella temporanea. */
     static Path dir = Paths.get(System.getProperty("mailpanel.secrets.dir", "/usr/local/etc/mail-panel"));
-    private static final String FILE = "panel-secrets.properties";
-    private static final String LOCK = "panel-secrets.lock";
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    /*
-     * Il file lo usano due processi: il pannello e il comando da console (--access-code). Ognuno
-     * tiene una copia in memoria; se l'altro ha scritto il file, la copia si rilegge (data e
-     * dimensione cambiate). Le scritture rileggono dal disco sotto un lock del file system, cosi'
-     * una chiave mancante la genera uno solo: se ciascuno ne generasse una sua, il codice dato
-     * dalla console non sarebbe mai giusto per il pannello.
+    /**
+     * I segreti che restano solo di root. La parte web del pannello
+     * gira con l'utente mailpanel e legge il suo file; questi due li usano soltanto installatori e
+     * migrazioni, che girano da root, e con la password di root di MySQL chi bucasse la parte web avrebbe
+     * tutto il database. Stanno in un file a parte, 0600 di root, nella stessa cartella.
      */
-    private static Properties cache;
-    private static String cacheStamp = "";
+    public static final Set<String> ROOT_ONLY = Set.of(MYSQL_ROOT_PASSWORD, ROUNDCUBE_DB_PASSWORD);
 
-    static synchronized void reset() { cache = null; cacheStamp = ""; }
+    /**
+     * L'utente a cui appartiene il file della parte web quando il pannello e' separato; null nel modo di
+     * oggi. Lo fissa la parte root: ogni volta che root riscrive quel file (un rename crea un file
+     * nuovo, di root), il file e il suo lock tornano subito di questo utente.
+     */
+    private static volatile String webOwner;
 
-    private static Path file() { return dir.resolve(FILE); }
+    public static void setWebOwner(String user) { webOwner = user; }
 
-    private static String stamp() {
-        try {
-            Path f = file();
-            return Files.exists(f) ? Files.getLastModifiedTime(f).toMillis() + ":" + Files.size(f) : "";
-        } catch (IOException e) {
-            return "?";
+    static String webOwner() { return webOwner; }
+
+    static final Store WEB = new Store("panel-secrets.properties", "panel-secrets.lock", true);
+    static final Store ROOT = new Store("root-secrets.properties", "root-secrets.lock", false);
+
+    private static Store storeFor(String name) { return ROOT_ONLY.contains(name) ? ROOT : WEB; }
+
+    static synchronized void reset() { WEB.reset(); ROOT.reset(); }
+
+    private static boolean runningAsRoot() { return "root".equals(System.getProperty("user.name")); }
+
+    /*
+     * Ogni file lo usano piu' processi: il pannello e i comandi da console (--access-code); col pannello
+     * separato anche le sue due parti. Ognuno tiene una copia in memoria; se un altro ha scritto il
+     * file, la copia si rilegge (data e dimensione cambiate). Le scritture rileggono dal disco sotto un
+     * lock del file system, cosi' una chiave mancante la genera uno solo: se ciascuno ne generasse una
+     * sua, il codice dato dalla console non sarebbe mai giusto per il pannello.
+     */
+    static final class Store {
+        private final String fileName;
+        private final String lockName;
+        private final boolean web;
+        private Properties cache;
+        private String cacheStamp = "";
+
+        Store(String fileName, String lockName, boolean web) {
+            this.fileName = fileName;
+            this.lockName = lockName;
+            this.web = web;
         }
-    }
 
-    private static Properties readFile() {
-        Properties p = new Properties();
-        Path f = file();
-        if (Files.exists(f)) {
-            try (Reader r = Files.newBufferedReader(f, StandardCharsets.UTF_8)) {
-                p.load(r);
+        synchronized void reset() { cache = null; cacheStamp = ""; }
+
+        Path file() { return dir.resolve(fileName); }
+
+        private String stamp() {
+            try {
+                Path f = file();
+                return Files.exists(f) ? Files.getLastModifiedTime(f).toMillis() + ":" + Files.size(f) : "";
             } catch (IOException e) {
-                throw new IllegalStateException("Panel secrets file unreadable: " + f.toAbsolutePath(), e);
+                return "?";
             }
         }
-        return p;
-    }
 
-    private static synchronized Properties load() {
-        String now = stamp();
-        if (cache != null && now.equals(cacheStamp)) return cache;
-        cache = readFile();
-        cacheStamp = now;
-        return cache;
-    }
-
-    /** Legge, cambia e riscrive il file tenendo il lock: un solo processo alla volta. */
-    private static synchronized Properties update(java.util.function.UnaryOperator<Properties> change) {
-        try {
-            Files.createDirectories(dir);
-            setPermissions(dir, "rwx------");
-            try (java.nio.channels.FileChannel ch = java.nio.channels.FileChannel.open(dir.resolve(LOCK),
-                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE);
-                 java.nio.channels.FileLock ignored = ch.lock()) {
-                setPermissions(dir.resolve(LOCK), "rw-------");
-                Properties p = readFile();
-                Properties changed = change.apply(p);
-                if (changed != null) store(changed);
-                else { cache = p; cacheStamp = stamp(); }
-                return cache;
+        Properties readFile() {
+            Properties p = new Properties();
+            Path f = file();
+            if (Files.exists(f)) {
+                try (Reader r = Files.newBufferedReader(f, StandardCharsets.UTF_8)) {
+                    p.load(r);
+                } catch (IOException e) {
+                    throw new IllegalStateException("Panel secrets file unreadable: " + f.toAbsolutePath(), e);
+                }
             }
-        } catch (IOException e) {
-            throw new IllegalStateException("Panel secrets file not writable: " + file().toAbsolutePath(), e);
+            return p;
         }
-    }
 
-    private static void store(Properties p) throws IOException {
-        Path tmp = dir.resolve(FILE + ".tmp");
-        Files.deleteIfExists(tmp);
-        Files.createFile(tmp);
-        setPermissions(tmp, "rw-------");
-        try (Writer w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-            p.store(w, "FreeBSD Mail Panel secrets - root only, never in the database or the repository");
+        synchronized Properties load() {
+            String now = stamp();
+            if (cache != null && now.equals(cacheStamp)) return cache;
+            cache = readFile();
+            cacheStamp = now;
+            return cache;
         }
-        try {
-            Files.move(tmp, file(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(tmp, file(), StandardCopyOption.REPLACE_EXISTING);
+
+        /** Legge, cambia e riscrive il file tenendo il lock: un solo processo alla volta. */
+        synchronized Properties update(java.util.function.UnaryOperator<Properties> change) {
+            try {
+                if (runningAsRoot() || !Files.isDirectory(dir)) {
+                    Files.createDirectories(dir);
+                    String owner = webOwner;
+                    if (owner == null) setPermissions(dir, "rwx------");
+                    else { setPermissions(dir, "rwxr-x---"); setOwner(dir, "root", owner); }
+                }
+                Path lock = dir.resolve(lockName);
+                try (java.nio.channels.FileChannel ch = java.nio.channels.FileChannel.open(lock,
+                        java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE);
+                     java.nio.channels.FileLock ignored = ch.lock()) {
+                    ownForWeb(lock);
+                    Properties p = readFile();
+                    Properties changed = change.apply(p);
+                    if (changed != null) store(changed);
+                    else { cache = p; cacheStamp = stamp(); }
+                    return cache;
+                }
+            } catch (IOException e) {
+                throw new IllegalStateException("Panel secrets file not writable: " + file().toAbsolutePath(), e);
+            }
         }
-        setPermissions(file(), "rw-------");
-        cache = p;
-        cacheStamp = stamp();
+
+        private void store(Properties p) throws IOException {
+            Path tmp = dir.resolve(fileName + ".tmp");
+            Files.deleteIfExists(tmp);
+            Files.createFile(tmp);
+            setPermissions(tmp, "rw-------");
+            try (Writer w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
+                p.store(w, web ? "FreeBSD Mail Panel secrets - the panel only, never in the database or the repository"
+                               : "FreeBSD Mail Panel root secrets - root only, never in the database or the repository");
+            }
+            ownForWeb(tmp);
+            try {
+                Files.move(tmp, file(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmp, file(), StandardCopyOption.REPLACE_EXISTING);
+            }
+            setPermissions(file(), "rw-------");
+            cache = p;
+            cacheStamp = stamp();
+        }
+
+        /** Il file della parte web, scritto da root col pannello separato, torna dell'utente della web. */
+        private void ownForWeb(Path p) throws IOException {
+            setPermissions(p, "rw-------");
+            String owner = webOwner;
+            if (web && owner != null && runningAsRoot()) setOwner(p, owner, owner);
+        }
     }
 
     private static void setPermissions(Path p, String perms) throws IOException {
@@ -154,15 +205,22 @@ public final class PanelSecrets {
         }
     }
 
-    private static synchronized String get(String name) {
-        return load().getProperty(name, "");
+    private static void setOwner(Path p, String user, String group) throws IOException {
+        var lookup = p.getFileSystem().getUserPrincipalLookupService();
+        Files.setOwner(p, lookup.lookupPrincipalByName(user));
+        Files.getFileAttributeView(p, java.nio.file.attribute.PosixFileAttributeView.class)
+                .setGroup(lookup.lookupPrincipalByGroupName(group));
+    }
+
+    private static String get(String name) {
+        return storeFor(name).load().getProperty(name, "");
     }
 
     /** Una chiave di 32 byte, generata e scritta la prima volta che serve (da un processo solo). */
     static synchronized byte[] key(String name) {
         String v = get(name);
         if (v.isEmpty()) {
-            v = update(p -> {
+            v = storeFor(name).update(p -> {
                 if (!p.getProperty(name, "").isEmpty()) return null;     // l'ha appena scritta l'altro processo
                 byte[] k = new byte[32];
                 RANDOM.nextBytes(k);
@@ -185,23 +243,59 @@ public final class PanelSecrets {
      * che una password e' davvero nel file prima di metterla in un servizio (MysqlRoot).
      */
     public static synchronized String reread(String name) {
-        return readFile().getProperty(name, "");
+        return storeFor(name).readFile().getProperty(name, "");
     }
 
-    /** Dove sta il file, da dire nei messaggi a chi deve andare a cercarlo. */
+    /** Dove sta il file del pannello, da dire nei messaggi a chi deve andare a cercarlo. */
     public static String location() {
-        return file().toAbsolutePath().toString();
+        return WEB.file().toAbsolutePath().toString();
+    }
+
+    /** Dove sta il file che tiene questo segreto. */
+    public static String location(String name) {
+        return storeFor(name).file().toAbsolutePath().toString();
     }
 
     /** Scrive (o con "" o null toglie) un segreto di testo; un processo alla volta, file 600. */
     public static synchronized void setText(String name, String value) {
         String v = value == null ? "" : value;
-        update(p -> {
+        storeFor(name).update(p -> {
             if (v.equals(p.getProperty(name, ""))) return null;
             if (v.isEmpty()) p.remove(name);
             else p.setProperty(name, v);
             return p;
         });
+    }
+
+    /**
+     * All'avvio, da root: i segreti solo di root che stanno ancora nel file del pannello (i server di
+     * prima) passano nel file di root e poi spariscono da quello del pannello. Prima si scrive il file di
+     * root e lo si rilegge, poi si toglie dall'altro: a meta' strada il segreto c'e' sempre in almeno un
+     * file. Se il file di root ha gia' un valore diverso vince il suo, che e' quello scritto dopo. I nomi
+     * spostati, o nessuno.
+     */
+    public static synchronized java.util.List<String> splitRootSecrets() {
+        Properties web = WEB.readFile();
+        java.util.List<String> moved = new java.util.ArrayList<>();
+        for (String name : ROOT_ONLY) {
+            String v = web.getProperty(name, "");
+            if (v.isEmpty()) continue;
+            ROOT.update(p -> {
+                if (!p.getProperty(name, "").isEmpty()) return null;
+                p.setProperty(name, v);
+                return p;
+            });
+            if (ROOT.readFile().getProperty(name, "").isEmpty())
+                throw new IllegalStateException("Root secret " + name + " not saved in " + ROOT.file());
+            moved.add(name);
+        }
+        if (!moved.isEmpty()) {
+            WEB.update(p -> {
+                for (String name : moved) p.remove(name);
+                return p;
+            });
+        }
+        return moved;
     }
 
     /**
@@ -284,7 +378,7 @@ public final class PanelSecrets {
     private static synchronized String ensureGenerated(String name, java.util.function.Supplier<String> generator) {
         String v = get(name);
         if (!v.isEmpty()) return v;
-        return update(p -> {
+        return storeFor(name).update(p -> {
             if (!p.getProperty(name, "").isEmpty()) return null;   // l'ha appena scritta un altro
             p.setProperty(name, generator.get());
             return p;

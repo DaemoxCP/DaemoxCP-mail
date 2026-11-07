@@ -79,7 +79,7 @@ public class MysqlRootTest {
 
             check("the repair: DONE", MysqlRoot.repair() == MysqlRoot.Outcome.DONE);
             Properties p = new Properties();
-            Path file = secrets.resolve("panel-secrets.properties");
+            Path file = secrets.resolve("root-secrets.properties");
             try (var r = Files.newBufferedReader(file)) { p.load(r); }
             String pw = p.getProperty(PanelSecrets.MYSQL_ROOT_PASSWORD, "");
             check("the password is in the secrets file", pw.length() >= 20);

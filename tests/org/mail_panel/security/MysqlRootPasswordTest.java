@@ -75,7 +75,7 @@ public class MysqlRootPasswordTest {
         check("a password set by hand is not replaced",
                 "set-by-hand".equals(PanelSecrets.ensureMysqlRootPassword()));
         check("the file is readable only by root, the folder only traversable by root",
-                "rw-------".equals(permissions(PanelSecrets.dir.resolve("panel-secrets.properties")))
+                "rw-------".equals(permissions(PanelSecrets.dir.resolve("root-secrets.properties")))
                         && "rwx------".equals(permissions(PanelSecrets.dir)));
 
         OUT.println("\n== The root password survives the installation's here-document ==");
