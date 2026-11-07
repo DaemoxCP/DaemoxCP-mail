@@ -15,25 +15,25 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Il turno dei lavori sui pacchetti fra PROCESSI: due pannelli, e il pannello contro lo script
- * dell'installazione completa lanciato a mano.
+ * The package jobs' turn between PROCESSES: two panels, and the panel against the full installation
+ * script started by hand.
  *
- * Il servizio (--web) e il menu a schermo sono due JVM, e lo script install_mail_server.sh si
- * puo' lanciare anche da una shell. Il turno e' un lock su PackageQueue.turnLock (fcntl dal
- * pannello, lockf(1) dallo script). Qui un secondo processo vero (TurnHolder) tiene il turno, e si
- * guarda che questo processo:
- *   - non lo prenda, e sappia da chi e' tenuto;
- *   - all'avvio lasci stare l'elenco di quel lavoro (restoreLocksAfterCrash);
- *   - non applichi la regola dei blocchi mentre l'altro lavora, e lo dica (applyLockPolicy);
- * che, ucciso l'altro con kill -9, il turno torni libero e l'elenco rimasto si riprotegga con
- * l'avviso che nomina il lavoro interrotto; che lockf e il pannello si escludano in tutte e due le
- * direzioni (reperto 153); e che la parte del turno dello script vero (presa dal testo che il
- * pannello scrive, fino ai controlli sui pacchetti protetti, prima di fermare qualunque cosa)
- * parta solo quando deve.
+ * The service (--web) and the on-screen menu are two JVMs, and the install_mail_server.sh script can
+ * also be started from a shell. The turn is a lock on PackageQueue.turnLock (fcntl from the panel,
+ * lockf(1) from the script). Here a second real process (TurnHolder) holds the turn, and it is
+ * checked that this process:
+ *   - does not take it, and knows who holds it;
+ *   - at start leaves that job's list alone (restoreLocksAfterCrash);
+ *   - does not apply the locks rule while the other works, and says so (applyLockPolicy);
+ * that, with the other killed by kill -9, the turn is free again and the list left is locked again
+ * with the notice naming the interrupted job; that lockf and the panel exclude each other in both
+ * directions (reperto 153); and that the turn part of the real script (taken from the text the
+ * panel writes, up to the checks on the protected packages, before stopping anything) starts only
+ * when it should.
  *
- * Elenco, record del lavoro, avviso e lock stanno in una cartella di prova. Il ripristino chiede
- * a pkg di due pacchetti che non esistono (pkg info -e), quindi non cambia niente sulla macchina;
- * va lanciata sulla VM come le altre, da root (lo script lo controlla):
+ * List, job record, notice and lock live in a test folder. The restore asks pkg about two packages
+ * that do not exist (pkg info -e), so it changes nothing on the machine; it must be run on the VM
+ * like the others, as root (the script checks it):
  *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PackageTurnAcrossProcessesTest
  */
 public class PackageTurnAcrossProcessesTest {
@@ -49,49 +49,49 @@ public class PackageTurnAcrossProcessesTest {
         Path list = PackageQueue.list;
         long me = ProcessHandle.current().pid();
 
-        System.out.println("== Un altro processo tiene il turno, senza elenco ==");
-        Holder h = Holder.start(list, "manutenzione di prova");
-        check("l'altro processo ha il turno", h.pid > 0);
-        String r = PackageQueue.take("here", "aggiornamento guidato");
-        check("qui non si prende", r != null);
-        check("e il motivo dice il pid e il lavoro dell'altro",
-                r != null && r.contains("pid " + h.pid) && r.contains("manutenzione di prova"));
-        check("il rifiuto non lascia preso il turno in memoria", PackageQueue.holder() == null);
-        check("nemmeno per le protezioni", PackageQueue.takeForLocks("here", "protezione") != null);
-        // La regola dei blocchi all'avvio: con il database del pannello "presente" (non collegato:
-        // il rifiuto arriva prima di qualunque domanda), non deve bloccare niente adesso, e dirlo.
+        System.out.println("== Another process holds the turn, without a list ==");
+        Holder h = Holder.start(list, "test maintenance");
+        check("the other process has the turn", h.pid > 0);
+        String r = PackageQueue.take("here", "guided update");
+        check("here it is not taken", r != null);
+        check("and the reason says the other's pid and job",
+                r != null && r.contains("pid " + h.pid) && r.contains("test maintenance"));
+        check("the refusal does not leave the turn taken in memory", PackageQueue.holder() == null);
+        check("not even for the protections", PackageQueue.takeForLocks("here", "protection") != null);
+        // The locks rule at start: with the panel's database "present" (not connected: the refusal
+        // comes before any question), it must lock nothing now, and say so.
         Main.mailDatabase = new MailDatabase();
         String policy = UpdateManager.applyLockPolicy();
         Main.mailDatabase = null;
-        check("la regola dei blocchi non si applica mentre l'altro lavora, e lo dice",
-                policy.contains("not applied") && policy.contains("manutenzione di prova"));
+        check("the locks rule is not applied while the other works, and it says so",
+                policy.contains("not applied") && policy.contains("test maintenance"));
         h.release();
-        check("rilasciato dall'altro, qui si prende", PackageQueue.take("here", "aggiornamento guidato") == null);
-        check("e il lock dice chi lo tiene adesso", Files.readString(PackageQueue.turnLock).startsWith("pid " + me + ", "));
+        check("released by the other, here it is taken", PackageQueue.take("here", "guided update") == null);
+        check("and the lock says who holds it now", Files.readString(PackageQueue.turnLock).startsWith("pid " + me + ", "));
         PackageQueue.release("here");
 
-        System.out.println("\n== Un altro processo lavora con i pacchetti sbloccati (elenco su disco) ==");
-        h = Holder.start(list, "reinstallazione di prova", "e2e-turn-probe-a", "e2e-turn-probe-b");
-        check("l'altro ha il turno e l'elenco", h.pid > 0 && Files.exists(list));
-        check("il record del lavoro accanto all'elenco e' dell'altro",
+        System.out.println("\n== Another process works with the packages unlocked (list on disk) ==");
+        h = Holder.start(list, "test reinstallation", "e2e-turn-probe-a", "e2e-turn-probe-b");
+        check("the other has the turn and the list", h.pid > 0 && Files.exists(list));
+        check("the job record next to the list is the other's",
                 PackageQueue.jobRecord().optLong("pid") == h.pid
-                && "reinstallazione di prova".equals(PackageQueue.jobRecord().optString("description")));
+                && "test reinstallation".equals(PackageQueue.jobRecord().optString("description")));
         String restore = UpdateManager.restoreLocksAfterCrash();
-        check("l'avvio di questo processo lascia stare l'elenco", restore.contains("the list is not touched"));
-        check("e l'elenco e' ancora quello dell'altro",
+        check("this process's start leaves the list alone", restore.contains("the list is not touched"));
+        check("and the list is still the other's",
                 Files.readString(list).equals("e2e-turn-probe-a\ne2e-turn-probe-b\n"));
-        check("e nessun avviso di lavoro interrotto", !Files.exists(PackageRecovery.notice));
-        check("con l'elenco di un lavoro vivo, qui non si parte", PackageQueue.take("here", "manutenzione") != null);
+        check("and no notice of an interrupted job", !Files.exists(PackageRecovery.notice));
+        check("with the list of a live job, nothing starts here", PackageQueue.take("here", "maintenance") != null);
 
-        System.out.println("\n== L'altro processo muore (kill -9) ==");
+        System.out.println("\n== The other process dies (kill -9) ==");
         h.kill();
-        check("l'elenco resta: e' quello che sopravvive", Files.exists(list));
+        check("the list stays: it is what survives", Files.exists(list));
         restore = UpdateManager.restoreLocksAfterCrash();
-        check("adesso l'avvio lo riconosce come interrotto e lo chiude",
+        check("now the start recognises it as interrupted and closes it",
                 restore.contains("Interrupted") && !Files.exists(list));
         JSONObject notice = PackageRecovery.notice();
-        check("e l'avviso nomina il lavoro interrotto", "reinstallazione di prova".equals(notice.optString("description")));
-        check("e il turno e' libero", PackageQueue.take("here", "manutenzione") == null);
+        check("and the notice names the interrupted job", "test reinstallation".equals(notice.optString("description")));
+        check("and the turn is free", PackageQueue.take("here", "maintenance") == null);
         PackageQueue.release("here");
         Files.deleteIfExists(PackageRecovery.notice);
 
@@ -102,108 +102,110 @@ public class PackageTurnAcrossProcessesTest {
                 "mail-panel-maintenance-locks.job.json", "package-job-interrupted.json", "stop", "turn-part.sh"})
             Files.deleteIfExists(d.resolve(f));
         Files.delete(d);
-        System.out.println(failed == 0 ? "\nTUTTO OK" : "\n" + failed + " PROVE FALLITE");
+        System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         System.exit(failed == 0 ? 0 : 1);
     }
 
-    /** lockf(1) (flock) e il pannello (fcntl): si escludono? Misurato nel reperto 153, qui ripetuto. */
+    /** lockf(1) (flock) and the panel (fcntl): do they exclude each other? Measured in reperto 153, repeated here. */
     static void lockfAgainstThePanel() throws Exception {
-        System.out.println("\n== lockf(1) contro il pannello ==");
-        if (!Files.isExecutable(Path.of("/usr/bin/lockf"))) { check("lockf(1) c'e' (FreeBSD)", false); return; }
+        System.out.println("\n== lockf(1) against the panel ==");
+        if (!Files.isExecutable(Path.of("/usr/bin/lockf"))) { check("lockf(1) is there (FreeBSD)", false); return; }
         Path lock = PackageQueue.turnLock, stop = d.resolve("stop");
         Files.writeString(stop, "");
         Process p = new ProcessBuilder("lockf", "-k", "-t", "0", lock.toString(), "sh", "-c",
-                "echo \"pid $$, prova con lockf\" > " + lock + "; echo HELD; while [ -e " + stop + " ]; do sleep 0.2; done")
+                "echo \"pid $$, test with lockf\" > " + lock + "; echo HELD; while [ -e " + stop + " ]; do sleep 0.2; done")
                 .redirectErrorStream(true).start();
         String first = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8)).readLine();
-        check("lockf ha il turno", "HELD".equals(first));
-        String r = PackageQueue.take("here", "aggiornamento guidato");
-        check("con lockf che lo tiene, il pannello non prende il turno", r != null);
-        check("e sa chi lo tiene, da quello che c'e' scritto", r != null && r.contains("prova con lockf"));
+        check("lockf has the turn", "HELD".equals(first));
+        String r = PackageQueue.take("here", "guided update");
+        check("with lockf holding it, the panel does not take the turn", r != null);
+        check("and it knows who holds it, from what is written there", r != null && r.contains("test with lockf"));
         Files.delete(stop);
         p.waitFor();
-        check("finito lockf -k, il file del lock resta", Files.exists(lock));
-        check("finito lockf, il pannello lo prende", PackageQueue.take("here", "aggiornamento guidato") == null);
+        check("lockf -k finished, the lock file stays", Files.exists(lock));
+        check("lockf finished, the panel takes it", PackageQueue.take("here", "guided update") == null);
         int rc = sh("lockf -k -s -t 0 " + lock + " true");
-        check("col turno al pannello, lockf -t 0 esce 75 (gia' preso)", rc == 75);
+        check("with the turn held by the panel, lockf -t 0 exits 75 (already taken)", rc == 75);
         PackageQueue.release("here");
-        check("rilasciato dal pannello, lockf lo prende", sh("lockf -k -s -t 0 " + lock + " true") == 0);
-        check("con -k il file resta (il pannello lo apre per nome)", Files.exists(lock));
+        check("released by the panel, lockf takes it", sh("lockf -k -s -t 0 " + lock + " true") == 0);
+        check("with -k the file stays (the panel opens it by name)", Files.exists(lock));
     }
 
     /**
-     * La parte del turno dello script vero: il testo di FullMailServerScript fino ai controlli sui
-     * pacchetti protetti, con il lock della cartella di prova; al posto del resto, "TURN-OK" e
-     * un'attesa finche' c'e' il file stop. Non arriva mai alla fase 1, qualunque cosa succeda.
+     * The turn part of the real script: the text of FullMailServerScript up to the checks on the
+     * protected packages, with the test folder's lock; in place of the rest, "TURN-OK" and a wait while
+     * the stop file is there. It never reaches phase 1, whatever happens.
      */
     static void scriptTurn() throws Exception {
-        System.out.println("\n== La parte del turno dello script dell'installazione completa ==");
+        System.out.println("\n== The turn part of the full installation script ==");
         String full = new FullMailServerScript().getScriptContent();
-        String cut = "# Prima di fermare qualunque cosa: i pacchetti protetti";
+        // The cut is the opening of the protected-packages check: the comment above it is in the
+        // script's own language, the code line is not.
+        String cut = "if true; then\n    if ! LOCKED_PACKAGES=";
         int at = full.indexOf(cut);
-        check("lo script ha il controllo dei protetti dopo il turno", at > 0 && full.indexOf("PACKAGE_TURN_LOCK=") > 0
+        check("the script has the protected-packages check after the turn", at > 0 && full.indexOf("PACKAGE_TURN_LOCK=") > 0
                 && full.indexOf("PACKAGE_TURN_LOCK=") < at && at < full.indexOf("PHASE 1: CLEANUP"));
         if (at < 0) return;
         Path lock = PackageQueue.turnLock, stop = d.resolve("stop"), part = d.resolve("turn-part.sh");
         String body = full.substring(0, at).replace(PackageQueue.TURN_LOCK_PATH, lock.toString());
-        check("e prende il lock del pannello, non un altro file", !body.equals(full.substring(0, at)));
+        check("and it takes the panel's lock, not another file", !body.equals(full.substring(0, at)));
         Files.writeString(part, body + "\necho TURN-OK\nwhile [ -e " + stop + " ]; do sleep 0.2; done\nexit 0\n");
         long me = ProcessHandle.current().pid();
 
-        // Dal menu: il pannello (noi) tiene il turno e lo dice allo script.
+        // From the menu: the panel (us) holds the turn and tells the script.
         PackageQueue.take("menu", "complete mail server installation");
         Run s = Run.script(part, Map.of("MAIL_PANEL_PACKAGE_TURN", String.valueOf(me)));
-        check("dal menu, col turno al pannello: lo script passa", s.rc == 0 && s.out.contains("TURN-OK"));
-        // Lanciato a mano mentre il pannello lavora.
+        check("from the menu, with the turn held by the panel: the script passes", s.rc == 0 && s.out.contains("TURN-OK"));
+        // Started by hand while the panel works.
         s = Run.script(part, Map.of());
-        check("a mano, col turno al pannello: lo script si ferma prima di tutto", s.rc != 0 && !s.out.contains("TURN-OK"));
-        check("e dice chi lo tiene", s.out.contains("another job is working on the packages") && s.out.contains("pid " + me + ","));
-        // Un pid che non e' il padre.
+        check("by hand, with the turn held by the panel: the script stops before anything", s.rc != 0 && !s.out.contains("TURN-OK"));
+        check("and it says who holds it", s.out.contains("another job is working on the packages") && s.out.contains("pid " + me + ","));
+        // A pid that is not the parent.
         s = Run.script(part, Map.of("MAIL_PANEL_PACKAGE_TURN", "1"));
-        check("col pid di un altro processo: si ferma", s.rc != 0 && !s.out.contains("TURN-OK"));
-        // Il rilancio sotto lockf finto mentre il pannello lavora: il lock e' preso (dal pannello),
-        // quindi solo il controllo che il padre sia lockf lo ferma.
+        check("with another process's pid: it stops", s.rc != 0 && !s.out.contains("TURN-OK"));
+        // The restart under a fake lockf while the panel works: the lock is taken (by the panel), so
+        // only the check that the parent is lockf stops it.
         s = Run.script(part, Map.of("MAIL_PANEL_TURN_BY_LOCKF", "1"));
-        check("a mano con MAIL_PANEL_TURN_BY_LOCKF, col turno al pannello: si ferma", s.rc != 0 && !s.out.contains("TURN-OK"));
+        check("by hand with MAIL_PANEL_TURN_BY_LOCKF, with the turn held by the panel: it stops", s.rc != 0 && !s.out.contains("TURN-OK"));
         PackageQueue.release("menu");
-        // Il pannello dice di tenerlo, ma non lo tiene.
+        // The panel says it holds it, but it does not.
         s = Run.script(part, Map.of("MAIL_PANEL_PACKAGE_TURN", String.valueOf(me)));
-        check("col pid giusto ma il turno libero: si ferma", s.rc != 0 && !s.out.contains("TURN-OK") && s.out.contains("does not hold"));
-        // Il turno e' preso, ma da un altro processo: dentro c'e' scritto il suo pid, non il nostro.
-        Holder h = Holder.start(PackageQueue.list, "manutenzione di prova");
+        check("with the right pid but the turn free: it stops", s.rc != 0 && !s.out.contains("TURN-OK") && s.out.contains("does not hold"));
+        // The turn is taken, but by another process: its pid is written inside, not ours.
+        Holder h = Holder.start(PackageQueue.list, "test maintenance");
         s = Run.script(part, Map.of("MAIL_PANEL_PACKAGE_TURN", String.valueOf(me)));
-        check("col turno preso da un altro processo del pannello: si ferma", s.rc != 0 && !s.out.contains("TURN-OK"));
+        check("with the turn taken by another panel process: it stops", s.rc != 0 && !s.out.contains("TURN-OK"));
         h.release();
-        // Il rilancio sotto lockf finto: la variabile messa a mano.
+        // The restart under a fake lockf: the variable set by hand.
         s = Run.script(part, Map.of("MAIL_PANEL_TURN_BY_LOCKF", "1"));
-        check("con MAIL_PANEL_TURN_BY_LOCKF messo a mano, senza lockf: si ferma", s.rc != 0 && !s.out.contains("TURN-OK"));
+        check("with MAIL_PANEL_TURN_BY_LOCKF set by hand, without lockf: it stops", s.rc != 0 && !s.out.contains("TURN-OK"));
 
-        // A mano, con il turno libero: si rilancia sotto lockf e lo tiene finche' lavora.
+        // By hand, with the turn free: it restarts itself under lockf and holds it while it works.
         Files.writeString(stop, "");
         Process p = Run.start(part, Map.of());
         StringBuilder out = new StringBuilder();
         BufferedReader rd = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
         for (String l; (l = rd.readLine()) != null; ) { out.append(l).append('\n'); if (l.contains("TURN-OK")) break; }
-        check("a mano, col turno libero: lo script passa", out.toString().contains("TURN-OK"));
-        String r = PackageQueue.take("here", "manutenzione");
-        check("e mentre lavora il pannello non prende il turno", r != null);
-        check("e sa che e' lo script lanciato a mano", r != null && r.contains("install_mail_server.sh started by hand"));
+        check("by hand, with the turn free: the script passes", out.toString().contains("TURN-OK"));
+        String r = PackageQueue.take("here", "maintenance");
+        check("and while it works the panel does not take the turn", r != null);
+        check("and it knows it is the script started by hand", r != null && r.contains("install_mail_server.sh started by hand"));
         Run second = Run.script(part, Map.of());
-        check("e un secondo script a mano si ferma", second.rc != 0 && !second.out.contains("TURN-OK"));
-        check("la riga del lock nomina il processo che lavora, non lockf",
+        check("and a second script by hand stops", second.rc != 0 && !second.out.contains("TURN-OK"));
+        check("the lock line names the process that works, not lockf",
                 Files.readString(lock).startsWith("pid ") && !Files.readString(lock).startsWith("pid " + p.pid() + ","));
         Files.delete(stop);
         rd.transferTo(java.io.Writer.nullWriter());
         int rc = p.waitFor();
-        check("lo script finisce con 0", rc == 0);
-        // Prima di qualunque take: take crea il file se manca, e il controllo non vedrebbe piu'
-        // niente (e' successo: con lockf senza -k questo controllo, messo dopo, restava verde).
-        check("finito lo script, il file del lock c'e' ancora (lockf -k)", Files.exists(lock));
-        check("finito lo script, il pannello prende il turno", PackageQueue.take("here", "manutenzione") == null);
+        check("the script ends with 0", rc == 0);
+        // Before any take: take creates the file if missing, and the check would no longer see
+        // anything (it happened: with lockf without -k this check, placed after, stayed green).
+        check("the script finished, the lock file is still there (lockf -k)", Files.exists(lock));
+        check("the script finished, the panel takes the turn", PackageQueue.take("here", "maintenance") == null);
         PackageQueue.release("here");
     }
 
-    /** Uno script lanciato come lo lancia il pannello: sh <percorso> <argomenti>, stdin /dev/null. */
+    /** A script started as the panel starts it: sh <path> <arguments>, stdin /dev/null. */
     static final class Run {
         int rc;
         String out;
@@ -220,8 +222,8 @@ public class PackageTurnAcrossProcessesTest {
             pb.environment().remove("MAIL_PANEL_TURN_BY_LOCKF");
             pb.environment().put("MYSQL_PASSWORD", "turn-test");
             pb.environment().put("MYSQL_ROOT_PASSWORD", "turn-test");
-            // Lo script della #91 (la webmail col suo utente MySQL) vuole anche questa, e si ferma
-            // prima del turno se manca; quello di prima la ignora. Trovato sul ramo d'integrazione.
+            // The script of #91 (the webmail with its own MySQL user) also wants this one, and stops
+            // before the turn if it is missing; the old one ignores it. Found on the integration branch.
             pb.environment().put("ROUNDCUBE_DB_PASSWORD", "turn-test");
             pb.environment().putAll(env);
             return pb.start();
@@ -243,7 +245,7 @@ public class PackageTurnAcrossProcessesTest {
         return new ProcessBuilder("sh", "-c", cmd).inheritIO().start().waitFor();
     }
 
-    /** Il secondo processo: TurnHolder, con lo stesso classpath. */
+    /** The second process: TurnHolder, with the same classpath. */
     static final class Holder {
         final Process p;
         final long pid;
@@ -258,7 +260,7 @@ public class PackageTurnAcrossProcessesTest {
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             BufferedReader out = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
             String line = out.readLine();
-            System.out.println("    (altro processo: " + line + ")");
+            System.out.println("    (other process: " + line + ")");
             long pid = line != null && line.startsWith("HELD ") ? Long.parseLong(line.substring(5).trim()) : -1;
             return new Holder(p, pid);
         }
@@ -269,7 +271,7 @@ public class PackageTurnAcrossProcessesTest {
         }
 
         void kill() throws Exception {
-            p.destroyForcibly();   // SIGKILL: niente finally, niente shutdown hook
+            p.destroyForcibly();   // SIGKILL: no finally, no shutdown hook
             p.waitFor();
         }
     }
