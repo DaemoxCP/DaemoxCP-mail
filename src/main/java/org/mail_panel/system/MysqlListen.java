@@ -147,9 +147,16 @@ public final class MysqlListen {
             }
         }
         if (!open.isEmpty()) return "MySQL still listens on " + open;
-        String lookupsAfter = lookups();
-        if (!lookupsAfter.equals(lookupsBefore)) return "mail lookups changed: before " + lookupsBefore + ", after " + lookupsAfter;
-        return null;
+        // Dovecot e Postfix tengono una connessione a MySQL: dopo il riavvio la prima domanda trova la
+        // connessione caduta e risponde "riprova" (Dovecot 75), la seguente si ricollega. Misurato sulla VM
+        // il 07/11/2026 nella prova del passaggio: si aspetta che si ricolleghino, fino a 30 secondi.
+        String lookupsAfter = "";
+        for (int i = 0; i < 30; i++) {
+            lookupsAfter = lookups();
+            if (lookupsAfter.equals(lookupsBefore)) return null;
+            Thread.sleep(1000);
+        }
+        return "mail lookups changed: before " + lookupsBefore + ", after " + lookupsAfter + " for 30 seconds";
     }
 
     static boolean waitForMysql() throws InterruptedException {

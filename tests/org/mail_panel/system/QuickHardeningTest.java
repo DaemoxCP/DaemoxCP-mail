@@ -229,14 +229,16 @@ public class QuickHardeningTest {
             logged.clear();
             RspamdUser.ensureAtBoot();
             check("the second time: nothing", logged.isEmpty());
-            // Fault: back to root; the check must say so.
+            // Fault: back to root (stop as the user, then without the setting), and the check must say so.
+            RspamdUser.stop();
             Shell.run(Duration.ofSeconds(10), "sysrc", "-x", "rspamd_user");
-            Shell.run(Duration.ofSeconds(120), "service", "rspamd", "restart");
+            Shell.run(Duration.ofSeconds(120), "service", "rspamd", "start");
             String problem = RspamdUser.verify();
             check("the main process as root again: the check sees it (" + problem + ")", problem != null && problem.contains("root"));
         } finally {
+            RspamdUser.stop();
             if (!rcSet) Shell.run(Duration.ofSeconds(10), "sysrc", "-x", "rspamd_user");
-            Shell.run(Duration.ofSeconds(120), "service", "rspamd", "restart");
+            Shell.run(Duration.ofSeconds(120), "service", "rspamd", "start");
             Thread.sleep(3000);
             System.out.println("    rspamd put back: main process as '" + RspamdUser.mainUser() + "', a scan says '" + RspamdUser.scan() + "'");
         }

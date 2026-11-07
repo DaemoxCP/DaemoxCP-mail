@@ -76,12 +76,24 @@ public final class RspamdUser {
             LOGGER.warning("[RspamdUser] rspamd does not scan a message before any change: left as it is");
             return false;
         }
+        // L'ordine conta. Con rspamd_user scritto, rc.subr manda anche i segnali di stop come quell'utente,
+        // e allora non riesce a fermare il processo principale che gira da root ("kill: No such process"),
+        // e l'avvio trova rspamd "already running". Misurato sulla VM il 07/11/2026. Quindi: si ferma
+        // con l'impostazione di prima, si scrive rspamd_user, si avvia; e per tornare indietro lo stesso
+        // al contrario.
+        if (!stop()) {
+            Shell.run(Duration.ofSeconds(120), "service", "rspamd", "start");
+            LOGGER.warning("[RspamdUser] NOT_APPLIED: rspamd did not stop within 120 seconds; started again as it was");
+            return false;
+        }
         Shell.run(Duration.ofSeconds(10), "sysrc", "rspamd_user=" + USER);
-        Shell.run(Duration.ofSeconds(120), "service", "rspamd", "restart");
+        Shell.run(Duration.ofSeconds(120), "service", "rspamd", "start");
         String problem = verify();
         if (problem != null) {
+            stop();
             Shell.run(Duration.ofSeconds(10), "sysrc", "-x", "rspamd_user");
-            Shell.run(Duration.ofSeconds(120), "service", "rspamd", "restart");
+            Shell.run(Duration.ofSeconds(120), "service", "rspamd", "start");
+            Thread.sleep(3000);
             String again = scan() != null ? "rspamd scans again" : "rspamd DOES NOT SCAN";
             LOGGER.warning("[RspamdUser] ROLLED_BACK: " + problem + "; rspamd_user removed and rspamd restarted (" + again + ")");
             return false;
@@ -89,6 +101,16 @@ public final class RspamdUser {
         LOGGER.info("[RspamdUser] DONE: rspamd runs entirely as " + USER + ", the main process no longer as root"
                 + " (rspamd_user in rc.conf); a real scan checked");
         return true;
+    }
+
+    /** Ferma rspamd con l'impostazione di adesso e aspetta che il processo principale non ci sia piu'. */
+    static boolean stop() throws InterruptedException {
+        Shell.run(Duration.ofSeconds(120), "service", "rspamd", "stop");
+        for (int i = 0; i < 60; i++) {
+            if (mainUser() == null) return true;
+            Thread.sleep(1000);
+        }
+        return false;
     }
 
     /** Dopo il riavvio: tutti i processi suoi, le porte aperte, una scansione vera. */
