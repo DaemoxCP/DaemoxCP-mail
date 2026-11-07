@@ -1,5 +1,7 @@
 package org.mail_panel.security;
 
+import org.mail_panel.database.SqlCatalog;
+
 import com.yubico.webauthn.data.ByteArray;
 
 import java.security.SecureRandom;
@@ -121,12 +123,12 @@ public final class AuthStore {
      */
     private static void assignUserHandles() throws SQLException {
         List<Long> ids = new ArrayList<>();
-        try (PreparedStatement p = db().prepareStatement("SELECT id FROM panel_admin WHERE user_handle IS NULL");
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ASSIGN_USER_HANDLES);
              ResultSet r = p.executeQuery()) {
             while (r.next()) ids.add(r.getLong(1));
         }
         for (long id : ids) {
-            try (PreparedStatement u = db().prepareStatement("UPDATE panel_admin SET user_handle = ? WHERE id = ? AND user_handle IS NULL")) {
+            try (PreparedStatement u = db().prepareStatement(SqlCatalog.AUTH_ASSIGN_USER_HANDLES_2)) {
                 u.setString(1, b64url(new byte[]{(byte) (id >> 24), (byte) (id >> 16), (byte) (id >> 8), (byte) id}));
                 u.setLong(2, id);
                 u.executeUpdate();
@@ -135,8 +137,7 @@ public final class AuthStore {
     }
 
     private static void linkOldPasskeys() throws SQLException {
-        try (PreparedStatement p = db().prepareStatement(
-                "UPDATE admin_passkeys k JOIN panel_admin a ON a.id = k.admin_id SET k.user_handle = a.user_handle WHERE k.user_handle IS NULL")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_LINK_OLD_PASSKEYS)) {
             int n = p.executeUpdate();
             if (n > 0) LOGGER.info("Linked " + n + " existing passkeys to their user handle");
         }
@@ -148,12 +149,11 @@ public final class AuthStore {
      * superadmin attivo, lo diventa il piu' vecchio.
      */
     private static void ensureSuperadmin() throws SQLException {
-        try (PreparedStatement p = db().prepareStatement("SELECT 1 FROM panel_admin WHERE role = 'superadmin' AND active = TRUE LIMIT 1");
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ENSURE_SUPERADMIN);
              ResultSet r = p.executeQuery()) {
             if (r.next()) return;
         }
-        try (PreparedStatement u = db().prepareStatement(
-                "UPDATE panel_admin SET role = 'superadmin' WHERE active = TRUE ORDER BY id LIMIT 1")) {
+        try (PreparedStatement u = db().prepareStatement(SqlCatalog.AUTH_ENSURE_SUPERADMIN_2)) {
             if (u.executeUpdate() == 1) LOGGER.info("No active superadmin: the oldest administrator is now superadmin");
         }
     }
@@ -170,9 +170,7 @@ public final class AuthStore {
         }
     }
 
-    private static final String ADMIN_COLUMNS =
-            "SELECT id, username, role, active, email_enc, user_handle, created_at, last_login FROM panel_admin ";
-
+    // Le colonne lette da admin(): SqlCatalog.AUTH_ADMIN_SELECT, in quest'ordine.
     private static Admin admin(ResultSet r) throws SQLException {
         return new Admin(r.getLong(1), r.getString(2), r.getString(3), r.getBoolean(4), r.getString(5), r.getString(6),
                 r.getObject(7, LocalDateTime.class), r.getObject(8, LocalDateTime.class));
@@ -186,7 +184,7 @@ public final class AuthStore {
 
     public static List<Admin> admins() {
         List<Admin> out = new ArrayList<>();
-        try (PreparedStatement p = db().prepareStatement(ADMIN_COLUMNS + "ORDER BY id");
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_LIST_ADMINS);
              ResultSet r = p.executeQuery()) {
             while (r.next()) out.add(admin(r));
         } catch (SQLException e) {
@@ -197,7 +195,7 @@ public final class AuthStore {
 
     /** Un amministratore attivo, per id. */
     public static Optional<Admin> adminById(long id) {
-        try (PreparedStatement p = db().prepareStatement(ADMIN_COLUMNS + "WHERE id = ? AND active = TRUE")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ADMIN_BY_ID)) {
             p.setLong(1, id);
             return oneAdmin(p);
         } catch (SQLException e) {
@@ -208,7 +206,7 @@ public final class AuthStore {
 
     public static Optional<Admin> adminByUsername(String username) {
         if (username == null) return Optional.empty();
-        try (PreparedStatement p = db().prepareStatement(ADMIN_COLUMNS + "WHERE username = ? AND active = TRUE")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ADMIN_BY_USERNAME)) {
             p.setString(1, username);
             return oneAdmin(p);
         } catch (SQLException e) {
@@ -219,7 +217,7 @@ public final class AuthStore {
 
     public static Optional<Admin> adminByEmail(String email) {
         if (email == null || email.isBlank()) return Optional.empty();
-        try (PreparedStatement p = db().prepareStatement(ADMIN_COLUMNS + "WHERE email_index = ? AND active = TRUE")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ADMIN_BY_EMAIL_INDEX)) {
             p.setString(1, DataCrypto.emailIndex(email));
             return oneAdmin(p);
         } catch (SQLException e) {
@@ -230,7 +228,7 @@ public final class AuthStore {
 
     public static Optional<Admin> adminByUserHandle(ByteArray handle) {
         if (handle == null) return Optional.empty();
-        try (PreparedStatement p = db().prepareStatement(ADMIN_COLUMNS + "WHERE user_handle = ? AND active = TRUE")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ADMIN_BY_USER_HANDLE)) {
             p.setString(1, handle.getBase64Url());
             return oneAdmin(p);
         } catch (SQLException e) {
@@ -251,8 +249,7 @@ public final class AuthStore {
         byte[] handle = new byte[16];
         RANDOM.nextBytes(handle);
         boolean withEmail = email != null && !email.isBlank();
-        try (PreparedStatement p = db().prepareStatement(
-                "INSERT INTO panel_admin (username, role, active, email_enc, email_index, user_handle, created_at) VALUES (?, ?, TRUE, ?, ?, ?, ?)",
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_CREATE_ADMIN,
                 Statement.RETURN_GENERATED_KEYS)) {
             p.setString(1, username);
             p.setString(2, role);
@@ -281,7 +278,7 @@ public final class AuthStore {
 
     /** Cambia il nome. NAME_TAKEN se e' gia' di un altro (vincolo UNIQUE). */
     public static CreateResult renameAdmin(long adminId, String username) {
-        try (PreparedStatement p = db().prepareStatement("UPDATE panel_admin SET username = ? WHERE id = ?")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_RENAME_ADMIN)) {
             p.setString(1, username);
             p.setLong(2, adminId);
             return p.executeUpdate() == 1 ? CreateResult.CREATED : CreateResult.FAILED;
@@ -292,7 +289,7 @@ public final class AuthStore {
 
     /** Imposta l'email (cifrata, con l'indice cieco). EMAIL_TAKEN se e' gia' di un altro amministratore. */
     public static CreateResult setEmail(long adminId, String email) {
-        try (PreparedStatement p = db().prepareStatement("UPDATE panel_admin SET email_enc = ?, email_index = ? WHERE id = ?")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_SET_EMAIL)) {
             p.setString(1, DataCrypto.encrypt(email.trim()));
             p.setString(2, DataCrypto.emailIndex(email));
             p.setLong(3, adminId);
@@ -304,7 +301,7 @@ public final class AuthStore {
 
     public static boolean setRole(long adminId, String role) {
         if (!ROLES.contains(role)) return false;
-        try (PreparedStatement p = db().prepareStatement("UPDATE panel_admin SET role = ? WHERE id = ?")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_SET_ROLE)) {
             p.setString(1, role);
             p.setLong(2, adminId);
             return p.executeUpdate() == 1;
@@ -316,7 +313,7 @@ public final class AuthStore {
 
     /** Toglie un amministratore: con lui (ON DELETE CASCADE) le sue passkey, sessioni e codici. */
     public static boolean deleteAdmin(long adminId) {
-        try (PreparedStatement p = db().prepareStatement("DELETE FROM panel_admin WHERE id = ?")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_DELETE_ADMIN)) {
             p.setLong(1, adminId);
             return p.executeUpdate() == 1;
         } catch (SQLException e) {
@@ -327,7 +324,7 @@ public final class AuthStore {
 
     /** Quanti superadmin attivi ci sono: l'ultimo non si toglie e non si declassa. */
     public static int activeSuperadmins() {
-        try (PreparedStatement p = db().prepareStatement("SELECT COUNT(*) FROM panel_admin WHERE role = 'superadmin' AND active = TRUE");
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ACTIVE_SUPERADMINS);
              ResultSet r = p.executeQuery()) {
             return r.next() ? r.getInt(1) : 0;
         } catch (SQLException e) {
@@ -337,7 +334,7 @@ public final class AuthStore {
     }
 
     public static void loggedIn(long adminId) {
-        try (PreparedStatement p = db().prepareStatement("UPDATE panel_admin SET last_login = ? WHERE id = ?")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_LOGGED_IN)) {
             p.setObject(1, utc(now()));
             p.setLong(2, adminId);
             p.executeUpdate();
@@ -351,9 +348,7 @@ public final class AuthStore {
     public record Passkey(long id, long adminId, ByteArray credentialId, ByteArray publicKeyCose, long signCount,
                           String name, LocalDateTime createdAt, LocalDateTime lastUsed, String userHandle) {}
 
-    private static final String PASSKEY_COLUMNS =
-            "SELECT id, admin_id, credential_id, public_key_cose, sign_count, name, created_at, last_used, user_handle FROM admin_passkeys ";
-
+    // Le colonne lette da passkeys(): SqlCatalog.AUTH_PASSKEY_SELECT, in quest'ordine.
     private static List<Passkey> passkeys(PreparedStatement p) throws SQLException {
         List<Passkey> out = new ArrayList<>();
         try (ResultSet r = p.executeQuery()) {
@@ -364,7 +359,7 @@ public final class AuthStore {
     }
 
     public static List<Passkey> passkeysOf(long adminId) {
-        try (PreparedStatement p = db().prepareStatement(PASSKEY_COLUMNS + "WHERE admin_id = ? AND user_handle IS NOT NULL ORDER BY id")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_PASSKEYS_OF_ADMIN)) {
             p.setLong(1, adminId);
             return passkeys(p);
         } catch (SQLException e) {
@@ -374,7 +369,7 @@ public final class AuthStore {
     }
 
     public static List<Passkey> passkeysByCredentialId(ByteArray credentialId) {
-        try (PreparedStatement p = db().prepareStatement(PASSKEY_COLUMNS + "WHERE credential_id = ? AND user_handle IS NOT NULL")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_PASSKEYS_BY_CREDENTIAL_ID)) {
             p.setBytes(1, credentialId.getBytes());
             return passkeys(p);
         } catch (SQLException e) {
@@ -386,8 +381,7 @@ public final class AuthStore {
     /** Salva una passkey. Falso anche se la credenziale c'e' gia' (vincolo UNIQUE). */
     public static boolean addPasskey(long adminId, ByteArray credentialId, ByteArray publicKeyCose, long signCount,
                                      String name, String rpId, String userHandle) {
-        try (PreparedStatement p = db().prepareStatement(
-                "INSERT INTO admin_passkeys (admin_id, credential_id, public_key_cose, sign_count, name, created_at, rp_id, user_handle) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_ADD_PASSKEY)) {
             p.setLong(1, adminId);
             p.setBytes(2, credentialId.getBytes());
             p.setBytes(3, publicKeyCose.getBytes());
@@ -404,7 +398,7 @@ public final class AuthStore {
     }
 
     public static void passkeyUsed(ByteArray credentialId, long signCount) {
-        try (PreparedStatement p = db().prepareStatement("UPDATE admin_passkeys SET sign_count = ?, last_used = ? WHERE credential_id = ?")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_PASSKEY_USED)) {
             p.setLong(1, signCount);
             p.setObject(2, utc(now()));
             p.setBytes(3, credentialId.getBytes());
@@ -415,7 +409,7 @@ public final class AuthStore {
     }
 
     public static boolean renamePasskey(long id, long adminId, String name) {
-        try (PreparedStatement p = db().prepareStatement("UPDATE admin_passkeys SET name = ? WHERE id = ? AND admin_id = ?")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_RENAME_PASSKEY)) {
             p.setString(1, name);
             p.setLong(2, id);
             p.setLong(3, adminId);
@@ -427,7 +421,7 @@ public final class AuthStore {
     }
 
     public static boolean deletePasskey(long id, long adminId) {
-        try (PreparedStatement p = db().prepareStatement("DELETE FROM admin_passkeys WHERE id = ? AND admin_id = ?")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_DELETE_PASSKEY)) {
             p.setLong(1, id);
             p.setLong(2, adminId);
             return p.executeUpdate() == 1;
@@ -439,30 +433,30 @@ public final class AuthStore {
 
     // ===================== Codici monouso, una tabella per flusso =====================
 
-    /** I flussi, ognuno con la sua tabella e le sue istruzioni costanti. */
+    /**
+     * I flussi, ognuno con la sua tabella e le sue istruzioni, fisse nel catalogo: una tabella non e'
+     * un parametro, e il nome non si compone piu' qui.
+     */
     public enum CodeFlow {
-        EMAIL_LOGIN("login_code_email"),
-        CONSOLE_LOGIN("login_code_console"),
-        STEP_UP("stepup_code"),
-        EMAIL_CHANGE("email_change_code");
+        EMAIL_LOGIN(SqlCatalog.AUTH_CODE_EMAIL_LOGIN_INVALIDATE, SqlCatalog.AUTH_CODE_EMAIL_LOGIN_INSERT, SqlCatalog.AUTH_CODE_EMAIL_LOGIN_ACTIVE_OF, SqlCatalog.AUTH_CODE_EMAIL_LOGIN_ACTIVE_ALL,
+                SqlCatalog.AUTH_CODE_EMAIL_LOGIN_ATTEMPT, SqlCatalog.AUTH_CODE_EMAIL_LOGIN_CONSUME, SqlCatalog.AUTH_CODE_EMAIL_LOGIN_PURGE),
+        CONSOLE_LOGIN(SqlCatalog.AUTH_CODE_CONSOLE_LOGIN_INVALIDATE, SqlCatalog.AUTH_CODE_CONSOLE_LOGIN_INSERT, SqlCatalog.AUTH_CODE_CONSOLE_LOGIN_ACTIVE_OF, SqlCatalog.AUTH_CODE_CONSOLE_LOGIN_ACTIVE_ALL,
+                SqlCatalog.AUTH_CODE_CONSOLE_LOGIN_ATTEMPT, SqlCatalog.AUTH_CODE_CONSOLE_LOGIN_CONSUME, SqlCatalog.AUTH_CODE_CONSOLE_LOGIN_PURGE),
+        STEP_UP(SqlCatalog.AUTH_CODE_STEP_UP_INVALIDATE, SqlCatalog.AUTH_CODE_STEP_UP_INSERT, SqlCatalog.AUTH_CODE_STEP_UP_ACTIVE_OF, SqlCatalog.AUTH_CODE_STEP_UP_ACTIVE_ALL,
+                SqlCatalog.AUTH_CODE_STEP_UP_ATTEMPT, SqlCatalog.AUTH_CODE_STEP_UP_CONSUME, SqlCatalog.AUTH_CODE_STEP_UP_PURGE),
+        EMAIL_CHANGE(SqlCatalog.AUTH_CODE_EMAIL_CHANGE_INVALIDATE, SqlCatalog.AUTH_CODE_EMAIL_CHANGE_INSERT, SqlCatalog.AUTH_CODE_EMAIL_CHANGE_ACTIVE_OF, SqlCatalog.AUTH_CODE_EMAIL_CHANGE_ACTIVE_ALL,
+                SqlCatalog.AUTH_CODE_EMAIL_CHANGE_ATTEMPT, SqlCatalog.AUTH_CODE_EMAIL_CHANGE_CONSUME, SqlCatalog.AUTH_CODE_EMAIL_CHANGE_PURGE);
 
         final String invalidate, insert, activeOf, activeAll, attempt, consume, purge;
 
-        CodeFlow(String table) {
-            // Il nome della tabella viene da questo enum, non da una richiesta.
-            boolean target = table.equals("email_change_code");
-            String targetCols = target ? "target_enc, target_index" : "NULL, NULL";
-            this.invalidate = "UPDATE " + table + " SET used_at = ? WHERE admin_id = ? AND used_at IS NULL";
-            this.insert = target
-                    ? "INSERT INTO " + table + " (admin_id, code_hash, created_at, expires_at, target_enc, target_index) VALUES (?, ?, ?, ?, ?, ?)"
-                    : "INSERT INTO " + table + " (admin_id, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?)";
-            this.activeOf = "SELECT id, admin_id, code_hash, attempts, " + targetCols + " FROM " + table
-                    + " WHERE admin_id = ? AND used_at IS NULL AND expires_at > ? ORDER BY id DESC";
-            this.activeAll = "SELECT id, admin_id, code_hash, attempts, " + targetCols + " FROM " + table
-                    + " WHERE used_at IS NULL AND expires_at > ? ORDER BY id DESC";
-            this.attempt = "UPDATE " + table + " SET attempts = attempts + 1 WHERE id = ?";
-            this.consume = "UPDATE " + table + " SET used_at = ? WHERE id = ? AND used_at IS NULL AND attempts <= ?";
-            this.purge = "DELETE FROM " + table + " WHERE expires_at < ?";
+        CodeFlow(String invalidate, String insert, String activeOf, String activeAll, String attempt, String consume, String purge) {
+            this.invalidate = invalidate;
+            this.insert = insert;
+            this.activeOf = activeOf;
+            this.activeAll = activeAll;
+            this.attempt = attempt;
+            this.consume = consume;
+            this.purge = purge;
         }
     }
 
@@ -494,7 +488,8 @@ public final class AuthStore {
     /** I codici ancora validi di un amministratore (adminId >= 0) o di tutti (adminId < 0). */
     public static List<CodeRow> activeCodes(CodeFlow flow, long adminId) {
         LocalDateTime now = utc(now());
-        try (PreparedStatement p = db().prepareStatement(adminId >= 0 ? flow.activeOf : flow.activeAll)) {
+        String active = adminId >= 0 ? flow.activeOf : flow.activeAll;
+        try (PreparedStatement p = db().prepareStatement(active)) {
             if (adminId >= 0) { p.setLong(1, adminId); p.setObject(2, now); }
             else p.setObject(1, now);
             List<CodeRow> out = new ArrayList<>();
@@ -544,7 +539,7 @@ public final class AuthStore {
                 LOGGER.log(Level.WARNING, "Old codes not purged (" + f + ")", e);
             }
         }
-        try (PreparedStatement p = db().prepareStatement("DELETE FROM panel_sessions WHERE expires_at < ? OR last_seen_at < ?")) {
+        try (PreparedStatement p = db().prepareStatement(SqlCatalog.AUTH_PURGE_EXPIRED)) {
             p.setObject(1, utc(now()));
             p.setObject(2, utc(now().minusSeconds(org.mail_panel.webserver.WebSessions.IDLE_SECONDS)));
             p.executeUpdate();

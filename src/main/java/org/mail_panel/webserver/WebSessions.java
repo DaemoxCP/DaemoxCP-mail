@@ -1,5 +1,7 @@
 package org.mail_panel.webserver;
 
+import org.mail_panel.database.SqlCatalog;
+
 import org.mail_panel.security.AuthStore;
 import org.mail_panel.security.DataCrypto;
 
@@ -117,8 +119,7 @@ public final class WebSessions {
     public String create(long adminId, String userAgent, String ip) {
         String token = newToken();
         Instant now = Instant.now();
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(
-                "INSERT INTO panel_sessions (token_hash, admin_id, ua_hash, ua_enc, ip_enc, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_CREATE)) {
             p.setString(1, tokenHash(token));
             p.setLong(2, adminId);
             p.setString(3, uaHash(userAgent));
@@ -165,9 +166,7 @@ public final class WebSessions {
         LAST_CHECK_FAILED.set(false);
         if (!wellFormed(token)) return Optional.empty();
         Instant now = Instant.now();
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(
-                "SELECT id, admin_id, ua_hash, last_seen_at, reauth_at FROM panel_sessions "
-              + "WHERE token_hash = ? AND expires_at > ? AND last_seen_at > ?")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_CHECK)) {
             p.setString(1, tokenHash(token));
             p.setObject(2, utc(now));
             p.setObject(3, utc(now.minusSeconds(IDLE_SECONDS)));
@@ -198,8 +197,7 @@ public final class WebSessions {
         LAST_CHECK_FAILED.set(false);
         if (sessionId <= 0 || adminId <= 0) return Optional.empty();
         Instant now = Instant.now();
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(
-                "SELECT admin_id, reauth_at FROM panel_sessions WHERE id = ? AND expires_at > ? AND last_seen_at > ?")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_FORWARDED)) {
             p.setLong(1, sessionId);
             p.setObject(2, utc(now));
             p.setObject(3, utc(now.minusSeconds(IDLE_SECONDS)));
@@ -217,7 +215,7 @@ public final class WebSessions {
     }
 
     private void touch(long id, Instant now) {
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement("UPDATE panel_sessions SET last_seen_at = ? WHERE id = ?")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_TOUCH)) {
             p.setObject(1, utc(now));
             p.setLong(2, id);
             p.executeUpdate();
@@ -228,7 +226,7 @@ public final class WebSessions {
 
     /** Annota che l'amministratore di questa sessione ha appena confermato di essere lui. */
     public void markReauthenticated(long sessionId) {
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement("UPDATE panel_sessions SET reauth_at = ? WHERE id = ?")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_MARK_REAUTHENTICATED)) {
             p.setObject(1, utc(Instant.now()));
             p.setLong(2, sessionId);
             p.executeUpdate();
@@ -276,7 +274,7 @@ public final class WebSessions {
      * database non risponde: in quel caso restano righe morte, che la pulizia delle scadute toglie.
      */
     public int beginRun() {
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement("DELETE FROM panel_sessions")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_BEGIN_RUN)) {
             return p.executeUpdate();
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Sessions of the previous start not removed", e);
@@ -286,7 +284,7 @@ public final class WebSessions {
 
     public void revoke(String token) {
         if (!wellFormed(token)) return;
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement("DELETE FROM panel_sessions WHERE token_hash = ?")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_REVOKE)) {
             p.setString(1, tokenHash(token));
             p.executeUpdate();
         } catch (SQLException e) {
@@ -296,7 +294,7 @@ public final class WebSessions {
 
     /** Toglie una sessione dell'amministratore (dall'elenco). Falso se non e' sua o non c'e'. */
     public boolean revokeById(long id, long adminId) {
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement("DELETE FROM panel_sessions WHERE id = ? AND admin_id = ?")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_REVOKE_BY_ID)) {
             p.setLong(1, id);
             p.setLong(2, adminId);
             return p.executeUpdate() == 1;
@@ -308,7 +306,7 @@ public final class WebSessions {
 
     /** Toglie tutte le sessioni dell'amministratore tranne quella da tenere (-1: tutte). */
     public int revokeOthers(long adminId, long keepId) {
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement("DELETE FROM panel_sessions WHERE admin_id = ? AND id <> ?")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_REVOKE_OTHERS)) {
             p.setLong(1, adminId);
             p.setLong(2, keepId);
             return p.executeUpdate();
@@ -322,9 +320,7 @@ public final class WebSessions {
     public List<Listed> list(long adminId) {
         List<Listed> out = new ArrayList<>();
         Instant now = Instant.now();
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(
-                "SELECT id, ip_enc, ua_enc, created_at, last_seen_at FROM panel_sessions "
-              + "WHERE admin_id = ? AND expires_at > ? AND last_seen_at > ? ORDER BY last_seen_at DESC")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_LIST)) {
             p.setLong(1, adminId);
             p.setObject(2, utc(now));
             p.setObject(3, utc(now.minusSeconds(IDLE_SECONDS)));
@@ -341,8 +337,7 @@ public final class WebSessions {
     /** Quante sessioni valide ci sono in tutto (per i test e la diagnostica). */
     public int count() {
         Instant now = Instant.now();
-        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(
-                "SELECT COUNT(*) FROM panel_sessions WHERE expires_at > ? AND last_seen_at > ?")) {
+        try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_COUNT)) {
             p.setObject(1, utc(now));
             p.setObject(2, utc(now.minusSeconds(IDLE_SECONDS)));
             try (ResultSet r = p.executeQuery()) {

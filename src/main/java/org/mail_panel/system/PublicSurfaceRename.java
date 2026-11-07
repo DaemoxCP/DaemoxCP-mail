@@ -1,5 +1,7 @@
 package org.mail_panel.system;
 
+import org.mail_panel.database.SqlCatalog;
+
 import org.mail_panel.util.Shell;
 
 import java.io.IOException;
@@ -377,17 +379,17 @@ public final class PublicSurfaceRename {
                 LOGGER.warning("[PublicSurfaceRename] fail2ban has no database file: bans not carried over");
                 return false;
             }
-            try (java.sql.Connection c = java.sql.DriverManager.getConnection("jdbc:sqlite:" + db);
+            try (java.sql.Connection c = org.mail_panel.database.CatalogGuard.open("jdbc:sqlite:" + db);
                  java.sql.Statement st = c.createStatement()) {
                 // fail2ban tiene il database aperto: si aspetta il suo turno invece di fallire.
-                st.execute("PRAGMA busy_timeout = 10000");
+                st.execute(SqlCatalog.RENAME_BUSY_TIMEOUT);
                 c.setAutoCommit(false);
                 try {
                     // Lo schema e' quello di fail2ban (server/database.py): jails, bips, bans, logs.
-                    exec(c, "INSERT OR IGNORE INTO jails(name, enabled) VALUES (?, 0)", to);
-                    exec(c, "UPDATE OR IGNORE bips SET jail = ? WHERE jail = ?", to, from);
-                    exec(c, "UPDATE OR IGNORE bans SET jail = ? WHERE jail = ?", to, from);
-                    exec(c, "UPDATE OR IGNORE logs SET jail = ?, path = ? WHERE jail = ? AND path = ?", to, toLog, from, fromLog);
+                    exec(c, SqlCatalog.RENAME_ADD_JAIL, to);
+                    exec(c, SqlCatalog.RENAME_MOVE_JAIL_BIPS, to, from);
+                    exec(c, SqlCatalog.RENAME_MOVE_JAIL_BANS, to, from);
+                    exec(c, SqlCatalog.RENAME_MOVE_JAIL_LOGS, to, toLog, from, fromLog);
                     c.commit();
                     return true;
                 } catch (java.sql.SQLException e) {

@@ -1,5 +1,7 @@
 package org.mail_panel.webserver;
 
+import org.mail_panel.TestSql;
+
 import com.sun.net.httpserver.HttpsServer;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -94,7 +96,7 @@ public class LoginRoutesTest {
     }
 
     static int count(String query, Object... params) throws Exception {
-        try (PreparedStatement p = Main.mailDatabase.getConnection().prepareStatement(query)) {
+        try (PreparedStatement p = TestSql.mysql().prepareStatement(query)) {
             for (int i = 0; i < params.length; i++) p.setObject(i + 1, params[i]);
             try (ResultSet r = p.executeQuery()) {
                 return r.next() ? r.getInt(1) : -1;

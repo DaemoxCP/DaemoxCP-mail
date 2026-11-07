@@ -142,9 +142,9 @@ public class MysqlReconnectTest {
                     try {
                         Connection c = Main.mailDatabase.getConnection();
                         if (c == null) result = "refused (no connection)";
-                        else try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("SELECT CURRENT_USER()")) {
-                            result = rs.next() ? "ok " + rs.getString(1) : "refused (no row)";
-                        }
+                        // The panel's connection takes only its catalog's statements (CatalogGuard): the
+                        // user comes from the driver's metadata, which asks MySQL (SELECT USER()).
+                        else result = "ok " + c.getMetaData().getUserName();
                     } catch (Exception e) {
                         result = "refused (" + e.getMessage() + ")";
                     }

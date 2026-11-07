@@ -1,5 +1,7 @@
 package org.mail_panel.security;
 
+import org.mail_panel.TestSql;
+
 import org.mail_panel.Main;
 import org.mail_panel.database.MailDatabase;
 import org.mail_panel.webserver.WebSessions;
@@ -48,7 +50,7 @@ public class LoginSecurityTest {
         try { j.run(); return false; } catch (Exception e) { return true; }
     }
 
-    static Connection db() { return Main.mailDatabase.getConnection(); }
+    static Connection db() throws java.sql.SQLException { return TestSql.mysql(); }
 
     static void sql(String s) throws Exception {
         try (Statement st = db().createStatement()) { st.executeUpdate(s); }

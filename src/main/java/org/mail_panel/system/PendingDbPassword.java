@@ -7,7 +7,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
@@ -227,7 +226,7 @@ public final class PendingDbPassword {
             if (password == null || password.isEmpty()) return Answer.REJECTED;
             String url = "jdbc:mysql://" + host + ":" + port + "/?connectTimeout=5000&socketTimeout=10000"
                     + "&useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
-            try (Connection c = DriverManager.getConnection(url, user, password)) {
+            try (Connection c = org.mail_panel.database.CatalogGuard.open(url, user, password)) {
                 return c.isValid(5) ? Answer.ACCEPTED : Answer.NO_ANSWER;
             } catch (SQLException e) {
                 if (e.getErrorCode() == 1045 || "28000".equals(e.getSQLState())) return Answer.REJECTED;

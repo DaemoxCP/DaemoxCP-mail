@@ -1,5 +1,7 @@
 package org.mail_panel.webserver;
 
+import org.mail_panel.TestSql;
+
 import com.sun.net.httpserver.HttpsServer;
 import org.json.JSONObject;
 import org.mail_panel.Main;
@@ -184,7 +186,7 @@ public class LanguageRoutesTest {
             check("the database refuses a language that is not ours", !db.setAdminLanguage(admin, "fr") && "it".equals(db.getAdminLanguage(admin)));
         } finally {
             https.stop(0);
-            try (var st = db.getConnection().prepareStatement("DELETE FROM panel_admin WHERE username = ?")) {
+            try (var st = TestSql.mysql().prepareStatement("DELETE FROM panel_admin WHERE username = ?")) {
                 st.setString(1, admin);
                 st.executeUpdate();
             }

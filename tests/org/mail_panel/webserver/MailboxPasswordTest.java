@@ -1,5 +1,7 @@
 package org.mail_panel.webserver;
 
+import org.mail_panel.TestSql;
+
 import com.sun.net.httpserver.HttpsServer;
 import org.json.JSONObject;
 import org.mail_panel.Main;
@@ -83,7 +85,7 @@ public class MailboxPasswordTest {
     }
 
     static String column(String col, int id) throws Exception {
-        try (PreparedStatement p = Main.mailDatabase.getConnection().prepareStatement("SELECT " + col + " FROM mailboxes WHERE id = ?")) {
+        try (PreparedStatement p = TestSql.mysql().prepareStatement("SELECT " + col + " FROM mailboxes WHERE id = ?")) {
             p.setInt(1, id);
             try (ResultSet r = p.executeQuery()) {
                 return r.next() ? r.getString(1) : null;
@@ -92,7 +94,7 @@ public class MailboxPasswordTest {
     }
 
     static void setColumn(String col, int id, String value) throws Exception {
-        try (PreparedStatement p = Main.mailDatabase.getConnection().prepareStatement("UPDATE mailboxes SET " + col + " = ? WHERE id = ?")) {
+        try (PreparedStatement p = TestSql.mysql().prepareStatement("UPDATE mailboxes SET " + col + " = ? WHERE id = ?")) {
             p.setString(1, value);
             p.setInt(2, id);
             p.executeUpdate();

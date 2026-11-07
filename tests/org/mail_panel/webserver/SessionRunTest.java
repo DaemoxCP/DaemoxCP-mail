@@ -1,5 +1,7 @@
 package org.mail_panel.webserver;
 
+import org.mail_panel.TestSql;
+
 import com.sun.net.httpserver.HttpsServer;
 import org.mail_panel.Main;
 import org.mail_panel.database.MailDatabase;
@@ -106,7 +108,7 @@ public class SessionRunTest {
 
         System.out.println("\n== 2. The fingerprint in the database ==");
         String stored = "";
-        try (PreparedStatement p = db.getConnection().prepareStatement("SELECT token_hash FROM panel_sessions WHERE admin_id = ? ORDER BY id DESC LIMIT 1")) {
+        try (PreparedStatement p = TestSql.mysql().prepareStatement("SELECT token_hash FROM panel_sessions WHERE admin_id = ? ORDER BY id DESC LIMIT 1")) {
             p.setLong(1, admin);
             try (ResultSet r = p.executeQuery()) { if (r.next()) stored = r.getString(1); }
         }

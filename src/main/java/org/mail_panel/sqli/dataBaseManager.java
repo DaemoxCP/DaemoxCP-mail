@@ -1,5 +1,7 @@
 package org.mail_panel.sqli;
 
+import org.mail_panel.database.SqlCatalog;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -65,18 +67,23 @@ public class dataBaseManager {
      * nuova versione (anche di un comando da console): se una colonna ha un valore, e' il piu'
      * recente (le versioni nuove non ci scrivono piu') e va nel file; poi la colonna si svuota.
      */
-    private static final String[][] SECRET_COLUMNS = {
-            {"mysql_password", org.mail_panel.security.PanelSecrets.MYSQL_PASSWORD},
-            {"mail_panel_ssl_cert_key", org.mail_panel.security.PanelSecrets.PANEL_TLS_KEY}};
+    /** Una colonna di un segreto: il nome, il segreto nel file, e le istruzioni fisse che la leggono e la svuotano. */
+    private record SecretColumn(String column, String secret, String read, String clear) {}
+
+    private static final SecretColumn[] SECRET_COLUMNS = {
+            new SecretColumn("mysql_password", org.mail_panel.security.PanelSecrets.MYSQL_PASSWORD,
+                    SqlCatalog.CONFIG_GET_MYSQL_PASSWORD, SqlCatalog.CONFIG_CLEAR_MYSQL_PASSWORD),
+            new SecretColumn("mail_panel_ssl_cert_key", org.mail_panel.security.PanelSecrets.PANEL_TLS_KEY,
+                    SqlCatalog.CONFIG_GET_PANEL_TLS_KEY, SqlCatalog.CONFIG_CLEAR_PANEL_TLS_KEY)};
 
     /** Sposta nel file dei segreti quello che e' ancora in SQLite. Ritorna quanti valori ha spostato. */
     public int migrateSecrets() {
         int moved = 0;
         Connection c = this.database_.get(1).connection;
         if (c == null) return 0;
-        for (String[] col : SECRET_COLUMNS) {
+        for (SecretColumn col : SECRET_COLUMNS) {
             String value;
-            try (PreparedStatement ps = c.prepareStatement("SELECT " + col[0] + " FROM config WHERE id = 1");
+            try (PreparedStatement ps = c.prepareStatement(col.read());
                  ResultSet rs = ps.executeQuery()) {
                 value = rs.next() ? rs.getString(1) : null;
             } catch (SQLException e) {
@@ -84,16 +91,16 @@ public class dataBaseManager {
             }
             if (value == null || value.isEmpty()) continue;
             try {
-                org.mail_panel.security.PanelSecrets.setText(col[1], value);
+                org.mail_panel.security.PanelSecrets.setText(col.secret(), value);
             } catch (RuntimeException e) {
-                System.err.println("Secrets file not writable, " + col[0] + " stays in SQLite for now: " + e.getMessage());
+                System.err.println("Secrets file not writable, " + col.column() + " stays in SQLite for now: " + e.getMessage());
                 continue;
             }
-            try (PreparedStatement ps = c.prepareStatement("UPDATE config SET " + col[0] + " = '' WHERE id = 1")) {
+            try (PreparedStatement ps = c.prepareStatement(col.clear())) {
                 ps.executeUpdate();
                 moved++;
             } catch (SQLException e) {
-                System.err.println("Could not clear " + col[0] + " in SQLite: " + e.getMessage());
+                System.err.println("Could not clear " + col.column() + " in SQLite: " + e.getMessage());
             }
         }
         return moved;
@@ -113,20 +120,18 @@ public class dataBaseManager {
     public void setMysqlPassword(String password) {
         String inSqlite = storeSecret(0, password);
         String column = null;
-        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(
-                "SELECT " + SECRET_COLUMNS[0][0] + " FROM config WHERE id = 1");
+        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_MYSQL_PASSWORD);
              ResultSet rs = ps.executeQuery()) {
             column = rs.next() ? rs.getString(1) : null;
         } catch (SQLException e) {
             // tabella non ancora creata
         }
         if (column == null || column.equals(inSqlite)) return;
-        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(
-                "UPDATE config SET " + SECRET_COLUMNS[0][0] + " = ? WHERE id = 1")) {
+        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_SET_MYSQL_PASSWORD)) {
             ps.setString(1, inSqlite);
             ps.executeUpdate();
         } catch (SQLException e) {
-            System.err.println("Could not write " + SECRET_COLUMNS[0][0] + " in SQLite: " + e.getMessage());
+            System.err.println("Could not write " + SECRET_COLUMNS[0].column() + " in SQLite: " + e.getMessage());
         }
     }
 
@@ -137,8 +142,7 @@ public class dataBaseManager {
 
     /** Una colonna non vuota e' il valore piu' recente (non ancora spostato): vince sul file. */
     private String secret(int i) {
-        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(
-                "SELECT " + SECRET_COLUMNS[i][0] + " FROM config WHERE id = 1");
+        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(SECRET_COLUMNS[i].read());
              ResultSet rs = ps.executeQuery()) {
             String v = rs.next() ? rs.getString(1) : null;
             if (v != null && !v.isEmpty()) return v;
@@ -146,7 +150,7 @@ public class dataBaseManager {
             // tabella non ancora creata
         }
         try {
-            return org.mail_panel.security.PanelSecrets.text(SECRET_COLUMNS[i][1]);
+            return org.mail_panel.security.PanelSecrets.text(SECRET_COLUMNS[i].secret());
         } catch (RuntimeException e) {
             System.err.println("Secrets file unreadable: " + e.getMessage());
             return "";
@@ -156,10 +160,10 @@ public class dataBaseManager {
     /** Scrive un segreto nel file; se il file non e' scrivibile resta in SQLite come prima. */
     private String storeSecret(int i, String value) {
         try {
-            org.mail_panel.security.PanelSecrets.setText(SECRET_COLUMNS[i][1], value);
+            org.mail_panel.security.PanelSecrets.setText(SECRET_COLUMNS[i].secret(), value);
             return "";
         } catch (RuntimeException e) {
-            System.err.println("Secrets file not writable, " + SECRET_COLUMNS[i][0] + " saved in SQLite: " + e.getMessage());
+            System.err.println("Secrets file not writable, " + SECRET_COLUMNS[i].column() + " saved in SQLite: " + e.getMessage());
             return value == null ? "" : value;
         }
     }
@@ -192,14 +196,6 @@ public class dataBaseManager {
         return this.database_.get(1).connection;
     }
 
-    public Connection get_mysql_connection() {
-        return this.database_.get(1).connection_mysql;
-    }
-
-    public void add_mysql_connection(String host, String user_, String password_, String port, String database) {
-        this.database_.get(1).database_mysql(host, user_, password_, port, database);
-    }
-
     public boolean create_tables() {
         return this.database_.get(1).create_tables();
     }
@@ -213,15 +209,7 @@ public class dataBaseManager {
      */
     public boolean update_panel_config(String host, String port, String sslCert, String sslKey,
                                         String sslChain, String sessionPrefix) {
-        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET " +
-                    "mail_panel_host = ?, " +
-                    "mail_panel_port = ?, " +
-                    "mail_panel_ssl_cert = ?, " +
-                    "mail_panel_ssl_cert_key = ?, " +
-                    "mail_panel_ssl_chain = ?, " +
-                    "mail_panel_sessions_prefix = ? " +
-                    "WHERE id = 1")) {
+        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_UPDATE_PANEL_CONFIG)) {
 
             preparedStatement.setString(1, host);
             preparedStatement.setString(2, port);
@@ -243,14 +231,7 @@ public class dataBaseManager {
      */
     public boolean update_mysql_config(String mysqlHost, String mysqlPort, String mysqlUser,
                                         String mysqlPassword, String mysqlDatabase) {
-        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET " +
-                    "mysql_host = ?, " +
-                    "mysql_port = ?, " +
-                    "mysql_user = ?, " +
-                    "mysql_password = ?, " +
-                    "mysql_database = ? " +
-                    "WHERE id = 1")) {
+        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_UPDATE_MYSQL_CONFIG)) {
 
             preparedStatement.setString(1, mysqlHost);
             preparedStatement.setString(2, mysqlPort);
@@ -267,29 +248,7 @@ public class dataBaseManager {
     }
 
     public boolean insert_data_default() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "INSERT INTO config (" +
-                    "mail_panel_port, " +
-                    "mail_panel_host, " +
-                    "mail_panel_ssl_cert, " +
-                    "mail_panel_ssl_cert_key, " +
-                    "mail_panel_ssl_chain, " +
-                    "mail_panel_sessions_prefix, " +
-                    "mysql_host, " +
-                    "mysql_port, " +
-                    "mysql_user, " +
-                    "mysql_password, " +
-                    "mysql_database, " +
-                    "postfix_installed, " +
-                    "dovecot_installed, " +
-                    "rspamd_installed, " +
-                    "clamav_installed, " +
-                    "roundcube_installed, " +
-                    "roundcube_domain, " +
-                    "roundcube_port, " +
-                    "roundcube_ssl_cert, " +
-                    "roundcube_ssl_key) " +
-                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_INSERT_DATA_DEFAULT)) {
 
             prepare.setString(1, "2096");
             prepare.setString(2, "127.0.0.1");
@@ -320,25 +279,29 @@ public class dataBaseManager {
         }
     }
 
-    /** Mappa nome servizio → colonna DB. Null se servizio non riconosciuto. */
-    private static String serviceColumn(String service) {
+    /**
+     * Il flag di un servizio: l'istruzione fissa che lo legge e quella che lo scrive (la colonna non e'
+     * un parametro). Null se il servizio non e' riconosciuto.
+     */
+    private record ServiceFlag(String read, String write) {}
+
+    private static ServiceFlag serviceFlag(String service) {
         if (service == null) return null;
         // Switch expression (Java 14+) — nessun fall-through, return diretto del valore.
         return switch (service.toLowerCase()) {
-            case "postfix"   -> "postfix_installed";
-            case "dovecot"   -> "dovecot_installed";
-            case "rspamd"    -> "rspamd_installed";
-            case "clamav"    -> "clamav_installed";
-            case "roundcube" -> "roundcube_installed";
+            case "postfix"   -> new ServiceFlag(SqlCatalog.CONFIG_GET_POSTFIX_INSTALLED, SqlCatalog.CONFIG_SET_POSTFIX_INSTALLED);
+            case "dovecot"   -> new ServiceFlag(SqlCatalog.CONFIG_GET_DOVECOT_INSTALLED, SqlCatalog.CONFIG_SET_DOVECOT_INSTALLED);
+            case "rspamd"    -> new ServiceFlag(SqlCatalog.CONFIG_GET_RSPAMD_INSTALLED, SqlCatalog.CONFIG_SET_RSPAMD_INSTALLED);
+            case "clamav"    -> new ServiceFlag(SqlCatalog.CONFIG_GET_CLAMAV_INSTALLED, SqlCatalog.CONFIG_SET_CLAMAV_INSTALLED);
+            case "roundcube" -> new ServiceFlag(SqlCatalog.CONFIG_GET_ROUNDCUBE_INSTALLED, SqlCatalog.CONFIG_SET_ROUNDCUBE_INSTALLED);
             default -> null;
         };
     }
 
     public boolean setServiceInstalled(String service, boolean installed) {
-        String column = serviceColumn(service);
-        if (column == null) return false;
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET " + column + " = ? WHERE id = 1")) {
+        ServiceFlag flag = serviceFlag(service);
+        if (flag == null) return false;
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(flag.write())) {
             prepare.setInt(1, installed ? 1 : 0);
             return prepare.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -348,10 +311,9 @@ public class dataBaseManager {
     }
 
     public boolean isServiceInstalled(String service) {
-        String column = serviceColumn(service);
-        if (column == null) return false;
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT " + column + " FROM config WHERE id = 1")) {
+        ServiceFlag flag = serviceFlag(service);
+        if (flag == null) return false;
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(flag.read())) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 return rs.getInt(1) == 1;
@@ -366,8 +328,7 @@ public class dataBaseManager {
         try {
             // Non in un try con risorse: il ResultSet esce di qui. Chi lo chiude (tutti lo leggono
             // in un try) chiude anche lo statement, e con lui la lettura che tiene il lock.
-            PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT * FROM config WHERE id = 1");
+            PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_DATA_CONFIG);
             prepare.closeOnCompletion();
             return prepare.executeQuery();
         } catch (SQLException e) {
@@ -376,8 +337,7 @@ public class dataBaseManager {
     }
 
     public boolean updateMySQLPassword(String newPassword) {
-        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET mysql_password = ? WHERE id = 1")) {
+        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_SET_MYSQL_PASSWORD)) {
             preparedStatement.setString(1, storeSecret(0, newPassword));
             return preparedStatement.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -387,14 +347,7 @@ public class dataBaseManager {
     }
 
     public boolean resetAllServices() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET " +
-                    "postfix_installed = 0, " +
-                    "dovecot_installed = 0, " +
-                    "rspamd_installed = 0, " +
-                    "clamav_installed = 0, " +
-                    "roundcube_installed = 0 " +
-                    "WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_RESET_ALL_SERVICES)) {
             return prepare.executeUpdate() > 0;
         } catch (SQLException e) {
             System.out.println("Error resetting services: " + e.getMessage());
@@ -415,8 +368,7 @@ public class dataBaseManager {
     }
 
     public String getMailHostname() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT mail_hostname FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_MAIL_HOSTNAME)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 return rs.getString("mail_hostname");
@@ -428,8 +380,7 @@ public class dataBaseManager {
     }
 
     public boolean setMailHostname(String hostname) {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET mail_hostname = ? WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_SET_MAIL_HOSTNAME)) {
             prepare.setString(1, hostname);
             return prepare.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -444,8 +395,7 @@ public class dataBaseManager {
     }
 
     public String getRoundcubeDomain() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT roundcube_domain FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_ROUNDCUBE_DOMAIN)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 return rs.getString("roundcube_domain");
@@ -457,8 +407,7 @@ public class dataBaseManager {
     }
 
     public String getRoundcubePort() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT roundcube_port FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_ROUNDCUBE_PORT)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 String port = rs.getString("roundcube_port");
@@ -471,8 +420,7 @@ public class dataBaseManager {
     }
 
     public String getRoundcubeSslCert() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT roundcube_ssl_cert FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_ROUNDCUBE_SSL_CERT)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 return rs.getString("roundcube_ssl_cert");
@@ -484,8 +432,7 @@ public class dataBaseManager {
     }
 
     public String getRoundcubeSslKey() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT roundcube_ssl_key FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_ROUNDCUBE_SSL_KEY)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 return rs.getString("roundcube_ssl_key");
@@ -497,14 +444,7 @@ public class dataBaseManager {
     }
 
     public boolean updateRoundcubeConfig(String domain, String port, String sslCert, String sslKey, String sslChain) {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET " +
-                    "roundcube_domain = ?, " +
-                    "roundcube_port = ?, " +
-                    "roundcube_ssl_cert = ?, " +
-                    "roundcube_ssl_key = ?, " +
-                    "roundcube_ssl_chain = ? " +
-                    "WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_UPDATE_ROUNDCUBE_CONFIG)) {
             prepare.setString(1, domain);
             prepare.setString(2, port);
             prepare.setString(3, sslCert);
@@ -518,8 +458,7 @@ public class dataBaseManager {
     }
 
     public String getRoundcubeSslChain() {
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT roundcube_ssl_chain FROM config WHERE id = 1")) {
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_ROUNDCUBE_SSL_CHAIN)) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 String chain = rs.getString("roundcube_ssl_chain");
