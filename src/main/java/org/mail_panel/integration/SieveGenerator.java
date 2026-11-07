@@ -260,13 +260,16 @@ public class SieveGenerator {
     public boolean saveSieveScript(String email, String script) {
         try {
             // Create user sieve directory
+            // L'indirizzo viene da MySQL, che col pannello separato scrive anche la parte web, e root ne fa un
+            // percorso: deve avere la forma di un indirizzo, e il file restare sotto SIEVE_DIR. Prima una casella
+            // come ../x faceva scrivere a root un file fuori dalla sua cartella.
+            if (!org.mail_panel.security.SafeNames.address(email)) return false;
             String[] parts = email.split("@");
-            if (parts.length != 2) return false;
 
             String user = parts[0];
             String domain = parts[1];
 
-            Path userDir = Path.of(SIEVE_DIR, domain, user);
+            Path userDir = org.mail_panel.security.SafeNames.under(Path.of(SIEVE_DIR), domain, user);
             Files.createDirectories(userDir);
 
             Path sieveFile = userDir.resolve(".dovecot.sieve");
@@ -396,10 +399,10 @@ public class SieveGenerator {
      */
     public String getSieveScript(String email) {
         try {
+            if (!org.mail_panel.security.SafeNames.address(email)) return null;
             String[] parts = email.split("@");
-            if (parts.length != 2) return null;
 
-            Path sieveFile = Path.of(SIEVE_DIR, parts[1], parts[0], ".dovecot.sieve");
+            Path sieveFile = org.mail_panel.security.SafeNames.under(Path.of(SIEVE_DIR), parts[1], parts[0], ".dovecot.sieve");
             if (Files.exists(sieveFile)) {
                 return Files.readString(sieveFile);
             }
