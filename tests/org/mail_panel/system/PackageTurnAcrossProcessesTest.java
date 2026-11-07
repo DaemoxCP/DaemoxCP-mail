@@ -220,6 +220,9 @@ public class PackageTurnAcrossProcessesTest {
             pb.environment().remove("MAIL_PANEL_TURN_BY_LOCKF");
             pb.environment().put("MYSQL_PASSWORD", "turn-test");
             pb.environment().put("MYSQL_ROOT_PASSWORD", "turn-test");
+            // Lo script della #91 (la webmail col suo utente MySQL) vuole anche questa, e si ferma
+            // prima del turno se manca; quello di prima la ignora. Trovato sul ramo d'integrazione.
+            pb.environment().put("ROUNDCUBE_DB_PASSWORD", "turn-test");
             pb.environment().putAll(env);
             return pb.start();
         }

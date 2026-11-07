@@ -99,10 +99,10 @@ public class InstallScriptsTest {
 
         System.out.println("\n== 4. L'impronta e il controllo dopo la #! ==");
         String s = InstallScripts.stamped("#!/bin/sh\necho x\n");
-        check("la riga #! resta la prima", s.startsWith("#!/bin/sh\n# --- Scritto dal pannello di posta"));
+        check("la riga #! resta la prima", s.startsWith("#!/bin/sh\n# --- Written by the mail panel"));
         check("l'impronta e' quella del jar che gira", s.contains("MAIL_PANEL_WRITTEN_BY_JAR=\"" + InstallScripts.jarSha256() + "\"")
                 && InstallScripts.jarSha256().matches("[0-9a-f]{64}"));
-        check("una #! rientrata torna a inizio file", Files.readString(tz).startsWith("#!/bin/sh\n# --- Scritto dal pannello di posta"));
+        check("una #! rientrata torna a inizio file", Files.readString(tz).startsWith("#!/bin/sh\n# --- Written by the mail panel"));
         System.exit(failed == 0 ? 0 : 1);
     }
 

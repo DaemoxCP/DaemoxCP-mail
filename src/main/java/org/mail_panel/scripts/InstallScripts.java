@@ -87,10 +87,13 @@ public final class InstallScripts {
      * #!. Il jar del servizio lo dice rc.conf (mailpanel_jar) o, se li' non c'e', il valore
      * predefinito scritto nello script rc.d del pannello. Senza servizio del pannello, o lanciato dal
      * pannello stesso (che l'ha appena scritto), il controllo non si fa.
+     *
+     * <p>La riga di testa e' in inglese: la stessa frase in italiano e' uno dei marcatori di prima
+     * (legacy-names.json), e LegacyNamesTest non la vuole piu' in nessun file scritto dal pannello.
      */
     static String stamped(String content) {
         String guard = """
-                # --- Scritto dal pannello di posta (InstallScripts) ---------------------------------------
+                # --- Written by the mail panel (InstallScripts) -------------------------------------------
                 # L'impronta del jar che ha scritto questo script. Lanciato a mano (non dal pannello), lo
                 # script la confronta col jar che il servizio del pannello usa: se sono diversi, lo script e'
                 # di un'altra versione del pannello e si ferma prima di cambiare qualunque cosa.
