@@ -171,6 +171,7 @@
         // lo mostra, e il lavoro che esegue quel piano o niente (la firma).
         async function ucPackages() {
             const state = document.getElementById('ucState');
+            ucOutcome(true, '');
             state.textContent = t('uc.planning');
             const r = await updApi('updates_status');
             if (!r.success) { state.textContent = r.error || t('common.errorShort'); return; }
