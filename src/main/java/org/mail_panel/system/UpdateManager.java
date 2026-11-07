@@ -2653,16 +2653,16 @@ public final class UpdateManager {
     }
 
     /**
-     * Query privilegiata come root attraverso il socket unix.
+     * Query privilegiata come root, con la password del file dei segreti (MysqlRoot).
      *
-     * Su FreeBSD l'utente root del sistema entra in MySQL dal socket senza password, ed e' il
-     * modo con cui il pannello ha creato database e utenti al primo avvio. Serve per leggere
-     * mysql.user, che l'utente applicativo non puo' vedere: l'alternativa sarebbe chiedere di
-     * eseguire una GRANT a mano, cioe' esattamente il dettare comandi che si vuole evitare.
+     * Serve per leggere mysql.user, che l'utente applicativo non puo' vedere: l'alternativa
+     * sarebbe chiedere di eseguire una GRANT a mano, cioe' esattamente il dettare comandi che si
+     * vuole evitare. Prima entrava dal socket senza password, che su FreeBSD funziona solo dove
+     * root una password non ce l'ha: cioe' dove entra chiunque. Dal 07/11/2026 root ha la sua
+     * password anche sui server installati prima (MysqlRoot.ensureAtBoot).
      */
     private static String mysqlRootOut(String sql) {
-        String q = sql.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$").replace("`", "\\`");
-        return sh("mysql -u root -N -B -e \"" + q + "\" 2>/dev/null", 30);
+        return org.mail_panel.database.MysqlRoot.query(sql);
     }
 
     /**

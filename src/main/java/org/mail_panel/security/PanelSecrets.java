@@ -180,6 +180,19 @@ public final class PanelSecrets {
         return get(name);
     }
 
+    /**
+     * Un segreto di testo letto adesso dal disco, non dalla copia in memoria: per chi deve sapere
+     * che una password e' davvero nel file prima di metterla in un servizio (MysqlRoot).
+     */
+    public static synchronized String reread(String name) {
+        return readFile().getProperty(name, "");
+    }
+
+    /** Dove sta il file, da dire nei messaggi a chi deve andare a cercarlo. */
+    public static String location() {
+        return file().toAbsolutePath().toString();
+    }
+
     /** Scrive (o con "" o null toglie) un segreto di testo; un processo alla volta, file 600. */
     public static synchronized void setText(String name, String value) {
         String v = value == null ? "" : value;

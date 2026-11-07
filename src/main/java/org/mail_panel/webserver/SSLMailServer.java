@@ -545,6 +545,15 @@ public class SSLMailServer {
             // nella lista permaban e negli script d'installazione: anche qui solo commenti.
             org.mail_panel.system.CommentRepair.ensureAtBoot();
 
+            // Root di MySQL con la sua password sui server installati prima che l'installatore la
+            // impostasse: senza, entrava come root chiunque avesse un utente sulla macchina. Prima di
+            // tutto quello che dopo parla con MySQL da root (RoundcubeDbUser, l'updater).
+            org.mail_panel.database.MysqlRoot.ensureAtBoot();
+
+            // Il processo di Dovecot che cerca le password non gira piu' da root: le cerca in MySQL,
+            // root non gli serve. Si verifica con una ricerca vera, e se non va si rimette com'era.
+            org.mail_panel.system.DovecotAuthWorker.ensureAtBoot();
+
             // Auto-setup Postfix aliases: crea /etc/aliases (o /etc/mail/aliases) se manca
             // + compila il .db. Risolve l'errore comune "open database /etc/aliases.db: No such file".
             // Idempotente: se è tutto OK non fa nulla.
@@ -2860,7 +2869,12 @@ public class SSLMailServer {
         if (!"roundcube".equals(component) && !"all".equals(component)) return Map.of();
         Map<String, String> env = new HashMap<>();
         env.put("ROUNDCUBE_DB_PASSWORD", org.mail_panel.security.PanelSecrets.ensureRoundcubeDbPassword());
-        String root = org.mail_panel.security.PanelSecrets.text(org.mail_panel.security.PanelSecrets.MYSQL_ROOT_PASSWORD);
+        // "all" installa MySQL: la password di root c'e' sempre, e lo script la imposta su un MySQL
+        // nuovo invece di lasciarlo senza (prima entrava chiunque). Alla webmail da sola basta
+        // quella che c'e', se il pannello l'ha impostata.
+        String root = "all".equals(component)
+                ? org.mail_panel.security.PanelSecrets.ensureMysqlRootPassword()
+                : org.mail_panel.security.PanelSecrets.text(org.mail_panel.security.PanelSecrets.MYSQL_ROOT_PASSWORD);
         if (!root.isEmpty()) env.put("MYSQL_ROOT_PASSWORD", root);
         return env;
     }

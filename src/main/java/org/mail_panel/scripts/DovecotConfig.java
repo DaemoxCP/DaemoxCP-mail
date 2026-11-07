@@ -342,6 +342,10 @@ public final class DovecotConfig {
             }
             DOVECOT_MASTER
 
+            cat > "$DOVECOT_ETC/conf.d/10-auth-worker.conf" <<'DOVECOT_AUTH_WORKER'
+            __AUTH_WORKER__
+            DOVECOT_AUTH_WORKER
+
             cat > "$DOVECOT_ETC/conf.d/auth-master.conf.ext" <<'DOVECOT_AUTH_MASTER'
             passdb {
               driver = passwd-file
@@ -368,8 +372,15 @@ public final class DovecotConfig {
             default_pass_scheme = BLF-CRYPT
             password_query = SELECT email as user, password FROM mailboxes WHERE email='%u' AND active=1
             DOVECOT_SQL
-            """;
+            """.replace("__AUTH_WORKER__", AUTH_WORKER_FILE);
     }
+
+    /**
+     * conf.d/10-auth-worker.conf, lo stesso file che la riparazione all'avvio scrive sui server
+     * installati prima (DovecotAuthWorker): auth-worker con l'utente interno di Dovecot, non root.
+     */
+    static final String AUTH_WORKER_FILE =
+            org.mail_panel.system.DovecotAuthWorker.fileContent("dovecot").stripTrailing();
 
     /**
      * Sintassi 2.4 — traduzione della configurazione qui sopra, fatta sulle pagine
@@ -578,6 +589,8 @@ public final class DovecotConfig {
             # quel predefinito: riscriverlo aggiungerebbe solo occasioni di sbagliare un
             # nome, e un nome sbagliato impedisce l'avvio.
             """, false));
+
+        f.add(new FileConf("conf.d/10-auth-worker.conf", AUTH_WORKER_FILE + "\n", false));
 
         f.add(new FileConf("conf.d/auth-master.conf.ext", """
             # Il nome del blocco e' obbligatorio nella 2.4, e "args" e' diventato
