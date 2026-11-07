@@ -6661,5 +6661,9 @@
   "server.search.done": "Elenchi aggiornati: la scheda dice cosa c'è da fare. Non è stato installato niente.",
   "uc.afterBranch": "Vedi cosa c'è da aggiornare",
   "server.su.panelLegacy": "Il pannello gira tutto da root: la parte web non è stata separata ({detail}).",
-  "server.rootPart.unavailable": "La parte del pannello che amministra il server non risponde: riprova fra qualche secondo."
+  "server.rootPart.unavailable": "La parte del pannello che amministra il server non risponde: riprova fra qualche secondo.",
+  "server.paths.panelWebLog": "Log della parte web del pannello",
+  "server.paths.panelWebLogDesc": "Quello che scrive la parte web, che gira con l'utente mailpanel: accessi, pagine, richieste passate alla parte root",
+  "server.paths.rootSocket": "Socket della parte root",
+  "server.paths.rootSocketDesc": "Da qui la parte web passa le richieste di chi ha fatto l'accesso alla parte root, che non apre porte di rete"
 }

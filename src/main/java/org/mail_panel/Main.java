@@ -1260,7 +1260,11 @@ public class Main {
                     System.out.println("Applying the package lock rule failed: " + e.getMessage());
                 }
 
-                System.out.println(ANSI_GREEN + "Mail Panel Server started on port " + port + ANSI_RESET);
+                if (server.mode() == SSLMailServer.Mode.ROOT_PART)
+                    System.out.println(ANSI_GREEN + "Mail Panel started: the web part answers on port " + port + " as "
+                            + org.mail_panel.system.PanelSeparation.USER + ", this root part on no port" + ANSI_RESET);
+                else
+                    System.out.println(ANSI_GREEN + "Mail Panel Server started on port " + port + ANSI_RESET);
                 System.out.println(ANSI_GREEN + "Open your browser: https://" + host + ":" + port + ANSI_RESET);
                 System.out.println();
                 System.out.println("Press ENTER to stop the server.");
