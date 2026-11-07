@@ -53,7 +53,10 @@ ROOT_PW=""
 if [ -f ./installed-mysql-root-password ]; then
     ROOT_PW=$(cat ./installed-mysql-root-password)
 elif [ -f /usr/local/etc/mail-panel/panel-secrets.properties ]; then
-    ROOT_PW=$(grep '^mysql_root_password=' /usr/local/etc/mail-panel/panel-secrets.properties | cut -d= -f2-)
+    # The panel writes the file with java.util.Properties, which escapes ! # = : with a backslash:
+    # read as it is, the password would be wrong. The generator's alphabet has no backslash, so
+    # dropping the escapes gives the password back.
+    ROOT_PW=$(sed -n 's/^mysql_root_password=//p' /usr/local/etc/mail-panel/panel-secrets.properties | sed 's/\\\(.\)/\1/g')
 fi
 if [ -z "$ROOT_PW" ]; then
     echo "MySQL root password not found"; exit 2
