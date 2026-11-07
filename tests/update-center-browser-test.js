@@ -143,7 +143,7 @@ const allErrors = [], allDialogs = [];
         && m.contains(document.activeElement)));
     await page.click('#panelAskGo');
     await page.waitForTimeout(800);
-    check('the job\'s outcome sentence reaches the card', await page.textContent('#ucState') === 'Lists updated.');
+    check('the job\'s outcome stays in the card after it reads its state again', await page.textContent('#ucOutcome') === 'Lists updated.');
     const apply = calls.find(c => c.action === 'updates_apply');
     check('the job starts with UPDATE and the signature of the plan shown', apply && apply.confirm === 'UPDATE' && apply.signature === '0123456789abcdef');
 

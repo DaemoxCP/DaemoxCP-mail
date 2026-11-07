@@ -130,11 +130,18 @@
             const pre = document.getElementById('uc-log');
             const state = document.getElementById('ucState');
             state.textContent = t('uc.searching');
+            ucOutcome(true, '');
             pre.hidden = false;
             pre.textContent = '';
             const r = await updApi('updates_search', { confirm: 'SEARCH' });
             if (!r.success) { state.textContent = r.error || t('common.errorShort'); return; }
             ucFollow(r.jobId, () => { ucLoad(); osState(); pkOverview(); });
+        }
+
+        // L'esito di un lavoro: in un posto suo, che la rilettura della scheda non copre.
+        function ucOutcome(ok, text) {
+            const box = document.getElementById('ucOutcome');
+            box.replaceChildren(text ? ucEl('div', 'alert py-2 small mb-2 ' + (ok ? 'alert-success' : 'alert-danger'), text) : '');
         }
 
         // Segue un lavoro nel registro della scheda, poi fa 'after'.
@@ -145,8 +152,17 @@
             if (s.success && s.job) {
                 pre.textContent = s.job.consoleLog || '';
                 pre.scrollTop = pre.scrollHeight;
-                if (s.job.status === 'completed') { state.textContent = s.job.result || t('up.opDone', { s: s.job.elapsedSeconds }); after(); return; }
-                if (s.job.status === 'error') { state.textContent = t('up.opFailed') + ' ' + (s.job.errorMessage || ''); return; }
+                if (s.job.status === 'completed') {
+                    state.textContent = '';
+                    ucOutcome(true, s.job.result || t('up.opDone', { s: s.job.elapsedSeconds }));
+                    after();
+                    return;
+                }
+                if (s.job.status === 'error') {
+                    state.textContent = '';
+                    ucOutcome(false, t('up.opFailed') + ' ' + (s.job.errorMessage || ''));
+                    return;
+                }
             }
             setTimeout(() => ucFollow(id, after), 3000);
         }
@@ -178,6 +194,7 @@
             if (!a.success) { state.textContent = a.error || t('common.errorShort'); return; }
             const pre = document.getElementById('uc-log');
             pre.hidden = false;
+            ucOutcome(true, '');
             state.textContent = t('up.upgradingKeepOpen');
             ucFollow(a.jobId, () => { ucLoad(); pkOverview(); });
         }
