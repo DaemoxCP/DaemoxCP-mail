@@ -19,9 +19,12 @@ resta fermo una decina di secondi; la posta resta sempre accesa.
    sulla macchina dove è stato costruito, non sul server:
 
    ```sh
-   mvn -B -o -q package -DskipTests
-   shasum -a 256 target/freebsd-mail-panel-1.0.jar
+   tools/build-jar.sh -o
    ```
+
+   Lo script costruisce col numero di build e il commit dentro il jar (la dashboard li mostra dietro
+   l'occhio, reperto 183) e stampa l'impronta; con `mvn package` da solo il pannello dice «build non
+   registrata». Se nei sorgenti ci sono modifiche fuori dal commit, il jar lo dice.
 
    Poi si copiano sul server il jar e i due script, per esempio in `/root/panel-upgrade/`. Prima di
    toccare qualsiasi cosa, lo script confronta l'impronta. Un jar arrivato a metà, o un altro jar,

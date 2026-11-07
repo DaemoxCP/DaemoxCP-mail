@@ -309,6 +309,11 @@ public class MailPanelContent {
         .role-badge.admin { background-color: #0d6efd; }
         .role-badge.operator { background-color: #198754; }
         .role-badge.viewer { background-color: #6c757d; }
+        /* Un pulsante piccolo (btn-sm, un'icona sola) che col dito resta grande almeno 44 px (r9):
+           sullo schermo col mouse non cambia niente. Lo usa la scheda del pannello in Home. */
+        @media (pointer: coarse) {
+            .touch-target { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+        }
         """;
     }
 
@@ -1009,6 +1014,7 @@ public class MailPanelContent {
                 </div>
             </div>
 
+""" + resource("pages/home-panel-card.html") + """
             <h3><i class="fas fa-chart-line me-2" aria-hidden="true"></i>{{t:home.overview}}</h3>
             <div class="row">
                 <div class="col-md-4 mb-3">
@@ -1331,7 +1337,7 @@ public class MailPanelContent {
         }
 
         checkStatus();
-""" + getVersionsJs() + resource("pages/home-status.js") + getScriptEnd();
+""" + getVersionsJs() + resource("pages/home-status.js") + resource("pages/home-panel.js") + getScriptEnd();
     }
 
     /**

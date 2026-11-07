@@ -241,6 +241,9 @@ public class SSLMailServer {
         context("/api/logs", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiLogs);
         context("/paths", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
         context("/api/system_paths", Access.api(SYSTEM_VIEW), this::handleApiSystemPaths);
+        // La scheda del pannello in cima alla dashboard (reperto 183): da quando gira per chi vede la
+        // dashboard, i dettagli tecnici (versione, build, impronta del jar, processo) con system.view.
+        context("/api/panel_info", Access.api(HOME, HOME, Access.actions(SYSTEM_VIEW, "details")), this::handleApiPanelInfo);
         context("/api/service", Access.api(SYSTEM_MANAGE), this::handleApiService);
         context("/api/timezone-diag", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiTimezoneDiag);
         context("/api/postfix-aliases-health", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiPostfixAliases);
@@ -8240,6 +8243,26 @@ public class SSLMailServer {
             response.put("error", e.getMessage());
         }
         sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * GET /api/panel_info?action=uptime|details: la scheda del pannello in cima alla dashboard
+     * (PanelInfo, reperto 183). Il permesso lo ha gia' controllato il filtro (Access): uptime con
+     * home.view, details con system.view. La risposta di uptime dice se chi guarda puo' chiedere
+     * anche i dettagli, cosi' la pagina mostra l'occhio solo a lui.
+     */
+    private void handleApiPanelInfo(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
+            return;
+        }
+        String action = extractParamFromQuery(exchange.getRequestURI().getQuery(), "action");
+        switch (action == null ? "" : action) {
+            case "uptime" -> sendJsonResponse(exchange, org.mail_panel.system.PanelInfo.uptime(java.time.Instant.now(),
+                    currentSession(exchange).map(s -> AuthStore.may(s.admin(), SYSTEM_VIEW)).orElse(false)));
+            case "details" -> sendJsonResponse(exchange, org.mail_panel.system.PanelInfo.details(port));
+            default -> sendJsonError(exchange, 400, I18n.tr("server.unknownAction"));
+        }
     }
 
     /**
