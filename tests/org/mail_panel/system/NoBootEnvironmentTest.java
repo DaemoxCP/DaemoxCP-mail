@@ -33,6 +33,7 @@ public class NoBootEnvironmentTest {
     public static void main(String[] args) throws Exception {
         if (args.length > 0) { child(); return; }
         Path d = Files.createTempDirectory("no-bectl");
+        int code;
         try {
             Path fake = d.resolve("bectl");
             Files.writeString(fake, "#!/bin/sh\necho \"bectl: libbe_init(\\\"\\\") failed.\" >&2\nexit 1\n");
@@ -41,11 +42,13 @@ public class NoBootEnvironmentTest {
             ProcessBuilder pb = new ProcessBuilder(java, "-cp", System.getProperty("java.class.path"),
                     NoBootEnvironmentTest.class.getName(), "child").inheritIO();
             pb.environment().put("PATH", d + ":" + System.getenv("PATH"));
-            System.exit(pb.start().waitFor());
+            code = pb.start().waitFor();
         } finally {
+            // Prima c'era System.exit dentro il try: il finally non girava e la cartella restava in /tmp.
             Files.deleteIfExists(d.resolve("bectl"));
             Files.deleteIfExists(d);
         }
+        System.exit(code);
     }
 
     static void child() {
