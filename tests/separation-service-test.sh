@@ -109,6 +109,13 @@ check "mail_panel.db: $(mode $PANEL/database/mail_panel.db)" "$(is "$(mode $PANE
 check "the audit log: $(mode /var/log/mail-panel-auth.log)" "$(is "$(mode /var/log/mail-panel-auth.log)" "-rw-r----- mailpanel:wheel")"
 check "newsyslog recreates it as mailpanel" "$(has "$(cat /usr/local/etc/newsyslog.conf.d/mail-panel-auth.conf)" "mailpanel:wheel")"
 check "the web part's log: $(mode /var/db/mailpanel/panel-web.log)" "$(has "$(mode /var/db/mailpanel/panel-web.log)" "-rw------- root:")"
+A=$PANEL/admin
+check "the pages: $(mode $A)" "$(is "$(mode $A)" "drwxr-x--- root:mailpanel")"
+check "their scripts: $(mode $A/assets/open)" "$(is "$(mode $A/assets/open)" "drwxr-x--- root:mailpanel")"
+UNREADABLE=$(find $A -type f ! -perm -040 | head -3)
+check "every page file is readable by the group ($UNREADABLE)" "$(is "$UNREADABLE" "")"
+NOT_GROUP=$(find $A ! -group mailpanel | head -3)
+check "every page file is in the group mailpanel ($NOT_GROUP)" "$(is "$NOT_GROUP" "")"
 as_web /bin/test -r $E/panel-secrets.properties; check "mailpanel reads its secrets" $?
 as_web /bin/test -r $E/master.key; check "mailpanel reads the vault key" $?
 as_web /bin/test -r $PANEL/database/mail_panel.db; check "mailpanel reads SQLite" $?
@@ -132,6 +139,10 @@ c=$(get "/api/domains"); check "GET /api/domains: $c" "$(is "$c" 200)"
 c=$(get "/api/admins"); check "GET /api/admins: $c" "$(is "$c" 200)"
 c=$(get "/api/account"); check "GET /api/account (web part): $c" "$(is "$c" 200)"
 c=$(get "/home"); check "GET /home (web part): $c" "$(is "$c" 200)"
+ASSET=$(curl -sk -A "$UA" "$BASE/index" | grep -o '/assets/open/[0-9a-f]*\.js' | head -1)
+c=$(get "$ASSET"); check "a script of the sign-in page ($ASSET): $c" "$(is "$c" 200)"
+PASSET=$(curl -sk -A "$UA" -b "$JAR_COOKIES" "$BASE/home" | grep -o '/assets/[0-9a-f]*\.js' | head -1)
+c=$(get "$PASSET"); check "a script of a signed-in page ($PASSET): $c" "$(is "$c" 200)"
 c=$(post "/api/updates" '{"action":"service_users"}' "$CSRF"); B=$(cat /var/tmp/sep-body)
 check "POST service_users with the CSRF token: $c" "$(is "$c" 200)"
 PANEL_ROW=$(printf '%s' "$B" | tr '{' '\n' | grep '"mail-panel"' | head -1)

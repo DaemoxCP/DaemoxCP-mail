@@ -243,12 +243,17 @@ public final class PanelSeparation {
         String d = openToWeb(Path.of("database").toAbsolutePath(), SQLITE_FOR_WEB);
         if (d != null) return d;
 
+        String pages = openPagesToWeb(Path.of(jarPath()).getParent().resolve("admin"));
+        if (pages != null) return pages;
+
         if (Files.isSymbolicLink(auditLog)) return auditLog + " is a symbolic link";
         if (!Files.exists(auditLog)) Files.createFile(auditLog);
         set(auditLog, USER, "wheel", "rw-r-----");
 
         if (!changed.isEmpty())
-            LOGGER.info("[PanelSeparation] DONE: readable by the web part (" + USER + "), never writable: " + String.join(", ", changed));
+            LOGGER.info("[PanelSeparation] DONE: " + changed.size() + " paths readable by the web part (" + USER
+                    + "), never writable, or back to root only: " + String.join(", ", changed.subList(0, Math.min(8, changed.size())))
+                    + (changed.size() > 8 ? ", ..." : ""));
         return null;
     }
 
@@ -280,6 +285,23 @@ public final class PanelSeparation {
                             .setGroup(f.getFileSystem().getUserPrincipalLookupService().lookupPrincipalByGroupName("wheel"));
                     changed.add(f + " now only root's");
                 }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Le pagine del pannello e i loro script e stili (MailPanelContent, PageAssets): la web li serve, quindi
+     * cartelle 0750 e file 0640 root:mailpanel, in sola lettura. Solo cartelle e file veri, mai collegamenti.
+     */
+    static String openPagesToWeb(Path admin) throws IOException {
+        if (!Files.isDirectory(admin, LinkOption.NOFOLLOW_LINKS)) return admin + " is missing";
+        for (Path dir : new Path[]{admin, admin.resolve("assets"), admin.resolve("assets").resolve("open")}) {
+            if (!Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) continue;
+            set(dir, "root", GROUP, "rwxr-x---");
+            try (DirectoryStream<Path> all = Files.newDirectoryStream(dir)) {
+                for (Path f : all)
+                    if (Files.isRegularFile(f, LinkOption.NOFOLLOW_LINKS)) set(f, "root", GROUP, "rw-r-----");
             }
         }
         return null;
