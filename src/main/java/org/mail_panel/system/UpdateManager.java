@@ -8918,6 +8918,66 @@ public final class UpdateManager {
     }
 
     /**
+     * Cerca gli aggiornamenti di tutto, per la scheda «Aggiorna il server» (reperto 186): il catalogo
+     * dei pacchetti (pkg update), l'elenco delle vulnerabilita' (pkg audit -F) e le patch del sistema
+     * di base (freebsd-update fetch, se la release le riceve). Scarica e basta: non installa niente.
+     * Prima ognuna stava in una scheda diversa, e il quadro dei pacchetti confronta col catalogo gia'
+     * scaricato, senza rete: senza un pkg update i conteggi erano quelli dell'ultima volta.
+     *
+     * Col turno dei pacchetti: un pkg update mentre un altro lavoro installa cambia il catalogo sotto
+     * il suo piano.
+     */
+    public static JSONObject startUpdatesSearch() {
+        String id = "srch-" + System.currentTimeMillis();
+        String refusal = PackageQueue.take(id, I18n.tr("server.search.turn"));
+        if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
+        Job j = new Job(id, "search");
+        JOBS.put(id, j);
+        PackageQueue.start(id, "updates-search", () -> runUpdatesSearch(j));
+        return new JSONObject().put("success", true).put("jobId", id).put("async", true);
+    }
+
+    private static void runUpdatesSearch(Job j) {
+        j.status = "running";
+        final int TOT = 3;
+        try {
+            j.advance(1, TOT);
+            j.write(I18n.tr("server.search.step1", Map.of("total", String.valueOf(TOT))));
+            int code = runLogged(j, "pkg update 2>&1", 600);
+            if (code != 0) throw new IllegalStateException(I18n.tr("server.search.pkgFailed", Map.of("code", String.valueOf(code))));
+
+            j.advance(2, TOT);
+            j.write("");
+            j.write(I18n.tr("server.search.step2", Map.of("total", String.valueOf(TOT))));
+            // pkg audit esce con 1 anche quando trova pacchetti vulnerabili: conta l'elenco scaricato.
+            runLogged(j, "pkg audit -F -q 2>&1 | tail -5", 600);
+
+            j.advance(3, TOT);
+            j.write("");
+            j.write(I18n.tr("server.search.step3", Map.of("total", String.valueOf(TOT))));
+            JSONObject os = operatingSystem();
+            if (!os.optBoolean("updatableWithFreebsdUpdate", false)) {
+                j.write("    " + os.optString("updatesNote", I18n.tr("server.um.findSystemUpdates.1")));
+            } else {
+                StringBuilder out = new StringBuilder();
+                code = runLogged(j, "freebsd-update --not-running-from-cron fetch 2>&1", 1800, out);
+                if (code != 0 && !OsPatch.nothingToFetch(out.toString()))
+                    throw new IllegalStateException(I18n.tr("server.um.startSystemUpdateSearch.8", Map.of("code", String.valueOf(code))));
+            }
+            j.write("");
+            j.outcome = I18n.tr("server.search.done");
+            j.write(j.outcome);
+            j.status = "completed";
+        } catch (Exception e) {
+            j.status = "error";
+            j.errorMessage = e.getMessage();
+            j.write(I18n.tr("server.um.startMtaStsActivation.1", Map.of("message", String.valueOf(e.getMessage()))));
+        } finally {
+            j.finishedAt = System.currentTimeMillis();
+        }
+    }
+
+    /**
      * Se il server va riavviato, per ogni pagina del pannello (la striscia in alto): letture leggere,
      * senza freebsd-update ne' pkg. Anche un riavvio gia' programmato, per poterlo annullare.
      */

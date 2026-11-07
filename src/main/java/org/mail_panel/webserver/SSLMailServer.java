@@ -7332,6 +7332,15 @@ public class SSLMailServer {
                     response = UpdateManager.startSystemPreparation(req.optString("target", "15.1"));
                     logAudit("OS_UPGRADE_PREPARE", ip, req.optString("target", ""));
                 }
+                case "updates_search" -> {
+                    // Scarica cataloghi, vulnerabilita' e patch: non installa niente (reperto 186).
+                    if (!"SEARCH".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
+                        break;
+                    }
+                    response = UpdateManager.startUpdatesSearch();
+                    logAudit("UPDATES_SEARCH", ip, response.optString("jobId", response.optString("error", "")));
+                }
                 case "os_patch_install" -> {
                     // Scarica e installa le patch del sistema di base, con un ambiente di avvio prima (reperto 185).
                     if (!"INSTALL PATCHES".equals(req.optString("confirm", ""))) {

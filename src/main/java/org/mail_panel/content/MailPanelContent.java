@@ -11968,6 +11968,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <h2><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i>{{t:up.title}}</h2>
             <p class="text-muted">{{t:up.intro.html}}</p>
             <div id="upd-interrupted" aria-live="polite"></div>
+""" + resource("pages/update-center-card.html") + """
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -12330,7 +12331,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // (limite del formato .class). Concatenare due letterali NON basta: javac li fonde
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
-        return getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js");
+        return getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js")
+                + resource("pages/update-center.js");
     }
 
     /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */
