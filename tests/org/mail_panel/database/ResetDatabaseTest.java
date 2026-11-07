@@ -1,5 +1,7 @@
 package org.mail_panel.database;
 
+import org.mail_panel.TestSql;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -56,7 +58,7 @@ public class ResetDatabaseTest {
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
         if (!db.connect()) { real("connection to MySQL", false); return; }
-        Connection c = db.getConnection();
+        Connection c = TestSql.mysql();
         try (Statement st = c.createStatement(); ResultSet r = st.executeQuery("SELECT VERSION()")) {
             r.next();
             System.out.println("\n  MySQL " + r.getString(1));

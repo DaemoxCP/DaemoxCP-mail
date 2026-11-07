@@ -11,19 +11,19 @@ public final class SqlCatalog {
     private SqlCatalog() {}
 
     /** MailDatabase.createDatabaseAndUser */
-    public static final String MAIL_CREATE_DATABASE_AND_USER = "CREATE DATABASE IF NOT EXISTS mailpanel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+    public static final String MAIL_CREATE_PANEL_DATABASE = "CREATE DATABASE IF NOT EXISTS mailpanel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
 
     /** MailDatabase.createDatabaseAndUser */
-    public static final String MAIL_CREATE_DATABASE_AND_USER_2 = "GRANT ALL PRIVILEGES ON mailpanel.* TO 'mailpanel'@'127.0.0.1'";
+    public static final String MAIL_GRANT_PANEL_USER = "GRANT ALL PRIVILEGES ON mailpanel.* TO 'mailpanel'@'127.0.0.1'";
 
     /** MailDatabase.createDatabaseAndUser */
-    public static final String MAIL_CREATE_DATABASE_AND_USER_3 = "CREATE DATABASE IF NOT EXISTS mailserver CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+    public static final String MAIL_CREATE_MAILSERVER_DATABASE = "CREATE DATABASE IF NOT EXISTS mailserver CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
 
     /** MailDatabase.createDatabaseAndUser */
-    public static final String MAIL_CREATE_DATABASE_AND_USER_4 = "GRANT ALL PRIVILEGES ON mailserver.* TO 'mailserver'@'127.0.0.1'";
+    public static final String MAIL_GRANT_MAILSERVER_USER = "GRANT ALL PRIVILEGES ON mailserver.* TO 'mailserver'@'127.0.0.1'";
 
     /** MailDatabase.createDatabaseAndUser */
-    public static final String MAIL_CREATE_DATABASE_AND_USER_5 = "FLUSH PRIVILEGES";
+    public static final String MAIL_FLUSH_PRIVILEGES = "FLUSH PRIVILEGES";
 
     /** MailDatabase.panelTables */
     public static final String MAIL_PANEL_TABLES = "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name";
@@ -845,9 +845,6 @@ public final class SqlCatalog {
     /** dataBaseManager.get_data_config */
     public static final String CONFIG_GET_DATA_CONFIG = "SELECT * FROM config WHERE id = 1";
 
-    /** dataBaseManager.updateMySQLPassword */
-    public static final String CONFIG_UPDATE_MY_SQLPASSWORD = "UPDATE config SET mysql_password = ? WHERE id = 1";
-
     /** dataBaseManager.resetAllServices */
     public static final String CONFIG_RESET_ALL_SERVICES = "UPDATE config SET postfix_installed = 0, dovecot_installed = 0, rspamd_installed = 0, clamav_installed = 0, roundcube_installed = 0 WHERE id = 1";
 
@@ -876,6 +873,374 @@ public final class SqlCatalog {
     public static final String CONFIG_GET_ROUNDCUBE_SSL_CHAIN = "SELECT roundcube_ssl_chain FROM config WHERE id = 1";
 
     /** PublicSurfaceRename.moveJailState */
-    public static final String RENAME_MOVE_JAIL_STATE = "PRAGMA busy_timeout = 10000";
+    public static final String RENAME_BUSY_TIMEOUT = "PRAGMA busy_timeout = 10000";
+
+    // ===== Scritte a mano dal SQL composto di prima =====
+
+    /** MailDatabase.createDatabaseAndUser: la password e' un parametro, che il driver mette fra apici con l'escape giusto */
+    public static final String MAIL_CREATE_PANEL_USER = "CREATE USER IF NOT EXISTS 'mailpanel'@'127.0.0.1' IDENTIFIED BY ?";
+
+    /** MailDatabase.createDatabaseAndUser */
+    public static final String MAIL_CREATE_MAILSERVER_USER = "CREATE USER IF NOT EXISTS 'mailserver'@'127.0.0.1' IDENTIFIED BY ?";
+
+    /** MailDatabase.dropAllTables: le tabelle di MailDatabase.PANEL_TABLES, nello stesso ordine (lo controlla SqlCatalogTest) */
+    public static final String MAIL_DROP_PANEL_TABLES = "DROP TABLE IF EXISTS admin_passkeys, rspamd_training, panel_sessions, login_code_email, login_code_console, stepup_code, email_change_code, roundcube_tokens, auto_responders, sieve_filters, forwarding_rules, email_statistics, aliases, mailboxes, dkim_rotation_history, domains, cloudflare_accounts, audit_log, rate_limits, panel_settings, installed_components, panel_admin, virtual_aliases, virtual_users, virtual_domains";
+
+    /** MailDatabase.createAuthTables */
+    public static final String MAIL_CREATE_PANEL_SESSIONS = "CREATE TABLE IF NOT EXISTS panel_sessions (\n"
+            + "    id BIGINT AUTO_INCREMENT PRIMARY KEY,\n"
+            + "    token_hash CHAR(64) CHARACTER SET ascii NOT NULL,\n"
+            + "    admin_id INT NOT NULL,\n"
+            + "    ua_hash CHAR(64) CHARACTER SET ascii NOT NULL,\n"
+            + "    ua_enc VARCHAR(1024) NULL,\n"
+            + "    ip_enc VARCHAR(256) NULL,\n"
+            + "    created_at DATETIME NOT NULL,\n"
+            + "    last_seen_at DATETIME NOT NULL,\n"
+            + "    expires_at DATETIME NOT NULL,\n"
+            + "    reauth_at DATETIME NULL,\n"
+            + "    UNIQUE KEY uq_session_token (token_hash),\n"
+            + "    KEY idx_session_admin (admin_id),\n"
+            + "    KEY idx_session_expires (expires_at),\n"
+            + "    CONSTRAINT fk_session_admin FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE\n"
+            + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4\n";
+
+    /** MailDatabase.createAuthTables */
+    public static final String MAIL_CREATE_LOGIN_CODE_EMAIL = "CREATE TABLE IF NOT EXISTS login_code_email (id BIGINT AUTO_INCREMENT PRIMARY KEY, admin_id INT NOT NULL, code_hash CHAR(64) CHARACTER SET ascii NOT NULL,  attempts INT NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, expires_at DATETIME NOT NULL, used_at DATETIME NULL, KEY idx_login_code_email_admin (admin_id, expires_at), CONSTRAINT fk_login_code_email_admin FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    /** MailDatabase.createAuthTables */
+    public static final String MAIL_CREATE_LOGIN_CODE_CONSOLE = "CREATE TABLE IF NOT EXISTS login_code_console (id BIGINT AUTO_INCREMENT PRIMARY KEY, admin_id INT NOT NULL, code_hash CHAR(64) CHARACTER SET ascii NOT NULL,  attempts INT NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, expires_at DATETIME NOT NULL, used_at DATETIME NULL, KEY idx_login_code_console_admin (admin_id, expires_at), CONSTRAINT fk_login_code_console_admin FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    /** MailDatabase.createAuthTables */
+    public static final String MAIL_CREATE_STEPUP_CODE = "CREATE TABLE IF NOT EXISTS stepup_code (id BIGINT AUTO_INCREMENT PRIMARY KEY, admin_id INT NOT NULL, code_hash CHAR(64) CHARACTER SET ascii NOT NULL,  attempts INT NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, expires_at DATETIME NOT NULL, used_at DATETIME NULL, KEY idx_stepup_code_admin (admin_id, expires_at), CONSTRAINT fk_stepup_code_admin FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    /** MailDatabase.createAuthTables */
+    public static final String MAIL_CREATE_EMAIL_CHANGE_CODE = "CREATE TABLE IF NOT EXISTS email_change_code (id BIGINT AUTO_INCREMENT PRIMARY KEY, admin_id INT NOT NULL, code_hash CHAR(64) CHARACTER SET ascii NOT NULL, target_enc VARCHAR(512) NOT NULL, target_index CHAR(64) CHARACTER SET ascii NOT NULL, attempts INT NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, expires_at DATETIME NOT NULL, used_at DATETIME NULL, KEY idx_email_change_code_admin (admin_id, expires_at), CONSTRAINT fk_email_change_code_admin FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    /** MailDatabase.ensurePasswordlessSchema */
+    public static final String MAIL_DROP_ADMIN_PASSWORD_HASH = "ALTER TABLE panel_admin DROP COLUMN password_hash";
+
+    /** MailDatabase.ensurePasswordlessSchema */
+    public static final String MAIL_DROP_ADMIN_TOTP_SECRET = "ALTER TABLE panel_admin DROP COLUMN totp_secret";
+
+    /** MailDatabase.ensurePasswordlessSchema */
+    public static final String MAIL_DROP_ADMIN_TOTP_ENABLED = "ALTER TABLE panel_admin DROP COLUMN totp_enabled";
+
+    /** MailDatabase.ensurePasswordlessSchema */
+    public static final String MAIL_DROP_ADMIN_BACKUP_CODES = "ALTER TABLE panel_admin DROP COLUMN backup_codes";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_PENDING_SELECTOR = "ALTER TABLE domains ADD COLUMN dkim_pending_selector VARCHAR(50) NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_PENDING_PRIVATE_KEY = "ALTER TABLE domains ADD COLUMN dkim_pending_private_key TEXT NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_PENDING_PUBLIC_KEY = "ALTER TABLE domains ADD COLUMN dkim_pending_public_key TEXT NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_ROTATION_STATE = "ALTER TABLE domains ADD COLUMN dkim_rotation_state VARCHAR(32) NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_ROTATION_STARTED_AT = "ALTER TABLE domains ADD COLUMN dkim_rotation_started_at TIMESTAMP NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_ROTATION_ACTIVATED_AT = "ALTER TABLE domains ADD COLUMN dkim_rotation_activated_at TIMESTAMP NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_PREVIOUS_SELECTOR = "ALTER TABLE domains ADD COLUMN dkim_previous_selector VARCHAR(50) NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_PREVIOUS_PRIVATE_KEY = "ALTER TABLE domains ADD COLUMN dkim_previous_private_key TEXT NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_PREVIOUS_PUBLIC_KEY = "ALTER TABLE domains ADD COLUMN dkim_previous_public_key TEXT NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_DNS_ZONE_ID = "ALTER TABLE domains ADD COLUMN dkim_dns_zone_id VARCHAR(64) NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_PENDING_DNS_RECORD_ID = "ALTER TABLE domains ADD COLUMN dkim_pending_dns_record_id VARCHAR(64) NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_PREVIOUS_DNS_RECORD_ID = "ALTER TABLE domains ADD COLUMN dkim_previous_dns_record_id VARCHAR(64) NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_ROTATION_INTERVAL_DAYS = "ALTER TABLE domains ADD COLUMN dkim_rotation_interval_days INT NOT NULL DEFAULT 0";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_LAST_ROTATION_AT = "ALTER TABLE domains ADD COLUMN dkim_last_rotation_at TIMESTAMP NULL";
+
+    /** MailDatabase.ensureDkimRotationColumns */
+    public static final String MAIL_ADD_DOMAINS_DKIM_ROTATION_MODE = "ALTER TABLE domains ADD COLUMN dkim_rotation_mode VARCHAR(16) NULL";
+
+    /** MailDatabase.ensureMailboxPasswordVaultColumns */
+    public static final String MAIL_ADD_MAILBOXES_PASSWORD_ENCRYPTED = "ALTER TABLE mailboxes ADD COLUMN password_encrypted TEXT NULL";
+
+    /** MailDatabase.ensureMailboxPasswordVaultColumns */
+    public static final String MAIL_ADD_MAILBOXES_PASSWORD_ENCRYPTED_AT = "ALTER TABLE mailboxes ADD COLUMN password_encrypted_at TIMESTAMP NULL";
+
+    /** MailDatabase.getDomainCount */
+    public static final String MAIL_COUNT_ACTIVE_DOMAINS = "SELECT COUNT(*) FROM domains WHERE active = TRUE";
+
+    /** MailDatabase.getMailboxCount */
+    public static final String MAIL_COUNT_ACTIVE_MAILBOXES = "SELECT COUNT(*) FROM mailboxes WHERE active = TRUE";
+
+    /** MailDatabase.getAliasCount */
+    public static final String MAIL_COUNT_ACTIVE_ALIASES = "SELECT COUNT(*) FROM aliases WHERE active = TRUE";
+
+    /** MailDatabase.incrementEmailStat */
+    public static final String MAIL_ADD_STAT_SENT = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, sent_count, bytes_sent)\n"
+            + "VALUES (CURDATE(), ?, ?, ?, ?)\n"
+            + "ON DUPLICATE KEY UPDATE sent_count = sent_count + ?, bytes_sent = bytes_sent + ?\n";
+
+    /** MailDatabase.incrementEmailStat */
+    public static final String MAIL_ADD_STAT_RECEIVED = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, received_count, bytes_received)\n"
+            + "VALUES (CURDATE(), ?, ?, ?, ?)\n"
+            + "ON DUPLICATE KEY UPDATE received_count = received_count + ?, bytes_received = bytes_received + ?\n";
+
+    /** MailDatabase.incrementEmailStat */
+    public static final String MAIL_ADD_STAT_SPAM = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, spam_count, bytes_received)\n"
+            + "VALUES (CURDATE(), ?, ?, ?, ?)\n"
+            + "ON DUPLICATE KEY UPDATE spam_count = spam_count + ?, bytes_received = bytes_received + ?\n";
+
+    /** MailDatabase.incrementEmailStat */
+    public static final String MAIL_ADD_STAT_VIRUS = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, virus_count, bytes_received)\n"
+            + "VALUES (CURDATE(), ?, ?, ?, ?)\n"
+            + "ON DUPLICATE KEY UPDATE virus_count = virus_count + ?, bytes_received = bytes_received + ?\n";
+
+    /** MailDatabase.incrementEmailStat */
+    public static final String MAIL_ADD_STAT_BOUNCED = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, bounced_count, bytes_received)\n"
+            + "VALUES (CURDATE(), ?, ?, ?, ?)\n"
+            + "ON DUPLICATE KEY UPDATE bounced_count = bounced_count + ?, bytes_received = bytes_received + ?\n";
+
+    /** MailDatabase.getAuditLog: un filtro vuoto (NULL) prende tutto, invece di comporre il WHERE */
+    public static final String MAIL_GET_AUDIT_LOG = "SELECT * FROM audit_log WHERE (? IS NULL OR action = ?) AND (? IS NULL OR username = ?) AND (? IS NULL OR ip_address = ?) ORDER BY created_at DESC LIMIT ?";
+
+    /** AuthStore: le colonne di un amministratore. Un pezzo, non un'istruzione: privata, la guardia non la accetta da sola */
+    private static final String AUTH_ADMIN_SELECT = "SELECT id, username, role, active, email_enc, user_handle, created_at, last_login FROM panel_admin ";
+
+    /** AuthStore.admins */
+    public static final String AUTH_LIST_ADMINS = AUTH_ADMIN_SELECT + "ORDER BY id";
+
+    /** AuthStore.adminById */
+    public static final String AUTH_ADMIN_BY_ID = AUTH_ADMIN_SELECT + "WHERE id = ? AND active = TRUE";
+
+    /** AuthStore.adminByUsername */
+    public static final String AUTH_ADMIN_BY_USERNAME = AUTH_ADMIN_SELECT + "WHERE username = ? AND active = TRUE";
+
+    /** AuthStore.adminByEmail */
+    public static final String AUTH_ADMIN_BY_EMAIL_INDEX = AUTH_ADMIN_SELECT + "WHERE email_index = ? AND active = TRUE";
+
+    /** AuthStore.adminByUserHandle */
+    public static final String AUTH_ADMIN_BY_USER_HANDLE = AUTH_ADMIN_SELECT + "WHERE user_handle = ? AND active = TRUE";
+
+    /** AuthStore: le colonne di una passkey. Un pezzo, privato come AUTH_ADMIN_SELECT */
+    private static final String AUTH_PASSKEY_SELECT = "SELECT id, admin_id, credential_id, public_key_cose, sign_count, name, created_at, last_used, user_handle FROM admin_passkeys ";
+
+    /** AuthStore.passkeysOf */
+    public static final String AUTH_PASSKEYS_OF_ADMIN = AUTH_PASSKEY_SELECT + "WHERE admin_id = ? AND user_handle IS NOT NULL ORDER BY id";
+
+    /** AuthStore.passkeysByCredentialId */
+    public static final String AUTH_PASSKEYS_BY_CREDENTIAL_ID = AUTH_PASSKEY_SELECT + "WHERE credential_id = ? AND user_handle IS NOT NULL";
+
+    /** AuthStore.CodeFlow.EMAIL_LOGIN */
+    public static final String AUTH_CODE_EMAIL_LOGIN_INVALIDATE = "UPDATE login_code_email SET used_at = ? WHERE admin_id = ? AND used_at IS NULL";
+
+    /** AuthStore.CodeFlow.EMAIL_LOGIN */
+    public static final String AUTH_CODE_EMAIL_LOGIN_INSERT = "INSERT INTO login_code_email (admin_id, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?)";
+
+    /** AuthStore.CodeFlow.EMAIL_LOGIN */
+    public static final String AUTH_CODE_EMAIL_LOGIN_ACTIVE_OF = "SELECT id, admin_id, code_hash, attempts, NULL, NULL FROM login_code_email WHERE admin_id = ? AND used_at IS NULL AND expires_at > ? ORDER BY id DESC";
+
+    /** AuthStore.CodeFlow.EMAIL_LOGIN */
+    public static final String AUTH_CODE_EMAIL_LOGIN_ACTIVE_ALL = "SELECT id, admin_id, code_hash, attempts, NULL, NULL FROM login_code_email WHERE used_at IS NULL AND expires_at > ? ORDER BY id DESC";
+
+    /** AuthStore.CodeFlow.EMAIL_LOGIN */
+    public static final String AUTH_CODE_EMAIL_LOGIN_ATTEMPT = "UPDATE login_code_email SET attempts = attempts + 1 WHERE id = ?";
+
+    /** AuthStore.CodeFlow.EMAIL_LOGIN */
+    public static final String AUTH_CODE_EMAIL_LOGIN_CONSUME = "UPDATE login_code_email SET used_at = ? WHERE id = ? AND used_at IS NULL AND attempts <= ?";
+
+    /** AuthStore.CodeFlow.EMAIL_LOGIN */
+    public static final String AUTH_CODE_EMAIL_LOGIN_PURGE = "DELETE FROM login_code_email WHERE expires_at < ?";
+
+    /** AuthStore.CodeFlow.CONSOLE_LOGIN */
+    public static final String AUTH_CODE_CONSOLE_LOGIN_INVALIDATE = "UPDATE login_code_console SET used_at = ? WHERE admin_id = ? AND used_at IS NULL";
+
+    /** AuthStore.CodeFlow.CONSOLE_LOGIN */
+    public static final String AUTH_CODE_CONSOLE_LOGIN_INSERT = "INSERT INTO login_code_console (admin_id, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?)";
+
+    /** AuthStore.CodeFlow.CONSOLE_LOGIN */
+    public static final String AUTH_CODE_CONSOLE_LOGIN_ACTIVE_OF = "SELECT id, admin_id, code_hash, attempts, NULL, NULL FROM login_code_console WHERE admin_id = ? AND used_at IS NULL AND expires_at > ? ORDER BY id DESC";
+
+    /** AuthStore.CodeFlow.CONSOLE_LOGIN */
+    public static final String AUTH_CODE_CONSOLE_LOGIN_ACTIVE_ALL = "SELECT id, admin_id, code_hash, attempts, NULL, NULL FROM login_code_console WHERE used_at IS NULL AND expires_at > ? ORDER BY id DESC";
+
+    /** AuthStore.CodeFlow.CONSOLE_LOGIN */
+    public static final String AUTH_CODE_CONSOLE_LOGIN_ATTEMPT = "UPDATE login_code_console SET attempts = attempts + 1 WHERE id = ?";
+
+    /** AuthStore.CodeFlow.CONSOLE_LOGIN */
+    public static final String AUTH_CODE_CONSOLE_LOGIN_CONSUME = "UPDATE login_code_console SET used_at = ? WHERE id = ? AND used_at IS NULL AND attempts <= ?";
+
+    /** AuthStore.CodeFlow.CONSOLE_LOGIN */
+    public static final String AUTH_CODE_CONSOLE_LOGIN_PURGE = "DELETE FROM login_code_console WHERE expires_at < ?";
+
+    /** AuthStore.CodeFlow.STEP_UP */
+    public static final String AUTH_CODE_STEP_UP_INVALIDATE = "UPDATE stepup_code SET used_at = ? WHERE admin_id = ? AND used_at IS NULL";
+
+    /** AuthStore.CodeFlow.STEP_UP */
+    public static final String AUTH_CODE_STEP_UP_INSERT = "INSERT INTO stepup_code (admin_id, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?)";
+
+    /** AuthStore.CodeFlow.STEP_UP */
+    public static final String AUTH_CODE_STEP_UP_ACTIVE_OF = "SELECT id, admin_id, code_hash, attempts, NULL, NULL FROM stepup_code WHERE admin_id = ? AND used_at IS NULL AND expires_at > ? ORDER BY id DESC";
+
+    /** AuthStore.CodeFlow.STEP_UP */
+    public static final String AUTH_CODE_STEP_UP_ACTIVE_ALL = "SELECT id, admin_id, code_hash, attempts, NULL, NULL FROM stepup_code WHERE used_at IS NULL AND expires_at > ? ORDER BY id DESC";
+
+    /** AuthStore.CodeFlow.STEP_UP */
+    public static final String AUTH_CODE_STEP_UP_ATTEMPT = "UPDATE stepup_code SET attempts = attempts + 1 WHERE id = ?";
+
+    /** AuthStore.CodeFlow.STEP_UP */
+    public static final String AUTH_CODE_STEP_UP_CONSUME = "UPDATE stepup_code SET used_at = ? WHERE id = ? AND used_at IS NULL AND attempts <= ?";
+
+    /** AuthStore.CodeFlow.STEP_UP */
+    public static final String AUTH_CODE_STEP_UP_PURGE = "DELETE FROM stepup_code WHERE expires_at < ?";
+
+    /** AuthStore.CodeFlow.EMAIL_CHANGE */
+    public static final String AUTH_CODE_EMAIL_CHANGE_INVALIDATE = "UPDATE email_change_code SET used_at = ? WHERE admin_id = ? AND used_at IS NULL";
+
+    /** AuthStore.CodeFlow.EMAIL_CHANGE */
+    public static final String AUTH_CODE_EMAIL_CHANGE_INSERT = "INSERT INTO email_change_code (admin_id, code_hash, created_at, expires_at, target_enc, target_index) VALUES (?, ?, ?, ?, ?, ?)";
+
+    /** AuthStore.CodeFlow.EMAIL_CHANGE */
+    public static final String AUTH_CODE_EMAIL_CHANGE_ACTIVE_OF = "SELECT id, admin_id, code_hash, attempts, target_enc, target_index FROM email_change_code WHERE admin_id = ? AND used_at IS NULL AND expires_at > ? ORDER BY id DESC";
+
+    /** AuthStore.CodeFlow.EMAIL_CHANGE */
+    public static final String AUTH_CODE_EMAIL_CHANGE_ACTIVE_ALL = "SELECT id, admin_id, code_hash, attempts, target_enc, target_index FROM email_change_code WHERE used_at IS NULL AND expires_at > ? ORDER BY id DESC";
+
+    /** AuthStore.CodeFlow.EMAIL_CHANGE */
+    public static final String AUTH_CODE_EMAIL_CHANGE_ATTEMPT = "UPDATE email_change_code SET attempts = attempts + 1 WHERE id = ?";
+
+    /** AuthStore.CodeFlow.EMAIL_CHANGE */
+    public static final String AUTH_CODE_EMAIL_CHANGE_CONSUME = "UPDATE email_change_code SET used_at = ? WHERE id = ? AND used_at IS NULL AND attempts <= ?";
+
+    /** AuthStore.CodeFlow.EMAIL_CHANGE */
+    public static final String AUTH_CODE_EMAIL_CHANGE_PURGE = "DELETE FROM email_change_code WHERE expires_at < ?";
+
+    /** dataBaseManager: la colonna del segreto, vuota dopo lo spostamento nel file */
+    public static final String CONFIG_GET_MYSQL_PASSWORD = "SELECT mysql_password FROM config WHERE id = 1";
+
+    /** dataBaseManager.migrateSecrets */
+    public static final String CONFIG_CLEAR_MYSQL_PASSWORD = "UPDATE config SET mysql_password = '' WHERE id = 1";
+
+    /** dataBaseManager: la colonna del segreto, vuota dopo lo spostamento nel file */
+    public static final String CONFIG_GET_PANEL_TLS_KEY = "SELECT mail_panel_ssl_cert_key FROM config WHERE id = 1";
+
+    /** dataBaseManager.migrateSecrets */
+    public static final String CONFIG_CLEAR_PANEL_TLS_KEY = "UPDATE config SET mail_panel_ssl_cert_key = '' WHERE id = 1";
+
+    /** dataBaseManager.setMysqlPassword e updateMySQLPassword */
+    public static final String CONFIG_SET_MYSQL_PASSWORD = "UPDATE config SET mysql_password = ? WHERE id = 1";
+
+    /** dataBaseManager.isServiceInstalled */
+    public static final String CONFIG_GET_POSTFIX_INSTALLED = "SELECT postfix_installed FROM config WHERE id = 1";
+
+    /** dataBaseManager.setServiceInstalled */
+    public static final String CONFIG_SET_POSTFIX_INSTALLED = "UPDATE config SET postfix_installed = ? WHERE id = 1";
+
+    /** dataBaseManager.isServiceInstalled */
+    public static final String CONFIG_GET_DOVECOT_INSTALLED = "SELECT dovecot_installed FROM config WHERE id = 1";
+
+    /** dataBaseManager.setServiceInstalled */
+    public static final String CONFIG_SET_DOVECOT_INSTALLED = "UPDATE config SET dovecot_installed = ? WHERE id = 1";
+
+    /** dataBaseManager.isServiceInstalled */
+    public static final String CONFIG_GET_RSPAMD_INSTALLED = "SELECT rspamd_installed FROM config WHERE id = 1";
+
+    /** dataBaseManager.setServiceInstalled */
+    public static final String CONFIG_SET_RSPAMD_INSTALLED = "UPDATE config SET rspamd_installed = ? WHERE id = 1";
+
+    /** dataBaseManager.isServiceInstalled */
+    public static final String CONFIG_GET_CLAMAV_INSTALLED = "SELECT clamav_installed FROM config WHERE id = 1";
+
+    /** dataBaseManager.setServiceInstalled */
+    public static final String CONFIG_SET_CLAMAV_INSTALLED = "UPDATE config SET clamav_installed = ? WHERE id = 1";
+
+    /** dataBaseManager.isServiceInstalled */
+    public static final String CONFIG_GET_ROUNDCUBE_INSTALLED = "SELECT roundcube_installed FROM config WHERE id = 1";
+
+    /** dataBaseManager.setServiceInstalled */
+    public static final String CONFIG_SET_ROUNDCUBE_INSTALLED = "UPDATE config SET roundcube_installed = ? WHERE id = 1";
+
+    /** database: lo stesso valore di database.BUSY_TIMEOUT_MS (lo controlla SqlCatalogTest) */
+    public static final String CONFIG_DB_BUSY_TIMEOUT = "PRAGMA busy_timeout = 15000";
+
+    /** database.columnExists: le colonne di config, invece di provare a leggerne una per nome */
+    public static final String CONFIG_DB_COLUMNS = "PRAGMA table_info(config)";
+
+    /** database.create_tables */
+    public static final String CONFIG_DB_CREATE_TABLE = "CREATE TABLE config (\n"
+            + "    id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
+            + "    mail_panel_port TEXT DEFAULT '2096',\n"
+            + "    mail_panel_host TEXT DEFAULT '127.0.0.1',\n"
+            + "    mail_panel_ssl_cert TEXT DEFAULT '',\n"
+            + "    mail_panel_ssl_cert_key TEXT DEFAULT '',\n"
+            + "    mail_panel_ssl_chain TEXT DEFAULT '',\n"
+            + "    mail_panel_sessions_prefix TEXT DEFAULT 'mailpanel-',\n"
+            + "    mysql_host TEXT DEFAULT '127.0.0.1',\n"
+            + "    mysql_port TEXT DEFAULT '3306',\n"
+            + "    mysql_user TEXT DEFAULT 'mailpanel',\n"
+            + "    mysql_password TEXT DEFAULT '',\n"
+            + "    mysql_database TEXT DEFAULT 'mailserver',\n"
+            + "    mail_hostname TEXT DEFAULT '',\n"
+            + "    postfix_installed INTEGER DEFAULT 0,\n"
+            + "    dovecot_installed INTEGER DEFAULT 0,\n"
+            + "    rspamd_installed INTEGER DEFAULT 0,\n"
+            + "    clamav_installed INTEGER DEFAULT 0,\n"
+            + "    roundcube_installed INTEGER DEFAULT 0,\n"
+            + "    roundcube_domain TEXT DEFAULT 'webmail.example.com',\n"
+            + "    roundcube_port TEXT DEFAULT '8443',\n"
+            + "    roundcube_ssl_cert TEXT DEFAULT '',\n"
+            + "    roundcube_ssl_key TEXT DEFAULT ''\n"
+            + ")\n";
+
+    /** database: le colonne aggiunte dopo la prima versione */
+    public static final String CONFIG_DB_ADD_MAIL_HOSTNAME = "ALTER TABLE config ADD COLUMN mail_hostname TEXT DEFAULT ''";
+
+    /** database: le colonne aggiunte dopo la prima versione */
+    public static final String CONFIG_DB_ADD_MAIL_PANEL_SSL_CHAIN = "ALTER TABLE config ADD COLUMN mail_panel_ssl_chain TEXT DEFAULT ''";
+
+    /** database: le colonne aggiunte dopo la prima versione */
+    public static final String CONFIG_DB_ADD_ROUNDCUBE_DOMAIN = "ALTER TABLE config ADD COLUMN roundcube_domain TEXT DEFAULT 'webmail.example.com'";
+
+    /** database: le colonne aggiunte dopo la prima versione */
+    public static final String CONFIG_DB_ADD_ROUNDCUBE_PORT = "ALTER TABLE config ADD COLUMN roundcube_port TEXT DEFAULT '8443'";
+
+    /** database: le colonne aggiunte dopo la prima versione */
+    public static final String CONFIG_DB_ADD_ROUNDCUBE_SSL_CERT = "ALTER TABLE config ADD COLUMN roundcube_ssl_cert TEXT DEFAULT ''";
+
+    /** database: le colonne aggiunte dopo la prima versione */
+    public static final String CONFIG_DB_ADD_ROUNDCUBE_SSL_KEY = "ALTER TABLE config ADD COLUMN roundcube_ssl_key TEXT DEFAULT ''";
+
+    /** database: le colonne aggiunte dopo la prima versione */
+    public static final String CONFIG_DB_ADD_ROUNDCUBE_SSL_CHAIN = "ALTER TABLE config ADD COLUMN roundcube_ssl_chain TEXT DEFAULT ''";
+
+    /** database: le colonne aggiunte dopo la prima versione */
+    public static final String CONFIG_DB_ADD_POSTFIX_INSTALLED = "ALTER TABLE config ADD COLUMN postfix_installed INTEGER DEFAULT 0";
+
+    /** database.ensurePostfixColumn */
+    public static final String CONFIG_DB_COPY_OPENSMTPD_INSTALLED = "UPDATE config SET postfix_installed = opensmtpd_installed";
+
+    /** PublicSurfaceRename.moveJailState, nel database di fail2ban (server/database.py) */
+    public static final String RENAME_ADD_JAIL = "INSERT OR IGNORE INTO jails(name, enabled) VALUES (?, 0)";
+
+    /** PublicSurfaceRename.moveJailState */
+    public static final String RENAME_MOVE_JAIL_BIPS = "UPDATE OR IGNORE bips SET jail = ? WHERE jail = ?";
+
+    /** PublicSurfaceRename.moveJailState */
+    public static final String RENAME_MOVE_JAIL_BANS = "UPDATE OR IGNORE bans SET jail = ? WHERE jail = ?";
+
+    /** PublicSurfaceRename.moveJailState */
+    public static final String RENAME_MOVE_JAIL_LOGS = "UPDATE OR IGNORE logs SET jail = ?, path = ? WHERE jail = ? AND path = ?";
 
 }

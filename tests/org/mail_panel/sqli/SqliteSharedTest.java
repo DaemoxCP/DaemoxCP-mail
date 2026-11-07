@@ -1,5 +1,7 @@
 package org.mail_panel.sqli;
 
+import org.mail_panel.TestSql;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -117,7 +119,7 @@ public class SqliteSharedTest {
                 System.exit(0);
             }
             case "service-holds-write" -> {
-                try (Statement s = db.get_connection().createStatement()) {
+                try (java.sql.Connection own = TestSql.sqlite(); Statement s = own.createStatement()) {
                     s.execute("BEGIN IMMEDIATE");
                     s.executeUpdate("UPDATE config SET mail_hostname = 'held.by.service' WHERE id = 1");
                     System.out.println("HOLDING");

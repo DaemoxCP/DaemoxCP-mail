@@ -1,5 +1,7 @@
 package org.mail_panel.webserver;
 
+import org.mail_panel.TestSql;
+
 import com.sun.net.httpserver.HttpsServer;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -99,7 +101,7 @@ public class RateLimitsApiTest {
         // Written before the tables existed, it was not saved and the panel wrote to the real
         // log.
         TestSessions.auditLogTo(db, audit);
-        Connection c = db.getConnection();
+        Connection c = TestSql.mysql();
         try (Statement st = c.createStatement()) {
             st.executeUpdate("DELETE FROM rate_limits");
         }

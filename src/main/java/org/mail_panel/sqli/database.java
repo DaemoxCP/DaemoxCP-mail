@@ -1,10 +1,12 @@
 package org.mail_panel.sqli;
 
+import org.mail_panel.database.CatalogGuard;
+import org.mail_panel.database.SqlCatalog;
+
 import java.sql.*;
 
 public class database {
     Connection connection;
-    Connection connection_mysql;
 
     /**
      * Quanto aspetta una scrittura se il database e' occupato da un altro processo, prima di
@@ -14,6 +16,7 @@ public class database {
      * scrittura. Il difetto del reperto 156 non era l'attesa ma il lock tenuto per sempre dalle
      * letture lasciate aperte (sotto). Quindici secondi sono il margine per una scrittura lunga
      * dell'altro processo: una tenuta di 6 secondi passa con 15, con 3 no (misurato).
+     * L'istruzione e' SqlCatalog.CONFIG_DB_BUSY_TIMEOUT, con lo stesso numero (lo controlla SqlCatalogTest).
      */
     static final int BUSY_TIMEOUT_MS = 15_000;
 
@@ -33,34 +36,18 @@ public class database {
             if (readOnly) {
                 org.sqlite.SQLiteConfig config = new org.sqlite.SQLiteConfig();
                 config.setReadOnly(true);
-                conn = DriverManager.getConnection(url, config.toProperties());
+                conn = CatalogGuard.open(url, config.toProperties());
             } else {
-                conn = DriverManager.getConnection(url);
+                conn = CatalogGuard.open(url);
             }
             if (conn != null) {
                 try (Statement s = conn.createStatement()) {
-                    s.execute("PRAGMA busy_timeout = " + BUSY_TIMEOUT_MS);
+                    s.execute(SqlCatalog.CONFIG_DB_BUSY_TIMEOUT);
                 }
             }
             this.connection = conn;
         } catch (SQLException e) {
             System.out.println(e.getMessage());
-        }
-    }
-
-    public void database_mysql(String host, String user_, String password_, String port, String database) {
-        Connection conn = null;
-        try {
-            // MySQL database parameters
-            String url = "jdbc:mysql://" + host + ":" + port + "/" + database + "?allowPublicKeyRetrieval=true&useSSL=false";
-            String user = user_;
-            String password = password_;
-
-            // create a connection to the MySQL database
-            conn = DriverManager.getConnection(url, user, password);
-            this.connection_mysql = conn;
-        } catch (SQLException e) {
-            // Silent fail - don't print to avoid terminal interference
         }
     }
 
@@ -86,17 +73,23 @@ public class database {
      * SQLITE_BUSY su nome del server, flag dei servizi e configurazione MySQL (reperto 156).
      */
 
-    /** Vero se la colonna esiste: la si legge, e lo statement si chiude prima di tornare. */
+    /**
+     * Vero se la colonna esiste: dall'elenco delle colonne di config (un'istruzione fissa, invece di
+     * leggere la colonna per nome), e lo statement si chiude prima di tornare.
+     */
     boolean columnExists(String column) {
-        try (PreparedStatement check = connection.prepareStatement("SELECT " + column + " FROM config LIMIT 1");
+        try (PreparedStatement check = connection.prepareStatement(SqlCatalog.CONFIG_DB_COLUMNS);
              ResultSet rs = check.executeQuery()) {
-            return true;
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) return true;
+            }
+            return false;
         } catch (SQLException e) {
             return false;
         }
     }
 
-    /** Un comando che non legge niente, chiuso subito. */
+    /** Un comando del catalogo che non legge niente, chiuso subito. */
     void execute(String sql) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.executeUpdate();
@@ -105,32 +98,7 @@ public class database {
 
     public boolean create_tables() {
         try {
-            execute("""
-                CREATE TABLE config (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    mail_panel_port TEXT DEFAULT '2096',
-                    mail_panel_host TEXT DEFAULT '127.0.0.1',
-                    mail_panel_ssl_cert TEXT DEFAULT '',
-                    mail_panel_ssl_cert_key TEXT DEFAULT '',
-                    mail_panel_ssl_chain TEXT DEFAULT '',
-                    mail_panel_sessions_prefix TEXT DEFAULT 'mailpanel-',
-                    mysql_host TEXT DEFAULT '127.0.0.1',
-                    mysql_port TEXT DEFAULT '3306',
-                    mysql_user TEXT DEFAULT 'mailpanel',
-                    mysql_password TEXT DEFAULT '',
-                    mysql_database TEXT DEFAULT 'mailserver',
-                    mail_hostname TEXT DEFAULT '',
-                    postfix_installed INTEGER DEFAULT 0,
-                    dovecot_installed INTEGER DEFAULT 0,
-                    rspamd_installed INTEGER DEFAULT 0,
-                    clamav_installed INTEGER DEFAULT 0,
-                    roundcube_installed INTEGER DEFAULT 0,
-                    roundcube_domain TEXT DEFAULT 'webmail.example.com',
-                    roundcube_port TEXT DEFAULT '8443',
-                    roundcube_ssl_cert TEXT DEFAULT '',
-                    roundcube_ssl_key TEXT DEFAULT ''
-                )
-                """);
+            execute(SqlCatalog.CONFIG_DB_CREATE_TABLE);
             return true;
         } catch (SQLException e) {
             System.out.println(e.getMessage());
@@ -141,7 +109,7 @@ public class database {
     public void ensureMailHostnameColumn() {
         if (columnExists("mail_hostname")) return;
         try {
-            execute("ALTER TABLE config ADD COLUMN mail_hostname TEXT DEFAULT ''");
+            execute(SqlCatalog.CONFIG_DB_ADD_MAIL_HOSTNAME);
         } catch (SQLException e2) {
             // Silent fail
         }
@@ -150,26 +118,26 @@ public class database {
     public void ensureSslChainColumn() {
         if (columnExists("mail_panel_ssl_chain")) return;
         try {
-            execute("ALTER TABLE config ADD COLUMN mail_panel_ssl_chain TEXT DEFAULT ''");
+            execute(SqlCatalog.CONFIG_DB_ADD_MAIL_PANEL_SSL_CHAIN);
         } catch (SQLException e2) {
             // Silent fail
         }
     }
 
     public void ensureRoundcubeColumns() {
-        String[] columns = {
-            "roundcube_domain TEXT DEFAULT 'webmail.example.com'",
-            "roundcube_port TEXT DEFAULT '8443'",
-            "roundcube_ssl_cert TEXT DEFAULT ''",
-            "roundcube_ssl_key TEXT DEFAULT ''",
-            "roundcube_ssl_chain TEXT DEFAULT ''"
+        // Nome della colonna e la sua istruzione fissa: un ALTER non prende parametri.
+        String[][] columns = {
+            {"roundcube_domain", SqlCatalog.CONFIG_DB_ADD_ROUNDCUBE_DOMAIN},
+            {"roundcube_port", SqlCatalog.CONFIG_DB_ADD_ROUNDCUBE_PORT},
+            {"roundcube_ssl_cert", SqlCatalog.CONFIG_DB_ADD_ROUNDCUBE_SSL_CERT},
+            {"roundcube_ssl_key", SqlCatalog.CONFIG_DB_ADD_ROUNDCUBE_SSL_KEY},
+            {"roundcube_ssl_chain", SqlCatalog.CONFIG_DB_ADD_ROUNDCUBE_SSL_CHAIN}
         };
 
-        for (String colDef : columns) {
-            String colName = colDef.split(" ")[0];
-            if (columnExists(colName)) continue;
+        for (String[] col : columns) {
+            if (columnExists(col[0])) continue;
             try {
-                execute("ALTER TABLE config ADD COLUMN " + colDef);
+                execute(col[1]);
             } catch (SQLException e2) {
                 // Silent fail
             }
@@ -183,11 +151,11 @@ public class database {
         try {
             if (columnExists("opensmtpd_installed")) {
                 // Old column exists - add new column and copy data
-                execute("ALTER TABLE config ADD COLUMN postfix_installed INTEGER DEFAULT 0");
-                execute("UPDATE config SET postfix_installed = opensmtpd_installed");
+                execute(SqlCatalog.CONFIG_DB_ADD_POSTFIX_INSTALLED);
+                execute(SqlCatalog.CONFIG_DB_COPY_OPENSMTPD_INSTALLED);
             } else {
                 // Neither column exists, add postfix_installed
-                execute("ALTER TABLE config ADD COLUMN postfix_installed INTEGER DEFAULT 0");
+                execute(SqlCatalog.CONFIG_DB_ADD_POSTFIX_INSTALLED);
             }
         } catch (SQLException e3) {
             // Silent fail
@@ -198,9 +166,6 @@ public class database {
         try {
             if (this.connection != null) {
                 this.connection.close();
-            }
-            if (this.connection_mysql != null) {
-                this.connection_mysql.close();
             }
         } catch (SQLException e) {
             // Silent fail

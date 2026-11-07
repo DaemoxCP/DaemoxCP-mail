@@ -67,18 +67,23 @@ public class dataBaseManager {
      * nuova versione (anche di un comando da console): se una colonna ha un valore, e' il piu'
      * recente (le versioni nuove non ci scrivono piu') e va nel file; poi la colonna si svuota.
      */
-    private static final String[][] SECRET_COLUMNS = {
-            {"mysql_password", org.mail_panel.security.PanelSecrets.MYSQL_PASSWORD},
-            {"mail_panel_ssl_cert_key", org.mail_panel.security.PanelSecrets.PANEL_TLS_KEY}};
+    /** Una colonna di un segreto: il nome, il segreto nel file, e le istruzioni fisse che la leggono e la svuotano. */
+    private record SecretColumn(String column, String secret, String read, String clear) {}
+
+    private static final SecretColumn[] SECRET_COLUMNS = {
+            new SecretColumn("mysql_password", org.mail_panel.security.PanelSecrets.MYSQL_PASSWORD,
+                    SqlCatalog.CONFIG_GET_MYSQL_PASSWORD, SqlCatalog.CONFIG_CLEAR_MYSQL_PASSWORD),
+            new SecretColumn("mail_panel_ssl_cert_key", org.mail_panel.security.PanelSecrets.PANEL_TLS_KEY,
+                    SqlCatalog.CONFIG_GET_PANEL_TLS_KEY, SqlCatalog.CONFIG_CLEAR_PANEL_TLS_KEY)};
 
     /** Sposta nel file dei segreti quello che e' ancora in SQLite. Ritorna quanti valori ha spostato. */
     public int migrateSecrets() {
         int moved = 0;
         Connection c = this.database_.get(1).connection;
         if (c == null) return 0;
-        for (String[] col : SECRET_COLUMNS) {
+        for (SecretColumn col : SECRET_COLUMNS) {
             String value;
-            try (PreparedStatement ps = c.prepareStatement("SELECT " + col[0] + " FROM config WHERE id = 1");
+            try (PreparedStatement ps = c.prepareStatement(col.read());
                  ResultSet rs = ps.executeQuery()) {
                 value = rs.next() ? rs.getString(1) : null;
             } catch (SQLException e) {
@@ -86,16 +91,16 @@ public class dataBaseManager {
             }
             if (value == null || value.isEmpty()) continue;
             try {
-                org.mail_panel.security.PanelSecrets.setText(col[1], value);
+                org.mail_panel.security.PanelSecrets.setText(col.secret(), value);
             } catch (RuntimeException e) {
-                System.err.println("Secrets file not writable, " + col[0] + " stays in SQLite for now: " + e.getMessage());
+                System.err.println("Secrets file not writable, " + col.column() + " stays in SQLite for now: " + e.getMessage());
                 continue;
             }
-            try (PreparedStatement ps = c.prepareStatement("UPDATE config SET " + col[0] + " = '' WHERE id = 1")) {
+            try (PreparedStatement ps = c.prepareStatement(col.clear())) {
                 ps.executeUpdate();
                 moved++;
             } catch (SQLException e) {
-                System.err.println("Could not clear " + col[0] + " in SQLite: " + e.getMessage());
+                System.err.println("Could not clear " + col.column() + " in SQLite: " + e.getMessage());
             }
         }
         return moved;
@@ -115,20 +120,18 @@ public class dataBaseManager {
     public void setMysqlPassword(String password) {
         String inSqlite = storeSecret(0, password);
         String column = null;
-        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(
-                "SELECT " + SECRET_COLUMNS[0][0] + " FROM config WHERE id = 1");
+        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_GET_MYSQL_PASSWORD);
              ResultSet rs = ps.executeQuery()) {
             column = rs.next() ? rs.getString(1) : null;
         } catch (SQLException e) {
             // tabella non ancora creata
         }
         if (column == null || column.equals(inSqlite)) return;
-        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(
-                "UPDATE config SET " + SECRET_COLUMNS[0][0] + " = ? WHERE id = 1")) {
+        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_SET_MYSQL_PASSWORD)) {
             ps.setString(1, inSqlite);
             ps.executeUpdate();
         } catch (SQLException e) {
-            System.err.println("Could not write " + SECRET_COLUMNS[0][0] + " in SQLite: " + e.getMessage());
+            System.err.println("Could not write " + SECRET_COLUMNS[0].column() + " in SQLite: " + e.getMessage());
         }
     }
 
@@ -139,8 +142,7 @@ public class dataBaseManager {
 
     /** Una colonna non vuota e' il valore piu' recente (non ancora spostato): vince sul file. */
     private String secret(int i) {
-        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(
-                "SELECT " + SECRET_COLUMNS[i][0] + " FROM config WHERE id = 1");
+        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(SECRET_COLUMNS[i].read());
              ResultSet rs = ps.executeQuery()) {
             String v = rs.next() ? rs.getString(1) : null;
             if (v != null && !v.isEmpty()) return v;
@@ -148,7 +150,7 @@ public class dataBaseManager {
             // tabella non ancora creata
         }
         try {
-            return org.mail_panel.security.PanelSecrets.text(SECRET_COLUMNS[i][1]);
+            return org.mail_panel.security.PanelSecrets.text(SECRET_COLUMNS[i].secret());
         } catch (RuntimeException e) {
             System.err.println("Secrets file unreadable: " + e.getMessage());
             return "";
@@ -158,10 +160,10 @@ public class dataBaseManager {
     /** Scrive un segreto nel file; se il file non e' scrivibile resta in SQLite come prima. */
     private String storeSecret(int i, String value) {
         try {
-            org.mail_panel.security.PanelSecrets.setText(SECRET_COLUMNS[i][1], value);
+            org.mail_panel.security.PanelSecrets.setText(SECRET_COLUMNS[i].secret(), value);
             return "";
         } catch (RuntimeException e) {
-            System.err.println("Secrets file not writable, " + SECRET_COLUMNS[i][0] + " saved in SQLite: " + e.getMessage());
+            System.err.println("Secrets file not writable, " + SECRET_COLUMNS[i].column() + " saved in SQLite: " + e.getMessage());
             return value == null ? "" : value;
         }
     }
@@ -192,14 +194,6 @@ public class dataBaseManager {
 
     public Connection get_connection() {
         return this.database_.get(1).connection;
-    }
-
-    public Connection get_mysql_connection() {
-        return this.database_.get(1).connection_mysql;
-    }
-
-    public void add_mysql_connection(String host, String user_, String password_, String port, String database) {
-        this.database_.get(1).database_mysql(host, user_, password_, port, database);
     }
 
     public boolean create_tables() {
@@ -285,25 +279,29 @@ public class dataBaseManager {
         }
     }
 
-    /** Mappa nome servizio → colonna DB. Null se servizio non riconosciuto. */
-    private static String serviceColumn(String service) {
+    /**
+     * Il flag di un servizio: l'istruzione fissa che lo legge e quella che lo scrive (la colonna non e'
+     * un parametro). Null se il servizio non e' riconosciuto.
+     */
+    private record ServiceFlag(String read, String write) {}
+
+    private static ServiceFlag serviceFlag(String service) {
         if (service == null) return null;
         // Switch expression (Java 14+) — nessun fall-through, return diretto del valore.
         return switch (service.toLowerCase()) {
-            case "postfix"   -> "postfix_installed";
-            case "dovecot"   -> "dovecot_installed";
-            case "rspamd"    -> "rspamd_installed";
-            case "clamav"    -> "clamav_installed";
-            case "roundcube" -> "roundcube_installed";
+            case "postfix"   -> new ServiceFlag(SqlCatalog.CONFIG_GET_POSTFIX_INSTALLED, SqlCatalog.CONFIG_SET_POSTFIX_INSTALLED);
+            case "dovecot"   -> new ServiceFlag(SqlCatalog.CONFIG_GET_DOVECOT_INSTALLED, SqlCatalog.CONFIG_SET_DOVECOT_INSTALLED);
+            case "rspamd"    -> new ServiceFlag(SqlCatalog.CONFIG_GET_RSPAMD_INSTALLED, SqlCatalog.CONFIG_SET_RSPAMD_INSTALLED);
+            case "clamav"    -> new ServiceFlag(SqlCatalog.CONFIG_GET_CLAMAV_INSTALLED, SqlCatalog.CONFIG_SET_CLAMAV_INSTALLED);
+            case "roundcube" -> new ServiceFlag(SqlCatalog.CONFIG_GET_ROUNDCUBE_INSTALLED, SqlCatalog.CONFIG_SET_ROUNDCUBE_INSTALLED);
             default -> null;
         };
     }
 
     public boolean setServiceInstalled(String service, boolean installed) {
-        String column = serviceColumn(service);
-        if (column == null) return false;
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "UPDATE config SET " + column + " = ? WHERE id = 1")) {
+        ServiceFlag flag = serviceFlag(service);
+        if (flag == null) return false;
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(flag.write())) {
             prepare.setInt(1, installed ? 1 : 0);
             return prepare.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -313,10 +311,9 @@ public class dataBaseManager {
     }
 
     public boolean isServiceInstalled(String service) {
-        String column = serviceColumn(service);
-        if (column == null) return false;
-        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(
-                    "SELECT " + column + " FROM config WHERE id = 1")) {
+        ServiceFlag flag = serviceFlag(service);
+        if (flag == null) return false;
+        try (PreparedStatement prepare = this.database_.get(1).connection.prepareStatement(flag.read())) {
             ResultSet rs = prepare.executeQuery();
             if (rs.next()) {
                 return rs.getInt(1) == 1;
@@ -340,7 +337,7 @@ public class dataBaseManager {
     }
 
     public boolean updateMySQLPassword(String newPassword) {
-        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_UPDATE_MY_SQLPASSWORD)) {
+        try (PreparedStatement preparedStatement = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_SET_MYSQL_PASSWORD)) {
             preparedStatement.setString(1, storeSecret(0, newPassword));
             return preparedStatement.executeUpdate() > 0;
         } catch (SQLException e) {

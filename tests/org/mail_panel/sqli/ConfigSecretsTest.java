@@ -1,5 +1,7 @@
 package org.mail_panel.sqli;
 
+import org.mail_panel.TestSql;
+
 import org.mail_panel.security.PanelSecrets;
 
 import java.io.File;
@@ -127,7 +129,7 @@ public class ConfigSecretsTest {
     }
 
     static void setColumns(dataBaseManager db, String password, String key) throws Exception {
-        try (PreparedStatement p = db.get_connection().prepareStatement(
+        try (java.sql.Connection c = TestSql.sqlite(); PreparedStatement p = c.prepareStatement(
                 "UPDATE config SET mysql_password = ?, mail_panel_ssl_cert_key = CASE WHEN ? = '' THEN mail_panel_ssl_cert_key ELSE ? END WHERE id = 1")) {
             p.setString(1, password);
             p.setString(2, key);
@@ -137,7 +139,7 @@ public class ConfigSecretsTest {
     }
 
     static String column(dataBaseManager db, String name) throws Exception {
-        try (PreparedStatement p = db.get_connection().prepareStatement("SELECT " + name + " FROM config WHERE id = 1");
+        try (java.sql.Connection c = TestSql.sqlite(); PreparedStatement p = c.prepareStatement("SELECT " + name + " FROM config WHERE id = 1");
              ResultSet r = p.executeQuery()) {
             String v = r.next() ? r.getString(1) : null;
             return v == null ? "" : v;

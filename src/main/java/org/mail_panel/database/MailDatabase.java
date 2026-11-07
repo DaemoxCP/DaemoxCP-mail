@@ -111,7 +111,7 @@ public class MailDatabase {
     public boolean connect() {
         boolean again = connection != null;
         try {
-            connection = DriverManager.getConnection(databaseUrl(), username, currentPassword());
+            connection = CatalogGuard.open(databaseUrl(), username, currentPassword());
             connected = true;
             if (again) System.out.println("Connected to MySQL again.");
             return true;
@@ -135,7 +135,7 @@ public class MailDatabase {
      * l'autocommit spento i loro comandi finirebbero dentro la transazione di un altro.
      */
     private Connection ownConnection() throws SQLException {
-        return DriverManager.getConnection(databaseUrl(), username, currentPassword());
+        return CatalogGuard.open(databaseUrl(), username, currentPassword());
     }
 
     /**
@@ -147,7 +147,7 @@ public class MailDatabase {
                 "jdbc:mysql://%s:%d/?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
                 host, port
             );
-            connection = DriverManager.getConnection(url, "root", rootPassword);
+            connection = CatalogGuard.open(url, "root", rootPassword);
             connected = true;
             return true;
         } catch (SQLException e) {
@@ -175,7 +175,7 @@ public class MailDatabase {
                 "jdbc:mysql://%s:%d/?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
                 host, port
             );
-            connection = DriverManager.getConnection(url, "root", "");
+            connection = CatalogGuard.open(url, "root", "");
             connected = true;
             System.out.println("Connected to MySQL as root via TCP (no password)");
             return true;
@@ -190,7 +190,7 @@ public class MailDatabase {
                     "jdbc:mysql://localhost/?socket=%s&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
                     socketPath
                 );
-                connection = DriverManager.getConnection(url, "root", "");
+                connection = CatalogGuard.open(url, "root", "");
                 connected = true;
                 System.out.println("Connected to MySQL as root via socket: " + socketPath);
                 return true;
@@ -210,22 +210,35 @@ public class MailDatabase {
     public void createDatabaseAndUser(String panelPassword) throws SQLException {
         try (Statement stmt = getConnection().createStatement()) {
             // Create database
-            stmt.execute(SqlCatalog.MAIL_CREATE_DATABASE_AND_USER);
+            stmt.execute(SqlCatalog.MAIL_CREATE_PANEL_DATABASE);
 
-            // Create user
-            stmt.execute("CREATE USER IF NOT EXISTS 'mailpanel'@'127.0.0.1' IDENTIFIED BY '" + panelPassword.replace("'", "''") + "'");
-            stmt.execute(SqlCatalog.MAIL_CREATE_DATABASE_AND_USER_2);
+            // Create user: la password e' un parametro, non un pezzo del testo
+            createUser(SqlCatalog.MAIL_CREATE_PANEL_USER, panelPassword);
+            stmt.execute(SqlCatalog.MAIL_GRANT_PANEL_USER);
 
             // Create mailserver database for Dovecot
-            stmt.execute(SqlCatalog.MAIL_CREATE_DATABASE_AND_USER_3);
-            stmt.execute("CREATE USER IF NOT EXISTS 'mailserver'@'127.0.0.1' IDENTIFIED BY '" + panelPassword.replace("'", "''") + "'");
-            stmt.execute(SqlCatalog.MAIL_CREATE_DATABASE_AND_USER_4);
+            stmt.execute(SqlCatalog.MAIL_CREATE_MAILSERVER_DATABASE);
+            createUser(SqlCatalog.MAIL_CREATE_MAILSERVER_USER, panelPassword);
+            stmt.execute(SqlCatalog.MAIL_GRANT_MAILSERVER_USER);
 
-            stmt.execute(SqlCatalog.MAIL_CREATE_DATABASE_AND_USER_5);
+            stmt.execute(SqlCatalog.MAIL_FLUSH_PRIVILEGES);
         }
 
         // Store the password for later use
         this.password = panelPassword;
+    }
+
+    /**
+     * CREATE USER con la password come parametro. MySQL non accetta un segnaposto in IDENTIFIED BY
+     * quando prepara lui l'istruzione; Connector/J pero' prepara dalla parte del client (il
+     * predefinito, useServerPrepStmts=false) e mette il valore fra apici con il suo escape, apici e
+     * barre rovesciate compresi. Prima la password entrava nel testo con il solo raddoppio degli apici.
+     */
+    private void createUser(String statement, String password) throws SQLException {
+        try (PreparedStatement ps = getConnection().prepareStatement(statement)) {
+            ps.setString(1, password);
+            ps.execute();
+        }
     }
 
     /**
@@ -260,8 +273,8 @@ public class MailDatabase {
         try (Connection c = ownConnection()) {
             List<String> before = panelTables(c);
             try (Statement st = c.createStatement()) {
-                // Nomi fissi, scritti qui sopra, non input: un DROP non prende parametri.
-                st.executeUpdate("DROP TABLE IF EXISTS " + String.join(", ", PANEL_TABLES));
+                // Un DROP non prende parametri: l'elenco e' fisso nel catalogo, uguale a PANEL_TABLES.
+                st.executeUpdate(SqlCatalog.MAIL_DROP_PANEL_TABLES);
             } catch (SQLException e) {
                 String present;
                 try {
@@ -356,7 +369,7 @@ public class MailDatabase {
             stmt.execute(SqlCatalog.MAIL_CREATE_SCHEMA_15);
             stmt.execute(SqlCatalog.MAIL_CREATE_SCHEMA_16);
             stmt.execute(SqlCatalog.MAIL_CREATE_SCHEMA_17);
-            for (String t : AUTH_TABLES) stmt.execute(t);
+            createAuthTables(stmt);
         }
     }
 
@@ -366,40 +379,12 @@ public class MailDatabase {
      * un'operazione delicata). Nei codici c'e' solo l'impronta HMAC, mai il codice; della sessione
      * c'e' solo l'impronta SHA-256 del token. Date in UTC, colonne DATETIME.
      */
-    private static final List<String> AUTH_TABLES = List.of(
-        """
-        CREATE TABLE IF NOT EXISTS panel_sessions (
-            id BIGINT AUTO_INCREMENT PRIMARY KEY,
-            token_hash CHAR(64) CHARACTER SET ascii NOT NULL,
-            admin_id INT NOT NULL,
-            ua_hash CHAR(64) CHARACTER SET ascii NOT NULL,
-            ua_enc VARCHAR(1024) NULL,
-            ip_enc VARCHAR(256) NULL,
-            created_at DATETIME NOT NULL,
-            last_seen_at DATETIME NOT NULL,
-            expires_at DATETIME NOT NULL,
-            reauth_at DATETIME NULL,
-            UNIQUE KEY uq_session_token (token_hash),
-            KEY idx_session_admin (admin_id),
-            KEY idx_session_expires (expires_at),
-            CONSTRAINT fk_session_admin FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        """,
-        codeTable("login_code_email", ""),
-        codeTable("login_code_console", ""),
-        codeTable("stepup_code", ""),
-        codeTable("email_change_code",
-            "target_enc VARCHAR(512) NOT NULL, target_index CHAR(64) CHARACTER SET ascii NOT NULL,")
-    );
-
-    private static String codeTable(String name, String extra) {
-        return "CREATE TABLE IF NOT EXISTS " + name + " ("
-             + "id BIGINT AUTO_INCREMENT PRIMARY KEY, admin_id INT NOT NULL,"
-             + " code_hash CHAR(64) CHARACTER SET ascii NOT NULL, " + extra
-             + " attempts INT NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, expires_at DATETIME NOT NULL,"
-             + " used_at DATETIME NULL, KEY idx_" + name + "_admin (admin_id, expires_at),"
-             + " CONSTRAINT fk_" + name + "_admin FOREIGN KEY (admin_id) REFERENCES panel_admin(id) ON DELETE CASCADE"
-             + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    private static void createAuthTables(Statement st) throws SQLException {
+        st.execute(SqlCatalog.MAIL_CREATE_PANEL_SESSIONS);
+        st.execute(SqlCatalog.MAIL_CREATE_LOGIN_CODE_EMAIL);
+        st.execute(SqlCatalog.MAIL_CREATE_LOGIN_CODE_CONSOLE);
+        st.execute(SqlCatalog.MAIL_CREATE_STEPUP_CODE);
+        st.execute(SqlCatalog.MAIL_CREATE_EMAIL_CHANGE_CODE);
     }
 
     /**
@@ -415,12 +400,17 @@ public class MailDatabase {
     public void ensurePasswordlessSchema() throws SQLException {
         try (Connection c = ownConnection(); Statement st = c.createStatement()) {
             st.execute(SqlCatalog.MAIL_ENSURE_PASSWORDLESS_SCHEMA);
-            for (String t : AUTH_TABLES) st.execute(t);
-            for (String col : List.of("password_hash", "totp_secret", "totp_enabled", "backup_codes")) {
-                if (columnType(c, "panel_admin", col) != null) {
-                    // Nome fisso, preso dall'elenco qui sopra: un ALTER non prende parametri.
-                    st.executeUpdate("ALTER TABLE panel_admin DROP COLUMN " + col);
-                    LOGGER.info("Removed panel_admin." + col);
+            createAuthTables(st);
+            // Un ALTER non prende parametri: una istruzione fissa per colonna.
+            String[][] old = {
+                {"password_hash", SqlCatalog.MAIL_DROP_ADMIN_PASSWORD_HASH},
+                {"totp_secret", SqlCatalog.MAIL_DROP_ADMIN_TOTP_SECRET},
+                {"totp_enabled", SqlCatalog.MAIL_DROP_ADMIN_TOTP_ENABLED},
+                {"backup_codes", SqlCatalog.MAIL_DROP_ADMIN_BACKUP_CODES}};
+            for (String[] col : old) {
+                if (columnType(c, "panel_admin", col[0]) != null) {
+                    st.executeUpdate(col[1]);
+                    LOGGER.info("Removed panel_admin." + col[0]);
                 }
             }
             if (columnType(c, "panel_admin", "email_enc") == null)
@@ -560,37 +550,32 @@ public class MailDatabase {
      * dkim_rotation_state, dkim_rotation_started_at, dkim_rotation_activated_at.
      */
     public void ensureDkimRotationColumns() {
+        // Nome della colonna e la sua istruzione fissa: un ALTER non prende parametri.
         String[][] cols = {
-            {"dkim_pending_selector",       "VARCHAR(50) NULL"},
-            {"dkim_pending_private_key",    "TEXT NULL"},
-            {"dkim_pending_public_key",     "TEXT NULL"},
-            {"dkim_rotation_state",         "VARCHAR(32) NULL"},
-            {"dkim_rotation_started_at",    "TIMESTAMP NULL"},
-            {"dkim_rotation_activated_at",  "TIMESTAMP NULL"},
-            {"dkim_previous_selector",      "VARCHAR(50) NULL"},
-            {"dkim_previous_private_key",   "TEXT NULL"},
-            {"dkim_previous_public_key",    "TEXT NULL"},
+            {"dkim_pending_selector", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PENDING_SELECTOR},
+            {"dkim_pending_private_key", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PENDING_PRIVATE_KEY},
+            {"dkim_pending_public_key", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PENDING_PUBLIC_KEY},
+            {"dkim_rotation_state", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_ROTATION_STATE},
+            {"dkim_rotation_started_at", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_ROTATION_STARTED_AT},
+            {"dkim_rotation_activated_at", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_ROTATION_ACTIVATED_AT},
+            {"dkim_previous_selector", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PREVIOUS_SELECTOR},
+            {"dkim_previous_private_key", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PREVIOUS_PRIVATE_KEY},
+            {"dkim_previous_public_key", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PREVIOUS_PUBLIC_KEY},
             // Cloudflare automation: zone + ID dei record TXT, per cancellarli
-            {"dkim_dns_zone_id",            "VARCHAR(64) NULL"},
-            {"dkim_pending_dns_record_id", "VARCHAR(64) NULL"},
-            {"dkim_previous_dns_record_id","VARCHAR(64) NULL"},
+            {"dkim_dns_zone_id", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_DNS_ZONE_ID},
+            {"dkim_pending_dns_record_id", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PENDING_DNS_RECORD_ID},
+            {"dkim_previous_dns_record_id", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PREVIOUS_DNS_RECORD_ID},
             // Rotazione programmata
-            {"dkim_rotation_interval_days","INT NOT NULL DEFAULT 0"},
-            {"dkim_last_rotation_at",      "TIMESTAMP NULL"},
+            {"dkim_rotation_interval_days", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_ROTATION_INTERVAL_DAYS},
+            {"dkim_last_rotation_at", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_LAST_ROTATION_AT},
             // Modalità rotazione (ereditata da tutti gli eventi della catena)
-            {"dkim_rotation_mode",         "VARCHAR(16) NULL"}
+            {"dkim_rotation_mode", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_ROTATION_MODE}
         };
         try (Statement stmt = getConnection().createStatement()) {
             for (String[] col : cols) {
-                String name = col[0];
-                String type = col[1];
-                ResultSet rs = stmt.executeQuery(
-                    "SELECT COUNT(*) FROM information_schema.columns " +
-                    "WHERE table_schema = DATABASE() AND table_name = 'domains' AND column_name = '" + name + "'"
-                );
-                if (rs.next() && rs.getInt(1) == 0) {
-                    stmt.executeUpdate("ALTER TABLE domains ADD COLUMN " + name + " " + type);
-                    System.out.println("Added " + name + " column to domains table");
+                if (columnType(getConnection(), "domains", col[0]) == null) {
+                    stmt.executeUpdate(col[1]);
+                    System.out.println("Added " + col[0] + " column to domains table");
                 }
             }
         } catch (SQLException e) {
@@ -691,10 +676,6 @@ public class MailDatabase {
                                       String mode, String triggeredBy,
                                       Integer cloudflareAccountId, String cloudflareAccountLabel,
                                       boolean success, String message) {
-        String sql = "INSERT INTO dkim_rotation_history " +
-                     "(domain_id, domain, event_type, selector, previous_selector, mode, triggered_by, cloudflare_account_id, " +
-                     "cloudflare_account_label, success, message, occurred_at) " +
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_LOG_DKIM_ROTATION_EVENT)) {
             stmt.setInt(1, domainId);
             stmt.setString(2, domain == null ? "" : domain);
@@ -1123,10 +1104,6 @@ public class MailDatabase {
 
     public void setDkimPending(int domainId, String pendingSelector, String pendingPrivateKey,
                                 String pendingPublicKey, String state, String rotationMode) throws SQLException {
-        String sql = "UPDATE domains SET dkim_pending_selector = ?, dkim_pending_private_key = ?, " +
-                     "dkim_pending_public_key = ?, dkim_rotation_state = ?, dkim_rotation_mode = ?, " +
-                     "dkim_rotation_started_at = ?, dkim_rotation_activated_at = NULL " +
-                     "WHERE id = ?";
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_SET_DKIM_PENDING)) {
             stmt.setString(1, pendingSelector);
             stmt.setString(2, pendingPrivateKey);
@@ -1159,26 +1136,6 @@ public class MailDatabase {
      *  - dkim_rotation_activated_at = NOW
      */
     public void promotePendingToActive(int domainId) throws SQLException {
-        String sql = "UPDATE domains SET " +
-                     "dkim_previous_selector = dkim_selector, " +
-                     "dkim_previous_private_key = dkim_private_key, " +
-                     "dkim_previous_public_key = dkim_public_key, " +
-                     "dkim_previous_dns_record_id = NULL, " + // record DNS della "vecchia" chiave attuale di solito NON è stato creato via CF
-                     "dkim_selector = dkim_pending_selector, " +
-                     "dkim_private_key = dkim_pending_private_key, " +
-                     "dkim_public_key = dkim_pending_public_key, " +
-                     "dkim_pending_selector = NULL, " +
-                     "dkim_pending_private_key = NULL, " +
-                     "dkim_pending_public_key = NULL, " +
-                     // pending_dns_record_id ora rappresenta il record DEL NUOVO selector attivo,
-                     // lo conserviamo come "current dns record id" muovendolo... ma non abbiamo un
-                     // campo "current": lo lasciamo in pending_dns_record_id azzerandolo (la chiave
-                     // attiva è già pubblicata in DNS, non ci serve più l'id finché non si rifa
-                     // un'altra rotazione).
-                     "dkim_pending_dns_record_id = NULL, " +
-                     "dkim_rotation_state = 'active_grace', " +
-                     "dkim_rotation_activated_at = ? " +
-                     "WHERE id = ?";
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_PROMOTE_PENDING_TO_ACTIVE)) {
             stmt.setTimestamp(1, java.sql.Timestamp.from(java.time.Instant.now()));
             stmt.setInt(2, domainId);
@@ -1237,7 +1194,6 @@ public class MailDatabase {
      * ambiguità di timezone tra MySQL session, JDBC e JVM.
      */
     public void markDkimRotationActivated(int domainId) throws SQLException {
-        String sql = "UPDATE domains SET dkim_last_rotation_at = ? WHERE id = ?";
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_MARK_DKIM_ROTATION_ACTIVATED)) {
             stmt.setTimestamp(1, java.sql.Timestamp.from(java.time.Instant.now()));
             stmt.setInt(2, domainId);
@@ -1250,7 +1206,6 @@ public class MailDatabase {
      * Utile per correggere valori "fossili" memorizzati prima del fix timezone.
      */
     public void setDkimLastRotationAtMs(int domainId, long epochMs) throws SQLException {
-        String sql = "UPDATE domains SET dkim_last_rotation_at = ? WHERE id = ?";
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_MARK_DKIM_ROTATION_ACTIVATED)) {
             stmt.setTimestamp(1, java.sql.Timestamp.from(java.time.Instant.ofEpochMilli(epochMs)));
             stmt.setInt(2, domainId);
@@ -1313,8 +1268,6 @@ public class MailDatabase {
         // La copia cifrata che il pannello mostra quando serve: senza, la casella non si crea
         String encryptedPassword = vaultCopy(password);
 
-        String sql = "INSERT INTO mailboxes (domain_id, email, password, password_encrypted, password_encrypted_at, name, quota_mb, receive_enabled) " +
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = c.prepareStatement(SqlCatalog.MAIL_INSERT_MAILBOX, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, domainId);
             stmt.setString(2, email.toLowerCase());
@@ -1348,7 +1301,6 @@ public class MailDatabase {
         // Hash e copia cambiano insieme: una copia vecchia accanto a un hash nuovo mostrerebbe la password sbagliata
         String encryptedPassword = vaultCopy(newPassword);
 
-        String sql = "UPDATE mailboxes SET password = ?, password_encrypted = ?, password_encrypted_at = ? WHERE id = ?";
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_UPDATE_MAILBOX_PASSWORD)) {
             stmt.setString(1, hashedPassword);
             stmt.setString(2, encryptedPassword);
@@ -1442,7 +1394,6 @@ public class MailDatabase {
                 // copia illeggibile (chiave cambiata o blob rovinato): la si riscrive
             }
         }
-        String sql = "UPDATE mailboxes SET password_encrypted = ?, password_encrypted_at = ? WHERE id = ?";
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_FILL_MISSING_VAULT_COPY)) {
             stmt.setString(1, vaultCopy(plain));
             stmt.setTimestamp(2, java.sql.Timestamp.from(java.time.Instant.now()));
@@ -1466,7 +1417,6 @@ public class MailDatabase {
             }
         }
         int repaired = 0;
-        String sql = "UPDATE mailboxes SET password = ?, password_encrypted = ?, password_encrypted_at = ? WHERE id = ? AND password = ?";
         for (Object[] row : rows) {
             String plain = (String) row[1];
             try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_REPAIR_PLAINTEXT_MAILBOX_PASSWORDS_2)) {
@@ -1543,7 +1493,6 @@ public class MailDatabase {
      * dove non rigeneriamo bcrypt — la password resta logicamente la stessa).
      */
     public void setMailboxEncryptedPasswordOnly(int mailboxId, String newEncryptedBlob) throws SQLException {
-        String sql = "UPDATE mailboxes SET password_encrypted = ?, password_encrypted_at = ? WHERE id = ?";
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_FILL_MISSING_VAULT_COPY)) {
             stmt.setString(1, newEncryptedBlob);
             stmt.setTimestamp(2, java.sql.Timestamp.from(java.time.Instant.now()));
@@ -1606,17 +1555,13 @@ public class MailDatabase {
      */
     public void ensureMailboxPasswordVaultColumns() {
         String[][] cols = {
-            {"password_encrypted",     "TEXT NULL"},
-            {"password_encrypted_at",  "TIMESTAMP NULL"}
+            {"password_encrypted",     SqlCatalog.MAIL_ADD_MAILBOXES_PASSWORD_ENCRYPTED},
+            {"password_encrypted_at",  SqlCatalog.MAIL_ADD_MAILBOXES_PASSWORD_ENCRYPTED_AT}
         };
         try (Statement stmt = getConnection().createStatement()) {
             for (String[] col : cols) {
-                ResultSet rs = stmt.executeQuery(
-                    "SELECT COUNT(*) FROM information_schema.columns " +
-                    "WHERE table_schema = DATABASE() AND table_name = 'mailboxes' AND column_name = '" + col[0] + "'"
-                );
-                if (rs.next() && rs.getInt(1) == 0) {
-                    stmt.executeUpdate("ALTER TABLE mailboxes ADD COLUMN " + col[0] + " " + col[1]);
+                if (columnType(getConnection(), "mailboxes", col[0]) == null) {
+                    stmt.executeUpdate(col[1]);
                     System.out.println("Added " + col[0] + " column to mailboxes table");
                 }
             }
@@ -2009,15 +1954,15 @@ public class MailDatabase {
     // ========== STATISTICS ==========
 
     public int getDomainCount() {
-        return getCount("SELECT COUNT(*) FROM domains WHERE active = TRUE");
+        return getCount(SqlCatalog.MAIL_COUNT_ACTIVE_DOMAINS);
     }
 
     public int getMailboxCount() {
-        return getCount("SELECT COUNT(*) FROM mailboxes WHERE active = TRUE");
+        return getCount(SqlCatalog.MAIL_COUNT_ACTIVE_MAILBOXES);
     }
 
     public int getAliasCount() {
-        return getCount("SELECT COUNT(*) FROM aliases WHERE active = TRUE");
+        return getCount(SqlCatalog.MAIL_COUNT_ACTIVE_ALIASES);
     }
 
     private int getCount(String sql) {
@@ -2535,23 +2480,16 @@ public class MailDatabase {
     }
 
     public void incrementEmailStat(Integer mailboxId, Integer domainId, String statType, int count, long bytes) {
-        String column = switch (statType) {
-            case "sent" -> "sent_count";
-            case "received" -> "received_count";
-            case "spam" -> "spam_count";
-            case "virus" -> "virus_count";
-            case "bounced" -> "bounced_count";
+        // Un'istruzione fissa per tipo: le colonne non sono parametri.
+        String sql = switch (statType) {
+            case "sent" -> SqlCatalog.MAIL_ADD_STAT_SENT;
+            case "received" -> SqlCatalog.MAIL_ADD_STAT_RECEIVED;
+            case "spam" -> SqlCatalog.MAIL_ADD_STAT_SPAM;
+            case "virus" -> SqlCatalog.MAIL_ADD_STAT_VIRUS;
+            case "bounced" -> SqlCatalog.MAIL_ADD_STAT_BOUNCED;
             default -> null;
         };
-        String bytesColumn = statType.equals("sent") ? "bytes_sent" : "bytes_received";
-
-        if (column == null) return;
-
-        String sql = String.format("""
-            INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, %s, %s)
-            VALUES (CURDATE(), ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE %s = %s + ?, %s = %s + ?
-            """, column, bytesColumn, column, column, bytesColumn, bytesColumn);
+        if (sql == null) return;
 
         try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
             if (mailboxId != null) {
@@ -2662,38 +2600,21 @@ public class MailDatabase {
      * @return List of audit log entries
      */
     public java.util.List<AuditLogEntry> getAuditLog(String action, String username, String ipAddress, int limit) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM audit_log WHERE 1=1");
-        java.util.List<Object> params = new java.util.ArrayList<>();
-
-        if (action != null && !action.isEmpty()) {
-            sql.append(" AND action = ?");
-            params.add(action);
-        }
-        if (username != null && !username.isEmpty()) {
-            sql.append(" AND username = ?");
-            params.add(username);
-        }
-        if (ipAddress != null && !ipAddress.isEmpty()) {
-            sql.append(" AND ip_address = ?");
-            params.add(ipAddress);
-        }
-
-        sql.append(" ORDER BY created_at DESC LIMIT ?");
-        params.add(limit);
+        // Un filtro vuoto e' NULL, e (? IS NULL OR colonna = ?) lo lascia passare: un'istruzione sola,
+        // invece di comporre il WHERE con i filtri presenti.
+        String[] filters = {
+            action == null || action.isEmpty() ? null : action,
+            username == null || username.isEmpty() ? null : username,
+            ipAddress == null || ipAddress.isEmpty() ? null : ipAddress};
 
         java.util.List<AuditLogEntry> entries = new java.util.ArrayList<>();
 
-        try (PreparedStatement stmt = getConnection().prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                // Pattern matching for instanceof (Java 16+): niente cast esplicito,
-                // la variabile e' gia' tipata nello scope dell'if.
-                switch (params.get(i)) {
-                    case String s  -> stmt.setString(i + 1, s);
-                    case Integer n -> stmt.setInt(i + 1, n);
-                    case null      -> stmt.setNull(i + 1, java.sql.Types.NULL);
-                    default        -> stmt.setObject(i + 1, params.get(i));
-                }
+        try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_AUDIT_LOG)) {
+            for (int f = 0; f < filters.length; f++) {
+                stmt.setString(2 * f + 1, filters[f]);
+                stmt.setString(2 * f + 2, filters[f]);
             }
+            stmt.setInt(7, limit);
 
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {

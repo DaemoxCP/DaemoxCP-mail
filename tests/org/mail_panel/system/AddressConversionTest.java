@@ -1,5 +1,7 @@
 package org.mail_panel.system;
 
+import org.mail_panel.TestSql;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.mail_panel.database.MailDatabase;
@@ -257,7 +259,7 @@ public class AddressConversionTest {
         if (!db.connect()) { real("connection to MySQL", false); return; }
         db.dropAllTables();
         db.createSchema();
-        Connection c = db.getConnection();
+        Connection c = TestSql.mysql();
         try (var st = c.createStatement(); ResultSet r = st.executeQuery("SELECT VERSION()")) { r.next(); System.out.println("  MySQL " + r.getString(1)); }
 
         int dom = db.addDomain("domain-d.test", "test");
