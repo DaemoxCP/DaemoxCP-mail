@@ -1010,6 +1010,11 @@ public class Main {
         }
         System.out.flush();
 
+        // Gli script scrivono nelle mappe di Postfix e nella connessione di Dovecot l'utente del pannello: si passa
+        // subito ai loro utenti (MailDbUsers), che leggono solo le colonne che usano. Se qualcosa non torna i file
+        // restano come li ha scritti lo script, e ci riprova il prossimo avvio del pannello.
+        if (success) org.mail_panel.system.MailDbUsers.ensureAfterInstall(mysqlHost, mysqlPort, mysqlUser, mysqlDatabase);
+
         if (success) {
             // Mark all services as installed
             dbManager.setServiceInstalled("postfix", true);

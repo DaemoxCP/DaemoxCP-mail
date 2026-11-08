@@ -792,6 +792,26 @@ previous private key. A vault that decrypts outside root, or a private key not k
 
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.VaultKeysTest
 
+**MailDbUsersTest** — Postfix and Dovecot with their own MySQL users, without MySQL.
+The connection read from the files exactly as both installers and both Dovecot versions write them, rewritten
+changing only user and password; files the panel did not write (another host, database or user, a setting twice, a
+continuation line, quotes) not read as the panel's. The switch with fake services in a temporary folder: the new
+user in every file, the mode kept, a second run touching nothing; postmap failing after the change, a Postfix
+reload failing, Dovecot's lookup failing, MySQL not seeing Dovecot's new user, doveconf refusing, a Dovecot reload
+failing each put that service's files back byte for byte; a map that already fails, Dovecot not running, a file of
+someone else and a symbolic link are left alone.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.MailDbUsersTest
+
+**MailDbUsersMysqlTest** — the same users on the test MySQL, as its root: both host names, only their columns and
+no table, database or global privilege; a second run changes nothing. Each user over its own connection: the lookups
+of its files give the right rows; the password hashes, the vault copies, the DKIM keys, the administrators and every
+write refused. An extra table or global privilege taken away, a column given again (and really readable: MySQL 8.4
+needs the privileges reloaded), a changed password set again. The whole migration with fake services: the user and
+password written in the files really enter MySQL; with MySQL root refused the files stay as they were.
+
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.MailDbUsersMysqlTest
+
 **RootDistrustsDataTest** — the root part does not trust the names it reads from MySQL, which the
 web part can write. Names planted straight into MySQL, as a
 broken-into web part would: SafeNames' shapes; DKIM key paths with ".." or a quote refused; Sieve with

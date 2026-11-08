@@ -731,6 +731,9 @@ public class SSLMailServer {
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.
             // Ognuna si verifica, e se non va torna com'era; al secondo avvio non fanno niente.
             org.mail_panel.system.MysqlListen.ensureAtBoot();
+            // Postfix e Dovecot in MySQL coi loro utenti, che leggono solo le colonne che usano, e non piu' con
+            // quello del pannello: dopo MysqlRoot (serve la root di MySQL) e MysqlListen (MySQL com'e' davvero).
+            org.mail_panel.system.MailDbUsers.ensureAtBoot();
             org.mail_panel.system.SyslogNetwork.ensureAtBoot();
             org.mail_panel.system.VmailPermissions.ensureAtBoot();
             // rspamd tutto col suo utente, anche il processo principale: le sue porte sono sopra la 1023 e

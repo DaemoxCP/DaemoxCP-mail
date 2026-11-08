@@ -69,6 +69,9 @@ public final class PanelSecrets {
     public static final String VAULT_PREVIOUS_PRIVATE_KEY = "vault_previous_private_key";
     /** La chiave pubblica del vault (X.509 in base64): la web cifra con questa le copie delle password nuove. */
     public static final String VAULT_PUBLIC_KEY = "vault_public_key";
+    /** Le password degli utenti MySQL di Postfix e Dovecot (MailDbUsers): solo di root, e nei loro file di configurazione. */
+    public static final String POSTFIX_DB_PASSWORD = "postfix_db_password";
+    public static final String DOVECOT_DB_PASSWORD = "dovecot_db_password";
 
     /** La cartella dei file; i test la spostano in una cartella temporanea. */
     static Path dir = Paths.get(System.getProperty("mailpanel.secrets.dir", "/usr/local/etc/mail-panel"));
@@ -81,7 +84,7 @@ public final class PanelSecrets {
      * tutto il database. Stanno in un file a parte, 0600 di root, nella stessa cartella.
      */
     public static final Set<String> ROOT_ONLY = Set.of(MYSQL_ROOT_PASSWORD, ROUNDCUBE_DB_PASSWORD, VAULT_PRIVATE_KEY,
-            VAULT_PREVIOUS_PRIVATE_KEY);
+            VAULT_PREVIOUS_PRIVATE_KEY, POSTFIX_DB_PASSWORD, DOVECOT_DB_PASSWORD);
 
     /**
      * I segreti che passano nel file di root quando la parte web ha il suo utente MySQL ({@link #MYSQL_WEB_PASSWORD}
@@ -465,6 +468,17 @@ public final class PanelSecrets {
      */
     public static synchronized String ensureRoundcubeDbPassword() {
         return ensureGenerated(ROUNDCUBE_DB_PASSWORD, () -> newAlphanumericPassword(24));
+    }
+
+    /**
+     * La password di uno degli utenti MySQL di Postfix e Dovecot (MailDbUsers), generandola se non c'e' ancora:
+     * 32 lettere e cifre, perche' finisce nelle mappe di Postfix e nella riga connect di Dovecot, dove uno spazio,
+     * un apice o un cancelletto cambierebbero il senso della riga.
+     */
+    public static synchronized String ensureServiceDbPassword(String name) {
+        if (!POSTFIX_DB_PASSWORD.equals(name) && !DOVECOT_DB_PASSWORD.equals(name))
+            throw new IllegalArgumentException("not a mail service password: " + name);
+        return ensureGenerated(name, () -> newAlphanumericPassword(32));
     }
 
     /** Il segreto se c'e'; altrimenti lo genera sotto il lock del file, e chi arriva secondo trova il primo. */

@@ -22,7 +22,12 @@ public final class SqlCatalog {
     /** MailDatabase.createDatabaseAndUser */
     public static final String MAIL_GRANT_MAILSERVER_USER = "GRANT ALL PRIVILEGES ON mailserver.* TO 'mailserver'@'127.0.0.1'";
 
-    /** MailDatabase.createDatabaseAndUser */
+    /**
+     * MailDatabase.createDatabaseAndUser; MailDbUsers, dopo aver cambiato i permessi per colonna. Misurato sulla VM
+     * l'08/11/2026 col MySQL 8.4.11 dei pacchetti: una colonna tolta e ridata a un utente che ha ancora le altre della
+     * stessa tabella compare in mysql.columns_priv e in information_schema, ma MySQL continua a rifiutarla (1143)
+     * finche' non si ricaricano i permessi.
+     */
     public static final String MAIL_FLUSH_PRIVILEGES = "FLUSH PRIVILEGES";
 
     /** MailDatabase.panelTables */
@@ -1356,6 +1361,77 @@ public final class SqlCatalog {
 
     /** WebDbAccess: se l'utente della web avesse altro, gli si toglie tutto e gli si ridanno solo le procedure */
     public static final String WEB_DB_REVOKE_WEB = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'";
+
+    // ========== Gli utenti MySQL di Postfix e Dovecot (MailDbUsers) ==========
+    //
+    // Postfix e Dovecot leggono soltanto, ognuno le sue colonne: Postfix domini, caselle e alias, mai le password;
+    // Dovecot indirizzo, hash della password e stato delle caselle. Prima entravano con l'utente del pannello, che
+    // nel database puo' tutto. I nomi sono fissi, i due host come per l'utente del pannello.
+
+    /** MailDbUsers, come root di MySQL: i due utenti, se ci sono */
+    public static final String MAILDB_USERS = "SELECT user, host FROM mysql.user WHERE user IN ('mailpanel_postfix', 'mailpanel_dovecot')";
+
+    /** MailDbUsers */
+    public static final String MAILDB_CREATE_POSTFIX_USER = "CREATE USER IF NOT EXISTS 'mailpanel_postfix'@'localhost' IDENTIFIED BY ?, 'mailpanel_postfix'@'127.0.0.1' IDENTIFIED BY ?";
+
+    /** MailDbUsers */
+    public static final String MAILDB_SET_POSTFIX_PASSWORD = "ALTER USER 'mailpanel_postfix'@'localhost' IDENTIFIED BY ?, 'mailpanel_postfix'@'127.0.0.1' IDENTIFIED BY ?";
+
+    /** MailDbUsers */
+    public static final String MAILDB_CREATE_DOVECOT_USER = "CREATE USER IF NOT EXISTS 'mailpanel_dovecot'@'localhost' IDENTIFIED BY ?, 'mailpanel_dovecot'@'127.0.0.1' IDENTIFIED BY ?";
+
+    /** MailDbUsers */
+    public static final String MAILDB_SET_DOVECOT_PASSWORD = "ALTER USER 'mailpanel_dovecot'@'localhost' IDENTIFIED BY ?, 'mailpanel_dovecot'@'127.0.0.1' IDENTIFIED BY ?";
+
+    /** MailDbUsers: Postfix, i domini (virtual_mailbox_domains) */
+    public static final String MAILDB_GRANT_POSTFIX_DOMAINS = "GRANT SELECT (domain, active) ON domains TO 'mailpanel_postfix'@'localhost', 'mailpanel_postfix'@'127.0.0.1'";
+
+    /** MailDbUsers: Postfix, le caselle (virtual_mailbox_maps): niente password */
+    public static final String MAILDB_GRANT_POSTFIX_MAILBOXES = "GRANT SELECT (email, active, receive_enabled) ON mailboxes TO 'mailpanel_postfix'@'localhost', 'mailpanel_postfix'@'127.0.0.1'";
+
+    /** MailDbUsers: Postfix, gli alias (virtual_alias_maps) */
+    public static final String MAILDB_GRANT_POSTFIX_ALIASES = "GRANT SELECT (source, destination, active) ON aliases TO 'mailpanel_postfix'@'localhost', 'mailpanel_postfix'@'127.0.0.1'";
+
+    /** MailDbUsers: Dovecot, l'accesso alle caselle (passdb) */
+    public static final String MAILDB_GRANT_DOVECOT_MAILBOXES = "GRANT SELECT (email, password, active) ON mailboxes TO 'mailpanel_dovecot'@'localhost', 'mailpanel_dovecot'@'127.0.0.1'";
+
+    /** MailDbUsers: i permessi di un utente che non sono quelli per colonna (ce ne devono essere zero) */
+    public static final String MAILDB_OTHER_PRIVILEGES = "SELECT privilege_type FROM information_schema.user_privileges WHERE grantee IN (?, ?) AND privilege_type <> 'USAGE'\n"
+            + "UNION ALL SELECT privilege_type FROM information_schema.schema_privileges WHERE grantee IN (?, ?)\n"
+            + "UNION ALL SELECT privilege_type FROM information_schema.table_privileges WHERE grantee IN (?, ?)\n"
+            + "UNION ALL SELECT priv FROM mysql.global_grants WHERE user = ?\n"
+            + "UNION ALL SELECT from_user FROM mysql.role_edges WHERE to_user = ?\n"
+            + "UNION ALL SELECT routine_name FROM mysql.procs_priv WHERE user = ?";
+
+    /** MailDbUsers: i permessi per colonna di un utente, con il database, la tabella e la colonna */
+    public static final String MAILDB_COLUMN_PRIVILEGES = "SELECT grantee, table_schema, table_name, column_name, privilege_type FROM information_schema.column_privileges WHERE grantee IN (?, ?)";
+
+    /** MailDbUsers */
+    public static final String MAILDB_REVOKE_POSTFIX = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'mailpanel_postfix'@'localhost', 'mailpanel_postfix'@'127.0.0.1'";
+
+    /** MailDbUsers */
+    public static final String MAILDB_REVOKE_DOVECOT = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'mailpanel_dovecot'@'localhost', 'mailpanel_dovecot'@'127.0.0.1'";
+
+    /** MailDbUsers, come root di MySQL: le connessioni aperte adesso da un utente (Dovecot tiene la sua) */
+    public static final String MAILDB_CONNECTIONS = "SELECT COUNT(*) FROM information_schema.processlist WHERE user = ?";
+
+    /** MailDbUsers, da utente di Postfix: la domanda di mysql-virtual-domains.cf */
+    public static final String MAILDB_POSTFIX_DOMAIN_LOOKUP = "SELECT domain FROM domains WHERE domain = ? AND active = 1";
+
+    /** MailDbUsers, da utente di Postfix: la domanda di mysql-virtual-mailboxes.cf */
+    public static final String MAILDB_POSTFIX_MAILBOX_LOOKUP = "SELECT CONCAT(SUBSTRING_INDEX(email, '@', -1), '/', SUBSTRING_INDEX(email, '@', 1), '/') FROM mailboxes WHERE email = ? AND active = 1 AND receive_enabled = 1";
+
+    /** MailDbUsers, da utente di Postfix: la domanda di mysql-virtual-aliases.cf */
+    public static final String MAILDB_POSTFIX_ALIAS_LOOKUP = "SELECT destination FROM aliases WHERE source = ? AND active = 1";
+
+    /** MailDbUsers, da utente di Postfix: la password di una casella, che deve essere rifiutata */
+    public static final String MAILDB_POSTFIX_PASSWORD_REFUSED = "SELECT password FROM mailboxes WHERE email = ?";
+
+    /** MailDbUsers, da utente di Dovecot: la domanda di passdb */
+    public static final String MAILDB_DOVECOT_PASSWORD_LOOKUP = "SELECT email AS user, password FROM mailboxes WHERE email = ? AND active = 1";
+
+    /** MailDbUsers, da utente di Dovecot: un alias, che deve essere rifiutato */
+    public static final String MAILDB_DOVECOT_ALIAS_REFUSED = "SELECT destination FROM aliases WHERE source = ?";
 
     // ========== Le procedure della parte web ==========
     //
