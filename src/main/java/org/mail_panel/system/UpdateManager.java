@@ -40,6 +40,21 @@ import java.util.regex.Pattern;
 public final class UpdateManager {
 
     private static final Logger LOGGER = Logger.getLogger(UpdateManager.class.getName());
+
+    static {
+        // Ogni lavoro che prende il turno dei pacchetti scrive com'erano pacchetti e servizi all'inizio: se muore a
+        // meta', il pannello in servizio sa che cosa ha cambiato e lo completa (InterruptedJobRecovery).
+        PackageQueue.snapshot = UpdateManager::jobSnapshot;
+    }
+
+    /** I pacchetti installati (nome -> versione) e i servizi accesi adesso: la fotografia d'inizio di un lavoro. */
+    static JSONObject jobSnapshot() {
+        JSONObject inv = new JSONObject();
+        for (Map.Entry<String, String> e : PackagePlan.versionsOnly(PackagePlan.installed()).entrySet()) inv.put(e.getKey(), e.getValue());
+        JSONObject svc = new JSONObject();
+        for (Map.Entry<String, Boolean> e : servicesState().entrySet()) svc.put(e.getKey(), e.getValue());
+        return new JSONObject().put("inventory", inv).put("services", svc);
+    }
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
 
     /** Elenco dei pacchetti sbloccati durante una manutenzione, per rimetterli a posto dopo un crash. */
@@ -211,7 +226,7 @@ public final class UpdateManager {
     }
 
     /** Quali servizi risultano attivi adesso. Solo quelli davvero presenti sul sistema. */
-    private static Map<String, Boolean> servicesState() {
+    static Map<String, Boolean> servicesState() {
         Map<String, Boolean> m = new LinkedHashMap<>();
         for (String[] candidates : SERVICES) {
             // Un servizio non installato non e' "caduto": va distinto, altrimenti la verifica
@@ -2310,6 +2325,14 @@ public final class UpdateManager {
      * tocca niente. "" se non c'era niente da fare.
      */
     static String watchOnce() {
+        String relock = relockOnce();
+        // Poi, protetti i pacchetti e fermo pkg, il lavoro interrotto si completa: servizi rimessi in servizio e
+        // verificati (InterruptedJobRecovery). Solo qui, nel pannello in servizio: non nel menu da console.
+        String completed = InterruptedJobRecovery.completeIfInterrupted(new RecoveryMachine());
+        return relock + completed;
+    }
+
+    private static String relockOnce() {
         if (!PackageQueue.statePresent()) return "";
         JSONObject job = PackageQueue.jobRecord();
         if (job.optBoolean("expectsRestart")) return "";
@@ -2318,6 +2341,102 @@ public final class UpdateManager {
         if (pid == self && PackageQueue.holder() != null) return "";     // un lavoro di questo processo
         if (pid > 0 && pid != self && ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) return "";
         return restoreLocksAfterCrash(I18n.tr("server.recovery.turnWatch"));
+    }
+
+    /** Il sistema vero per InterruptedJobRecovery: pkg, i servizi rc.d, le ricerche della posta. */
+    static final class RecoveryMachine implements InterruptedJobRecovery.Machine {
+        @Override public long now() { return java.time.Instant.now().getEpochSecond(); }
+        @Override public boolean pkgRunning() { return !PackageRecovery.pkgRunning().isEmpty(); }
+        @Override public Map<String, String> inventory() { return PackagePlan.versionsOnly(PackagePlan.installed()); }
+        @Override public Map<String, Long> installTimes(java.util.Collection<String> names) {
+            Map<String, Long> out = new LinkedHashMap<>();
+            for (String n : names) {
+                if (!isValidName(n)) continue;
+                long t = number(sh("pkg query %t " + n + " 2>/dev/null", 20).trim());
+                if (t > 0) out.put(n, t);
+            }
+            return out;
+        }
+        @Override public java.util.List<String> servicesOf(String pkg) {
+            java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+            for (String logical : servicesToRestart(pkg)) {
+                String real = realServiceName(logical);
+                if (real != null) out.add(real);
+            }
+            return new ArrayList<>(out);
+        }
+        @Override public Map<String, Boolean> servicesState() { return UpdateManager.servicesState(); }
+        @Override public String pid(String service) { return servicePid(service); }
+        @Override public long processStart(String pid) {
+            if (pid == null || !pid.matches("[0-9]{1,10}")) return -1;
+            String e = sh("ps -o etimes= -p " + pid + " 2>/dev/null", 10).trim();
+            return e.matches("[0-9]+") ? now() - Long.parseLong(e) : -1;
+        }
+        @Override public Shell.Result configTest(String service) {
+            String test = testConfigOf(service);
+            return test == null ? null : Shell.runShell(Duration.ofSeconds(60), test + " 2>&1");
+        }
+        @Override public boolean restart(String service) { return isValidName(service) && ok("service " + service + " restart", 120); }
+        @Override public boolean start(String service) { return isValidName(service) && ok("service " + service + " start", 120); }
+        @Override public boolean running(String service) { return isValidName(service) && ok("service " + service + " status", 20); }
+        @Override public String dataCheck(String service) {
+            String[] after = testAfterOf(service);
+            if (after == null) return null;
+            String out = sh(after[1], 30).trim();
+            return number(out) > 0 ? "" : I18n.tr("server.recovery.complete.dataEmpty", java.util.Map.of("s", service,
+                    "what", I18n.tr(after[2])));
+        }
+        @Override public java.util.List<String> checksumFailures(java.util.Collection<String> pkgs) {
+            java.util.List<String> names = new ArrayList<>();
+            for (String p : pkgs) if (isValidName(p)) names.add(p);
+            if (names.isEmpty()) return java.util.List.of();
+            java.util.LinkedHashSet<String> bad = new java.util.LinkedHashSet<>();
+            String out = sh("pkg check -s " + String.join(" ", names) + " 2>&1", 600);
+            for (String line : out.split("\n")) {
+                String l = line.trim();
+                if (!l.contains("checksum mismatch") && !l.contains("missing file")) continue;
+                for (String n : names) if (l.startsWith(n + "-")) bad.add(n);
+            }
+            return new ArrayList<>(bad);
+        }
+        @Override public String reinstall(java.util.List<String> pkgs) {
+            for (String p : pkgs) if (!isValidName(p)) return "invalid package name: " + p;
+            java.util.List<String> toUnlock = new ArrayList<>();
+            Set<String> locked = lockedNames();
+            for (String p : pkgs) if (locked.contains(p)) toUnlock.add(p);
+            if (!toUnlock.isEmpty()) {
+                // Le regole di ogni sblocco: l'elenco su disco prima, poi lo sblocco; e si riprotegge sempre.
+                String err = PackageQueue.writeState(toUnlock);
+                if (err != null) return err;
+                for (String p : toUnlock) if (!ok("pkg unlock -y " + p, 30)) { relockAll(toUnlock); return "cannot unlock " + p; }
+            }
+            try {
+                Shell.Result r = Shell.runShell(Duration.ofSeconds(1800), "pkg install -f -y -U " + String.join(" ", pkgs) + " 2>&1");
+                if (r.success()) return null;
+                String[] lines = r.outputTrim().split("\n");
+                return "pkg install -f exit " + r.exitCode() + ": " + lines[lines.length - 1];
+            } finally {
+                if (!toUnlock.isEmpty()) relockAll(toUnlock);
+            }
+        }
+        private static void relockAll(java.util.List<String> names) {
+            int done = 0;
+            for (String p : names) if (ok("pkg info -e " + p, 15) && ok("pkg lock -y " + p, 30)) done++;
+            if (done == names.size()) clearState();
+        }
+        @Override public String mailLookups() {
+            java.util.List<String> problems = new ArrayList<>();
+            Path map = Paths.get("/usr/local/etc/postfix/mysql-virtual-mailboxes.cf");
+            if (Files.isRegularFile(map) && ok("service postfix status", 15)) {
+                Shell.Result r = Shell.run(Duration.ofSeconds(30), "/usr/local/sbin/postmap", "-q", MailDbUsers.PROBE, "mysql:" + map);
+                if (!MailDbUsers.postmapAnswered(r)) problems.add("postmap -q: exit " + r.exitCode() + " " + r.outputTrim());
+            }
+            if (Files.isExecutable(Paths.get(DovecotAuthWorker.DOVEADM)) && DovecotAuthWorker.running()) {
+                int rc = DovecotAuthWorker.lookup();
+                if (!DovecotAuthWorker.LOOKUP_OK.contains(rc)) problems.add("doveadm auth lookup: exit " + rc);
+            }
+            return problems.isEmpty() ? null : String.join("; ", problems);
+        }
     }
 
     static String restoreLocksAfterCrash(String turnDescription) {
@@ -6323,7 +6442,7 @@ public final class UpdateManager {
     }
 
     /** Nome effettivo dello script rc.d fra i candidati, o null se il servizio non c'e'. */
-    private static String realServiceName(String logical) {
+    static String realServiceName(String logical) {
         for (String[] candidates : SERVICES) {
             boolean belongs = false;
             for (String c : candidates) if (c.equals(logical)) belongs = true;
@@ -6489,7 +6608,7 @@ public final class UpdateManager {
         {"mysql-server", "su -m mysql -c '$(which mysqld 2>/dev/null || echo /usr/local/libexec/mysqld) --validate-config'"},
     };
 
-    private static String testConfigOf(String service) {
+    static String testConfigOf(String service) {
         for (String[] r : CONFIG_TEST) if (r[0].equals(service)) return r[1];
         return null;
     }
@@ -6507,13 +6626,13 @@ public final class UpdateManager {
         {"redis", "redis-cli DBSIZE 2>/dev/null", "server.um.testConfigOf.1"},
     };
 
-    private static String[] testAfterOf(String service) {
+    static String[] testAfterOf(String service) {
         for (String[] r : TEST_AFTER) if (r[0].equals(service)) return r;
         return null;
     }
 
     /** Il pid di un servizio, o stringa vuota. Confrontarlo prima e dopo prova che e' ripartito davvero. */
-    private static String servicePid(String service) {
+    static String servicePid(String service) {
         if (!isValidName(service)) return "";
         String o = sh("service " + service + " status 2>/dev/null", 15);
         Matcher m = Pattern.compile("pid[s]?[: ]+([0-9]+)").matcher(o.toLowerCase());

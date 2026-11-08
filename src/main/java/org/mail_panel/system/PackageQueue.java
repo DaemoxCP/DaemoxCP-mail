@@ -70,6 +70,23 @@ public final class PackageQueue {
     static Path turnLock = Path.of(TURN_LOCK_PATH);
 
     /**
+     * Il lavoro che tiene il turno, scritto su disco quando lo prende e tolto quando lo rilascia: chi e',
+     * quando e' partito, da quale processo, e com'erano pacchetti e servizi all'inizio. Se il processo muore
+     * a meta' resta, ed e' da qui che il pannello in servizio capisce che cosa il lavoro ha cambiato e lo
+     * completa (InterruptedJobRecovery): anche un lavoro che non aveva sbloccato niente, e che quindi non
+     * lasciava l'elenco. Sta accanto al lock del turno, cosi' le prove che spostano il lock spostano anche lui.
+     */
+    static Path running() {
+        return turnLock.resolveSibling("package-job-running.json");
+    }
+
+    /**
+     * Com'erano pacchetti e servizi all'inizio di un lavoro ({"inventory": {nome: versione}, "services": {nome:
+     * acceso}}): lo fornisce UpdateManager, che sa chiederlo al sistema. Vuoto finche' nessuno lo imposta.
+     */
+    static volatile java.util.function.Supplier<JSONObject> snapshot = JSONObject::new;
+
+    /**
      * Il canale e il lock di chi tiene il turno in QUESTO processo. Si toccano solo da chi tiene
      * IN_PROGRESS: un secondo canale aperto e chiuso sullo stesso file, nello stesso processo,
      * toglierebbe il lock fcntl (e' la regola di POSIX, la ricorda anche la documentazione di
@@ -115,7 +132,49 @@ public final class PackageQueue {
             release(id);
             return I18n.tr("server.turn.openList", java.util.Map.of("file", String.valueOf(list)));
         }
+        // Un lavoro vero (non il ripristino delle protezioni) lascia la sua traccia finche' tiene il turno.
+        if (notWithOpenList) writeRunning(fresh);
         return null;
+    }
+
+    private static void writeRunning(Turn t) {
+        JSONObject r = new JSONObject()
+                .put("id", t.id())
+                .put("description", t.description())
+                .put("startedUtc", java.time.Instant.ofEpochMilli(t.start()).truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString())
+                .put("startedEpoch", t.start() / 1000)
+                .put("pid", ProcessHandle.current().pid())
+                .put("expectsRestart", false);
+        try {
+            JSONObject snap = snapshot.get();
+            if (snap != null) for (String k : snap.keySet()) r.put(k, snap.get(k));
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Cannot take the snapshot of packages and services for " + t.id(), e);
+        }
+        writeJson(running(), r);
+    }
+
+    private static void writeJson(Path f, JSONObject r) {
+        try {
+            Files.createDirectories(f.getParent());
+            Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
+            Files.writeString(tmp, r.toString(2) + "\n", StandardCharsets.UTF_8);
+            Files.move(tmp, f, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Cannot write " + f, e);
+        }
+    }
+
+    /** La traccia del lavoro che tiene (o teneva) il turno, o un oggetto vuoto se non c'e'. */
+    public static JSONObject runningRecord() {
+        try { return new JSONObject(Files.readString(running())); }
+        catch (Exception e) { return new JSONObject(); }
+    }
+
+    /** Toglie la traccia: chi ha completato un lavoro interrotto, o il lavoro stesso quando rilascia il turno. */
+    static void deleteRunning() {
+        try { Files.deleteIfExists(running()); }
+        catch (Exception e) { LOGGER.log(Level.WARNING, "Cannot remove " + running(), e); }
     }
 
     /**
@@ -154,6 +213,8 @@ public final class PackageQueue {
     public static void release(String id) {
         Turn t = IN_PROGRESS.get();
         if (t == null || !t.id().equals(id)) return;
+        // Il lavoro e' finito (bene o male, ma dentro il suo finally): la sua traccia non serve piu'.
+        if (id.equals(runningRecord().optString("id"))) deleteRunning();
         // Prima il lock fra processi, poi il turno di questo processo: al contrario, un altro
         // thread potrebbe prendere il turno e trovare il file ancora bloccato da noi.
         try {
@@ -236,7 +297,12 @@ public final class PackageQueue {
      */
     public static String writeStateForRestart(List<String> packages) {
         String error = writeState(list, packages);
-        if (error == null) writeJobRecord(packages, true);
+        if (error == null) {
+            writeJobRecord(packages, true);
+            // Anche la traccia del turno: al riavvio voluto il processo e' morto per disegno, non interrotto.
+            JSONObject r = runningRecord();
+            if (!r.isEmpty()) writeJson(running(), r.put("expectsRestart", true));
+        }
         return error;
     }
 

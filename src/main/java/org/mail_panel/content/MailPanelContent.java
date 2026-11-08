@@ -12640,7 +12640,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + (r.retrying ? ' ' + escHtml(t('up.retrying')) : '') + '</div>';
             }
             if (r.notice) {
-                h += '<div class="alert alert-warning" role="alert"><strong>' + escHtml(t('up.interruptedTitle')) + '</strong>'
+                // Completato e verificato dal pannello: da leggere, non un allarme. Altrimenti resta l'avviso giallo.
+                h += '<div class="alert ' + (r.notice.completed ? 'alert-success' : 'alert-warning') + '" role="alert"><strong>'
+                   + escHtml(t(r.notice.completed ? 'up.interruptedCompletedTitle' : 'up.interruptedTitle')) + '</strong>'
                    + '<p class="mb-2">' + escHtml(r.notice.text) + '</p>';
                 // La reinstallazione interrotta: tornare al server di prima con un pulsante, non con bectl in una shell.
                 if (r.notice.reinstall && r.notice.wayBack) {

@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -84,6 +85,35 @@ public final class PackageRecovery {
         LOGGER.warning("Interrupted package job recorded in " + notice + ": " + n.optString("description"));
     }
 
+    /**
+     * Il lavoro interrotto e' stato completato dal pannello (InterruptedJobRecovery): l'avviso dice che cosa ha
+     * fatto e se tutto torna. Se l'avviso non c'era (un lavoro che non aveva sbloccato niente, e quindi non lasciava
+     * l'elenco), lo crea dalla traccia del lavoro.
+     */
+    static void recordRecovery(JSONObject running, JSONObject recovery) {
+        JSONObject n = notice();
+        if (n.isEmpty()) {
+            List<String> names = new java.util.ArrayList<>();
+            JSONArray ch = recovery.optJSONArray("changed");
+            for (int i = 0; ch != null && i < ch.length(); i++) names.add(ch.getJSONObject(i).optString("name"));
+            n.put("description", running.optString("description", ""))
+             .put("startedUtc", running.optString("startedUtc", ""))
+             .put("detectedUtc", now())
+             .put("packages", new JSONArray(names))
+             .put("unlockedAtStart", new JSONArray())
+             .put("pkgWasRunning", "");
+            if (running.optString("id", "").startsWith(InstallLocks.REINSTALL_TURN_PREFIX))
+                n.put("reinstall", true).put("wayBack", PackageWayBack.newestReinstallWayBack());
+        }
+        write(n.put("recovery", recovery));
+    }
+
+    /** L'avviso dice un lavoro completato e verificato: da leggere, non una cosa da fare. */
+    static boolean completed(JSONObject n) {
+        JSONObject r = n.optJSONObject("recovery");
+        return r != null && r.optBoolean("ok");
+    }
+
     /** I pacchetti sono di nuovo protetti: l'avviso lo dice, ma resta finche' qualcuno non controlla. */
     static void markRelocked() {
         JSONObject n = notice();
@@ -109,7 +139,8 @@ public final class PackageRecovery {
      */
     public static JSONObject reportItem() {
         JSONObject n = notice();
-        if (n.isEmpty()) return null;
+        // Completato e verificato dal pannello: non c'e' niente da fare (la pagina lo mostra comunque).
+        if (n.isEmpty() || completed(n)) return null;
         boolean reinstall = n.optBoolean("reinstall");
         return new JSONObject().put("urgency", reinstall ? 0 : 1)
                 .put("title", I18n.tr(reinstall ? "mail.report.title.reinstallInterrupted" : "server.recovery.title"))
@@ -127,7 +158,7 @@ public final class PackageRecovery {
     public static JSONObject status() {
         JSONObject r = new JSONObject().put("success", true);
         JSONObject n = notice();
-        r.put("notice", n.isEmpty() ? JSONObject.NULL : n.put("text", text(n)));
+        r.put("notice", n.isEmpty() ? JSONObject.NULL : n.put("text", text(n)).put("completed", completed(n)));
         if (PackageQueue.statePresent()) {
             r.put("stillUnprotected", new JSONArray(statePackages()));
             r.put("retrying", retry != null && retry.isAlive());
@@ -179,6 +210,36 @@ public final class PackageRecovery {
         retry.start();
     }
 
+    /** Che cosa ha fatto il pannello completando il lavoro, in una frase: pacchetti, reinstallazioni, servizi. */
+    static String actions(JSONObject r) {
+        List<String> parts = new java.util.ArrayList<>();
+        JSONArray ch = r.optJSONArray("changed");
+        if (ch != null && ch.length() > 0) {
+            List<String> list = new java.util.ArrayList<>();
+            for (int i = 0; i < ch.length(); i++) {
+                JSONObject c = ch.getJSONObject(i);
+                list.add(c.optString("name") + " " + (c.optString("from").isEmpty() ? "-" : c.optString("from")) + " -> "
+                        + (c.optString("to").isEmpty() ? "-" : c.optString("to")));
+            }
+            parts.add(I18n.tr("server.recovery.actions.changed", Map.of("list", String.join(", ", list))));
+        }
+        JSONArray re = r.optJSONArray("reinstalled");
+        if (re != null && re.length() > 0)
+            parts.add(I18n.tr("server.recovery.actions.reinstalled", Map.of("list",
+                    String.join(" ", re.toList().stream().map(String::valueOf).toList()))));
+        JSONArray sv = r.optJSONArray("services");
+        List<String> handled = new java.util.ArrayList<>();
+        for (int i = 0; sv != null && i < sv.length(); i++) {
+            JSONObject o = sv.getJSONObject(i);
+            String key = "server.recovery.actions." + o.optString("action");
+            handled.add(I18n.tr(key, Map.of("s", o.optString("name"), "before", o.optString("pidBefore", "?"),
+                    "after", o.optString("pidAfter", "?"))));
+        }
+        parts.add(handled.isEmpty() ? I18n.tr("server.recovery.actions.noServices")
+                : I18n.tr("server.recovery.actions.services", Map.of("list", String.join(", ", handled))));
+        return String.join(" ", parts);
+    }
+
     /** Il testo dell'avviso nella lingua della richiesta, per la pagina e per il rapporto. */
     static String text(JSONObject n) {
         String what = n.optString("description", "");
@@ -191,6 +252,19 @@ public final class PackageRecovery {
         String reinstall = !n.optBoolean("reinstall") ? ""
                 : " " + (n.optString("wayBack", "").isEmpty() ? I18n.tr("server.recovery.reinstallNoWayBack")
                         : I18n.tr("server.recovery.reinstallHint", java.util.Map.of("name", n.optString("wayBack"))));
+        JSONObject r = n.optJSONObject("recovery");
+        if (r != null && !n.optBoolean("reinstall")) {
+            // Il pannello l'ha completato: si dice che cosa ha fatto, e solo se qualcosa non torna che cosa resta.
+            Map<String, String> v = new java.util.HashMap<>();
+            v.put("what", what.isEmpty() ? I18n.tr("server.recovery.unknownJob") : what);
+            v.put("started", n.optString("startedUtc", "?"));
+            v.put("detected", n.optString("detectedUtc", "?"));
+            v.put("done", r.optString("finishedUtc", "?"));
+            v.put("actions", actions(r));
+            v.put("problems", String.join(" ", r.optJSONArray("problems") == null ? List.of()
+                    : r.getJSONArray("problems").toList().stream().map(String::valueOf).toList()));
+            return I18n.tr(r.optBoolean("ok") ? "server.recovery.completedText" : "server.recovery.completedProblemsText", v);
+        }
         return I18n.tr("server.recovery.text", java.util.Map.of(
                 "what", what.isEmpty() ? I18n.tr("server.recovery.unknownJob") : what,
                 "started", n.optString("startedUtc", "?"),
