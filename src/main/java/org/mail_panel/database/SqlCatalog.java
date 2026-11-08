@@ -1407,6 +1407,19 @@ public final class SqlCatalog {
     /** UpdateManager, come root: perche' mysqldump chiede un FLUSH */
     public static final String UM_GTID_STATE = "SELECT CONCAT('gtid_mode=', @@gtid_mode, '  log_bin=', @@log_bin, '  enforce_gtid_consistency=', @@enforce_gtid_consistency)";
 
+    // ========== Il database di pkg, nella COPIA del piano (PackagePlan) ==========
+    //
+    // Solo sulla copia di /var/db/pkg fatta per calcolare un piano, mai sul database vero: un pacchetto che il lavoro
+    // togliera' (pkg delete, anche -f) si dimentica nella copia, righe e non file, e poi si chiede a pkg con -n che
+    // cosa installerebbe. Le righe che dipendono dal pacchetto (file, dipendenze, opzioni) se ne vanno con lui: le
+    // tabelle di pkg hanno ON DELETE CASCADE, che SQLite applica solo con le chiavi esterne accese.
+
+    /** PackagePlan, sulla copia del database di pkg */
+    public static final String PKGDB_FOREIGN_KEYS_ON = "PRAGMA foreign_keys = ON";
+
+    /** PackagePlan, sulla copia del database di pkg: un pacchetto dimenticato */
+    public static final String PKGDB_FORGET_PACKAGE = "DELETE FROM packages WHERE name = ?";
+
     // ========== La webmail col suo utente MySQL (RoundcubeDbUser) ==========
     //
     // Da JDBC, come root o con l'utente della webmail e del pannello: i nomi degli account e le password come

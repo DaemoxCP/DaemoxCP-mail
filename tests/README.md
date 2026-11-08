@@ -123,6 +123,23 @@ prints "M7 IN PKG", then, with the panel started again, the `m7-after` mode. Onl
 
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdaterRobustnessE2ETest
 
+`SignedJobsE2ETest` runs the three dedicated package jobs end to end under the signed plan: the
+Roundcube update, the Python transition and the MySQL 8.4 migration. For each one: the checks and
+the plan (measured, with a fingerprint; the two jobs that remove packages first say it at the top of
+the plan), the job refused without a fingerprint, the job refused with a fingerprint that is not the
+plan's BEFORE touching anything (same packages, same protections, no list of unlocked packages), then
+the real run: the approved plan, nothing changed outside it, every line where it said, the
+protections back. Each mode needs the old situation prepared by `tests/signed-jobs-setup.sh` with the
+same mode (`roundcube`: Roundcube recorded one version behind the catalog; `python`: `py311-build`
+installed and protected; `mysql84`: MySQL 8.0 in place of the 8.4, with the data and the accounts
+loaded back), and puts it back with `restore-python` / `restore-mysql84`; `cleanup` removes the
+`packages-before-*` boot environments the jobs created. It starts from the panel's folder, because
+the jobs read the panel's configuration (read-only here). Only on a test machine; the full log of
+each job goes to `/var/tmp/signed-jobs-<mode>-<attempt>.log`. How it went on the VM: reperto 189.
+
+    sh tests/signed-jobs-setup.sh roundcube
+    cd /home/panel && java -De2e.vm=yes -cp "<compiled tests>:<jar>" org.mail_panel.system.SignedJobsE2ETest roundcube
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the

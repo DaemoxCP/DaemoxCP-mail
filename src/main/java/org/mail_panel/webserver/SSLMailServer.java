@@ -7967,7 +7967,7 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.startPythonTransition();
+                    response = UpdateManager.startPythonTransition(req.optString("signature", ""));
                     logAudit("PYTHON_MOVE_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "java_preflight" -> response = UpdateManager.javaPreflight();
@@ -7996,7 +7996,7 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.startRoundcubeUpdate();
+                    response = UpdateManager.startRoundcubeUpdate(req.optString("signature", ""));
                     logAudit("ROUNDCUBE_UPDATE_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "clean_client" -> {
@@ -8031,7 +8031,7 @@ public class SSLMailServer {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    response = UpdateManager.startMysql84Migration();
+                    response = UpdateManager.startMysql84Migration(req.optString("signature", ""));
                     logAudit("MYSQL84_MIGRATION_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "package_preflight" -> {

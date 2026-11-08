@@ -14200,11 +14200,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 + ' py-2 mb-0">' + escHtml(tn('up.removedN', (r.removed || []).length)) + ' ' + escHtml(t('up.pressLeftoversAgain')) + '</div>';
         }
 
+        // L'impronta del piano letto nella scheda: il lavoro parte solo se il piano ricalcolato e' lo stesso.
+        let pySignature = '';
+
         async function pyPre() {
             const el = document.getElementById('py-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.pyChecks')) + '';
             const r = await updApi('python_preflight');
+            pySignature = '';
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            pySignature = r.signature || '';
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
@@ -14212,6 +14217,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
+            if (r.plan) h += updPlanHtml(r.plan, r.signature);
             if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.nothingToMove')) + '</div>';
             else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
             else h += '<button class="btn btn-danger" data-on-click="pyRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.moveTo', { to: 'py' + r.newVersion })) + '</button>';
@@ -14221,7 +14227,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function pyRun() {
             if (!updConfirm('', t('up.wMovePython'))) return;
             const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
-            const r = await updApi('python_move', { confirm: 'MOVE PYTHON' });
+            const r = await updApi('python_move', { confirm: 'MOVE PYTHON', signature: pySignature });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.runningKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -14314,11 +14320,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pre.textContent = (r.entries || []).map(v => '=== ' + v.title + ' ===\\n' + v.text).join('\\n\\n');
         }
 
+        let rcSignature = '';
+
         async function rcPre() {
             const el = document.getElementById('rc-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.rcChecks')) + '';
             const r = await updApi('roundcube_preflight');
+            rcSignature = '';
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            rcSignature = r.signature || '';
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
@@ -14326,6 +14336,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
+            if (r.plan) h += updPlanHtml(r.plan, r.signature);
             if (r.already) {
                 h += '<div class="alert alert-success py-2 mb-0"><strong>' + escHtml(t('up.nothingToDoTitle')) + '</strong> ' + escHtml(t('up.rcLatest')) + '</div>';
             } else if (r.unknown) {
@@ -14343,7 +14354,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!updConfirm('', t('up.wUpgradeRc'))) return;
             const el = document.getElementById('rc-pre');
             const pre = document.getElementById('rc-log');
-            const r = await updApi('roundcube_update', { confirm: 'UPGRADE ROUNDCUBE' });
+            const r = await updApi('roundcube_update', { confirm: 'UPGRADE ROUNDCUBE', signature: rcSignature });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
             pre.style.display = 'block';
@@ -14351,11 +14362,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- migrazione MySQL 8.4: solo verifica ----------
+        let my84Signature = '';
+
         async function my84Pre() {
             const el = document.getElementById('my84-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.my84Checks')) + '';
             const r = await updApi('mysql84_preflight');
+            my84Signature = '';
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            my84Signature = r.signature || '';
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
@@ -14372,6 +14387,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 });
                 h += '</ul></div>';
             }
+            if (r.plan) h += updPlanHtml(r.plan, r.signature);
             if (r.alreadyDone) {
                 h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.already84')) + '</div>';
             } else if (r.blocked) {
@@ -14390,7 +14406,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // un'altra parte della pagina, e chi guardava sotto il messaggio di errore non
             // trovava niente. Un log che esiste ma non e' dove lo cerchi e' un log perduto.
             const pre = document.getElementById('my84-log');
-            const r = await updApi('mysql84_migrate', { confirm: 'MIGRATE TO 8.4' });
+            const r = await updApi('mysql84_migrate', { confirm: 'MIGRATE TO 8.4', signature: my84Signature });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.migrating')) + '</span>';
             pre.style.display = 'block';
