@@ -203,7 +203,8 @@ const allErrors = [], allDialogs = [];
     check('  what the server did is there, closed', await page.$eval('#os-log-box', d => !d.hidden && !d.open));
     check('  nothing about a new release under it', await page.$eval('#os-release', r => r.hidden));
     await page.waitForFunction(() => /One step left/.test(document.querySelector('#uc-os .uc-head').innerText), null, { timeout: 10000 });
-    check('the FreeBSD row says it too, with the same button', await page.$('#uc-os .uc-head button[data-on-click="panelRebootOpen()"]') !== null);
+    check('the FreeBSD row says it too, and the button is there once, not twice',
+        await page.$$eval('#uc-os button[data-on-click="panelRebootOpen()"]', b => b.filter(x => x.offsetParent).length) === 1);
     if (shots) await page.locator('#uc-os').screenshot({ path: path.join(shots, 'os-patches-done.png') });
 
     console.log('\n== 4b. A new FreeBSD release, one step at a time ==');
@@ -230,6 +231,8 @@ const allErrors = [], allDialogs = [];
     check('prepared for 15.2 with PREPARE UPGRADE', prep && prep.target === '15.2' && prep.confirm === 'PREPARE UPGRADE');
     st1 = await stepState();
     check('step 1 done, step 2 now', /\(done\)/.test(st1[0]) && /\(now\)/.test(st1[1]));
+    check('  the row says step 2 of 4, without repeating the button of the open steps',
+        /step 2 of 4/.test(await mv.page.innerText('#uc-os .uc-head')) && await mv.page.$('#uc-os .uc-head button') === null);
     check('  the command, ready to copy', (await mv.page.innerText('#os-cmd')) === 'freebsd-update -r 15.2-RELEASE upgrade');
     check('  copy, I have run it, and cancel: ' + (await actions()).join(', '), (await actions()).length === 3);
     if (shots) await mv.page.locator('#uc-os').screenshot({ path: path.join(shots, 'os-move-step2.png') });

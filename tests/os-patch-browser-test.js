@@ -86,7 +86,8 @@ async function logs(page) {
         check('the outcome: what is installed and the restart left, with its button', /Patches installed: FreeBSD 15\.1-RELEASE-p[0-9]+/.test(outcome)
             && /One step left: restart the server/.test(outcome) && await page.$('#os-body button[data-on-click="panelRebootOpen()"]') !== null);
         await page.waitForFunction(() => /One step left/.test(document.querySelector('#uc-os .uc-head').innerText), null, { timeout: 120000 });
-        check('the FreeBSD row says it too, with the restart button', await page.$('#uc-os .uc-head button[data-on-click="panelRebootOpen()"]') !== null);
+        check('the FreeBSD row says it too, and the restart button is there once',
+            await page.$$eval('#uc-os button[data-on-click="panelRebootOpen()"]', b => b.filter(x => x.offsetParent).length) === 1);
         if (OUT) await page.locator('#uc-os').screenshot({ path: OUT + '/patch-2-done.png' });
         const done = await logs(page);
         console.log('  operation logs:\n    ' + done.slice(0, 4).join('\n    '));

@@ -118,14 +118,17 @@
 
             // 1. Il sistema di base, guidato (reperto 196): una frase e il pulsante del passo dopo. Prima un passaggio di
             //    release cominciato, poi un riavvio che manca, poi le patch pronte. Una release nuova solo se c'e'.
-            const restart = () => document.getElementById('panelRebootModal')
+            // Col pannello della riga aperto, il pulsante del passo dopo sta li' dentro: in testata sarebbe un doppione.
+            const osDetail = document.getElementById('uc-os-detail');
+            const osOpen = !!(osDetail && !osDetail.hidden);
+            const restart = () => document.getElementById('panelRebootModal') && !osOpen
                 ? [ucButton('btn-warning', 'fa-rotate-right', t('osu.restartGo'), 'panelRebootOpen()')] : [];
             const moving = osMoving();
             if (!uc.os) reading('os', t('uc.os'));
             else if (!os.success) ucHead('os', 'error', t('uc.os'), os.error || t('common.errorShort'));
             else if (moving) {
                 ucHead('os', 'todo', t('uc.os'), t('osu.moving', { target: osRelTarget(), n: osRelStep() }),
-                    [ucButton('btn-primary', 'fa-list-check', t('osu.openMove'), 'ucRelease()')]);
+                    osOpen ? [] : [ucButton('btn-primary', 'fa-list-check', t('osu.openMove'), 'ucRelease()')]);
             } else if (os.restartNeeded) {
                 ucHead('os', 'todo', t('uc.os'), t('osu.patchRestartRow', { now: os.userland, kernel: os.installedKernel }), restart());
             } else if (!os.updatableWithFreebsdUpdate) ucHead('os', 'info', t('uc.os'), os.updatesNote || '');

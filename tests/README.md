@@ -152,6 +152,13 @@ carries the fingerprint the card showed and that the job ran that one. It signs 
 its session the fresh confirmation with the `confirm` mode of `signed-jobs-setup.sh` (VM only). It also reports
 every JavaScript error of the pages it opens.
 
+`os-patch-browser-test.js` does the FreeBSD patches on the test VM as a person would (reperto 196), in two phases:
+`install` (check for updates if none is known, the row with the patches ready and one button, the confirmation, the
+progress in one line with the details closed, the outcome with the one step left, the restart, and its button; the
+operation logs in Diagnostics with the job's log on disk; the restart from the panel's window) and `after` (once the
+VM is back: nothing left in the FreeBSD row, the logs written before the restart still there). It changes the VM:
+patches, a boot environment, a restart.
+
 `java-update-browser-test.js` does the same with the Java row (reperto 195), the one procedure that stops the panel
 itself: "Prepare", the checks and the exact plan with its fingerprint, start with the word, the panel going down
 and coming back, the sign-in again (a restart ends every session), the last report from Diagnostics. Then, on the
@@ -344,6 +351,14 @@ the panel restarted to close it; no way back; the port held by root instead of m
 CHECK); the new java does not start and the way back goes in. Plus the service detection (rc script
 and pidfile). FreeBSD only (`stat -f`): on the VM. The same flow from the browser, on the real VM
 panel, is in reperto 195.
+
+**JobJournalTest** — the jobs' log on disk (`JobJournal`, reperto 196): one file per job in
+`/var/db/mailpanel/jobs` (here a temporary folder), that survives a restart of the panel or of the server and is
+read from Diagnostics, Operation logs. The start line, every line with its UTC time, the end with status, error and
+duration written once only; folder 0700 and files 0600; only the newest KEEP stay; the list newest first, with the
+type from the name and the status from the end line (a job that never ended says so); reading only a well formed
+name inside the folder (no `..`, no absolute path, no other file); a folder that cannot be written does not stop the
+job. On the VM.
 
 **PropagationWaitTest** — waiting for propagation, with a fake clock instead of six real minutes. It
 verifies the three properties that must hold: no waiting if the domains already answer, it stops as
