@@ -111,14 +111,16 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     const errors = [];
     page.on('pageerror', e => errors.push(String(e)));
     csp.watch(page, errors);
+    // Confirmations are the panel's window (reperto 198): a browser dialog is a fault, counted and closed.
     const dialogs = [];
-    let answer = null;
-    page.on('dialog', async d => {
-        dialogs.push({ type: d.type(), message: d.message() });
-        if (d.type() === 'prompt') await d.accept(answer === null ? '' : answer);
-        else if (answer === false) await d.dismiss();
-        else await d.accept();
-    });
+    page.on('dialog', async d => { dialogs.push(d.type() + ': ' + d.message()); await d.dismiss(); });
+    const answer = async accept => {
+        await page.waitForSelector('#panelAskModal.show', { timeout: 5000 });
+        const asked = await page.innerText('#panelAskModal .modal-content');
+        await page.click(accept ? '#panelAskGo' : '#panelAskModal .modal-footer [data-bs-dismiss="modal"]');
+        await page.waitForFunction(() => !document.getElementById('panelAskModal').classList.contains('show'), null, { timeout: 5000 });
+        return asked;
+    };
 
     console.log('\n== In Italian ==');
     await page.goto(BASE + '/queue');
@@ -154,12 +156,11 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     await page.waitForSelector('#messageModal', { state: 'hidden' });
 
     console.log('\n== Deleting one message ==');
-    answer = false;
     await page.click('[data-queue-remove="5B2C3D4E6F"]');
-    await page.waitForTimeout(200);
-    check('cancelled: nothing sent', posts.length === 0 && dialogs.length === 1 && dialogs[0].message.includes('5B2C3D4E6F'));
-    answer = true;
+    const asked = await answer(false);
+    check('cancelled: nothing sent', posts.length === 0 && asked.includes('5B2C3D4E6F'));
     await page.click('[data-queue-remove="5B2C3D4E6F"]');
+    await answer(true);
     await page.waitForSelector('#queueMsg .alert-success');
     check('confirmed: remove with the ID and the CSRF token', posts.length === 1 && posts[0].action === 'remove'
         && posts[0].id === '5B2C3D4E6F' && posts[0].csrf_token === 'csrf-test');
@@ -167,15 +168,14 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     check('the answer in the message area, the list read again', (await text(page, '#queueMsg')) === 'Message 5B2C3D4E6F removed from the queue.');
 
     console.log('\n== Deleting the permanent failures ==');
-    answer = '7';
     await page.click('#purgeBtn');
-    await page.waitForSelector('#queueMsg .alert-warning');
-    const prompt = dialogs[dialogs.length - 1];
-    check('the prompt lists the recipient and the reason, and asks for the number', prompt.type === 'prompt'
-        && prompt.message.includes('gone@example.com') && prompt.message.includes('550 5.1.1') && prompt.message.includes(fill(IT['que.typeCount.one'], { n: 1 })));
-    check('a wrong number: only the preview was sent', posts.length === 2 && !posts[1].ids && posts[1].csrf_token === 'csrf-test');
-    answer = '1';
+    const purge = await answer(false);
+    check('the panel\'s window lists the recipient and the reason, with how many go and a red button',
+        purge.includes('gone@example.com') && purge.includes('550 5.1.1') && purge.includes(fill(IT['que.purgeGo.one'], { n: 1 }))
+        && await page.$eval('#panelAskGo', b => b.classList.contains('btn-danger')));
+    check('cancelled: only the preview was sent', posts.length === 2 && !posts[1].ids && posts[1].csrf_token === 'csrf-test');
     await page.click('#purgeBtn');
+    await answer(true);
     await page.waitForFunction(() => document.querySelectorAll('#queueBody tr').length === 1);
     const last = posts[posts.length - 1];
     check('the right number: the IDs seen and the number, with the token', last.action === 'purge_permfails'
@@ -185,10 +185,11 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
         posts.every(b => b.header === 'csrf-test'));
 
     console.log('\n== Flush, hold ==');
-    answer = true;
     await page.click('#flushBtn');
+    await answer(true);
     await page.waitForFunction(() => document.getElementById('queueMsg').textContent.includes('ok flush'));
     await page.click('#holdBtn');
+    await answer(true);
     await page.waitForFunction(() => document.getElementById('queueMsg').textContent.includes('ok hold'));
     check('flush and hold asked first, then sent with the token', posts.slice(-2).map(b => b.action).join(',') === 'flush,hold'
         && posts.slice(-2).every(b => b.csrf_token === 'csrf-test'));
@@ -221,6 +222,7 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     if (shots) await page.screenshot({ path: path.join(shots, 'queue-phone.png'), fullPage: true });
 
     check('no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''), errors.length === 0);
+    check('no browser dialog (confirmations are the panel\'s window)' + (dialogs.length ? ': ' + dialogs.join(' | ') : ''), dialogs.length === 0);
     await browser.close();
     console.log('\n' + (failed === 0 ? 'ALL GREEN' : failed + ' CHECKS FAILED'));
     process.exit(failed ? 1 : 0);

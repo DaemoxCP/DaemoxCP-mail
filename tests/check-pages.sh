@@ -67,6 +67,26 @@ for f in $(find "$DIR/assets" "$DIR/i18n" -name '*.js' 2>/dev/null | sort); do
 done
 if [ "$assets" -eq 0 ]; then echo "  ERROR    no script file under $DIR/assets: the pages load nothing I can check"; ko=$((ko+1)); fi
 tot=$((tot+assets))
+# No browser dialog: confirmations are the panel's window (panelAsk, panelConfirm) and messages its notices (panelSay),
+# reperto 198. A call to alert(), confirm() or prompt() in a page's script is a fault, named with the file and the
+# line; window.confirm inside panelAsk (its fallback when a page has no window) is not a call of this kind.
+dialogs=$(python3 - "$DIR" <<'PY'
+import glob, re, sys
+call = re.compile(r'(?<![A-Za-z0-9_.$])(alert|confirm|prompt)\s*\(')
+for f in sorted(glob.glob(sys.argv[1] + '/assets/*.js')):
+    for i, line in enumerate(open(f, encoding='utf-8'), 1):
+        code = re.sub(r'//.*$', '', line)
+        code = re.sub(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"", "''", code)
+        for m in call.finditer(code):
+            print('/assets/' + f.rsplit('/', 1)[1] + ':' + str(i) + ': ' + m.group(1) + '(')
+PY
+)
+if [ -n "$dialogs" ]; then
+    echo "$dialogs" | sed 's/^/  ERROR    browser dialog in /'
+    ko=$((ko+$(echo "$dialogs" | wc -l)))
+else
+    echo "  OK       no browser dialog (alert, confirm, prompt) in the scripts"
+fi
 # The structure: every element opened must be closed, and the footer sits directly in <body>.
 #
 # The JavaScript check above does not see it, and the browser does not report it either: it

@@ -165,10 +165,13 @@ async function served(route) {
     real('and the server\'s message above the table', (await page.textContent('#mbMsg')).includes('is now an alias'));
 
     console.log('\n== Delete mailbox: now with the CSRF token ==');
-    page.once('dialog', d => { real('the confirmation says the mail stays on the disk', d.message().includes(IT['mbx.confirmDelete'].split('\n').pop())); d.accept(); });
     await page.click('#mailboxesTable .dropdown-toggle');
     await page.click('#mailboxesTable .dropdown-item.text-danger');
-    await page.waitForFunction(() => true);
+    // The panel's window (reperto 198), with the red button: deleting is what it does.
+    await page.waitForSelector('#panelAskModal.show', { timeout: 5000 });
+    real('the confirmation says the mail stays on the disk', (await page.innerText('#panelAskModal .modal-body')).includes(IT['mbx.confirmDelete'].split('\n').pop()));
+    real('  with the red button', await page.$eval('#panelAskGo', b => b.classList.contains('btn-danger')));
+    await page.click('#panelAskGo');
     await page.waitForTimeout(300);
     const del = requests.find(r => r.method === 'DELETE');
     real('DELETE with the CSRF token in the body', del && del.body && del.body.csrf_token === 'csrf-test');

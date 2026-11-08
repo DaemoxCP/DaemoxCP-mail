@@ -13,11 +13,10 @@
             return await r.json();
         }
 
-        // La conferma scritta: la parola e' nella lingua della pagina, il server riceve sempre il
-        // suo codice fisso (CREA, CAMBIA, CONFIGURA) e non dipende dalla lingua.
-        function adConfirm(textValue, keyword) {
-            const typed = prompt(textValue + '\n\n' + t('ad.typeToConfirm', { word: keyword }));
-            return typed !== null && typed.trim().toUpperCase() === keyword.toUpperCase();
+        // La conferma: la finestra del pannello (reperto 198), non il prompt del browser con la parola da scrivere. Il
+        // server riceve sempre il suo codice fisso (CREA, CAMBIA, CONFIGURA), nel codice di chi chiama.
+        function adConfirm(textValue) {
+            return panelConfirm(textValue);
         }
 
         function adEsc(v) {
@@ -197,7 +196,7 @@
                 el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + escHtml(t('ad.chooseFirst')) + '</div>';
                 return;
             }
-            if (!adConfirm(t('ad.confirmFwd', { to: destination }), t('ad.wordCreate'))) return;
+            if (!await adConfirm(t('ad.confirmFwd', { to: destination }), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.creatingFwd'));
             const r = await autoDnsApi('alias_create', { confirm: 'CREATE', destination: destination });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
@@ -210,7 +209,7 @@
 
         async function autoDnsCreateMailbox() {
             const el = document.getElementById('adAliasOutcome');
-            if (!adConfirm(t('ad.confirmBox'), t('ad.wordCreate'))) return;
+            if (!await adConfirm(t('ad.confirmBox'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.creatingBox'));
             const r = await autoDnsApi('mailbox_create', { confirm: 'CREATE' });
             let h = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
@@ -293,7 +292,7 @@
 
         async function autoDnsCreateOptional(which) {
             const el = document.getElementById('adOpzOutcome');
-            if (!adConfirm(t('ad.confirmOpt'), t('ad.wordCreate'))) return;
+            if (!await adConfirm(t('ad.confirmOpt'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.writingCf'));
             const r = await autoDnsApi('create_optional', { confirm: 'CREATE', which: which });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
@@ -308,7 +307,7 @@
             const r0 = await autoDnsApi('status');
             const missingOnes = (r0.optionalItems || []).filter(x => !x.exists && !x.conflict);
             if (!missingOnes.length) { el.innerHTML = '<div class="alert alert-info py-2 small mb-0">' + escHtml(t('ad.nothingMissing')) + '</div>'; return; }
-            if (!adConfirm(tn('ad.confirmMany', missingOnes.length) + '\n\n'
+            if (!await adConfirm(tn('ad.confirmMany', missingOnes.length) + '\n\n'
                      + missingOnes.map(x => '• ' + x.type + ' ' + x.name).join('\n') + '\n\n'
                      + t('ad.noneTouched'), t('ad.wordCreate'))) return;
 
@@ -352,7 +351,7 @@
 
             const warning = fresh === 'reject' ? '\n\n' + t('ad.warnReject')
                 : fresh === 'quarantine' ? '\n\n' + t('ad.warnQuarantine') : '';
-            if (!adConfirm(t('ad.confirmPolicy', { policy: fresh }) + '\n\n'
+            if (!await adConfirm(t('ad.confirmPolicy', { policy: fresh }) + '\n\n'
                      + t('ad.before') + '  ' + a.before + '\n'
                      + t('ad.after') + '  ' + a.after + '\n\n'
                      + t('ad.onlyP')
@@ -369,7 +368,7 @@
             const sel = document.getElementById('adPolicy');
             const policy = (sel && sel.value) ? sel.value : 'none';
             const whichLabel = which === 'spf' ? 'SPF' : 'DMARC (p=' + policy + ')';
-            if (!adConfirm(t('ad.confirmCreate', { record: whichLabel }), t('ad.wordCreate'))) return;
+            if (!await adConfirm(t('ad.confirmCreate', { record: whichLabel }), t('ad.wordCreate'))) return;
             const el = document.getElementById('autoDnsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.writingCf'));
             const r = await autoDnsApi('create', { confirm: 'CREATE', which: which, policy: policy });
@@ -391,7 +390,7 @@
         // c'e' gia' e aggiunge solo il resto.
         async function autoDnsConfigureAll() {
             if (!currentDomainId) return;
-            if (!adConfirm(t('ad.confirmAll'), t('ad.wordConfigure'))) return;
+            if (!await adConfirm(t('ad.confirmAll'), t('ad.wordConfigure'))) return;
 
             const el = document.getElementById('autoDnsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.starting'));
