@@ -22,6 +22,8 @@ const shots = process.argv[3];
 const resources = path.join(__dirname, '..', 'src', 'main', 'resources');
 const BASE = 'http://panel.test';
 let failed = 0;
+// The API calls of the page being visited that the simulated server does not know (see serve).
+const unsimulated = new Set();
 function check(what, ok) {
     console.log((ok ? '  OK   ' : '  FAILED ') + what);
     if (!ok) failed++;
@@ -117,6 +119,12 @@ const API = {
                      last_seen: '2026-10-09T09:20:00Z', current: false }] },
     'GET /api/hostname': { success: true, consistent: false, sqlite_hostname: 'mail.example.com', mysql_hostname: 'mail.example.com' },
     'GET /api/roundcube-domain': { success: true, domain: 'webmail.example.com', dns_ok: false },
+    // Root's SSH keys and POP3, on Settings. Without these two the page got the bare { success: true } and sshLoad
+    // broke on keys.length: the test was red from #116 on, and it looked like a fault of the page.
+    'GET /api/ssh-keys': { success: true, keys: [
+        { type: 'ssh-ed25519', fingerprint: 'SHA256:yH3v0mJbV7kQ2cXr9pLwT4eN8sA1uZfG6dKqRbO5iEc', comment: 'admin@laptop', has_options: false },
+        { type: 'ssh-rsa', fingerprint: 'SHA256:Qm2nB8xV4cL9kP1wR7tY3uE6sD0aF5gH2jZ8oI4vXbN', comment: '', has_options: true }] },
+    'GET /api/pop3': { success: true, enabled: false },
     'POST /api/report': (q, body) => ({
         status: { success: true, sender: 'panel@example.com', recipient: 'me@example.com', frequency: 'weekly', now: 7, active: true,
                   next: 'Next report: Monday 07:00' },
@@ -167,6 +175,10 @@ async function serve(route) {
         return route.fulfill({ status: 200, contentType: type, body: fs.readFileSync(f) });
     }
     if (p.startsWith('/api/')) {
+        // A call with no simulated reply still gets { success: true }, so the page goes on, but it is noted: the page
+        // check fails on it. A bare reply hides the fields the page reads, and the error that follows looks like the
+        // page's fault (GET /api/ssh-keys, from #116 to the fix).
+        if (!API[req.method() + ' ' + p]) unsimulated.add(req.method() + ' ' + p);
         let reply = API[req.method() + ' ' + p] || { success: true };
         if (typeof reply === 'function') {
             let body = {};
@@ -249,6 +261,8 @@ const VISITS = [
     { path: '/settings', prepare: async page => {
         await page.waitForSelector('#hostnameConsistency .alert');
         await page.waitForSelector('#rcDomainDns .badge');
+        await page.waitForSelector('#sshKeysList button.btn-outline-danger');
+        await page.waitForSelector('#pop3Switch:not([disabled])');
         await page.click('.card-header button[data-on-click="repLoad()"]');
         await page.waitForSelector('#repFreq');
     } },
@@ -285,6 +299,7 @@ const VISITS = [
         console.log('\n== ' + v.path + ' ==');
         const page = await ctx.newPage();
         const errors = [];
+        unsimulated.clear();
         page.on('pageerror', e => errors.push(String(e)));
         csp.watch(page, errors);
         page.on('dialog', d => d.dismiss());
@@ -315,6 +330,8 @@ const VISITS = [
         }, IT_RE.source);
         check('no Italian in the visible text' + (found.length ? ': ' + found.slice(0, 8).join(' | ') : ''), found.length === 0);
         check('no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''), errors.length === 0);
+        check('every API the page calls has a simulated reply' + (unsimulated.size ? ': ' + [...unsimulated].join(', ') : ''),
+            unsimulated.size === 0);
         if (shots) await page.screenshot({ path: path.join(shots, 'en-' + v.path.slice(1) + '.png'), fullPage: true });
         await page.close();
     }

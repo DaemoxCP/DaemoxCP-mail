@@ -948,7 +948,10 @@ are not touched; every refusal in the audit log.
 server that answers every API plausibly (and in English). For every page: the scripts run without
 errors, <html lang="en">, and the visible text after the scripts have filled the page, plus title,
 aria-label and placeholder, has no Italian words left. For the DNS page a domain is chosen, the
-check, the time diagnostics and the autodns, autoconfig and MTA-STS tabs.
+check, the time diagnostics and the autodns, autoconfig and MTA-STS tabs. Every API the page calls
+must have a simulated reply: an unknown call still gets `{ success: true }`, but the page fails. A
+bare reply hides the fields the page reads, and the error that follows looks like the page's fault
+(Settings and `GET /api/ssh-keys`, red from #116 until it was added; reperto 194).
 
 **pkg-simulation-test.sh** — the simulation on a COPY of pkg's database, against a fake pkg that
 keeps the "locks" as files in `$FAKE_DB/locked`. It shows that the unlock happens in the copy and
