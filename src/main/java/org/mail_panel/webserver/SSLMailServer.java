@@ -3717,6 +3717,8 @@ public class SSLMailServer {
                     : resource.endsWith(".woff2") ? "font/woff2"
                     : resource.endsWith(".woff") ? "font/woff"
                     : resource.endsWith(".ttf") ? "font/ttf"
+                    // L'icona delle pagine (vendor/favicon.svg): un file nostro, senza script.
+                    : resource.endsWith(".svg") ? "image/svg+xml"
                     : "application/octet-stream";
         byte[] data;
         try (java.io.InputStream in = getClass().getResourceAsStream(resource)) {
