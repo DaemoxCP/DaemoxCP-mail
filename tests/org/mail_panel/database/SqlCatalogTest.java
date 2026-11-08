@@ -48,7 +48,7 @@ import java.util.stream.Stream;
  *     and one placeholder (the comment), the same name in the four texts; every one but the public ones is
  *     bound to the session (the helper with a real permission, or the session's own row); the idle time is
  *     WebSessions.IDLE_SECONDS; no procedure gives the DKIM private keys or the password hashes and copies; the reads give no "*" of a table; and every text parameter compared with a
- *     column is ASCII (the database's collation is not the tables').
+ *     column is ASCII (the database's collation is not the one of its tables).
  *
  * Usage (on the VM, from the project folder for part 3):
  *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.SqlCatalogTest
@@ -344,7 +344,7 @@ public class SqlCatalogTest {
         check("no read gives every column of a table (*)" + (star.isEmpty() ? "" : " " + star), star.isEmpty());
         check("the helper is not the web's: nobody gets EXECUTE on it", WebPartStatements.ROUTINES.stream()
                 .noneMatch(r -> r.grant().contains("web_session_admin")));
-        // The database's collation (utf8mb4_unicode_ci, from the installer) is not the tables' (utf8mb4_0900_ai_ci): a
+        // The database's collation (utf8mb4_unicode_ci, from the installer) is not the one of its tables (utf8mb4_0900_ai_ci): a
         // text parameter compared with a column must not take the database's, or MySQL refuses the mix.
         List<String> creates = new ArrayList<>(List.of(SqlCatalog.WEB_CREATE_SESSION_ADMIN));
         WebPartStatements.ROUTINES.forEach(r -> creates.add(r.create()));
