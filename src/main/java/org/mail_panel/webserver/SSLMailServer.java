@@ -317,6 +317,7 @@ public class SSLMailServer {
 
         // ---------- Sistema ----------
         context("/updates", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
+        context("/diagnostics", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
         context("/api/updates", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE, UPDATES_ACTIONS).reading("service_users"), this::handleApiUpdates);
         context("/logs", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
         context("/api/logs", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE).reading("search"), this::handleApiLogs);

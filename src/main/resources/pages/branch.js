@@ -13,6 +13,7 @@
 
         async function branchStatus() {
             const box = document.getElementById('branch-body');
+            if (!box) return;   // la pagina della diagnostica usa lo stesso script, senza il ramo
             box.textContent = t('up.readingPkg');
             document.getElementById('branch-preview').textContent = '';
             const r = await updApi('branch_status');
@@ -134,7 +135,10 @@
             line.append(inp, via, cancel);
             card.appendChild(line);
             box.appendChild(card);
-            inp.focus();
+            // Il fuoco all'inizio dell'anteprima, senza scorrere: si legge dall'alto, e il campo per confermare si
+            // raggiunge col Tab. Prima andava al campo in fondo, e la pagina saltava giu' di un migliaio di pixel.
+            card.setAttribute('tabindex', '-1');
+            card.focus({ preventScroll: true });
         }
 
         async function branchChange() {

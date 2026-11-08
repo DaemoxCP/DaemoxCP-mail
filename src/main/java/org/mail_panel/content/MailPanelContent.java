@@ -86,6 +86,7 @@ public class MailPanelContent {
             page(adminDir, "admins.html", getAdminsHtml(), false);
             page(adminDir, "ratelimits.html", getRateLimitsHtml(), false);
             page(adminDir, "updates.html", getUpdatesHtml(), false);
+            page(adminDir, "diagnostics.html", getDiagnosticsHtml(), false);
             page(adminDir, "forbidden.html", getForbiddenHtml(), false);
             // Gli script e gli stili che le pagine qui sopra hanno messo in file (PageAssets), quelli
             // della cornice (Layout) e della pagina «non disponibile», e via quelli di una versione di prima.
@@ -6308,6 +6309,21 @@ public class MailPanelContent {
 """ + resource("pages/autodns-card.html") + resource("pages/autoconfig-card.html") + resource("pages/mtasts-card.html") + """
             </div>
 
+            <!-- Attivare MTA-STS per tutto il server: era nella pagina degli aggiornamenti (reperto 193). Fuori dai
+                 risultati del dominio scelto, che restano nascosti finche' non se ne sceglie uno. -->
+            <div class="card mb-4 border-success">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-wand-magic-sparkles me-2" aria-hidden="true"></i><strong>{{t:up.ams}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.amsSub}}</span></span>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="amsPlan()"><i class="fas fa-list-check me-1" aria-hidden="true"></i>{{t:up.state}}</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">{{t:up.amsIntro1.html}}</p>
+                    <p class="small text-muted mb-2">{{t:up.amsIntro2.html}}</p>
+                    <div id="upd-ams"><span class="text-muted">{{t:up.phState}}</span></div>
+                </div>
+            </div>
+
             <!-- DNS Records -->
             <div id="dnsRecordsContainer">
                 <p class="text-muted">{{t:dns.pickToSee}}</p>
@@ -6604,7 +6620,8 @@ public class MailPanelContent {
             loadDnsRecords();
         });
 
-""" + getDnsJsTzDiag() + resource("pages/dns.js") + getDnsJsPart3() + getDnsJsPart2() + resource("pages/autodns.js") + resource("pages/autoconfig.js") + resource("pages/mtasts.js") + """
+""" + getDnsJsTzDiag() + resource("pages/dns.js") + getDnsJsPart3() + getDnsJsPart2() + resource("pages/autodns.js") + resource("pages/autoconfig.js") + resource("pages/mtasts.js")
+        + resource("pages/upd-api.js") + resource("pages/enable-mtasts.js") + """
     </script>
 </body>
 </html>
@@ -7970,6 +7987,20 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <h2><i class="fas fa-cog me-2" aria-hidden="true"></i>{{t:nav.settings}}</h2>
             <p class="text-muted">{{t:set.intro}}</p>
 
+            <!-- La porta 465: era nella pagina degli aggiornamenti, sta con le impostazioni della posta (reperto 193). -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-lock me-2" aria-hidden="true"></i><strong>{{t:up.p465}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.p465Sub}}</span></span>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="upd465()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">{{t:up.p465Intro1.html}}</p>
+                    <p class="small text-muted mb-2">{{t:up.p465Intro2.html}}</p>
+                    <div id="upd-465"><span class="text-muted">{{t:up.ph465}}</span></div>
+                </div>
+            </div>
+
             <div class="card mb-4 mb-4 border-success">
 """ + resource("pages/report-card.html") + """
                 <div class="card-body">
@@ -8209,7 +8240,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """ + getWebAuthnScript() + getSettingsAuthJs() + """
 """ + getSettingsHostnameJs() + """
         // Load on page load
-""" + resource("pages/report.js") + """
+""" + resource("pages/report.js") + resource("pages/upd-api.js") + resource("pages/port465.js") + """
         checkHostnameConsistency();
         checkRcDomainDnsStatus();
         repLoad();
@@ -10824,6 +10855,20 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         </div>
 
         <!-- Avvertenze prima di applicare -->
+        <!-- La porta 443: era nella pagina degli aggiornamenti, sta con le porte (reperto 193). -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-shield-halved me-2" aria-hidden="true"></i><strong>{{t:up.w443}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.w443Sub}}</span></span>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="w443Load()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.state}}</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">{{t:up.w443Intro1.html}}</p>
+                    <p class="small text-muted mb-2">{{t:up.w443Intro2.html}}</p>
+                    <div id="upd-443"><span class="text-muted">{{t:up.phState}}</span></div>
+                </div>
+            </div>
+
         <div class="fw-warning-banner mb-3">
             <strong><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>{{t:fw.beforeApply}}</strong>
             <ul class="small mb-0 mt-1 ps-3">
@@ -10836,7 +10881,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     </div>
 """ + getFooterSection() + """
     <script>
-""" + getFirewallJs() + """
+""" + getFirewallJs() + resource("pages/upd-api.js") + resource("pages/web443.js") + """
 """ + """
     </script>
 </body>
@@ -12018,8 +12063,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
      * puo' superare i 65535 byte nel constant pool, e una chiamata a metodo interrompe la
      * concatenazione costante che porterebbe a sforarlo.
      */
-    public static String getUpdatesHtml() {
-        String extraStyles = """
+    /** Gli stili delle pagine degli aggiornamenti e della diagnostica: i registri, i verdetti, la tabella dei pacchetti. */
+    private static String updatesStyles() {
+        return """
         .upd-badge-ok    { background:#198754; }
         .upd-badge-warn  { background:#ffc107; color:#000; }
         .upd-badge-stop  { background:#dc3545; }
@@ -12031,7 +12077,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
            fino a nascondere i pulsanti, a 1280 px. */
         .pk-table .badge { white-space: normal; text-align: start; }
         """;
-        return getHead("nav.updates", "updates", extraStyles) + """
+    }
+
+    public static String getUpdatesHtml() {
+        return getHead("nav.updates", "updates", updatesStyles()) + """
     <div id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <h2><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i>{{t:up.title}}</h2>
@@ -12039,26 +12088,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div id="upd-interrupted" aria-live="polite"></div>
 """ + resource("pages/update-center-card.html") + """
 
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fab fa-freebsd me-2" aria-hidden="true"></i><strong>{{t:up.os}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.osSub}}</span></span>
-                    <span>
-                        <button class="btn btn-sm btn-outline-danger me-1" data-on-click="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>{{t:up.reboot}}</button>
-                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="rcPrev()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>{{t:up.autostart}}</button>
-                        <button class="btn btn-sm btn-outline-primary" data-on-click="osState()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.sysState}}</button>
-                    </span>
-                </div>
-                <div class="card-body">
-                    <div id="os-body"><span class="text-muted">{{t:up.phSysState}}</span></div>
-                    <pre id="os-log" class="upd-log mt-2" data-style="display:none"></pre>
-                </div>
-            </div>
-
             <div class="card mb-4" id="packages">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span><i class="fas fa-cubes me-2" aria-hidden="true"></i><strong>{{t:pkgs.title}}</strong></span>
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-on-click="pkOverview()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:common.refresh}}</button>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary touch-target" id="pk-all" aria-pressed="false" data-on-click="pkToggleAll()"><i class="fas fa-list me-1" aria-hidden="true"></i><span id="pk-all-label">{{t:pkgs.showAllShort}}</span></button>
+                        <button type="button" class="btn btn-sm btn-outline-primary touch-target" data-on-click="pkOverview()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:common.refresh}}</button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-2">{{t:pkgs.intro.html}}</p>
@@ -12066,11 +12102,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <div id="pk-result" class="mt-2"></div>
                 </div>
                 <div class="card-footer">
-                    <div class="small text-muted mb-2">{{t:pkgs.bulk.intro.html}}</div>
+                    <div class="small text-muted mb-2">{{t:pkgs.bulk.introShort}}</div>
                     <div class="d-flex flex-wrap gap-1">
                         <button type="button" class="btn btn-sm btn-outline-success" data-on-click="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:pkgs.bulk.lockAll}}</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-on-click="updLockAll(false)"><i class="fas fa-lock-open me-1" aria-hidden="true"></i>{{t:pkgs.bulk.unlockAll}}</button>
-                        <a class="btn btn-sm btn-outline-primary" href="#updates"><i class="fas fa-arrow-down me-1" aria-hidden="true"></i>{{t:pkgs.bulk.goUpdates}}</a>
                     </div>
                 </div>
             </div>
@@ -12102,27 +12137,45 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-""" + resource("pages/branch-card.html") + """
-            <div class="card mb-4 border-danger">
+        </div>
+    </div>
+""" + getFooterSection() + """
+    <script>
+""" + getUpdatesScript() + """
+    </script>
+</body>
+</html>
+""";
+    }
+
+    /**
+     * Diagnostica (reperto 193): le schede che leggono il sistema e non cambiano niente, piu' qualche riparazione
+     * mirata, tolte dalla pagina degli aggiornamenti. Stesse azioni di /api/updates, stesso permesso; lo script e'
+     * quello degli aggiornamenti, che a ogni pagina fa solo cio' che trova (gli elementi che non ci sono si saltano).
+     */
+    public static String getDiagnosticsHtml() {
+        return getHead("nav.diagnostics", "diagnostics", updatesStyles()) + """
+    <div id="main" tabindex="-1" class="content container mt-4">
+        <div class="content-container">
+            <h2><i class="fas fa-stethoscope me-2" aria-hidden="true"></i>{{t:diag.title}}</h2>
+            <p class="text-muted">{{t:diag.intro}}</p>
+
+            <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i><strong>{{t:up.release}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.releaseSub}}</span></span>
+                    <span><i class="fab fa-freebsd me-2" aria-hidden="true"></i><strong>{{t:up.os}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.osSub}}</span></span>
                     <span>
-                        <select id="os-target" class="form-select form-select-sm d-inline-block me-1" data-style="width:auto" aria-label="{{t:up.targetVersionLabel}}">
-                            <option value="">{{t:up.targetVersion}}</option>
-                        </select>
-                        <button class="btn btn-sm btn-warning me-1" data-on-click="jumpState()"><i class="fas fa-forward me-1" aria-hidden="true"></i>{{t:up.continueJump}}</button>
-                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="upCheck()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkAfter}}</button>
-                        <button class="btn btn-sm btn-outline-danger" data-on-click="upPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-release-tog" data-on-click="procOpen('proc-release')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                        <button class="btn btn-sm btn-outline-danger me-1" data-on-click="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>{{t:up.reboot}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="rcPrev()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>{{t:up.autostart}}</button>
+                        <button class="btn btn-sm btn-outline-primary" data-on-click="osState()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.sysState}}</button>
                     </span>
                 </div>
-                <div class="card-body" id="proc-release" data-style="display:none">
-                    <p class="small text-muted mb-2">{{t:up.releaseIntro.html}}</p>
-                    <div id="up-body"><span class="text-muted">{{t:up.phRelease}}</span></div>
-                    <pre id="up-log" class="upd-log mt-2" data-style="display:none"></pre>
+                <div class="card-body">
+                    <div id="os-body"><span class="text-muted">{{t:up.phSysState}}</span></div>
+                    <pre id="os-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
+
 
             <div class="card mb-4 border-info">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -12137,129 +12190,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <p class="small text-muted mb-2">{{t:up.reportIntro.html}}</p>
                     <div id="rep-state"><span class="text-muted">{{t:up.phReport}}</span></div>
                     <pre id="rep-text" class="upd-log mt-2" data-style="display:none"></pre>
-                </div>
-            </div>
-
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-scale-balanced me-2" aria-hidden="true"></i><strong>{{t:up.defaults}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.defaultsSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="defCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.compare}}</button>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.defaultsIntro.html}}</p>
-                    <div id="def-body"><span class="text-muted">{{t:up.phCompare}}</span></div>
-                </div>
-            </div>
-
-            <div class="card mb-4 border-info">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-terminal me-2" aria-hidden="true"></i><strong>{{t:up.env}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.envSub}}</span></span>
-                    <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-info" data-on-click="envCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.envIntro.html}}</p>
-                    <div id="env-body"><span class="text-muted">{{t:up.phCheck}}</span></div>
-                </div>
-            </div>
-            <div class="card mb-4 border-warning">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-hand me-2" aria-hidden="true"></i><strong>{{t:up.remove}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.removeSub}}</span></span>
-                    <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-warning" data-on-click="rmCandidates()"><i class="fas fa-list me-1" aria-hidden="true"></i>{{t:up.listCandidates}}</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.removeIntro.html}}</p>
-                    <div id="rim-body"><span class="text-muted">{{t:up.phCandidates}}</span></div>
-                </div>
-            </div>
-            <div class="card mb-4 border-danger">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-link-slash me-2" aria-hidden="true"></i><strong>{{t:up.libs}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.libsSub}}</span></span>
-<div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-danger me-1" data-on-click="libsCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
-                        <button class="btn btn-sm btn-outline-secondary" data-on-click="libsDiag()"><i class="fas fa-stethoscope me-1" aria-hidden="true"></i>{{t:up.mysqlClientDiag}}</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.libsIntro.html}}</p>
-                    <div id="libs-body"><span class="text-muted">{{t:up.phCheck}}</span></div>
-                    <pre id="libs-log" class="upd-log mt-2" data-style="display:none"></pre>
-                </div>
-            </div>
-
-            <div class="card mb-4 border-primary">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-list-check me-2" aria-hidden="true"></i><strong>{{t:up.plan}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.planSub}}</span></span>
-                    <button class="btn btn-sm btn-primary" data-on-click="planLoad()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:up.computePlan}}</button>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.planIntro.html}}</p>
-                    <div id="plan-body"><span class="text-muted">{{t:up.phPlan}}</span></div>
-                    <pre id="plan-log" class="upd-log mt-2" data-style="display:none"></pre>
-                </div>
-            </div>
-
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-vial me-2" aria-hidden="true"></i><strong>{{t:up.compat}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.compatSub}}</span></span>
-                    <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-primary me-1" data-on-click="updCompat()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
-                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="updDumpDovecot()" title="{{t:up.showDovecotHint}}"><i class="fas fa-file-code me-1" aria-hidden="true"></i>{{t:up.showDovecot}}</button>
-                        <button class="btn btn-sm btn-outline-warning" data-on-click="updRegenDovecot()" title="{{t:up.regenDovecotHint}}"><i class="fas fa-wand-magic-sparkles me-1" aria-hidden="true"></i>{{t:up.regenDovecot}}</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div id="upd-compat"><span class="text-muted">{{t:up.phCompat}}</span></div>
-                    <div id="upd-dovecot-dump" class="mt-3"></div>
-                </div>
-            </div>
-
-            <div class="card mb-4 border-success">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-wand-magic-sparkles me-2" aria-hidden="true"></i><strong>{{t:up.ams}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.amsSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="amsPlan()"><i class="fas fa-list-check me-1" aria-hidden="true"></i>{{t:up.state}}</button>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.amsIntro1.html}}</p>
-                    <p class="small text-muted mb-2">{{t:up.amsIntro2.html}}</p>
-                    <div id="upd-ams"><span class="text-muted">{{t:up.phState}}</span></div>
-                </div>
-            </div>
-""" + resource("pages/cf-ranges-card.html") + """
-
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-shield-halved me-2" aria-hidden="true"></i><strong>{{t:up.w443}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.w443Sub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="w443Load()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.state}}</button>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.w443Intro1.html}}</p>
-                    <p class="small text-muted mb-2">{{t:up.w443Intro2.html}}</p>
-                    <div id="upd-443"><span class="text-muted">{{t:up.phState}}</span></div>
-                </div>
-            </div>
-
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-globe me-2" aria-hidden="true"></i><strong>{{t:up.web}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.webSub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="webDiag()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.diagnose}}</button>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.webIntro1.html}}</p>
-                    <p class="small text-muted mb-2">{{t:up.webIntro2.html}}</p>
-                    <div id="upd-web"><span class="text-muted">{{t:up.phDiagnose}}</span></div>
                 </div>
             </div>
 
@@ -12288,102 +12218,119 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4">
+            <div class="card mb-4 border-danger">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-lock me-2" aria-hidden="true"></i><strong>{{t:up.p465}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.p465Sub}}</span></span>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="upd465()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:up.p465Intro1.html}}</p>
-                    <p class="small text-muted mb-2">{{t:up.p465Intro2.html}}</p>
-                    <div id="upd-465"><span class="text-muted">{{t:up.ph465}}</span></div>
-                </div>
-            </div>
-
-
-            <div class="card mb-4" id="updates">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-download me-2" aria-hidden="true"></i><strong>{{t:up.updates}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.updatesSub}}</span></span>
-                    <div class="text-nowrap">
-                        <button class="btn btn-sm btn-outline-primary me-1" data-on-click="updStatus()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
-                        <button class="btn btn-sm btn-outline-warning me-1" data-on-click="updApply()" title="{{t:up.upgradeUnlockedHint}}"><i class="fas fa-download me-1" aria-hidden="true"></i>{{t:up.upgradeUnlocked}}</button>
-                        <button class="btn btn-sm btn-outline-danger" data-on-click="updMaintPreview()" title="{{t:up.fullMaintHint}}"><i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>{{t:up.fullMaint}}</button>
+                    <span><i class="fas fa-link-slash me-2" aria-hidden="true"></i><strong>{{t:up.libs}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.libsSub}}</span></span>
+<div class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-danger me-1" data-on-click="libsCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
+                        <button class="btn btn-sm btn-outline-secondary" data-on-click="libsDiag()"><i class="fas fa-stethoscope me-1" aria-hidden="true"></i>{{t:up.mysqlClientDiag}}</button>
                     </div>
                 </div>
                 <div class="card-body">
-                    <div id="upd-status"><span class="text-muted">{{t:up.phUpdates}}</span></div>
-                    <pre id="upd-log" class="upd-log mt-2" data-style="display:none"></pre>
+                    <p class="small text-muted mb-2">{{t:up.libsIntro.html}}</p>
+                    <div id="libs-body"><span class="text-muted">{{t:up.phCheck}}</span></div>
+                    <pre id="libs-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fab fa-python me-2" aria-hidden="true"></i><strong>{{t:up.py}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.pySub}}</span></span>
-                    <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="pyLeftovers()"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:up.leftovers}}</button>
-                        <button class="btn btn-sm btn-outline-primary" data-on-click="pyPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-python-tog" data-on-click="procOpen('proc-python')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
-                    </span>
+                    <span><i class="fas fa-vial me-2" aria-hidden="true"></i><strong>{{t:up.compat}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.compatSub}}</span></span>
+                    <div class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-primary me-1" data-on-click="updCompat()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:set.verify}}</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="updDumpDovecot()" title="{{t:up.showDovecotHint}}"><i class="fas fa-file-code me-1" aria-hidden="true"></i>{{t:up.showDovecot}}</button>
+                        <button class="btn btn-sm btn-outline-warning" data-on-click="updRegenDovecot()" title="{{t:up.regenDovecotHint}}"><i class="fas fa-wand-magic-sparkles me-1" aria-hidden="true"></i>{{t:up.regenDovecot}}</button>
+                    </div>
                 </div>
-                <div class="card-body" id="proc-python" data-style="display:none">
-                    <p class="small text-muted mb-2">{{t:up.pyIntro.html}}</p>
-                    <div id="py-pre"><span class="text-muted">{{t:up.phPre}}</span></div>
-                    <pre id="py-log" class="upd-log mt-2" data-style="display:none"></pre>
-                </div>
-            </div>
-
-            <div class="card mb-4 border-danger">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fab fa-java me-2" aria-hidden="true"></i><strong>{{t:up.jvm}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.jvmSub}}</span></span>
-                    <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="jvState()"><i class="fas fa-file-alt me-1" aria-hidden="true"></i>{{t:up.lastReport}}</button>
-                        <button class="btn btn-sm btn-outline-danger" data-on-click="jvPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-jvm-tog" data-on-click="procOpen('proc-jvm')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
-                    </span>
-                </div>
-                <div class="card-body" id="proc-jvm" data-style="display:none">
-                    <p class="small text-muted mb-2">{{t:up.jvmIntro.html}}</p>
-                    <div id="jv-pre"><span class="text-muted">{{t:up.phPre}}</span></div>
-                    <pre id="jv-log" class="upd-log mt-2" data-style="display:none"></pre>
+                <div class="card-body">
+                    <div id="upd-compat"><span class="text-muted">{{t:up.phCompat}}</span></div>
+                    <div id="upd-dovecot-dump" class="mt-3"></div>
                 </div>
             </div>
 
-            <div class="card mb-4 border-warning">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-envelope-open-text me-2" aria-hidden="true"></i><strong>{{t:up.rc}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.rcSub}}</span></span>
-                    <span>
-                        <button class="btn btn-sm btn-outline-secondary me-1" data-on-click="rcDiag()"><i class="fas fa-stethoscope me-1" aria-hidden="true"></i>{{t:up.whyNoAnswer}}</button>
-                        <button class="btn btn-sm btn-outline-info me-1" data-on-click="rcNginx()"><i class="fas fa-wrench me-1" aria-hidden="true"></i>{{t:up.assetsNoStyle}}</button>
-                        <button class="btn btn-sm btn-outline-warning" data-on-click="rcPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-roundcube-tog" data-on-click="procOpen('proc-roundcube')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+            <div class="card mb-4">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span><i class="fas fa-envelope-open-text me-2" aria-hidden="true"></i><strong>{{t:uc.roundcube}}</strong>
+                        <span class="small text-muted ms-2">{{t:diag.rcSub}}</span></span>
+                    <span class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary touch-target" data-on-click="rcDiag()"><i class="fas fa-stethoscope me-1" aria-hidden="true"></i>{{t:up.whyNoAnswer}}</button>
+                        <button type="button" class="btn btn-sm btn-outline-info touch-target" data-on-click="rcNginx()"><i class="fas fa-wrench me-1" aria-hidden="true"></i>{{t:up.assetsNoStyle}}</button>
                     </span>
                 </div>
-                <div class="card-body" id="proc-roundcube" data-style="display:none">
-                    <p class="small text-muted mb-2">{{t:up.rcIntro.html}}</p>
-                    <div id="rc-pre"><span class="text-muted">{{t:up.phPre}}</span></div>
+                <div class="card-body">
+                    <div id="rc-pre"><span class="text-muted">{{t:diag.rcPlaceholder}}</span></div>
                     <pre id="rc-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
-            <div class="card mb-4 border-warning">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-database me-2" aria-hidden="true"></i><strong>{{t:up.my84}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.my84Sub}}</span></span>
-                    <button class="btn btn-sm btn-outline-warning" data-on-click="my84Pre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                    <button class="btn btn-sm btn-outline-secondary ms-1" id="proc-mysql-tog" data-on-click="procOpen('proc-mysql')" title="{{t:up.toggleProc}}" aria-label="{{t:up.toggleProc}}" aria-expanded="false"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+            <div class="card mb-4">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span><i class="fab fa-java me-2" aria-hidden="true"></i><strong>{{t:uc.java}}</strong>
+                        <span class="small text-muted ms-2">{{t:diag.jvmSub}}</span></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary touch-target" data-on-click="jvState()"><i class="fas fa-file-alt me-1" aria-hidden="true"></i>{{t:up.lastReport}}</button>
                 </div>
-                <div class="card-body" id="proc-mysql" data-style="display:none">
-                    <p class="small text-muted mb-2">{{t:up.my84Intro.html}}</p>
-                    <div id="my84-pre"><span class="text-muted">{{t:up.phPre2}}</span></div>
-                    <pre id="my84-log" class="upd-log mt-2" data-style="display:none"></pre>
+                <div class="card-body">
+                    <div id="jv-pre"><span class="text-muted">{{t:diag.jvmPlaceholder}}</span></div>
+                    <pre id="jv-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
             </div>
 
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-globe me-2" aria-hidden="true"></i><strong>{{t:up.web}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.webSub}}</span></span>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="webDiag()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.diagnose}}</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">{{t:up.webIntro1.html}}</p>
+                    <p class="small text-muted mb-2">{{t:up.webIntro2.html}}</p>
+                    <div id="upd-web"><span class="text-muted">{{t:up.phDiagnose}}</span></div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-scale-balanced me-2" aria-hidden="true"></i><strong>{{t:up.defaults}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.defaultsSub}}</span></span>
+                    <button class="btn btn-sm btn-outline-primary" data-on-click="defCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.compare}}</button>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">{{t:up.defaultsIntro.html}}</p>
+                    <div id="def-body"><span class="text-muted">{{t:up.phCompare}}</span></div>
+                </div>
+            </div>
+
+            <div class="card mb-4 border-info">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-terminal me-2" aria-hidden="true"></i><strong>{{t:up.env}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.envSub}}</span></span>
+                    <div class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-info" data-on-click="envCheck()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:up.check}}</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">{{t:up.envIntro.html}}</p>
+                    <div id="env-body"><span class="text-muted">{{t:up.phCheck}}</span></div>
+                </div>
+            </div>
+
+            <div class="card mb-4 border-warning">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-hand me-2" aria-hidden="true"></i><strong>{{t:up.remove}}</strong>
+                        <span class="small text-muted ms-2">{{t:up.removeSub}}</span></span>
+                    <div class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-warning" data-on-click="rmCandidates()"><i class="fas fa-list me-1" aria-hidden="true"></i>{{t:up.listCandidates}}</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">{{t:up.removeIntro.html}}</p>
+                    <div id="rim-body"><span class="text-muted">{{t:up.phCandidates}}</span></div>
+                </div>
+            </div>
+
+""" + resource("pages/cf-ranges-card.html") + """
         </div>
     </div>
 """ + getFooterSection() + """
@@ -12400,7 +12347,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // (limite del formato .class). Concatenare due letterali NON basta: javac li fonde
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
-        return getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js")
+        return resource("pages/upd-api.js") + getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js")
                 + resource("pages/update-center.js");
     }
 
@@ -12441,6 +12388,20 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return h;
         }
 
+        // Per impostazione si vedono solo i pacchetti che chiedono qualcosa: un aggiornamento, una vulnerabilita', un
+        // pacchetto del server di posta senza protezione (reperto 193). Gli altri, a richiesta.
+        let pkShowAll = false, pkLast = null;
+
+        function pkNeedsAttention(p) { return p.update || !!p.vuln || (p.stack && !p.locked); }
+
+        function pkToggleAll() {
+            pkShowAll = !pkShowAll;
+            const b = document.getElementById('pk-all'), label = document.getElementById('pk-all-label');
+            if (b) b.setAttribute('aria-pressed', String(pkShowAll));
+            if (label) label.textContent = pkShowAll ? t('pkgs.showAttention') : t('pkgs.showAllShort');
+            if (pkLast) pkRender(pkLast);
+        }
+
         async function pkOverview() {
             const el = document.getElementById('pk-body');
             if (!el) return;
@@ -12453,7 +12414,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // «Aggiorna il server» usa questa lettura invece di rifarla (reperto 186): e' la piu' pesante.
             document.dispatchEvent(new CustomEvent('upd:packages', { detail: r }));
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; return; }
+            pkLast = r;
+            pkRender(r);
+        }
+
+        function pkRender(r) {
+            const el = document.getElementById('pk-body');
             const s = r.summary || {};
+            const proc = r.procedures || {};
+            const shown = (r.packages || []).filter(p => pkShowAll || pkNeedsAttention(p));
             let h = '<div class="d-flex flex-wrap gap-1 mb-2">'
                   + '<span class="badge ' + (s.updates ? 'bg-primary' : 'bg-success') + '">' + escHtml(tn('pkgs.sum.updates', s.updates || 0)) + '</span>'
                   + '<span class="badge ' + (s.vulnerable ? 'bg-danger' : 'bg-success') + '">' + escHtml(tn('pkgs.sum.vulnerable', s.vulnerable || 0)) + '</span>'
@@ -12470,16 +12439,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             h += '<div class="table-responsive"><table class="table table-cards table-sm align-middle mb-2 pk-table"><thead><tr>'
                + '<th scope="col">' + escHtml(t('pkgs.colPackage')) + '</th><th scope="col">' + escHtml(t('pkgs.colInstalled')) + '</th><th scope="col">' + escHtml(t('pkgs.colAvailable')) + '</th>'
                + '<th scope="col">' + escHtml(t('pkgs.colSecurity')) + '</th><th scope="col">' + escHtml(t('pkgs.colLock')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('up.colAction')) + '</span></th></tr></thead><tbody>';
-            (r.packages || []).forEach((p, i) => {
+            shown.forEach((p, i) => {
                 const detailInfo = pkDetails(p);
                 let actionItems = '';
-                if (p.update) {
+                // Java del pannello e Roundcube, quando hanno la loro procedura, si fanno dalla loro riga in
+                // «Aggiorna il server», in cima: qui lo si dice, senza un pulsante che porti altrove.
+                const own = p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);
+                if (p.update && own) {
+                    actionItems += '<span class="badge bg-info text-dark me-1 mb-1">' + escHtml(t('pkgs.ownProcedure')) + '</span>';
+                } else if (p.update) {
                     if (p.canUpdate) {
                         actionItems += '<button type="button" class="btn btn-sm ' + (p.vuln ? 'btn-warning' : 'btn-outline-primary') + ' me-1 mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-on-click="pkUpdOpen(this.dataset.pkg)">'
                                 + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: p.available })) + '</button>';
-                    } else if (p.javaFlow) {
-                        actionItems += '<button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1 text-nowrap" data-on-click="pkGoJava()">'
-                                + '<i class="fab fa-java me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.javaFlow')) + '</button>';
                     } else {
                         actionItems += '<span class="badge bg-secondary me-1 mb-1">' + escHtml(t('pkgs.heldBack')) + '</span>';
                     }
@@ -12502,6 +12473,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (detailInfo) h += '<tr id="pk-det-' + i + '" hidden><td colspan="6" class="small">' + detailInfo + '</td></tr>';
             });
             h += '</tbody></table></div>';
+            if (!shown.length) {
+                // Niente da fare: la tabella vuota non direbbe niente, la frase si'.
+                h = h.substring(0, h.indexOf('<div class="table-responsive">'));
+                h += '<p class="small mb-2"><i class="fas fa-circle-check text-success me-1" aria-hidden="true"></i>'
+                   + escHtml(tn('pkgs.allQuiet', (r.packages || []).length)) + '</p>';
+            }
             if ((r.others || []).length) {
                 h += '<details class="small"><summary>' + escHtml(tn('pkgs.others', r.others.length)) + '</summary>'
                    + '<p class="text-muted mt-2 mb-1">' + escHtml(t('pkgs.othersHint')) + '</p><ul class="mb-0">'
@@ -12518,12 +12495,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             btn.setAttribute('aria-expanded', String(!row.hidden));
         }
 
-        /* Il JDK del pannello ha la sua procedura: si apre la sua scheda. */
-        function pkGoJava() {
-            procOpen('proc-jvm', true);
-            const c = document.getElementById('proc-jvm');
-            if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
 
         async function pkLock(name, lock) {
             const el = document.getElementById('pk-result');
@@ -12689,63 +12660,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
     private static String getUpdatesScript1() {
         return """
-        let updBusy = false;
-
-        // Le operazioni su pkg toccano la rete e durano decine di secondi, tenendo occupato
-        // un thread HTTP del pannello: due click o due schede bastano a saturarlo. La guardia
-        // sta qui, in un punto solo, invece che dentro ogni funzione.
-        async function updApi(action, extra) {
-            // Le letture leggere non passano dalla guardia. Prima la guardia veniva prima di sapere se
-            // l'azione era lenta: al caricamento della pagina branch_status e packages_overview partono
-            // per primi, e interruption_status tornava «occupato» senza nemmeno chiedere. L'avviso di un
-            // lavoro interrotto (e il pulsante per tornare indietro) non compariva mai (reperto 176).
-            const slow = action !== 'job_status' && action !== 'interruption_status';
-            // In fila, non rifiutate (reperto 185): «Stato del sistema» premuto mentre la pagina caricava
-            // i pacchetti rispondeva «Operazione già in corso» e la scheda restava vuota. Una richiesta
-            // aspetta che finisca quella prima; il server ha comunque i suoi turni per i lavori.
-            if (slow) {
-                const before = updQueue;
-                let done;
-                updQueue = new Promise(resolve => { done = resolve; });
-                await before;
-                updBusy = true;
-                try { return await updSend(action, extra); }
-                finally { updBusy = false; done(); }
-            }
-            return updSend(action, extra);
-        }
-
-        let updQueue = Promise.resolve();
-
-        async function updSend(action, extra) {
-            try {
-                const body = Object.assign({
-                    action: action,
-                    csrf_token: document.getElementById('csrf_token').value
-                }, extra || {});
-                const res = await fetch('/api/updates', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                return await res.json();
-            } catch (e) {
-                return { success: false, error: t('common.networkError', { message: e.message }) };
-            }
-        }
-
-        // Conferma scritta: la parola si mostra nella lingua della pagina; al server va il suo codice.
-        function updConfirm(textValue, keyword) {
-            const typed = prompt((textValue ? textValue + '\\n\\n' : '') + t('ad.typeToConfirm', { word: keyword }));
-            return typed !== null && typed.trim().toUpperCase() === keyword.toUpperCase();
-        }
-
-        function updEsc(v) {
-            const d = document.createElement('div');
-            d.textContent = v === null || v === undefined ? '' : String(v);
-            return d.innerHTML;
-        }
-
         // I verdetti arrivano come codici: il server e la pagina li confrontano cosi' come sono,
         // e il testo da leggere si sceglie qui, nella lingua della pagina.
         function updVerdict(v) {
@@ -12784,7 +12698,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.bWait')) + '</span>';
         }
 
-""" + resource("pages/port465.js") + resource("pages/standards-watch.js") + resource("pages/web-diagnostics.js") + resource("pages/service-users.js") + resource("pages/web443.js") + resource("pages/enable-mtasts.js") + resource("pages/cf-ranges.js") + """
+""" + resource("pages/standards-watch.js") + resource("pages/web-diagnostics.js") + resource("pages/service-users.js") + resource("pages/cf-ranges.js") + """
         // ---------- compatibilita' ----------
         async function updCompat() {
             const el = document.getElementById('upd-compat');
@@ -13178,7 +13092,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('os_patch_install', { confirm: 'INSTALL PATCHES' });
             if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
             planPoll(r.jobId, document.getElementById('os-body'), pre, function () {
-                osState();
+                if (document.getElementById('ucList')) ucLoad(true); else osState();
                 if (typeof panelRebootRefresh === 'function') panelRebootRefresh();
             });
         }
@@ -13990,122 +13904,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // ---------- piano di manutenzione ----------
-        function planBadge(stateValue) {
-            if (stateValue === 'done')   return '<span class="badge upd-badge-ok"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('up.pDone')) + '</span>';
-            if (stateValue === 'manual') return '<span class="badge upd-badge-warn">' + escHtml(t('up.pManual')) + '</span>';
-            return '<span class="badge upd-badge-stop">' + escHtml(t('up.pTodo')) + '</span>';
-        }
-
-        let planActions = [];
-
-        async function planLoad() {
-            planActions = [];
-            const el = document.getElementById('plan-body');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingSystem')) + '';
-            const r = await updApi('plan');
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-
-            let firstToDo = true;
-
-            function lineItem(p, labelText) {
-                const activeNow = p.state === 'todo' && firstToDo;
-                if (p.state === 'todo') firstToDo = false;
-                let h = '<div class="border rounded p-2 mb-2' + (activeNow ? ' border-primary' : '') + '">'
-                      + '<div class="d-flex justify-content-between align-items-center">'
-                      + '<span><strong>' + labelText + updEsc(p.title) + '</strong> ' + planBadge(p.state) + '</span>';
-                if (activeNow && p.action) {
-                    const idx = planActions.push(p.action) - 1;
-                    h += '<button class="btn btn-sm btn-primary" data-on-click="planRun(' + idx + ')">'
-                       + '<i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runStep')) + '</button>';
-                } else if (p.redoAction) {
-                    // Passo gia' fatto ma ripetibile: pulsante secondario, sempre disponibile,
-                    // fuori dalla regola del "solo il primo" perche' non e' un passo da fare.
-                    const idx = planActions.push(p.redoAction) - 1;
-                    h += '<button class="btn btn-sm btn-outline-secondary" data-on-click="planRun(' + idx + ')" '
-                       + 'title="' + escHtml(t('up.redoHint')) + '">'
-                       + '<i class="fas fa-rotate me-1" aria-hidden="true"></i>' + escHtml(t('up.redo')) + '</button>';
-                }
-                h += '</div>'
-                   + '<div class="small mt-1">' + updEsc(p.situation) + '</div>'
-                   + '<div class="small text-muted mt-1">' + updEsc(p.why) + '</div>'
-                   + '</div>';
-                return h;
-            }
-
-            const steps = r.steps || [];
-            let h = '<div class="mb-2 small">' + (r.toDo === 0
-                ? '<span class="text-success"><i class="fas fa-circle-check me-1" aria-hidden="true"></i><strong>' + escHtml(t('up.nothingToDo')) + '</strong></span>'
-                : '<strong>' + escHtml(tn('up.stepsToDo', r.toDo)) + '</strong> ' + escHtml(t('up.onlyFirst')))
-                + '</div>';
-
-            // I passi si presentano nell'ordine di esecuzione, ma con identita' stabili:
-            // le fasi hanno una lettera fissa, i pacchetti si chiamano col proprio nome.
-            // Cosi' nessuna etichetta cambia significato quando un passo viene completato.
-            // Nessuna intestazione di gruppo: fasi e pacchetti si alternano nell'ordine di
-            // esecuzione, e ripetere "Fasi" e "Pacchetti" a ogni cambio faceva sembrare sezioni
-            // separate cio' che e' una sequenza sola. Ogni riga si presenta gia' da se': le fasi
-            // con la loro lettera, i pacchetti col loro nome.
-            steps.forEach(p => {
-                // La lettera arriva dal backend, legata alla chiave del passo: non si ricava
-                // dalla posizione, altrimenti una fase che compare farebbe scorrere le altre.
-                const labelText = p.group === 'phase' ? escHtml(t('up.phase', { letter: p.letter })) + ' &mdash; ' : '';
-                h += lineItem(p, labelText);
-            });
-
-            if ((r.withoutRemedy || []).length) {
-                h += '<div class="alert alert-secondary py-2 small mb-0"><strong>' + escHtml(t('up.noFix')) + '</strong> '
-                   + r.withoutRemedy.map(x => updEsc(x)).join(', ')
-                   + '. ' + escHtml(t('up.noFixNote')) + '</div>';
-            }
-            el.innerHTML = h;
-        }
-
-        async function planRun(idx) {
-            const actionItem = planActions[idx];
-            if (!actionItem) { alert(t('up.stepStale')); return; }
-            const el = document.getElementById('plan-body');
-            const pre = document.getElementById('plan-log');
-            let r;
-            if (actionItem.type === 'packages_lock_all') {
-                r = await updApi('packages_lock', { lock: true, package: '' });
-                if (!r.success) { alert(r.error || t('common.failed')); return; }
-                planLoad();
-                return;
-            }
-            if (actionItem.type === 'updates_apply') {
-                /* Non si parte da qui: questo aggiornamento ha un piano e una firma, e si
-                   approva nella scheda che li mostra. Come per il JDK del pannello, si va
-                   dove la decisione si puo' prendere guardandola. */
-                const c = document.getElementById('upd-status');
-                if (c) {
-                    updStatus();
-                    c.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-                alert(t('up.applyFromCard'));
-                return;
-            } else if (actionItem.type === 'package_update') {
-                // L'aggiornamento di un pacchetto passa sempre dalla sua finestra: piano esatto,
-                // conferma con il nome, avanzamento.
-                pkUpdOpen(actionItem.package);
-                return;
-            } else if (actionItem.type === 'rspamd_clean_cache') {
-                if (!updConfirm('', t('up.wDeleteCache'))) return;
-                r = await updApi('rspamd_clean_cache', { confirm: 'DELETE CACHE' });
-            } else if (actionItem.type === 'dovecot_config_regen') {
-                if (!updConfirm('', t('up.wRegen'))) return;
-                r = await updApi('dovecot_config_regen', { confirm: 'REGENERATE' });
-            } else {
-                alert(t('up.noAutoAction'));
-                return;
-            }
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.stepRunning')) + '</span>';
-            pre.style.display = 'block';
-            planPoll(r.jobId, el, pre);
-        }
-
-        // after: cosa fare a lavoro finito (bene o male); senza, si ricalcola il piano come prima.
+        // La scheda del piano di manutenzione non c'e' piu': «Aggiorna il server» e' quella lista, e ogni riga fa la sua
+        // cosa sul posto (reperto 193). Resta planPoll, con cui le procedure seguono i loro lavori.
         async function planPoll(id, el, pre, after) {
             const s = await updApi('job_status', { jobId: id });
             if (s.success && s.job) {
@@ -14114,14 +13914,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (s.job.status === 'completed') {
                     el.innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>'
                                  + escHtml(t('up.stepDone', { s: s.job.elapsedSeconds })) + '</span>';
-                    setTimeout(after || planLoad, 1500);
+                    setTimeout(after || (() => ucLoad(true)), 1500);
                     return;
                 }
                 if (s.job.status === 'error') {
                     // Andato male: il messaggio resta a vista (rileggere la scheda lo coprirebbe).
                     el.innerHTML = '<div class="alert alert-danger py-2"><strong>' + escHtml(t('up.stepFailed')) + '</strong> '
                                  + updEsc(s.job.errorMessage) + '<br>' + escHtml(t('up.readLogFirst')) + '</div>'
-                                 + '<button class="btn btn-sm btn-outline-primary" data-on-click="planLoad()">' + escHtml(t('up.recomputePlan')) + '</button>';
+                                 + (document.getElementById('ucList') ? '<button type="button" class="btn btn-sm btn-outline-primary" data-on-click="ucLoad(true)">' + escHtml(t('uc.reread')) + '</button>' : '');
                     return;
                 }
             }
@@ -14496,10 +14296,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         async function updLockAll(doLock) {
             if (!doLock && !confirm(t('up.confirmUnlockAll'))) return;
-            const el = document.getElementById('upd-packages');
+            // Nel riquadro dell'esito della scheda dei pacchetti: 'upd-packages' non esisteva piu', e il pulsante si
+            // fermava alla prima riga senza dire niente (trovato col controllo degli id, reperto 193).
+            const el = document.getElementById('pk-result');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(doLock ? t('up.locking') : t('up.unlocking'));
             const r = await updApi('packages_lock', { lock: doLock, package: '' });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            el.textContent = '';
             updPackages();
         }
 

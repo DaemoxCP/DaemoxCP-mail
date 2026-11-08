@@ -66,6 +66,7 @@ public final class Layout {
             new Item("firewall", "/firewall", "fas fa-fire", "nav.firewall", "security.view", "security.manage"))),
         new Section("nav.section.system", List.of(
             new Item("updates", "/updates", "fas fa-arrow-up-right-dots", "nav.updates", "system.view", "system.manage"),
+            new Item("diagnostics", "/diagnostics", "fas fa-stethoscope", "nav.diagnostics", "system.view", "system.manage"),
             new Item("logs", "/logs", "fas fa-file-lines", "nav.logs", "system.view", "system.manage"),
             new Item("paths", "/paths", "fas fa-folder-tree", "nav.paths", "system.view", null),
             new Item("admins", "/admins", "fas fa-users-gear", "nav.admins", "admins.manage", "admins.manage"),

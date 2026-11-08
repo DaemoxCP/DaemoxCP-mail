@@ -1,8 +1,9 @@
 
-        // ---------- Aggiorna il server (reperto 186) ----------
-        // Un posto solo per sapere cosa c'e' da aggiornare e farlo: il sistema di base, i pacchetti, quelli
-        // del server di posta (protetti, uno alla volta), la Java del pannello, il ramo e il riavvio. Legge
-        // con le azioni delle schede qui sotto e fa le cose con i loro lavori: qui cambia solo il percorso.
+        // ---------- Aggiorna il server (reperti 186, 193) ----------
+        // Un posto solo per sapere cosa c'e' da aggiornare e farlo. Ogni riga ha la sua testata (lo stato a parole e i
+        // pulsanti), che si ridisegna quando arrivano i dati, e il suo pannello sotto, che resta dov'e': il pulsante lo
+        // apre sul posto, senza mandare a un'altra scheda. Le righe di Java, Roundcube, MySQL e Python compaiono solo
+        // quando il server dice che servono (packages_overview, «procedures»). I lavori sono quelli di sempre.
         const uc = { os: null, pk: null, branch: null, reboot: null };
 
         function ucEl(tag, cls, text) {
@@ -22,34 +23,75 @@
             return b;
         }
 
-        // Una riga: lo stato a parole (mai solo col colore), un'icona, e i pulsanti di quello che c'e' da fare.
-        function ucRow(kind, title, text, buttons, extra) {
-            const li = ucEl('li', 'list-group-item d-flex flex-wrap align-items-start gap-2');
+        // La testata di una riga: lo stato a parole (mai solo col colore), un'icona, i pulsanti.
+        function ucHead(key, kind, title, text, buttons, extra) {
+            const li = document.getElementById('uc-' + key);
+            if (!li) return;
+            const head = li.querySelector('.uc-head');
+            head.className = 'uc-head d-flex flex-wrap align-items-start gap-2';
+            head.replaceChildren();
             const icon = ucEl('i', 'fas mt-1 ' + ({ ok: 'fa-circle-check text-success', todo: 'fa-circle-exclamation text-warning',
                 info: 'fa-circle-info text-primary', error: 'fa-circle-xmark text-danger' }[kind] || 'fa-circle-info'));
             icon.setAttribute('aria-hidden', 'true');
             const body = ucEl('div', 'flex-grow-1');
-            const head = ucEl('div', 'fw-semibold', title);
+            const name = ucEl('div', 'fw-semibold', title);
             // Le chiavi scritte per intero: I18nTest controlla che ogni testo usato esista nelle due lingue.
             const word = { ok: t('uc.kind.ok'), todo: t('uc.kind.todo'), info: t('uc.kind.info'), error: t('uc.kind.error') }[kind] || '';
-            const state = ucEl('span', 'visually-hidden', ' (' + word + ')');
-            head.append(state);
-            body.append(head, ucEl('div', 'small', text));
+            name.append(ucEl('span', 'visually-hidden', ' (' + word + ')'));
+            body.append(name, ucEl('div', 'small', text));
             if (extra) body.append(extra);
-            li.append(icon, body);
+            head.append(icon, body);
             if (buttons && buttons.length) {
                 const box = ucEl('div', 'd-flex flex-wrap gap-2');
                 buttons.forEach(b => box.append(b));
-                li.append(box);
+                head.append(box);
             }
-            return li;
+            li.hidden = false;
         }
 
-        // Legge lo stato di FreeBSD; il resto arriva dalle letture che le schede qui sotto fanno comunque
-        // (pacchetti, ramo, riavvio): rileggerli qui raddoppiava la lettura piu' pesante della pagina.
-        // «Rileggi» chiede a quelle schede di rileggere.
+        function ucHide(key) {
+            const li = document.getElementById('uc-' + key);
+            if (li) li.hidden = true;
+        }
+
+        // Apre il pannello di una riga, sotto la riga. 'panel' e' un pezzo che si sposta (il piano dei pacchetti, uno
+        // solo per due righe). Il fuoco va al pannello, che si vede senza scorrere altrove.
+        function ucOpen(key, panel) {
+            const detail = document.getElementById('uc-' + key + '-detail');
+            if (!detail) return;
+            if (panel) {
+                const p = document.getElementById(panel);
+                if (p) { if (p.parentElement !== detail) detail.appendChild(p); p.hidden = false; }
+            }
+            detail.hidden = false;
+            detail.setAttribute('tabindex', '-1');
+            detail.focus({ preventScroll: true });
+            detail.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
+        function ucToggle(key) {
+            const detail = document.getElementById('uc-' + key + '-detail');
+            if (!detail) return;
+            if (detail.hidden) ucOpen(key); else detail.hidden = true;
+        }
+
+        // Le azioni delle righe: aprono il pannello sotto la riga e partono da li'.
+        function ucOsInstall() { ucOpen('os'); osInstall(); }
+        function ucRelease() { ucToggle('os'); }
+        function ucStackAll() { ucOpen('stack', 'uc-updates-panel'); updMaintPreview(); }
+        function ucJava() { ucOpen('java'); jvPre(); }
+        function ucJavaReport() { ucOpen('java'); jvState(); }
+        function ucRoundcube() { ucOpen('roundcube'); rcPre(); }
+        function ucMysql() { ucOpen('mysql'); my84Pre(); }
+        function ucPython() { ucOpen('python'); pyPre(); }
+        function ucPythonLeftovers() { ucOpen('python'); pyLeftovers(); }
+        function ucBranch() { ucToggle('branch'); }
+
+        // Legge lo stato di FreeBSD; i pacchetti, il ramo e il riavvio arrivano dalle loro letture (eventi qui sotto):
+        // rileggerli qui raddoppiava la lettura piu' pesante della pagina. «Rileggi» le rifa' tutte.
         async function ucLoad(all) {
             const state = document.getElementById('ucState');
+            if (!state || !document.getElementById('ucList')) return;
             state.textContent = t('uc.reading');
             if (all) {
                 pkOverview();
@@ -66,85 +108,96 @@
         document.addEventListener('panel:reboot', e => { uc.reboot = e.detail; ucRender(); });
 
         function ucRender() {
-            const list = document.getElementById('ucList');
-            if (!list) return;
-            list.replaceChildren();
+            if (!document.getElementById('ucList')) return;
             const os = uc.os || {}, pk = uc.pk || {}, br = uc.branch || {}, rb = uc.reboot || {};
-            const reading = title => ucRow('info', title, t('uc.reading'));
+            const proc = pk.procedures || {};
+            const rows = pk.packages || [];
+            const reading = (key, title) => ucHead(key, 'info', title, t('uc.reading'));
+            const release = () => ucButton('btn-outline-secondary', 'fa-forward', t('uc.osRelease'), 'ucRelease()');
 
-            // 1. Il sistema di base
-            if (!uc.os) {
-                list.append(reading(t('uc.os')));
-            } else if (!os.success) {
-                list.append(ucRow('error', t('uc.os'), os.error || t('common.errorShort')));
-            } else if (!os.updatableWithFreebsdUpdate) {
-                list.append(ucRow('info', t('uc.os'), os.updatesNote || ''));
-            } else if (os.readyExist) {
-                list.append(ucRow('todo', t('uc.os'), t('uc.osReady', { now: os.userland, target: os.readyTarget || '?' })
+            // 1. Il sistema di base: le patch, e una release nuova quando la si vuole
+            if (!uc.os) reading('os', t('uc.os'));
+            else if (!os.success) ucHead('os', 'error', t('uc.os'), os.error || t('common.errorShort'));
+            else if (!os.updatableWithFreebsdUpdate) ucHead('os', 'info', t('uc.os'), os.updatesNote || '', [release()]);
+            else if (os.readyExist) {
+                ucHead('os', 'todo', t('uc.os'), t('uc.osReady', { now: os.userland, target: os.readyTarget || '?' })
                     + (os.readyKernel ? ' ' + t('osp.readyKernel') : ''),
-                    [ucButton('btn-primary', 'fa-download', t('osp.install'), 'osInstall()')]));
-            } else {
-                list.append(ucRow('ok', t('uc.os'), t('uc.osOk', { now: os.userland })));
-            }
+                    [ucButton('btn-primary', 'fa-download', t('osp.install'), 'ucOsInstall()'), release()]);
+            } else ucHead('os', 'ok', t('uc.os'), t('uc.osOk', { now: os.userland }), [release()]);
+
+            // Le procedure dedicate hanno la loro riga: qui sotto non si contano due volte.
+            const own = p => p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);
 
             // 2. I pacchetti che non sono del server di posta: un piano, un pulsante
             const sum = pk.summary || {};
-            const rows = pk.packages || [];
-            const stack = rows.filter(p => p.update && p.locked);
-            const plain = (sum.updates || 0) - stack.length;
-            if (!uc.pk) {
-                list.append(reading(t('uc.packages')));
-            } else if (!pk.success) {
-                list.append(ucRow('error', t('uc.packages'), pk.error || t('common.errorShort')));
-            } else if (plain > 0) {
-                list.append(ucRow('todo', t('uc.packages'), tn('uc.packagesTodo', plain)
+            const stack = rows.filter(p => p.update && p.locked && !own(p));
+            const plain = (sum.updates || 0) - rows.filter(p => p.update && p.locked).length;
+            if (!uc.pk) reading('packages', t('uc.packages'));
+            else if (!pk.success) ucHead('packages', 'error', t('uc.packages'), pk.error || t('common.errorShort'));
+            else if (plain > 0) {
+                ucHead('packages', 'todo', t('uc.packages'), tn('uc.packagesTodo', plain)
                     + (sum.fixable ? ' ' + tn('uc.packagesFix', sum.fixable) : ''),
-                    [ucButton('btn-primary', 'fa-arrow-up', t('uc.packagesGo'), 'ucPackages()')]));
-            } else {
-                list.append(ucRow('ok', t('uc.packages'), t('uc.packagesOk')));
+                    [ucButton('btn-primary', 'fa-arrow-up', t('uc.packagesGo'), 'ucPackages()')]);
+            } else ucHead('packages', 'ok', t('uc.packages'), t('uc.packagesOk'));
+
+            // 3. Quelli del server di posta: protetti, uno alla volta col suo controllo, o tutti insieme in un piano
+            if (!uc.pk) reading('stack', t('uc.stack'));
+            else if (!pk.success) ucHide('stack');
+            else if (!stack.length) ucHead('stack', 'ok', t('uc.stack'), t('uc.stackOk'));
+            else {
+                const items = ucEl('ul', 'list-unstyled small mb-0 mt-1');
+                const buttons = [];
+                stack.forEach(p => {
+                    items.append(ucEl('li', '', p.name + ': ' + p.installed + ' → ' + p.available
+                        + (p.canUpdate ? '' : ' (' + (p.whyNot || t('pkgs.heldBack')) + ')')));
+                    if (p.canUpdate) {
+                        const b = ucButton('btn-outline-primary', 'fa-arrow-up', t('pkgs.update', { v: p.available }) + ' (' + p.name + ')', 'pkUpdOpen(this.dataset.pkg)');
+                        b.dataset.pkg = p.name;
+                        buttons.push(b);
+                    }
+                });
+                if (stack.filter(p => p.canUpdate).length > 1)
+                    buttons.push(ucButton('btn-outline-secondary', 'fa-layer-group', t('uc.stackAll'), 'ucStackAll()'));
+                ucHead('stack', 'todo', t('uc.stack'), tn('uc.stackTodo', stack.length), buttons, items);
             }
 
-            // 3. Quelli del server di posta: protetti, uno alla volta, ognuno col suo controllo
-            if (pk.success) {
-                if (!stack.length) {
-                    list.append(ucRow('ok', t('uc.stack'), t('uc.stackOk')));
-                } else {
-                    const items = ucEl('ul', 'list-unstyled small mb-0 mt-1');
-                    const buttons = [];
-                    stack.forEach(p => {
-                        items.append(ucEl('li', '', p.name + ': ' + p.installed + ' \u2192 ' + p.available
-                            + (p.canUpdate || p.javaFlow ? '' : ' (' + (p.whyNot || t('pkgs.heldBack')) + ')')));
-                        if (p.canUpdate) {
-                            const b = ucButton('btn-outline-primary', 'fa-arrow-up', t('pkgs.update', { v: p.available }) + ' (' + p.name + ')', 'pkUpdOpen(this.dataset.pkg)');
-                            b.dataset.pkg = p.name;
-                            buttons.push(b);
-                        } else if (p.javaFlow) {
-                            buttons.push(ucButton('btn-outline-primary', 'fa-mug-hot', t('pkgs.javaFlow'), 'pkGoJava()'));
-                        }
-                    });
-                    list.append(ucRow('todo', t('uc.stack'), tn('uc.stackTodo', stack.length), buttons, items));
-                }
-            }
+            // 4. Le procedure dedicate, solo quando servono
+            const jvm = rows.find(p => p.javaFlow);
+            if (proc.java && jvm) {
+                ucHead('java', 'todo', t('uc.java'), t('uc.javaTodo', { name: jvm.name, from: jvm.installed, to: jvm.available }),
+                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucJava()'),
+                     ucButton('btn-outline-secondary', 'fa-file-alt', t('up.lastReport'), 'ucJavaReport()')]);
+            } else ucHide('java');
+            const rc = rows.find(p => p.name === proc.roundcubePackage);
+            if (proc.roundcube && rc) {
+                ucHead('roundcube', 'todo', t('uc.roundcube'), t('uc.roundcubeTodo', { name: rc.name, from: rc.installed, to: rc.available }),
+                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucRoundcube()')]);
+            } else ucHide('roundcube');
+            if (proc.mysql84) {
+                ucHead('mysql', 'todo', t('uc.mysql'), t('uc.mysqlTodo'),
+                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucMysql()')]);
+            } else ucHide('mysql');
+            if (proc.python) {
+                ucHead('python', 'todo', t('uc.python'), t('uc.pythonTodo'),
+                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucPython()'),
+                     ucButton('btn-outline-secondary', 'fa-broom', t('up.leftovers'), 'ucPythonLeftovers()')]);
+            } else ucHide('python');
 
-            // 4. Il ramo
-            if (!uc.branch) {
-                list.append(reading(t('uc.branch')));
-            } else if (br.success) {
-                const b = ucButton('btn-outline-secondary', 'fa-code-branch', t('uc.branchGo'), 'ucGoBranch()');
-                list.append(ucRow('info', t('uc.branch'), t('uc.branchNow', { branch: br.branch || '?' }), [b]));
-            }
+            // 5. Il ramo: la scelta si apre qui sotto
+            if (!uc.branch) reading('branch', t('uc.branch'));
+            else if (br.success) {
+                ucHead('branch', 'info', t('uc.branch'), t('uc.branchNow', { branch: br.branch || '?' }),
+                    [ucButton('btn-outline-secondary', 'fa-code-branch', t('uc.branchGo'), 'ucBranch()')]);
+            } else ucHead('branch', 'error', t('uc.branch'), br.error || t('up.branchUnreadable'));
 
-            // 5. Il riavvio
-            if (!uc.reboot) {
-                list.append(reading(t('uc.reboot')));
-            } else if (rb.success) {
+            // 6. Il riavvio: la finestra del pannello, la stessa di ogni pagina
+            if (!uc.reboot) reading('reboot', t('uc.reboot'));
+            else if (rb.success) {
                 if (rb.state === 'needed' || rb.state === 'advised') {
-                    list.append(ucRow('todo', t('uc.reboot'), rb.state === 'needed'
+                    ucHead('reboot', 'todo', t('uc.reboot'), rb.state === 'needed'
                         ? t('rb.needed', { installed: rb.installedKernel, running: rb.runningKernel }) : t('rb.advised'),
-                        document.getElementById('panelRebootModal') ? [ucButton('btn-warning', 'fa-rotate-right', t('rb.open'), 'panelRebootOpen()')] : []));
-                } else {
-                    list.append(ucRow('ok', t('uc.reboot'), rb.scheduled ? t('rb.scheduled') : t('uc.rebootNo')));
-                }
+                        document.getElementById('panelRebootModal') ? [ucButton('btn-warning', 'fa-rotate-right', t('rb.open'), 'panelRebootOpen()')] : []);
+                } else ucHead('reboot', 'ok', t('uc.reboot'), rb.scheduled ? t('rb.scheduled') : t('uc.rebootNo'));
             }
         }
 
@@ -158,7 +211,7 @@
             pre.textContent = '';
             const r = await updApi('updates_search', { confirm: 'SEARCH' });
             if (!r.success) { state.textContent = r.error || t('common.errorShort'); return; }
-            ucFollow(r.jobId, () => { ucLoad(true); osState(); });
+            ucFollow(r.jobId, () => { ucLoad(true); });
         }
 
         // L'esito di un lavoro: in un posto suo, che la rilettura della scheda non copre.
@@ -190,8 +243,9 @@
             setTimeout(() => ucFollow(id, after), 3000);
         }
 
-        // I pacchetti fuori dal server di posta: il piano esatto (lo stesso di «Verifica»), una conferma che
-        // lo mostra, e il lavoro che esegue quel piano o niente (la firma).
+        // I pacchetti fuori dal server di posta: il piano esatto, una conferma che lo mostra, e il lavoro che esegue quel
+        // piano o niente (la firma). Se il piano toglierebbe o retrocederebbe pacchetti, il piano con le prove si apre
+        // qui sotto, e non parte niente.
         async function ucPackages() {
             const state = document.getElementById('ucState');
             ucOutcome(true, '');
@@ -204,12 +258,12 @@
             if (!changes.length) { state.textContent = t('up.planNoChange'); return; }
             if (changes.some(c => c.type === 'remove' || c.type === 'downgrade')) {
                 state.textContent = t('uc.planRemoves');
-                document.getElementById('updates').scrollIntoView();
+                ucOpen('packages', 'uc-updates-panel');
                 updStatus();
                 return;
             }
             state.textContent = '';
-            const lines = changes.map(c => c.name + ': ' + (c.from || '-') + ' \u2192 ' + (c.to || '-')).join('\n');
+            const lines = changes.map(c => c.name + ': ' + (c.from || '-') + ' → ' + (c.to || '-')).join('\n');
             const yes = await panelAsk({ title: tn('uc.pkAskTitle', changes.length), text: t('uc.pkAskText') + '\n' + lines,
                 confirm: tn('uc.pkAskGo', changes.length) });
             if (!yes) return;
@@ -223,14 +277,10 @@
             ucFollow(a.jobId, () => { ucLoad(true); });
         }
 
+        // Dopo il cambio di ramo: si torna in cima a questa scheda, a vedere cosa c'e' da aggiornare adesso.
         function ucShow() {
-            const card = document.getElementById('update-center');
-            if (card) { card.scrollIntoView({ behavior: 'smooth' }); document.getElementById('ucTitle').setAttribute('tabindex', '-1'); document.getElementById('ucTitle').focus({ preventScroll: true }); }
-        }
-
-        function ucGoBranch() {
-            const card = document.getElementById('branch');
-            if (card) { card.scrollIntoView({ behavior: 'smooth' }); card.querySelector('button, a') && card.querySelector('button, a').focus({ preventScroll: true }); }
+            const title = document.getElementById('ucTitle');
+            if (title) { title.focus({ preventScroll: true }); title.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
         }
 
         document.addEventListener('DOMContentLoaded', () => { ucLoad(); });

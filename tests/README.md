@@ -576,7 +576,8 @@ read after the panel's that wins, a catalog that does not download, a folder tha
 written, a configuration changed after the preview. At the end the real file on disk: permissions
 rw-r--r--, no temporary file left, the .conf files listed as pkg reads them.
 
-**pkg-branch-browser-test.js** — the "Package branch" tab of the Updates page: it reads by itself,
+**pkg-branch-browser-test.js** — the "Package branch" row of the Updates page (its panel opens in place
+under the row, reperto 193): it reads by itself,
 names and addresses only as text, the preview, the branch name typed by hand to confirm,
 fingerprint and CSRF token in the request, the job followed to its outcome, the error of a change
 that does not start; dark theme and phone.
@@ -585,7 +586,8 @@ that does not start; dark theme and phone.
 reads by itself; the summary; the warning about the stack's unlocked packages with the button to
 lock them; for every row installed and catalog version, verdict on the vulnerability (text, never
 HTML), lock; "Update" also on a locked package, "held" where the advisory says to wait, the panel's
-JDK pointing to the Java procedure; Lock/Unlock with name and CSRF token. The update window: exact
+JDK saying it has its own procedure (its row in "Update the server", without a button that jumps
+there); Lock/Unlock with name and CSRF token. The update window: exact
 plan, the steps in plain words, the button off until the package name is typed right, the request
 with confirmation and fingerprint, the job followed to its outcome. And in the Updates tab the
 header of a vulnerability saying the same verdict as the detail (it was "the update fixes it" above
@@ -682,7 +684,8 @@ session getting in.
 
 **update-center-browser-test.js** — updating from the panel (reperti 185-187), with a simulated
 server: the restart banner on every page (and the Italian text taken from it.json), the "Update the
-server" card with its five rows in words, the package update confirmed in the panel's window with
+server" card with its rows in words (a dedicated procedure only when it applies; every row acts in place,
+reperto 193), the package update confirmed in the panel's window with
 the exact plan and its signature, the FreeBSD patch install with INSTALL PATCHES, the restart window
 (what stops, the chosen delay, the time, cancelling, Escape), reads that queue up instead of
 failing, 44 px touch buttons at 375 px, and no browser dialog at all.

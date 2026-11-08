@@ -100,6 +100,9 @@ async function served(route) {
 
     console.log('\n== The card reads itself ==');
     await page.goto(BASE + '/updates');
+    // The branch is a row of "Update the server" (reperto 193): its panel opens in place, under the row.
+    await page.waitForSelector('#uc-branch button[data-on-click="ucBranch()"]');
+    await page.click('#uc-branch button[data-on-click="ucBranch()"]');
     await page.waitForSelector('#branch-body table');
     const textValue = await page.textContent('#branch-body');
     real('quarterly branch, with the explanation', textValue.includes('Packages come from the quarterly branch') && textValue.includes('Quarterly branch'));
@@ -109,7 +112,7 @@ async function served(route) {
         && await page.evaluate(() => window.injectedRan) === undefined);
     real('out of the box: "no panel file"', textValue.includes('No panel file'));
     real('the button to switch to latest', await page.locator('#branch-body button', { hasText: 'Switch to the latest branch' }).count() === 1);
-    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-card.png') });
+    if (photos) await page.locator('#uc-branch').screenshot({ path: path.join(photos, 'branch-card.png') });
 
     console.log('\n== Preview and confirmation ==');
     await page.click('#branch-body button:has-text("Switch to the latest branch")');

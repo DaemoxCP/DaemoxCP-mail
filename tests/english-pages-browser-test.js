@@ -254,14 +254,26 @@ const VISITS = [
     } },
     { path: '/install' },
     { path: '/setup' },
+    // "Update the server" with every row opened in place (reperto 193): the branch, FreeBSD with its release, the plan
+    // of the packages; and the whole package list. The checks that only read are on Diagnostics.
     { path: '/updates', prepare: async page => {
+        await page.waitForSelector('#uc-branch button[data-on-click="ucBranch()"]');
+        await page.click('#uc-branch button[data-on-click="ucBranch()"]');
         await page.waitForSelector('#branch-body table');
-        for (const [fn, sel] of [['osState', '#os-body table'], ['planLoad', '#plan-body .border'], ['pkOverview', '#pk-body table'],
-                                 ['updStatus', '#upd-status .alert-danger'], ['defCheck', '#def-body table'], ['envCheck', '#env-body table']]) {
+        await page.click('#uc-os button[data-on-click="ucRelease()"]');
+        for (const [fn, sel] of [['osState', '#os-body table'], ['pkOverview', '#pk-body table']]) {
             await page.evaluate(f => window[f](), fn);
             await page.waitForSelector(sel);
         }
-        await page.click('#proc-release-tog');
+        await page.evaluate(() => { ucOpen('packages', 'uc-updates-panel'); updStatus(); });
+        await page.waitForSelector('#upd-status .alert-danger');
+        await page.click('#pk-all');
+    } },
+    { path: '/diagnostics', prepare: async page => {
+        for (const [fn, sel] of [['osState', '#os-body table'], ['defCheck', '#def-body table'], ['envCheck', '#env-body table']]) {
+            await page.evaluate(f => window[f](), fn);
+            await page.waitForSelector(sel);
+        }
     } },
 ];
 

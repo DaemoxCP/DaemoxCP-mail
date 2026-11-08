@@ -132,7 +132,9 @@ async function served(route) {
     real('dovecot with the "wait" advisory: no Update, only "held back"',
         await page.locator('#pk-body button[data-pkg="dovecot-mysql"]', { hasText: 'Update' }).count() === 0
         && (await page.textContent('#pk-body tbody tr:nth-of-type(3)')).includes('held back'));
-    real('the panel\'s JDK points to the Java procedure', await page.locator('#pk-body button', { hasText: 'Java update procedure' }).count() === 1);
+    // Its own procedure is a row of "Update the server", above: here it is said, without a button that jumps there (reperto 193).
+    real('the panel\'s JDK says it has its own procedure, without a button', await page.locator('#pk-body .badge', { hasText: 'own procedure' }).count() === 1
+        && await page.locator('#pk-body button', { hasText: 'Java update procedure' }).count() === 0);
     real('clamav up to date and not locked: Lock button', (await page.textContent('#pk-body tbody tr:has(code:text-is("clamav"))')).includes('up to date')
         && await page.locator('#pk-body button[data-pkg="clamav"]', { hasText: 'Lock' }).count() === 1);
     real('expat: "the update is not enough"', (await page.textContent('#pk-body tbody tr:has(code:text-is("expat"))')).includes('the update is not enough'));
@@ -180,7 +182,8 @@ async function served(route) {
     await page.waitForSelector('#pkUpdModal', { state: 'hidden' });
 
     console.log('\n== Vulnerabilities: the header says the verdict ==');
-    await page.click('#updates button:has-text("Verify")');
+    // The plan of the packages opens under the row of "Update the server" that asks for it (reperto 193).
+    await page.evaluate(() => { ucOpen('packages', 'uc-updates-panel'); updStatus(); });
     await page.waitForSelector('#upd-status li');
     const lis = await page.$$eval('#upd-status li', l => l.map(x => x.textContent));
     real('expat: "not enough" in the header, not "fixes it"', lis[0].includes('the update is not enough') && !lis[0].includes('the update fixes it'));

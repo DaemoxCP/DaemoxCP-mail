@@ -2,8 +2,9 @@
 //
 //  1. The restart banner at the top of every page (Updates and Home), with the reason and the button;
 //     on the Italian page the text is the one of it.json.
-//  2. "Update the server": one row each for FreeBSD, packages, mail server packages, branch and restart,
-//     in words and not only by color, with the buttons for what there is to do.
+//  2. "Update the server": one row each for FreeBSD, packages, mail server packages, the dedicated procedures
+//     only when they apply (here the panel's Java), branch and restart, in words and not only by color, with the
+//     buttons for what there is to do (reperto 193: every row acts in place).
 //  3. No browser dialog (prompt, confirm): confirmations are the panel's own window, which shows the
 //     exact plan; the job starts with the plan's signature and the right keyword.
 //  4. FreeBSD patches: the confirmation, then os_patch_install with INSTALL PATCHES.
@@ -38,7 +39,7 @@ function replies(o) {
         os_status: { success: true, installedKernel: '15.1-RELEASE', uname: '15.1-RELEASE', userland: '15.1-RELEASE', arch: 'arm64 GENERIC',
             restartNeeded: false, endOfSupport: '2027-03-31', supportNotes: '', supportSource: 'freebsd.org', series: '15.1',
             updatableWithFreebsdUpdate: true, readyExist: true, readyTarget: '15.1-RELEASE-p6', readyKernel: true, alreadyReady: 'There are updates available to install.' },
-        packages_overview: { success: true, summary: { updates: 4, stackUpdates: 2, vulnerable: 3, fixable: 2, locked: 39 },
+        packages_overview: { success: true, procedures: { java: true, roundcube: false, roundcubePackage: '', mysql84: false, python: false }, summary: { updates: 4, stackUpdates: 2, vulnerable: 3, fixable: 2, locked: 39 },
             packages: [
                 { name: 'dovecot-mysql', role: 'IMAP', installed: '2.3.21.1_3', available: '2.3.21.1_4', update: true, locked: true, stack: true, canUpdate: true },
                 { name: 'openjdk25', role: 'Java', installed: '25.0.4', available: '25.0.5', update: true, locked: true, stack: true, canUpdate: false, javaFlow: true },
@@ -96,7 +97,7 @@ async function open(ctx, name, lang, o = {}) {
 }
 
 // Ready when every row has its data: the card fills in as the other cards' reads arrive.
-const centerReady = page => page.waitForFunction(() => document.querySelectorAll('#ucList > li').length >= 5
+const centerReady = page => page.waitForFunction(() => document.querySelectorAll('#ucList > li:not([hidden])').length >= 6
     && document.getElementById('ucState').textContent === '' && !document.getElementById('ucList').textContent.includes(t('uc.reading')),
     null, { timeout: 20000 });
 const allErrors = [], allDialogs = [];
@@ -129,14 +130,16 @@ const allErrors = [], allDialogs = [];
 
     console.log('\n== 2. Update the server ==');
     await centerReady(page);
-    const rows = await page.$$eval('#ucList > li', lis => lis.map(li => li.innerText.replace(/\s+/g, ' ').trim()));
+    const rows = await page.$$eval('#ucList > li:not([hidden])', lis => lis.map(li => li.querySelector('.uc-head').innerText.replace(/\s+/g, ' ').trim()));
     console.log('    ' + rows.join('\n    '));
-    check('five rows: FreeBSD, packages, mail server, branch, restart', rows.length === 5);
+    check('six rows: FreeBSD, packages, mail server, the panel\'s Java (it has an update), branch, restart', rows.length === 6);
+    check('  the procedures with nothing to do have no row (Roundcube, MySQL, Python)', await page.$$eval('#uc-roundcube, #uc-mysql, #uc-python', l => l.every(x => x.hidden)));
     check('FreeBSD: now and what is ready, with the button', /Now 15\.1-RELEASE; patches up to 15\.1-RELEASE-p6/.test(rows[0]) && /Install the FreeBSD updates/.test(rows[0]));
     check('packages: two to update, two fixes, the button', /2 packages to update/.test(rows[1]) && /2 security fixes/.test(rows[1]) && /Update the packages/.test(rows[1]));
-    check('mail server: dovecot with its button, Java with its procedure', /dovecot-mysql: 2\.3\.21\.1_3 → 2\.3\.21\.1_4/.test(rows[2])
-        && await page.$('#ucList button[data-pkg="dovecot-mysql"]') !== null && /Java update procedure/.test(rows[2]));
-    check('branch and restart', /quarterly branch/.test(rows[3]) && /needs a restart/.test(rows[4]));
+    check('mail server: dovecot with its button, and not Java (it has its own row)', /dovecot-mysql: 2\.3\.21\.1_3 → 2\.3\.21\.1_4/.test(rows[2])
+        && await page.$('#ucList button[data-pkg="dovecot-mysql"]') !== null && !/openjdk/.test(rows[2]));
+    check('the panel\'s Java: its row, with the versions and Prepare', /openjdk25: 25\.0\.4/.test(rows[3]) && /Prepare/.test(rows[3]));
+    check('branch and restart', /quarterly branch/.test(rows[4]) && /needs a restart/.test(rows[5]));
     check('one read each of packages and branch when the page opens (the card reuses the cards\' reads)',
         calls.filter(c => c.action === 'packages_overview').length === 1 && calls.filter(c => c.action === 'branch_status').length === 1);
     check('the state in words too, not only by color', await page.$$eval('#ucList .visually-hidden', s => s.map(x => x.textContent).join(' '))
@@ -158,7 +161,7 @@ const allErrors = [], allDialogs = [];
     check('the job starts with UPDATE and the signature of the plan shown', apply && apply.confirm === 'UPDATE' && apply.signature === '0123456789abcdef');
 
     console.log('\n== 4. FreeBSD patches ==');
-    await page.click('#ucList button[data-on-click="osInstall()"]');
+    await page.click('#ucList button[data-on-click="ucOsInstall()"]');
     await page.waitForSelector('#panelAskModal.show');
     check('the confirmation says what happens (boot environment, mail stays up)', /boot environment/.test(await page.innerText('#panelAskModal'))
         && /mail stays up/.test(await page.innerText('#panelAskModal')));
@@ -198,8 +201,8 @@ const allErrors = [], allDialogs = [];
     check('two reads at once both answer (no "operation already running")', both.every(r => r.success));
     await slow.page.close();
 
-    console.log('\n== 8. Why root, on the service users card ==');
-    const su = await open(ctx, 'updates', 'en', { reboot: 'none' });
+    console.log('\n== 8. Why root, on the service users card (Diagnostics) ==');
+    const su = await open(ctx, 'diagnostics', 'en', { reboot: 'none' });
     allErrors.push(su.errors); allDialogs.push(su.dialogs);
     await su.page.click('button[data-on-click="svcUsersLoad()"]');
     await su.page.waitForFunction(() => document.querySelectorAll('#upd-svc-users tbody tr').length >= 2, null, { timeout: 10000 });
