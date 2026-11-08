@@ -40,6 +40,9 @@ import java.util.TreeSet;
  * reads the panel's configuration read-only, like the jobs in the service):
  *   cd /home/panel && java -De2e.vm=yes -cp "/root/signed/tests:/root/signed/target/freebsd-mail-panel-1.0.jar" \
  *       org.mail_panel.system.SignedJobsE2ETest roundcube
+ * With -Doutside=<package> (a small one, not installed: tree) the real run also gets a change outside its plan,
+ * a real package installed between the inventory photo and pkg, and must end in error naming it; with
+ * -Doutside.when=before the same package goes in before the job, and those checks must fail.
  * The full log of each job goes to /var/tmp/signed-jobs-<mode>-<attempt>.log. The boot
  * environments the jobs create as their way back stay: they are the way back of the run, and
  * the script removes them with "cleanup".
@@ -63,6 +66,21 @@ public class SignedJobsE2ETest {
         // In the service the jobs read the panel's configuration (the MySQL account of the mail database):
         // here the same, read-only, from the panel's folder (the test starts there).
         org.mail_panel.Main.dbManager = org.mail_panel.sqli.dataBaseManager.readOnly();
+        // -Doutside=<package>: a real package installed while the job runs, between the inventory photo and pkg
+        // (UpdateManager.PlanWatch.afterTaken), as someone running pkg from SSH. The job must not call it a success,
+        // and must name it. With -Doutside.when=before it is installed before the job instead, so it is in the
+        // inventory: then the job completes, and the checks of this mode must FAIL (the test can tell).
+        String outside = System.getProperty("outside", "");
+        boolean outsideBefore = "before".equals(System.getProperty("outside.when", "during"));
+        if (!outside.isEmpty() && !PackagePlan.isValidName(outside)) { System.out.println("invalid -Doutside"); System.exit(2); }
+        if (!outside.isEmpty() && ok("pkg info -e " + outside)) {
+            System.out.println(outside + " is already installed: it would not be a change");
+            System.exit(2);
+        }
+        if (!outside.isEmpty() && outsideBefore) {
+            System.out.println("== 0. " + outside + " installed BEFORE the job (falsification of the -Doutside checks) ==");
+            sh("pkg install -y -U " + outside + " 2>&1");
+        }
 
         System.out.println("== 1. The checks and the plan (" + mode + ") ==");
         JSONObject pf = preflight(mode);
@@ -110,23 +128,42 @@ public class SignedJobsE2ETest {
         check("3 the same protections", locked().equals(lockedBefore));
         check("3 no list of unlocked packages", !PackageQueue.statePresent());
 
-        System.out.println("\n== 4. With the plan's fingerprint ==");
+        System.out.println("\n== 4. With the plan's fingerprint" + (outside.isEmpty() ? "" : ", and " + outside
+                + (outsideBefore ? " installed before the job" : " installed while it runs")) + " ==");
+        if (!outside.isEmpty() && !outsideBefore)
+            UpdateManager.PlanWatch.afterTaken = () -> sh("pkg install -y -U " + outside + " 2>&1");
         JSONObject realStart = start(mode, signature);
         JSONObject job = waitJob(realStart.optString("jobId"));
-        save(mode, "real", job);
+        UpdateManager.PlanWatch.afterTaken = null;
+        save(mode, outside.isEmpty() ? "real" : "outside", job);
         String log = job == null ? "" : job.optString("consoleLog");
         for (String l : log.split("\n"))
             if (l.contains("exact plan") || l.contains("ok  ") || l.contains("NO  ") || l.contains("fingerprint")
                     || l.contains("outside the plan") || l.contains("Protecting") || l.contains("[") && l.contains("/"))
                 System.out.println("  | " + l);
         System.out.println("  outcome: " + (job == null ? "no job: " + realStart : job.optString("status") + " " + job.optString("errorMessage")));
-        check("4 the job completes", job != null && "completed".equals(job.optString("status")));
         check("4 the plan was the approved one", log.contains(I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", signature))));
-        check("4 nothing changed outside the plan", log.contains("ok  " + I18n.tr("server.plan.d.none")));
-        check("4 every line of the plan where it said", log.contains(I18n.tr("server.um.runGuidedUpdate.12").trim())
-                && !log.contains("NO  "));
+        // The lines of the comparison with the plan ("ok  name: expected x, found y"): all ok, also with a change outside.
+        boolean planFollowed = log.contains(I18n.tr("server.um.runGuidedUpdate.12").trim())
+                && !log.matches("(?s).*NO  [^\n]*" + java.util.regex.Pattern.quote(": expected ") + ".*");
+        check("4 every line of the plan where it said", planFollowed);
+        if (outside.isEmpty()) {
+            check("4 the job completes", job != null && "completed".equals(job.optString("status")));
+            check("4 nothing changed outside the plan", log.contains("ok  " + I18n.tr("server.plan.d.none")) && !log.contains("NO  "));
+        } else {
+            String version = sh("pkg query %v " + outside).trim();
+            String line = I18n.tr("server.plan.d.installed", java.util.Map.of("name", outside, "version", version));
+            check("4 the job does not call it a success", job != null && "error".equals(job.optString("status")));
+            check("4 the log names it against the inventory: \"" + line + "\"", log.contains("NO  " + line));
+            check("4 the outcome says it, and only it", job != null
+                    && job.optString("errorMessage").contains(I18n.tr("server.um.x.divergenceFound.one", java.util.Map.of("list", outside))));
+        }
         check("4 the list of unlocked packages is closed", !PackageQueue.statePresent());
         afterChecks(mode, pf);
+        if (!outside.isEmpty()) {
+            sh("pkg delete -y " + outside + " 2>&1");
+            check("the test removed " + outside + " again", !ok("pkg info -e " + outside));
+        }
         end();
     }
 

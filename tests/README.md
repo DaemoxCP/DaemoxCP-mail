@@ -140,6 +140,18 @@ each job goes to `/var/tmp/signed-jobs-<mode>-<attempt>.log`. How it went on the
     sh tests/signed-jobs-setup.sh roundcube
     cd /home/panel && java -De2e.vm=yes -cp "<compiled tests>:<jar>" org.mail_panel.system.SignedJobsE2ETest roundcube
 
+With `-Doutside=tree` the real run also gets a change outside its plan: a real package installed between the
+inventory photo and pkg (`UpdateManager.PlanWatch.afterTaken`, null in the service), as someone running pkg from SSH.
+The job must end in error naming it, with every line of the plan still where it said; with `-Doutside.when=before`
+the package goes in before the job instead, and those three checks must fail (reperto 190).
+
+`signed-jobs-browser-test.js` uses the same three cards in a real browser (Playwright with the Chrome installed on
+the Mac), against the panel of the test VM through an SSH tunnel: "Check prerequisites", the plan and its
+fingerprint in the card, start with the confirmation word, the log to the end. It checks that the start request
+carries the fingerprint the card showed and that the job ran that one. It signs in with a console code and gives
+its session the fresh confirmation with the `confirm` mode of `signed-jobs-setup.sh` (VM only). It also reports
+every JavaScript error of the pages it opens.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the
