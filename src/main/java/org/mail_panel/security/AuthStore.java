@@ -62,7 +62,7 @@ public final class AuthStore {
      *  - "x.view": vedere le pagine e gli stati di quell'area, senza cambiare niente;
      *  - "x.manage": cambiare. Rivelare la password di una casella, aprire la sua webmail e
      *    leggere un messaggio in coda sono "manage": vuol dire leggere la posta di qualcuno;
-     *  - sicurezza, sistema, impostazioni, amministratori e vault sono solo del superadmin: chi
+     *  - sicurezza, sistema, impostazioni, amministratori, vault e chiavi SSH di root sono solo del superadmin: chi
      *    li ha (firewall, aggiornamenti come root) puo' darsi qualunque altro permesso.
      */
     private static final Map<String, Set<String>> PERMISSIONS;
@@ -70,7 +70,8 @@ public final class AuthStore {
         Set<String> viewer = Set.of("home.view", "mail.view", "queue.view", "dns.view", "security.view", "system.view", "account.self");
         Set<String> operator = union(viewer, Set.of("mailboxes.manage", "queue.manage"));
         Set<String> admin = union(operator, Set.of("domains.manage", "dns.manage"));
-        Set<String> superadmin = union(admin, Set.of("security.manage", "system.manage", "settings.manage", "admins.manage", "vault.manage"));
+        Set<String> superadmin = union(admin, Set.of("security.manage", "system.manage", "settings.manage", "admins.manage", "vault.manage",
+                "ssh.manage"));
         Map<String, Set<String>> m = new java.util.LinkedHashMap<>();
         m.put("superadmin", superadmin);
         m.put("admin", admin);
