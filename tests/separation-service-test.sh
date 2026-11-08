@@ -191,7 +191,8 @@ S=$RUN/root.sock
 R=$(probe_root "$S" /api/logs GET /api/logs 1 1); check "root's own client gets no answer ($R)" "$(has "$R" "NO ANSWER")"
 R=$(probe_web "$S" /api/logs GET /api/logs 1 999999999); check "mailpanel with a session that does not exist: 401 ($R)" "$(has "$R" "401 ")"
 R=$(probe_web "$S" /api/account GET /api/account 1 999999999); check "mailpanel asking the account API without a live session: 401 ($R)" "$(has "$R" "401 ")"
-R=$(probe_web "$S" /op/session-key POST /op/session-key 0 0); check "mailpanel asking the session key: 200 ($R)" "$(has "$R" "200 ")"
+R=$(probe_web "$S" /op/session-key POST /op/session-key 0 0 | sed 's/"key":"[^"]*"/"key":"(not shown)"/')
+check "mailpanel asking the session key: 200 ($R)" "$(has "$R" '200 {"success":true,"key":')"
 R=$(probe_web "$S" /op/session-key POST /op/session-key 1 999999999); check "  the session key with an administrator: 404 ($R)" "$(has "$R" "404 ")"
 R=$(probe_root "$S" /op/session-key POST /op/session-key 0 0); check "  root's own client asking the session key gets no answer ($R)" "$(has "$R" "NO ANSWER")"
 R=$(probe_web "$S" /api/admins GET /api/admins 0 0); check "mailpanel without an administrator on a signed-in route: 400 ($R)" "$(has "$R" "400 ")"
