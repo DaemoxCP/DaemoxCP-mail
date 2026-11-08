@@ -1,5 +1,7 @@
 package org.mail_panel.system;
 
+import org.mail_panel.database.MysqlRoot;
+import org.mail_panel.database.SqlCatalog;
 import org.mail_panel.integration.RoundcubeSsoManager;
 import org.mail_panel.security.PanelSecrets;
 import org.mail_panel.util.Shell;
@@ -42,7 +44,8 @@ import java.util.stream.Stream;
  * Roundcube; la password la genera il pannello e la tiene nel file dei segreti
  * ({@link PanelSecrets#ROUNDCUBE_DB_PASSWORD}).
  *
- * <p>Gli script d'installazione creano l'utente da subito ({@link #shellAccountSql}). Sui server
+ * <p>Gli script d'installazione creano l'utente da subito
+ * ({@link org.mail_panel.scripts.RoundcubeDbAccountScript#sql}). Sui server
  * installati prima ci pensa l'avvio ({@link #ensureAtBoot}), dopo il plugin SSO:
  * <ol>
  *   <li>guarda che la webmail risponda adesso e che la sua sessione arrivi nel database, e prova
@@ -177,33 +180,6 @@ public final class RoundcubeDbUser {
         return false;
     }
 
-    // ===================== gli script d'installazione =====================
-
-    /**
-     * Le istruzioni SQL degli script d'installazione: l'utente roundcube con la password che il
-     * pannello passa nell'ambiente, i privilegi sul solo database della webmail, e quelli
-     * dell'utente del pannello su quel database tolti, perche' una reinstallazione li trova
-     * dalla versione di prima. Vanno in un here-document NON quotato eseguito da root: la variabile
-     * della password si espande una volta sola, e l'alfabeto del generatore non ha apici.
-     */
-    public static String shellAccountSql(String passwordVariable, String panelUser) {
-        return accountSql(HOST, DATABASE, passwordVariable)
-             + "REVOKE IF EXISTS ALL PRIVILEGES ON " + DATABASE + ".* FROM '" + panelUser + "'@'localhost', '"
-             + panelUser + "'@'127.0.0.1' IGNORE UNKNOWN USER;\n";
-    }
-
-    /**
-     * L'account roundcube con quella password e i privilegi sul solo database della webmail. Lo
-     * stesso per gli script e per la migrazione. Niente accenti gravi intorno ai nomi: negli
-     * script sta in un here-document non quotato, dove aprirebbero una sostituzione di comando.
-     */
-    static String accountSql(String host, String db, String password) {
-        String account = "'" + USER + "'@'" + host + "'";
-        return "CREATE USER IF NOT EXISTS " + account + " IDENTIFIED BY '" + password + "';\n"
-             + "ALTER USER " + account + " IDENTIFIED BY '" + password + "';\n"
-             + "GRANT ALL PRIVILEGES ON " + db + ".* TO " + account + ";\n";
-    }
-
     // ===================== la migrazione all'avvio =====================
 
     enum Outcome { NOTHING, NOT_OURS, NO_ROOT, NOT_SERVED, NOT_ANSWERING, DONE, FINISHED, PARTIAL, ROLLED_BACK }
@@ -229,10 +205,13 @@ public final class RoundcubeDbUser {
         /** L'utente MySQL del pannello e la sua password. */
         String panelUser();
         String panelPassword();
-        /** SQL eseguito da root di MySQL, dallo standard input: fallisce anche se root non entra. */
-        Shell.Result root(String sql);
-        /** Una domanda a MySQL con quell'utente e quella password, sul suo database. */
-        Shell.Result as(String user, String password, String host, String db, String sql);
+        /**
+         * Un'istruzione del catalogo (SqlCatalog) come root di MySQL, sul database db (null: nessuno), coi suoi
+         * parametri: l'uscita come la scriveva il client (righe e colonne col tab); fallisce anche se root non entra.
+         */
+        Shell.Result root(String db, String sql, Object... params);
+        /** Un'istruzione del catalogo con quell'utente e quella password, sul suo database. */
+        Shell.Result as(String user, String password, String host, String db, String sql, Object... params);
         Shell.Result phpFpmReload();
         /** I siti di nginx che servono la webmail; null se nginx -T non risponde. */
         List<Site> webmailSites();
@@ -255,16 +234,22 @@ public final class RoundcubeDbUser {
         }
     }
 
-    /** Quello che la migrazione ha cambiato, per rimetterlo. */
+    /**
+     * Quello che la migrazione ha cambiato, per rimetterlo. Niente istruzioni stampate da MySQL da rieseguire:
+     * solo istruzioni del catalogo con i loro valori.
+     */
     private static final class Undo {
-        /** Le istruzioni che ricreano l'account roundcube com'era (vuote: non c'era). */
-        List<String> accountBefore = List.of();
+        String db;
+        String panel;
+        /** L'account roundcube c'era gia' (la webmail lo usava con un'altra password): si rimette quella. */
+        boolean accountExisted;
+        String passwordBefore;
         String accountHost = HOST;
         boolean accountTouched;
         FileState config;
         boolean reloadFpm;
-        /** Le GRANT dell'utente del pannello sul database della webmail, da rimettere. */
-        List<String> panelGrants = List.of();
+        /** Gli host da cui l'utente del pannello aveva tutto il database della webmail, da ridargli. */
+        List<String> panelHosts = List.of();
         boolean revoked;
     }
 
@@ -289,7 +274,7 @@ public final class RoundcubeDbUser {
         // Gia' fatto: resta solo, se un avvio di prima si e' fermato a meta', togliere i privilegi
         // al pannello. Si guarda con le sue credenziali, senza root: veloce quando non c'e' niente.
         if (USER.equals(d.user()) && secret.equals(d.password())) {
-            if (!sv.as(panel, sv.panelPassword(), host, db, "SELECT 1").success())
+            if (!sv.as(panel, sv.panelPassword(), host, db, SqlCatalog.MYSQL_ROOT_PING).success())
                 return new Report(Outcome.NOTHING, "");
             return finishRevoke(sv, panel, host, db);
         }
@@ -299,13 +284,13 @@ public final class RoundcubeDbUser {
 
         if (!rootAnswers(sv))
             return new Report(Outcome.NO_ROOT, "cannot enter MySQL as root: nothing changed, retrying at the next start");
-        List<String> account = accountStatements(sv, host);
+        Account account = account(sv, host);
         if (account == null)
             return new Report(Outcome.NO_ROOT, "cannot read the MySQL account " + USER + "@" + host + ": nothing changed");
-        if (!account.isEmpty() && !USER.equals(d.user()))
+        if (account.exists() && !USER.equals(d.user()))
             return new Report(Outcome.NOT_OURS, "the MySQL account " + USER + "@" + host
                     + " already exists and the webmail does not use it: nothing changed");
-        String beyond = privilegesBeyond(account, db);
+        String beyond = account.exists() ? privilegesBeyond(account.grants(), db, USER, host) : null;
         if (beyond != null)
             return new Report(Outcome.NOT_OURS, "the MySQL account " + USER + "@" + host + " has privileges beyond "
                     + db + " (" + beyond + "): nothing changed");
@@ -313,9 +298,12 @@ public final class RoundcubeDbUser {
         if (!others.isEmpty())
             return new Report(Outcome.NOT_OURS, "the webmail also enters MySQL as " + panel + " in "
                     + String.join(", ", others) + ": nothing changed");
-        List<String> panelGrants = panelGrantsOn(sv, panel, db);
-        if (panelGrants == null)
+        PanelOnDb panelOn = panelOnDb(sv, panel, db);
+        if (panelOn == null)
             return new Report(Outcome.NO_ROOT, "cannot read the privileges of " + panel + ": nothing changed");
+        if (panelOn.other() != null)
+            return new Report(Outcome.NOT_OURS, panel + " has privileges on " + db + " other than the installer's ("
+                    + panelOn.other() + "): nothing changed");
 
         List<Site> sites = sv.webmailSites();
         if (sites == null)
@@ -331,14 +319,19 @@ public final class RoundcubeDbUser {
         boolean realLogin = noLogin == null;
 
         Undo u = new Undo();
-        u.accountBefore = account;
+        u.db = db;
+        u.panel = panel;
+        u.accountExisted = account.exists();
+        u.passwordBefore = d.password();
         u.accountHost = host;
-        u.panelGrants = panelGrants;
+        u.panelHosts = panelOn.hosts();
         try {
             u.accountTouched = true;
-            Shell.Result r = sv.root(accountSql(host, db, secret));
+            Shell.Result r = sv.root(null, SqlCatalog.RC_CREATE_USER, host, secret);
+            if (r.success()) r = sv.root(null, SqlCatalog.RC_SET_PASSWORD, host, secret);
+            if (r.success()) r = sv.root(db, SqlCatalog.RC_GRANT_DATABASE, host);
             if (!r.success()) return rollBack(sv, u, "cannot create the MySQL account " + USER + "@" + host + ": " + oneLine(r));
-            Shell.Result in = sv.as(USER, secret, host, db, "SELECT COUNT(*) FROM session");
+            Shell.Result in = sv.as(USER, secret, host, db, SqlCatalog.RC_SESSIONS_READABLE);
             if (!in.success())
                 return rollBack(sv, u, USER + " cannot read " + db + " with the new password: " + oneLine(in));
 
@@ -352,7 +345,7 @@ public final class RoundcubeDbUser {
             if (why != null) return rollBack(sv, u, why + " after the switch to " + USER);
 
             u.revoked = true;
-            r = sv.root(revokeSql(panel, db, panelGrants));
+            r = revoke(sv, panel, db, panelOn.hosts());
             if (!r.success()) return rollBack(sv, u, "cannot take " + db + " away from " + panel + ": " + oneLine(r));
             why = verify(sv, sites, db, false, realLogin);
             if (why != null) return rollBack(sv, u, why + " once " + panel + " lost " + db);
@@ -362,7 +355,7 @@ public final class RoundcubeDbUser {
         String detail = "the webmail enters MySQL as " + USER + "@" + host + " with privileges on " + db + " only, "
                 + panel + " no longer has them; verified with the login page, its session in the database"
                 + (realLogin ? " and a real login through the panel's SSO" : ", but without a real login: " + noLogin);
-        if (sv.as(panel, sv.panelPassword(), host, db, "SELECT 1").success())
+        if (sv.as(panel, sv.panelPassword(), host, db, SqlCatalog.MYSQL_ROOT_PING).success())
             return new Report(Outcome.PARTIAL, detail + "; BUT " + panel + " still reads " + db
                     + " (privileges from somewhere else: " + String.join(" | ", grantsOf(sv, panel)) + ")");
         return new Report(Outcome.DONE, detail);
@@ -377,8 +370,8 @@ public final class RoundcubeDbUser {
         if (!rootAnswers(sv))
             return new Report(Outcome.NO_ROOT, "the webmail already uses " + USER + " but " + panel + " still reads " + db
                     + ", and MySQL root does not answer: left as it is");
-        List<String> grants = panelGrantsOn(sv, panel, db);
-        if (grants == null || grants.isEmpty())
+        PanelOnDb on = panelOnDb(sv, panel, db);
+        if (on == null || on.hosts().isEmpty() || on.other() != null)
             return new Report(Outcome.PARTIAL, "the webmail already uses " + USER + " but " + panel + " still reads " + db
                     + " with privileges from somewhere else: " + String.join(" | ", grantsOf(sv, panel)));
         List<Site> sites = sv.webmailSites();
@@ -390,9 +383,11 @@ public final class RoundcubeDbUser {
             return new Report(Outcome.NOT_ANSWERING, now + ": " + panel + " keeps " + db + ", retrying at the next start");
         boolean realLogin = sv.realLogin(sites.get(0), db) == null;
         Undo u = new Undo();
-        u.panelGrants = grants;
+        u.db = db;
+        u.panel = panel;
+        u.panelHosts = on.hosts();
         u.revoked = true;
-        Shell.Result r = sv.root(revokeSql(panel, db, grants));
+        Shell.Result r = revoke(sv, panel, db, on.hosts());
         if (!r.success()) return rollBack(sv, u, "cannot take " + db + " away from " + panel + ": " + oneLine(r));
         String why = verify(sv, sites, db, false, realLogin);
         if (why != null) return rollBack(sv, u, why + " once " + panel + " lost " + db);
@@ -438,7 +433,7 @@ public final class RoundcubeDbUser {
         if (p.sessionId() == null || !SESSION_ID.matcher(p.sessionId()).matches())
             return "the webmail on " + where + " did not open a session";
         for (int i = 0; i < 5; i++) {
-            Shell.Result r = sv.root("SELECT COUNT(*) FROM `" + db + "`.session WHERE sess_id = '" + p.sessionId() + "';");
+            Shell.Result r = sv.root(db, SqlCatalog.RC_SESSION_EXISTS, p.sessionId());
             if (r.success() && "1".equals(r.outputTrim())) return null;
             sv.pause();
         }
@@ -447,8 +442,7 @@ public final class RoundcubeDbUser {
 
     /** Le connessioni di roundcube viste da MySQL; -1 se performance_schema e' spento (allora non si misura). */
     private static long connections(Services sv) {
-        Shell.Result r = sv.root("SELECT IF(@@performance_schema, (SELECT COALESCE(SUM(TOTAL_CONNECTIONS), 0) "
-                + "FROM performance_schema.accounts WHERE USER = '" + USER + "'), -1);");
+        Shell.Result r = sv.root(null, SqlCatalog.RC_CONNECTIONS);
         try {
             return r.success() ? Long.parseLong(r.outputTrim()) : -1;
         } catch (NumberFormatException e) {
@@ -468,85 +462,113 @@ public final class RoundcubeDbUser {
     // ===================== MySQL da root =====================
 
     private static boolean rootAnswers(Services sv) {
-        Shell.Result r = sv.root("SELECT 1;");
+        Shell.Result r = sv.root(null, SqlCatalog.MYSQL_ROOT_PING);
         return r.success() && "1".equals(r.outputTrim());
     }
 
+    /** L'account roundcube su quell'host: se c'e', e le sue righe di SHOW GRANTS (solo lette). */
+    record Account(boolean exists, List<String> grants) {}
+
     /**
-     * Le istruzioni che ricreano l'account roundcube com'e' adesso: SHOW CREATE USER con l'hash in
-     * esadecimale (si rimette identico, misurato su MySQL 8.4) e le sue GRANT. Vuote se l'account
-     * non c'e', null se non si sa.
+     * Una riga di SHOW GRANTS su un intero database, come la stampa MySQL 8: i privilegi, il database, l'utente,
+     * l'host, e quello che segue (WITH GRANT OPTION). Si legge e basta: per tornare indietro non si riesegue.
      */
-    static List<String> accountStatements(Services sv, String host) {
-        Shell.Result n = sv.root("SELECT COUNT(*) FROM mysql.user WHERE user = '" + USER + "' AND host = '" + host + "';");
+    private static final Pattern DB_GRANT = Pattern.compile("^GRANT (.+) ON `([^`]+)`\\.\\* TO `([^`]+)`@`([^`]+)`(.*)$");
+    /** La riga che ogni account ha: nessun privilegio globale. */
+    private static final Pattern USAGE_ONLY = Pattern.compile("^GRANT USAGE ON \\*\\.\\* TO `[^`]+`@`[^`]+`$");
+
+    /** L'account roundcube su quell'host: null se non si sa. */
+    static Account account(Services sv, String host) {
+        Shell.Result n = sv.root(null, SqlCatalog.RC_ACCOUNT_EXISTS, host);
         if (!n.success()) return null;
-        if ("0".equals(n.outputTrim())) return List.of();
-        Shell.Result r = sv.root("SET SESSION print_identified_with_as_hex = ON;\nSHOW CREATE USER '" + USER + "'@'" + host
-                + "';\nSHOW GRANTS FOR '" + USER + "'@'" + host + "';");
-        if (!r.success()) return null;
-        List<String> out = new ArrayList<>();
-        for (String l : r.output().split("\n")) if (!l.isBlank()) out.add(l.trim());
-        return out.isEmpty() || !out.get(0).startsWith("CREATE USER") ? null : out;
+        if ("0".equals(n.outputTrim())) return new Account(false, List.of());
+        Shell.Result g = sv.root(null, SqlCatalog.RC_SHOW_GRANTS, USER, host);
+        if (!g.success()) return null;
+        return new Account(true, lines(g));
     }
 
-    /** Le GRANT dell'account che vanno oltre USAGE e il database della webmail; null se non ce ne sono. */
-    static String privilegesBeyond(List<String> account, String db) {
+    private static List<String> lines(Shell.Result r) {
+        List<String> out = new ArrayList<>();
+        for (String l : r.output().split("\n")) if (!l.isBlank()) out.add(l.trim());
+        return out;
+    }
+
+    /**
+     * Le righe di SHOW GRANTS dell'account che non sono USAGE o tutto il database della webmail; null se non ce ne
+     * sono. Tornando indietro si rimette solo la password: un account con altro (anche solo una parte del database)
+     * non e' quello che gli script creano, e non si tocca.
+     */
+    static String privilegesBeyond(List<String> grants, String db, String user, String host) {
         List<String> extra = new ArrayList<>();
-        for (String l : account) {
-            if (!l.startsWith("GRANT ")) continue;
-            if (l.startsWith("GRANT USAGE ON *.* TO ") || l.contains(" ON `" + db + "`.* TO ")) continue;
+        for (String l : grants) {
+            if (USAGE_ONLY.matcher(l).matches() || isAllOn(l, db, user, host)) continue;
             extra.add(l);
         }
         return extra.isEmpty() ? null : String.join(" | ", extra);
     }
 
-    /** Le GRANT dell'utente del pannello sul database della webmail, da ogni host: per rimetterle. null se non si sa. */
-    static List<String> panelGrantsOn(Services sv, String panel, String db) {
-        Shell.Result hosts = sv.root("SELECT host FROM mysql.user WHERE user = '" + panel + "' ORDER BY host;");
+    /** La riga e' "tutto il database db a user@host", senza GRANT OPTION, come la danno gli script? */
+    private static boolean isAllOn(String line, String db, String user, String host) {
+        Matcher m = DB_GRANT.matcher(line);
+        return m.matches() && m.group(1).equals("ALL PRIVILEGES") && m.group(2).equals(db) && m.group(3).equals(user)
+                && m.group(4).equals(host) && m.group(5).isEmpty();
+    }
+
+    /**
+     * I privilegi dell'utente del pannello sul database della webmail: gli host da cui ha tutto il database (come
+     * glielo da' l'installatore), e le righe sul database che non sono quelle (other, null se non ce ne sono).
+     */
+    record PanelOnDb(List<String> hosts, String other) {}
+
+    /** null se non si sa. */
+    static PanelOnDb panelOnDb(Services sv, String panel, String db) {
+        Shell.Result hosts = sv.root(null, SqlCatalog.RC_PANEL_HOSTS, panel);
         if (!hosts.success()) return null;
-        List<String> out = new ArrayList<>();
-        for (String h : hosts.output().split("\n")) {
-            h = h.trim();
-            if (h.isEmpty()) continue;
+        List<String> all = new ArrayList<>(), other = new ArrayList<>();
+        for (String h : lines(hosts)) {
             if (!h.matches("[A-Za-z0-9.%:_-]{1,255}")) return null;
-            Shell.Result g = sv.root("SHOW GRANTS FOR '" + panel + "'@'" + h + "';");
+            Shell.Result g = sv.root(null, SqlCatalog.RC_SHOW_GRANTS, panel, h);
             if (!g.success()) return null;
-            for (String l : g.output().split("\n"))
-                if (l.contains(" ON `" + db + "`.* TO ")) out.add(l.trim());
+            for (String l : lines(g)) {
+                Matcher m = DB_GRANT.matcher(l);
+                if (!m.matches() || !m.group(2).equals(db)) continue;
+                if (isAllOn(l, db, panel, h)) all.add(h);
+                else other.add(l);
+            }
         }
-        return out;
+        return new PanelOnDb(all, other.isEmpty() ? null : String.join(" | ", other));
     }
 
+    /** Le righe di SHOW GRANTS dell'utente del pannello, per dirle nel registro. */
     private static List<String> grantsOf(Services sv, String panel) {
-        Shell.Result hosts = sv.root("SELECT host FROM mysql.user WHERE user = '" + panel + "' ORDER BY host;");
         List<String> out = new ArrayList<>();
+        Shell.Result hosts = sv.root(null, SqlCatalog.RC_PANEL_HOSTS, panel);
         if (!hosts.success()) return out;
-        for (String h : hosts.output().split("\n")) {
-            h = h.trim();
-            if (h.isEmpty() || !h.matches("[A-Za-z0-9.%:_-]{1,255}")) continue;
-            Shell.Result g = sv.root("SHOW GRANTS FOR '" + panel + "'@'" + h + "';");
-            for (String l : g.output().split("\n")) if (!l.isBlank() && !l.startsWith("GRANT USAGE ON *.*")) out.add(l.trim());
+        for (String h : lines(hosts)) {
+            if (!h.matches("[A-Za-z0-9.%:_-]{1,255}")) continue;
+            for (String l : lines(sv.root(null, SqlCatalog.RC_SHOW_GRANTS, panel, h)))
+                if (!USAGE_ONLY.matcher(l).matches()) out.add(l);
         }
         return out;
     }
 
-    /** Toglie al pannello il database della webmail su ogni host in cui ce l'ha. */
-    private static String revokeSql(String panel, String db, List<String> grants) {
-        Set<String> hosts = new LinkedHashSet<>();
-        Matcher m = Pattern.compile(" TO `" + Pattern.quote(panel) + "`@`([^`]+)`").matcher(String.join("\n", grants));
-        while (m.find()) hosts.add(m.group(1));
-        StringBuilder b = new StringBuilder();
-        for (String h : hosts)
-            b.append("REVOKE IF EXISTS ALL PRIVILEGES ON `").append(db).append("`.* FROM '").append(panel)
-             .append("'@'").append(h).append("' IGNORE UNKNOWN USER;\n");
-        return b.length() == 0 ? "SELECT 1;" : b.toString();
+    /** Toglie al pannello il database della webmail da ogni host da cui ce l'ha; alla prima che MySQL rifiuta si ferma. */
+    private static Shell.Result revoke(Services sv, String panel, String db, List<String> hosts) {
+        Shell.Result r = new Shell.Result(0, "", false, List.of());
+        for (String h : hosts) {
+            r = sv.root(db, SqlCatalog.RC_REVOKE_PANEL, panel, h);
+            if (!r.success()) return r;
+        }
+        return r;
     }
 
     private static Report rollBack(Services sv, Undo u, String why) {
         List<String> problems = new ArrayList<>();
-        if (u.revoked && !u.panelGrants.isEmpty()) {
-            Shell.Result r = sv.root(String.join(";\n", u.panelGrants) + ";");
-            if (!r.success()) problems.add("the privileges of the panel's user: " + oneLine(r));
+        if (u.revoked) {
+            for (String h : u.panelHosts) {
+                Shell.Result r = sv.root(u.db, SqlCatalog.RC_GRANT_PANEL, u.panel, h);
+                if (!r.success()) problems.add("the privileges of the panel's user from " + h + ": " + oneLine(r));
+            }
         }
         if (u.config != null) {
             try {
@@ -560,8 +582,11 @@ public final class RoundcubeDbUser {
             if (!r.success()) problems.add("php-fpm reload: " + oneLine(r));
         }
         if (u.accountTouched) {
-            Shell.Result r = sv.root("DROP USER IF EXISTS '" + USER + "'@'" + u.accountHost + "';\n"
-                    + (u.accountBefore.isEmpty() ? "" : String.join(";\n", u.accountBefore) + ";"));
+            // C'era: la password che la webmail usava (i privilegi erano gia' tutto il database, privilegesBeyond).
+            // Non c'era: si toglie.
+            Shell.Result r = u.accountExisted
+                    ? sv.root(null, SqlCatalog.RC_SET_PASSWORD, u.accountHost, u.passwordBefore)
+                    : sv.root(null, SqlCatalog.RC_DROP_USER, u.accountHost);
             if (!r.success()) problems.add("the MySQL account " + USER + ": " + oneLine(r));
         }
         return new Report(Outcome.ROLLED_BACK, why + "; everything put back"
@@ -643,8 +668,6 @@ public final class RoundcubeDbUser {
     private static final class RealServices implements Services {
         private static final Duration SHORT = Duration.ofSeconds(30);
         private final RoundcubeSsoManager sso;
-        /** Come root entra in MySQL: con la password del file dei segreti, o senza (null: non si sa ancora). */
-        private Boolean rootWithPassword;
 
         RealServices(RoundcubeSsoManager sso) { this.sso = sso; }
 
@@ -663,73 +686,18 @@ public final class RoundcubeDbUser {
 
         @Override public String panelPassword() { return PanelSecrets.text(PanelSecrets.MYSQL_PASSWORD); }
 
-        @Override public Shell.Result root(String sql) {
-            String password = PanelSecrets.text(PanelSecrets.MYSQL_ROOT_PASSWORD);
-            if (rootWithPassword == null) {
-                rootWithPassword = !password.isEmpty() && "1".equals(mysql(rootOptions(password, true), "SELECT 1;").outputTrim());
-                if (!rootWithPassword && !"1".equals(mysql(rootOptions(password, false), "SELECT 1;").outputTrim()))
-                    rootWithPassword = null;   // root non entra: si riprova alla prossima domanda
-            }
-            if (rootWithPassword == null) return new Shell.Result(1, "MySQL root does not answer", false, List.of("mysql"));
-            return mysql(rootOptions(password, rootWithPassword), sql);
+        /** Root di MySQL da JDBC (127.0.0.1), con la password del file dei segreti o senza se non ce l'ha ancora. */
+        @Override public Shell.Result root(String db, String sql, Object... params) {
+            if (db != null && !NAME.matcher(db).matches()) return new Shell.Result(1, "refused", false, List.of("jdbc"));
+            return MysqlRoot.rootJdbc(db, sql, params);
         }
 
-        /** Il file di opzioni di root: con la password del file dei segreti, o null (socket, senza password). */
-        private static String rootOptions(String password, boolean withPassword) {
-            return withPassword ? "[client]\nuser=root\npassword=\"" + password + "\"\n" : null;
-        }
-
-        @Override public Shell.Result as(String user, String password, String host, String db, String sql) {
+        @Override public Shell.Result as(String user, String password, String host, String db, String sql, Object... params) {
             if (!NAME.matcher(user).matches() || !LOCAL_HOST.matcher(host).matches() || !NAME.matcher(db).matches())
-                return new Shell.Result(1, "refused", false, List.of("mysql"));
-            String options = "[client]\nuser=" + user + "\npassword=\"" + (password == null ? "" : password)
-                    + "\"\nhost=" + host + "\ndatabase=" + db + "\n";
-            return mysql(options, sql);
-        }
-
-        /**
-         * mysql con il segreto in un file di opzioni e l'SQL nello standard input, tutti e due in una
-         * cartella 700 che dura un comando: ne' la password ne' un IDENTIFIED BY passano dalla riga di
-         * comando, che "ps" mostra a tutti. Senza file di opzioni: root dal socket, senza password.
-         */
-        private static Shell.Result mysql(String options, String sql) {
-            Path dir = null;
-            try {
-                dir = Files.createTempDirectory(Path.of(WORK_DIR), ".roundcube-db-",
-                        PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
-                Path in = dir.resolve("statements.sql");
-                Files.writeString(in, sql + "\n", StandardCharsets.UTF_8);
-                List<String> cmd = new ArrayList<>();
-                cmd.add("mysql");
-                if (options != null) {
-                    Path cnf = dir.resolve("client.cnf");
-                    Files.writeString(cnf, options, StandardCharsets.UTF_8);
-                    cmd.add("--defaults-extra-file=" + cnf);
-                } else {
-                    cmd.add("-u");
-                    cmd.add("root");
-                }
-                cmd.add("-N");
-                cmd.add("-B");
-                ProcessBuilder pb = new ProcessBuilder(cmd);
-                Shell.applyPath(pb);
-                pb.redirectInput(in.toFile());
-                pb.redirectErrorStream(true);
-                Process p = pb.start();
-                java.util.concurrent.CompletableFuture<String> out = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-                    try { return new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8); }
-                    catch (IOException e) { return ""; }
-                });
-                if (!p.waitFor(SHORT.toSeconds(), java.util.concurrent.TimeUnit.SECONDS)) {
-                    p.destroyForcibly();
-                    return new Shell.Result(-1, "mysql did not answer", true, cmd);
-                }
-                return new Shell.Result(p.exitValue(), out.get(5, java.util.concurrent.TimeUnit.SECONDS), false, cmd);
-            } catch (Exception e) {
-                return new Shell.Result(-2, e.toString(), false, List.of("mysql"));
-            } finally {
-                deleteTree(dir);
-            }
+                return new Shell.Result(1, "refused", false, List.of("jdbc"));
+            int c = host.indexOf(':');
+            return MysqlRoot.jdbc(c < 0 ? host : host.substring(0, c), c < 0 ? "3306" : host.substring(c + 1), db, user,
+                    password, sql, params);
         }
 
         @Override public Shell.Result phpFpmReload() { return Shell.run(SHORT, "service", "php_fpm", "onereload"); }
@@ -767,8 +735,7 @@ public final class RoundcubeDbUser {
             }
             if (boxes.isEmpty()) return "there is no active mailbox to log in with";
             Set<String> known = new LinkedHashSet<>();
-            Shell.Result u = root("SELECT username FROM `" + db + "`.users WHERE username LIKE '%*"
-                    + RoundcubeSsoManager.MASTER_USER + "';");
+            Shell.Result u = root(db, SqlCatalog.RC_SSO_USERS, "%*" + RoundcubeSsoManager.MASTER_USER);
             if (u.success()) for (String l : u.output().split("\n")) known.add(l.trim());
             org.mail_panel.database.MailDatabase.Mailbox box = boxes.stream()
                     .filter(b -> known.contains(b.email + "*" + RoundcubeSsoManager.MASTER_USER)).findFirst().orElse(boxes.get(0));

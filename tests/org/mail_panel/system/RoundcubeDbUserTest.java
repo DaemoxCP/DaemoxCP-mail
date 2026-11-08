@@ -1,5 +1,6 @@
 package org.mail_panel.system;
 
+import org.mail_panel.database.SqlCatalog;
 import org.mail_panel.scripts.FullMailServerScript;
 import org.mail_panel.scripts.FullMailStackScript;
 import org.mail_panel.scripts.RoundcubeScript;
@@ -13,7 +14,6 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,9 +27,10 @@ import java.util.regex.Pattern;
 /**
  * The webmail moved from the panel's MySQL user to its own (RoundcubeDbUser.migrate), with a real
  * config.inc.php in a temporary folder (content, owner, group, permissions) and fake MySQL, php-fpm,
- * nginx and webmail. The fake MySQL runs the statements the migration sends it -- and stops on one it
- * does not know --; the fake webmail enters MySQL with the db_dsnw php-fpm loaded at the last reload,
- * like the real one with opcache.
+ * nginx and webmail. The fake MySQL answers the catalog statements the migration sends it, with their
+ * parameters -- and stops on one it does not know, or on one that needs the webmail's database without it --;
+ * the fake webmail enters MySQL with the db_dsnw php-fpm loaded at the last reload, like the real one with
+ * opcache. The same statements against a real MySQL: RoundcubeDbUserMysqlTest.
  *
  * <p>For every check there is a planted fault that only that check sees, and the test wants the
  * migration to go back leaving EVERYTHING as it was: config.inc.php byte for byte with owner, group
@@ -118,99 +119,81 @@ public class RoundcubeDbUserTest {
         }
         static final String USER = RoundcubeDbUser.USER;
 
-        @Override public Shell.Result as(String user, String password, String host, String db, String sql) {
+        @Override public Shell.Result as(String user, String password, String host, String db, String sql, Object... params) {
+            if (!sql.equals(SqlCatalog.MYSQL_ROOT_PING) && !sql.equals(SqlCatalog.RC_SESSIONS_READABLE)) {
+                unknown.add(sql);
+                return r(false, "ERROR: not a statement the migration sends as " + user);
+            }
             boolean ok = canUse(user, password, host, db);
             if (ok && USER.equals(user)) rcConnections++;
             return r(ok, ok ? "1" : "ERROR 1045 (28000): Access denied for user '" + user + "'");
         }
 
-        @Override public Shell.Result root(String sql) {
-            rootLog.add(sql);
+        @Override public Shell.Result root(String db, String sql, Object... params) {
+            rootLog.add(sql + " " + java.util.Arrays.toString(params));
             if (rootDown) return r(false, "ERROR 2002 (HY000): Can't connect to local MySQL server");
-            StringBuilder out = new StringBuilder();
-            for (String line : sql.split("\n")) {
-                String st = line.trim();
-                if (st.endsWith(";")) st = st.substring(0, st.length() - 1).trim();
-                if (st.isEmpty()) continue;
-                String res = exec(st);
-                if (res == null) return r(false, "ERROR 1396 (HY000): Operation failed: " + st);
-                out.append(res);
-            }
-            return r(true, out.toString());
+            String res = exec(db, sql, params);
+            if (res == null) return r(false, "ERROR 1396 (HY000): Operation failed: " + sql);
+            return r(true, res);
         }
 
         String account(String u, String h) { return u + "@" + h; }
 
-        /** The statements the migration uses, and only those: anything else is a mistake of the test. */
-        String exec(String st) {
-            Matcher m;
-            if (st.equals("SELECT 1")) return "1\n";
-            if ((m = Pattern.compile("SELECT COUNT\\(\\*\\) FROM mysql\\.user WHERE user = '(\\w+)' AND host = '([^']+)'").matcher(st)).matches())
-                return (accounts.containsKey(account(m.group(1), m.group(2))) ? "1" : "0") + "\n";
-            if (st.equals("SET SESSION print_identified_with_as_hex = ON")) return "";
-            if ((m = Pattern.compile("SHOW CREATE USER '(\\w+)'@'([^']+)'").matcher(st)).matches()) {
-                Account a = accounts.get(account(m.group(1), m.group(2)));
+        /**
+         * The catalog statements the migration uses, and only those: anything else is a mistake of the test. The ones
+         * with "ON *" or a table of the webmail need its database, as in MySQL (1046 No database selected).
+         */
+        String exec(String db, String st, Object[] p) {
+            if (st.equals(SqlCatalog.MYSQL_ROOT_PING)) return "1\n";
+            if (st.equals(SqlCatalog.RC_ACCOUNT_EXISTS))
+                return (accounts.containsKey(account(USER, (String) p[0])) ? "1" : "0") + "\n";
+            if (st.equals(SqlCatalog.RC_SHOW_GRANTS)) {
+                Account a = accounts.get(account((String) p[0], (String) p[1]));
                 if (a == null) return null;
-                return "CREATE USER `" + m.group(1) + "`@`" + m.group(2) + "` IDENTIFIED WITH 'caching_sha2_password' AS 0x"
-                        + HexFormat.of().withUpperCase().formatHex(a.password.getBytes(StandardCharsets.UTF_8))
-                        + " REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK\n";
-            }
-            if ((m = Pattern.compile("SHOW GRANTS FOR '(\\w+)'@'([^']+)'").matcher(st)).matches()) {
-                Account a = accounts.get(account(m.group(1), m.group(2)));
-                if (a == null) return null;
-                String to = " TO `" + m.group(1) + "`@`" + m.group(2) + "`\n";
+                String to = " TO `" + p[0] + "`@`" + p[1] + "`\n";
                 StringBuilder b = new StringBuilder(a.globalSelect ? "GRANT SELECT ON *.*" + to : "GRANT USAGE ON *.*" + to);
-                for (String db : a.dbs) b.append("GRANT ALL PRIVILEGES ON `").append(db).append("`.*").append(to);
+                for (String d : a.dbs) b.append("GRANT ALL PRIVILEGES ON `").append(d).append("`.*").append(to);
                 return b.toString();
             }
-            if ((m = Pattern.compile("SELECT host FROM mysql\\.user WHERE user = '(\\w+)' ORDER BY host").matcher(st)).matches()) {
+            if (st.equals(SqlCatalog.RC_PANEL_HOSTS)) {
                 StringBuilder b = new StringBuilder();
-                for (String k : accounts.keySet()) if (k.startsWith(m.group(1) + "@")) b.append(k.substring(k.indexOf('@') + 1)).append('\n');
+                for (String k : accounts.keySet()) if (k.startsWith(p[0] + "@")) b.append(k.substring(k.indexOf('@') + 1)).append('\n');
                 return b.toString();
             }
-            if ((m = Pattern.compile("CREATE USER IF NOT EXISTS '(\\w+)'@'([^']+)' IDENTIFIED BY '([^']*)'").matcher(st)).matches()) {
+            if (st.equals(SqlCatalog.RC_CREATE_USER)) {
                 if (createRefused) return null;      // validate_password: the policy refuses a password of letters and digits only
-                accounts.putIfAbsent(account(m.group(1), m.group(2)), new Account(m.group(3)));
+                accounts.putIfAbsent(account(USER, (String) p[0]), new Account((String) p[1]));
                 return "";
             }
-            if ((m = Pattern.compile("ALTER USER '(\\w+)'@'([^']+)' IDENTIFIED BY '([^']*)'").matcher(st)).matches()) {
-                Account a = accounts.get(account(m.group(1), m.group(2)));
+            if (st.equals(SqlCatalog.RC_SET_PASSWORD)) {
+                Account a = accounts.get(account(USER, (String) p[0]));
                 if (a == null || createRefused) return null;
-                a.password = m.group(3);
+                a.password = (String) p[1];
                 return "";
             }
-            if ((m = Pattern.compile("GRANT ALL PRIVILEGES ON `?(\\w+)`?\\.\\* TO [`']([\\w]+)[`']@[`']([^`']+)[`']").matcher(st)).matches()) {
-                Account a = accounts.get(account(m.group(2), m.group(3)));
+            if (st.equals(SqlCatalog.RC_GRANT_DATABASE) || st.equals(SqlCatalog.RC_GRANT_PANEL)) {
+                if (db == null) return null;
+                Account a = st.equals(SqlCatalog.RC_GRANT_DATABASE) ? accounts.get(account(USER, (String) p[0]))
+                        : accounts.get(account((String) p[0], (String) p[1]));
                 if (a == null) return null;
-                a.dbs.add(m.group(1));
+                a.dbs.add(db);
                 return "";
             }
-            if ((m = Pattern.compile("GRANT (USAGE|SELECT) ON \\*\\.\\* TO `(\\w+)`@`([^`]+)`").matcher(st)).matches()) {
-                Account a = accounts.get(account(m.group(2), m.group(3)));
-                if (a == null) return null;
-                if (m.group(1).equals("SELECT")) a.globalSelect = true;
+            if (st.equals(SqlCatalog.RC_REVOKE_PANEL)) {
+                if (db == null || revokeFails) return null;
+                Account a = accounts.get(account((String) p[0], (String) p[1]));
+                if (a != null) a.dbs.remove(db);
                 return "";
             }
-            if ((m = Pattern.compile("REVOKE IF EXISTS ALL PRIVILEGES ON `(\\w+)`\\.\\* FROM '(\\w+)'@'([^']+)' IGNORE UNKNOWN USER").matcher(st)).matches()) {
-                if (revokeFails) return null;
-                Account a = accounts.get(account(m.group(2), m.group(3)));
-                if (a != null) a.dbs.remove(m.group(1));
+            if (st.equals(SqlCatalog.RC_DROP_USER)) {
+                accounts.remove(account(USER, (String) p[0]));
                 return "";
             }
-            if ((m = Pattern.compile("DROP USER IF EXISTS '(\\w+)'@'([^']+)'").matcher(st)).matches()) {
-                accounts.remove(account(m.group(1), m.group(2)));
-                return "";
+            if (st.equals(SqlCatalog.RC_SESSION_EXISTS)) {
+                if (db == null) return null;
+                return (sessions.contains((String) p[0]) ? "1" : "0") + "\n";
             }
-            if ((m = Pattern.compile("CREATE USER `(\\w+)`@`([^`]+)` IDENTIFIED WITH 'caching_sha2_password' AS 0x([0-9A-F]+) .*").matcher(st)).matches()) {
-                if (accounts.containsKey(account(m.group(1), m.group(2)))) return null;
-                accounts.put(account(m.group(1), m.group(2)),
-                        new Account(new String(HexFormat.of().parseHex(m.group(3)), StandardCharsets.UTF_8)));
-                return "";
-            }
-            if ((m = Pattern.compile("SELECT COUNT\\(\\*\\) FROM `(\\w+)`\\.session WHERE sess_id = '(\\w+)'").matcher(st)).matches())
-                return (sessions.contains(m.group(2)) ? "1" : "0") + "\n";
-            if (st.startsWith("SELECT IF(@@performance_schema, (SELECT COALESCE(SUM(TOTAL_CONNECTIONS), 0) FROM performance_schema.accounts WHERE USER = 'roundcube'), -1)"))
-                return (performanceSchema ? rcConnections : -1) + "\n";
+            if (st.equals(SqlCatalog.RC_CONNECTIONS)) return (performanceSchema ? rcConnections : -1) + "\n";
             unknown.add(st);
             return null;
         }
@@ -295,7 +278,7 @@ public class RoundcubeDbUserTest {
         return RoundcubeDbUser.migrate(new RoundcubeDbUser.Places(f.config.getParent().getParent()), f);
     }
 
-    /** No statement that changes accounts or privileges (SHOW CREATE USER and SHOW GRANTS only read). */
+    /** No statement that changes accounts or privileges (SHOW GRANTS only reads). */
     static boolean noWrites(Fake f) {
         for (String s : f.rootLog)
             for (String l : s.split("\n"))

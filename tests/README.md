@@ -828,6 +828,16 @@ be written MySQL is not touched.
 
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.MysqlRootTest
 
+**RoundcubeDbUserMysqlTest** — the webmail moved to its own MySQL user (RoundcubeDbUser) against the test MySQL as its
+root: the catalog statements run by MySQL, the privileges read back with SHOW GRANTS,
+a small fake webmail that writes its session into the real session table. It succeeds (roundcube with everything on
+its database and nothing else, the panel's user without it from both hosts); php-fpm with the old configuration and
+something still entering as the panel after the revoke go back (the panel gets its database again, roundcube
+dropped); the scripts of before get their old password back on a fault; a roundcube account with more, or a panel
+with only part of the database, are left alone. A way back that forgets the panel's privileges makes it fail.
+
+    java -Dmysql.port=33062 -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeDbUserMysqlTest
+
 **RootDistrustsDataTest** — the root part does not trust the names it reads from MySQL, which the
 web part can write. Names planted straight into MySQL, as a
 broken-into web part would: SafeNames' shapes; DKIM key paths with ".." or a quote refused; Sieve with

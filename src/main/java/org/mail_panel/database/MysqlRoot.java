@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -173,6 +174,54 @@ public final class MysqlRoot {
         } catch (SQLException e) {
             return e.getErrorCode() + " " + e.getMessage();
         }
+    }
+
+    /**
+     * Un'istruzione del catalogo da JDBC, con quell'utente su quel database (null: nessuno), i valori come
+     * parametri. L'uscita come la scriveva il client mysql (una riga per riga, le colonne separate da un tab, NULL
+     * per un valore vuoto), oppure uscita 1 col codice e il messaggio di MySQL. Host, porta e database devono essere
+     * gia' passati da una forma stretta: finiscono nell'URL.
+     */
+    public static Shell.Result jdbc(String host, String port, String db, String user, String password, String sql, Object... params) {
+        String url = "jdbc:mysql://" + host + ":" + port + "/" + (db == null ? "" : db) + "?useSSL=true&requireSSL=false"
+                + "&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectTimeout=10000&socketTimeout=30000";
+        List<String> what = List.of("jdbc", user + "@" + host, db == null ? "" : db);
+        try (Connection c = CatalogGuard.open(url, user, password == null ? "" : password);
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
+            StringBuilder out = new StringBuilder();
+            if (ps.execute()) {
+                try (ResultSet rs = ps.getResultSet()) {
+                    int n = rs.getMetaData().getColumnCount();
+                    while (rs.next()) {
+                        for (int i = 1; i <= n; i++) {
+                            if (i > 1) out.append('\t');
+                            String v = rs.getString(i);
+                            out.append(v == null ? "NULL" : v);
+                        }
+                        out.append('\n');
+                    }
+                }
+            }
+            return new Shell.Result(0, out.toString(), false, what);
+        } catch (SQLException e) {
+            return new Shell.Result(1, "ERROR " + e.getErrorCode() + " (" + e.getSQLState() + "): " + e.getMessage(), false, what);
+        } catch (RuntimeException e) {
+            return new Shell.Result(1, e.toString(), false, what);
+        }
+    }
+
+    /**
+     * Lo stesso come root da 127.0.0.1 (MySQL la risolve in localhost: lo stesso account del socket), con la password
+     * del file dei segreti, o senza se MySQL non ce l'ha ancora.
+     */
+    public static Shell.Result rootJdbc(String db, String sql, Object... params) {
+        String password = PanelSecrets.text(PanelSecrets.MYSQL_ROOT_PASSWORD);
+        if (!password.isEmpty()) {
+            Shell.Result r = jdbc("127.0.0.1", port, db, "root", password, sql, params);
+            if (r.success() || !r.output().startsWith("ERROR 1045 ")) return r;
+        }
+        return jdbc("127.0.0.1", port, db, "root", "", sql, params);
     }
 
     /** Il risultato della riparazione, per la prova e per il log. */

@@ -1081,7 +1081,7 @@ echo "${YELLOW}[PHASE 9/10] Configuring Roundcube...${NC}"
 # pannello perde i privilegi su roundcubemail che gli aveva dato la versione di prima.
 if ! mysql --defaults-extra-file="$MYSQL_ROOT_CNF" << ROUNDCUBE_DB
 CREATE DATABASE IF NOT EXISTS roundcubemail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-""" + org.mail_panel.system.RoundcubeDbUser.shellAccountSql("$ROUNDCUBE_DB_PASSWORD", "$MYSQL_USER") + """
+""" + org.mail_panel.scripts.RoundcubeDbAccountScript.sql("$ROUNDCUBE_DB_PASSWORD", "$MYSQL_USER") + """
 FLUSH PRIVILEGES;
 ROUNDCUBE_DB
 then

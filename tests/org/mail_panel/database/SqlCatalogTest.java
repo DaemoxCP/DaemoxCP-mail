@@ -29,8 +29,7 @@ import java.util.stream.Stream;
  *     execute, executeQuery, executeUpdate, addBatch, also the ones a PreparedStatement inherits), and
  *     the statements and the metadata do not hand out the connection without the guard;
  *  3. from the project folder, the code (src/main/java):
- *     a. no SQL text outside the catalog, except the webmail user's migration (RoundcubeDbUser, listed
- *        below, the second piece of 0.8.1) and the install scripts;
+ *     a. no SQL text outside the catalog, except the install scripts (shell text for the mysql client);
  *     b. what goes to a JDBC call is a catalog constant or a name that holds one, never a text built
  *        there (a +, a literal, String.format, a StringBuilder);
  *     c. only CatalogGuard opens a connection (DriverManager), and nobody takes the driver's statement
@@ -77,14 +76,12 @@ public class SqlCatalogTest {
     }
 
     /**
-     * The mysql client's SQL that is not in the catalog yet: the webmail user's migration, run by the root part
-     * (as MySQL's root, or with the credentials of Roundcube and of the panel, through the command line). MysqlRoot,
-     * MysqlListen and UpdateManager are no longer here: the client gets only catalog statements from them
-     * (MysqlRoot.mysql refuses any other text) and the questions with a value go through JDBC. The install scripts
-     * are shell text for the mysql client and for Postfix and Dovecot.
+     * The mysql client's SQL that is not in the catalog: none any more.
+     * MysqlRoot, MysqlListen and UpdateManager give the client only catalog statements (MysqlRoot.mysql refuses any
+     * other text), and the questions with a value, RoundcubeDbUser's included, go through JDBC. Only the install
+     * scripts remain: shell text for the mysql client and for Postfix and Dovecot (RoundcubeDbAccountScript too).
      */
-    static final Set<String> MYSQL_CLIENT = Set.of(
-            "org/mail_panel/system/RoundcubeDbUser.java");
+    static final Set<String> MYSQL_CLIENT = Set.of();
     static final String SCRIPTS = "org/mail_panel/scripts/";
 
     /** The start of an SQL statement, in the panel's style (keywords in capitals). */

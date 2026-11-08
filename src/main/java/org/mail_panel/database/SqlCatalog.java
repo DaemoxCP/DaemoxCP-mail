@@ -1407,6 +1407,52 @@ public final class SqlCatalog {
     /** UpdateManager, come root: perche' mysqldump chiede un FLUSH */
     public static final String UM_GTID_STATE = "SELECT CONCAT('gtid_mode=', @@gtid_mode, '  log_bin=', @@log_bin, '  enforce_gtid_consistency=', @@enforce_gtid_consistency)";
 
+    // ========== La webmail col suo utente MySQL (RoundcubeDbUser) ==========
+    //
+    // Da JDBC, come root o con l'utente della webmail e del pannello: i nomi degli account e le password come
+    // parametri (Connector/J li mette fra apici, e la sintassi degli account li accetta cosi'). Le istruzioni con
+    // "ON *" valgono per il database della connessione: quello della webmail, nell'URL. Quello che MySQL stampa
+    // (SHOW GRANTS) si legge e basta, non si riesegue.
+
+    /** RoundcubeDbUser: l'account della webmail su quell'host c'e'? */
+    public static final String RC_ACCOUNT_EXISTS = "SELECT COUNT(*) FROM mysql.user WHERE user = 'roundcube' AND host = ?";
+
+    /** RoundcubeDbUser: i privilegi di un account, utente e host come parametri; si leggono, non si rieseguono */
+    public static final String RC_SHOW_GRANTS = "SHOW GRANTS FOR ?@?";
+
+    /** RoundcubeDbUser: gli host dell'utente del pannello */
+    public static final String RC_PANEL_HOSTS = "SELECT host FROM mysql.user WHERE user = ? ORDER BY host";
+
+    /** RoundcubeDbUser */
+    public static final String RC_CREATE_USER = "CREATE USER IF NOT EXISTS 'roundcube'@? IDENTIFIED BY ?";
+
+    /** RoundcubeDbUser: la password nuova, o per tornare indietro quella che la webmail usava */
+    public static final String RC_SET_PASSWORD = "ALTER USER 'roundcube'@? IDENTIFIED BY ?";
+
+    /** RoundcubeDbUser, sul database della webmail: tutto quel database, e solo quello, alla webmail */
+    public static final String RC_GRANT_DATABASE = "GRANT ALL PRIVILEGES ON * TO 'roundcube'@?";
+
+    /** RoundcubeDbUser: per tornare indietro, se l'account prima non c'era */
+    public static final String RC_DROP_USER = "DROP USER IF EXISTS 'roundcube'@?";
+
+    /** RoundcubeDbUser, sul database della webmail: il database della webmail tolto all'utente del pannello */
+    public static final String RC_REVOKE_PANEL = "REVOKE IF EXISTS ALL PRIVILEGES ON * FROM ?@? IGNORE UNKNOWN USER";
+
+    /** RoundcubeDbUser, sul database della webmail: per tornare indietro, ridato all'utente del pannello come lo da' l'installatore */
+    public static final String RC_GRANT_PANEL = "GRANT ALL PRIVILEGES ON * TO ?@?";
+
+    /** RoundcubeDbUser, sul database della webmail: la sessione aperta dalla pagina d'accesso e' arrivata? */
+    public static final String RC_SESSION_EXISTS = "SELECT COUNT(*) FROM session WHERE sess_id = ?";
+
+    /** RoundcubeDbUser, con l'utente della webmail: legge le sue sessioni? */
+    public static final String RC_SESSIONS_READABLE = "SELECT COUNT(*) FROM session";
+
+    /** RoundcubeDbUser: le connessioni della webmail viste da MySQL; -1 se performance_schema e' spento */
+    public static final String RC_CONNECTIONS = "SELECT IF(@@performance_schema, (SELECT COALESCE(SUM(TOTAL_CONNECTIONS), 0) FROM performance_schema.accounts WHERE USER = 'roundcube'), -1)";
+
+    /** RoundcubeDbUser, sul database della webmail: le caselle gia' entrate con l'SSO del pannello ("casella*admin") */
+    public static final String RC_SSO_USERS = "SELECT username FROM users WHERE username LIKE ?";
+
     // ========== Gli utenti MySQL di Postfix e Dovecot (MailDbUsers) ==========
     //
     // Postfix e Dovecot leggono soltanto, ognuno le sue colonne: Postfix domini, caselle e alias, mai le password;
