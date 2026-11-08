@@ -3257,10 +3257,20 @@ public final class UpdateManager {
      */
     record PlanWatch(Map<String, String> inventoryBefore, InstallSideEffects.Watch sideEffects,
                      PostfixMaps.Before mapsBefore) {
+        /**
+         * Solo per le prove (SignedJobsE2ETest, -Doutside): un cambiamento vero fra la fotografia e pkg, come qualcuno
+         * che installa un pacchetto da SSH mentre il lavoro gira. Lo imposta solo chi ha il processo in mano: nel
+         * pannello in servizio e' sempre null.
+         */
+        static volatile Runnable afterTaken;
+
         static PlanWatch take(InstallSideEffects.Watch sideEffects) {
             Map<String, String> inventory = PackagePlan.versionsOnly(PackagePlan.installed());
             sideEffects.takeBefore();
-            return new PlanWatch(inventory, sideEffects, PostfixMaps.before());
+            PlanWatch w = new PlanWatch(inventory, sideEffects, PostfixMaps.before());
+            Runnable r = afterTaken;
+            if (r != null) r.run();
+            return w;
         }
     }
 

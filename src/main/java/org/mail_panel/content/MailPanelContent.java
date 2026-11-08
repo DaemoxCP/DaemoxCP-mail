@@ -6124,7 +6124,7 @@ public class MailPanelContent {
             for (const k of d.keys) {
                 html += '<tr><td class="small">' + escHtml(k.type) + (k.has_options ? ' <span class="badge text-bg-secondary">' + escHtml(t('set.sshOptions')) + '</span>' : '')
                     + '</td><td class="small text-long">' + escHtml(k.comment || '—') + '</td><td class="small font-monospace text-long">' + escHtml(k.fingerprint)
-                    + '</td><td class="text-end"><button class="btn btn-outline-danger btn-sm" data-on-click="sshRemove(\'' + escHtml(k.fingerprint) + '\')" aria-label="'
+                    + '</td><td class="text-end"><button class="btn btn-outline-danger btn-sm" data-on-click="sshRemove(\\'' + escHtml(k.fingerprint) + '\\')" aria-label="'
                     + escHtml(t('set.sshRemoveOne', { fingerprint: k.fingerprint })) + '"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>';
             }
             box.innerHTML = html + '</tbody></table></div>';

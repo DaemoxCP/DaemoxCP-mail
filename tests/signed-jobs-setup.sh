@@ -7,6 +7,13 @@
 #   sh tests/signed-jobs-setup.sh restore-python   toglie cio' che il passaggio ha aggiunto
 #   sh tests/signed-jobs-setup.sh restore-mysql84  rimette il datadir 8.4 di prima e le dipendenze vere
 #   sh tests/signed-jobs-setup.sh cleanup          toglie i boot environment creati dai lavori
+#   sh tests/signed-jobs-setup.sh confirm          tiene confermata per un'ora la sessione piu' recente del pannello
+#   sh tests/signed-jobs-setup.sh confirm-stop     smette di confermarla
+#
+# La conferma recente (reauth_at) e' quella che il pannello vuole prima di avviare un lavoro, e che normalmente
+# arriva da una passkey o da un codice via email: sulla VM la si scrive in MySQL, come confirm_session di
+# separation-service-test.sh, per la sessione aperta col codice da console (signed-jobs-browser-test.js). Solo
+# sulla VM di prova: sul server vero sarebbe aggirarla.
 #
 # Solo su una macchina di prova, come root. Non stampa mai password ne' contenuti del database:
 # le credenziali di root di MySQL vanno in un file di opzioni 0600 letto dai client, e i dati
@@ -139,11 +146,30 @@ EOF
     echo "rdeps of mysql84-client: $(pkg query %rn mysql84-client | tr '\n' ' ')"
     echo "missing dependencies: $(pkg check -d -n 2>&1 | grep -c 'has a missing dependency' || true)"
     ;;
+confirm)
+    if [ -f "$W/confirm.pid" ] && ps -o command= -p "$(cat "$W/confirm.pid")" 2>/dev/null | grep -q 'signed-jobs-confirm'; then
+        kill "$(cat "$W/confirm.pid")" && echo "stopped the previous confirmation"
+    fi
+    root_cnf
+    db=$(mysql --defaults-file="$W/root.cnf" -N -e "SELECT DISTINCT routine_schema FROM information_schema.routines WHERE routine_name = 'check_session'")
+    id=$(mysql --defaults-file="$W/root.cnf" -N -e "SELECT id FROM $db.panel_sessions ORDER BY created_at DESC LIMIT 1")
+    [ -n "$id" ] || { echo "no panel session in $db: sign in first (console code), then confirm"; rm -f "$W/root.cnf"; exit 1; }
+    echo "confirming session $id of $db for an hour"
+    nohup sh -c "end=\$((\$(date +%s) + 3600)); while [ \$(date +%s) -lt \$end ]; do mysql --defaults-file=$W/root.cnf -N -e 'UPDATE $db.panel_sessions SET reauth_at = UTC_TIMESTAMP() WHERE id = $id'; sleep 60; done # signed-jobs-confirm" \
+        > "$W/confirm.out" 2>&1 &
+    echo $! > "$W/confirm.pid"
+    ;;
+confirm-stop)
+    if [ -f "$W/confirm.pid" ] && ps -o command= -p "$(cat "$W/confirm.pid")" 2>/dev/null | grep -q 'signed-jobs-confirm'; then
+        kill "$(cat "$W/confirm.pid")" && echo "confirmation stopped"
+    fi
+    rm -f "$W/confirm.pid"
+    ;;
 cleanup)
     for be in $(bectl list -H | cut -f1 | sort | comm -13 "$W/bes-before.txt" -); do
         case "$be" in packages-before-*) bectl destroy -o "$be" && echo "destroyed $be" ;; *) echo "kept $be" ;; esac
     done
     ;;
 *)
-    echo "mode: roundcube | python | restore-python | mysql84 | restore-mysql84 | cleanup"; exit 2 ;;
+    echo "mode: roundcube | python | restore-python | mysql84 | restore-mysql84 | confirm | confirm-stop | cleanup"; exit 2 ;;
 esac

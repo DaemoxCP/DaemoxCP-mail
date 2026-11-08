@@ -16,11 +16,19 @@ set -e
 # while the source is broken. It happened on 03/09/2026: the green message came from a jar twenty
 # minutes old. A check that measures something other than what it seems to measure is worse than
 # no check.
-mvn -o -q package -DskipTests
-
-DIR=$(mktemp -d)
-javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java
-java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator "$DIR" >/dev/null
+#
+# With a folder as argument it checks the pages already generated there by PageGenerator (on the test VM, where
+# the Java programs run: run.sh of the series writes them in pages-panel), without building anything:
+#   sh tests/check-pages.sh <folder with the pages, assets/ and i18n/>
+if [ -n "${1:-}" ]; then
+    DIR=$1
+    [ -d "$DIR/assets" ] || { echo "$DIR has no assets/: not a folder written by PageGenerator"; exit 2; }
+else
+    mvn -o -q package -DskipTests
+    DIR=$(mktemp -d)
+    javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator "$DIR" >/dev/null
+fi
 python3 - "$DIR" <<'PY'
 import io, re, glob, sys
 for f in sorted(glob.glob(sys.argv[1] + "/*.html")):
@@ -38,6 +46,23 @@ for f in "$DIR"/*.js; do
         ko=$((ko+1))
     fi
 done
+# The script files. Since the strict CSP (no inline script) the JavaScript of every page is in the files the page
+# loads, /assets/*.js and /i18n/*.js: what the loop above extracts from the pages is empty, and it answered "valid"
+# on every page while /account and /settings did not load their script at all (reperto 191). A file that does not
+# parse is named with the pages that load it.
+assets=0
+for f in $(find "$DIR/assets" "$DIR/i18n" -name '*.js' 2>/dev/null | sort); do
+    assets=$((assets+1)); rel=${f#$DIR}
+    if node --check "$f" 2>/dev/null; then
+        printf "  OK       %s\n" "$rel"
+    else
+        printf "  ERROR    %s, loaded by: %s\n" "$rel" "$(grep -l "src=\"${rel}" "$DIR"/*.html | xargs -n1 basename | tr '\n' ' ')"
+        node --check "$f" 2>&1 | sed -n '2,4p' | cut -c1-200 | sed 's/^/           /'
+        ko=$((ko+1))
+    fi
+done
+if [ "$assets" -eq 0 ]; then echo "  ERROR    no script file under $DIR/assets: the pages load nothing I can check"; ko=$((ko+1)); fi
+tot=$((tot+assets))
 # The structure: every element opened must be closed, and the footer sits directly in <body>.
 #
 # The JavaScript check above does not see it, and the browser does not report it either: it
@@ -92,5 +117,5 @@ then brokenStructure=0; else brokenStructure=1; fi
 
 rm -rf "$DIR"
 echo
-if [ "$ko" -eq 0 ]; then echo "ALL $tot PAGES HAVE VALID JAVASCRIPT"; else echo "$ko PAGES OF $tot WITH BROKEN JAVASCRIPT"; fi
+if [ "$ko" -eq 0 ]; then echo "ALL $tot PAGES AND SCRIPT FILES HAVE VALID JAVASCRIPT"; else echo "$ko PAGES OR SCRIPT FILES OF $tot WITH BROKEN JAVASCRIPT"; fi
 if [ "$ko" -ne 0 ] || [ "$brokenStructure" -ne 0 ]; then exit 1; fi
