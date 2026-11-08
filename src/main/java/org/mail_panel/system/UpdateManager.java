@@ -5535,7 +5535,7 @@ public final class UpdateManager {
             } else {
                 addCheck(checks, "start", I18n.tr("server.um.javaPreflight.6"), "wait", st.getString("note"));
                 addCheck(checks, "cmd", I18n.tr("server.um.javaPreflight.7"), "ok",
-                        "in " + st.getString("dir") + ":  " + st.getString("command"));
+                        st.optBoolean("service") ? st.getString("command") : "in " + st.getString("dir") + ":  " + st.getString("command"));
             }
 
             if (!ok("test -x /usr/sbin/daemon", 10)) {
@@ -5566,7 +5566,7 @@ public final class UpdateManager {
 
             // Il piano ESATTO, come per Roundcube, Python e MySQL: che cosa farebbe pkg aggiornando la JVM, calcolato
             // su una copia del suo database con le stesse protezioni tolte. Prima la pagina diceva solo
-            // «25.0.4 -> 25.0.5», e pkg aggiornava anche libX11, libXi, libXrender e libXtst senza che nessuno
+            // «25.0.4 -> 25.0.5», e pkg aggiornava anche quattro librerie di X11 senza che nessuno
             // l'avesse letto (reperto 195). Il lavoro parte solo con l'impronta di questo piano.
             if (!vRepo.isEmpty()) {
                 JSONObject plan = javaPlan(pkg);

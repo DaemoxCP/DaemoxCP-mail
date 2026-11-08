@@ -77,7 +77,10 @@ public class JavaUpdateScriptTest {
             check(lang + ": every date in UTC", !s.contains("$(date)") && s.contains("date -u"));
             int fetch = s.indexOf("pkg upgrade -F -y"), stop = s.indexOf("kill \"$PANEL_PID\""), upgrade = s.indexOf("pkg upgrade -y \"$PKG\"");
             check(lang + ": download, then stop, then upgrade", fetch > 0 && stop > fetch && upgrade > stop);
-            check(lang + ": started by the service, checked by the service", s.contains("service mailpanel status"));
+            // The command itself, not the report line that names it (that one would pass with the check gone).
+            check(lang + ": started by the service, checked by the service",
+                    Pattern.compile("(?m)^if \\[ \\$SERVICE -eq 1 \\] && ! /usr/sbin/service mailpanel status >/dev/null 2>&1; then$").matcher(s).find()
+                    && s.contains("SERVICE=1"));
         }
     }
 
