@@ -2648,27 +2648,8 @@ public final class UpdateManager {
      * stretta; i valori vanno come parametri.
      */
     static String jdbcRows(String host, String port, String db, String user, String password, String sql, Object... params) {
-        String url = "jdbc:mysql://" + host + ":" + port + "/" + db + "?useSSL=true&requireSSL=false"
-                + "&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectTimeout=10000&socketTimeout=30000";
-        try (java.sql.Connection c = org.mail_panel.database.CatalogGuard.open(url, user, password == null ? "" : password);
-             java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
-            for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
-            StringBuilder sb = new StringBuilder();
-            try (java.sql.ResultSet rs = ps.executeQuery()) {
-                int n = rs.getMetaData().getColumnCount();
-                while (rs.next()) {
-                    for (int i = 1; i <= n; i++) {
-                        if (i > 1) sb.append('\t');
-                        String v = rs.getString(i);
-                        sb.append(v == null ? "NULL" : v);
-                    }
-                    sb.append('\n');
-                }
-            }
-            return sb.toString().trim();
-        } catch (java.sql.SQLException | RuntimeException e) {
-            return "";
-        }
+        Shell.Result r = org.mail_panel.database.MysqlRoot.jdbc(host, port, db, user, password, sql, params);
+        return r.success() ? r.outputTrim() : "";
     }
 
     /**

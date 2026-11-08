@@ -332,7 +332,7 @@ public class FullMailStackScript {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
             CREATE DATABASE IF NOT EXISTS roundcubemail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-            """ + org.mail_panel.system.RoundcubeDbUser.shellAccountSql("${ROUNDCUBE_DB_PASSWORD}", "mailpanel") + """
+            """ + org.mail_panel.scripts.RoundcubeDbAccountScript.sql("${ROUNDCUBE_DB_PASSWORD}", "mailpanel") + """
 
             FLUSH PRIVILEGES;
             SQLEOF
