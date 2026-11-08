@@ -101,9 +101,13 @@ check "the pid files are the supervisor's: $(mode $RUN/web.pid)" "$(has "$(mode 
 E=/usr/local/etc/mail-panel
 check "$E: $(mode $E)" "$(is "$(mode $E)" "drwxr-x--- root:mailpanel")"
 check "panel-secrets.properties: $(mode $E/panel-secrets.properties)" "$(is "$(mode $E/panel-secrets.properties)" "-rw-r----- root:mailpanel")"
-check "master.key: $(mode $E/master.key)" "$(is "$(mode $E/master.key)" "-rw-r----- root:mailpanel")"
+# The asymmetric vault: the old symmetric key is root's only, the private key
+# in root's file, the public one in the web part's.
+[ -e $E/master.key ] && check "master.key, only for the copies of before: $(mode $E/master.key)" "$(is "$(mode $E/master.key)" "-rw------- root:wheel")"
+check "the vault's private key only in root's file" "$(is "$(grep -c '^vault_private_key=' $E/root-secrets.properties)$(grep -c '^vault_private_key' $E/panel-secrets.properties)" 10)"
+check "the vault's public key in the web part's file" "$(is "$(grep -c '^vault_public_key=' $E/panel-secrets.properties)" 1)"
 check "root-secrets.properties: $(mode $E/root-secrets.properties)" "$(is "$(mode $E/root-secrets.properties)" "-rw------- root:wheel")"
-OTHERS=$(find $E -type f ! -name panel-secrets.properties ! -name master.key -perm +077)
+OTHERS=$(find $E -type f ! -name panel-secrets.properties -perm +077)
 check "nothing else in $E is open to the group ($OTHERS)" "$(is "$OTHERS" "")"
 check "$PANEL/database: $(mode $PANEL/database)" "$(is "$(mode $PANEL/database)" "drwxr-x--- root:mailpanel")"
 check "mail_panel.db: $(mode $PANEL/database/mail_panel.db)" "$(is "$(mode $PANEL/database/mail_panel.db)" "-rw-r----- root:mailpanel")"
@@ -118,10 +122,9 @@ check "every page file is readable by the group ($UNREADABLE)" "$(is "$UNREADABL
 NOT_GROUP=$(find $A ! -group mailpanel | head -3)
 check "every page file is in the group mailpanel ($NOT_GROUP)" "$(is "$NOT_GROUP" "")"
 as_web /bin/test -r $E/panel-secrets.properties; check "mailpanel reads its secrets" $?
-as_web /bin/test -r $E/master.key; check "mailpanel reads the vault key" $?
 as_web /bin/test -r $PANEL/database/mail_panel.db; check "mailpanel reads SQLite" $?
 as_web /bin/test -w /var/log/mail-panel-auth.log; check "mailpanel writes the audit log" $?
-for f in $E/root-secrets.properties $E/firewall.json /var/db/mailpanel/roundcube_sso.key /var/db/mailpanel/dovecot_master.key; do
+for f in $E/root-secrets.properties $E/master.key $E/firewall.json /var/db/mailpanel/roundcube_sso.key /var/db/mailpanel/dovecot_master.key; do
     as_web /bin/test -r "$f"; r=$?
     check "mailpanel cannot read $f" "$(is $r 1)"
 done
@@ -165,8 +168,10 @@ check "add a test mailbox: $c (id $MID, $(cut -c1-120 /var/tmp/sep-body))" "$(is
 [ -d "/var/vmail/$D/probe/Maildir/cur" ] && [ -d "/var/vmail/$D/probe/Maildir/new" ] && [ -d "/var/vmail/$D/probe/Maildir/tmp" ]; r=$?
 check "the root part made its mail folders (the mail-folders operation)" $r
 check "  owned by vmail ($(stat -f %Su /var/vmail/$D/probe/Maildir 2>/dev/null))" "$(is "$(stat -f %Su /var/vmail/$D/probe/Maildir 2>/dev/null)" vmail)"
+c=$(post "/api/mailbox-password" "{\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
+check "the password comes back from the vault, read by the root part ($c)" "$(has "$B" "Sep-Test-Password-2026x")"
 c=$(post "/api/mailboxes" "{\"action\":\"reveal_password\",\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
-check "the password comes back from the vault, read by the web part ($c)" "$(has "$B" "Sep-Test-Password-2026x")"
+check "  the web part has no reveal of its own any more ($c $(printf '%s' "$B" | cut -c1-80))" "$(is "$(has "$B" "Sep-Test-Password-2026x")" 1)"
 c=$(post "/api/webmail" "{\"mailbox_id\":$MID}" "$CSRF"); check "POST /api/webmail, a sign-in token for the webmail: $c" "$(is "$c" 200)"
 # The webmail's two routes: the web part checks who calls (loopback and the webmail's key), the root serves them.
 # The key as Roundcube sends it: base64url without padding.
@@ -176,7 +181,7 @@ c=$(webmail "$WKEY" /api/internal/mailbox-vault "pass=Sep-Test-Password-2026x");
 c=$(webmail "not-the-key-$$" /api/internal/mailbox-vault "pass=Sep-Test-Password-2026x"); check "  without the webmail's key: 404 from the web part ($c)" "$(is "$c" 404)"
 c=$(webmail "$WKEY" /api/internal/mailbox-password "curpass=wrong-$$" "newpass=Sep-Test-Password-2026y"); check "the webmail's password change with a wrong current password: 403 ($c)" "$(is "$c" 403)"
 c=$(webmail "$WKEY" /api/internal/mailbox-password "curpass=Sep-Test-Password-2026x" "newpass=Sep-Test-Password-2026y"); check "  with the right one: $c $(cat /var/tmp/sep-body)" "$(is "$c" 200)"
-c=$(post "/api/mailboxes" "{\"action\":\"reveal_password\",\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
+c=$(post "/api/mailbox-password" "{\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
 check "  the root wrote the hash and the copy: Show password gives the new one ($c)" "$(has "$B" "Sep-Test-Password-2026y")"
 for p in /api/domains /api/mailboxes "/api/statistics?days=7" /api/mailconfig /api/theme; do
     c=$(get "$p"); check "GET $p: $c" "$(is "$c" 200)"

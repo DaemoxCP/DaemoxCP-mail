@@ -47,9 +47,8 @@ import java.util.stream.Stream;
  *     those; its call has the session and then the statement's parameters, its creation as many parameters
  *     and one placeholder (the comment), the same name in the four texts; every one but the public ones is
  *     bound to the session (the helper with a real permission, or the session's own row); the idle time is
- *     WebSessions.IDLE_SECONDS; no procedure gives the DKIM private keys or the password hashes and copies,
- *     save the two of Show password; the reads give no "*" of a table; and every text parameter compared with a
- *     column is ASCII (the database's collation is not the tables').
+ *     WebSessions.IDLE_SECONDS; no procedure gives the DKIM private keys or the password hashes and copies; the reads give no "*" of a table; and every text parameter compared with a
+ *     column is ASCII (the database's collation is not the one of its tables).
  *
  * Usage (on the VM, from the project folder for part 3):
  *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.SqlCatalogTest
@@ -325,8 +324,7 @@ public class SqlCatalogTest {
             boolean ownRow = r.create().contains("s.token_hash = p_session AND s.expires_at > UTC_TIMESTAMP()");
             if (!publicOnes.contains(routine) && !permission && !ownRow) unbound.add(routine);
             String body = r.create().replace("(d.dkim_private_key IS NOT NULL AND d.dkim_private_key <> '') AS has_dkim", "");
-            boolean showPassword = routine.equals("get_mailbox_vault_copy") || routine.equals("get_mailbox_password_hash");
-            if (r.read() && (body.contains("private_key") || (!showPassword && body.matches("(?s).*SELECT((?!\\bFROM\\b).)*\\bpassword(_encrypted)?\\b.*"))))
+            if (r.read() && (body.contains("private_key") || (body.matches("(?s).*SELECT((?!\\bFROM\\b).)*\\bpassword(_encrypted)?\\b.*"))))
                 secrets.add(routine);
             if (body.matches("(?s).*(\\.\\*|SELECT \\*).*")) star.add(routine);
         }
@@ -341,12 +339,12 @@ public class SqlCatalogTest {
                 SqlCatalog.WEB_CREATE_SESSION_ADMIN.contains("INTERVAL " + org.mail_panel.webserver.WebSessions.IDLE_SECONDS + " SECOND")
                 && WebPartStatements.ROUTINES.stream().filter(r -> r.create().contains("INTERVAL") && r.create().contains("last_seen_at"))
                         .allMatch(r -> r.create().contains("INTERVAL " + org.mail_panel.webserver.WebSessions.IDLE_SECONDS + " SECOND")));
-        check("no DKIM private key, no password hash or copy out of the database, save Show password's two" + (secrets.isEmpty() ? "" : " " + secrets),
+        check("no DKIM private key, no password hash or copy out of the database (Show password is the root part's)" + (secrets.isEmpty() ? "" : " " + secrets),
                 secrets.isEmpty());
         check("no read gives every column of a table (*)" + (star.isEmpty() ? "" : " " + star), star.isEmpty());
         check("the helper is not the web's: nobody gets EXECUTE on it", WebPartStatements.ROUTINES.stream()
                 .noneMatch(r -> r.grant().contains("web_session_admin")));
-        // The database's collation (utf8mb4_unicode_ci, from the installer) is not the tables' (utf8mb4_0900_ai_ci): a
+        // The database's collation (utf8mb4_unicode_ci, from the installer) is not the one of its tables (utf8mb4_0900_ai_ci): a
         // text parameter compared with a column must not take the database's, or MySQL refuses the mix.
         List<String> creates = new ArrayList<>(List.of(SqlCatalog.WEB_CREATE_SESSION_ADMIN));
         WebPartStatements.ROUTINES.forEach(r -> creates.add(r.create()));

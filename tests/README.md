@@ -782,6 +782,16 @@ stops, the session check of every request. Planting a procedure that ignores the
 
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.WebRoutinesTest
 
+**VaultKeysTest** — the asymmetric vault of the mailbox password copies, as root
+in a test folder: the key pair generated once, the private key only in root's secrets file and the public one in
+the web part's, a lost or wrong public key written again from the private one; a copy is "v2:", different every
+time, opens back, and does not open with one byte changed or with another pair; as the web part it encrypts but
+decrypts nothing and exports no key; a copy of before (master.key) still opens; with the test MySQL, in a database of
+its own, the copies of before encrypted again at start (the second time nothing) and a rotation that keeps the
+previous private key. A vault that decrypts outside root, or a private key not kept to root's file, makes it fail.
+
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.VaultKeysTest
+
 **RootDistrustsDataTest** — the root part does not trust the names it reads from MySQL, which the
 web part can write. Names planted straight into MySQL, as a
 broken-into web part would: SafeNames' shapes; DKIM key paths with ".." or a quote refused; Sieve with

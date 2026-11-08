@@ -175,7 +175,8 @@ public class RolesTest {
                 if (a == null || !item.view().equals(a.readPermission())) mismatch.append(' ').append(item.href());
             }
         check("every menu item is a route asking the same permission to look" + mismatch, mismatch.isEmpty());
-        check("revealing a mailbox password (a POST) asks mailboxes.manage", "mailboxes.manage".equals(routes.get("/api/mailboxes").permissionFor("POST", "reveal_password")));
+        check("revealing a mailbox password (a POST, served by the root part) asks mailboxes.manage",
+                "mailboxes.manage".equals(routes.get("/api/mailbox-password").permissionFor("POST", null)));
         check("opening a mailbox's webmail asks mailboxes.manage, even with GET", "mailboxes.manage".equals(routes.get("/api/webmail/open").permissionFor("GET", null)));
         check("/api/updates: reading the status is system.view, rebooting is system.manage",
                 "system.view".equals(routes.get("/api/updates").permissionFor("POST", "updates_status"))
@@ -207,7 +208,7 @@ public class RolesTest {
                 && settings.body().contains("Access denied") && settings.body().contains("class=\"topbar\"")
                 && !settings.body().contains("href=\"/settings\""));
         check("viewer opens Account", send("GET", "/account", null, viewer).statusCode() == 200);
-        check("viewer cannot reveal a mailbox password", refused(send("POST", "/api/mailboxes", "{\"action\":\"reveal_password\",\"id\":1}", viewer)));
+        check("viewer cannot reveal a mailbox password", refused(send("POST", "/api/mailbox-password", "{\"id\":1}", viewer)));
         check("viewer cannot read a queued message", refused(send("GET", "/api/queue?action=message&id=ABCDEF1234", null, viewer)));
         check("viewer cannot open a mailbox's webmail", refused(send("POST", "/api/webmail/open", "{\"email\":\"a@b.test\"}", viewer)));
         check("viewer cannot restart a service", refused(send("POST", "/api/service", "{\"service\":\"redis\",\"action\":\"stop\"}", viewer)));

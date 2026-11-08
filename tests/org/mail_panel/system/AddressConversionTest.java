@@ -92,6 +92,12 @@ public class AddressConversionTest {
     public static void main(String[] a) throws Exception {
         org.mail_panel.i18n.I18n.setCurrent("en");
         Path root = Files.createTempDirectory("transform-test");
+        // The panel's secrets and the vault's keys in the test folder, never the machine's: the mailboxes this test
+        // creates encrypt their password copy, and as root the vault would write its keys in /usr/local/etc/mail-panel.
+        if (System.getProperty("mailpanel.secrets.dir") == null)
+            System.setProperty("mailpanel.secrets.dir", root.resolve("secrets").toString());
+        if (System.getProperty("mailpanel.vault.key") == null)
+            System.setProperty("mailpanel.vault.key", root.resolve("master.key").toString());
         try {
             AddressTransform.vmail = root.resolve("vmail");
             AddressTransform.sieve = root.resolve("sieve");

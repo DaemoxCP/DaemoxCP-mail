@@ -2,8 +2,6 @@ package org.mail_panel.security;
 
 import org.mail_panel.webserver.SecurityUtils;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.security.SecureRandom;
 import java.util.regex.Pattern;
 
@@ -25,11 +23,8 @@ public class PasswordGeneratorTest {
     }
 
     public static void main(String[] a) throws Exception {
-        // The key is not needed to generate: no getInstance(), which would read or create
-        // /usr/local/etc/mail-panel/master.key.
-        var constructor = PasswordVault.class.getDeclaredConstructor(SecretKey.class);
-        constructor.setAccessible(true);
-        PasswordVault vault = constructor.newInstance(new SecretKeySpec(new byte[32], "AES"));
+        // No key is needed to generate: the vault's keys are read only to encrypt or decrypt a copy.
+        PasswordVault vault = PasswordVault.getInstance();
 
         System.out.println("\n== every generated password passes the panel's rule ==");
         String[] kinds = { "easy_to_say", "easy_to_read", "all_chars", "unknown", null };

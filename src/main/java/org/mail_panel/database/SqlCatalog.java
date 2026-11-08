@@ -1888,26 +1888,6 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_DELETE_MAILBOX = "GRANT EXECUTE ON PROCEDURE delete_mailbox" + WEB_TO;
 
     /**
-     * MAIL_GET_MAILBOX_PASSWORD_ENCRYPTED nella parte web, con mailboxes.manage: la copia cifrata della password
-     * di una casella (Mostra password; col vault asimmetrico passera' alla root).
-     */
-    public static final String WEB_CALL_GET_MAILBOX_VAULT_COPY = "CALL get_mailbox_vault_copy(?, ?)";
-
-    /** WebDbAccess: la procedura di WEB_CALL_GET_MAILBOX_VAULT_COPY. */
-    public static final String WEB_CREATE_GET_MAILBOX_VAULT_COPY = WEB_CREATE + "get_mailbox_vault_copy(" + WEB_SESSION
-            + ", IN p_id INT)" + WEB_BEGIN
-            + "    DECLARE v_admin INT;\n"
-            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
-            + "    SELECT password_encrypted FROM mailboxes WHERE id = p_id;\n"
-            + "END";
-
-    /** WebDbAccess */
-    public static final String WEB_DROP_GET_MAILBOX_VAULT_COPY = "DROP PROCEDURE IF EXISTS get_mailbox_vault_copy";
-
-    /** WebDbAccess */
-    public static final String WEB_GRANT_GET_MAILBOX_VAULT_COPY = "GRANT EXECUTE ON PROCEDURE get_mailbox_vault_copy" + WEB_TO;
-
-    /**
      * MAIL_MAILBOX_HAS_ENCRYPTED_PASSWORD nella parte web, con mail.view: se una casella ha la copia della
      * password.
      */
@@ -1926,26 +1906,6 @@ public final class SqlCatalog {
 
     /** WebDbAccess */
     public static final String WEB_GRANT_MAILBOX_HAS_VAULT_COPY = "GRANT EXECUTE ON PROCEDURE mailbox_has_vault_copy" + WEB_TO;
-
-    /**
-     * MAIL_MAILBOX_PASSWORD_MATCHES nella parte web, con mailboxes.manage: l'hash bcrypt di una casella, per
-     * Mostra password (col vault asimmetrico passera' alla root).
-     */
-    public static final String WEB_CALL_GET_MAILBOX_PASSWORD_HASH = "CALL get_mailbox_password_hash(?, ?)";
-
-    /** WebDbAccess: la procedura di WEB_CALL_GET_MAILBOX_PASSWORD_HASH. */
-    public static final String WEB_CREATE_GET_MAILBOX_PASSWORD_HASH = WEB_CREATE + "get_mailbox_password_hash(" + WEB_SESSION
-            + ", IN p_id INT)" + WEB_BEGIN
-            + "    DECLARE v_admin INT;\n"
-            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
-            + "    SELECT password FROM mailboxes WHERE id = p_id;\n"
-            + "END";
-
-    /** WebDbAccess */
-    public static final String WEB_DROP_GET_MAILBOX_PASSWORD_HASH = "DROP PROCEDURE IF EXISTS get_mailbox_password_hash";
-
-    /** WebDbAccess */
-    public static final String WEB_GRANT_GET_MAILBOX_PASSWORD_HASH = "GRANT EXECUTE ON PROCEDURE get_mailbox_password_hash" + WEB_TO;
 
     /** MAIL_GET_ALIASES_BY_SOURCE nella parte web, con mail.view: gli alias con questa sorgente. */
     public static final String WEB_CALL_LIST_ALIASES_BY_SOURCE = "CALL list_aliases_by_source(?, ?)";
@@ -2181,4 +2141,14 @@ public final class SqlCatalog {
 
     /** WebDbAccess */
     public static final String WEB_GRANT_COUNT_TRAINING = "GRANT EXECUTE ON PROCEDURE count_training" + WEB_TO;
+
+    /**
+     * WebDbAccess: le procedure che la web non ha piu' e che si tolgono dove ci sono, col loro permesso. Le copie
+     * delle password e i loro hash (Mostra password): dal vault a chiave asimmetrica le legge solo la root.
+     *
+     */
+    public static final String WEB_DROP_RETIRED_GET_MAILBOX_VAULT_COPY = "DROP PROCEDURE IF EXISTS get_mailbox_vault_copy";
+
+    /** WebDbAccess: vedi WEB_DROP_RETIRED_GET_MAILBOX_VAULT_COPY. */
+    public static final String WEB_DROP_RETIRED_GET_MAILBOX_PASSWORD_HASH = "DROP PROCEDURE IF EXISTS get_mailbox_password_hash";
 }

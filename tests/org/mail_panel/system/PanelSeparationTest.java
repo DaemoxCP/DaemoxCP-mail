@@ -84,6 +84,10 @@ public class PanelSeparationTest {
                     Files.writeString(dir.resolve(n), n);
                 Files.setPosixFilePermissions(dir.resolve("firewall.json"), PosixFilePermissions.fromString("rw-r--r--"));
                 Files.setPosixFilePermissions(dir.resolve("root-secrets.properties"), PosixFilePermissions.fromString("rw-------"));
+                // master.key as the separated panel left it before the asymmetric vault: 0640 in the web part's group.
+                Files.setPosixFilePermissions(dir.resolve("master.key"), PosixFilePermissions.fromString("rw-r-----"));
+                Files.getFileAttributeView(dir.resolve("master.key"), java.nio.file.attribute.PosixFileAttributeView.class).setGroup(
+                        dir.getFileSystem().getUserPrincipalLookupService().lookupPrincipalByGroupName(g));
                 String r = PanelSeparation.openToWeb(dir, PanelSeparation.SECRETS_FOR_WEB);
                 check("opened (" + r + ")", r == null);
                 check("the folder is 0750 root:" + g + " (" + mode(dir) + " " + owner(dir) + ")", mode(dir).equals("rwxr-x---") && owner(dir).equals("root:" + g));
@@ -91,6 +95,9 @@ public class PanelSeparationTest {
                     check(n + " is 0640 root:" + g + " (" + mode(dir.resolve(n)) + " " + owner(dir.resolve(n)) + ")",
                             mode(dir.resolve(n)).equals("rw-r-----") && owner(dir.resolve(n)).equals("root:" + g));
                 check("a file that was 0644 is now only root's (" + mode(dir.resolve("firewall.json")) + ")", mode(dir.resolve("firewall.json")).equals("rw-------"));
+                check("the old vault key (master.key) is not the web part's any more: 0600 root:wheel (" + mode(dir.resolve("master.key"))
+                        + " " + owner(dir.resolve("master.key")) + ")", !PanelSeparation.SECRETS_FOR_WEB.contains("master.key")
+                        && mode(dir.resolve("master.key")).equals("rw-------") && owner(dir.resolve("master.key")).equals("root:wheel"));
                 check("the root secrets stay 0600 and not in the group (" + owner(dir.resolve("root-secrets.properties")) + ")",
                         mode(dir.resolve("root-secrets.properties")).equals("rw-------") && !owner(dir.resolve("root-secrets.properties")).endsWith(":" + g));
                 // A file created after the folder went to the group: on FreeBSD it takes the folder's group.
@@ -105,8 +112,8 @@ public class PanelSeparationTest {
                 check("the second time nothing changes (" + PanelSeparation.changed + ")",
                         PanelSeparation.openToWeb(dir, PanelSeparation.SECRETS_FOR_WEB) == null && PanelSeparation.changed.isEmpty());
 
-                Files.delete(dir.resolve("master.key"));
-                Files.createSymbolicLink(dir.resolve("master.key"), Path.of("/etc/master.passwd"));
+                Files.delete(dir.resolve("panel-secrets.properties"));
+                Files.createSymbolicLink(dir.resolve("panel-secrets.properties"), Path.of("/etc/master.passwd"));
                 String link = PanelSeparation.openToWeb(dir, PanelSeparation.SECRETS_FOR_WEB);
                 check("a symbolic link instead of a data file is refused (" + link + ")", link != null && link.contains("symbolic link"));
                 check("  and what it points to is untouched (" + mode(Path.of("/etc/master.passwd")) + " " + owner(Path.of("/etc/master.passwd")) + ")",

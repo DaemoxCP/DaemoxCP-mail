@@ -3408,10 +3408,10 @@ public class MailPanelContent {
             const id = parseInt(document.getElementById('editMbId').value);
             if (!id) return;
             if (!confirm(t('mbx.confirmReveal'))) return;
-            fetch('/api/mailboxes', {
+            fetch('/api/mailbox-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'reveal_password', id: id, csrf_token: csrfToken })
+                body: JSON.stringify({ id: id, csrf_token: csrfToken })
             })
             .then(r => r.json())
             .then(data => {
@@ -3581,10 +3581,10 @@ public class MailPanelContent {
             if (!confirm(t('mbx.confirmRevealOf', { email: __cfgCurrentEmail }))) return;
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
-            fetch('/api/mailboxes', {
+            fetch('/api/mailbox-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'reveal_password', id: __cfgCurrentMailboxId, csrf_token: csrfToken })
+                body: JSON.stringify({ id: __cfgCurrentMailboxId, csrf_token: csrfToken })
             })
             .then(r => r.json())
             .then(data => {
@@ -6273,7 +6273,7 @@ public class MailPanelContent {
             const url = URL.createObjectURL(new Blob([v + '\\n'], { type: 'text/plain' }));
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'mail-panel-master-key-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+            a.download = 'mail-panel-vault-private-key-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

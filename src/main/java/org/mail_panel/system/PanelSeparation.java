@@ -71,8 +71,12 @@ public final class PanelSeparation {
     /** Quanto si aspetta che la web risponda: avvio della JVM, MySQL, le rotte. Sulla VM ci mette pochi secondi. */
     static final long ANSWER_SECONDS = 90;
 
-    /** I file che la web legge nella cartella dei segreti; il resto della cartella resta solo di root. */
-    static final Set<String> SECRETS_FOR_WEB = Set.of("panel-secrets.properties", "master.key");
+    /**
+     * I file che la web legge nella cartella dei segreti; il resto della cartella resta solo di root. Non piu'
+     * master.key: col vault asimmetrico la web cifra con la chiave pubblica, che sta nel suo file, e non legge
+     * nessuna copia. La chiave simmetrica di prima resta solo di root.
+     */
+    static final Set<String> SECRETS_FOR_WEB = Set.of("panel-secrets.properties");
     static final Set<String> SQLITE_FOR_WEB = Set.of("mail_panel.db");
 
     private static volatile boolean active;
@@ -228,8 +232,9 @@ public final class PanelSeparation {
     /** Porta i file a come li vuole la separazione; null se e' andato tutto, altrimenti il motivo. */
     static String prepareFiles() throws IOException {
         changed.clear();
-        // La chiave del vault deve esistere prima di aprirla alla web (la crea il primo uso).
-        org.mail_panel.security.PasswordVault.getInstance();
+        // Le chiavi del vault prima di accendere la web: la privata nel file di root, la pubblica in quello della
+        // web, con cui la web cifra le copie delle password nuove.
+        org.mail_panel.security.PasswordVault.ensureKeyPair();
 
         Path run = runDir;
         if (Files.isSymbolicLink(run) || (Files.exists(run, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(run, LinkOption.NOFOLLOW_LINKS)))

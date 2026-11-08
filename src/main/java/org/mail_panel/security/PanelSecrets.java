@@ -61,6 +61,14 @@ public final class PanelSecrets {
      * La scrive la root quando l'utente e' pronto e provato.
      */
     public static final String MYSQL_WEB_PASSWORD = "mysql_web_password";
+    /**
+     * La chiave privata del vault (RSA, PKCS#8 in base64): legge le copie delle password delle caselle. Solo nel file
+     * di root (PasswordVault); quella di prima dell'ultima rotazione accanto.
+     */
+    public static final String VAULT_PRIVATE_KEY = "vault_private_key";
+    public static final String VAULT_PREVIOUS_PRIVATE_KEY = "vault_previous_private_key";
+    /** La chiave pubblica del vault (X.509 in base64): la web cifra con questa le copie delle password nuove. */
+    public static final String VAULT_PUBLIC_KEY = "vault_public_key";
 
     /** La cartella dei file; i test la spostano in una cartella temporanea. */
     static Path dir = Paths.get(System.getProperty("mailpanel.secrets.dir", "/usr/local/etc/mail-panel"));
@@ -72,7 +80,8 @@ public final class PanelSecrets {
      * migrazioni, che girano da root, e con la password di root di MySQL chi bucasse la parte web avrebbe
      * tutto il database. Stanno in un file a parte, 0600 di root, nella stessa cartella.
      */
-    public static final Set<String> ROOT_ONLY = Set.of(MYSQL_ROOT_PASSWORD, ROUNDCUBE_DB_PASSWORD);
+    public static final Set<String> ROOT_ONLY = Set.of(MYSQL_ROOT_PASSWORD, ROUNDCUBE_DB_PASSWORD, VAULT_PRIVATE_KEY,
+            VAULT_PREVIOUS_PRIVATE_KEY);
 
     /**
      * I segreti che passano nel file di root quando la parte web ha il suo utente MySQL ({@link #MYSQL_WEB_PASSWORD}
