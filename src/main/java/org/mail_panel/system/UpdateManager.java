@@ -2611,6 +2611,9 @@ public final class UpdateManager {
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
             if (script != null) try { java.nio.file.Files.deleteIfExists(script); } catch (Exception ignored) {}
+            // La rigenerazione scrive la connessione con l'utente del pannello: si torna a quello di Dovecot
+            // (MailDbUsers), che legge solo indirizzo, hash e stato delle caselle.
+            if ("completed".equals(job.status)) MailDbUsers.ensureAtBoot();
             job.finishedAt = System.currentTimeMillis();
         }
     }

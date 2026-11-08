@@ -234,6 +234,54 @@ R=$(my "CALL $DB.web_session_admin(NULL, '', @a)"); check "  the procedures' own
 rm -f "$MYOPT"
 
 echo
+echo "== 3d. Postfix's and Dovecot's own MySQL users (MailDbUsers) =="
+PF=/usr/local/etc/postfix
+DSQL=/usr/local/etc/dovecot/dovecot-sql.conf
+unescape() { sed 's/\\\(.\)/\1/g'; }
+PANELPW=$(sed -n 's/^mysql_password=//p' $E/root-secrets.properties | unescape)
+check "the panel's MySQL password is known to the test" "$(is "$([ -n "$PANELPW" ] && echo y)" y)"
+for m in mysql-virtual-domains.cf mysql-virtual-mailboxes.cf mysql-virtual-aliases.cf; do
+    check "$m enters as mailpanel_postfix ($(grep '^user' $PF/$m))" "$(is "$(grep '^user' $PF/$m)" "user = mailpanel_postfix")"
+    check "  the panel's password is not in it" "$(is "$(grep -cF -- "$PANELPW" $PF/$m)" 0)"
+    check "  still root:postfix 0640 ($(mode $PF/$m))" "$(is "$(mode $PF/$m)" "-rw-r----- root:postfix")"
+    R=$(/usr/local/sbin/postmap -q mailpanel-probe@invalid mysql:$PF/$m 2>&1; echo "exit $?")
+    check "  postmap -q asks MySQL without an error ($R)" "$(is "$R" "exit 1")"
+done
+check "dovecot-sql.conf enters as mailpanel_dovecot ($(grep -o 'user=[^ ]*' $DSQL))" "$(is "$(grep -o 'user=[^ ]*' $DSQL)" "user=mailpanel_dovecot")"
+check "  the panel's password is not in it" "$(is "$(grep -cF -- "$PANELPW" $DSQL)" 0)"
+check "  still root:dovecot 0600 ($(mode $DSQL))" "$(is "$(mode $DSQL)" "-rw------- root:dovecot")"
+R=$(/usr/local/bin/doveadm auth lookup mailpanel-auth-probe@invalid >/dev/null 2>&1; echo $?)
+check "doveadm auth lookup answers (exit $R, 67 = no such user)" "$(is "$R" 67)"
+ROOTOPT=$(mktemp /var/tmp/sep-root.XXXXXX); chmod 600 "$ROOTOPT"
+printf '[client]\nuser=root\npassword="%s"\n' "$(sed -n 's/^mysql_root_password=//p' $E/root-secrets.properties | unescape)" > "$ROOTOPT"
+asroot() { /usr/local/bin/mysql --defaults-extra-file="$ROOTOPT" -N -e "$1" 2>&1; }
+R=$(asroot "SELECT COUNT(*) FROM information_schema.processlist WHERE user = 'mailpanel_dovecot'")
+check "MySQL sees Dovecot's connection as mailpanel_dovecot ($R)" "$(is "$([ "$R" -ge 1 ] 2>/dev/null && echo y)" y)"
+MDB=$(sed -n 's/.*dbname=\([A-Za-z0-9_]*\).*/\1/p' $DSQL)
+BOX=$(asroot "SELECT email FROM $MDB.mailboxes WHERE active = 1 AND receive_enabled = 1 LIMIT 1")
+if [ -n "$BOX" ]; then
+    R=$(/usr/local/sbin/postmap -q "$BOX" mysql:$PF/mysql-virtual-mailboxes.cf 2>&1)
+    check "a real mailbox: Postfix finds where to deliver it ($R)" "$(is "$R" "${BOX#*@}/${BOX%@*}/")"
+fi
+for u in mailpanel_postfix mailpanel_dovecot; do
+    O=$(mktemp /var/tmp/sep-my.XXXXXX); chmod 600 "$O"
+    printf '[client]\nuser=%s\npassword=%s\nhost=127.0.0.1\nport=3306\n' "$u" \
+        "$(sed -n "s/^${u#mailpanel_}_db_password=//p" $E/root-secrets.properties | unescape)" > "$O"
+    asuser() { /usr/local/bin/mysql --defaults-extra-file="$O" -N -e "$1" 2>&1; }
+    R=$(asuser "SELECT COUNT(*) FROM $MDB.panel_admin"); check "$u: the administrators refused ($R)" "$(has "$R" "ERROR 1142")"
+    R=$(asuser "UPDATE $MDB.mailboxes SET active = active"); check "$u: writing the mailboxes refused ($R)" "$(has "$R" "ERROR 1142")"
+    if [ $u = mailpanel_postfix ]; then
+        R=$(asuser "SELECT password FROM $MDB.mailboxes LIMIT 1"); check "$u: the password hashes refused ($R)" "$(has "$R" "ERROR 1143")"
+        R=$(asuser "SELECT dkim_private_key FROM $MDB.domains LIMIT 1"); check "$u: the DKIM keys refused ($R)" "$(has "$R" "ERROR 1143")"
+    else
+        R=$(asuser "SELECT destination FROM $MDB.aliases LIMIT 1"); check "$u: the aliases refused ($R)" "$(has "$R" "ERROR 1142")"
+        R=$(asuser "SELECT password_encrypted FROM $MDB.mailboxes LIMIT 1"); check "$u: the vault copies refused ($R)" "$(has "$R" "ERROR 1143")"
+    fi
+    rm -f "$O"
+done
+rm -f "$ROOTOPT"
+
+echo
 echo "== 4. The root socket =="
 S=$RUN/root.sock
 R=$(probe_root "$S" /api/logs GET /api/logs 1 1); check "root's own client gets no answer ($R)" "$(has "$R" "NO ANSWER")"
