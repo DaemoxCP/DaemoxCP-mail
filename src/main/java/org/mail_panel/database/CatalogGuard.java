@@ -58,9 +58,29 @@ public final class CatalogGuard {
         return Set.copyOf(s);
     }
 
-    /** Vero se il testo e' una delle istruzioni del catalogo, carattere per carattere. */
+    /** Le istruzioni accettate: tutto il catalogo, o nella parte web solo il suo elenco (webPartOnly). */
+    private static volatile Set<String> accepted = STATEMENTS;
+
+    /** Vero se il testo e' una delle istruzioni accettate, carattere per carattere. */
     public static boolean allowed(String sql) {
-        return sql != null && STATEMENTS.contains(sql);
+        return sql != null && accepted.contains(sql);
+    }
+
+    /**
+     * La parte web del pannello separato, all'avvio: da qui solo le istruzioni di WebPartStatements.
+     * Non si torna indietro. Un nome che non e' nel catalogo ferma l'avvio.
+     */
+    public static synchronized void webPartOnly() {
+        Set<String> web = new HashSet<>();
+        for (String name : WebPartStatements.NAMES) {
+            try {
+                Field f = SqlCatalog.class.getField(name);
+                web.add((String) f.get(null));
+            } catch (ReflectiveOperationException | ClassCastException e) {
+                throw new IllegalStateException("WebPartStatements names a statement that is not in the catalog: " + name, e);
+            }
+        }
+        accepted = Set.copyOf(web);
     }
 
     /** Quante istruzioni ha il catalogo. */
@@ -92,7 +112,8 @@ public final class CatalogGuard {
         // Nel registro l'inizio del testo, senza a capo e caratteri di controllo: i valori stanno nei
         // parametri, non nel testo, e un testo rifiutato e' un errore del codice o un tentativo.
         String head = text.substring(0, Math.min(60, text.length())).replaceAll("\\p{Cntrl}", " ");
-        LOGGER.warning("SQL outside the panel's catalog refused (" + text.length() + " characters): " + head);
+        LOGGER.warning("SQL outside the panel's catalog refused (" + text.length() + " characters"
+                + (STATEMENTS.contains(text) ? ", in the catalog but not in this part's list" : "") + "): " + head);
         throw new SQLException("SQL statement not in the panel's catalog", "42000");
     }
 

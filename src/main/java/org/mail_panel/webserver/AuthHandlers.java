@@ -117,6 +117,14 @@ final class AuthHandlers {
 
     /** POST /api/login. */
     void handleLogin(HttpExchange ex) throws IOException {
+        handleLogin(ex, true);
+    }
+
+    /**
+     * L'accesso. Col pannello separato lo serve la parte root (A), a cui la web lo passa dopo aver controllato
+     * lei il token CSRF della pagina: il cookie che lo lega al browser resta alla web (checkPageToken falso).
+     */
+    void handleLogin(HttpExchange ex, boolean checkPageToken) throws IOException {
         try {
             server.addSecurityHeaders(ex);
             if (!"POST".equals(ex.getRequestMethod())) {
@@ -129,7 +137,7 @@ final class AuthHandlers {
             JSONObject req = body(ex);
             if (req == null) { send(ex, 400, error("server.badRequest")); return; }
             String ip = server.getClientIp(ex);
-            if (!WebSessions.validPreLoginCsrf(SSLMailServer.cookieValue(ex, WebSessions.PRE_COOKIE), req.optString("csrf_token", ""))) {
+            if (checkPageToken && !WebSessions.validPreLoginCsrf(SSLMailServer.cookieValue(ex, WebSessions.PRE_COOKIE), req.optString("csrf_token", ""))) {
                 server.logAudit("CSRF_FAILURE", ip, "login page token");
                 send(ex, 403, error("server.csrfInvalid"));
                 return;

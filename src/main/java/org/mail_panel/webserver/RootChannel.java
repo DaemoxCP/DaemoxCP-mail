@@ -49,9 +49,12 @@ import java.util.regex.Pattern;
  * <p>Nell'intestazione: la rotta che la web ha scelto, metodo, percorso e query grezzi, le intestazioni
  * dell'elenco {@link #HEADERS} e nessun'altra, l'IP del client per il registro, la lingua, e chi ha
  * fatto l'accesso: l'id dell'amministratore e quello della sua sessione. <strong>Mai i cookie ne' il
- * token della sessione</strong>: la parte root non vede mai i segreti della sessione. Amministratore,
- * permessi e conferma recente li rilegge lei dal database (WebSessions.forwarded), senza fidarsi di
- * quello che le dice la web.
+ * token della sessione</strong> che manda il browser. Amministratore, permessi e conferma recente la root
+ * li rilegge dal database (WebSessions.forwarded), senza fidarsi di quello che le dice la web.
+ *
+ * <p>Senza amministratore (id 0 e 0) passano solo le rotte di {@link #BEFORE_SIGN_IN}: l'accesso, che
+ * decide la root, e la chiave delle sessioni, che la web chiede
+ * all'avvio.
  *
  * <p>Il socket sta in una cartella 0750 root:mailpanel e il socket e' 0660 root:mailpanel; in piu' la
  * root accetta solo connessioni il cui processo e' dell'utente della web (SO_PEERCRED, che Java 25 su
@@ -72,10 +75,14 @@ public final class RootChannel implements Closeable {
 
     /**
      * Le sole intestazioni della richiesta che passano alla root, coi nomi come li scrive Headers. Il
-     * resto (Cookie, X-CSRF-Token, Authorization, Host, le intestazioni dei proxy) non passa mai: i
-     * filtri che le usano li ha gia' fatti la web, e l'IP del client arriva in un campo suo.
+     * resto (Cookie, X-CSRF-Token, Authorization, le intestazioni dei proxy) non passa mai: i filtri che
+     * le usano li ha gia' fatti la web, e l'IP del client arriva in un campo suo. Host passa: la web lo ha
+     * gia' confrontato coi nomi del pannello (HostCheck), e la root lo usa per l'rpId delle passkey.
      */
-    static final List<String> HEADERS = List.of("Content-type", "Accept-language", "User-agent", "Accept");
+    static final List<String> HEADERS = List.of("Content-type", "Accept-language", "User-agent", "Accept", "Host");
+
+    /** Le rotte che la web passa senza un amministratore (id 0 e 0): l'accesso e la chiave delle sessioni. */
+    public static final java.util.Set<String> BEFORE_SIGN_IN = java.util.Set.of("/api/login", "/op/session-key");
 
     static final List<String> METHODS = List.of("GET", "HEAD", "POST", "PUT", "DELETE", "PATCH");
 
@@ -161,7 +168,8 @@ public final class RootChannel implements Closeable {
         if (query != null && !QUERY.matcher(query).matches()) throw new IllegalArgumentException("bad query");
         if (!org.mail_panel.security.InputValidator.isValidIp(clientIp)) throw new IllegalArgumentException("bad client ip");
         if (!LANG.matcher(lang).matches()) throw new IllegalArgumentException("bad language");
-        if (adminId <= 0 || sessionId <= 0) throw new IllegalArgumentException("no administrator");
+        boolean before = adminId == 0 && sessionId == 0 && BEFORE_SIGN_IN.contains(route);
+        if (!before && (adminId <= 0 || sessionId <= 0)) throw new IllegalArgumentException("no administrator");
         Map<String, String> headers = new LinkedHashMap<>();
         JSONObject hs = h.optJSONObject("headers");
         if (hs != null) {

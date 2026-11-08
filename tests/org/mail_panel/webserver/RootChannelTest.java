@@ -19,9 +19,10 @@ import java.util.concurrent.atomic.AtomicReference;
  * a database:
  *
  *  1. the format: a request goes and comes back the same; headers outside the list (Cookie,
- *     X-CSRF-Token, Authorization, Host, the proxies' ones) never pass; a field out of shape refuses the
- *     whole request (route or path with "..", an encoded dot, an unknown method, a client address that is
- *     not an IP, a language that is not two letters, no administrator or session, a body over the limit);
+ *     X-CSRF-Token, Authorization, the proxies' ones) never pass, Host does; a field out of shape refuses
+ *     the whole request (route or path with "..", an encoded dot, an unknown method, a client address that
+ *     is not an IP, a language that is not two letters, no administrator or session except on the sign-in
+ *     and the session key, a body over the limit);
  *  2. the socket: a request reaches the dispatcher and its answer comes back, with status, headers and
  *     body; the socket is 0660; a connection from a user other than the allowed one gets nothing;
  *  3. the in-memory exchange: the declared length is enforced, a response without body stays without,
@@ -103,8 +104,8 @@ public class RootChannelTest {
                 .put("User-Agent", "UA"));
         liar.put("token", "the-session-token");
         RootChannel.Request filtered = RootChannel.readRequest(new ByteArrayInputStream(raw(liar.toString(), new byte[0])));
-        check("headers outside the list never pass (" + filtered.headers().keySet() + ")",
-                filtered.headers().keySet().equals(java.util.Set.of("User-agent")));
+        check("headers outside the list never pass, Host does (checked by the web part, the passkeys' rpId) ("
+                + filtered.headers().keySet() + ")", filtered.headers().keySet().equals(java.util.Set.of("User-agent", "Host")));
 
         check("a route with .. is refused", refused(raw(head("/api/../index", "GET", "/api/../index", "203.0.113.7", "en", 4, 17), new byte[0])));
         check("a path with .. is refused", refused(raw(head("/api/domains", "GET", "/api/domains/../../x", "203.0.113.7", "en", 4, 17), new byte[0])));
@@ -114,6 +115,11 @@ public class RootChannelTest {
         check("a language that is not two letters is refused", refused(raw(head("/api/domains", "GET", "/api/domains", "203.0.113.7", "../../etc", 4, 17), new byte[0])));
         check("no administrator is refused", refused(raw(head("/api/domains", "GET", "/api/domains", "203.0.113.7", "en", 0, 17), new byte[0])));
         check("no session is refused", refused(raw(head("/api/domains", "GET", "/api/domains", "203.0.113.7", "en", 4, 0), new byte[0])));
+        check("neither, on a signed-in route: refused", refused(raw(head("/api/domains", "GET", "/api/domains", "203.0.113.7", "en", 0, 0), new byte[0])));
+        check("neither, on the sign-in and the session key: accepted (they are before any session)",
+                !refused(raw(head("/api/login", "POST", "/api/login", "203.0.113.7", "en", 0, 0), new byte[0]))
+                && !refused(raw(head("/op/session-key", "POST", "/op/session-key", "203.0.113.7", "en", 0, 0), new byte[0])));
+        check("  but only with both at zero", refused(raw(head("/api/login", "POST", "/api/login", "203.0.113.7", "en", 0, 17), new byte[0])));
         org.json.JSONObject crlf = new org.json.JSONObject(head("/api/domains", "GET", "/api/domains", "203.0.113.7", "en", 4, 17));
         crlf.put("headers", new org.json.JSONObject().put("User-Agent", "a\r\nSet-Cookie: x=1"));
         check("a header value with a line break is refused", refused(raw(crlf.toString(), new byte[0])));
