@@ -775,7 +775,7 @@
         }
 
         function saveDkimSchedule() {
-            if (!currentDomainId) { panelSay('warning', 'Seleziona un dominio'); return; }
+            if (!currentDomainId) { panelSay('warning', t('dns.chooseDomainFirst')); return; }
             const sel = document.getElementById('dkimSchedulePreset');
             let days;
             if (sel.value === 'custom') {
