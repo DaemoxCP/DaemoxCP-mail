@@ -1250,11 +1250,12 @@ public final class SqlCatalog {
 
     /**
      * WebDbAccess: i permessi di ogni ruolo, per le procedure della parte web. Li scrive la root a ogni avvio dai
-     * permessi del Java (AuthStore): la tabella e' una copia, la web non la scrive e non la legge.
+     * permessi del Java (AuthStore): la tabella e' una copia, la web non la scrive e non la legge. ASCII, come il
+     * parametro con cui la si confronta (web_session_admin): stesso ordinamento, qualunque sia quello del database.
      */
     public static final String ROLES_CREATE_TABLE = "CREATE TABLE IF NOT EXISTS panel_role_permissions (\n"
-            + "    role VARCHAR(16) NOT NULL,\n"
-            + "    permission VARCHAR(32) NOT NULL,\n"
+            + "    role VARCHAR(16) CHARACTER SET ascii NOT NULL,\n"
+            + "    permission VARCHAR(32) CHARACTER SET ascii NOT NULL,\n"
             + "    PRIMARY KEY (role, permission)\n"
             + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4\n";
 
@@ -1369,7 +1370,14 @@ public final class SqlCatalog {
     private static final String WEB_CREATE = "CREATE DEFINER = 'mailpanel_routines'@'localhost' PROCEDURE ";
     /** Dopo i parametri: il commento (l'impronta del testo, WebDbAccess) e i permessi di chi l'ha definita. */
     private static final String WEB_BEGIN = " COMMENT ? SQL SECURITY DEFINER\nBEGIN\n";
-    /** Il primo parametro di ogni procedura: l'impronta del token della sessione della richiesta, o NULL. */
+    /**
+     * Il primo parametro di ogni procedura: l'impronta del token della sessione della richiesta, o NULL.
+     *
+     * <p>I parametri che si confrontano con una colonna (impronte, nomi, indirizzi, chiavi, permessi) sono
+     * CHARACTER SET ascii. Senza, prenderebbero l'ordinamento del database (utf8mb4_unicode_ci, come lo crea
+     * l'installatore), diverso da quello delle tabelle (utf8mb4_0900_ai_ci), e MySQL rifiuta il confronto
+     * (Illegal mix of collations, visto sulla VM l'08/11/2026). Con un lato ASCII vince la colonna Unicode.
+     */
     private static final String WEB_SESSION = "IN p_session CHAR(64) CHARACTER SET ascii";
     /** Chi le puo' chiamare: l'utente della parte web, da tutti e due i nomi con cui entra. */
     private static final String WEB_TO = " TO 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'";
@@ -1386,7 +1394,7 @@ public final class SqlCatalog {
      * procedura che la chiama. I ruoli li scrive la root a ogni avvio (panel_role_permissions). Non e' della web.
      */
     public static final String WEB_CREATE_SESSION_ADMIN = WEB_CREATE + "web_session_admin(" + WEB_SESSION
-            + ", IN p_permissions VARCHAR(255), OUT p_admin INT)" + WEB_BEGIN
+            + ", IN p_permissions VARCHAR(255) CHARACTER SET ascii, OUT p_admin INT)" + WEB_BEGIN
             + "    SET p_admin = (SELECT a.id FROM panel_sessions s JOIN panel_admin a ON a.id = s.admin_id\n"
             + "        WHERE " + WEB_SESSION_VALID + " AND a.active = TRUE\n"
             + "        AND (p_permissions = '' OR EXISTS (SELECT 1 FROM panel_role_permissions rp\n"
@@ -1465,7 +1473,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_GET_ADMIN_LANGUAGE. */
     public static final String WEB_CREATE_GET_ADMIN_LANGUAGE = WEB_CREATE + "get_admin_language(" + WEB_SESSION
-            + ", IN p_username VARCHAR(50))" + WEB_BEGIN
+            + ", IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
             + "    SELECT a.language FROM panel_admin a JOIN panel_sessions s ON s.admin_id = a.id\n"
             + "        WHERE a.username = p_username AND a.active = TRUE AND " + WEB_SESSION_VALID + ";\n"
             + "END";
@@ -1484,7 +1492,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_SET_ADMIN_LANGUAGE. */
     public static final String WEB_CREATE_SET_ADMIN_LANGUAGE = WEB_CREATE + "set_admin_language(" + WEB_SESSION
-            + ", IN p_language VARCHAR(5), IN p_username VARCHAR(50))" + WEB_BEGIN
+            + ", IN p_language VARCHAR(5), IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, '', v_admin);\n"
             + "    IF p_language IS NOT NULL AND p_language NOT IN ('it', 'en') THEN\n"
@@ -1505,7 +1513,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_GET_ADMIN_THEME. */
     public static final String WEB_CREATE_GET_ADMIN_THEME = WEB_CREATE + "get_admin_theme(" + WEB_SESSION
-            + ", IN p_username VARCHAR(50))" + WEB_BEGIN
+            + ", IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
             + "    SELECT a.theme FROM panel_admin a JOIN panel_sessions s ON s.admin_id = a.id\n"
             + "        WHERE a.username = p_username AND a.active = TRUE AND " + WEB_SESSION_VALID + ";\n"
             + "END";
@@ -1524,7 +1532,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_SET_ADMIN_THEME. */
     public static final String WEB_CREATE_SET_ADMIN_THEME = WEB_CREATE + "set_admin_theme(" + WEB_SESSION
-            + ", IN p_theme VARCHAR(10), IN p_username VARCHAR(50))" + WEB_BEGIN
+            + ", IN p_theme VARCHAR(10), IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, '', v_admin);\n"
             + "    IF p_theme IS NULL OR p_theme NOT IN ('auto', 'light', 'dark') THEN\n"
@@ -1565,7 +1573,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_GET_SETTING. */
     public static final String WEB_CREATE_GET_SETTING = WEB_CREATE + "get_setting(" + WEB_SESSION
-            + ", IN p_key VARCHAR(64))" + WEB_BEGIN
+            + ", IN p_key VARCHAR(64) CHARACTER SET ascii)" + WEB_BEGIN
             + "    SELECT setting_value FROM panel_settings\n"
             + "        WHERE setting_key = p_key AND setting_key IN ('mail_hostname', 'mta_sts_mode', 'pop3_enabled', 'audit_log_file_path');\n"
             + "END";
@@ -1645,7 +1653,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_GET_DOMAIN_BY_NAME. */
     public static final String WEB_CREATE_GET_DOMAIN_BY_NAME = WEB_CREATE + "get_domain_by_name(" + WEB_SESSION
-            + ", IN p_domain VARCHAR(255))" + WEB_BEGIN
+            + ", IN p_domain VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
             + "    SELECT d.id, d.domain, d.description, d.active, d.created_at, d.dkim_selector, d.dkim_public_key,\n"
@@ -1784,7 +1792,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_GET_MAILBOX_BY_EMAIL. */
     public static final String WEB_CREATE_GET_MAILBOX_BY_EMAIL = WEB_CREATE + "get_mailbox_by_email(" + WEB_SESSION
-            + ", IN p_email VARCHAR(255))" + WEB_BEGIN
+            + ", IN p_email VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
             + "    SELECT m.id, m.domain_id, d.domain AS domain_name, m.email, m.name, m.quota_mb, m.active, m.receive_enabled,\n"
@@ -1944,7 +1952,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_LIST_ALIASES_BY_SOURCE. */
     public static final String WEB_CREATE_LIST_ALIASES_BY_SOURCE = WEB_CREATE + "list_aliases_by_source(" + WEB_SESSION
-            + ", IN p_source VARCHAR(255))" + WEB_BEGIN
+            + ", IN p_source VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
             + "    SELECT a.id, a.domain_id, a.source, a.destination, a.active, a.created_at, d.domain AS domain_name\n"
@@ -1962,7 +1970,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_LIST_ALIASES_BY_DESTINATION. */
     public static final String WEB_CREATE_LIST_ALIASES_BY_DESTINATION = WEB_CREATE + "list_aliases_by_destination(" + WEB_SESSION
-            + ", IN p_destination VARCHAR(255))" + WEB_BEGIN
+            + ", IN p_destination VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
             + "    SELECT a.id, a.domain_id, a.source, a.destination, a.active, a.created_at, d.domain AS domain_name\n"
@@ -2037,7 +2045,8 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_DELETE_ALIAS. */
     public static final String WEB_CREATE_DELETE_ALIAS = WEB_CREATE + "delete_alias(" + WEB_SESSION
-            + ", IN p_source VARCHAR(255), IN p_destination VARCHAR(255))" + WEB_BEGIN
+            + ", IN p_source VARCHAR(255) CHARACTER SET ascii"
+            + ", IN p_destination VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
             + "    DELETE FROM aliases WHERE source = p_source AND destination = p_destination;\n"
@@ -2079,7 +2088,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_DELETE_MAILBOX_BY_ADDRESS. */
     public static final String WEB_CREATE_DELETE_MAILBOX_BY_ADDRESS = WEB_CREATE + "delete_mailbox_by_address(" + WEB_SESSION
-            + ", IN p_id INT, IN p_email VARCHAR(255))" + WEB_BEGIN
+            + ", IN p_id INT, IN p_email VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
             + "    DELETE FROM mailboxes WHERE id = p_id AND email = p_email;\n"
@@ -2161,7 +2170,7 @@ public final class SqlCatalog {
 
     /** WebDbAccess: la procedura di WEB_CALL_COUNT_TRAINING. */
     public static final String WEB_CREATE_COUNT_TRAINING = WEB_CREATE + "count_training(" + WEB_SESSION
-            + ", IN p_trained_as VARCHAR(4), IN p_days INT)" + WEB_BEGIN
+            + ", IN p_trained_as VARCHAR(4) CHARACTER SET ascii, IN p_days INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
             + "    SELECT COUNT(*) FROM rspamd_training WHERE trained_as = p_trained_as AND trained_at >= DATE_SUB(NOW(), INTERVAL p_days DAY);\n"

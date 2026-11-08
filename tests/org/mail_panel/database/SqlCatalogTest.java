@@ -48,7 +48,8 @@ import java.util.stream.Stream;
  *     and one placeholder (the comment), the same name in the four texts; every one but the public ones is
  *     bound to the session (the helper with a real permission, or the session's own row); the idle time is
  *     WebSessions.IDLE_SECONDS; no procedure gives the DKIM private keys or the password hashes and copies,
- *     save the two of Show password; and the reads give no "*" of a table.
+ *     save the two of Show password; the reads give no "*" of a table; and every text parameter compared with a
+ *     column is ASCII (the database's collation is not the tables').
  *
  * Usage (on the VM, from the project folder for part 3):
  *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.SqlCatalogTest
@@ -345,6 +346,25 @@ public class SqlCatalogTest {
         check("no read gives every column of a table (*)" + (star.isEmpty() ? "" : " " + star), star.isEmpty());
         check("the helper is not the web's: nobody gets EXECUTE on it", WebPartStatements.ROUTINES.stream()
                 .noneMatch(r -> r.grant().contains("web_session_admin")));
+        // The database's collation (utf8mb4_unicode_ci, from the installer) is not the tables' (utf8mb4_0900_ai_ci): a
+        // text parameter compared with a column must not take the database's, or MySQL refuses the mix.
+        List<String> creates = new ArrayList<>(List.of(SqlCatalog.WEB_CREATE_SESSION_ADMIN));
+        WebPartStatements.ROUTINES.forEach(r -> creates.add(r.create()));
+        Pattern textParam = Pattern.compile("\\b(?:IN|OUT) (p_\\w+) (?:VAR)?CHAR\\(\\d+\\)( CHARACTER SET ascii)?");
+        List<String> mixed = new ArrayList<>();
+        for (String c : creates) {
+            int begin = c.indexOf("\nBEGIN\n");
+            StringBuilder where = new StringBuilder();
+            Matcher w = Pattern.compile("WHERE[^;]*;").matcher(c.substring(begin));
+            while (w.find()) where.append(w.group()).append('\n');
+            Matcher m = textParam.matcher(c.substring(0, begin));
+            while (m.find()) {
+                if (m.group(2) == null && Pattern.compile("\\b" + m.group(1) + "\\b").matcher(where).find())
+                    mixed.add(c.replaceAll("(?s).*PROCEDURE (\\w+)\\(.*", "$1") + "." + m.group(1));
+            }
+        }
+        check("every text parameter compared with a column is ASCII, whatever the database's collation" + (mixed.isEmpty() ? "" : " " + mixed),
+                mixed.isEmpty());
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         System.exit(failed == 0 ? 0 : 1);

@@ -143,6 +143,11 @@ public class WebRoutinesTest {
         PanelSecrets.setText(PanelSecrets.MYSQL_PASSWORD, System.getProperty("mysql.password", ""));
 
         Connection root = as("root", "");
+        // The database as the installer creates it (FullMailServerScript): utf8mb4_unicode_ci, while the tables say
+        // only utf8mb4 and get utf8mb4_0900_ai_ci. A procedure's parameters take the database's collation: on the
+        // VM, compared with a column, MySQL refused the mix ("Illegal mix of collations"). The test MySQL's own
+        // default would have hidden it.
+        exec(root, "ALTER DATABASE " + database + " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
         // A clean start: none of the users and procedures of an earlier run.
         exec(root, "DROP USER IF EXISTS 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1', 'mailpanel_routines'@'localhost'");
         for (WebDbAccess.Definition d : WebDbAccess.definitions()) exec(root, d.drop());
