@@ -5633,7 +5633,9 @@ public final class UpdateManager {
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.um.plan.changedSinceRead"));
             String pkg = pf.getString("pkg");
             if (!isValidName(pkg)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
-            java.util.List<String> unlock = new ArrayList<>(List.of(pkg));
+            // Le protezioni da togliere sono esattamente quelle del piano (la JVM, se protetta, e le dipendenze
+            // protette): rimesse alla fine, ne' una in piu' ne' una in meno.
+            java.util.List<String> unlock = new ArrayList<>();
             for (String n : jsonArrayToList(pf.optJSONArray("unlock") == null ? new JSONArray() : pf.getJSONArray("unlock"))) {
                 if (!isValidName(n)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
                 if (!unlock.contains(n)) unlock.add(n);
