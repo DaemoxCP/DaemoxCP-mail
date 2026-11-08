@@ -12361,7 +12361,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
         return resource("pages/upd-api.js") + getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js")
-                + resource("pages/os-update.js") + resource("pages/update-center.js");
+                + resource("pages/os-update.js") + resource("pages/guided.js") + resource("pages/update-center.js");
     }
 
     /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */
@@ -12644,7 +12644,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updWayBack(name) {
-            if (!confirm(t('up.wayBackConfirm', { name: name }))) return;
+            // La finestra del pannello, non quella del browser (reperto 197).
+            if (!await panelAsk({ title: t('gd.wayBackTitle'), text: t('up.wayBackConfirm', { name: name }), confirm: t('gd.wayBackGo') })) return;
             const el = document.getElementById('upd-interrupted');
             const r = await updApi('reinstall_way_back', { name: name, confirm: 'GO BACK' });
             if (!r || !r.success) {
@@ -12921,7 +12922,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updRegenDovecot() {
-            if (!updConfirm(t('up.confirmRegenDovecot'), t('up.wRegen'))) return;
+            if (!await updConfirm(t('up.confirmRegenDovecot'), t('up.wRegen'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
             const r = await updApi('dovecot_config_regen', { confirm: 'REGENERATE' });
@@ -12932,7 +12933,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function cleanClient(foreign, correct) {
-            if (!updConfirm('', t('up.wRemove'))) return;
+            if (!await updConfirm('', t('up.wRemove'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
             const r = await updApi('clean_client', { confirm: 'REMOVE', foreign: foreign, correct: correct });
@@ -12949,7 +12950,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         function rebPrev() { panelRebootOpen(); }
 
         async function rebGo() {
-            if (!updConfirm('', t('up.wReboot'))) return;
+            if (!await updConfirm('', t('up.wReboot'))) return;
             const el = document.getElementById('os-body');
             const r = await updApi('reboot_now', { confirm: 'REBOOT THE SERVER', minutes: 1 });
             if (!r.success) {
@@ -13034,7 +13035,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcRemoveGo() {
-            if (!updConfirm(t('up.confirmRemoveRc'), t('up.wRemoveRc'))) return;
+            if (!await updConfirm(t('up.confirmRemoveRc'), t('up.wRemoveRc'))) return;
             const el = document.getElementById('os-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingAutostart')) + '';
             const r = await updApi('rc_remove', { confirm: 'REMOVE RC' });
@@ -13045,7 +13046,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcGo() {
-            if (!updConfirm('', t('up.wInstallRc'))) return;
+            if (!await updConfirm('', t('up.wInstallRc'))) return;
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
             const r = await updApi('rc_install', { confirm: 'INSTALL RC' });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
@@ -13110,7 +13111,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- eliminazione di un ambiente di avvio ----------
         async function beDelete(entryName) {
-            if (!updConfirm(t('up.confirmBeDelete', { name: entryName }), t('up.wDelete'))) return;
+            if (!await updConfirm(t('up.confirmBeDelete', { name: entryName }), t('up.wDelete'))) return;
             const el = document.getElementById('up-body');
             const r = await updApi('be_destroy', { confirm: 'DELETE', name: entryName });
             const box = document.createElement('div');
@@ -13433,7 +13434,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // ---------- alzare il livello di compatibilita' di Postfix ----------
         async function pfRaise(levelValue, opened) {
             const noticeText = opened > 0 ? tn('up.paramsChange', opened) : t('up.paramsSame');
-            if (!updConfirm(t('up.confirmLevel', { level: levelValue, note: noticeText }), t('up.wRaise'))) return;
+            if (!await updConfirm(t('up.confirmLevel', { level: levelValue, note: noticeText }), t('up.wRaise'))) return;
             const el = document.getElementById('pf-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.raising')) + '';
             const r = await updApi('postfix_level', { confirm: 'RAISE', level: levelValue });
@@ -13677,7 +13678,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- togliere un pacchetto, dal pannello ----------
         async function rmRemove(entryName) {
-            if (!updConfirm(t('up.confirmRemovePkg', { pkg: entryName }), t('up.wRemove'))) return;
+            if (!await updConfirm(t('up.confirmRemovePkg', { pkg: entryName }), t('up.wRemove'))) return;
             const el = document.getElementById('rim-esec-' + entryName);
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingChecking')) + '';
             const r = await updApi('pkg_remove', { confirm: 'REMOVE', name: entryName });
@@ -13721,7 +13722,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function libsRelink() {
-            if (!updConfirm('', t('up.wRelink'))) return;
+            if (!await updConfirm('', t('up.wRelink'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
             const r = await updApi('relink', { confirm: 'RELINK' });
@@ -13787,7 +13788,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (s.job.status === 'completed') {
                     el.innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>'
                                  + escHtml(t('up.stepDone', { s: s.job.elapsedSeconds })) + '</span>';
-                    setTimeout(after || (() => ucLoad(true)), 1500);
+                    // Chi aspetta riceve il lavoro: l'esito (job.result) e' suo, da mostrare (reperto 197).
+                    setTimeout(() => (after || (() => ucLoad(true)))(s.job), 1500);
                     return;
                 }
                 if (s.job.status === 'error') {
@@ -13863,7 +13865,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         return """
 
         async function pyLeftoversGo() {
-            if (!updConfirm('', t('up.wCleanPython'))) return;
+            if (!await panelAsk({ title: t('gd.pyCleanTitle'), text: t('gd.pyCleanText'), confirm: t('gd.pyCleanGo') })) return;
             const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removing')) + '';
             const r = await updApi('python_leftovers_clean', { confirm: 'CLEAN PYTHON' });
@@ -13884,30 +13886,23 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.pyChecks')) + '';
             const r = await updApi('python_preflight');
             pySignature = '';
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            pyPlan = r;
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             pySignature = r.signature || '';
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
-            (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
-                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            if (r.plan) h += updPlanHtml(r.plan, r.signature);
-            if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.nothingToMove')) + '</div>';
-            else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
-            else h += '<button class="btn btn-danger" data-on-click="pyRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.moveTo', { to: 'py' + r.newVersion })) + '</button>';
-            el.innerHTML = h;
+            el.innerHTML = gdReady(r, { already: r.already, alreadyText: t('up.nothingToMove'),
+                go: { label: t('up.moveTo', { to: 'py' + r.newVersion }), action: 'pyRun()' } });
         }
 
+        let pyPlan = null;
+
         async function pyRun() {
-            if (!updConfirm('', t('up.wMovePython'))) return;
-            const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
+            const to = 'py' + ((pyPlan && pyPlan.newVersion) || '');
+            if (!await panelAsk({ title: t('gd.pyAskTitle', { to: to }), text: t('gd.pyAskText') + '\\n' + gdPlanLines(pyPlan),
+                confirm: t('up.moveTo', { to: to }) })) return;
+            const el = document.getElementById('py-pre');
             const r = await updApi('python_move', { confirm: 'MOVE PYTHON', signature: pySignature });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.runningKeepOpen')) + '</span>';
-            pre.style.display = 'block';
-            planPoll(r.jobId, el, pre);
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
+            gdFollow('python', 'py-pre', 'py-log-box', 'py-log', r.jobId, t('up.runningKeepOpen'));
         }
 
         // ---------- aggiornamento della JVM ----------
@@ -13920,28 +13915,21 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.jvmChecks')) + '';
             const r = await updApi('java_preflight');
             jvSignature = '';
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            jvPlan = r;
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             jvSignature = r.signature || '';
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
-            (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
-                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            if (r.plan) h += updPlanHtml(r.plan, r.signature);
-            if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.latestAlready')) + '</div>';
-            else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
-            else h += '<div class="alert alert-danger py-2"><strong>' + escHtml(t('up.pageWillStopShort')) + '</strong> ' + escHtml(t('up.jvmStopNote')) + '</div>'
-                   + '<button class="btn btn-danger" data-on-click="jvRun()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.jvmRun')) + '</button>';
-            el.innerHTML = h;
+            el.innerHTML = gdReady(r, { already: r.already, alreadyText: t('up.latestAlready'),
+                note: t('up.pageWillStopShort') + ' ' + t('up.jvmStopNote'), go: { label: t('up.jvmRun'), action: 'jvRun()' } });
         }
 
+        let jvPlan = null;
+
         async function jvRun() {
-            if (!updConfirm(t('up.javaStops'), t('up.wUpgradeJava'))) return;
+            if (!await panelAsk({ title: t('gd.jvAskTitle'), text: t('up.javaStops') + ' ' + t('up.jvmStopNote') + '\\n' + gdPlanLines(jvPlan),
+                confirm: t('up.jvmRun') })) return;
             const el = document.getElementById('jv-pre');
             const r = await updApi('java_update', { confirm: 'UPGRADE JAVA', signature: jvSignature });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
             el.innerHTML = '<div class="alert alert-warning mb-0"><strong>' + escHtml(t('up.started')) + '</strong> ' + escHtml(t('up.panelStopping')) + ' '
                 + updEsc(r.note || '') + '<br>' + t('up.reportWrittenIn.html', { path: updEsc(r.log || '') }) + '</div>';
         }
@@ -13976,7 +13964,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcNginxGo() {
-            if (!updConfirm('', t('up.wFixNginx'))) return;
+            if (!await updConfirm('', t('up.wFixNginx'))) return;
             const pre = document.getElementById('rc-log');
             const el = document.getElementById('rc-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.inProgress')) + '';
@@ -14010,38 +13998,21 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.rcChecks')) + '';
             const r = await updApi('roundcube_preflight');
             rcSignature = '';
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            rcPlan = r;
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             rcSignature = r.signature || '';
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
-            (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
-                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            if (r.plan) h += updPlanHtml(r.plan, r.signature);
-            if (r.already) {
-                h += '<div class="alert alert-success py-2 mb-0"><strong>' + escHtml(t('up.nothingToDoTitle')) + '</strong> ' + escHtml(t('up.rcLatest')) + '</div>';
-            } else if (r.unknown) {
-                h += '<div class="alert alert-warning py-2 mb-0">' + escHtml(t('up.repoUnknown')) + '</div>';
-            } else if (r.blocked) {
-                h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
-            } else {
-                h += '<div class="alert alert-warning py-2">' + escHtml(t('up.rcDowntime')) + '</div>'
-                   + '<button class="btn btn-danger" data-on-click="rcRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.rcRun')) + '</button>';
-            }
-            el.innerHTML = h;
+            el.innerHTML = gdReady(r, { already: r.already, alreadyText: t('up.nothingToDoTitle') + ' ' + t('up.rcLatest'),
+                unknownText: r.unknown ? t('up.repoUnknown') : '', note: t('up.rcDowntime'), go: { label: t('up.rcRun'), action: 'rcRun()' } });
         }
 
+        let rcPlan = null;
+
         async function rcRun() {
-            if (!updConfirm('', t('up.wUpgradeRc'))) return;
+            if (!await panelAsk({ title: t('gd.rcAskTitle'), text: t('up.rcDowntime') + '\\n' + gdPlanLines(rcPlan), confirm: t('up.rcRun') })) return;
             const el = document.getElementById('rc-pre');
-            const pre = document.getElementById('rc-log');
             const r = await updApi('roundcube_update', { confirm: 'UPGRADE ROUNDCUBE', signature: rcSignature });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
-            pre.style.display = 'block';
-            planPoll(r.jobId, el, pre);
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
+            gdFollow('roundcube', 'rc-pre', 'rc-log-box', 'rc-log', r.jobId, t('up.upgradingKeepOpen'));
         }
 
         // ---------- migrazione MySQL 8.4: solo verifica ----------
@@ -14052,52 +14023,36 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.my84Checks')) + '';
             const r = await updApi('mysql84_preflight');
             my84Signature = '';
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            my84Plan = r;
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             my84Signature = r.signature || '';
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
-            (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
-                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
+            let extra = '';
             if ((r.dependents || []).length) {
-                h += '<div class="small mb-2"><strong>' + escHtml(t('up.linkedPkgs')) + '</strong><ul class="mb-0">';
+                extra = '<div class="small mb-2"><strong>' + escHtml(t('up.linkedPkgs')) + '</strong><ul class="mb-0">';
                 r.dependents.forEach(d => {
-                    h += '<li>' + t('up.requires.html', { pkg: updEsc(d.name), lib: updEsc(d.requires) }) + ' '
+                    extra += '<li>' + t('up.requires.html', { pkg: updEsc(d.name), lib: updEsc(d.requires) }) + ' '
                        + (d.compatible ? '<span class="text-success">' + escHtml(t('up.compatible')) + '</span>'
                                         : '<span class="text-danger">' + escHtml(t('up.notCompatible84')) + '</span>') + '</li>';
                 });
-                h += '</ul></div>';
+                extra += '</ul></div>';
             }
-            if (r.plan) h += updPlanHtml(r.plan, r.signature);
-            if (r.alreadyDone) {
-                h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.already84')) + '</div>';
-            } else if (r.blocked) {
-                h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.migrationCannotStart')) + '</strong> ' + escHtml(t('up.migrationRedRows')) + '</div>';
-            } else {
-                h += '<div class="alert alert-warning py-2"><strong>' + escHtml(t('up.prereqPassed')) + '</strong> ' + escHtml(t('up.migrationNote')) + '</div>'
-                   + '<button class="btn btn-danger" data-on-click="my84Run()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.migrate84')) + '</button>';
-            }
-            el.innerHTML = h;
+            el.innerHTML = gdReady(r, { already: r.alreadyDone, alreadyText: t('up.already84'), extra: extra,
+                note: t('up.migrationNote'), go: { label: t('up.migrate84'), action: 'my84Run()' } });
         }
 
+        let my84Plan = null;
+
         async function my84Run() {
-            if (!updConfirm('', t('up.wMigrate84'))) return;
+            if (!await panelAsk({ title: t('gd.myAskTitle'), text: t('up.migrationNote') + '\\n' + gdPlanLines(my84Plan), confirm: t('up.migrate84') })) return;
             const el = document.getElementById('my84-pre');
-            // Il log va nel riquadro DI QUESTA scheda: prima finiva in quello del piano, in
-            // un'altra parte della pagina, e chi guardava sotto il messaggio di errore non
-            // trovava niente. Un log che esiste ma non e' dove lo cerchi e' un log perduto.
-            const pre = document.getElementById('my84-log');
+            // Il registro nel riquadro DI QUESTA scheda, chiuso sotto: prima finiva in quello del piano, in un'altra
+            // parte della pagina. Un registro che esiste ma non e' dove lo cerchi e' un registro perduto.
             const r = await updApi('mysql84_migrate', { confirm: 'MIGRATE TO 8.4', signature: my84Signature });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.migrating')) + '</span>';
-            pre.style.display = 'block';
-            planPoll(r.jobId, el, pre);
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
+            gdFollow('mysql', 'my84-pre', 'my84-log-box', 'my84-log', r.jobId, t('up.migrating'));
         }
 
         // ---------- aggiornamento guidato ----------
-        let updMaintenanceSignature = '';
 
         /* Le prove su ogni pacchetto che il piano toglie: una sostituzione innocua, o una rimozione
            che il pannello non esegue (non c'e' modo di confermarla). */
@@ -14303,65 +14258,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                che nessuno ha visto il piano che si sta per eseguire. */
             if (!updUnprotectedSignature) { alert(t('up.readFirst')); return; }
             if (!confirm(t('up.confirmApply'))) return;
-            if (!updConfirm('', t('up.wUpgrade'))) return;
+            if (!await updConfirm('', t('up.wUpgrade'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
             const r = await updApi('updates_apply', { confirm: 'UPDATE', signature: updUnprotectedSignature });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
-            pre.style.display = 'block';
-            updPoll(r.jobId, el, pre);
-        }
-
-        async function updMaintPreview() {
-            const el = document.getElementById('upd-status');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.computingChange')) + '';
-            const r = await updApi('maintenance_preview');
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            let h = '<div class="alert alert-secondary py-2 small">' + updEsc(r.generalNote) + '</div>';
-            /* Se il piano rimuove o retrocede pacchetti il pannello non lo esegue: si dice
-               QUI, prima del pulsante, non dopo aver scritto MANUTENZIONE. */
-            if (r.blockedReason) {
-                h += '<div class="alert alert-danger py-2 small"><strong>'
-                   + escHtml(t('up.notRunnable')) + '</strong> ' + updEsc(r.blockedReason) + '</div>';
-            }
-            const pk = r.packages || [];
-            if (!pk.length) {
-                h += '<div class="small text-muted">' + escHtml(t('up.noLockedUpd')) + '</div>';
-                el.innerHTML = h;
-                return;
-            }
-            h += '<div class="table-responsive"><table class="table table-sm"><thead><tr>'
-               + '<th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colFrom')) + '</th><th scope="col">' + escHtml(t('up.colTo')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
-            pk.forEach(p => {
-                const a = p.advisory;
-                h += '<tr class="upd-cell"><td><code>' + updEsc(p.name) + '</code></td>'
-                   + '<td class="small">' + updEsc(p.current) + '</td>'
-                   + '<td class="small">' + updEsc(p.available) + '</td>'
-                   + '<td>' + (a ? updBadge(a.level) : '<span class="badge bg-secondary">-</span>') + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            if (r.waitCount > 0) {
-                h += '<div class="alert alert-warning py-2 small"><strong>' + escHtml(tn('up.staysLocked', r.waitCount)) + '</strong> '
-                   + escHtml(t('up.staysLockedNote')) + '</div>';
-            }
-            h += updPlanHtml(r.plan, r.signature);
-            updMaintenanceSignature = r.signature || '';
-            if (r.plan && r.plan.runnable && !r.blockedReason) {
-                h += '<button class="btn btn-sm btn-danger" data-on-click="updMaintRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runMaint')) + '</button>';
-            } else {
-                h += '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.nothingToRun')) + '</div>';
-            }
-            el.innerHTML = h;
-        }
-
-        async function updMaintRun() {
-            if (!updConfirm(t('up.confirmMaint'), t('up.wMaint'))) return;
-            const el = document.getElementById('upd-status');
-            const pre = document.getElementById('upd-log');
-            const r = await updApi('maintenance_run', { confirm: 'MAINTENANCE', signature: updMaintenanceSignature });
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.maintRunning')) + '</span>';
             pre.style.display = 'block';
             updPoll(r.jobId, el, pre);
         }

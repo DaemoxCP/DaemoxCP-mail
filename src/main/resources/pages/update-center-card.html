@@ -42,7 +42,15 @@
                         </li>
                         <li class="list-group-item" id="uc-packages">
                             <div class="uc-head"></div>
-                            <div class="uc-detail mt-3" id="uc-packages-detail" hidden></div>
+                            <div class="uc-detail mt-3" id="uc-packages-detail" hidden>
+                                <!-- L'aggiornamento dei pacchetti: l'avanzamento in una riga, poi l'esito; il registro chiuso sotto. -->
+                                <div id="pk-run" role="status" aria-live="polite"></div>
+                                <details class="mt-2" id="pk-log-box" hidden>
+                                    <summary class="small">{{t:osu.showLog}}</summary>
+                                    <pre id="pk-log" class="upd-log mt-2"></pre>
+                                    <p class="small text-muted mb-0">{{t:osu.logKept}}</p>
+                                </details>
+                            </div>
                         </li>
                         <li class="list-group-item" id="uc-stack">
                             <div class="uc-head"></div>
@@ -53,7 +61,11 @@
                             <div class="uc-detail mt-3" id="uc-java-detail" hidden>
                                 <p class="small text-muted mb-2">{{t:up.jvmIntro.html}}</p>
                                 <div id="jv-pre"></div>
-                                <pre id="jv-log" class="upd-log mt-2" data-style="display:none"></pre>
+                                <details class="mt-2" id="jv-log-box" hidden>
+                                    <summary class="small">{{t:osu.showLog}}</summary>
+                                    <pre id="jv-log" class="upd-log mt-2"></pre>
+                                    <p class="small text-muted mb-0">{{t:osu.logKept}}</p>
+                                </details>
                             </div>
                         </li>
                         <li class="list-group-item" id="uc-roundcube" hidden>
@@ -61,7 +73,11 @@
                             <div class="uc-detail mt-3" id="uc-roundcube-detail" hidden>
                                 <p class="small text-muted mb-2">{{t:up.rcIntro.html}}</p>
                                 <div id="rc-pre"></div>
-                                <pre id="rc-log" class="upd-log mt-2" data-style="display:none"></pre>
+                                <details class="mt-2" id="rc-log-box" hidden>
+                                    <summary class="small">{{t:osu.showLog}}</summary>
+                                    <pre id="rc-log" class="upd-log mt-2"></pre>
+                                    <p class="small text-muted mb-0">{{t:osu.logKept}}</p>
+                                </details>
                             </div>
                         </li>
                         <li class="list-group-item" id="uc-mysql" hidden>
@@ -69,7 +85,11 @@
                             <div class="uc-detail mt-3" id="uc-mysql-detail" hidden>
                                 <p class="small text-muted mb-2">{{t:up.my84Intro.html}}</p>
                                 <div id="my84-pre"></div>
-                                <pre id="my84-log" class="upd-log mt-2" data-style="display:none"></pre>
+                                <details class="mt-2" id="my84-log-box" hidden>
+                                    <summary class="small">{{t:osu.showLog}}</summary>
+                                    <pre id="my84-log" class="upd-log mt-2"></pre>
+                                    <p class="small text-muted mb-0">{{t:osu.logKept}}</p>
+                                </details>
                             </div>
                         </li>
                         <li class="list-group-item" id="uc-python" hidden>
@@ -77,7 +97,11 @@
                             <div class="uc-detail mt-3" id="uc-python-detail" hidden>
                                 <p class="small text-muted mb-2">{{t:up.pyIntro.html}}</p>
                                 <div id="py-pre"></div>
-                                <pre id="py-log" class="upd-log mt-2" data-style="display:none"></pre>
+                                <details class="mt-2" id="py-log-box" hidden>
+                                    <summary class="small">{{t:osu.showLog}}</summary>
+                                    <pre id="py-log" class="upd-log mt-2"></pre>
+                                    <p class="small text-muted mb-0">{{t:osu.logKept}}</p>
+                                </details>
                             </div>
                         </li>
                         <li class="list-group-item" id="uc-branch">
@@ -99,6 +123,10 @@
                         <div id="upd-status"></div>
                         <pre id="upd-log" class="upd-log mt-2" data-style="display:none"></pre>
                     </div>
-                    <pre id="uc-log" class="upd-log mt-3" hidden></pre>
+                    <details class="mt-3" id="uc-log-box" hidden>
+                        <summary class="small">{{t:osu.showLog}}</summary>
+                        <pre id="uc-log" class="upd-log mt-2"></pre>
+                        <p class="small text-muted mb-0">{{t:osu.logKept}}</p>
+                    </details>
                 </div>
             </section>

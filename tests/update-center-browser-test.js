@@ -12,6 +12,9 @@
 //  4b. A new FreeBSD release, one step at a time: only when there is one; four steps, only the current one with its
 //     button; check and prepare with one confirmation, the command from SSH, the install, the final check by itself.
 //  4c. The checks stop the preparation: only the rows that stop it, and nothing starts.
+//  4d. A dedicated procedure, guided (reperto 197): Roundcube. "Prepare": one line on the checks, what to know before,
+//      the exact plan and one button, all the checks closed below; the panel's window, not the browser's; the job's
+//      outcome stays in the row after the card reads its state again. When the checks stop it: only the rows that stop.
 //  5. The restart window: what stops, the chosen delay, the time, cancelling; Escape closes it.
 //  6. Reads queue up: two "System state" calls at once both answer.
 //  7. At 375 px: no horizontal scrolling, 44 px buttons.
@@ -56,11 +59,19 @@ function replies(o, st) {
             : { success: true, blocked: false, checks: [{ label: 'Current version', level: 'ok', detail: '15.1-RELEASE' },
                 { label: 'Space', level: 'ok', detail: 'Enough.' }, { label: 'Boot environments', level: 'ok', detail: 'ZFS.' }] },
         os_upgrade_prepare: { success: true, jobId: 'prep-1' },
+        roundcube_preflight: o.rcBlocked
+            ? { success: true, blocked: true, checks: [{ label: 'Database copy', level: 'block', detail: 'No space for the copy of the database.' },
+                { label: 'Version', level: 'ok', detail: '1.6.11 -> 1.7.0' }] }
+            : { success: true, blocked: false, signature: 'fedcba9876543210', checks: [{ label: 'Version', level: 'ok', detail: '1.6.11 -> 1.7.0' },
+                { label: 'Downtime', level: 'wait', detail: 'The webmail is off for about a minute.' }],
+                plan: { measured: true, command: 'pkg upgrade -n', changes: [{ type: 'upgrade', name: 'roundcube-php84', from: '1.6.11', to: '1.7.0' }] } },
+        roundcube_update: { success: true, jobId: 'rc-1' },
         jump_continue: { success: true, jobId: 'jump-1' },
         jump_cancel: { success: true, note: 'Move cancelled.' },
         os_upgrade_verify: { success: true, allGood: true, checks: [{ label: 'Services', level: 'ok', detail: 'All up.' }], environments: { success: false } },
-        packages_overview: { success: true, procedures: { java: true, roundcube: false, roundcubePackage: '', mysql84: false, python: false }, summary: { updates: 4, stackUpdates: 2, vulnerable: 3, fixable: 2, locked: 39 },
+        packages_overview: { success: true, procedures: { java: true, roundcube: !!o.roundcube && !st.rcDone, roundcubePackage: 'roundcube-php84', mysql84: false, python: false }, summary: { updates: 4, stackUpdates: 2, vulnerable: 3, fixable: 2, locked: 39 },
             packages: [
+                ...(o.roundcube ? [{ name: 'roundcube-php84', role: 'Webmail', installed: '1.6.11', available: '1.7.0', update: true, locked: true, stack: true, canUpdate: false }] : []),
                 { name: 'dovecot-mysql', role: 'IMAP', installed: '2.3.21.1_3', available: '2.3.21.1_4', update: true, locked: true, stack: true, canUpdate: true },
                 { name: 'openjdk25', role: 'Java', installed: '25.0.4', available: '25.0.5', update: true, locked: true, stack: true, canUpdate: false, javaFlow: true },
                 { name: 'postfix-mysql', role: 'SMTP', installed: '3.11.7', available: '', update: false, locked: true, stack: true }],
@@ -74,7 +85,8 @@ function replies(o, st) {
         updates_apply: { success: true, jobId: 'upd-1' },
         updates_search: { success: true, jobId: 'srch-1' },
         os_patch_install: { success: true, jobId: 'osp-1' },
-        job_status: { success: true, job: { status: 'completed', consoleLog: 'done', result: 'Lists updated.', elapsedSeconds: 3 } },
+        job_status: { success: true, job: { status: 'completed', consoleLog: 'done', elapsedSeconds: 3,
+            result: st.rcDone ? 'Roundcube 1.7.0 is in place and answers.' : 'Lists updated.' } },
         service_users: { success: true, problems: [], pools: [], services: [
             { service: 'php-fpm', users: ['root', 'roundcube'], ok: true, processes: 4,
               rootWhy: 'Root only for the master process <b>bold</b>: it creates the webmail socket.' },
@@ -108,6 +120,7 @@ async function open(ctx, name, lang, o = {}) {
             if (body.action === 'os_upgrade_prepare') st.phase = 'prepared';
             if (body.action === 'jump_continue') st.phase = 'finished';
             if (body.action === 'jump_cancel') st.phase = '';
+            if (body.action === 'roundcube_update') st.rcDone = true;
             return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(r) });
         }
         if (p.startsWith('/api/')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":false,"error":"mock"}' });
@@ -168,6 +181,7 @@ const allErrors = [], allDialogs = [];
         && await page.$('[data-on-click="ucRelease()"]') === null);
     check('one read each of packages and branch when the page opens (the card reuses the cards\' reads)',
         calls.filter(c => c.action === 'packages_overview').length === 1 && calls.filter(c => c.action === 'branch_status').length === 1);
+    check('one button at most in every row (reperto 197)', await page.$$eval('#ucList > li:not([hidden]) .uc-head', hs => hs.every(h => h.querySelectorAll('button').length <= 1)));
     check('the state in words too, not only by color', await page.$$eval('#ucList .visually-hidden', s => s.map(x => x.textContent).join(' '))
         .then(x => /to do/.test(x) && /information/.test(x)));
     if (shots) await page.locator('#update-center').screenshot({ path: path.join(shots, 'update-center.png') });
@@ -181,8 +195,11 @@ const allErrors = [], allDialogs = [];
     check('  it is labelled, with the focus inside', await page.$eval('#panelAskModal', m => m.getAttribute('aria-labelledby') === 'panelAskTitle'
         && m.contains(document.activeElement)));
     await page.click('#panelAskGo');
+    await page.waitForFunction(() => /Lists updated\./.test(document.getElementById('pk-run').innerText), null, { timeout: 10000 });
     await page.waitForTimeout(800);
-    check('the job\'s outcome stays in the card after it reads its state again', await page.textContent('#ucOutcome') === 'Lists updated.');
+    check('the job\'s outcome stays under its row after the card reads its state again (reperto 197)',
+        /Done\. Lists updated\./.test(await page.innerText('#pk-run')) && await page.$eval('#uc-packages-detail', d => !d.hidden));
+    check('  what the server did is there, closed', await page.$eval('#pk-log-box', d => !d.hidden && !d.open));
     const apply = calls.find(c => c.action === 'updates_apply');
     check('the job starts with UPDATE and the signature of the plan shown', apply && apply.confirm === 'UPDATE' && apply.signature === '0123456789abcdef');
 
@@ -266,6 +283,41 @@ const allErrors = [], allDialogs = [];
     check('only the row that stops it, with what to do', /Restart pending/.test(why) && /Restart the server first/.test(why) && !/Current version/.test(why));
     check('  nothing started', !bl.calls.some(c => c.action === 'os_upgrade_prepare') && !await bl.page.$('#panelAskModal.show'));
     await bl.page.close();
+
+    console.log('\n== 4d. Roundcube, guided ==');
+    const rc = await open(ctx, 'updates', 'en', { roundcube: true, noPatches: true, reboot: 'none' });
+    allErrors.push(rc.errors); allDialogs.push(rc.dialogs);
+    await centerReady(rc.page);
+    check('the Roundcube row: the versions and one button', /roundcube-php84: 1\.6\.11/.test(await rc.page.innerText('#uc-roundcube .uc-head'))
+        && await rc.page.$$eval('#uc-roundcube .uc-head button', b => b.length) === 1);
+    await rc.page.click('#uc-roundcube button[data-on-click="ucRoundcube()"]');
+    await rc.page.waitForSelector('#rc-pre button[data-on-click="rcRun()"]', { timeout: 10000 });
+    const ready = await rc.page.innerText('#rc-pre');
+    console.log('    ' + ready.replace(/\s+/g, ' ').slice(0, 300));
+    check('one line on the checks, what to know before, the plan, one button', /All 2 checks are fine/.test(ready) && /Good to know before you start/.test(ready)
+        && /The webmail is off for about a minute/.test(ready) && /roundcube-php84/.test(ready)
+        && await rc.page.$$eval('#rc-pre button', b => b.filter(x => x.offsetParent).length) === 1);
+    check('  all the checks closed below', await rc.page.$eval('#rc-pre details', d => !d.open && /Show all 2 checks/.test(d.querySelector('summary').textContent)));
+    await rc.page.click('#rc-pre button[data-on-click="rcRun()"]');
+    await rc.page.waitForSelector('#panelAskModal.show');
+    check('the panel\'s window, with the plan', /roundcube-php84: 1\.6\.11 → 1\.7\.0/.test(await rc.page.innerText('#panelAskModal')));
+    await rc.page.click('#panelAskGo');
+    await rc.page.waitForFunction(() => /Roundcube 1\.7\.0 is in place/.test(document.querySelector('#uc-roundcube .uc-head').innerText), null, { timeout: 15000 });
+    const upd = rc.calls.find(c => c.action === 'roundcube_update');
+    check('started with its word and the plan\'s signature', upd && upd.confirm === 'UPGRADE ROUNDCUBE' && upd.signature === 'fedcba9876543210');
+    check('the row stays, with the outcome, and nothing left to press', await rc.page.$eval('#uc-roundcube', li => !li.hidden)
+        && await rc.page.$$eval('#uc-roundcube .uc-head button', b => b.length) === 0);
+    check('  the details closed', await rc.page.$eval('#rc-log-box', d => !d.hidden && !d.open));
+    await rc.page.close();
+    const rcb = await open(ctx, 'updates', 'en', { roundcube: true, rcBlocked: true, noPatches: true, reboot: 'none' });
+    allErrors.push(rcb.errors); allDialogs.push(rcb.dialogs);
+    await centerReady(rcb.page);
+    await rcb.page.click('#uc-roundcube button[data-on-click="ucRoundcube()"]');
+    await rcb.page.waitForFunction(() => /Not ready yet/.test(document.getElementById('rc-pre').innerText), null, { timeout: 10000 });
+    const stop = await rcb.page.innerText('#rc-pre');
+    check('the checks stop it: only the row that stops, no button', /No space for the copy/.test(stop) && !/1\.6\.11 -> 1\.7\.0/.test(stop.split('Show all')[0])
+        && await rcb.page.$('#rc-pre button') === null);
+    await rcb.page.close();
 
     console.log('\n== 5. The restart window ==');
     await page.click('#panelRebootBanner button');

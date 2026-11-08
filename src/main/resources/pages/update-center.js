@@ -77,7 +77,6 @@
 
         // Le azioni delle righe: aprono il pannello sotto la riga e partono da li'.
         function ucOsInstall() { ucOpen('os'); osShow('patch'); osInstall(); }
-        function ucStackAll() { ucOpen('stack', 'uc-updates-panel'); updMaintPreview(); }
         function ucJava() { ucOpen('java'); jvPre(); }
         function ucJavaReport() { ucOpen('java'); jvState(); }
         function ucRoundcube() { ucOpen('roundcube'); rcPre(); }
@@ -169,42 +168,44 @@
             else if (!pk.success) ucHide('stack');
             else if (!stack.length) ucHead('stack', 'ok', t('uc.stack'), t('uc.stackOk'));
             else {
+                // Uno alla volta, ognuno col suo controllo e il suo piano (la finestra del pacchetto): UN pulsante, il
+                // prossimo da fare, col numero di quanti restano (reperto 197). Quelli trattenuti dicono perche'.
                 const items = ucEl('ul', 'list-unstyled small mb-0 mt-1');
+                stack.forEach(p => items.append(ucEl('li', '', p.name + ': ' + p.installed + ' → ' + p.available
+                    + (p.canUpdate ? '' : ' (' + (p.whyNot || t('pkgs.heldBack')) + ')'))));
+                const ready = stack.filter(p => p.canUpdate);
                 const buttons = [];
-                stack.forEach(p => {
-                    items.append(ucEl('li', '', p.name + ': ' + p.installed + ' → ' + p.available
-                        + (p.canUpdate ? '' : ' (' + (p.whyNot || t('pkgs.heldBack')) + ')')));
-                    if (p.canUpdate) {
-                        const b = ucButton('btn-outline-primary', 'fa-arrow-up', t('pkgs.update', { v: p.available }) + ' (' + p.name + ')', 'pkUpdOpen(this.dataset.pkg)');
-                        b.dataset.pkg = p.name;
-                        buttons.push(b);
-                    }
-                });
-                if (stack.filter(p => p.canUpdate).length > 1)
-                    buttons.push(ucButton('btn-outline-secondary', 'fa-layer-group', t('uc.stackAll'), 'ucStackAll()'));
-                ucHead('stack', 'todo', t('uc.stack'), tn('uc.stackTodo', stack.length), buttons, items);
+                if (ready.length) {
+                    const b = ucButton('btn-primary', 'fa-arrow-up', t('uc.stackNext', { name: ready[0].name, n: 1, total: ready.length }), 'pkUpdOpen(this.dataset.pkg)');
+                    b.dataset.pkg = ready[0].name;
+                    buttons.push(b);
+                }
+                ucHead('stack', 'todo', t('uc.stack'), tn('uc.stackTodo', stack.length) + (ready.length ? '' : ' ' + t('uc.stackHeld')), buttons, items);
             }
 
             // 4. Le procedure dedicate, solo quando servono
+            const doneRow = (key, title) => gdDone[key] ? ucHead(key, 'ok', title, gdDone[key]) : ucHide(key);
             const jvm = rows.find(p => p.javaFlow);
             if (proc.java && jvm) {
                 ucHead('java', 'todo', t('uc.java'), t('uc.javaTodo', { name: jvm.name, from: jvm.installed, to: jvm.available }),
-                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucJava()'),
-                     ucButton('btn-outline-secondary', 'fa-file-alt', t('up.lastReport'), 'ucJavaReport()')]);
-            } else ucHide('java');
+                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucJava()')]);
+            } else doneRow('java', t('uc.java'));
             const rc = rows.find(p => p.name === proc.roundcubePackage);
             if (proc.roundcube && rc) {
                 ucHead('roundcube', 'todo', t('uc.roundcube'), t('uc.roundcubeTodo', { name: rc.name, from: rc.installed, to: rc.available }),
                     [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucRoundcube()')]);
-            } else ucHide('roundcube');
+            } else doneRow('roundcube', t('uc.roundcube'));
             if (proc.mysql84) {
                 ucHead('mysql', 'todo', t('uc.mysql'), t('uc.mysqlTodo'),
                     [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucMysql()')]);
-            } else ucHide('mysql');
+            } else doneRow('mysql', t('uc.mysql'));
             if (proc.python) {
                 ucHead('python', 'todo', t('uc.python'), t('uc.pythonTodo'),
-                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucPython()'),
-                     ucButton('btn-outline-secondary', 'fa-broom', t('up.leftovers'), 'ucPythonLeftovers()')]);
+                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucPython()')]);
+            } else if (gdDone.python) {
+                // Il passaggio fatto: il passo dopo e' togliere i resti della famiglia vecchia, con il suo pulsante.
+                ucHead('python', 'ok', t('uc.python'), gdDone.python + ' ' + t('gd.pyNext'),
+                    [ucButton('btn-outline-primary', 'fa-broom', t('up.leftovers'), 'ucPythonLeftovers()')]);
             } else ucHide('python');
 
             // 5. Il ramo: la scelta si apre qui sotto
@@ -216,6 +217,7 @@
 
             // 6. Il riavvio: la finestra del pannello, la stessa di ogni pagina
             if (!uc.reboot) reading('reboot', t('uc.reboot'));
+            else if (rb.success && rb.state === 'needed' && os.restartNeeded) ucHide('reboot');
             else if (rb.success) {
                 if (rb.state === 'needed' || rb.state === 'advised') {
                     ucHead('reboot', 'todo', t('uc.reboot'), rb.state === 'needed'
@@ -231,7 +233,7 @@
             const state = document.getElementById('ucState');
             state.textContent = t('uc.searching');
             ucOutcome(true, '');
-            pre.hidden = false;
+            osLogBox('uc-log-box', true);
             pre.textContent = '';
             const r = await updApi('updates_search', { confirm: 'SEARCH' });
             if (!r.success) { state.textContent = r.error || t('common.errorShort'); return; }
@@ -271,34 +273,31 @@
         // piano o niente (la firma). Se il piano toglierebbe o retrocederebbe pacchetti, il piano con le prove si apre
         // qui sotto, e non parte niente.
         async function ucPackages() {
-            const state = document.getElementById('ucState');
-            ucOutcome(true, '');
-            state.textContent = t('uc.planning');
+            ucOpen('packages');
+            const box = document.getElementById('pk-run');
+            const say = (cls, text) => { box.innerHTML = '<div class="alert ' + cls + ' py-2 mb-0">' + escHtml(text) + '</div>'; };
+            box.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('uc.planning'));
             const r = await updApi('updates_status');
-            if (!r.success) { state.textContent = r.error || t('common.errorShort'); return; }
+            if (!r.success) { say('alert-danger', r.error || t('common.errorShort')); return; }
             const plan = r.plan || {};
-            if (!plan.measured) { state.textContent = t('up.planUnavailable') + ' ' + (plan.error || ''); return; }
+            if (!plan.measured) { say('alert-warning', t('up.planUnavailable') + ' ' + (plan.error || '')); return; }
             const changes = plan.changes || [];
-            if (!changes.length) { state.textContent = t('up.planNoChange'); return; }
+            if (!changes.length) { say('alert-success', t('up.planNoChange')); return; }
             if (changes.some(c => c.type === 'remove' || c.type === 'downgrade')) {
-                state.textContent = t('uc.planRemoves');
+                say('alert-warning', t('uc.planRemoves'));
                 ucOpen('packages', 'uc-updates-panel');
                 updStatus();
                 return;
             }
-            state.textContent = '';
+            box.innerHTML = '';
             const lines = changes.map(c => c.name + ': ' + (c.from || '-') + ' → ' + (c.to || '-')).join('\n');
             const yes = await panelAsk({ title: tn('uc.pkAskTitle', changes.length), text: t('uc.pkAskText') + '\n' + lines,
                 confirm: tn('uc.pkAskGo', changes.length) });
             if (!yes) return;
             updUnprotectedSignature = r.signature;
             const a = await updApi('updates_apply', { confirm: 'UPDATE', signature: r.signature });
-            if (!a.success) { state.textContent = a.error || t('common.errorShort'); return; }
-            const pre = document.getElementById('uc-log');
-            pre.hidden = false;
-            ucOutcome(true, '');
-            state.textContent = t('up.upgradingKeepOpen');
-            ucFollow(a.jobId, () => { ucLoad(true); });
+            if (!a.success) { say('alert-danger', a.error || t('common.errorShort')); return; }
+            gdFollow('packages', 'pk-run', 'pk-log-box', 'pk-log', a.jobId, t('up.upgradingKeepOpen'));
         }
 
         // Dopo il cambio di ramo: si torna in cima a questa scheda, a vedere cosa c'e' da aggiornare adesso.

@@ -45,10 +45,11 @@
             }
         }
 
-        // Conferma scritta: la parola si mostra nella lingua della pagina; al server va il suo codice.
+        // La conferma: la finestra del pannello, con cosa succede e il pulsante che lo dice (reperto 197). Prima era la
+        // finestra del browser con una parola da scrivere: fuori dallo stile del pannello, e ferma la pagina. Al server
+        // la parola va comunque, nel codice di chi chiama; e le operazioni pericolose chiedono anche la conferma recente.
         function updConfirm(textValue, keyword) {
-            const typed = prompt((textValue ? textValue + '\n\n' : '') + t('ad.typeToConfirm', { word: keyword }));
-            return typed !== null && typed.trim().toUpperCase() === keyword.toUpperCase();
+            return panelAsk({ title: t('gd.confirmTitle'), text: textValue || t('gd.confirmText'), confirm: t('gd.confirmGo') });
         }
 
         function updEsc(v) {

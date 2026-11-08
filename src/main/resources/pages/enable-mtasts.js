@@ -40,7 +40,7 @@
         }
 
         async function amsEnable() {
-            if (!updConfirm(t('ams.confirm'), t('w4.wEnable'))) return;
+            if (!await updConfirm(t('ams.confirm'), t('w4.wEnable'))) return;
             const el = document.getElementById('amsOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ams.running')) + '';
             const r = await updApi('mtasts_enable', { confirm: 'ENABLE' });

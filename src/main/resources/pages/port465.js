@@ -37,7 +37,7 @@
         }
 
         async function upd465Apply() {
-            if (!updConfirm(t('p465.confirm'), t('p465.wApply'))) return;
+            if (!await updConfirm(t('p465.confirm'), t('p465.wApply'))) return;
             const el = document.getElementById('upd-465-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('p465.applying')) + '';
             const r = await updApi('port465_apply', { confirm: 'APPLY' });

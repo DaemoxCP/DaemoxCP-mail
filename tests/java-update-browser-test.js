@@ -42,7 +42,7 @@ async function signIn(page) {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(String(e)));
-    page.on('dialog', d => { console.log('  dialog: ' + d.message().replace(/\n+/g, ' / ')); d.type() === 'prompt' ? d.accept('UPGRADE JAVA') : d.accept(); });
+    page.on('dialog', d => { errors.push('browser dialog: ' + d.message()); d.dismiss(); });
 
     await signIn(page);
     check('signed in with a console code', !page.url().includes('/index'));
@@ -64,6 +64,10 @@ async function signIn(page) {
 
     const t0 = Date.now();
     await run.click();
+    // The panel's window (reperto 197), with what stops and the plan.
+    await page.waitForSelector('#panelAskModal.show');
+    console.log('  confirmation: ' + (await page.innerText('#panelAskModal .modal-body')).replace(/\s+/g, ' ').slice(0, 200));
+    await page.click('#panelAskGo');
     await page.waitForFunction(() => /Started/.test(document.getElementById('jv-pre').innerText), null, { timeout: 120000 });
     console.log('  after the click: ' + (await text(page, '#jv-pre')).replace(/\n/g, ' | '));
     await page.screenshot({ path: OUT + '/java-2-started.png', fullPage: true });
