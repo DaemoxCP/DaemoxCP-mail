@@ -1077,7 +1077,7 @@ public class MailPanelContent {
                     <thead class="table-light"><tr><th scope="col">{{t:home.colService}}</th><th scope="col">{{t:home.colVersion}}</th><th scope="col">{{t:home.colState}}</th><th scope="col">{{t:home.colActions}}</th></tr></thead>
                     <tbody>
 """ + serviceLine("postfix", "postfix", "fa-paper-plane", "Postfix (SMTP)", "Postfix")
-    + serviceLine("dovecot", "dovecot", "fa-inbox", "Dovecot (IMAP/POP3)", "Dovecot")
+    + serviceLine("dovecot", "dovecot", "fa-inbox", "Dovecot (IMAP)", "Dovecot")
     + serviceLine("mysql", "mysql-server", "fa-database", "MySQL (Database)", "MySQL")
     + serviceLine("rspamd", "rspamd", "fa-shield-alt", "Rspamd (Anti-Spam)", "Rspamd")
     + serviceLine("redis", "redis", "fa-memory", "Redis ({{t:home.redisRole}})", "Redis")
@@ -1685,7 +1685,7 @@ public class MailPanelContent {
 
     // ============== MAILBOXES.HTML ==============
     /**
-     * Modal "Configurazione Client Email" — credenziali + server IMAP/SMTP/POP3,
+     * Modal "Configurazione Client Email" — credenziali + server IMAP/SMTP, POP3 solo se acceso (Pop3),
      * con bottoni copia per ogni campo e reveal della password se nel vault.
      */
     private static String getMailConfigModal() {
@@ -1755,17 +1755,19 @@ public class MailPanelContent {
                                 </div>
                             </div>
 
+                            <div id="cfgPop3Section" class="d-none">
                             <h6 class="mb-2 text-secondary"><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:cfg.inPop}}</h6>
                             <div class="row g-2 mb-3">
-                                <div class="col-md-8"><label class="form-label small mb-1">Server</label>
-                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgPop3Server" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgPop3Server')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
+                                <div class="col-md-8"><label class="form-label small mb-1" for="cfgPop3Server">Server</label>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgPop3Server" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgPop3Server')" aria-label="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
                                 </div>
-                                <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.port}}</label>
-                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="995" id="cfgPop3Port" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgPop3Port')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
+                                <div class="col-md-2"><label class="form-label small mb-1" for="cfgPop3Port">{{t:cfg.port}}</label>
+                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="995" id="cfgPop3Port" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgPop3Port')" aria-label="{{t:common.copy}}"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
                                 </div>
                                 <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.security}}</label>
                                     <input type="text" class="form-control form-control-sm" value="SSL/TLS" readonly>
                                 </div>
+                            </div>
                             </div>
 
                             <h6 class="mb-2 text-primary"><i class="fas fa-paper-plane me-1" aria-hidden="true"></i>{{t:cfg.outSmtp}}</h6>
@@ -3507,7 +3509,10 @@ public class MailPanelContent {
                     const server = data.server;
                     // Generale
                     setValIfExists('cfgImapServer', server);
-                    setValIfExists('cfgPop3Server', server);
+                    // POP3 solo se l'amministratore l'ha acceso (Impostazioni)
+                    const pop3Section = document.getElementById('cfgPop3Section');
+                    if (pop3Section) pop3Section.classList.toggle('d-none', !data.pop3);
+                    if (data.pop3) setValIfExists('cfgPop3Server', server);
                     setValIfExists('cfgSmtpServer', server);
                     // Outlook
                     setValIfExists('cfgOutlookImap', server);
@@ -8091,6 +8096,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         </div>
                     </div>
 
+                    <!-- POP3 -->
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="fas fa-inbox me-2" aria-hidden="true"></i>{{t:set.pop3Title}}</div>
+                        <div class="card-body">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="pop3Switch" data-on-change="pop3Toggle()" disabled aria-describedby="pop3Status pop3Hint">
+                                <label class="form-check-label" for="pop3Switch">{{t:set.pop3Label}}</label>
+                            </div>
+                            <div id="pop3Status" class="small mb-2" aria-live="polite"></div>
+                            <small class="text-muted" id="pop3Hint"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{t:set.pop3Hint}}</small>
+                        </div>
+                    </div>
+
                     <!-- System Info -->
                     <div class="card">
                         <div class="card-header"><i class="fas fa-info-circle me-2" aria-hidden="true"></i>{{t:set.sysInfo}}</div>
@@ -8274,6 +8292,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         checkHostnameConsistency();
         checkRcDomainDnsStatus();
         repLoad();
+        pop3Load();
         sshLoad();
 
         let csrfToken = document.getElementById('csrf_token').value;
@@ -8291,6 +8310,45 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
      */
     private static String getSettingsHostnameJs() {
         return """
+        // ========== POP3 ==========
+
+        function pop3Say(text, kind) {
+            const el = document.getElementById('pop3Status');
+            el.className = 'small mb-2 text-' + kind;
+            el.textContent = text;
+        }
+
+        function pop3Load() {
+            fetch('/api/pop3').then(r => r.json()).then(d => {
+                const sw = document.getElementById('pop3Switch');
+                if (!d.success) { pop3Say(d.error || t('set.pop3Failed'), 'danger'); return; }
+                sw.checked = !!d.enabled;
+                sw.disabled = false;
+                pop3Say(d.enabled ? t('set.pop3On') : t('set.pop3Off'), 'muted');
+            }).catch(() => pop3Say(t('set.pop3Failed'), 'danger'));
+        }
+
+        function pop3Toggle() {
+            const sw = document.getElementById('pop3Switch');
+            const want = sw.checked;
+            sw.disabled = true;
+            pop3Say(t('set.pop3Applying'), 'muted');
+            fetch('/api/pop3', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: want, csrf_token: csrfToken })
+            }).then(r => r.json()).then(d => {
+                sw.disabled = false;
+                sw.checked = d.success ? !!d.enabled : !want;
+                if (d.success) pop3Say(d.enabled ? t('set.pop3On') : t('set.pop3Off'), 'success');
+                else pop3Say(d.error || t('set.pop3Failed'), 'danger');
+            }).catch(() => {
+                sw.disabled = false;
+                sw.checked = !want;
+                pop3Say(t('set.pop3Failed'), 'danger');
+            });
+        }
+
         // ========== HOSTNAME CHANGE FUNCTIONS ==========
 
         let hostnameChangeData = null;

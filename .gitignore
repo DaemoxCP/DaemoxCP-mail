@@ -6,3 +6,6 @@ target/
 
 # Rumore di macOS, uno per cartella visitata dal Finder.
 .DS_Store
+
+# Le prove compilate sul posto (javac -d tests): si rifanno, e una e' finita in un commit per sbaglio.
+tests/**/*.class

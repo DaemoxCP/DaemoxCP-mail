@@ -51,6 +51,8 @@ final class RootGate {
             Map.entry("/api/report", POST), Map.entry("/api/hostname", GET_POST), Map.entry("/api/roundcube-domain", GET_POST),
             // L'accesso e la scheda Account: amministratori, passkey, codici e sessioni li decide la root (0.8.2, A).
             Map.entry("/api/login", POST), Map.entry("/api/account", GET_POST),
+            // POP3 acceso o spento (Impostazioni).
+            Map.entry("/api/pop3", GET_POST),
             // Le chiavi SSH di root (Impostazioni).
             Map.entry("/api/ssh-keys", GET_POST));
 

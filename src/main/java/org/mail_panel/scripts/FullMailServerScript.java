@@ -19,7 +19,7 @@ import java.io.IOException;
  * ║  │     • SASL auth via Dovecot                                             │ ║
  * ║  │     • Config: /usr/local/etc/postfix/                                   │ ║
  * ║  │                                                                         │ ║
- * ║  │  2. Dovecot (IMAP/POP3)   - ports 143/993/110/995                       │ ║
+ * ║  │  2. Dovecot (IMAP)        - ports 143/993                               │ ║
  * ║  │     • LMTP delivery on localhost:24                                     │ ║
  * ║  │     • SASL authentication for Postfix                                   │ ║
  * ║  │     • Mailboxes in /var/vmail/{domain}/{user}                           │ ║
@@ -1417,7 +1417,7 @@ echo "${GREEN}==================================================================
 echo ""
 echo "Services:"
 echo "  Postfix (SMTP)      - ports 25, 587, 465"
-echo "  Dovecot (IMAP/POP3) - ports 143, 993, 110, 995"
+echo "  Dovecot (IMAP) - ports 143, 993"
 echo "  Rspamd (Anti-Spam)  - port 11332"
 echo "  Roundcube           - https://$ROUNDCUBE_DOMAIN:$ROUNDCUBE_PORT"
 echo ""
