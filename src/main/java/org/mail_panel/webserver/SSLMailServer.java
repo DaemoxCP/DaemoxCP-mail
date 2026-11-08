@@ -260,8 +260,9 @@ public class SSLMailServer {
         context("/domains", Access.page(MAIL_VIEW), this::handleProtectedPage);
         context("/api/domains", Access.api(MAIL_VIEW, DOMAINS), this::handleApiDomains);
         context("/mailboxes", Access.page(MAIL_VIEW), this::handleProtectedPage);
-        // La password di una casella si rivela con una POST (reveal_password): vuole mailboxes.manage.
         context("/api/mailboxes", Access.api(MAIL_VIEW, MAILBOXES), this::handleApiMailboxes);
+        // «Mostra password»: la copia dal vault la legge solo la root, che sola ha la chiave privata (0.8, punto 3).
+        context("/api/mailbox-password", Access.api(MAILBOXES), this::handleApiMailboxPassword);
         context("/api/mailconfig", Access.api(MAIL_VIEW), this::handleApiMailConfig);
         context("/aliases", Access.page(MAIL_VIEW), this::handleProtectedPage);
         context("/api/aliases", Access.api(MAIL_VIEW, DOMAINS), this::handleApiAliases);
@@ -754,6 +755,15 @@ public class SSLMailServer {
             Main.mailDatabase.ensureColumnUpgrades();
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Schema upgrade failed", e);
+        }
+        // Il vault a chiave asimmetrica: la coppia di chiavi, poi le copie di prima ricifrate con la pubblica.
+        try {
+            org.mail_panel.security.PasswordVault.ensureKeyPair();
+            org.mail_panel.security.PasswordVault.Reencrypted r = org.mail_panel.security.PasswordVault.reencryptOldCopies(Main.mailDatabase);
+            if (r.failed() > 0)
+                LOGGER.warning("[PasswordVault] " + r.failed() + " password copies of before not readable: they stay as they are (master.key, root only)");
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "[PasswordVault] the copies of before were not encrypted again", e);
         }
     }
 
@@ -2283,50 +2293,6 @@ public class SSLMailServer {
                         return;
                     }
 
-                    if ("reveal_password".equals(action)) {
-                        // La copia della password dal vault, solo se e' ancora la password della
-                        // casella (confronto con l'hash di adesso): una copia vecchia non si mostra.
-                        // Audit log: tracciamo SEMPRE chi e quando rivela una password.
-                        int mid = req.optInt("id", 0);
-                        MailDatabase.Mailbox mbox = mid > 0 ? Main.mailDatabase.getMailbox(mid) : null;
-                        if (mbox == null) {
-                            response.put("success", false);
-                            response.put("error", I18n.tr(mid > 0 ? "server.mailbox.notFound" : "server.mailbox.missingId"));
-                            sendJsonResponse(exchange, response);
-                            return;
-                        }
-                        String ip = getClientIp(exchange);
-                        String encrypted = Main.mailDatabase.getMailboxPasswordEncrypted(mid);
-                        if (encrypted == null || encrypted.isEmpty()) {
-                            response.put("success", false);
-                            response.put("error", I18n.tr("server.mailbox.noCopy"));
-                            logAudit("MAILBOX_PASSWORD_REVEAL_NOT_AVAILABLE", ip, "mailbox_id=" + mid + " email=" + mbox.email);
-                            sendJsonResponse(exchange, response);
-                            return;
-                        }
-                        String plain;
-                        try {
-                            plain = org.mail_panel.security.PasswordVault.getInstance().decrypt(encrypted);
-                        } catch (RuntimeException e) {
-                            response.put("success", false);
-                            response.put("error", I18n.tr("server.mailbox.unreadableCopy"));
-                            logAudit("MAILBOX_PASSWORD_REVEAL_FAILED", ip, "mailbox_id=" + mid + " email=" + mbox.email + " reason=decrypt");
-                            sendJsonResponse(exchange, response);
-                            return;
-                        }
-                        if (!Main.mailDatabase.mailboxPasswordMatches(mid, plain)) {
-                            response.put("success", false);
-                            response.put("error", I18n.tr("server.mailbox.staleCopy"));
-                            logAudit("MAILBOX_PASSWORD_REVEAL_FAILED", ip, "mailbox_id=" + mid + " email=" + mbox.email + " reason=stale");
-                            sendJsonResponse(exchange, response);
-                            return;
-                        }
-                        response.put("success", true);
-                        response.put("password", plain);
-                        logAudit("MAILBOX_PASSWORD_REVEALED", ip, "mailbox_id=" + mid + " email=" + mbox.email);
-                        sendJsonResponse(exchange, response);
-                        return;
-                    }
 
                     // Default: creazione casella (codice esistente)
                     String email = req.optString("email", "").toLowerCase().trim();
@@ -10611,13 +10577,13 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
-    /** Esporta la chiave master del vault in base64, per il backup. */
+    /** Esporta la chiave privata del vault in base64, per la copia di sicurezza. Solo la root (la rotta e' sua). */
     private void vaultBackupKey(JSONObject response, AuthStore.Admin me, String ip) {
         try {
             org.mail_panel.security.PasswordVault vault = org.mail_panel.security.PasswordVault.getInstance();
             response.put("success", true)
-                    .put("key_base64", vault.exportKeyBase64())
-                    .put("key_file_path", org.mail_panel.security.PasswordVault.getKeyFilePath())
+                    .put("key_base64", vault.exportPrivateKeyBase64())
+                    .put("key_file_path", org.mail_panel.security.PasswordVault.privateKeyLocation())
                     .put("message", I18n.tr("server.vault.exported"));
             logAudit("VAULT_KEY_EXPORTED", ip, "admin_id=" + me.id());
         } catch (Exception e) {
@@ -10627,39 +10593,23 @@ public class SSLMailServer {
     }
 
     /**
-     * Rotazione della chiave master: genera una chiave nuova, ri-cifra con quella tutte le password
-     * conservate e la salva su disco (la vecchia resta come backup accanto).
+     * Rotazione delle chiavi del vault: una coppia nuova, tutte le copie delle password ricifrate con la sua pubblica,
+     * la privata di prima tenuta accanto nel file di root (PasswordVault.rotate).
      */
     private void vaultRotateKey(JSONObject response, AuthStore.Admin me, String ip) {
         try {
-            org.mail_panel.security.PasswordVault vault = org.mail_panel.security.PasswordVault.getInstance();
-            byte[] oldKey = java.util.Base64.getDecoder().decode(vault.exportKeyBase64());
-            byte[] newKey = vault.generateNewKeyBytes();
-            java.util.List<Object[]> rows = Main.mailDatabase.listMailboxesWithEncryptedPasswordAndBlob();
-            int total = rows.size(), reencrypted = 0, failed = 0;
-            for (Object[] row : rows) {
-                int mid = (int) row[0];
-                try {
-                    String plain = vault.decryptWithKey((String) row[1], oldKey);
-                    Main.mailDatabase.setMailboxEncryptedPasswordOnly(mid, vault.encryptWithKey(plain, newKey));
-                    reencrypted++;
-                } catch (Exception e) {
-                    failed++;
-                    LOGGER.warning("Vault rotation: mailbox " + mid + " not re-encrypted");
-                }
-            }
-            if (failed > 0 && reencrypted == 0) {
-                // Nessuna si decifra: la chiave attuale e' gia' rotta. La nuova non si salva.
-                response.put("success", false).put("error", I18n.tr("server.vault.allFailed", java.util.Map.of("total", total)));
+            org.mail_panel.security.PasswordVault.Reencrypted r = org.mail_panel.security.PasswordVault.getInstance().rotate(Main.mailDatabase);
+            if (r.reencrypted() == 0 && r.total() > 0) {
+                // Nessuna si decifra: le chiavi attuali sono gia' rotte. La coppia nuova non si salva.
+                response.put("success", false).put("error", I18n.tr("server.vault.allFailed", java.util.Map.of("total", r.total())));
                 return;
             }
-            vault.persistNewKey(newKey);
             response.put("success", true)
-                    .put("summary", new JSONObject().put("total", total).put("reencrypted", reencrypted).put("failed", failed))
+                    .put("summary", new JSONObject().put("total", r.total()).put("reencrypted", r.reencrypted()).put("failed", r.failed()))
                     .put("message", I18n.tr("server.vault.rotated", java.util.Map.of(
-                            "path", org.mail_panel.security.PasswordVault.getKeyFilePath() + ".bak.<timestamp>")));
-            logAudit("VAULT_KEY_ROTATED", ip, "admin_id=" + me.id() + " total=" + total
-                    + " reencrypted=" + reencrypted + " failed=" + failed);
+                            "path", org.mail_panel.security.PasswordVault.privateKeyLocation())));
+            logAudit("VAULT_KEY_ROTATED", ip, "admin_id=" + me.id() + " total=" + r.total()
+                    + " reencrypted=" + r.reencrypted() + " failed=" + r.failed());
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Vault key rotation failed", e);
             response.put("success", false).put("error", I18n.tr("server.vault.rotateFailed"));
@@ -11462,6 +11412,61 @@ public class SSLMailServer {
      * regole dei paesi, se attive, si rifanno con le porte di adesso. Una scelta che non si puo' applicare
      * lascia tutto com'era.
      */
+    /**
+     * «Mostra password» (POST {id}): la copia della password dal vault, solo se e' ancora la password della casella
+     * (confronto con l'hash di adesso), perche' una copia vecchia non si mostra. La serve la root: la web non ha la
+     * chiave privata del vault. Ogni rivelazione va nel registro di controllo.
+     */
+    private void handleApiMailboxPassword(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            exchange.getResponseHeaders().set("Allow", "POST");
+            sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
+            return;
+        }
+        JSONObject response = new JSONObject();
+        try {
+            String body = readRequestBodyWithLimit(exchange);
+            if (body == null) {
+                sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
+                return;
+            }
+            int mid = new JSONObject(body).optInt("id", 0);
+            MailDatabase.Mailbox mbox = mid > 0 ? Main.mailDatabase.getMailbox(mid) : null;
+            String ip = getClientIp(exchange);
+            if (mbox == null) {
+                response.put("success", false).put("error", I18n.tr(mid > 0 ? "server.mailbox.notFound" : "server.mailbox.missingId"));
+            } else {
+                String encrypted = Main.mailDatabase.getMailboxPasswordEncrypted(mid);
+                String plain = null;
+                if (encrypted == null || encrypted.isEmpty()) {
+                    response.put("success", false).put("error", I18n.tr("server.mailbox.noCopy"));
+                    logAudit("MAILBOX_PASSWORD_REVEAL_NOT_AVAILABLE", ip, "mailbox_id=" + mid + " email=" + mbox.email);
+                } else {
+                    try {
+                        plain = org.mail_panel.security.PasswordVault.getInstance().decrypt(encrypted);
+                    } catch (RuntimeException e) {
+                        response.put("success", false).put("error", I18n.tr("server.mailbox.unreadableCopy"));
+                        logAudit("MAILBOX_PASSWORD_REVEAL_FAILED", ip, "mailbox_id=" + mid + " email=" + mbox.email + " reason=decrypt");
+                    }
+                }
+                if (plain != null && !Main.mailDatabase.mailboxPasswordMatches(mid, plain)) {
+                    response.put("success", false).put("error", I18n.tr("server.mailbox.staleCopy"));
+                    logAudit("MAILBOX_PASSWORD_REVEAL_FAILED", ip, "mailbox_id=" + mid + " email=" + mbox.email + " reason=stale");
+                } else if (plain != null) {
+                    response.put("success", true).put("password", plain);
+                    logAudit("MAILBOX_PASSWORD_REVEALED", ip, "mailbox_id=" + mid + " email=" + mbox.email);
+                }
+            }
+        } catch (org.json.JSONException e) {
+            sendJsonError(exchange, 400, I18n.tr("server.badRequest"));
+            return;
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Password reveal failed", e);
+            response = new JSONObject().put("success", false).put("error", I18n.tr("server.requestFailed"));
+        }
+        sendJsonResponse(exchange, response);
+    }
+
     private void handleApiPop3(HttpExchange exchange) throws IOException {
         JSONObject response = new JSONObject();
         try {

@@ -55,6 +55,8 @@ final class RootGate {
             Map.entry("/api/pop3", GET_POST),
             // Le chiavi SSH di root (Impostazioni).
             Map.entry("/api/ssh-keys", GET_POST),
+            // «Mostra password»: la copia dal vault la legge solo la root (0.8, punto 3).
+            Map.entry("/api/mailbox-password", POST),
             // La webmail: cambio password e copia nel vault, senza sessione (la web ha controllato chi chiama).
             Map.entry(org.mail_panel.integration.WebmailPasswordConfig.PATH, POST),
             Map.entry(org.mail_panel.integration.WebmailPasswordConfig.VAULT_PATH, POST));

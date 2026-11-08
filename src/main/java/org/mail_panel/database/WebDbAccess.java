@@ -68,6 +68,10 @@ public final class WebDbAccess {
             SqlCatalog.WEB_DB_GRANT_ROUTINES_FILTERS, SqlCatalog.WEB_DB_GRANT_ROUTINES_STATISTICS,
             SqlCatalog.WEB_DB_GRANT_ROUTINES_TRAINING, SqlCatalog.WEB_DB_GRANT_ROUTINES_WEBMAIL_TOKENS);
 
+    /** Le procedure che la web non ha piu': si tolgono dove ci sono, e con loro il suo permesso. */
+    private static final List<String> RETIRED = List.of(SqlCatalog.WEB_DROP_RETIRED_GET_MAILBOX_VAULT_COPY,
+            SqlCatalog.WEB_DROP_RETIRED_GET_MAILBOX_PASSWORD_HASH);
+
     private WebDbAccess() {}
 
     /** Una procedura da creare: il nome, il testo che la crea e quello che la toglie. */
@@ -229,6 +233,15 @@ public final class WebDbAccess {
         }
         if (!changed.isEmpty())
             done.add(changed.size() == definitions().size() ? "all " + changed.size() + " procedures" : "procedures " + String.join(", ", changed));
+        List<String> removed = new ArrayList<>();
+        for (String drop : RETIRED) {
+            if (!have.containsKey(nameOf(drop))) continue;
+            try (Statement st = root.createStatement()) {
+                st.execute(drop);
+            }
+            removed.add(nameOf(drop));
+        }
+        if (!removed.isEmpty()) done.add("procedures the web part no longer has, removed: " + String.join(", ", removed));
     }
 
     private static void webUser(Connection root, String url, String password, List<String> done) throws SQLException {

@@ -157,19 +157,19 @@ public class WebRoutinesTest {
         System.out.println("== 1. The migration ==");
         String r = ensure(db);
         check("it says the web part can use its own user (" + r + ")", r == null);
-        check("  and logs what it did (" + LOG + ")", logged("DONE") && logged("all 40 procedures") && logged("user mailpanel_web"));
+        check("  and logs what it did (" + LOG + ")", logged("DONE") && logged("all 38 procedures") && logged("user mailpanel_web"));
         check("mailpanel_routines exists and is locked",
                 rows(root, "SELECT account_locked FROM mysql.user WHERE user = 'mailpanel_routines' AND host = 'localhost'").equals(List.of("Y")));
         check("mailpanel_web exists with both names, not locked", rows(root,
                 "SELECT host, account_locked FROM mysql.user WHERE user = 'mailpanel_web' ORDER BY host").equals(List.of("127.0.0.1|N", "localhost|N")));
         List<String> procs = rows(root, "SELECT routine_name, definer, security_type, routine_comment LIKE 'mailpanel %' FROM information_schema.routines"
                 + " WHERE routine_schema = DATABASE() AND routine_type = 'PROCEDURE'");
-        check("40 procedures (" + procs.size() + "), every one of mailpanel_routines, SQL SECURITY DEFINER, with its comment",
-                procs.size() == 40 && procs.stream().allMatch(p -> p.endsWith("|mailpanel_routines@localhost|DEFINER|1")));
-        check("the web user has EXECUTE on the 39 procedures of the web and nothing else (" + rows(root,
+        check("38 procedures (" + procs.size() + "), every one of mailpanel_routines, SQL SECURITY DEFINER, with its comment",
+                procs.size() == 38 && procs.stream().allMatch(p -> p.endsWith("|mailpanel_routines@localhost|DEFINER|1")));
+        check("the web user has EXECUTE on the 37 procedures of the web and nothing else (" + rows(root,
                 "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web'") + ")",
-                rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web' AND proc_priv = 'Execute' AND routine_name <> 'web_session_admin'").equals(List.of("78"))
-                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web'").equals(List.of("78"))
+                rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web' AND proc_priv = 'Execute' AND routine_name <> 'web_session_admin'").equals(List.of("74"))
+                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web'").equals(List.of("74"))
                 && rows(root, "SHOW GRANTS FOR 'mailpanel_web'@'127.0.0.1'").stream().noneMatch(g -> g.contains("ON *.*") && !g.startsWith("GRANT USAGE")));
         int expected = 0;
         for (String role : AuthStore.ROLES) expected += AuthStore.permissionsOf(role).size();
@@ -196,7 +196,16 @@ public class WebRoutinesTest {
         check("a table privilege given by hand is taken away, and the procedures stay (" + LOG + ")", r == null
                 && logged("every other privilege of mailpanel_web revoked")
                 && rows(root, "SELECT COUNT(*) FROM information_schema.table_privileges WHERE grantee LIKE '%mailpanel_web%'").equals(List.of("0"))
-                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web'").equals(List.of("78")));
+                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web'").equals(List.of("74")));
+        // A procedure the web part had before the asymmetric vault (the copy of a password), granted to it.
+        exec(root, "CREATE DEFINER = 'mailpanel_routines'@'localhost' PROCEDURE get_mailbox_password_hash(IN p_session CHAR(64), IN p_id INT)"
+                + " SQL SECURITY DEFINER SELECT password FROM mailboxes WHERE id = p_id");
+        exec(root, "GRANT EXECUTE ON PROCEDURE get_mailbox_password_hash TO 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'");
+        r = ensure(db);
+        check("a procedure the web part no longer has is removed, and its EXECUTE with it (" + LOG + ")", r == null
+                && logged("removed: get_mailbox_password_hash")
+                && rows(root, "SELECT COUNT(*) FROM information_schema.routines WHERE routine_schema = DATABASE() AND routine_name = 'get_mailbox_password_hash'").equals(List.of("0"))
+                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web'").equals(List.of("74")));
         exec(root, "ALTER USER 'mailpanel_web'@'127.0.0.1' IDENTIFIED BY 'someone-else-1234'");
         r = ensure(db);
         check("a password changed by someone else is set back to the one in the web's file (" + r + ", " + LOG + ")",
@@ -248,9 +257,9 @@ public class WebRoutinesTest {
                     refusal(() -> rows(w, "CALL list_domains(?)", veraHash)).isEmpty()
                     && refusal(() -> rows(w, "CALL add_domain(?, 'wr-no.example', 'x')", veraHash)).startsWith("45000")
                     && rows(TestSql(), "SELECT id FROM domains WHERE domain = 'wr-no.example'").isEmpty());
-            check("the viewer may not read a password copy or hash",
-                    refusal(() -> rows(w, "CALL get_mailbox_vault_copy(?, 1)", veraHash)).startsWith("45000")
-                    && refusal(() -> rows(w, "CALL get_mailbox_password_hash(?, 1)", veraHash)).startsWith("45000"));
+            check("no procedure gives a password copy or hash, not even to the superadmin (Show password is the root part's)",
+                    !refusal(() -> rows(w, "CALL get_mailbox_vault_copy(?, 1)", bossHash)).isEmpty()
+                    && !refusal(() -> rows(w, "CALL get_mailbox_password_hash(?, 1)", bossHash)).isEmpty());
             check("a language other than it or en: refused", refusal(() -> rows(w, "CALL set_admin_language(?, 'xx', 'wr-boss')", bossHash)).startsWith("45000"));
             check("a theme of someone else: nothing changes",
                     rows(w, "CALL set_admin_theme(?, 'dark', 'wr-vera')", bossHash).equals(List.of("0")));
@@ -292,8 +301,13 @@ public class WebRoutinesTest {
                 && db.getMailbox(mid).name.equals(box.name));
         check("  in the lists (all, of the domain), and by address", webDb.getAllMailboxes().stream().anyMatch(m -> m.id == mid)
                 && webDb.getMailboxes(did).size() == 1 && webDb.getMailboxByEmail("probe@" + domain) != null);
-        check("  the password: the copy and the hash match (Show password)", webDb.mailboxHasEncryptedPassword(mid)
-                && webDb.getMailboxPasswordEncrypted(mid) != null && webDb.mailboxPasswordMatches(mid, "Wr-Test-Password-2026x"));
+        check("  the copy is there, in the asymmetric vault's format, and the root part reads it",
+                webDb.mailboxHasEncryptedPassword(mid) && org.mail_panel.security.PasswordVault.isCurrentFormat(db.getMailboxPasswordEncrypted(mid))
+                && db.mailboxPasswordMatches(mid, "Wr-Test-Password-2026x")
+                && "Wr-Test-Password-2026x".equals(org.mail_panel.security.PasswordVault.getInstance().decrypt(db.getMailboxPasswordEncrypted(mid))));
+        check("  the web part's connection reads neither the copy nor the hash (" + refusal(() -> webDb.getMailboxPasswordEncrypted(mid)) + ")",
+                refusal(() -> webDb.getMailboxPasswordEncrypted(mid)).startsWith("42000")
+                && refusal(() -> webDb.mailboxPasswordMatches(mid, "Wr-Test-Password-2026x")).startsWith("42000"));
         check("an update with the same values says the same as the panel user's connection (rows found, not changed)",
                 webDb.updateMailbox(mid, "Probe", 10, true, true) == db.updateMailbox(mid, "Probe", 10, true, true));
         check("  and a real one is written", webDb.updateMailbox(mid, "Probe Two", 20, true, true) && db.getMailbox(mid).quotaMb == 20);

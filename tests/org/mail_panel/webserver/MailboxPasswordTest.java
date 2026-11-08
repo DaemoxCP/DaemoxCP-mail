@@ -147,11 +147,9 @@ public class MailboxPasswordTest {
         db.updateMailboxPassword(id, second);
         check("a change rewrites both", db.mailboxPasswordMatches(id, second) && second.equals(copyOf(id)));
 
-        // The vault cannot encrypt (a key AES refuses): nothing is saved
-        Field active = PasswordVault.class.getDeclaredField("activeKey");
-        active.setAccessible(true);
-        Object goodKey = active.get(PasswordVault.getInstance());
-        active.set(PasswordVault.getInstance(), new javax.crypto.spec.SecretKeySpec(new byte[5], "AES"));
+        // The vault cannot encrypt (its public key is not one): nothing is saved
+        String goodKey = org.mail_panel.security.PanelSecrets.text(org.mail_panel.security.PanelSecrets.VAULT_PUBLIC_KEY);
+        org.mail_panel.security.PanelSecrets.setText(org.mail_panel.security.PanelSecrets.VAULT_PUBLIC_KEY, "AAAA");
         boolean refused = false;
         try {
             db.addMailbox(domainId, "nocopy@" + domain, "Without-Copy-2026", "", 512);
@@ -165,7 +163,7 @@ public class MailboxPasswordTest {
         } catch (java.sql.SQLException e) {
             refused = true;
         }
-        active.set(PasswordVault.getInstance(), goodKey);
+        org.mail_panel.security.PanelSecrets.setText(org.mail_panel.security.PanelSecrets.VAULT_PUBLIC_KEY, goodKey);
         check("vault broken: the change is refused and the old password stays", refused && db.mailboxPasswordMatches(id, second) && second.equals(copyOf(id)));
 
         System.out.println("\n== Passwords the panel did not write ==");
@@ -229,7 +227,7 @@ public class MailboxPasswordTest {
             String json = "application/json";
             java.util.function.IntFunction<JSONObject> reveal = mid -> {
                 try {
-                    return new JSONObject(send("POST", "/api/mailboxes", "{\"action\":\"reveal_password\",\"id\":" + mid + "}", json,
+                    return new JSONObject(send("POST", "/api/mailbox-password", "{\"id\":" + mid + "}", json,
                             "Cookie", session, "X-CSRF-Token", csrf).body());
                 } catch (Exception e) {
                     throw new IllegalStateException(e);
@@ -237,7 +235,7 @@ public class MailboxPasswordTest {
             };
             JSONObject r = reveal.apply(id);
             check("the copy that matches the hash is shown", r.optBoolean("success") && second.equals(r.optString("password")));
-            check("without the session token: refused", send("POST", "/api/mailboxes", "{\"action\":\"reveal_password\",\"id\":" + id + "}", json,
+            check("without the session token: refused", send("POST", "/api/mailbox-password", "{\"id\":" + id + "}", json,
                     "Cookie", session).statusCode() == 403);
             setColumn("password", id, BCrypt.hashpw("Changed-Elsewhere-2026", BCrypt.gensalt(10)));
             r = reveal.apply(id);

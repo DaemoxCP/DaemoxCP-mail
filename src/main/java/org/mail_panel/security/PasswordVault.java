@@ -1,270 +1,354 @@
 package org.mail_panel.security;
 
 import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.OAEPParameterSpec;
+import javax.crypto.spec.PSource;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.nio.file.attribute.PosixFilePermissions;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.interfaces.RSAPrivateCrtKey;
+import java.security.spec.MGF1ParameterSpec;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.RSAPublicKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.logging.Logger;
 
 /**
- * Vault per password mailbox: AES-256-GCM con chiave master in file root-only.
+ * La copia cifrata delle password delle caselle, per «Mostra password».
  *
- * Workflow:
- *  - Al primo avvio genera una chiave master (32 byte random) e la salva su disco
- *    con permessi 600 in {@link #KEY_FILE}.
- *  - In RAM mantiene la chiave per cifrare/decifrare.
- *  - Cifratura AES-256-GCM con IV random per ogni chiamata (12 byte IV + 16 byte auth tag).
- *  - Output base64: 12 byte IV | ciphertext+tag — un blob auto-contenuto.
+ * <p>A chiave asimmetrica: la parte web cifra le copie delle password nuove con la chiave pubblica, che sta nel
+ * suo file dei segreti, e non ne legge nessuna; le legge solo la parte root, che sola ha la chiave privata (nel
+ * file dei segreti di root). Chi prendesse la web non porta via le password delle caselle, nemmeno quelle che
+ * passano di li' dopo.
  *
- * Trade-off di sicurezza:
- *  - Le password mailbox restano comunque BCrypt-hashate nel campo principale
- *    (per Dovecot/Postfix auth). Il blob cifrato è SOLO un copia recuperabile lato pannello.
- *  - Se un attaccante prende sia il DB sia il filesystem (root access), può decifrare
- *    le password mailbox. Ma con root access farebbe ben di peggio comunque.
- *  - La feature aumenta l'usabilità (recovery, sharing controllato) accettando
- *    questo trade-off di "se sei root puoi tutto".
+ * <p>Il formato (v2): {@code "v2:" + base64(versione 0x02 || chiave AES avvolta || nonce || testo cifrato e tag)}.
+ * Per ogni copia una chiave AES-256 nuova, presa dal generatore crittografico, avvolta con RSA-OAEP (SHA-256 e
+ * MGF1 con SHA-256) nella chiave pubblica RSA da 3072 bit; la password cifrata con AES-256-GCM, nonce di 12 byte a
+ * caso, e la versione e la chiave avvolta legate al tag (dati aggiuntivi): nessuno puo' scambiarle.
+ *
+ * <p>Le copie di prima (v1) sono AES-256-GCM con la chiave simmetrica di {@code master.key}: la root le ricifra in
+ * v2 all'avvio ({@link #reencryptOldCopies}); il file resta, solo di root, per una copia che non si fosse potuta
+ * ricifrare.
  */
 public class PasswordVault {
     private static final Logger LOGGER = Logger.getLogger(PasswordVault.class.getName());
 
-    /** Dove va a finire la chiave master sul disco (i test la spostano con -Dmailpanel.vault.key=...). */
+    /** La chiave simmetrica delle copie di prima (i test la spostano con -Dmailpanel.vault.key=...). */
     private static final String KEY_FILE = System.getProperty("mailpanel.vault.key", "/usr/local/etc/mail-panel/master.key");
 
-    private static final int KEY_SIZE_BYTES   = 32; // AES-256
-    private static final int GCM_IV_LEN       = 12; // standard per GCM
-    private static final int GCM_TAG_BITS     = 128;
+    /** Il segno delle copie a chiave asimmetrica. Il base64 non contiene ':', quindi nessuna copia v1 comincia cosi'. */
+    static final String V2_PREFIX = "v2:";
+    private static final byte V2 = 2;
+    private static final int RSA_BITS = 3072;
+    private static final int WRAPPED_LEN = RSA_BITS / 8;
+    private static final int GCM_IV_LEN = 12;
+    private static final int GCM_TAG_BITS = 128;
+    private static final OAEPParameterSpec OAEP = new OAEPParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256,
+            PSource.PSpecified.DEFAULT);
 
-    /** Singleton lazy: la chiave viene caricata/generata alla prima invocazione. */
     private static volatile PasswordVault INSTANCE;
-
-    private final SecretKey key;
     private final SecureRandom rng = new SecureRandom();
 
-    private volatile SecretKey activeKey;
-    /** Data, dimensione e inode del file da cui viene activeKey: se cambiano, la chiave si rilegge. */
-    private volatile String keyStamp = stamp();
-
-    private PasswordVault(SecretKey key) {
-        this.key = key;
-        this.activeKey = key;
-    }
-
-    /**
-     * La chiave attiva, riletta se il file e' cambiato. Col pannello separato la usano due processi (la
-     * parte root cifra le caselle nuove, la web decifra per la webmail) e la rotazione la fa uno solo: senza
-     * rileggere, l'altro continuerebbe con la chiave vecchia, e una casella cifrata cosi' non si
-     * decifrerebbe piu'. Costa uno stat del file a operazione.
-     */
-    private SecretKey activeKey() {
-        String now = stamp();
-        if (!now.equals(keyStamp) && !now.isEmpty()) {
-            synchronized (this) {
-                if (!now.equals(keyStamp)) {
-                    try {
-                        activeKey = new SecretKeySpec(readKeyFile(Paths.get(KEY_FILE)), "AES");
-                        LOGGER.info("[PasswordVault] master key changed on disk: reloaded from " + KEY_FILE);
-                    } catch (Exception e) {
-                        LOGGER.warning("[PasswordVault] master key changed on disk but unreadable, keeping the one in memory: " + e.getMessage());
-                    }
-                    keyStamp = now;
-                }
-            }
-        }
-        return activeKey;
-    }
-
-    private static String stamp() {
-        try {
-            java.nio.file.attribute.BasicFileAttributes a = Files.readAttributes(Paths.get(KEY_FILE),
-                    java.nio.file.attribute.BasicFileAttributes.class);
-            return a.lastModifiedTime().toMillis() + ":" + a.size() + ":" + a.fileKey();
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    /** I 32 byte della chiave dal file: base64 (la forma scritta dal pannello) o byte grezzi. */
-    private static byte[] readKeyFile(Path keyPath) throws java.io.IOException {
-        byte[] raw = Files.readAllBytes(keyPath);
-        byte[] keyBytes;
-        String content = new String(raw, StandardCharsets.UTF_8).trim();
-        try {
-            keyBytes = Base64.getDecoder().decode(content);
-        } catch (IllegalArgumentException notBase64) {
-            keyBytes = raw;
-        }
-        if (keyBytes.length != KEY_SIZE_BYTES) {
-            throw new RuntimeException("Master key file has the wrong size: "
-                + keyBytes.length + " bytes (expected: " + KEY_SIZE_BYTES + ")");
-        }
-        return keyBytes;
-    }
-
-    /** Restituisce la path del file chiave master (per il backup). */
-    public static String getKeyFilePath() {
-        return KEY_FILE;
-    }
-
-    /**
-     * Esporta la chiave master come stringa base64. Da usare SOLO per backup
-     * controllato — l'output è il valore di sicurezza più sensibile dell'applicazione.
-     */
-    public String exportKeyBase64() {
-        return Base64.getEncoder().encodeToString(activeKey().getEncoded());
-    }
-
-    /**
-     * Rotazione della chiave master.
-     *
-     *  - Genera una nuova chiave random
-     *  - L'esecuzione del re-encrypt dei blob esistenti è responsabilità del CHIAMANTE
-     *    (vedi {@code MailDatabase.bulkReencryptPasswords}), che chiamerà decrypt() (vecchia chiave)
-     *    + encrypt() (nuova chiave) per ogni record.
-     *  - Per supportare quel flow esponiamo {@link #setActiveKey(byte[])} e
-     *    {@link #decryptWithKey(String, byte[])} che permettono di passare la chiave esplicitamente.
-     *  - Al termine il chiamante deve invocare {@link #persistNewKey(byte[])} che
-     *    salva la nuova chiave su disco con backup della vecchia.
-     */
-    public byte[] generateNewKeyBytes() {
-        byte[] newKey = new byte[KEY_SIZE_BYTES];
-        new SecureRandom().nextBytes(newKey);
-        return newKey;
-    }
-
-    /** Cifra con una chiave esplicita (usato durante la rotazione: cifra coi nuovi bytes). */
-    public String encryptWithKey(String plaintext, byte[] keyBytes) {
-        if (plaintext == null) return null;
-        try {
-            byte[] iv = new byte[GCM_IV_LEN];
-            rng.nextBytes(iv);
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(keyBytes, "AES"),
-                new GCMParameterSpec(GCM_TAG_BITS, iv));
-            byte[] ct = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-            byte[] out = new byte[iv.length + ct.length];
-            System.arraycopy(iv, 0, out, 0, iv.length);
-            System.arraycopy(ct, 0, out, iv.length, ct.length);
-            return Base64.getEncoder().encodeToString(out);
-        } catch (Exception e) {
-            throw new RuntimeException("encryptWithKey failed: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Salva la nuova chiave su disco e la rende attiva in RAM.
-     * Fa anche un backup della precedente in master.key.bak.<timestamp>
-     */
-    public synchronized void persistNewKey(byte[] newKeyBytes) {
-        try {
-            Path keyPath = Paths.get(KEY_FILE);
-            if (Files.exists(keyPath)) {
-                Path backup = Paths.get(KEY_FILE + ".bak." + System.currentTimeMillis());
-                // La copia nasce gia' 0600 e col gruppo di root: Files.copy la creava coi permessi
-                // dell'umask (0644) e solo dopo la chiudeva, e su FreeBSD col gruppo della cartella.
-                try {
-                    Files.createFile(backup, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-                    if (PanelSecrets.webGroup(backup))
-                        Files.getFileAttributeView(backup, java.nio.file.attribute.PosixFileAttributeView.class).setGroup(
-                                backup.getFileSystem().getUserPrincipalLookupService().lookupPrincipalByGroupName("wheel"));
-                } catch (UnsupportedOperationException noPosix) {
-                    Files.createFile(backup);
-                }
-                Files.write(backup, Files.readAllBytes(keyPath), StandardOpenOption.TRUNCATE_EXISTING);
-                LOGGER.info("[PasswordVault] Old key backed up to " + backup);
-            }
-            String b64 = Base64.getEncoder().encodeToString(newKeyBytes);
-            // Un file nuovo e un rename, non una riscrittura sul posto: l'altra parte del pannello separato
-            // legge la chiave in ogni momento, e a meta' scrittura avrebbe trovato un file vuoto. Il nuovo
-            // prende il gruppo e i permessi del vecchio: col pannello separato e' 0640 root:mailpanel.
-            Path tmp = keyPath.resolveSibling(keyPath.getFileName() + ".tmp");
-            Files.deleteIfExists(tmp);
-            Files.writeString(tmp, b64, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-            String perms = "rw-------";
-            try {
-                Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString(perms));
-                if (Files.exists(keyPath) && PanelSecrets.webGroup(keyPath)) {
-                    Files.getFileAttributeView(tmp, java.nio.file.attribute.PosixFileAttributeView.class).setGroup(
-                            tmp.getFileSystem().getUserPrincipalLookupService().lookupPrincipalByGroupName(PanelSecrets.WEB_GROUP));
-                    perms = "rw-r-----";
-                    Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString(perms));
-                }
-            } catch (UnsupportedOperationException ignored) {}
-            Files.move(tmp, keyPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            this.activeKey = new SecretKeySpec(newKeyBytes, "AES");
-            this.keyStamp = stamp();
-            LOGGER.info("[PasswordVault] New master key active and saved to " + KEY_FILE);
-        } catch (Exception e) {
-            throw new RuntimeException("persistNewKey failed: " + e.getMessage(), e);
-        }
-    }
+    private PasswordVault() {}
 
     public static PasswordVault getInstance() {
         PasswordVault local = INSTANCE;
         if (local == null) {
             synchronized (PasswordVault.class) {
-                if (INSTANCE == null) {
-                    INSTANCE = loadOrCreate();
-                }
+                if (INSTANCE == null) INSTANCE = new PasswordVault();
                 local = INSTANCE;
             }
         }
         return local;
     }
 
+    private static boolean runningAsRoot() {
+        return "root".equals(System.getProperty("user.name"));
+    }
+
+    // ===================== Le chiavi =====================
+
     /**
-     * Cifra una password in plaintext. Ritorna una stringa base64 auto-contenuta
-     * (IV + ciphertext + GCM auth tag). Sicura per essere salvata in TEXT su DB.
+     * La parte root, all'avvio e prima di accendere la web: la coppia di chiavi c'e', e la chiave pubblica nel file
+     * della web e' quella della privata. Se manca la privata la genera; se la pubblica manca o non corrisponde, la
+     * riscrive da quella privata (una copia ripristinata a mano, per esempio). Vero se ha cambiato qualcosa.
      */
+    public static synchronized boolean ensureKeyPair() {
+        if (!runningAsRoot()) return false;
+        String priv = PanelSecrets.text(PanelSecrets.VAULT_PRIVATE_KEY);
+        boolean generated = false;
+        if (priv.isEmpty()) {
+            try {
+                KeyPairGenerator g = KeyPairGenerator.getInstance("RSA");
+                g.initialize(RSA_BITS, new SecureRandom());
+                KeyPair pair = g.generateKeyPair();
+                priv = Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded());
+            } catch (Exception e) {
+                throw new IllegalStateException("Vault key pair not generated: " + e.getMessage(), e);
+            }
+            PanelSecrets.setText(PanelSecrets.VAULT_PRIVATE_KEY, priv);
+            if (!priv.equals(PanelSecrets.reread(PanelSecrets.VAULT_PRIVATE_KEY)))
+                throw new IllegalStateException("Vault private key not saved in " + PanelSecrets.location(PanelSecrets.VAULT_PRIVATE_KEY));
+            generated = true;
+        }
+        String pub = Base64.getEncoder().encodeToString(publicOf(privateKey(priv)).getEncoded());
+        if (!pub.equals(PanelSecrets.text(PanelSecrets.VAULT_PUBLIC_KEY))) {
+            PanelSecrets.setText(PanelSecrets.VAULT_PUBLIC_KEY, pub);
+            if (!generated) LOGGER.info("[PasswordVault] DONE: the vault's public key written again from the private one");
+        }
+        if (generated)
+            LOGGER.info("[PasswordVault] DONE: new vault key pair (RSA " + RSA_BITS + "): the private key only in root's secrets file, "
+                    + "the public one in the web part's");
+        return generated;
+    }
+
+    static PrivateKey privateKey(String base64) {
+        try {
+            return KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(base64.trim())));
+        } catch (Exception e) {
+            throw new IllegalStateException("Vault private key unreadable: " + e.getMessage(), e);
+        }
+    }
+
+    static PublicKey publicKey(String base64) {
+        try {
+            return KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(base64.trim())));
+        } catch (Exception e) {
+            throw new IllegalStateException("Vault public key unreadable: " + e.getMessage(), e);
+        }
+    }
+
+    /** La chiave pubblica di una privata RSA (modulo ed esponente stanno anche nella privata). */
+    static PublicKey publicOf(PrivateKey key) {
+        try {
+            RSAPrivateCrtKey k = (RSAPrivateCrtKey) key;
+            return KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(k.getModulus(), k.getPublicExponent()));
+        } catch (Exception e) {
+            throw new IllegalStateException("Vault public key not derived: " + e.getMessage(), e);
+        }
+    }
+
+    /** La chiave pubblica con cui cifrare: dal file della web (la root la mette li' all'avvio). */
+    private static PublicKey currentPublicKey() {
+        String pub = PanelSecrets.text(PanelSecrets.VAULT_PUBLIC_KEY);
+        if (pub.isEmpty() && runningAsRoot()) {
+            // La root senza ancora una coppia (un'installazione nuova, una prova): la crea qui.
+            ensureKeyPair();
+            pub = PanelSecrets.text(PanelSecrets.VAULT_PUBLIC_KEY);
+        }
+        if (pub.isEmpty()) throw new IllegalStateException("The vault has no public key yet");
+        return publicKey(pub);
+    }
+
+    /** Dove sta la chiave privata, da dire a chi ne fa la copia. */
+    public static String privateKeyLocation() {
+        return PanelSecrets.location(PanelSecrets.VAULT_PRIVATE_KEY);
+    }
+
+    /**
+     * La chiave privata in base64 (PKCS#8), per la copia di sicurezza: con questa si leggono tutte le copie delle
+     * password. Solo la root. Per rimetterla: nel file dei segreti di root, alla voce vault_private_key; la root
+     * riscrive la pubblica al prossimo avvio.
+     */
+    public String exportPrivateKeyBase64() {
+        if (!runningAsRoot()) throw new IllegalStateException("Only the root part has the vault's private key");
+        String priv = PanelSecrets.text(PanelSecrets.VAULT_PRIVATE_KEY);
+        if (priv.isEmpty()) throw new IllegalStateException("The vault has no private key yet");
+        return priv;
+    }
+
+    // ===================== Cifrare e decifrare =====================
+
+    /** Cifra una password con la chiave pubblica (formato v2): la web e la root. */
     public String encrypt(String plaintext) {
+        return encryptWith(plaintext, currentPublicKey());
+    }
+
+    String encryptWith(String plaintext, PublicKey publicKey) {
         if (plaintext == null) return null;
         try {
+            byte[] aes = new byte[32];
+            rng.nextBytes(aes);
+            Cipher rsa = Cipher.getInstance("RSA/ECB/OAEPPadding");
+            rsa.init(Cipher.ENCRYPT_MODE, publicKey, OAEP, rng);
+            byte[] wrapped = rsa.doFinal(aes);
+            if (wrapped.length != WRAPPED_LEN) throw new IllegalStateException("the vault's public key is not RSA " + RSA_BITS);
             byte[] iv = new byte[GCM_IV_LEN];
             rng.nextBytes(iv);
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, activeKey(), new GCMParameterSpec(GCM_TAG_BITS, iv));
-            byte[] ct = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-            // Concatena IV || ciphertext+tag
-            byte[] out = new byte[iv.length + ct.length];
-            System.arraycopy(iv, 0, out, 0, iv.length);
-            System.arraycopy(ct, 0, out, iv.length, ct.length);
-            return Base64.getEncoder().encodeToString(out);
+            Cipher gcm = Cipher.getInstance("AES/GCM/NoPadding");
+            gcm.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(aes, "AES"), new GCMParameterSpec(GCM_TAG_BITS, iv));
+            gcm.updateAAD(new byte[]{V2});
+            gcm.updateAAD(wrapped);
+            byte[] ct = gcm.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+            java.util.Arrays.fill(aes, (byte) 0);
+            byte[] out = new byte[1 + wrapped.length + iv.length + ct.length];
+            out[0] = V2;
+            System.arraycopy(wrapped, 0, out, 1, wrapped.length);
+            System.arraycopy(iv, 0, out, 1 + wrapped.length, iv.length);
+            System.arraycopy(ct, 0, out, 1 + wrapped.length + iv.length, ct.length);
+            return V2_PREFIX + Base64.getEncoder().encodeToString(out);
         } catch (Exception e) {
             throw new RuntimeException("PasswordVault encrypt failed: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Decifra una password con la chiave attiva. Input atteso: output di {@link #encrypt}.
-     * Lancia RuntimeException se il blob è corrotto o cifrato con un'altra chiave.
-     */
-    public String decrypt(String encoded) {
-        return decryptWithKey(encoded, activeKey().getEncoded());
+    /** Vero se la copia e' gia' nel formato a chiave asimmetrica. */
+    public static boolean isCurrentFormat(String encoded) {
+        return encoded != null && encoded.startsWith(V2_PREFIX);
     }
 
-    /** Decifra con una chiave esplicita (usato durante la rotazione: decripta con la vecchia chiave). */
-    public String decryptWithKey(String encoded, byte[] keyBytes) {
+    /**
+     * Decifra una copia: v2 con la chiave privata (e, se non torna, con quella di prima della rotazione), v1 con
+     * master.key. Solo la parte root: nella web non c'e' niente con cui decifrare.
+     */
+    public String decrypt(String encoded) {
         if (encoded == null || encoded.isEmpty()) return null;
+        if (!runningAsRoot()) throw new IllegalStateException("Only the root part reads the vault");
+        if (!isCurrentFormat(encoded)) return decryptOld(encoded);
+        String priv = PanelSecrets.text(PanelSecrets.VAULT_PRIVATE_KEY);
+        if (priv.isEmpty()) throw new IllegalStateException("The vault has no private key");
         try {
-            byte[] data = Base64.getDecoder().decode(encoded);
-            if (data.length <= GCM_IV_LEN) throw new IllegalArgumentException("blob too short");
-            byte[] iv = new byte[GCM_IV_LEN];
-            byte[] ct = new byte[data.length - GCM_IV_LEN];
-            System.arraycopy(data, 0, iv, 0, GCM_IV_LEN);
-            System.arraycopy(data, GCM_IV_LEN, ct, 0, ct.length);
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(keyBytes, "AES"),
-                new GCMParameterSpec(GCM_TAG_BITS, iv));
-            byte[] pt = cipher.doFinal(ct);
-            return new String(pt, StandardCharsets.UTF_8);
+            return decryptWith(encoded, privateKey(priv));
+        } catch (RuntimeException current) {
+            String previous = PanelSecrets.text(PanelSecrets.VAULT_PREVIOUS_PRIVATE_KEY);
+            if (previous.isEmpty()) throw current;
+            return decryptWith(encoded, privateKey(previous));
+        }
+    }
+
+    String decryptWith(String encoded, PrivateKey privateKey) {
+        try {
+            byte[] data = Base64.getDecoder().decode(encoded.substring(V2_PREFIX.length()));
+            if (data.length < 1 + WRAPPED_LEN + GCM_IV_LEN + GCM_TAG_BITS / 8 || data[0] != V2)
+                throw new IllegalArgumentException("not a vault copy of version 2");
+            byte[] wrapped = java.util.Arrays.copyOfRange(data, 1, 1 + WRAPPED_LEN);
+            byte[] iv = java.util.Arrays.copyOfRange(data, 1 + WRAPPED_LEN, 1 + WRAPPED_LEN + GCM_IV_LEN);
+            byte[] ct = java.util.Arrays.copyOfRange(data, 1 + WRAPPED_LEN + GCM_IV_LEN, data.length);
+            Cipher rsa = Cipher.getInstance("RSA/ECB/OAEPPadding");
+            rsa.init(Cipher.DECRYPT_MODE, privateKey, OAEP);
+            byte[] aes = rsa.doFinal(wrapped);
+            Cipher gcm = Cipher.getInstance("AES/GCM/NoPadding");
+            gcm.init(Cipher.DECRYPT_MODE, new SecretKeySpec(aes, "AES"), new GCMParameterSpec(GCM_TAG_BITS, iv));
+            java.util.Arrays.fill(aes, (byte) 0);
+            gcm.updateAAD(new byte[]{V2});
+            gcm.updateAAD(wrapped);
+            return new String(gcm.doFinal(ct), StandardCharsets.UTF_8);
         } catch (Exception e) {
             throw new RuntimeException("PasswordVault decrypt failed: " + e.getMessage(), e);
         }
     }
+
+    /** Una copia di prima (v1: base64 di nonce || testo cifrato e tag), con la chiave di master.key. */
+    private static String decryptOld(String encoded) {
+        try {
+            byte[] key = oldKey();
+            byte[] data = Base64.getDecoder().decode(encoded);
+            if (data.length <= GCM_IV_LEN) throw new IllegalArgumentException("blob too short");
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key, "AES"),
+                    new GCMParameterSpec(GCM_TAG_BITS, java.util.Arrays.copyOfRange(data, 0, GCM_IV_LEN)));
+            return new String(cipher.doFinal(data, GCM_IV_LEN, data.length - GCM_IV_LEN), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new RuntimeException("PasswordVault decrypt failed (old copy): " + e.getMessage(), e);
+        }
+    }
+
+    /** I 32 byte della chiave di prima: base64 (la forma scritta dal pannello) o byte grezzi. */
+    private static byte[] oldKey() throws java.io.IOException {
+        Path keyPath = Paths.get(KEY_FILE);
+        if (!Files.exists(keyPath)) throw new java.io.IOException("no " + KEY_FILE + " for the copies of before");
+        byte[] raw = Files.readAllBytes(keyPath);
+        byte[] keyBytes;
+        try {
+            keyBytes = Base64.getDecoder().decode(new String(raw, StandardCharsets.UTF_8).trim());
+        } catch (IllegalArgumentException notBase64) {
+            keyBytes = raw;
+        }
+        if (keyBytes.length != 32) throw new java.io.IOException("the old master key has " + keyBytes.length + " bytes, not 32");
+        return keyBytes;
+    }
+
+    // ===================== Ricifrare =====================
+
+    /** Com'e' andata una ricifratura: quante copie, quante ricifrate, quante no. */
+    public record Reencrypted(int total, int reencrypted, int failed) {}
+
+    /**
+     * All'avvio della root: le copie di prima (v1, master.key) ricifrate con la chiave pubblica. Solo quelle: le altre
+     * restano come sono, e al secondo avvio non c'e' niente da fare. Una copia che non si decifra resta com'e', e il
+     * registro lo dice.
+     */
+    public static Reencrypted reencryptOldCopies(org.mail_panel.database.MailDatabase db) throws java.sql.SQLException {
+        PasswordVault vault = getInstance();
+        PublicKey pub = currentPublicKey();
+        int total = 0, done = 0, failed = 0;
+        for (Object[] row : db.listMailboxesWithEncryptedPasswordAndBlob()) {
+            String blob = (String) row[1];
+            if (isCurrentFormat(blob)) continue;
+            total++;
+            try {
+                db.setMailboxEncryptedPasswordOnly((int) row[0], vault.encryptWith(decryptOld(blob), pub));
+                done++;
+            } catch (RuntimeException e) {
+                failed++;
+                LOGGER.warning("[PasswordVault] the copy of mailbox " + row[0] + " is not readable with " + KEY_FILE + ": left as it is");
+            }
+        }
+        if (done > 0) LOGGER.info("[PasswordVault] DONE: " + done + " password copies of before encrypted again with the public key");
+        return new Reencrypted(total, done, failed);
+    }
+
+    /**
+     * La rotazione (Amministratori → cassaforte): una coppia nuova, tutte le copie ricifrate con la sua pubblica, poi
+     * la coppia salvata. La privata di prima resta nel file di root (vault_previous_private_key) per le copie che non si
+     * fossero potute ricifrare. Se non se ne ricifra nessuna ma ce n'erano, la coppia nuova non si salva.
+     */
+    public synchronized Reencrypted rotate(org.mail_panel.database.MailDatabase db) throws java.sql.SQLException {
+        if (!runningAsRoot()) throw new IllegalStateException("Only the root part rotates the vault's keys");
+        KeyPair pair;
+        try {
+            KeyPairGenerator g = KeyPairGenerator.getInstance("RSA");
+            g.initialize(RSA_BITS, new SecureRandom());
+            pair = g.generateKeyPair();
+        } catch (Exception e) {
+            throw new IllegalStateException("Vault key pair not generated: " + e.getMessage(), e);
+        }
+        java.util.List<Object[]> rows = db.listMailboxesWithEncryptedPasswordAndBlob();
+        java.util.List<Object[]> fresh = new java.util.ArrayList<>();
+        int failed = 0;
+        for (Object[] row : rows) {
+            try {
+                fresh.add(new Object[]{row[0], encryptWith(decrypt((String) row[1]), pair.getPublic())});
+            } catch (RuntimeException e) {
+                failed++;
+                LOGGER.warning("[PasswordVault] rotation: the copy of mailbox " + row[0] + " is not readable: left as it is");
+            }
+        }
+        if (fresh.isEmpty() && !rows.isEmpty()) return new Reencrypted(rows.size(), 0, failed);
+        // Prima le chiavi (la privata nuova nel file di root, la vecchia accanto), poi le copie: a meta' strada ogni
+        // copia si legge con l'una o con l'altra.
+        String before = PanelSecrets.text(PanelSecrets.VAULT_PRIVATE_KEY);
+        if (!before.isEmpty()) PanelSecrets.setText(PanelSecrets.VAULT_PREVIOUS_PRIVATE_KEY, before);
+        String priv = Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded());
+        PanelSecrets.setText(PanelSecrets.VAULT_PRIVATE_KEY, priv);
+        if (!priv.equals(PanelSecrets.reread(PanelSecrets.VAULT_PRIVATE_KEY)))
+            throw new IllegalStateException("Vault private key not saved in " + privateKeyLocation());
+        PanelSecrets.setText(PanelSecrets.VAULT_PUBLIC_KEY, Base64.getEncoder().encodeToString(pair.getPublic().getEncoded()));
+        for (Object[] row : fresh) db.setMailboxEncryptedPasswordOnly((int) row[0], (String) row[1]);
+        return new Reencrypted(rows.size(), fresh.size(), failed);
+    }
+
+    // ===================== Il generatore di password =====================
 
     /**
      * Genera una password sicura: 20 caratteri da tutti gli insiemi ("all_chars"), cioe' lettere,
@@ -385,44 +469,5 @@ public class PasswordVault {
     public static double estimateEntropy(int length, int poolSize) {
         if (length <= 0 || poolSize <= 1) return 0.0;
         return (Math.log(poolSize) / Math.log(2)) * length;
-    }
-
-    // ============ KEY LOADING / GENERATION ============
-
-    private static PasswordVault loadOrCreate() {
-        try {
-            Path keyPath = Paths.get(KEY_FILE);
-            if (Files.exists(keyPath)) {
-                // Il file può essere base64 (preferred) o raw bytes
-                byte[] keyBytes = readKeyFile(keyPath);
-                LOGGER.info("[PasswordVault] Master key loaded from " + KEY_FILE);
-                return new PasswordVault(new SecretKeySpec(keyBytes, "AES"));
-            }
-
-            // Genera nuova chiave
-            Path parent = keyPath.getParent();
-            if (parent != null && !Files.isDirectory(parent)) {
-                Files.createDirectories(parent);
-                try {
-                    Files.setPosixFilePermissions(parent, PosixFilePermissions.fromString("rwx------"));
-                } catch (Exception ignored) {}
-            }
-            byte[] newKey = new byte[KEY_SIZE_BYTES];
-            new SecureRandom().nextBytes(newKey);
-            // Salva in base64 con header esplicativo
-            String fileContent = Base64.getEncoder().encodeToString(newKey);
-            Files.writeString(keyPath, fileContent, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-            try {
-                // 600 = solo root può leggere
-                Files.setPosixFilePermissions(keyPath, PosixFilePermissions.fromString("rw-------"));
-            } catch (Exception ignored) {}
-            LOGGER.warning("[PasswordVault] NEW master key generated in " + KEY_FILE +
-                " — keep a safe backup of this file! Without it, the encrypted passwords are lost.");
-            return new PasswordVault(new SecretKeySpec(newKey, "AES"));
-
-        } catch (Exception e) {
-            throw new RuntimeException("PasswordVault init failed: " + e.getMessage(), e);
-        }
     }
 }
