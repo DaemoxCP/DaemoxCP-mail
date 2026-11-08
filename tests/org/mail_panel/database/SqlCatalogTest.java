@@ -1,5 +1,7 @@
 package org.mail_panel.database;
 
+import org.mail_panel.security.AuthStore;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
@@ -40,7 +42,13 @@ import java.util.stream.Stream;
  *     included (the driver prepares on the client side and escapes the value);
  *  6. the web part's list (WebPartStatements): every name is a statement of
  *     the catalog, none writes administrators, passkeys, codes or sessions (only the root does, A), and in
- *     the web part's mode the guard takes the list and refuses the rest of the catalog.
+ *     the web part's mode the guard takes the list and refuses the rest of the catalog;
+ *  7. the web part's procedures (0.8.2, second part): every MySQL statement of the list has one, and only
+ *     those; its call has the session and then the statement's parameters, its creation as many parameters
+ *     and one placeholder (the comment), the same name in the four texts; every one but the public ones is
+ *     bound to the session (the helper with a real permission, or the session's own row); the idle time is
+ *     WebSessions.IDLE_SECONDS; no procedure gives the DKIM private keys or the password hashes and copies,
+ *     save the two of Show password; and the reads give no "*" of a table.
  *
  * Usage (on the VM, from the project folder for part 3):
  *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.SqlCatalogTest
@@ -281,6 +289,62 @@ public class SqlCatalogTest {
         check("  and refuses the rest of the catalog: creating a session, an administrator, a migration",
                 !CatalogGuard.allowed(SqlCatalog.SESSION_CREATE) && !CatalogGuard.allowed(SqlCatalog.AUTH_CREATE_ADMIN)
                 && !CatalogGuard.allowed(SqlCatalog.MAIL_CREATE_PANEL_SESSIONS) && !CatalogGuard.allowed(SqlCatalog.AUTH_CODE_CONSOLE_LOGIN_INSERT));
+
+        System.out.println("\n== 7. The web part's procedures ==");
+        java.util.Set<String> mysqlStatements = new java.util.TreeSet<>(), withRoutine = new java.util.TreeSet<>();
+        for (String name : WebPartStatements.NAMES) if (!name.startsWith("CONFIG_")) mysqlStatements.add(name);
+        java.util.Map<String, String> nameOf = new java.util.HashMap<>();
+        for (Field f : SqlCatalog.class.getFields()) if (f.getType() == String.class) nameOf.put((String) f.get(null), f.getName());
+        List<String> shape = new ArrayList<>(), unbound = new ArrayList<>(), secrets = new ArrayList<>(), star = new ArrayList<>();
+        java.util.Set<String> routineNames = new java.util.HashSet<>();
+        Pattern helper = Pattern.compile("CALL web_session_admin\\(p_session, '([a-z.,]*)', v_admin\\)");
+        java.util.Set<String> publicOnes = java.util.Set.of("check_session", "has_admin", "get_setting", "log_audit_event", "list_domain_names");
+        for (WebPartStatements.Routine r : WebPartStatements.ROUTINES) {
+            String statement = nameOf.get(r.statement());
+            withRoutine.add(statement);
+            Matcher call = Pattern.compile("CALL ([a-z_]+)\\(([?, ]*)\\)").matcher(r.call());
+            String routine = call.matches() ? call.group(1) : "?";
+            routineNames.add(routine);
+            long params = r.statement().chars().filter(ch -> ch == '?').count();
+            long callParams = r.call().chars().filter(ch -> ch == '?').count();
+            int createParams = r.create().split("\\b(IN|OUT) p_").length - 1;
+            boolean ok = call.matches() && callParams == params + 1 && createParams == params + 1
+                    && r.create().chars().filter(ch -> ch == '?').count() == 1
+                    && r.create().startsWith("CREATE DEFINER = 'mailpanel_routines'@'localhost' PROCEDURE " + routine + "(IN p_session CHAR(64) CHARACTER SET ascii")
+                    && r.create().contains(" COMMENT ? SQL SECURITY DEFINER\n") && r.create().endsWith("END")
+                    && r.drop().equals("DROP PROCEDURE IF EXISTS " + routine)
+                    && r.grant().equals("GRANT EXECUTE ON PROCEDURE " + routine + " TO 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'")
+                    && r.read() == r.create().replaceAll("(?s).*\nBEGIN\n", "").lines()
+                            .filter(l -> !l.contains("DECLARE") && !l.contains("CALL web_session_admin") && !l.trim().startsWith("IF ")
+                                    && !l.contains("SIGNAL") && !l.trim().equals("END IF;")).findFirst().orElse("").trim().startsWith("SELECT");
+            if (!ok) shape.add(statement + " -> " + routine);
+            Matcher h = helper.matcher(r.create());
+            boolean permission = h.find() && (h.group(1).isEmpty() ? r.create().contains("WHERE id = v_admin")
+                    : java.util.Arrays.stream(h.group(1).split(",")).allMatch(AuthStore.ALL_PERMISSIONS::contains));
+            boolean ownRow = r.create().contains("s.token_hash = p_session AND s.expires_at > UTC_TIMESTAMP()");
+            if (!publicOnes.contains(routine) && !permission && !ownRow) unbound.add(routine);
+            String body = r.create().replace("(d.dkim_private_key IS NOT NULL AND d.dkim_private_key <> '') AS has_dkim", "");
+            boolean showPassword = routine.equals("get_mailbox_vault_copy") || routine.equals("get_mailbox_password_hash");
+            if (r.read() && (body.contains("private_key") || (!showPassword && body.matches("(?s).*SELECT((?!\\bFROM\\b).)*\\bpassword(_encrypted)?\\b.*"))))
+                secrets.add(routine);
+            if (body.matches("(?s).*(\\.\\*|SELECT \\*).*")) star.add(routine);
+        }
+        check("every MySQL statement of the web's list has a procedure, and only those " + mysqlStatements.size(),
+                mysqlStatements.equals(withRoutine) && WebPartStatements.ROUTINES.size() == mysqlStatements.size());
+        check("a name each, and every name in English words with underscores (" + routineNames.size() + ")",
+                routineNames.size() == WebPartStatements.ROUTINES.size() && routineNames.stream().allMatch(n -> n.matches("[a-z]+(_[a-z]+)+")));
+        check("the call has the session and the statement's parameters, the creation as many and the comment, the same name"
+                + " in the four texts, and a read is a read" + (shape.isEmpty() ? "" : " " + shape), shape.isEmpty());
+        check("every procedure but the public ones is bound to the session" + (unbound.isEmpty() ? "" : " " + unbound), unbound.isEmpty());
+        check("the idle time of the procedures is WebSessions.IDLE_SECONDS (" + org.mail_panel.webserver.WebSessions.IDLE_SECONDS + ")",
+                SqlCatalog.WEB_CREATE_SESSION_ADMIN.contains("INTERVAL " + org.mail_panel.webserver.WebSessions.IDLE_SECONDS + " SECOND")
+                && WebPartStatements.ROUTINES.stream().filter(r -> r.create().contains("INTERVAL") && r.create().contains("last_seen_at"))
+                        .allMatch(r -> r.create().contains("INTERVAL " + org.mail_panel.webserver.WebSessions.IDLE_SECONDS + " SECOND")));
+        check("no DKIM private key, no password hash or copy out of the database, save Show password's two" + (secrets.isEmpty() ? "" : " " + secrets),
+                secrets.isEmpty());
+        check("no read gives every column of a table (*)" + (star.isEmpty() ? "" : " " + star), star.isEmpty());
+        check("the helper is not the web's: nobody gets EXECUTE on it", WebPartStatements.ROUTINES.stream()
+                .noneMatch(r -> r.grant().contains("web_session_admin")));
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         System.exit(failed == 0 ? 0 : 1);

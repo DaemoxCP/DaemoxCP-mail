@@ -66,6 +66,25 @@ public class MailDatabase {
 
     private java.util.function.Supplier<String> passwordSource;
 
+    /**
+     * La parte web con il suo utente MySQL (WebDbAccess.WEB_USER): ogni istruzione diventa la chiamata della sua
+     * procedura (CatalogGuard.openRoutines). L'utente puo' solo chiamarle: niente creazione del database
+     * all'avvio della connessione, che il driver farebbe con createDatabaseIfNotExist.
+     */
+    private boolean routines;
+
+    public void useRoutines(String user, java.util.function.Supplier<String> password) {
+        this.routines = true;
+        this.username = user;
+        this.passwordSource = password;
+        this.password = password.get();
+    }
+
+    /** Vero se la connessione e' quella a procedure della parte web. */
+    public boolean usesRoutines() {
+        return routines;
+    }
+
     /** La password per il prossimo collegamento: quella della fonte se ne da' una, altrimenti l'ultima. */
     private String currentPassword() {
         if (passwordSource != null) {
@@ -111,7 +130,7 @@ public class MailDatabase {
     public boolean connect() {
         boolean again = connection != null;
         try {
-            connection = CatalogGuard.open(databaseUrl(), username, currentPassword());
+            connection = open();
             connected = true;
             if (again) System.out.println("Connected to MySQL again.");
             return true;
@@ -130,12 +149,28 @@ public class MailDatabase {
     }
 
     /**
+     * Il database del pannello per chi non lo crea: l'utente della web, e la root di MySQL che ci mette procedure
+     * e permessi (WebDbAccess). Le istruzioni senza database scritto (GRANT ... ON *, CREATE PROCEDURE) valgono qui.
+     */
+    public String existingDatabaseUrl() {
+        return String.format(
+            "jdbc:mysql://%s:%d/%s?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&autoReconnect=true",
+            host, port, database
+        );
+    }
+
+    private Connection open() throws SQLException {
+        return routines ? CatalogGuard.openRoutines(existingDatabaseUrl(), username, currentPassword())
+                : CatalogGuard.open(databaseUrl(), username, currentPassword());
+    }
+
+    /**
      * Una connessione tutta per chi la chiede, che la chiude. Serve alle transazioni: la
      * connessione condivisa la usano anche i lavori in background (rapporto, DKIM, MTA-STS), e con
      * l'autocommit spento i loro comandi finirebbero dentro la transazione di un altro.
      */
     private Connection ownConnection() throws SQLException {
-        return CatalogGuard.open(databaseUrl(), username, currentPassword());
+        return open();
     }
 
     /**
@@ -253,7 +288,7 @@ public class MailDatabase {
         "email_statistics",                                                   // -> mailboxes, domains
         "aliases", "mailboxes",                                               // -> domains
         "dkim_rotation_history", "domains", "cloudflare_accounts",
-        "audit_log", "rate_limits", "panel_settings", "installed_components", "panel_admin",
+        "audit_log", "rate_limits", "panel_settings", "panel_role_permissions", "installed_components", "panel_admin",
         "virtual_aliases", "virtual_users", "virtual_domains"
     );
 
@@ -531,6 +566,24 @@ public class MailDatabase {
     }
 
     /** La colonna della lingua in panel_admin, per le installazioni di prima (NULL: mai scelta). */
+    /**
+     * Le colonne e le tabelle aggiunte dalle versioni successive, per le installazioni di prima. Le chiama la root
+     * all'avvio (SSLMailServer) e prima di preparare l'utente MySQL della parte web (WebDbAccess), i cui permessi
+     * per colonna le vogliono gia' li'. Non fanno niente se ci sono gia'.
+     */
+    public void ensureColumnUpgrades() {
+        ensureMailboxReceiveEnabledColumn();
+        // Cifratura password mailbox per recovery dal pannello
+        ensureMailboxPasswordVaultColumns();
+        ensureThemeColumn();
+        // La lingua scelta dall'amministratore (per le installazioni di prima)
+        ensureLanguageColumn();
+        ensureDkimRotationColumns();
+        // Migra il token Cloudflare legacy se presente
+        ensureCloudflareAccountsSchema();
+        ensureDkimRotationHistoryTable();
+    }
+
     public void ensureLanguageColumn() {
         try (Statement stmt = getConnection().createStatement(); ResultSet rs = stmt.executeQuery(SqlCatalog.MAIL_ENSURE_LANGUAGE_COLUMN)) {
             if (rs.next() && rs.getInt(1) == 0) {
@@ -1031,6 +1084,16 @@ public class MailDatabase {
         return null;
     }
 
+    /** I nomi dei domini ospitati, in minuscolo come stanno nel database (autoconfig, MTA-STS: DomainCache). */
+    public List<String> getDomainNames() throws SQLException {
+        List<String> names = new ArrayList<>();
+        try (Statement stmt = getConnection().createStatement();
+             ResultSet rs = stmt.executeQuery(SqlCatalog.MAIL_GET_DOMAIN_NAMES)) {
+            while (rs.next()) names.add(rs.getString(1));
+        }
+        return names;
+    }
+
     public List<Domain> getDomains() throws SQLException {
         List<Domain> domains = new ArrayList<>();
         try (Statement stmt = getConnection().createStatement();
@@ -1053,19 +1116,22 @@ public class MailDatabase {
         d.active = rs.getBoolean("active");
         d.createdAt = rs.getTimestamp("created_at");
         d.dkimSelector = rs.getString("dkim_selector");
-        d.dkimPrivateKey = rs.getString("dkim_private_key");
         d.dkimPublicKey = rs.getString("dkim_public_key");
-        d.hasDkim = d.dkimPrivateKey != null && !d.dkimPrivateKey.isEmpty();
+        // Le chiavi private ci sono solo per la root: le procedure della parte web le lasciano nel database e
+        // dicono soltanto se c'e' la chiave (has_dkim).
+        boolean privateKeys = hasColumn(rs, "dkim_private_key");
+        d.dkimPrivateKey = privateKeys ? rs.getString("dkim_private_key") : null;
+        d.hasDkim = privateKeys ? d.dkimPrivateKey != null && !d.dkimPrivateKey.isEmpty() : rs.getBoolean("has_dkim");
         // Pending rotation
         d.dkimPendingSelector = rs.getString("dkim_pending_selector");
-        d.dkimPendingPrivateKey = rs.getString("dkim_pending_private_key");
+        d.dkimPendingPrivateKey = privateKeys ? rs.getString("dkim_pending_private_key") : null;
         d.dkimPendingPublicKey = rs.getString("dkim_pending_public_key");
         d.dkimRotationState = rs.getString("dkim_rotation_state");
         d.dkimRotationStartedAt = rs.getTimestamp("dkim_rotation_started_at");
         d.dkimRotationActivatedAt = rs.getTimestamp("dkim_rotation_activated_at");
         // Previous key (grace period)
         d.dkimPreviousSelector = rs.getString("dkim_previous_selector");
-        d.dkimPreviousPrivateKey = rs.getString("dkim_previous_private_key");
+        d.dkimPreviousPrivateKey = privateKeys ? rs.getString("dkim_previous_private_key") : null;
         d.dkimPreviousPublicKey = rs.getString("dkim_previous_public_key");
         // Cloudflare automation (può non esistere su DB legacy se ensureDkimRotationColumns non è ancora girato)
         try { d.dkimDnsZoneId            = rs.getString("dkim_dns_zone_id"); } catch (SQLException ignore) {}
@@ -1682,6 +1748,15 @@ public class MailDatabase {
             }
         }
         return mailboxes;
+    }
+
+    /** Il risultato ha questa colonna? */
+    private static boolean hasColumn(ResultSet rs, String name) throws SQLException {
+        java.sql.ResultSetMetaData md = rs.getMetaData();
+        for (int i = 1; i <= md.getColumnCount(); i++) {
+            if (name.equalsIgnoreCase(md.getColumnLabel(i))) return true;
+        }
+        return false;
     }
 
     private Mailbox mapMailbox(ResultSet rs) throws SQLException {

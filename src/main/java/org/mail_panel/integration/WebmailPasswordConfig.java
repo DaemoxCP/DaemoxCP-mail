@@ -32,6 +32,8 @@ public final class WebmailPasswordConfig {
     static final String END = "// END mail-panel: webmail password changes";
     /** Il percorso della rotta sul pannello. */
     public static final String PATH = "/api/internal/mailbox-password";
+    /** La rotta della copia nel vault dopo un accesso alla webmail (RoundcubeSsoManager, plugin mailpanel_sso). */
+    public static final String VAULT_PATH = "/api/internal/mailbox-vault";
 
     /** Le righe del plugin password che il blocco sostituisce, scritte da noi o a mano. */
     private static final Pattern OLD_LINE = Pattern.compile(

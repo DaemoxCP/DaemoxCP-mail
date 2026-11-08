@@ -641,7 +641,7 @@ class mailpanel_sso extends rcube_plugin
     private String generatePluginConfig() {
         String base64Secret = Base64.getEncoder().encodeToString(secretKey.getEncoded());
         String vault = panelPort > 0
-                ? "$config['mailpanel_vault_url'] = 'https://127.0.0.1:" + panelPort + "/api/internal/mailbox-vault';\n"
+                ? "$config['mailpanel_vault_url'] = 'https://127.0.0.1:" + panelPort + WebmailPasswordConfig.VAULT_PATH + "';\n"
                   + "$config['mailpanel_vault_key'] = '" + org.mail_panel.security.PanelSecrets.webmailKey() + "';\n"
                 : "";
         return String.format("""

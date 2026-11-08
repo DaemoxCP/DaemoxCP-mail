@@ -39,9 +39,10 @@ public class DomainCache {
 
         Set<String> fresh = new LinkedHashSet<>();
         try {
-            for (var d : Main.mailDatabase.getDomains())
-                if (d.domain != null && !d.domain.isBlank())
-                    fresh.add(d.domain.trim().toLowerCase(Locale.ROOT));
+            // Solo i nomi: queste rotte sono pubbliche, e nella parte web la loro procedura non chiede una sessione.
+            for (String d : Main.mailDatabase.getDomainNames())
+                if (d != null && !d.isBlank())
+                    fresh.add(d.trim().toLowerCase(Locale.ROOT));
         } catch (Exception e) {
             // Se il database non risponde si tiene la copia vecchia invece di svuotare
             // l'elenco: rispondere con dati di trenta secondi fa e' meglio che rispondere
