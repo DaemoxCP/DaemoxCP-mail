@@ -812,6 +812,22 @@ password written in the files really enter MySQL; with MySQL root refused the fi
 
     java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.MailDbUsersMysqlTest
 
+**UpdateManagerSqlTest** — the update manager's questions to MySQL through JDBC, on
+the test MySQL: every statement it uses answers as the mysql client did (one row per line, the columns separated by a
+tab, "" when MySQL refuses), as the panel's user and as root; an address with a quote is a value and finds nothing;
+the panel's user cannot read MySQL's accounts; a text outside the catalog and a wrong password give "".
+
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdateManagerSqlTest
+
+**MysqlRootTest** — MySQL's root password (MysqlRoot), as root on the VM with `-De2e.vm=yes`: a throwaway MySQL of
+its own (root without a password, as on the servers installed before) and a secrets folder of its own, set before
+anything else. The mysql client gets only statements of the catalog; the repair sets the password through JDBC (host
+and password as parameters), then root does not get in without it from the socket or from TCP; the second time it
+does nothing; a password set by hand is never replaced; two root accounts are fixed; with a secrets file that cannot
+be written MySQL is not touched.
+
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.MysqlRootTest
+
 **RootDistrustsDataTest** — the root part does not trust the names it reads from MySQL, which the
 web part can write. Names planted straight into MySQL, as a
 broken-into web part would: SafeNames' shapes; DKIM key paths with ".." or a quote refused; Sieve with

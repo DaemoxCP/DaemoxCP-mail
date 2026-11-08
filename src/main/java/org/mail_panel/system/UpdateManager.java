@@ -2579,7 +2579,7 @@ public final class UpdateManager {
             // con le STESSE credenziali, su una casella vera.
             job.write("");
             job.write(I18n.tr("server.um.x.authTest"));
-            String mailbox = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
+            String mailbox = mysqlOut(org.mail_panel.database.SqlCatalog.UM_FIRST_ACTIVE_MAILBOX).trim();
             if (mailbox.isEmpty()) {
                 job.write(I18n.tr("server.um.runDovecotRegeneration.7"));
                 job.status = "completed";
@@ -2594,7 +2594,7 @@ public final class UpdateManager {
             }
             // La stessa condizione della password_query scritta nel file, senza estrarre la
             // password: interessa che la riga ci sia e sia raggiungibile, non il suo contenuto.
-            String found = mysqlOut("SELECT COUNT(*) FROM mailboxes WHERE email='" + mailbox + "' AND active=1;").trim();
+            String found = mysqlOut(org.mail_panel.database.SqlCatalog.UM_ACTIVE_MAILBOX_COUNT, mailbox).trim();
             if ("1".equals(found)) {
                 job.write(I18n.tr("server.um.runDovecotRegeneration.10", java.util.Map.of("mailbox", String.valueOf(mailbox))));
                 job.status = "completed";
@@ -2619,11 +2619,12 @@ public final class UpdateManager {
     }
 
     /**
-     * Esegue una query con le credenziali del pannello, prese dalla configurazione.
-     * La password passa dall'ambiente, non dalla riga di comando: altrimenti comparirebbe
-     * nell'elenco dei processi visibile a chiunque sul server.
+     * Una domanda del catalogo con le credenziali del pannello, prese dalla configurazione, da JDBC: i
+     * valori come parametri. Le righe una per riga e le colonne separate da un tab, come le scriveva il
+     * client mysql che si usava prima; "" se MySQL non risponde. Prima passava da "sh -c" col testo
+     * dell'SQL dentro la riga di comando.
      */
-    private static String mysqlOut(String sql) {
+    private static String mysqlOut(String sql, Object... params) {
         String user = "mailpanel", pass = "", db = "mailserver", host = "127.0.0.1", port = "3306";
         try (java.sql.ResultSet rs = org.mail_panel.Main.dbManager.get_data_config()) {
             if (rs.next()) {
@@ -2638,21 +2639,36 @@ public final class UpdateManager {
         } catch (Exception ignored) {}
         if (!user.matches("[A-Za-z0-9_]{1,64}") || !db.matches("[A-Za-z0-9_]{1,64}")
                 || !host.matches("[A-Za-z0-9._-]{1,128}")) return "";
-        String q = sql.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$").replace("`", "\\`");
-        try {
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c",
-                    "mysql -u " + user + " -h " + host + " -P " + port + " -N -B " + db
-                    + " -e \"" + q + "\" 2>/dev/null");
-            org.mail_panel.util.Shell.applyPath(pb);
-            pb.environment().put("MYSQL_PWD", pass);
-            Process pr = pb.start();
+        return jdbcRows(host, port, db, user, pass, sql, params);
+    }
+
+    /**
+     * Una domanda del catalogo da JDBC, con quell'utente su quel database: le righe una per riga, le colonne
+     * separate da un tab; "" se non entra o MySQL rifiuta. Host, porta e database sono gia' passati da una forma
+     * stretta; i valori vanno come parametri.
+     */
+    static String jdbcRows(String host, String port, String db, String user, String password, String sql, Object... params) {
+        String url = "jdbc:mysql://" + host + ":" + port + "/" + db + "?useSSL=true&requireSSL=false"
+                + "&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectTimeout=10000&socketTimeout=30000";
+        try (java.sql.Connection c = org.mail_panel.database.CatalogGuard.open(url, user, password == null ? "" : password);
+             java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
             StringBuilder sb = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(pr.getInputStream(), StandardCharsets.UTF_8))) {
-                String l; while ((l = br.readLine()) != null) sb.append(l).append('\n');
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                int n = rs.getMetaData().getColumnCount();
+                while (rs.next()) {
+                    for (int i = 1; i <= n; i++) {
+                        if (i > 1) sb.append('\t');
+                        String v = rs.getString(i);
+                        sb.append(v == null ? "NULL" : v);
+                    }
+                    sb.append('\n');
+                }
             }
-            pr.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
             return sb.toString().trim();
-        } catch (Exception e) { return ""; }
+        } catch (java.sql.SQLException | RuntimeException e) {
+            return "";
+        }
     }
 
     /**
@@ -2676,13 +2692,13 @@ public final class UpdateManager {
      * che non ci sia nessuno da salvare.
      */
     private static boolean canReadMysqlUsers() {
-        if (!mysqlRootOut("SELECT 1 FROM mysql.user LIMIT 1;").trim().isEmpty()) return true;
-        return !mysqlOut("SELECT 1 FROM mysql.user LIMIT 1;").trim().isEmpty();
+        if (!mysqlRootOut(org.mail_panel.database.SqlCatalog.UM_CAN_READ_ACCOUNTS).trim().isEmpty()) return true;
+        return !mysqlOut(org.mail_panel.database.SqlCatalog.UM_CAN_READ_ACCOUNTS).trim().isEmpty();
     }
 
     /** La lettura di mysql.user, con l'utenza che riesce a farla. */
     private static String usersWithNativePlugin() {
-        String q = "SELECT CONCAT(user,'@',host) FROM mysql.user WHERE plugin='mysql_native_password';";
+        String q = org.mail_panel.database.SqlCatalog.UM_NATIVE_PASSWORD_ACCOUNTS;
         String r = mysqlRootOut(q);
         return r.isEmpty() ? mysqlOut(q) : r;
     }
@@ -2696,7 +2712,7 @@ public final class UpdateManager {
      * davvero. Serve anche a vedere sha256_password, deprecato anche lui.
      */
     private static JSONArray pluginInUse() {
-        String q = "SELECT CONCAT(plugin,' ',COUNT(*)) FROM mysql.user GROUP BY plugin;";
+        String q = org.mail_panel.database.SqlCatalog.UM_AUTH_PLUGINS;
         String out = mysqlRootOut(q);
         if (out.isEmpty()) out = mysqlOut(q);
         JSONArray arr = new JSONArray();
@@ -3121,7 +3137,7 @@ public final class UpdateManager {
 
         // --- 4. Il processo in esecuzione e' quello del pacchetto? ---
         boolean su = ok("service mysql-server status", 15);
-        String runVer = su ? mysqlOut("SELECT VERSION();") : "";
+        String runVer = su ? mysqlOut(org.mail_panel.database.SqlCatalog.MAIL_SERVER_VERSION) : "";
         if (!su) {
             addCheck(checks, "running", I18n.tr("server.um.x.mysqlRunning"), "block",
                     I18n.tr("server.um.mysql84Preflight.12"));
@@ -3194,9 +3210,9 @@ public final class UpdateManager {
         // --- 8. Inventario, per riconfrontare a fine migrazione ---
         long schemes = 0, tables = 0, mailboxes = 0;
         if (su && !runVer.isEmpty()) {
-            schemes = number(mysqlOut("SELECT COUNT(*) FROM information_schema.schemata;"));
-            tables = number(mysqlOut("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','performance_schema','mysql','sys');"));
-            mailboxes = number(mysqlOut("SELECT COUNT(*) FROM mailboxes;"));
+            schemes = number(mysqlOut(org.mail_panel.database.SqlCatalog.UM_COUNT_SCHEMATA));
+            tables = number(mysqlOut(org.mail_panel.database.SqlCatalog.UM_COUNT_USER_TABLES));
+            mailboxes = number(mysqlOut(org.mail_panel.database.SqlCatalog.UM_COUNT_MAILBOXES));
         }
         r.put("schemaCount", schemes).put("tableCount", tables).put("mailboxCount", mailboxes);
         addCheck(checks, "inventory", I18n.tr("server.um.mysql84Preflight.24"), schemes > 0 ? "ok" : "review",
@@ -3373,7 +3389,7 @@ public final class UpdateManager {
             schemesBefore = pf.optLong("schemaCount", 0);
             tablesBefore = pf.optLong("tableCount", 0);
             mailboxesBefore = pf.optLong("mailboxCount", 0);
-            testMailbox = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
+            testMailbox = mysqlOut(org.mail_panel.database.SqlCatalog.UM_FIRST_ACTIVE_MAILBOX).trim();
             job.write("  " + srvPkg + " + " + cliPkg + " -> mysql84-server + mysql84-client");
             job.write(I18n.tr("server.um.runMigration84.5", java.util.Map.of("schemasBefore", String.valueOf(schemesBefore), "tablesBefore", String.valueOf(tablesBefore), "mailboxesBefore", String.valueOf(mailboxesBefore))));
             job.write("  " + (testMailbox.isEmpty()
@@ -3503,22 +3519,22 @@ public final class UpdateManager {
             ok("service mysql-server start", 120);
             String newVer = "";
             for (int i = 0; i < 200; i++) {
-                newVer = mysqlOut("SELECT VERSION();").trim();
+                newVer = mysqlOut(org.mail_panel.database.SqlCatalog.MAIL_SERVER_VERSION).trim();
                 if (!newVer.isEmpty()) break;
                 try { Thread.sleep(3000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
                 if (i % 5 == 4) job.write(I18n.tr("server.um.runMigration84.22", java.util.Map.of("p", String.valueOf(((i + 1) * 3)))));
             }
             if (newVer.isEmpty()) throw new IllegalStateException("MySQL 8.4 does not answer: the copy is in " + backupDir);
             mysqlStopped = false;
-            job.write("    SELECT VERSION() = " + newVer);
+            job.write("    VERSION() = " + newVer);
             if (!newVer.startsWith("8.4")) throw new IllegalStateException("the running version is " + newVer + ", not an 8.4");
 
             job.advance(10, TOT);
             job.write("");
             job.write("[10/" + TOT + "] " + I18n.tr("server.um.x.inventory"));
-            long sd = number(mysqlOut("SELECT COUNT(*) FROM information_schema.schemata;"));
-            long td = number(mysqlOut("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','performance_schema','mysql','sys');"));
-            long cd = number(mysqlOut("SELECT COUNT(*) FROM mailboxes;"));
+            long sd = number(mysqlOut(org.mail_panel.database.SqlCatalog.UM_COUNT_SCHEMATA));
+            long td = number(mysqlOut(org.mail_panel.database.SqlCatalog.UM_COUNT_USER_TABLES));
+            long cd = number(mysqlOut(org.mail_panel.database.SqlCatalog.UM_COUNT_MAILBOXES));
             job.write(I18n.tr("server.um.runMigration84.23", java.util.Map.of("schemasBefore", String.valueOf(schemesBefore), "schemasAfter", String.valueOf(sd), "tablesBefore", String.valueOf(tablesBefore), "tablesAfter2", String.valueOf(td), "mailboxesBefore", String.valueOf(mailboxesBefore), "mailboxesAfter", String.valueOf(cd))));
             boolean inventoryOk = sd >= schemesBefore && td >= tablesBefore && cd >= mailboxesBefore;
             if (!inventoryOk) job.write(I18n.tr("server.um.runMigration84.24", java.util.Map.of("backupDir", String.valueOf(backupDir))));
@@ -3586,8 +3602,7 @@ public final class UpdateManager {
 
                 // Il percorso SQL di Dovecot si prova cosi': la stessa query che sta nel suo
                 // dovecot-sql.conf, eseguita con le stesse credenziali.
-                String lines = mysqlOut("SELECT COUNT(*) FROM mailboxes WHERE email='" + testMailbox
-                        + "' AND active=1;").trim();
+                String lines = mysqlOut(org.mail_panel.database.SqlCatalog.UM_ACTIVE_MAILBOX_COUNT, testMailbox).trim();
                 boolean sOk = "1".equals(lines);
                 job.write("    " + (sOk
                         ? I18n.tr("server.um.x.dcAuthYes", java.util.Map.of("mailbox", String.valueOf(testMailbox)))
@@ -3661,28 +3676,16 @@ public final class UpdateManager {
         }
     }
 
-    /** Query sul database della webmail, con le credenziali che usa Roundcube stesso. */
-    private static String rcQuery(String sql) {
+    /** Una domanda del catalogo sul database della webmail, con le credenziali che usa Roundcube stesso (JDBC). */
+    private static String rcQuery(String sql, Object... params) {
         JSONObject d = dsnRoundcube();
         if (!d.optBoolean("ok")) return "";
         String u = d.getString("user"), h = d.getString("host"), db = d.getString("db");
         if (!u.matches("[A-Za-z0-9_]{1,64}") || !db.matches("[A-Za-z0-9_]{1,64}")
-                || !h.matches("[A-Za-z0-9._:-]{1,128}")) return "";
+                || !h.matches("[A-Za-z0-9._-]{1,128}(:[0-9]{1,5})?")) return "";
         String host = h.contains(":") ? h.substring(0, h.indexOf(':')) : h;
-        String q = sql.replace("\"", "");
-        try {
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c",
-                    "mysql -u " + u + " -h " + host + " -N -B " + db + " -e \"" + q + "\" 2>/dev/null");
-            org.mail_panel.util.Shell.applyPath(pb);
-            pb.environment().put("MYSQL_PWD", d.getString("pass"));
-            Process pr = pb.start();
-            StringBuilder sb = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(pr.getInputStream(), StandardCharsets.UTF_8))) {
-                String l; while ((l = br.readLine()) != null) sb.append(l).append('\n');
-            }
-            pr.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
-            return sb.toString().trim();
-        } catch (Exception e) { return ""; }
+        String port = h.contains(":") ? h.substring(h.indexOf(':') + 1) : "3306";
+        return jdbcRows(host, port, db, u, d.getString("pass"), sql, params);
     }
 
     /**
@@ -3776,8 +3779,7 @@ public final class UpdateManager {
                     I18n.tr("server.um.x.rcNoCreds", java.util.Map.of("error", String.valueOf(dsn.optString("error", "")))));
             block = true;
         } else {
-            tables = number(rcQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"
-                    + dsn.getString("db") + "';"));
+            tables = number(rcQuery(org.mail_panel.database.SqlCatalog.UM_COUNT_SCHEMA_TABLES, dsn.getString("db")));
             r.put("db", dsn.getString("db")).put("dbUser", dsn.getString("user")).put("tables", tables);
             if (tables == 0) {
                 addCheck(checks, "dsn", I18n.tr("server.um.roundcubePreflight.9"), "block",
@@ -3980,7 +3982,7 @@ public final class UpdateManager {
      * momento in cui e' l'unica rimasta.
      */
     private static boolean mysqlRootAvailable() {
-        return "1".equals(mysqlRootOut("SELECT 1;").trim());
+        return "1".equals(mysqlRootOut(org.mail_panel.database.SqlCatalog.MYSQL_ROOT_PING).trim());
     }
 
     /** La parte di connessione della riga, secondo l'utente scelto dal modo. */
@@ -3994,8 +3996,7 @@ public final class UpdateManager {
 
     /** Perche' mysqldump fa quel FLUSH: si guarda il server, non si deduce. */
     private static String gtidState() {
-        String r = mysqlRootOut("SELECT CONCAT('gtid_mode=', @@gtid_mode, "
-                + "'  log_bin=', @@log_bin, '  enforce_gtid_consistency=', @@enforce_gtid_consistency);");
+        String r = mysqlRootOut(org.mail_panel.database.SqlCatalog.UM_GTID_STATE);
         return r == null ? "" : r.trim();
     }
 
@@ -4707,8 +4708,7 @@ public final class UpdateManager {
             job.advance(8, TOT);
             job.write("");
             job.write(I18n.tr("server.um.runRoundcubeUpdate.14", java.util.Map.of("total", String.valueOf(TOT))));
-            long tablesAfter = number(rcQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"
-                    + pf.optString("db") + "';"));
+            long tablesAfter = number(rcQuery(org.mail_panel.database.SqlCatalog.UM_COUNT_SCHEMA_TABLES, pf.optString("db")));
             job.write(I18n.tr("server.um.runRoundcubeUpdate.15", java.util.Map.of("tablesBefore", String.valueOf(tablesBefore), "tablesAfter", String.valueOf(tablesAfter))));
             boolean tabOk = tablesAfter >= tablesBefore;
             if (!tabOk) job.write(I18n.tr("server.um.runRoundcubeUpdate.16"));
@@ -10945,7 +10945,7 @@ public final class UpdateManager {
                 j.write("    " + I18n.tr("server.um.x.libOwner", java.util.Map.of("p", String.valueOf(libAfter.isEmpty() ? I18n.tr("server.um.x.nobodyMissing") : libAfter))));
                 JSONArray broken = packagesWithMissingLibraries().getJSONArray("packages");
                 j.write(I18n.tr("server.um.startForeignClientCleanup.10", java.util.Map.of("length", String.valueOf(broken.length()))));
-                String mailbox = mysqlOut("SELECT email FROM mailboxes WHERE active=1 LIMIT 1;").trim();
+                String mailbox = mysqlOut(org.mail_panel.database.SqlCatalog.UM_FIRST_ACTIVE_MAILBOX).trim();
                 boolean postfixOk = true;
                 if (mailbox.matches("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}")) {
                     String q = sh("postmap -q '" + mailbox + "' mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf 2>&1", 60);

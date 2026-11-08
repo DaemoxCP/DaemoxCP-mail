@@ -161,7 +161,7 @@ public final class MysqlListen {
 
     static boolean waitForMysql() throws InterruptedException {
         for (int i = 0; i < 60; i++) {
-            if ("1".equals(MysqlRoot.query("SELECT 1;"))) return true;
+            if ("1".equals(MysqlRoot.query(org.mail_panel.database.SqlCatalog.MYSQL_ROOT_PING))) return true;
             Thread.sleep(1000);
         }
         return false;
