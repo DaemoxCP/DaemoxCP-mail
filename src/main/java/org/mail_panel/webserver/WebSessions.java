@@ -61,6 +61,24 @@ public final class WebSessions {
     static {
         RANDOM.nextBytes(RUN_KEY);
     }
+    private static volatile boolean runKeyAdopted = false;
+
+    /**
+     * Col pannello separato la chiave e' quella della parte root, che crea le sessioni: la web la chiede alla root all'avvio (l'operazione chiusa session-key del socket) per
+     * riconoscere le sessioni e i token CSRF. Una copia, mai su disco.
+     */
+    public static byte[] runKeyForWebPart() {
+        return RUN_KEY.clone();
+    }
+
+    /** La parte web adotta la chiave della root, una volta sola, prima di servire. */
+    public static synchronized void adoptRunKey(byte[] key) {
+        if (key == null || key.length != RUN_KEY.length) throw new IllegalArgumentException("session key of the wrong size");
+        if (runKeyAdopted) throw new IllegalStateException("session key already adopted");
+        System.arraycopy(key, 0, RUN_KEY, 0, RUN_KEY.length);
+        java.util.Arrays.fill(key, (byte) 0);
+        runKeyAdopted = true;
+    }
     /** Un token: 32 byte casuali in base64url, senza "=". Tutto il resto non arriva al database. */
     private static final java.util.regex.Pattern TOKEN = java.util.regex.Pattern.compile("[A-Za-z0-9_-]{43}");
 

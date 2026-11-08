@@ -37,7 +37,10 @@ import java.util.stream.Stream;
  *     busy timeout of SQLite and database.BUSY_TIMEOUT_MS;
  *  5. with the test MySQL, as its root (-Dmysql.root=yes): the user that MailDatabase creates with
  *     CREATE USER ... IDENTIFIED BY ? gets in with exactly the password given, quotes and backslash
- *     included (the driver prepares on the client side and escapes the value).
+ *     included (the driver prepares on the client side and escapes the value);
+ *  6. the web part's list (WebPartStatements): every name is a statement of
+ *     the catalog, none writes administrators, passkeys, codes or sessions (only the root does, A), and in
+ *     the web part's mode the guard takes the list and refuses the rest of the catalog.
  *
  * Usage (on the VM, from the project folder for part 3):
  *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.SqlCatalogTest
@@ -250,6 +253,34 @@ public class SqlCatalogTest {
         } else {
             System.out.println("\n  (part 5 skipped: it creates MySQL users, turned on with -Dmysql.root=yes and the test MySQL's -Dmysql.port)");
         }
+
+        System.out.println("\n== 6. The web part's list ==");
+        List<String> unknown = new ArrayList<>();
+        for (String name : WebPartStatements.NAMES) {
+            try {
+                Field f = SqlCatalog.class.getField(name);
+                if (f.getType() != String.class) unknown.add(name);
+            } catch (NoSuchFieldException e) {
+                unknown.add(name);
+            }
+        }
+        check("every name of the list is a statement of the catalog " + unknown, unknown.isEmpty());
+        List<String> writesAuth = new ArrayList<>();
+        for (String name : WebPartStatements.NAMES) {
+            String sql = field(name).trim().toUpperCase(java.util.Locale.ROOT);
+            boolean write = !sql.startsWith("SELECT") && !sql.startsWith("PRAGMA");
+            if (write && sql.matches("(?s).*\\b(PANEL_ADMIN|ADMIN_PASSKEYS|PANEL_SESSIONS|LOGIN_CODE_EMAIL|LOGIN_CODE_CONSOLE|STEPUP_CODE|EMAIL_CHANGE_CODE)\\b.*")
+                    && !name.equals("SESSION_TOUCH") && !name.equals("MAIL_SET_ADMIN_THEME") && !name.equals("MAIL_SET_ADMIN_LANGUAGE"))
+                writesAuth.add(name);
+        }
+        check("none of them writes administrators, passkeys, codes or sessions, save the session's last activity "
+                + "and the administrator's theme and language " + writesAuth, writesAuth.isEmpty());
+        CatalogGuard.webPartOnly();
+        check("in the web part's mode the guard takes the list (the session check, the domains)",
+                CatalogGuard.allowed(SqlCatalog.SESSION_CHECK) && CatalogGuard.allowed(SqlCatalog.MAIL_GET_DOMAINS));
+        check("  and refuses the rest of the catalog: creating a session, an administrator, a migration",
+                !CatalogGuard.allowed(SqlCatalog.SESSION_CREATE) && !CatalogGuard.allowed(SqlCatalog.AUTH_CREATE_ADMIN)
+                && !CatalogGuard.allowed(SqlCatalog.MAIL_CREATE_PANEL_SESSIONS) && !CatalogGuard.allowed(SqlCatalog.AUTH_CODE_CONSOLE_LOGIN_INSERT));
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         System.exit(failed == 0 ? 0 : 1);

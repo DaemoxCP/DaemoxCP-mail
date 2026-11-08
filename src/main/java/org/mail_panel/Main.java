@@ -1332,10 +1332,16 @@ public class Main {
      *
      * @return falso se non e' partita: daemon(8) la riavvia, e la root dopo ANSWER_SECONDS torna al modo di oggi
      */
+    /** Vero nella parte web del pannello separato (--web-part). */
+    static volatile boolean webPart = false;
+
     private static boolean startWebPart() {
         nonInteractive = true;
-        // Da qui la parte web non lancia comandi di sistema, salvo i pochi suoi (Shell.webPartOnly).
+        webPart = true;
+        // Da qui la parte web non lancia comandi di sistema, salvo i pochi suoi (Shell.webPartOnly), e nel
+        // database fa solo le istruzioni del suo elenco (CatalogGuard).
         org.mail_panel.util.Shell.webPartOnly();
+        org.mail_panel.database.CatalogGuard.webPartOnly();
         if ("root".equals(System.getProperty("user.name"))) {
             System.err.println("--web-part is the panel's web part: the root part starts it as the user "
                     + org.mail_panel.system.PanelSeparation.USER + ", never as root.");
@@ -1375,6 +1381,14 @@ public class Main {
             } else {
                 System.out.println("[WARNING] Web part: could not connect to MySQL");
             }
+            // La chiave delle sessioni e' della root, che le crea (A): senza, la web non riconoscerebbe nessuna
+            // sessione, e non parte (daemon la riavvia).
+            byte[] sessionKey = SSLMailServer.sessionKeyFromRoot(30_000);
+            if (sessionKey == null) {
+                System.err.println("Web part: the root part did not give the session key");
+                return false;
+            }
+            org.mail_panel.webserver.WebSessions.adoptRunKey(sessionKey);
             SSLMailServer server = new SSLMailServer(port, certContent, keyContent, SSLMailServer.Mode.WEB_PART);
             server.start();
             System.out.println("Web part listening on https://" + host + ":" + port + " as " + System.getProperty("user.name")
@@ -1595,6 +1609,11 @@ public class Main {
      */
     public static synchronized void refreshSetupState() {
         if (!setupRequired || !mysqlAvailable || mailDatabase == null || !mailDatabase.hasAdminUser()) return;
+        // La parte web non migra niente: le tabelle dell'accesso le sistema la root, che sola le scrive (A).
+        if (webPart) {
+            setupRequired = false;
+            return;
+        }
         try {
             org.mail_panel.security.AuthStore.migrate();
             setupRequired = false;

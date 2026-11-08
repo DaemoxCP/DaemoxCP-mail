@@ -30,13 +30,16 @@ import java.util.concurrent.Executors;
  *
  *  1. a signed-in API goes through the web part's checks and reaches the root part, with who asked
  *     (administrator and session ids) and never the cookie, the token or the CSRF token;
- *  2. what the web part refuses never reaches the root: no session, no CSRF token, no permission; the
- *     account API stays in the web part;
+ *  2. what the web part refuses never reaches the root: no session, no CSRF token, no permission;
+ *  2b. the sign-in is decided by the root part: the web checks the
+ *     page token and forwards, the root verifies the code and creates the session, its cookie reaches
+ *     the browser; the account API and the sign-out go to the root; the web asks the root the session key;
  *  3. the root part checks by itself, with requests forged on its socket (what a broken-into web part
  *     could send): a viewer's session asking an administrator's action gets 403; a session with someone
- *     else's administrator id, or a revoked one, gets 401; a public route, the account API, a page, or
- *     a path that is not the route's get 404;
- *  4. a Set-Cookie from the root never reaches the browser; with the root part gone the web answers 503.
+ *     else's administrator id, or a revoked one, gets 401; a public route, a page, or a path that is not
+ *     the route's get 404;
+ *  4. a Set-Cookie from the root never reaches the browser, except the session cookie of a sign-in; with
+ *     the root part gone the web answers 503.
  *
  * Usage (on the VM, with the test MySQL of tests/README.md):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
@@ -72,6 +75,12 @@ public class SeparatedPanelTest {
         if (body != null) b.header("Content-Type", "application/json");
         b.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
         return http.send(b.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    static HttpResponse<String> signIn(String body, String preCookie) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create(base + "/api/login")).header("User-Agent", UA).header("Accept-Language", "en")
+                .header("Content-Type", "application/json").header("Cookie", WebSessions.PRE_COOKIE + "=" + preCookie)
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
     }
 
     static RootChannel.ResponseHead forge(Path sock, String route, String method, String path, String query, String body,
@@ -125,7 +134,8 @@ public class SeparatedPanelTest {
         check("the root part has the same routes, with the same permissions, as the web part", same);
         java.util.Set<String> forwarded = new java.util.TreeSet<>();
         root.routes().forEach((p, a) -> { if (a.kind() == Access.Kind.API && !SSLMailServer.WEB_LOCAL_API.contains(p)) forwarded.add(p); });
-        check("the root's closed list has exactly the routes the web part forwards (" + forwarded.size() + ")",
+        forwarded.add("/api/login");
+        check("the root's closed list has exactly the routes the web part forwards, the sign-in too (" + forwarded.size() + ")",
                 forwarded.equals(new java.util.TreeSet<>(RootGate.METHODS.keySet())));
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);
@@ -161,8 +171,9 @@ public class SeparatedPanelTest {
             RootChannel.Request got = seen.isEmpty() ? null : seen.get(seen.size() - 1);
             check("it reached the root part, with its route, query and who asked", got != null && got.route().equals("/api/panel_info")
                     && "action=uptime".equals(got.query()) && got.adminId() == boss.adminId() && got.sessionId() == boss.sessionId());
-            check("the root part never saw a Cookie, a CSRF token or a Host (" + seenHeaders + ")", seenHeaders.stream().noneMatch(h ->
-                    h.equalsIgnoreCase("Cookie") || h.equalsIgnoreCase("X-CSRF-Token") || h.equalsIgnoreCase("Host")));
+            check("the root part never saw a Cookie or a CSRF token (" + seenHeaders + ")", seenHeaders.stream().noneMatch(h ->
+                    h.equalsIgnoreCase("Cookie") || h.equalsIgnoreCase("X-CSRF-Token")));
+            check("  the Host passes, checked by the web part (the passkeys' rpId)", seenHeaders.stream().anyMatch(h -> h.equalsIgnoreCase("Host")));
             String sent = got == null ? "" : got.toString() + new String(got.body(), StandardCharsets.UTF_8);
             check("the session token is nowhere in what the root received", !sent.contains(boss.token()) && !sent.contains(boss.csrf()));
             int beforeLocal = seen.size();
@@ -202,9 +213,34 @@ public class SeparatedPanelTest {
             check("no CSRF token: 403 (" + r.statusCode() + ")", r.statusCode() == 403);
             r = send("POST", "/api/admins", "{\"action\":\"create\",\"username\":\"x\",\"role\":\"viewer\"}", vera, true);
             check("a viewer creating an administrator: 403 (" + r.statusCode() + ")", r.statusCode() == 403);
-            r = send("GET", "/api/account", null, boss, false);
-            check("the account API answers from the web part (" + r.statusCode() + ")", r.statusCode() == 200);
             check("none of these reached the root part", seen.size() == before);
+
+            System.out.println("\n== 2b. The sign-in is decided by the root part ==");
+            r = send("GET", "/api/account", null, boss, false);
+            check("the account API answers from the root part (" + r.statusCode() + ")", r.statusCode() == 200
+                    && seen.size() == before + 1 && "/api/account".equals(seen.get(seen.size() - 1).route()) && r.body().contains("sep-boss"));
+            String pre = WebSessions.preLoginCookieValue(null), pageToken = WebSessions.preLoginCsrf(pre);
+            String code = org.mail_panel.security.LoginCodes.issueConsoleCode(AuthStore.adminById(boss.adminId()).orElseThrow());
+            String signIn = "{\"action\":\"console_verify\",\"code\":\"" + code + "\",\"csrf_token\":\"";
+            int beforeSignIn = seen.size();
+            r = signIn(signIn + "x\"}", pre);
+            check("a sign-in without the page's token: 403 from the web part, not sent (" + r.statusCode() + ")",
+                    r.statusCode() == 403 && seen.size() == beforeSignIn);
+            r = signIn(signIn + pageToken + "\"}", pre);
+            String cookie = r.headers().allValues("Set-Cookie").stream().filter(v -> v.startsWith(WebSessions.COOKIE + "=")).findFirst().orElse("");
+            check("a sign-in with a console code through the web part: 200 and the session cookie (" + r.statusCode() + ")",
+                    r.statusCode() == 200 && r.body().contains("\"success\":true") && !cookie.isEmpty());
+            RootChannel.Request asked = seen.get(seen.size() - 1);
+            check("  the root part decided it, asked without an administrator", "/api/login".equals(asked.route())
+                    && asked.adminId() == 0 && asked.sessionId() == 0);
+            String token = cookie.substring((WebSessions.COOKIE + "=").length(), cookie.indexOf(';'));
+            Who signedIn = new Who(boss.adminId(), Main.sessions.check(token, UA).map(WebSessions.Current::id).orElse(-1L), token,
+                    WebSessions.csrfToken(token));
+            check("  the session the root created works through the web part", signedIn.sessionId() > 0
+                    && send("GET", "/api/domains", null, signedIn, false).statusCode() == 200);
+            r = send("POST", "/api/logout", "{}", signedIn, true);
+            check("the sign-out: 200, and the root part removed the session (" + r.statusCode() + ")", r.statusCode() == 200
+                    && "/op/logout".equals(seen.get(seen.size() - 1).route()) && Main.sessions.check(token, UA).isEmpty());
 
             System.out.println("\n== 3. The root part checks by itself (forged requests on its socket) ==");
             StringBuilder answer = new StringBuilder();
@@ -222,12 +258,25 @@ public class SeparatedPanelTest {
             check("a session with someone else's administrator id: 401 (" + h.status() + ")", h.status() == 401);
             h = forge(sock, "/api/logs", "GET", "/api/logs", null, null, boss.adminId(), 999_999_999L, answer);
             check("a session that does not exist: 401 (" + h.status() + ")", h.status() == 401);
-            for (String[] p : new String[][]{{"/api/login", "/api/login"}, {"/api/account", "/api/account"}, {"/index", "/index"},
+            for (String[] p : new String[][]{{"/api/login", "/api/login"}, {"/index", "/index"},
                     {"/", "/"}, {"/home", "/home"}, {"/api/fail2ban", "/api/fail2ban_health"}, {"/api/domains", "/api/domains"},
                     {"/api/mailboxes", "/api/mailboxes"}}) {
                 h = forge(sock, p[0], "GET", p[1], null, null, boss.adminId(), boss.sessionId(), answer);
                 check("route " + p[0] + " with path " + p[1] + ": 404 (" + h.status() + ")", h.status() == 404);
             }
+            h = forge(sock, "/api/login", "GET", "/api/login", null, null, 0, 0, answer);
+            check("a sign-in with GET, without an administrator: refused by the root's list (" + h.status() + ")", h.status() == 400);
+            h = forge(sock, "/op/session-key", "POST", "/op/session-key", null, null, 0, 0, answer);
+            byte[] key = h.status() == 200 ? java.util.Base64.getDecoder().decode(new org.json.JSONObject(answer.toString()).getString("key")) : new byte[0];
+            check("the session key, asked without an administrator: 200, the root's key (" + h.status() + ")",
+                    h.status() == 200 && java.util.Arrays.equals(key, WebSessions.runKeyForWebPart()));
+            h = forge(sock, "/op/session-key", "POST", "/op/session-key", null, null, boss.adminId(), boss.sessionId(), answer);
+            check("  with an administrator: 404 (" + h.status() + ")", h.status() == 404);
+            h = forge(sock, "/op/session-key", "POST", "/op/session-key", null, "{}", 0, 0, answer);
+            check("  with a body: 404 (" + h.status() + ")", h.status() == 404);
+            h = forge(sock, "/api/logs", "GET", "/api/logs", null, null, 0, 0, answer);
+            check("a signed-in route without an administrator: refused as a malformed request, 400 (" + h.status() + " " + answer + ")",
+                    h.status() == 400 && answer.toString().contains("bad forwarded request"));
             h = forge(sock, "/op/mail-folders", "POST", "/op/mail-folders", null, null, vera.adminId(), vera.sessionId(), answer);
             check("the mail-folders operation asked by a viewer: 403 (" + h.status() + ")", h.status() == 403);
             h = forge(sock, "/op/mail-folders", "GET", "/op/mail-folders", null, null, boss.adminId(), boss.sessionId(), answer);
@@ -264,6 +313,22 @@ public class SeparatedPanelTest {
             HttpResponse<String> r = send("GET", "/api/logs", null, boss2, false);
             check("a Set-Cookie from the root never reaches the browser (" + r.headers().allValues("Set-Cookie") + ")",
                     r.statusCode() == 200 && r.headers().allValues("Set-Cookie").isEmpty());
+        }
+        RootChannel.Dispatcher signInCookies = (r, ex) -> {
+            byte[] b = "{\"success\":true}".getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Set-Cookie", WebSessions.COOKIE + "=from-the-root; Path=/");
+            ex.getResponseHeaders().add("Set-Cookie", "other=x; Path=/");
+            ex.getResponseHeaders().set("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, b.length);
+            try (java.io.OutputStream os = ex.getResponseBody()) { os.write(b); }
+        };
+        try (RootChannel fake = RootChannel.open(sock, null, null, signInCookies)) {
+            String pre = WebSessions.preLoginCookieValue(null);
+            HttpResponse<String> r = signIn("{\"action\":\"console_verify\",\"code\":\"0\",\"csrf_token\":\""
+                    + WebSessions.preLoginCsrf(pre) + "\"}", pre);
+            List<String> cookies = r.headers().allValues("Set-Cookie");
+            check("on a sign-in only the session cookie passes (" + cookies + ")", r.statusCode() == 200 && cookies.size() == 1
+                    && cookies.get(0).startsWith(WebSessions.COOKIE + "=from-the-root"));
         }
         HttpResponse<String> gone = send("GET", "/api/logs", null, boss2, false);
         check("with the root part gone: 503 and a sentence (" + gone.statusCode() + " " + gone.body() + ")", gone.statusCode() == 503

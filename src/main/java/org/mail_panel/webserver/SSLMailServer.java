@@ -57,16 +57,13 @@ public class SSLMailServer {
     public enum Mode { LEGACY, ROOT_PART, WEB_PART }
 
     /**
-     * Le API che la parte web serve da se', con l'utente mailpanel:
-     * <ul>
-     *   <li>/api/account usa la memoria del suo processo (le sfide delle passkey, il token della sessione);</li>
-     *   <li>le altre non hanno bisogno di root: MySQL, SQLite in lettura, la chiave del vault in lettura, la
-     *       rete. Domini e caselle chiedono alla root una sola cosa, l'operazione chiusa «mail-folders»
-     *       (ROOT_OPERATIONS), senza parametri.</li>
-     * </ul>
-     * Tutte le altre API vanno alla root.
+     * Le API che la parte web serve da se', con l'utente mailpanel: non
+     * hanno bisogno di root (MySQL, SQLite in lettura, la chiave del vault in lettura, la rete). Domini e
+     * caselle chiedono alla root una sola cosa, l'operazione chiusa «mail-folders» (rootOperations), senza
+     * parametri. Tutte le altre API vanno alla root, anche /api/account: amministratori, passkey, codici e
+     * sessioni li scrive solo la root (0.8.2, A).
      */
-    static final java.util.Set<String> WEB_LOCAL_API = java.util.Set.of("/api/account", "/api/theme", "/api/domains",
+    static final java.util.Set<String> WEB_LOCAL_API = java.util.Set.of("/api/theme", "/api/domains",
             "/api/mailboxes", "/api/mailconfig", "/api/webmail", "/api/statistics", "/api/apple-profile", "/apple-profile",
             "/api/blacklist_check");
 
@@ -75,12 +72,19 @@ public class SSLMailServer {
      * richiesta: il nome, chi la puo' chiedere (uno dei permessi), cosa fa. La root rilegge la sessione e il
      * ruolo dal database come per le richieste inoltrate.
      */
-    private record RootOperation(java.util.Set<String> anyOf, Runnable work) {}
+    private record RootOperation(java.util.Set<String> anyOf,
+                                 java.util.function.BiConsumer<WebSessions.Current, RootChannel.Request> work) {}
 
     private Map<String, RootOperation> rootOperations() {
-        // mail-folders: le cartelle della posta delle caselle (dai nomi di MySQL, ricontrollati da SafeNames)
-        // e il reload di Postfix e Dovecot, dopo aver aggiunto o tolto un dominio o una casella.
-        return Map.of("mail-folders", new RootOperation(java.util.Set.of(DOMAINS, MAILBOXES), this::regenerateMailConfigs));
+        return Map.of(
+                // Le cartelle della posta delle caselle (dai nomi di MySQL, ricontrollati da SafeNames) e il reload
+                // di Postfix e Dovecot, dopo aver aggiunto o tolto un dominio o una casella.
+                "mail-folders", new RootOperation(java.util.Set.of(DOMAINS, MAILBOXES), (s, r) -> regenerateMailConfigs()),
+                // L'uscita: la sessione di chi la chiede, e nessun'altra. Le sessioni le toglie solo la root (A).
+                "logout", new RootOperation(java.util.Set.of(ACCOUNT), (s, r) -> {
+                    Main.sessions.revokeById(s.id(), s.admin().id());
+                    logAudit("LOGOUT", r.clientIp(), "user=" + s.admin().username());
+                }));
     }
 
     /** Il server HTTPS; null nella parte root, che non ha porte (lo crea becomeLegacy se serve). */
@@ -342,9 +346,13 @@ public class SSLMailServer {
 
     /** La rotta sul server HTTPS, coi filtri: Host, lingua, permesso, CSRF. */
     private HttpContext createContext(String path, Access access, HttpHandler handler) {
-        // Nella parte web le API di chi ha fatto l'accesso vanno alla root, dopo tutti i filtri qui sotto.
-        HttpHandler served = mode == Mode.WEB_PART && access.kind() == Access.Kind.API && !WEB_LOCAL_API.contains(path)
-                ? exchange -> forwardToRoot(exchange, path) : handler;
+        // Nella parte web le API di chi ha fatto l'accesso vanno alla root, dopo tutti i filtri qui sotto; e
+        // anche l'accesso, che decide la root (A).
+        HttpHandler served = handler;
+        if (mode == Mode.WEB_PART && access.kind() == Access.Kind.API && !WEB_LOCAL_API.contains(path))
+            served = exchange -> forwardToRoot(exchange, path);
+        else if (mode == Mode.WEB_PART && path.equals("/api/login"))
+            served = this::forwardSignIn;
         HttpContext context = server.createContext(path, served);
         // Per prima, una HEAD diventa per tutti quelli che seguono una GET senza corpo (HeadExchange): ogni
         // gestore scrive la risposta come sempre, e nessuno deve sapere delle HEAD.
@@ -774,8 +782,14 @@ public class SSLMailServer {
         //    query DB), il carrier thread va a servirne un'altra → niente starvation
         //  - memoria: ~200 byte/virtual thread vs ~1MB/thread piattaforma
         if (mode == Mode.ROOT_PART) {
-            // Nessuna porta e nessuna sessione: quelle le tiene la parte web. Qui le riparazioni e i
-            // lavori in background, come oggi; le API arrivano dal socket (serveForwarded).
+            // Nessuna porta: le API arrivano dal socket (serveForwarded). Le sessioni le crea e le toglie la
+            // root (A), con la chiave di questo avvio che la web le chiede: quelle dell'avvio di prima non
+            // valgono gia' piu', e qui si tolgono anche dal database. Poi le riparazioni e i lavori in
+            // background, come oggi.
+            if (Main.mysqlAvailable && !Main.setupRequired && Main.sessions != null) {
+                int closed = Main.sessions.beginRun();
+                if (closed > 0) LOGGER.info("Closed " + closed + " panel session(s) of the previous start: every administrator signs in again");
+            }
             initializeManagers();
             LOGGER.info("Mail Panel root part ready: no network port, the web part forwards the API on "
                     + org.mail_panel.system.PanelSeparation.socket());
@@ -784,8 +798,9 @@ public class SSLMailServer {
         server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
         // Le sessioni sono di questo avvio del jar (reperto 184): quelle di prima non valgono gia'
         // piu' (WebSessions ha una chiave nuova), e qui si tolgono anche dal database. La porta e'
-        // gia' presa (il costruttore): un secondo processo che non puo' servire non tocca niente.
-        if (Main.mysqlAvailable && !Main.setupRequired && Main.sessions != null) {
+        // gia' presa (il costruttore): un secondo processo che non puo' servire non tocca niente. La
+        // parte web no: la chiave e' della root, che le ha gia' tolte, e le sessioni non le scrive (A).
+        if (mode != Mode.WEB_PART && Main.mysqlAvailable && !Main.setupRequired && Main.sessions != null) {
             int closed = Main.sessions.beginRun();
             if (closed > 0) LOGGER.info("Closed " + closed + " panel session(s) of the previous start: every administrator signs in again");
         }
@@ -1158,6 +1173,10 @@ public class SSLMailServer {
             serveOperation(r, exchange);
             return;
         }
+        if (r.route().equals("/api/login")) {
+            serveSignIn(r, exchange);
+            return;
+        }
         Access access = routes.get(r.route());
         HttpHandler handler = handlers.get(r.route());
         I18n.setCurrent(I18n.LANGUAGES.contains(r.lang()) ? r.lang() : I18n.FALLBACK_LANGUAGE);
@@ -1197,13 +1216,54 @@ public class SSLMailServer {
     }
 
     /**
+     * La parte root: l'accesso (POST /api/login), che la web le passa senza amministratore (A). La web ha gia'
+     * controllato Host e il token CSRF della pagina di accesso, che e' legato al suo cookie __Host-MailPanelPre:
+     * quel cookie qui non arriva. Il resto lo decide la root: passkey e codici con le sfide nella sua memoria,
+     * la sessione nel database, il cookie nella risposta, che la web lascia passare solo da qui.
+     */
+    private void serveSignIn(RootChannel.Request r, ForwardedExchange exchange) throws IOException {
+        I18n.setCurrent(I18n.LANGUAGES.contains(r.lang()) ? r.lang() : I18n.FALLBACK_LANGUAGE);
+        try {
+            if (mode != Mode.ROOT_PART || !r.route().equals(r.path()) || r.query() != null || r.adminId() != 0 || r.sessionId() != 0) {
+                LOGGER.warning("Root part: sign-in request refused (" + r.method() + " " + r.path() + ")");
+                logAudit("FORWARD_REFUSED", r.clientIp(), "route=" + r.route() + " path=" + r.path());
+                sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
+                return;
+            }
+            String refused = RootGate.check(r);
+            if (refused != null) {
+                LOGGER.warning("Root part: sign-in request refused: " + refused);
+                logAudit("FORWARD_REFUSED", r.clientIp(), "route=" + r.route() + " " + refused);
+                sendJsonError(exchange, 400, I18n.tr("server.rootPart.refused"));
+                return;
+            }
+            auth.handleLogin(exchange, false);
+        } finally {
+            I18n.clearCurrent();
+            forgetCurrentSession();
+        }
+    }
+
+    /**
      * La parte root: un'operazione chiusa (rootOperations) chiesta dalla web. Solo POST, nessun corpo, il
      * percorso uguale al nome; la sessione deve esserci ancora, e il ruolo dal database deve avere uno dei
-     * permessi dell'operazione.
+     * permessi dell'operazione. Senza sessione c'e' solo session-key: la chiave delle sessioni di questo avvio,
+     * che la web chiede all'avvio (sul socket entra solo l'utente della web, SO_PEERCRED).
      */
     private void serveOperation(RootChannel.Request r, ForwardedExchange exchange) throws IOException {
         I18n.setCurrent(I18n.LANGUAGES.contains(r.lang()) ? r.lang() : I18n.FALLBACK_LANGUAGE);
         try {
+            if (r.route().equals("/op/session-key")) {
+                if (mode != Mode.ROOT_PART || !"POST".equals(r.method()) || !r.route().equals(r.path())
+                        || r.body().length > 0 || r.query() != null || r.adminId() != 0 || r.sessionId() != 0) {
+                    sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
+                    return;
+                }
+                byte[] key = WebSessions.runKeyForWebPart();
+                sendJsonResponse(exchange, new JSONObject().put("success", true).put("key", Base64.getEncoder().encodeToString(key)));
+                java.util.Arrays.fill(key, (byte) 0);
+                return;
+            }
             RootOperation op = rootOperations().get(r.route().substring("/op/".length()));
             if (mode != Mode.ROOT_PART || op == null || !"POST".equals(r.method()) || !r.route().equals(r.path())
                     || r.body().length > 0 || r.query() != null) {
@@ -1222,7 +1282,7 @@ public class SSLMailServer {
                 sendJsonError(exchange, 403, I18n.tr("server.access.forbidden"));
                 return;
             }
-            op.work().run();
+            op.work().accept(session.get(), r);
             sendJsonResponse(exchange, new JSONObject().put("success", true));
         } finally {
             I18n.clearCurrent();
@@ -1258,8 +1318,7 @@ public class SSLMailServer {
     /**
      * La parte web: un'API di chi ha fatto l'accesso, che ha gia' passato Host, lingua, permesso e CSRF,
      * va alla root con chi l'ha chiesta (id dell'amministratore e della sessione), l'IP e la lingua. Mai
-     * i cookie ne' il token: vedi RootChannel. La risposta torna com'e', senza Set-Cookie: le sessioni le
-     * tiene solo la web.
+     * i cookie ne' il token: vedi RootChannel. La risposta torna com'e', senza Set-Cookie.
      */
     private void forwardToRoot(HttpExchange exchange, String route) throws IOException {
         try {
@@ -1273,50 +1332,7 @@ public class SSLMailServer {
                 sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                 return;
             }
-            Map<String, String> headers = new java.util.LinkedHashMap<>();
-            for (String h : RootChannel.HEADERS) {
-                String v = exchange.getRequestHeaders().getFirst(h);
-                if (v == null) continue;
-                if (v.length() > 512) v = v.substring(0, 512);
-                // Un valore fuori dall'ASCII stampabile la root lo rifiuterebbe: non si manda, e basta.
-                if (v.matches("[\\x20-\\x7E]*")) headers.put(h, v);
-            }
-            java.net.URI uri = exchange.getRequestURI();
-            RootChannel.Request request = new RootChannel.Request(route, exchange.getRequestMethod(), uri.getRawPath(),
-                    uri.getRawQuery(), headers, getClientIp(exchange), I18n.current(), session.get().admin().id(),
-                    session.get().id(), body);
-            RootChannel.Exchange answer;
-            try {
-                answer = RootChannel.send(org.mail_panel.system.PanelSeparation.socket(), request);
-            } catch (IOException e) {
-                LOGGER.warning("Web part: the root part does not answer on " + org.mail_panel.system.PanelSeparation.socket()
-                        + ": " + e.getMessage());
-                sendJsonError(exchange, 503, I18n.tr("server.rootPart.unavailable"));
-                return;
-            }
-            try (answer) {
-                Headers out = exchange.getResponseHeaders();
-                for (String[] kv : answer.head().headers()) {
-                    String k = kv[0].toLowerCase(java.util.Locale.ROOT);
-                    if (ForwardedExchange.HOP_BY_HOP.contains(k)) continue;
-                    if (k.equals("set-cookie")) {
-                        LOGGER.warning("Web part: a Set-Cookie from the root part on " + route + " was dropped");
-                        continue;
-                    }
-                    out.add(kv[0], kv[1]);
-                }
-                long length = answer.head().length();
-                exchange.sendResponseHeaders(answer.head().status(), length);
-                if (length == -1) return;
-                try (OutputStream os = exchange.getResponseBody()) {
-                    if (length > 0) {
-                        long copied = answer.body().transferTo(os);
-                        if (copied != length) LOGGER.warning("Web part: " + route + " answered " + copied + " bytes of " + length);
-                    } else {
-                        answer.body().transferTo(os);
-                    }
-                }
-            }
+            relay(exchange, route, session.get().admin().id(), session.get().id(), body, false);
         } catch (IOException e) {
             if (exchange.getResponseCode() == -1) {
                 try { sendJsonError(exchange, 502, I18n.tr("server.rootPart.unavailable")); } catch (IOException ignored) { }
@@ -1324,6 +1340,141 @@ public class SSLMailServer {
             LOGGER.log(Level.FINE, "Web part: forwarding " + route + " failed", e);
         } finally {
             exchange.close();
+        }
+    }
+
+    /** Quanto puo' essere grande una richiesta di accesso (come AuthHandlers). */
+    private static final int SIGN_IN_MAX_BODY = 32 * 1024;
+
+    /**
+     * La parte web: l'accesso (POST /api/login) lo decide la root (A). Qui solo quello che la root non puo'
+     * vedere: il token CSRF della pagina di accesso, legato al cookie __Host-MailPanelPre di questo browser.
+     * Poi la richiesta va alla root senza amministratore, e dalla sua risposta passa un solo cookie, quello
+     * della sessione che la root ha creato.
+     */
+    private void forwardSignIn(HttpExchange exchange) throws IOException {
+        try {
+            addSecurityHeaders(exchange);
+            if (!"POST".equals(exchange.getRequestMethod())) {
+                exchange.getResponseHeaders().set("Allow", "POST");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
+                return;
+            }
+            byte[] body = RootChannel.readBody(exchange.getRequestBody());
+            if (body == null || body.length > SIGN_IN_MAX_BODY) {
+                sendJsonError(exchange, 400, I18n.tr("server.badRequest"));
+                return;
+            }
+            JSONObject req;
+            try {
+                req = new JSONObject(new String(body, StandardCharsets.UTF_8));
+            } catch (org.json.JSONException e) {
+                sendJsonError(exchange, 400, I18n.tr("server.badRequest"));
+                return;
+            }
+            if (!WebSessions.validPreLoginCsrf(cookieValue(exchange, WebSessions.PRE_COOKIE), req.optString("csrf_token", ""))) {
+                logAudit("CSRF_FAILURE", getClientIp(exchange), "login page token");
+                sendJsonError(exchange, 403, I18n.tr("server.csrfInvalid"));
+                return;
+            }
+            relay(exchange, "/api/login", 0, 0, body, true);
+            forgetCurrentSession();
+        } catch (IOException e) {
+            if (exchange.getResponseCode() == -1) {
+                try { sendJsonError(exchange, 502, I18n.tr("server.rootPart.unavailable")); } catch (IOException ignored) { }
+            }
+            LOGGER.log(Level.FINE, "Web part: forwarding the sign-in failed", e);
+        } finally {
+            exchange.close();
+        }
+    }
+
+    /**
+     * La richiesta alla root e la sua risposta al browser. Dalla root non passa nessun Set-Cookie, salvo,
+     * se sessionCookie, quello della sessione (l'accesso).
+     */
+    private void relay(HttpExchange exchange, String route, long adminId, long sessionId, byte[] body,
+                       boolean sessionCookie) throws IOException {
+        Map<String, String> headers = new java.util.LinkedHashMap<>();
+        for (String h : RootChannel.HEADERS) {
+            String v = exchange.getRequestHeaders().getFirst(h);
+            if (v == null) continue;
+            if (v.length() > 512) v = v.substring(0, 512);
+            // Un valore fuori dall'ASCII stampabile la root lo rifiuterebbe: non si manda, e basta.
+            if (v.matches("[\\x20-\\x7E]*")) headers.put(h, v);
+        }
+        java.net.URI uri = exchange.getRequestURI();
+        RootChannel.Request request = new RootChannel.Request(route, exchange.getRequestMethod(), uri.getRawPath(),
+                uri.getRawQuery(), headers, getClientIp(exchange), I18n.current(), adminId, sessionId, body);
+        RootChannel.Exchange answer;
+        try {
+            answer = RootChannel.send(org.mail_panel.system.PanelSeparation.socket(), request);
+        } catch (IOException e) {
+            LOGGER.warning("Web part: the root part does not answer on " + org.mail_panel.system.PanelSeparation.socket()
+                    + ": " + e.getMessage());
+            sendJsonError(exchange, 503, I18n.tr("server.rootPart.unavailable"));
+            return;
+        }
+        try (answer) {
+            // Le intestazioni della root sostituiscono quelle con lo stesso nome che la web avesse gia' messo
+            // (le intestazioni di sicurezza le mette anche la root): nessun doppione.
+            Headers out = exchange.getResponseHeaders();
+            Set<String> fromRoot = new HashSet<>();
+            for (String[] kv : answer.head().headers()) {
+                String k = kv[0].toLowerCase(java.util.Locale.ROOT);
+                if (ForwardedExchange.HOP_BY_HOP.contains(k)) continue;
+                if (k.equals("set-cookie") && !(sessionCookie && kv[1].startsWith(WebSessions.COOKIE + "="))) {
+                    LOGGER.warning("Web part: a Set-Cookie from the root part on " + route + " was dropped");
+                    continue;
+                }
+                if (fromRoot.add(k)) out.set(kv[0], kv[1]);
+                else out.add(kv[0], kv[1]);
+            }
+            long length = answer.head().length();
+            exchange.sendResponseHeaders(answer.head().status(), length);
+            if (length == -1) return;
+            try (OutputStream os = exchange.getResponseBody()) {
+                if (length > 0) {
+                    long copied = answer.body().transferTo(os);
+                    if (copied != length) LOGGER.warning("Web part: " + route + " answered " + copied + " bytes of " + length);
+                } else {
+                    answer.body().transferTo(os);
+                }
+            }
+        }
+    }
+
+    /**
+     * La parte web, all'avvio: la chiave delle sessioni di questo avvio della root (A). Prova per un po',
+     * perche' la root apre il socket prima di avviare la web ma puo' essere ancora occupata. Null se non
+     * risponde: allora la web non parte (daemon la riavvia).
+     */
+    public static byte[] sessionKeyFromRoot(long waitMs) {
+        long until = System.currentTimeMillis() + waitMs;
+        String last = "";
+        while (true) {
+            RootChannel.Request req = new RootChannel.Request("/op/session-key", "POST", "/op/session-key", null, Map.of(),
+                    "127.0.0.1", "en", 0, 0, null);
+            try (RootChannel.Exchange answer = RootChannel.send(org.mail_panel.system.PanelSeparation.socket(), req)) {
+                String body = new String(answer.body().readAllBytes(), StandardCharsets.UTF_8);
+                if (answer.head().status() == 200) {
+                    byte[] key = Base64.getDecoder().decode(new JSONObject(body).getString("key"));
+                    if (key.length == 32) return key;
+                }
+                last = "status " + answer.head().status();
+            } catch (Exception e) {
+                last = e.getMessage();
+            }
+            if (System.currentTimeMillis() > until) {
+                LOGGER.warning("Web part: no session key from the root part (" + last + ")");
+                return null;
+            }
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
         }
     }
 
@@ -1634,6 +1785,12 @@ public class SSLMailServer {
             return;
         }
         currentSession(exchange).ifPresent(s -> {
+            // Col pannello separato la sessione la toglie la root, che sola scrive le sessioni (A); il cookie
+            // qui sotto lo toglie comunque, anche se la root non risponde.
+            if (mode == Mode.WEB_PART) {
+                askRoot("logout");
+                return;
+            }
             Main.sessions.revoke(s.token());
             logAudit("LOGOUT", getClientIp(exchange), "user=" + s.admin().username());
         });

@@ -35,7 +35,7 @@ final class RootGate {
     static final Set<String> POST = Set.of("POST");
     static final Set<String> GET_POST = Set.of("GET", "POST");
 
-    /** Le rotte della root e i metodi dei loro gestori (letti dal codice dei gestori). */
+    /** Le rotte della root e i metodi dei loro gestori (letti dal codice dei gestori). /api/login senza sessione. */
     static final Map<String, Set<String>> METHODS = Map.ofEntries(
             Map.entry("/api/status", GET_POST), Map.entry("/api/stats", GET_POST), Map.entry("/api/versions", GET),
             Map.entry("/api/aliases", Set.of("GET", "POST", "PUT", "DELETE")), Map.entry("/api/webmail/open", GET_POST),
@@ -48,7 +48,9 @@ final class RootGate {
             Map.entry("/api/updates", GET_POST), Map.entry("/api/logs", GET_POST), Map.entry("/api/system_paths", GET),
             Map.entry("/api/panel_info", GET), Map.entry("/api/service", POST), Map.entry("/api/timezone-diag", GET_POST),
             Map.entry("/api/postfix-aliases-health", GET_POST), Map.entry("/api/sso", GET_POST), Map.entry("/api/admins", GET_POST),
-            Map.entry("/api/report", POST), Map.entry("/api/hostname", GET_POST), Map.entry("/api/roundcube-domain", GET_POST));
+            Map.entry("/api/report", POST), Map.entry("/api/hostname", GET_POST), Map.entry("/api/roundcube-domain", GET_POST),
+            // L'accesso e la scheda Account: amministratori, passkey, codici e sessioni li decide la root (0.8.2, A).
+            Map.entry("/api/login", POST), Map.entry("/api/account", GET_POST));
 
     static final int MAX_STRING = 64 * 1024;
     static final int MAX_DEPTH = 4;

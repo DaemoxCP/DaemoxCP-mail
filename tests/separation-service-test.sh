@@ -132,13 +132,15 @@ done
 
 echo
 echo "== 3. Sign-in and the API through the web part =="
+WEBLOG=/var/db/mailpanel/panel-web.log
+WM3=$(stat -f %z $WEBLOG)
 login
 check "signed in with a console code ($LOGIN)" "$(has "$LOGIN" '"success":true')"
 check "the page has a CSRF token" "$(is "$([ -n "$CSRF" ] && echo y)" y)"
 c=$(get "/api/panel_info?action=uptime"); check "GET /api/panel_info: $c" "$(is "$c" 200)"
 c=$(get "/api/domains"); check "GET /api/domains: $c" "$(is "$c" 200)"
 c=$(get "/api/admins"); check "GET /api/admins: $c" "$(is "$c" 200)"
-c=$(get "/api/account"); check "GET /api/account (web part): $c" "$(is "$c" 200)"
+c=$(get "/api/account"); check "GET /api/account (root part): $c" "$(is "$c" 200)"
 c=$(get "/home"); check "GET /home (web part): $c" "$(is "$c" 200)"
 ASSET=$(curl -sk -A "$UA" "$BASE/index" | grep -o '/assets/open/[0-9a-f]*\.js' | head -1)
 c=$(get "$ASSET"); check "a script of the sign-in page ($ASSET): $c" "$(is "$c" 200)"
@@ -154,7 +156,6 @@ c=$(post "/api/updates" '{"action":"service_users"}' ""); check "the same withou
 
 echo
 echo "== 3b. What the web part serves by itself =="
-WEBLOG=/var/db/mailpanel/panel-web.log
 WM=$(stat -f %z $WEBLOG)
 D=sep-test-$$.example
 c=$(post "/api/domains" "{\"domain\":\"$D\",\"description\":\"separation test\"}" "$CSRF"); DID=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' /var/tmp/sep-body)
@@ -170,18 +171,30 @@ for p in /api/domains /api/mailboxes "/api/statistics?days=7" /api/mailconfig /a
     c=$(get "$p"); check "GET $p: $c" "$(is "$c" 200)"
 done
 c=$(post "/api/apple-profile" '{"action":"status"}' "$CSRF"); check "POST /api/apple-profile status: $c" "$(is "$c" 200)"
+c=$(post "/api/theme" '{"theme":"dark"}' "$CSRF"); check "POST /api/theme dark (the web part writes the theme): $c" "$(is "$c" 200)"
+c=$(post "/api/theme" '{"theme":"auto"}' "$CSRF"); check "  and back to auto: $c" "$(is "$c" 200)"
+c=$(post "/api/language" '{"language":"en"}' "$CSRF"); check "POST /api/language en (the web part writes the language): $c" "$(is "$c" 200)"
 c=$(del "/api/mailboxes?id=$MID"); check "remove the test mailbox: $c" "$(is "$c" 200)"
 c=$(del "/api/domains?id=$DID"); check "remove the test domain: $c" "$(is "$c" 200)"
 rm -rf "/var/vmail/$D"
 PROBLEMS=$(tail -c +$((WM + 1)) $WEBLOG | grep -E "Permission denied|AccessDenied|Exception|SEVERE|refused" | head -3)
 check "nothing went wrong in the web part ($PROBLEMS)" "$(is "$PROBLEMS" "")"
+c=$(curl -sk -A "$UA" -b "$JAR_COOKIES" -c "$JAR_COOKIES" -H "X-CSRF-Token: $CSRF" -X POST -o /dev/null -w '%{http_code}' "$BASE/api/logout")
+check "sign out through the web part: $c" "$(is "$c" 200)"
+c=$(get "/api/domains"); check "  the root removed the session: the same cookie gets 401 ($c)" "$(is "$c" 401)"
+SQLREF=$(tail -c +$((WM3 + 1)) $WEBLOG | grep "outside the panel's catalog" | head -3)
+check "the web part ran only statements of its list, from the sign-in to the sign-out ($SQLREF)" "$(is "$SQLREF" "")"
 
 echo
 echo "== 4. The root socket =="
 S=$RUN/root.sock
 R=$(probe_root "$S" /api/logs GET /api/logs 1 1); check "root's own client gets no answer ($R)" "$(has "$R" "NO ANSWER")"
 R=$(probe_web "$S" /api/logs GET /api/logs 1 999999999); check "mailpanel with a session that does not exist: 401 ($R)" "$(has "$R" "401 ")"
-R=$(probe_web "$S" /api/account GET /api/account 1 1); check "mailpanel asking the account API: 404 ($R)" "$(has "$R" "404 ")"
+R=$(probe_web "$S" /api/account GET /api/account 1 999999999); check "mailpanel asking the account API without a live session: 401 ($R)" "$(has "$R" "401 ")"
+R=$(probe_web "$S" /op/session-key POST /op/session-key 0 0); check "mailpanel asking the session key: 200 ($R)" "$(has "$R" "200 ")"
+R=$(probe_web "$S" /op/session-key POST /op/session-key 1 999999999); check "  the session key with an administrator: 404 ($R)" "$(has "$R" "404 ")"
+R=$(probe_root "$S" /op/session-key POST /op/session-key 0 0); check "  root's own client asking the session key gets no answer ($R)" "$(has "$R" "NO ANSWER")"
+R=$(probe_web "$S" /api/admins GET /api/admins 0 0); check "mailpanel without an administrator on a signed-in route: 400 ($R)" "$(has "$R" "400 ")"
 R=$(probe_web "$S" /api/login POST /api/login 1 1 '{"action":"console_verify"}'); check "mailpanel asking a public route: 404 ($R)" "$(has "$R" "404 ")"
 rm -f "$JAR_COOKIES" /var/tmp/sep-body
 
