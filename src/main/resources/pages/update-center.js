@@ -4,7 +4,7 @@
         // pulsanti), che si ridisegna quando arrivano i dati, e il suo pannello sotto, che resta dov'e': il pulsante lo
         // apre sul posto, senza mandare a un'altra scheda. Le righe di Java, Roundcube, MySQL e Python compaiono solo
         // quando il server dice che servono (packages_overview, «procedures»). I lavori sono quelli di sempre.
-        const uc = { os: null, pk: null, branch: null, reboot: null };
+        const uc = { os: null, pk: null, branch: null, reboot: null, targets: null, jump: null };
 
         function ucEl(tag, cls, text) {
             const e = document.createElement(tag);
@@ -76,8 +76,7 @@
         }
 
         // Le azioni delle righe: aprono il pannello sotto la riga e partono da li'.
-        function ucOsInstall() { ucOpen('os'); osInstall(); }
-        function ucRelease() { ucToggle('os'); }
+        function ucOsInstall() { ucOpen('os'); osShow('patch'); osInstall(); }
         function ucStackAll() { ucOpen('stack', 'uc-updates-panel'); updMaintPreview(); }
         function ucJava() { ucOpen('java'); jvPre(); }
         function ucJavaReport() { ucOpen('java'); jvState(); }
@@ -99,6 +98,9 @@
                 if (typeof panelRebootRefresh === 'function') panelRebootRefresh();
             }
             uc.os = await updApi('os_status');
+            // Le release piu' nuove e lo stato di un passaggio cominciato: decidono cosa dice la riga di FreeBSD.
+            uc.targets = await updApi('os_upgrade_targets');
+            uc.jump = await updApi('jump_state');
             ucRender();
             state.textContent = '';
         }
@@ -113,17 +115,36 @@
             const proc = pk.procedures || {};
             const rows = pk.packages || [];
             const reading = (key, title) => ucHead(key, 'info', title, t('uc.reading'));
-            const release = () => ucButton('btn-outline-secondary', 'fa-forward', t('uc.osRelease'), 'ucRelease()');
 
-            // 1. Il sistema di base: le patch, e una release nuova quando la si vuole
+            // 1. Il sistema di base, guidato (reperto 196): una frase e il pulsante del passo dopo. Prima un passaggio di
+            //    release cominciato, poi un riavvio che manca, poi le patch pronte. Una release nuova solo se c'e'.
+            const restart = () => document.getElementById('panelRebootModal')
+                ? [ucButton('btn-warning', 'fa-rotate-right', t('osu.restartGo'), 'panelRebootOpen()')] : [];
+            const moving = osMoving();
             if (!uc.os) reading('os', t('uc.os'));
             else if (!os.success) ucHead('os', 'error', t('uc.os'), os.error || t('common.errorShort'));
-            else if (!os.updatableWithFreebsdUpdate) ucHead('os', 'info', t('uc.os'), os.updatesNote || '', [release()]);
+            else if (moving) {
+                ucHead('os', 'todo', t('uc.os'), t('osu.moving', { target: osRelTarget(), n: osRelStep() }),
+                    [ucButton('btn-primary', 'fa-list-check', t('osu.openMove'), 'ucRelease()')]);
+            } else if (os.restartNeeded) {
+                ucHead('os', 'todo', t('uc.os'), t('osu.patchRestartRow', { now: os.userland, kernel: os.installedKernel }), restart());
+            } else if (!os.updatableWithFreebsdUpdate) ucHead('os', 'info', t('uc.os'), os.updatesNote || '');
             else if (os.readyExist) {
                 ucHead('os', 'todo', t('uc.os'), t('uc.osReady', { now: os.userland, target: os.readyTarget || '?' })
                     + (os.readyKernel ? ' ' + t('osp.readyKernel') : ''),
-                    [ucButton('btn-primary', 'fa-download', t('osp.install'), 'ucOsInstall()'), release()]);
-            } else ucHead('os', 'ok', t('uc.os'), t('uc.osOk', { now: os.userland }), [release()]);
+                    [ucButton('btn-primary', 'fa-download', t('osp.install'), 'ucOsInstall()')]);
+            } else ucHead('os', 'ok', t('uc.os'), t('uc.osOk', { now: os.userland }));
+            // Una release nuova: una riga in piu' con il suo pulsante, solo quando c'e' e niente altro e' in corso.
+            const tv = (uc.targets && uc.targets.success && uc.targets.versions) || [];
+            if (uc.os && os.success && !moving && !os.restartNeeded && tv.length) {
+                const v = tv[tv.length - 1];
+                const line = ucEl('div', 'd-flex flex-wrap align-items-center gap-2 mt-2 small');
+                line.append(ucEl('span', '', t('osu.newRelease', { version: v.version, date: v.endOfSupport })),
+                    ucButton('btn-outline-primary', 'fa-forward', t('osu.moveTo', { version: v.version }), 'ucRelease()'));
+                document.querySelector('#uc-os .uc-head .flex-grow-1').append(line);
+            }
+            const releaseView = document.getElementById('os-release');
+            if (releaseView && !releaseView.hidden) osReleaseRender();
 
             // Le procedure dedicate hanno la loro riga: qui sotto non si contano due volte.
             const own = p => p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);

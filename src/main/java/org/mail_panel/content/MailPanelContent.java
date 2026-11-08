@@ -12176,6 +12176,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
+            <!-- I registri su disco dei lavori guidati (reperto 196): restano dopo i riavvii, e dicono cosa e' successo. -->
+            <div class="card mb-4" id="jr-card">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span><i class="fas fa-book me-2" aria-hidden="true"></i><strong>{{t:jr.title}}</strong>
+                        <span class="small text-muted ms-2">{{t:jr.sub}}</span></span>
+                    <button type="button" class="btn btn-sm btn-outline-primary touch-target" data-on-click="jrList()"><i class="fas fa-list me-1" aria-hidden="true"></i>{{t:jr.show}}</button>
+                </div>
+                <div class="card-body">
+                    <div id="jr-list" role="status" aria-live="polite"><span class="text-muted">{{t:jr.placeholder}}</span></div>
+                    <pre id="jr-text" class="upd-log mt-2" tabindex="-1" hidden></pre>
+                </div>
+            </div>
+
 
             <div class="card mb-4 border-info">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -12348,7 +12361,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
         return resource("pages/upd-api.js") + getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js")
-                + resource("pages/update-center.js");
+                + resource("pages/os-update.js") + resource("pages/update-center.js");
     }
 
     /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */
@@ -13073,40 +13086,26 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     ? '<div class="alert alert-warning py-2"><strong>' + escHtml(t('osp.ready', { target: r.readyTarget || '?' })) + '</strong>'
                       + (r.readyKernel ? ' ' + escHtml(t('osp.readyKernel')) : '') + '</div>'
                     : '<div class="alert alert-secondary py-2">' + escHtml(t('osp.nothingReady')) + '</div>';
-                h += '<div class="d-flex flex-wrap align-items-center gap-2">'
-                   + '<button type="button" class="btn btn-primary touch-target" id="ospInstall" data-on-click="osInstall()"><i class="fas fa-download me-1" aria-hidden="true"></i>' + escHtml(t('osp.install')) + '</button>'
-                   + '<button type="button" class="btn btn-outline-secondary touch-target" data-on-click="osSearch()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>' + escHtml(t('osp.checkOnly')) + '</button>'
-                   + '</div><p class="small text-muted mt-2 mb-0">' + escHtml(t('osp.installHint')) + '</p>';
+                // Qui solo lo stato: le patch si installano da Aggiornamenti, che guida un passo alla volta (reperto 196).
+                if (r.readyExist) h += '<p class="small mb-0">' + escHtml(t('osu.installFromUpdates')) + '</p>';
             } else {
                 h += '<div class="alert alert-info py-2 mb-0">' + updEsc(r.updatesNote) + '</div>';
             }
             el.innerHTML = h;
         }
 
+        // Le patch: una conferma, l'avanzamento in una riga, il registro chiuso sotto, e alla fine l'esito con il passo
+        // che resta (il riavvio, se il kernel e' cambiato) e il suo pulsante (reperto 196).
         async function osInstall() {
             const yes = await panelAsk({ title: t('osp.askTitle'), text: t('osp.askText'), confirm: t('osp.askGo') });
             if (!yes) return;
-            const pre = document.getElementById('os-log');
-            pre.style.display = 'block';
-            pre.textContent = t('osp.running');
+            const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('osu.installingPatches'));
+            pre.textContent = '';
+            osLogBox('os-log-box', true);
             const r = await updApi('os_patch_install', { confirm: 'INSTALL PATCHES' });
-            if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            planPoll(r.jobId, document.getElementById('os-body'), pre, function () {
-                if (document.getElementById('ucList')) ucLoad(true); else osState();
-                if (typeof panelRebootRefresh === 'function') panelRebootRefresh();
-            });
-        }
-
-        async function osSearch() {
-            if (!updConfirm(t('up.fetchNote'), t('up.wFetch'))) return;
-            const pre = document.getElementById('os-log');
-            pre.style.display = 'block';
-            pre.textContent = t('up.fetchRunning');
-            const r = await updApi('os_fetch', { confirm: 'FETCH UPDATES' });
-            if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            // Segue il lavoro con il polling: su un sistema indietro di mesi il download dura
-            // minuti, e una richiesta HTTP tenuta aperta cosi' a lungo la chiude il browser.
-            planPoll(r.jobId, document.getElementById('os-body'), pre);
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.errorShort')) + '</div>'; return; }
+            planPoll(r.jobId, el, pre, osPatchOutcome);
         }
 
         // ---------- eliminazione di un ambiente di avvio ----------
@@ -13119,140 +13118,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             box.textContent = r.note || r.error || t('shu.unknownResult');
             el.appendChild(box);
             if (r.success) upCheck();
-        }
-
-        // ---------- proseguimento del salto, che sopravvive ai riavvii ----------
-        async function jumpState() {
-            const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingWhere')) + '';
-            const r = await updApi('jump_state');
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            let h = '<div class="table-responsive"><table class="table table-sm mb-2"><tbody>'
-                  + '<tr class="upd-cell"><td data-style="width:14rem"><strong>' + escHtml(t('up.kernelInstalled')) + '</strong></td><td><code>'
-                  + updEsc(r.installedKernel) + '</code></td></tr>'
-                  + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.kernelRunning')) + '</strong></td><td><code>'
-                  + updEsc(r.runningKernel) + '</code>'
-                  + (r.restartNeeded ? ' <span class="badge upd-badge-warn ms-2">' + escHtml(t('up.needReboot')) + '</span>'
-                                         : ' <span class="badge upd-badge-ok ms-2">' + escHtml(t('up.kernelMatch')) + '</span>') + '</td></tr>'
-                  + '<tr class="upd-cell"><td><strong>Userland</strong></td><td><code>' + updEsc(r.userland) + '</code></td></tr>'
-                  + '</tbody></table></div>';
-            if ((r.steps || []).length) {
-                h += '<h6 class="mt-2 mb-1">' + escHtml(t('up.alreadyDone')) + '</h6>'
-                   + '<div class="table-responsive"><table class="table table-sm mb-2"><thead><tr>'
-                   + '<th scope="col">' + escHtml(t('up.colRound')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th><th scope="col">' + escHtml(t('up.colAsked')) + '</th><th scope="col">' + escHtml(t('up.colUserlandAfter')) + '</th>'
-                   + '</tr></thead><tbody>';
-                (r.steps || []).forEach(p => {
-                    h += '<tr class="upd-cell"><td>' + updEsc(p.round) + '</td><td>'
-                       + (p.code === 0 ? 'ok' : escHtml(t('up.code', { code: p.code }))) + '</td><td>'
-                       + escHtml(({ restart: t('up.asks.restart'), finished: t('up.asks.finished'), again: t('up.asks.again'), rebuild: t('up.asks.rebuild') })[p.asks] || p.asks || '') + '</td><td><code>' + updEsc(p.userland) + '</code></td></tr>';
-                });
-                h += '</tbody></table></div>';
-            }
-            if (r.restartNeeded) {
-                h += '<div class="alert alert-warning py-2">' + t('up.rebootFirst.html') + '</div>'
-                   + '<button class="btn btn-danger" data-on-click="rebPrev()"><i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('up.goReboot')) + '</button>';
-            } else if (r.phase === 'finished') {
-                h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.jumpDone')) + '</div>';
-            } else {
-                h += '<div class="alert alert-info py-2">' + t('up.jumpInfo.html') + '</div>'
-                   + '<button class="btn btn-warning" data-on-click="jumpGo()"><i class="fas fa-forward me-1" aria-hidden="true"></i>' + escHtml(t('up.continue')) + '</button>';
-            }
-            el.innerHTML = h;
-            pre.style.display = 'none';
-        }
-
-        async function jumpGo() {
-            if (!updConfirm('', t('up.wContinue'))) return;
-            const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
-            const r = await updApi('jump_continue', { confirm: 'CONTINUE', target: upTarget() });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.runningKeepOpen')) + '</span>';
-            pre.style.display = 'block';
-            planPoll(r.jobId, el, pre);
-        }
-
-        // ---------- passaggio di release ----------
-        function upTarget() { return (document.getElementById('os-target').value || '').trim(); }
-
-        // L'elenco lo decide il pannello, non la tastiera: un campo libero lasciava scrivere
-        // 16.0 (salto maggiore), 15.9 (inesistente) o 14.4 (indietro).
-        async function upTargets() {
-            const sel = document.getElementById('os-target');
-            if (sel.options.length > 1) return true;
-            const r = await updApi('os_upgrade_targets');
-            if (!r.success) {
-                document.getElementById('up-body').innerHTML =
-                    '<span class="text-danger">' + updEsc(r.error) + '</span>';
-                return false;
-            }
-            sel.innerHTML = '';
-            (r.versions || []).forEach(v => {
-                const o = document.createElement('option');
-                o.value = v.version;
-                o.textContent = t('up.supportedUntil', { version: v.version, date: v.endOfSupport });
-                sel.appendChild(o);
-            });
-            if (!(r.versions || []).length) {
-                const o = document.createElement('option');
-                o.value = ''; o.textContent = t('up.noneAvailable');
-                sel.appendChild(o);
-                document.getElementById('up-body').innerHTML =
-                    '<div class="alert alert-info py-2 mb-0">' + updEsc(r.note) + '</div>';
-                return false;
-            }
-            document.getElementById('up-body').innerHTML =
-                '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.youAreOn', { version: r.current })) + ' '
-              + updEsc(r.note) + '<br>' + escHtml(t('up.sourceIs', { source: r.source })) + '</div>';
-            return true;
-        }
-
-        async function upPre() {
-            const el = document.getElementById('up-body');
-            if (!await upTargets()) return;
-            if (!upTarget()) { el.innerHTML = '<span class="text-warning">' + escHtml(t('up.pickTarget')) + '</span>'; return; }
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.preflightRunning')) + '';
-            const r = await updApi('os_upgrade_preflight', { target: upTarget() });
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
-            (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
-                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            if (r.blocked) {
-                h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
-            } else {
-                h += '<div class="alert alert-warning py-2">' + t('up.prepInfo.html') + '</div>'
-                   + '<button class="btn btn-warning me-2" data-on-click="upPrep()"><i class="fas fa-shield-halved me-1" aria-hidden="true"></i>' + escHtml(t('up.prepare')) + '</button>'
-                   + '<button class="btn btn-outline-secondary" data-on-click="upInstr()"><i class="fas fa-list-ol me-1" aria-hidden="true"></i>' + escHtml(t('up.showCommands')) + '</button>';
-            }
-            el.innerHTML = h;
-        }
-
-        async function upPrep() {
-            if (!updConfirm('', t('up.wPrepare'))) return;
-            const el = document.getElementById('up-body'), pre = document.getElementById('up-log');
-            const r = await updApi('os_upgrade_prepare', { confirm: 'PREPARE UPGRADE', target: upTarget() });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.preparingKeepOpen')) + '</span>';
-            pre.style.display = 'block';
-            planPoll(r.jobId, el, pre);
-        }
-
-        async function upInstr() {
-            const pre = document.getElementById('up-log');
-            pre.style.display = 'block';
-            pre.textContent = t('up.genCommands');
-            const r = await updApi('os_upgrade_instructions', { target: upTarget() });
-            if (!r.success) { pre.textContent = r.error || t('common.errorShort'); return; }
-            let textValue = t('up.jumpTitle', { version: r.target }) + '\\n'
-                  + t('up.sourceIs', { source: r.source }) + '\\n\\n';
-            (r.steps || []).forEach(p => {
-                textValue += p.n + '. ' + p.title + '\\n     ' + p.cmd + '\\n     ' + p.note + '\\n\\n';
-            });
-            textValue += t('up.wayBack') + '\\n     ' + r.returnInfo + '\\n';
-            pre.textContent = textValue;
         }
 
         async function upCheck() {
@@ -13908,6 +13773,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // cosa sul posto (reperto 193). Resta planPoll, con cui le procedure seguono i loro lavori.
         async function planPoll(id, el, pre, after) {
             const s = await updApi('job_status', { jobId: id });
+            // Il pannello non conosce piu' il lavoro: si e' riavviato nel frattempo. Prima la pagina chiedeva per sempre;
+            // adesso lo dice, e dice dove sta il registro, che su disco resta (reperto 196).
+            if (s.unknown) {
+                el.innerHTML = '<div class="alert alert-warning py-2"><strong>' + escHtml(t('jr.lostTitle')) + '</strong> '
+                    + escHtml(t('jr.lostText')) + '</div>'
+                    + (document.getElementById('ucList') ? '<button type="button" class="btn btn-sm btn-outline-primary" data-on-click="ucLoad(true)">' + escHtml(t('uc.reread')) + '</button>' : '');
+                return;
+            }
             if (s.success && s.job) {
                 pre.textContent = s.job.consoleLog || '';
                 pre.scrollTop = pre.scrollHeight;

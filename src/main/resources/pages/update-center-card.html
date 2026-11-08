@@ -1,7 +1,7 @@
             <!-- Aggiorna il server: una riga per ogni cosa da aggiornare, e ogni riga fa la sua sul posto. Il pulsante
                  apre sotto la riga stessa quello che serve (il piano, la conferma, il registro): nessun salto verso
                  un'altra scheda (reperto 193). Le righe di Java, Roundcube, MySQL e Python ci sono solo quando c'e'
-                 qualcosa da fare. I motori dietro sono gli stessi di prima. -->
+                 qualcosa da fare; quella di FreeBSD guida un passo alla volta (reperto 196). -->
             <section class="card mb-4 border-primary" id="update-center" aria-labelledby="ucTitle">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <h3 class="h5 mb-0" id="ucTitle" tabindex="-1"><i class="fas fa-circle-arrow-up me-2" aria-hidden="true"></i>{{t:uc.title}}</h3>
@@ -18,21 +18,26 @@
                         <li class="list-group-item" id="uc-os">
                             <div class="uc-head"></div>
                             <div class="uc-detail mt-3" id="uc-os-detail" hidden>
-                                <div id="os-body"></div>
-                                <pre id="os-log" class="upd-log mt-2" data-style="display:none"></pre>
-                                <h4 class="h6 mt-3">{{t:up.release}}</h4>
-                                <p class="small text-muted mb-2">{{t:up.releaseIntro.html}}</p>
-                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                                    <label class="visually-hidden" for="os-target">{{t:up.targetVersionLabel}}</label>
-                                    <select id="os-target" class="form-select form-select-sm w-auto">
-                                        <option value="">{{t:up.targetVersion}}</option>
-                                    </select>
-                                    <button type="button" class="btn btn-sm btn-outline-danger touch-target" data-on-click="upPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
-                                    <button type="button" class="btn btn-sm btn-warning touch-target" data-on-click="jumpState()"><i class="fas fa-forward me-1" aria-hidden="true"></i>{{t:up.continueJump}}</button>
-                                    <button type="button" class="btn btn-sm btn-outline-secondary touch-target" data-on-click="upCheck()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkAfter}}</button>
+                                <!-- Le patch della release in uso: l'avanzamento e poi l'esito, col passo che resta e il
+                                     suo pulsante. Il registro di freebsd-update resta chiuso finche' non lo si apre. -->
+                                <div id="os-patch">
+                                    <div id="os-body" role="status" aria-live="polite"></div>
+                                    <details class="mt-2" id="os-log-box" hidden>
+                                        <summary class="small">{{t:osu.showLog}}</summary>
+                                        <pre id="os-log" class="upd-log mt-2"></pre>
+                                        <p class="small text-muted mb-0">{{t:osu.logKept}}</p>
+                                    </details>
                                 </div>
-                                <div id="up-body"></div>
-                                <pre id="up-log" class="upd-log mt-2" data-style="display:none"></pre>
+                                <!-- Una release nuova (reperto 196): quattro passi, solo quello di adesso col suo pulsante. -->
+                                <div id="os-release" hidden>
+                                    <ol class="list-unstyled mb-0" id="os-steps"></ol>
+                                    <div id="up-body" class="mt-2" role="status" aria-live="polite"></div>
+                                    <details class="mt-2" id="up-log-box" hidden>
+                                        <summary class="small">{{t:osu.showLog}}</summary>
+                                        <pre id="up-log" class="upd-log mt-2"></pre>
+                                        <p class="small text-muted mb-0">{{t:osu.logKept}}</p>
+                                    </details>
+                                </div>
                             </div>
                         </li>
                         <li class="list-group-item" id="uc-packages">
