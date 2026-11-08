@@ -152,6 +152,13 @@ carries the fingerprint the card showed and that the job ran that one. It signs 
 its session the fresh confirmation with the `confirm` mode of `signed-jobs-setup.sh` (VM only). It also reports
 every JavaScript error of the pages it opens.
 
+`java-update-browser-test.js` does the same with the Java row (reperto 195), the one procedure that stops the panel
+itself: "Prepare", the checks and the exact plan with its fingerprint, start with the word, the panel going down
+and coming back, the sign-in again (a restart ends every session), the last report from Diagnostics. Then, on the
+VM through `java-update-state.sh`: the service sees the panel again (its pidfile is the root part), the web part
+runs as mailpanel and holds the port, the JVM is the new one and protected again. It needs a JVM update waiting on
+the VM; the test's header says how the way back the script leaves puts the old JVM back.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the
@@ -324,6 +331,19 @@ choosing and checks: only the enabled repositories, the oldest counts, an enable
 catalog is said, without catalogs it says where it looked, all repositories disabled is not "I do
 not know", the old name is still recognised, a name with `../` does not end up in a path, a clock
 running behind does not give negative ages. Then the real line of the report, from `ReportMail`.
+
+**JavaUpdateScriptTest** — the detached script that upgrades the JVM the panel runs on (reperto
+195). The script is generated as the panel does and RUN, with fake pkg, sockstat, curl, ps and java
+in front of the PATH, a sleeping process as the panel and another as the web part's supervisor;
+the panel log, the backup folder and the pidfiles are in a temporary folder. As text, in English and
+Italian: `sh -n`, no placeholder left, every variable a report line prints is set by the script
+(`{VIA}` and `{backupPath}` were not), dates in UTC, download before the stop. Run: everything
+works (way back, unlock and lock of every package of the plan, web part stopped, panel started
+again, the port checked); the download fails and the job is cancelled with the protections back and
+the panel restarted to close it; no way back; the port held by root instead of mailpanel (TO
+CHECK); the new java does not start and the way back goes in. Plus the service detection (rc script
+and pidfile). FreeBSD only (`stat -f`): on the VM. The same flow from the browser, on the real VM
+panel, is in reperto 195.
 
 **PropagationWaitTest** — waiting for propagation, with a fake clock instead of six real minutes. It
 verifies the three properties that must hold: no waiting if the domains already answer, it stops as

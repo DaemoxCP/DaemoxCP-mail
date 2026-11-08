@@ -5306,6 +5306,20 @@ public final class UpdateManager {
     private static final String JDK_DIR = "/var/db/mailpanel/jdk";
     /** Dove finisce cio' che il pannello scrive quando riparte staccato dal terminale. */
     private static final String PANEL_LOG = "/var/db/mailpanel/panel.log";
+    /** Il servizio del pannello: il suo script e il pidfile che vi scrive daemon -p (RcScriptRepair). */
+    static final String RC_NAME = "mailpanel";
+    static String rcScript = "/usr/local/etc/rc.d/" + RC_NAME;
+    static String rcPidfile = "/var/run/" + RC_NAME + ".pid";
+
+    /** Vero se questo processo l'ha acceso il servizio: lo script c'e' e il suo pidfile porta il nostro pid. */
+    static boolean startedByService(long pid) {
+        try {
+            return Files.isRegularFile(Paths.get(rcScript))
+                    && Files.readString(Paths.get(rcPidfile)).trim().equals(String.valueOf(pid));
+        } catch (java.io.IOException | RuntimeException e) {
+            return false;
+        }
+    }
 
     /**
      * La riga di comando che riavvia QUESTO pannello, ricostruita dal processo vivo.
@@ -5380,6 +5394,23 @@ public final class UpdateManager {
      */
     private static JSONObject restartStrategy() {
         String dir = System.getProperty("user.dir", "");
+        // Acceso dal servizio (/usr/local/etc/rc.d/mailpanel, come all'avvio della macchina): si riaccende col
+        // servizio. Con la riga di daemon(8) ricostruita il pannello tornava su senza il pidfile del servizio:
+        // «service mailpanel status» lo dava spento, uno stop non lo fermava e uno start ne accendeva un secondo
+        // (reperto 195). Il servizio rifa' la stessa riga di sempre, col suo pidfile e il suo registro.
+        if (startedByService(ProcessHandle.current().pid())) {
+            String command = "/usr/sbin/service " + RC_NAME + " onestart";
+            return new JSONObject()
+                    .put("dir", dir)
+                    .put("menuCommand", startCommand(false))
+                    .put("jar", jarPath())
+                    .put("command", command)
+                    .put("log", PANEL_LOG)
+                    .put("line", command)
+                    .put("service", true)
+                    .put("note", I18n.tr("server.um.restartStrategy.service", java.util.Map.of("p", command)))
+                    .put("ok", true);
+        }
         String binJava = System.getProperty("java.home", "") + "/bin/java";
         String jar = "";
         try {
@@ -5504,7 +5535,7 @@ public final class UpdateManager {
             } else {
                 addCheck(checks, "start", I18n.tr("server.um.javaPreflight.6"), "wait", st.getString("note"));
                 addCheck(checks, "cmd", I18n.tr("server.um.javaPreflight.7"), "ok",
-                        "in " + st.getString("dir") + ":  " + st.getString("command"));
+                        st.optBoolean("service") ? st.getString("command") : "in " + st.getString("dir") + ":  " + st.getString("command"));
             }
 
             if (!ok("test -x /usr/sbin/daemon", 10)) {
@@ -5533,6 +5564,17 @@ public final class UpdateManager {
             addCheck(checks, "down", I18n.tr("server.um.x.downtime"), "wait",
                     I18n.tr("server.um.javaPreflight.13"));
 
+            // Il piano ESATTO, come per Roundcube, Python e MySQL: che cosa farebbe pkg aggiornando la JVM, calcolato
+            // su una copia del suo database con le stesse protezioni tolte. Prima la pagina diceva solo
+            // «25.0.4 -> 25.0.5», e pkg aggiornava anche quattro librerie di X11 senza che nessuno
+            // l'avesse letto (reperto 195). Il lavoro parte solo con l'impronta di questo piano.
+            if (!vRepo.isEmpty()) {
+                JSONObject plan = javaPlan(pkg);
+                if (addPlanChecks(checks, plan, java.util.List.of(pkg), java.util.List.of(pkg), lock)) lock = true;
+                r.put("plan", planForCard(plan)).put("signature", plan.optString("signature", ""))
+                 .put("unlock", plan.optJSONArray("unlockedPackages") == null ? new JSONArray() : plan.getJSONArray("unlockedPackages"));
+            }
+
             r.put("success", true).put("checks", checks)
              .put("blocked", lock).put("canProceed", !lock);
             return r;
@@ -5545,28 +5587,62 @@ public final class UpdateManager {
      * Prepara lo script, lo verifica e lo lancia staccato. Poi il pannello muore: da quel
      * momento in poi l'unico testimone e' il file di log, che si rilegge alla riaccensione.
      */
-    public static JSONObject startJavaUpdate() {
+    public static JSONObject startJavaUpdate(String approvedSignature) {
+        if (!validSignature(approvedSignature))
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.plan.signatureMissing"));
         // Il turno vale per la preparazione e il lancio. Poi lo script lavora fuori dal pannello:
         // da li' in avanti lo copre l'elenco su disco, che ferma ogni altro lavoro sui pacchetti
         // finche' il pannello riacceso non lo chiude.
         String id = "jdk-" + System.nanoTime();
         String refusal = PackageQueue.take(id, I18n.tr("server.um.startJavaUpdate.1"));
         if (refusal != null) return new JSONObject().put("success", false).put("error", refusal);
-        try { return startJavaUpdateNow(); }
+        try { return startJavaUpdateNow(approvedSignature); }
         finally { PackageQueue.release(id); }
     }
 
-    private static JSONObject startJavaUpdateNow() {
+    /** Il piano esatto per aggiornare la JVM: lo stesso calcolo di Roundcube e del guidato. */
+    private static JSONObject javaPlan(String pkg) {
+        return judged(PackagePlan.planFor(java.util.List.of(pkg), lockedNames(),
+                UpdateManager::reasonNotToUnlock, UpdateManager::installedFamilyTwin));
+    }
+
+    /**
+     * Quello che lo script deve sapere, deciso dal pannello prima di spegnersi.
+     *
+     * @param unlock       le protezioni che il piano toglie (la JVM e le dipendenze protette): tolte prima di scaricare,
+     *                     rimesse dopo, e scritte nell'elenco su disco che il pannello riacceso rilegge
+     * @param service      vero se il pannello l'ha acceso il servizio: allora si riaccende col servizio
+     * @param port         la porta su cui il pannello risponde adesso (della parte web, se separato); 0 se non si sa
+     * @param listenerUser l'utente che deve tenere quella porta dopo il riavvio (mailpanel se separato), o vuoto
+     * @param webSupervisorPidFile il pidfile del supervisore della parte web, o vuoto se il pannello non e' separato
+     * @param panelLog     il registro del pannello (PANEL_LOG; un altro solo nelle prove)
+     */
+    record JavaScriptPlan(String pkg, String home, String backupDir, String log, long pid, java.util.List<String> unlock,
+                          String startLine, String dir, boolean service, int port, String listenerUser,
+                          String webSupervisorPidFile, String panelLog) { }
+
+    private static JSONObject startJavaUpdateNow(String approvedSignature) {
         try {
             JSONObject pf = javaPreflight();
             if (!pf.optBoolean("canProceed", false))
                 return new JSONObject().put("success", false)
                         .put("error", pf.optBoolean("already", false)
                                 ? I18n.tr("server.um.x.alreadyLatest") : I18n.tr("server.um.startJavaUpdateNow.1"));
+            // Il piano ricalcolato adesso e' quello letto nella pagina? Altrimenti non si parte.
+            if (!approvedSignature.equals(pf.optString("signature", "")))
+                return new JSONObject().put("success", false).put("error", I18n.tr("server.um.plan.changedSinceRead"));
             String pkg = pf.getString("pkg");
             if (!isValidName(pkg)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
+            // Le protezioni da togliere sono esattamente quelle del piano (la JVM, se protetta, e le dipendenze
+            // protette): rimesse alla fine, ne' una in piu' ne' una in meno.
+            java.util.List<String> unlock = new ArrayList<>();
+            for (String n : jsonArrayToList(pf.optJSONArray("unlock") == null ? new JSONArray() : pf.getJSONArray("unlock"))) {
+                if (!isValidName(n)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
+                if (!unlock.contains(n)) unlock.add(n);
+            }
             JSONObject st = pf.getJSONObject("restart");
-            String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
+            // In UTC, come ogni data che si scrive (anche il nome della cartella e del resoconto).
+            String ts = sh("date -u '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}"))
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.um.repairNginxPathInfo.10"));
             String bk = JDK_DIR + "/" + ts;
@@ -5575,10 +5651,21 @@ public final class UpdateManager {
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.um.startJavaUpdateNow.2", java.util.Map.of("backup", String.valueOf(bk))));
 
             long pid = ProcessHandle.current().pid();
+            // Separato, la porta la tiene la parte web (utente mailpanel), non questo processo: chiesta a lui, la
+            // porta era 0 e lo script saltava la verifica, dichiarando riuscito un pannello mai controllato
+            // (reperto 195). E dopo il riavvio la deve tenere ancora mailpanel: se la tenesse root, la separazione
+            // non sarebbe tornata.
             int port = listeningPort(pid);
+            String listenerUser = "", webSupervisor = "";
+            if (PanelSeparation.active()) {
+                int webPort = listeningPort(PanelSeparation.readPid(PanelSeparation.webPid()));
+                if (webPort > 0) port = webPort;
+                listenerUser = PanelSeparation.USER;
+                webSupervisor = PanelSeparation.supervisorPid().toString();
+            }
 
-            String script = javaUpdateScript(pkg, pf.optString("home"), bk, log, pid,
-                    st.getString("line"), st.getString("dir"), port);
+            String script = javaUpdateScript(new JavaScriptPlan(pkg, pf.optString("home"), bk, log, pid, unlock,
+                    st.getString("line"), st.getString("dir"), st.optBoolean("service"), port, listenerUser, webSupervisor, PANEL_LOG));
             String path = bk + "/upgrade-jdk.sh";
             Files.writeString(Paths.get(path), script);
             ok("chmod 700 " + path, 15);
@@ -5593,7 +5680,7 @@ public final class UpdateManager {
             // avvio restoreLocksAfterCrash() li riprotegge da solo. Se l'elenco non si scrive,
             // lo script non parte. Finche' l'elenco c'e', nessun altro lavoro sui pacchetti parte:
             // lo script lavora fuori dal pannello, e il turno del pannello non lo vede.
-            String stateError = PackageQueue.writeStateForRestart(java.util.List.of(pkg));
+            String stateError = PackageQueue.writeStateForRestart(unlock);
             if (stateError != null)
                 return new JSONObject().put("success", false)
                         .put("error", I18n.tr("server.um.startJavaUpdateNow.5", java.util.Map.of("stateError", String.valueOf(stateError))));
@@ -5634,94 +5721,160 @@ public final class UpdateManager {
         }
     }
 
-    private static String javaUpdateScript(String pkg, String home, String bk, String log,
-                                                  long pid, String startLine, String dir, int port) {
-        // Le righe che lo script stampa sono nella lingua di chi ha avviato l'aggiornamento; le
-        // righe "=== OUTCOME: ... ===" restano fisse, perche' javaUpdateStatus le rilegge.
-        return "#!/bin/sh\n"
-          + "# Generated by the panel: it updates the JVM the panel itself runs on.\n"
-          + "exec >> '" + log + "' 2>&1\n"
-          + "echo \"=== $(date) ===\"\n"
-          + echo(I18n.tr("server.um.jvs.title")) + "\n"
-          + "PKG='" + pkg + "'\n"
-          + "BK='" + bk + "'\n"
-          + "JAVA='" + home + "/bin/java'\n"
-          + "\n"
-          + echo(I18n.tr("server.um.jvs.s1")) + "\n"
-          + "if pkg create -o \"$BK\" \"$PKG\"; then\n"
-          + "  # pkg create makes .pkg on recent versions and .txz on older ones: the way back is not\n"
-          + "  # tied to an extension, otherwise it would disappear for no reason.\n"
-          + "  WAY_BACK=$(ls -1 \"$BK\"/${PKG}-* 2>/dev/null | head -1)\n"
-          + "  if [ -n \"$WAY_BACK\" ]; then " + echo(I18n.tr("server.um.jvs.wayBack")) + "; else\n"
-          + "    " + echo(I18n.tr("server.um.jvs.noFile")) + "\n"
-          + "    " + echo(I18n.tr("server.um.jvs.cancelled")) + "\n"
-          + "    echo '=== OUTCOME: CANCELLED ==='; exit 1; fi\n"
-          + "else\n"
-          + "  " + echo(I18n.tr("server.um.jvs.createFailed")) + "\n"
-          + "  " + echo(I18n.tr("server.um.jvs.cancelled")) + "\n"
-          + "  echo '=== OUTCOME: CANCELLED ==='; exit 1\n"
-          + "fi\n"
-          + "\n"
-          + echo(I18n.tr("server.um.jvs.s2")) + "\n"
-          + "kill " + pid + " 2>/dev/null\n"
-          + "i=0\n"
-          + "while kill -0 " + pid + " 2>/dev/null; do\n"
-          + "  i=$((i+1)); [ $i -ge 45 ] && break; sleep 1\n"
-          + "done\n"
-          + "if kill -0 " + pid + " 2>/dev/null; then\n"
-          + "  " + echo(I18n.tr("server.um.jvs.forceKill")) + "\n"
-          + "  kill -9 " + pid + " 2>/dev/null; sleep 2\n"
-          + "fi\n"
-          + echo(I18n.tr("server.um.jvs.stopped")) + "\n"
-          + "\n"
-          + echo(I18n.tr("server.um.jvs.s3")) + "\n"
-          + "pkg unlock -y \"$PKG\"\n"
-          + "if pkg upgrade -y \"$PKG\"; then UPGRADE_RC=0; else UPGRADE_RC=1; " + echo(I18n.tr("server.um.jvs.upgradeFailed")) + "; fi\n"
-          + "\n"
-          + echo(I18n.tr("server.um.jvs.s4")) + "\n"
-          + "if \"$JAVA\" -version 2>&1; then\n"
-          + "  " + echo(I18n.tr("server.um.jvs.javaOk")) + "\n"
-          + "else\n"
-          + "  " + echo(I18n.tr("server.um.jvs.javaKo")) + "\n"
-          + "  pkg add -f \"$WAY_BACK\" && " + echo(I18n.tr("server.um.jvs.prevBack")) + " || " + echo(I18n.tr("server.um.jvs.restoreFailed")) + "\n"
-          + "  \"$JAVA\" -version 2>&1 || " + echo(I18n.tr("server.um.jvs.javaStillKo")) + "\n"
-          + "fi\n"
-          + "\n"
-          + echo(I18n.tr("server.um.jvs.s5")) + "\n"
-          + "pkg lock -y \"$PKG\" && " + echo(I18n.tr("server.um.jvs.relocked")) + " || " + echo(I18n.tr("server.um.jvs.relockFailed")) + "\n"
-          + "mkdir -p /var/db/mailpanel\n"
-          + "# The log is appended forever: above 10 MB it is set aside, so it does not grow\n"
-          + "# without end and a copy of what was there before still remains.\n"
-          + "if [ -f '" + PANEL_LOG + "' ] && [ $(stat -f %z '" + PANEL_LOG + "') -gt 10485760 ]; then\n"
-          + "  mv '" + PANEL_LOG + "' '" + PANEL_LOG + ".1'\n"
-          + "fi\n"
-          + "cd " + shellQuote(dir) + " || " + echo(I18n.tr("server.um.jvs.noCd", java.util.Map.of("d", String.valueOf(dir)))) + "\n"
-          + startLine + "\n"
-          + "\n"
-          + echo(I18n.tr("server.um.jvs.s6")) + "\n"
-          + "PANEL_UP=1\n"
-          + (port > 0
-             ? "j=0\n"
-             + "while [ $j -lt 90 ]; do\n"
-             + "  # -46l and not -4l: the JVM can open the socket in IPv6, and with -4l the panel would\n"
-             + "  # look off while it is up. The grep skips the header line. The final boundary is not\n"
-             + "  # the end of the line: sockstat prints another column after the local address, so\n"
-             + "  # with '$' it would never match. The boundary is a space or the end of the line.\n"
-             + "  if sockstat -46l -p " + port + " 2>/dev/null | grep -qE '[:.]" + port + "([[:space:]]|$)'; then PANEL_UP=0; break; fi\n"
-             + "  j=$((j+1)); sleep 1\n"
-             + "done\n"
-             + "[ $PANEL_UP -eq 0 ] && " + echo(I18n.tr("server.um.jvs.listening", java.util.Map.of("port", String.valueOf(port))))
-             + " || " + echo(I18n.tr("server.um.jvs.notListening", java.util.Map.of("port", String.valueOf(port)))) + "\n"
-             : echo(I18n.tr("server.um.jvs.noPort")) + "\nPANEL_UP=0\n")
-          + "\n"
-          + "if [ $UPGRADE_RC -eq 0 ] && [ $PANEL_UP -eq 0 ]; then\n"
-          + "  echo \"=== OUTCOME: SUCCEEDED ($(date)) ===\"\n"
-          + "  " + echo(I18n.tr("server.um.jvs.keepBack")) + "\n"
-          + "  " + echo(I18n.tr("server.um.jvs.panelLog", java.util.Map.of("f", String.valueOf(PANEL_LOG)))) + "\n"
-          + "else\n"
-          + "  echo \"=== OUTCOME: TO CHECK ($(date)) ===\"\n"
-          + "  echo \"upgrade=$UPGRADE_RC  panel_up=$PANEL_UP  way_back=$WAY_BACK\"\n"
-          + "fi\n";
+    /**
+     * Lo script staccato che aggiorna la JVM. In ordine: la via di ritorno, lo scaricamento col pannello ancora
+     * acceso, lo stop (parte root e parte web), l'aggiornamento dai pacchetti gia' scaricati, la prova di java, le
+     * protezioni rimesse e la riaccensione, poi la verifica che il pannello risponda davvero.
+     *
+     * Le righe che stampa sono nella lingua di chi ha avviato l'aggiornamento; le righe "=== OUTCOME: ... ==="
+     * restano fisse, perche' javaUpdateStatus le rilegge. Un segnaposto {MAIUSCOLO} nei testi e' una variabile
+     * di questo script (echo): JavaUpdateScriptTest controlla che ognuna sia assegnata qui.
+     */
+    static String javaUpdateScript(JavaScriptPlan p) {
+        String title = PanelSeparation.TITLE;
+        StringBuilder s = new StringBuilder();
+        java.util.function.Consumer<String> line = l -> s.append(l).append('\n');
+        line.accept("#!/bin/sh");
+        line.accept("# Generated by the panel: it updates the JVM the panel itself runs on.");
+        line.accept("exec >> " + shellQuote(p.log()) + " 2>&1");
+        line.accept("echo \"=== $(date -u '+%Y-%m-%d %H:%M:%S UTC') ===\"");
+        line.accept(echo(I18n.tr("server.um.jvs.title")));
+        line.accept("PKG=" + shellQuote(p.pkg()));
+        line.accept("BACKUP_DIR=" + shellQuote(p.backupDir()));
+        line.accept("JAVA=" + shellQuote(p.home() + "/bin/java"));
+        line.accept("UNLOCK=" + shellQuote(String.join(" ", p.unlock())));
+        line.accept("PANEL_PID=" + p.pid());
+        line.accept("PORT=" + Math.max(0, p.port()));
+        line.accept("LISTENER_USER=" + shellQuote(p.listenerUser()));
+        line.accept("SERVICE=" + (p.service() ? 1 : 0));
+        line.accept("WEB_SUPERVISOR_PIDFILE=" + shellQuote(p.webSupervisorPidFile()));
+        line.accept("WAY_BACK=''");
+        line.accept("UPGRADE_RC=1");
+        line.accept("DO_UPGRADE=1");
+        line.accept("");
+        line.accept("# The protections the plan removes, put back on what is still installed.");
+        line.accept("relock() {");
+        line.accept("  for NAME in $UNLOCK; do");
+        line.accept("    pkg info -e \"$NAME\" || continue");
+        line.accept("    if pkg lock -y \"$NAME\" >/dev/null 2>&1; then " + echo(I18n.tr("server.um.jvs.relocked"))
+                + "; else " + echo(I18n.tr("server.um.jvs.relockFailed")) + "; fi");
+        line.accept("  done");
+        line.accept("}");
+        line.accept("");
+        line.accept(echo(I18n.tr("server.um.jvs.s1")));
+        line.accept("if pkg create -o \"$BACKUP_DIR\" \"$PKG\"; then");
+        line.accept("  # pkg create makes .pkg on recent versions and .txz on older ones: the way back is not");
+        line.accept("  # tied to an extension, otherwise it would disappear for no reason.");
+        line.accept("  WAY_BACK=$(ls -1 \"$BACKUP_DIR\"/\"$PKG\"-* 2>/dev/null | head -1)");
+        line.accept("  if [ -n \"$WAY_BACK\" ]; then " + echo(I18n.tr("server.um.jvs.wayBack"))
+                + "; else " + echo(I18n.tr("server.um.jvs.noFile")) + "; DO_UPGRADE=0; fi");
+        line.accept("else");
+        line.accept("  " + echo(I18n.tr("server.um.jvs.createFailed")) + "; DO_UPGRADE=0");
+        line.accept("fi");
+        line.accept("");
+        line.accept(echo(I18n.tr("server.um.jvs.s2")));
+        line.accept("if [ $DO_UPGRADE -eq 1 ]; then");
+        line.accept("  for NAME in $UNLOCK; do pkg unlock -y \"$NAME\"; done");
+        line.accept("  # Only the download (-F): the panel still answers, and the packages stay as they are.");
+        line.accept("  if ! pkg upgrade -F -y \"$PKG\"; then " + echo(I18n.tr("server.um.jvs.fetchFailed")) + "; DO_UPGRADE=0; fi");
+        line.accept("fi");
+        line.accept("if [ $DO_UPGRADE -eq 0 ]; then");
+        line.accept("  relock");
+        line.accept("  " + echo(I18n.tr("server.um.jvs.cancelRestart")));
+        line.accept("fi");
+        line.accept("");
+        line.accept(echo(I18n.tr("server.um.jvs.s3")));
+        line.accept("kill \"$PANEL_PID\" 2>/dev/null");
+        line.accept("i=0");
+        line.accept("while kill -0 \"$PANEL_PID\" 2>/dev/null; do");
+        line.accept("  i=$((i+1)); [ $i -ge 45 ] && break; sleep 1");
+        line.accept("done");
+        line.accept("if kill -0 \"$PANEL_PID\" 2>/dev/null; then");
+        line.accept("  " + echo(I18n.tr("server.um.jvs.forceKill")));
+        line.accept("  kill -9 \"$PANEL_PID\" 2>/dev/null; sleep 2");
+        line.accept("fi");
+        line.accept(echo(I18n.tr("server.um.jvs.stopped")));
+        line.accept("# The root part stops the web part on its way out; killed by force it cannot, and a web part left");
+        line.accept("# running would keep the port and the old JVM. Its supervisor is recognised by its title.");
+        line.accept("if [ -n \"$WEB_SUPERVISOR_PIDFILE\" ]; then");
+        line.accept("  WEB_SUPERVISOR=$(cat \"$WEB_SUPERVISOR_PIDFILE\" 2>/dev/null)");
+        line.accept("  if [ -n \"$WEB_SUPERVISOR\" ] && ps -o command= -p \"$WEB_SUPERVISOR\" 2>/dev/null | grep -q '^daemon: "
+                + title + "\\['; then");
+        line.accept("    kill \"$WEB_SUPERVISOR\" 2>/dev/null");
+        line.accept("    k=0; while kill -0 \"$WEB_SUPERVISOR\" 2>/dev/null && [ $k -lt 30 ]; do k=$((k+1)); sleep 1; done");
+        line.accept("    kill -0 \"$WEB_SUPERVISOR\" 2>/dev/null && kill -9 \"$WEB_SUPERVISOR\" 2>/dev/null");
+        line.accept("    " + echo(I18n.tr("server.um.jvs.webStopped")));
+        line.accept("  fi");
+        line.accept("fi");
+        line.accept("");
+        line.accept(echo(I18n.tr("server.um.jvs.s4")));
+        line.accept("if [ $DO_UPGRADE -eq 1 ]; then");
+        line.accept("  if pkg upgrade -y \"$PKG\"; then UPGRADE_RC=0; else " + echo(I18n.tr("server.um.jvs.upgradeFailed")) + "; fi");
+        line.accept("fi");
+        line.accept("");
+        line.accept(echo(I18n.tr("server.um.jvs.s5")));
+        line.accept("if \"$JAVA\" -version 2>&1; then");
+        line.accept("  " + echo(I18n.tr("server.um.jvs.javaOk")));
+        line.accept("elif [ -n \"$WAY_BACK\" ]; then");
+        line.accept("  " + echo(I18n.tr("server.um.jvs.javaKo")));
+        line.accept("  if pkg add -f \"$WAY_BACK\"; then " + echo(I18n.tr("server.um.jvs.prevBack"))
+                + "; else " + echo(I18n.tr("server.um.jvs.restoreFailed")) + "; fi");
+        line.accept("  \"$JAVA\" -version 2>&1 || " + echo(I18n.tr("server.um.jvs.javaStillKo")));
+        line.accept("  UPGRADE_RC=1");
+        line.accept("else");
+        line.accept("  " + echo(I18n.tr("server.um.jvs.javaStillKo")));
+        line.accept("fi");
+        line.accept("");
+        line.accept(echo(I18n.tr("server.um.jvs.s6")));
+        line.accept("relock");
+        line.accept("mkdir -p " + shellQuote(java.nio.file.Paths.get(p.panelLog()).getParent().toString()));
+        line.accept("# The log is appended forever: above 10 MB it is set aside, so it does not grow");
+        line.accept("# without end and a copy of what was there before still remains.");
+        line.accept("if [ -f " + shellQuote(p.panelLog()) + " ] && [ $(stat -f %z " + shellQuote(p.panelLog()) + ") -gt 10485760 ]; then");
+        line.accept("  mv " + shellQuote(p.panelLog()) + " " + shellQuote(p.panelLog() + ".1"));
+        line.accept("fi");
+        line.accept("cd " + shellQuote(p.dir()) + " || " + echo(I18n.tr("server.um.jvs.noCd", java.util.Map.of("d", String.valueOf(p.dir())))));
+        line.accept(p.startLine());
+        line.accept("");
+        line.accept(echo(I18n.tr("server.um.jvs.s7")));
+        line.accept("PANEL_UP=1");
+        line.accept("if [ \"$PORT\" -gt 0 ]; then");
+        line.accept("  # Who holds the port, and whether an HTTPS server answers there (any status: the panel answers only");
+        line.accept("  # to its name). -46l and not -4l: the JVM can open the socket in IPv6. The sixth column is the");
+        line.accept("  # local address; its end is the port.");
+        line.accept("  j=0; USER_NOW=''");
+        line.accept("  while [ $j -lt 180 ]; do");
+        line.accept("    USER_NOW=$(sockstat -46l -p \"$PORT\" 2>/dev/null | awk -v p=\"$PORT\" 'NR > 1 && $6 ~ (\"[:.]\" p \"$\") { print $1; exit }')");
+        line.accept("    if [ -n \"$USER_NOW\" ] && curl -sk -m 5 -o /dev/null \"https://127.0.0.1:$PORT/index\"; then PANEL_UP=0; break; fi");
+        line.accept("    j=$((j+1)); sleep 1");
+        line.accept("  done");
+        line.accept("  if [ $PANEL_UP -eq 0 ]; then " + echo(I18n.tr("server.um.jvs.listening", java.util.Map.of("port", String.valueOf(p.port()))))
+                + "; else " + echo(I18n.tr("server.um.jvs.notListening", java.util.Map.of("port", String.valueOf(p.port())))) + "; fi");
+        line.accept("  # Separated, the port must be held by the web part's user again: held by root, the panel came back");
+        line.accept("  # without the separation, and that is not the state it was in.");
+        line.accept("  if [ $PANEL_UP -eq 0 ] && [ -n \"$LISTENER_USER\" ] && [ \"$USER_NOW\" != \"$LISTENER_USER\" ]; then");
+        line.accept("    " + echo(I18n.tr("server.um.jvs.wrongUser", java.util.Map.of("port", String.valueOf(p.port())))) + "; PANEL_UP=1");
+        line.accept("  fi");
+        line.accept("else");
+        line.accept("  " + echo(I18n.tr("server.um.jvs.noPort")) + "; PANEL_UP=2");
+        line.accept("fi");
+        line.accept("# Started by the service, the service must see it again (its pidfile): otherwise a stop would not");
+        line.accept("# stop it and a start would start a second one.");
+        line.accept("if [ $SERVICE -eq 1 ] && ! /usr/sbin/service " + RC_NAME + " status >/dev/null 2>&1; then");
+        line.accept("  " + echo(I18n.tr("server.um.jvs.serviceBlind")) + "; PANEL_UP=1");
+        line.accept("fi");
+        line.accept("");
+        line.accept("if [ $DO_UPGRADE -eq 0 ]; then");
+        line.accept("  echo \"=== OUTCOME: CANCELLED ($(date -u '+%Y-%m-%d %H:%M:%S UTC')) ===\"");
+        line.accept("elif [ $UPGRADE_RC -eq 0 ] && [ $PANEL_UP -eq 0 ]; then");
+        line.accept("  echo \"=== OUTCOME: SUCCEEDED ($(date -u '+%Y-%m-%d %H:%M:%S UTC')) ===\"");
+        line.accept("  " + echo(I18n.tr("server.um.jvs.keepBack")));
+        line.accept("  " + echo(I18n.tr("server.um.jvs.panelLog", java.util.Map.of("f", String.valueOf(p.panelLog())))));
+        line.accept("else");
+        line.accept("  echo \"=== OUTCOME: TO CHECK ($(date -u '+%Y-%m-%d %H:%M:%S UTC')) ===\"");
+        line.accept("  echo \"upgrade=$UPGRADE_RC  panel_up=$PANEL_UP  way_back=$WAY_BACK\"");
+        line.accept("fi");
+        return s.toString();
     }
 
     /**
