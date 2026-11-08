@@ -6739,7 +6739,7 @@
   "uc.kind.error": "errore",
   "uc.os": "FreeBSD (il sistema di base)",
   "uc.osReady": "Ora {now}; pronte le patch fino a {target}.",
-  "uc.osOk": "{now}: nessuna patch in attesa (fra quelle già scaricate).",
+  "uc.osOk": "{now}: nessuna patch in attesa fra quelle già scaricate. «Cerca aggiornamenti», qui in alto, cerca quelle nuove.",
   "uc.packages": "Pacchetti",
   "uc.packagesTodo.one": "{n} pacchetto da aggiornare.",
   "uc.packagesTodo.other": "{n} pacchetti da aggiornare.",
