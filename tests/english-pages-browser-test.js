@@ -137,6 +137,10 @@ const API = {
                       repository: [{ name: 'FreeBSD', role: 'packages', branch: 'quarterly', enabled: true, url: 'pkg+https://pkg.FreeBSD.org/...' }] },
         os_status: { success: true, installedKernel: '15.0-RELEASE-p3', uname: '15.0-RELEASE-p3', restartNeeded: false, userland: '15.0-RELEASE-p3',
                      arch: 'amd64', endOfSupport: '2026-12-31', supportNotes: '', supportSource: 'freebsd.org', updatableWithFreebsdUpdate: true, alreadyReady: 'none' },
+        // A move to a newer release prepared and waiting for the command from SSH: the guided steps (reperto 196).
+        os_upgrade_targets: { success: true, current: '15.0', versions: [{ version: '15.1', endOfSupport: '31/03/2027', note: '' }] },
+        jump_state: { success: true, inProgress: true, phase: 'prepared', target: '15.1', upgradeFetched: false, steps: [],
+                      installedKernel: '15.0-RELEASE-p3', runningKernel: '15.0-RELEASE-p3', userland: '15.0-RELEASE-p3', restartNeeded: false },
         plan: { success: true, toDo: 1, steps: [
             { group: 'phase', letter: 'A', title: 'Lock the stack', state: 'done', situation: 'Locked.', why: 'So nothing replaces it.' },
             { group: 'package', title: 'curl', state: 'todo', situation: '8.9 to 8.10', why: 'Fixes a CVE.', action: { type: 'package_update', package: 'curl' } }],
@@ -268,14 +272,16 @@ const VISITS = [
     } },
     { path: '/install' },
     { path: '/setup' },
-    // "Update the server" with every row opened in place (reperto 193): the branch, FreeBSD with its release, the plan
-    // of the packages; and the whole package list. The checks that only read are on Diagnostics.
+    // "Update the server" with every row opened in place (reperto 193): the branch, FreeBSD with the guided move to a
+    // new release (reperto 196), the plan of the packages; and the whole package list. The checks that only read are on
+    // Diagnostics.
     { path: '/updates', prepare: async page => {
         await page.waitForSelector('#uc-branch button[data-on-click="ucBranch()"]');
         await page.click('#uc-branch button[data-on-click="ucBranch()"]');
         await page.waitForSelector('#branch-body table');
         await page.click('#uc-os button[data-on-click="ucRelease()"]');
-        for (const [fn, sel] of [['osState', '#os-body table'], ['pkOverview', '#pk-body table']]) {
+        await page.waitForSelector('#os-steps pre');
+        for (const [fn, sel] of [['pkOverview', '#pk-body table']]) {
             await page.evaluate(f => window[f](), fn);
             await page.waitForSelector(sel);
         }

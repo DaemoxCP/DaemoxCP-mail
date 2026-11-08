@@ -20,12 +20,16 @@ set -e
 # With a folder as argument it checks the pages already generated there by PageGenerator (on the test VM, where
 # the Java programs run: run.sh of the series writes them in pages-panel), without building anything:
 #   sh tests/check-pages.sh <folder with the pages, assets/ and i18n/>
+# Only the temporary folder made here is removed at the end: a folder given as argument is someone else's, and until
+# 08/11/2026 it was deleted too (reperto 196).
+OWN_DIR=
 if [ -n "${1:-}" ]; then
     DIR=$1
     [ -d "$DIR/assets" ] || { echo "$DIR has no assets/: not a folder written by PageGenerator"; exit 2; }
 else
     mvn -o -q package -DskipTests
     DIR=$(mktemp -d)
+    OWN_DIR=$DIR
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator "$DIR" >/dev/null
 fi
@@ -115,7 +119,7 @@ sys.exit(1 if broken else 0)
 PY
 then brokenStructure=0; else brokenStructure=1; fi
 
-rm -rf "$DIR"
+[ -n "$OWN_DIR" ] && rm -rf "$OWN_DIR"
 echo
 if [ "$ko" -eq 0 ]; then echo "ALL $tot PAGES AND SCRIPT FILES HAVE VALID JAVASCRIPT"; else echo "$ko PAGES OR SCRIPT FILES OF $tot WITH BROKEN JAVASCRIPT"; fi
 if [ "$ko" -ne 0 ] || [ "$brokenStructure" -ne 0 ]; then exit 1; fi

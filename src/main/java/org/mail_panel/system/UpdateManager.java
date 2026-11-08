@@ -2078,8 +2078,14 @@ public final class UpdateManager {
         public final long startedAt = System.currentTimeMillis();
         public volatile long finishedAt;
         private final StringBuilder log = new StringBuilder();
+        /** Il registro su disco di questo lavoro (JobJournal), o null se non si e' potuto aprire. */
+        private final java.nio.file.Path journal;
 
-        Job(String id, String type) { this.id = id; this.type = type; }
+        Job(String id, String type) {
+            this.id = id;
+            this.type = type;
+            this.journal = JobJournal.open(id, type, startedAt);
+        }
 
         public synchronized void write(String line) {
             log.append('[')
@@ -2088,12 +2094,23 @@ public final class UpdateManager {
             // Un pkg upgrade di cento pacchetti produce migliaia di righe: senza un tetto il
             // job terrebbe in memoria tutto l'output e la pagina diventerebbe illeggibile.
             if (log.length() > 200_000) log.delete(0, log.length() - 150_000);
+            JobJournal.append(journal, line);
         }
 
         public void advance(int s, int t) { this.step = s; this.total = t; }
 
+        /**
+         * La fine del lavoro: l'ora, e nel registro su disco l'esito (stato, errore, durata). Una volta sola: chi la
+         * scrive per secondo non cambia niente.
+         */
+        public synchronized void finish() {
+            if (finishedAt != 0) return;
+            finishedAt = System.currentTimeMillis();
+            JobJournal.end(journal, status, errorMessage, outcome, (finishedAt - startedAt) / 1000);
+        }
+
         /** Scrive la fine, se il lavoro non l'ha gia' scritta da se': vedi withEndMarked. */
-        void markFinished() { if (finishedAt == 0) finishedAt = System.currentTimeMillis(); }
+        void markFinished() { finish(); }
 
         /**
          * Lo stato come lo deve vedere chi aspetta il lavoro.
@@ -2135,7 +2152,9 @@ public final class UpdateManager {
 
     public static JSONObject jobStatus(String id) {
         Job j = JOBS.get(id);
-        return j == null ? new JSONObject().put("success", false).put("error", I18n.tr("server.um.jobStatus.1"))
+        // «unknown»: il pannello non conosce piu' il lavoro (si e' riavviato). La pagina smette di chiedere e dice dove sta
+        // il registro su disco, invece di chiedere per sempre.
+        return j == null ? new JSONObject().put("success", false).put("unknown", true).put("error", I18n.tr("server.um.jobStatus.1"))
                          : new JSONObject().put("success", true).put("job", j.toJson());
     }
 
@@ -2594,7 +2613,7 @@ public final class UpdateManager {
                 j.errorMessage = String.valueOf(e.getMessage());
                 j.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
             } finally {
-                j.finishedAt = System.currentTimeMillis();
+                j.finish();
             }
         }, "mtasts-enable");
         t.setDaemon(true);
@@ -2632,7 +2651,7 @@ public final class UpdateManager {
                 j.errorMessage = String.valueOf(e.getMessage());
                 j.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
             } finally {
-                j.finishedAt = System.currentTimeMillis();
+                j.finish();
             }
         }, "configure-domain");
         t.setDaemon(true);
@@ -2754,7 +2773,7 @@ public final class UpdateManager {
             // La rigenerazione scrive la connessione con l'utente del pannello: si torna a quello di Dovecot
             // (MailDbUsers), che legge solo indirizzo, hash e stato delle caselle.
             if ("completed".equals(job.status)) MailDbUsers.ensureAtBoot();
-            job.finishedAt = System.currentTimeMillis();
+            job.finish();
         }
     }
 
@@ -4096,7 +4115,7 @@ public final class UpdateManager {
                     if (!backupDir.isEmpty()) job.write(I18n.tr("server.um.runMigration84.37", java.util.Map.of("backupDir", String.valueOf(backupDir))));
                 }
             }
-            job.finishedAt = System.currentTimeMillis();
+            job.finish();
         }
     }
 
@@ -5297,7 +5316,7 @@ public final class UpdateManager {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runGuidedUpdate.42");
             }
-            job.finishedAt = System.currentTimeMillis();
+            job.finish();
         }
     }
 
@@ -6631,7 +6650,7 @@ public final class UpdateManager {
                         job.write(I18n.tr("server.um.x.unlockedNotReplaced", java.util.Map.of("list", String.join(", ", stillThere))));
                 }
             }
-            job.finishedAt = System.currentTimeMillis();
+            job.finish();
         }
     }
 
@@ -7961,7 +7980,7 @@ public final class UpdateManager {
                     }
                 }
             }
-            job.finishedAt = System.currentTimeMillis();
+            job.finish();
         }
     }
 
@@ -8048,7 +8067,7 @@ public final class UpdateManager {
                 j.errorMessage = e.getMessage();
                 j.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
             } finally {
-                j.finishedAt = System.currentTimeMillis();
+                j.finish();
             }
         }, "rspamd-cache");
         t.setDaemon(true);
@@ -9531,7 +9550,7 @@ public final class UpdateManager {
             } catch (Exception e) {
                 j.status = "error"; j.errorMessage = e.getMessage();
                 j.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
-            } finally { j.finishedAt = System.currentTimeMillis(); }
+            } finally { j.finish(); }
         }, "os-fetch");
         t.setDaemon(true);
         t.start();
@@ -9659,7 +9678,7 @@ public final class UpdateManager {
             j.errorMessage = e.getMessage();
             j.write(I18n.tr("server.um.startMtaStsActivation.1", Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            j.finishedAt = System.currentTimeMillis();
+            j.finish();
         }
     }
 
@@ -9719,7 +9738,7 @@ public final class UpdateManager {
             j.errorMessage = e.getMessage();
             j.write(I18n.tr("server.um.startMtaStsActivation.1", Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            j.finishedAt = System.currentTimeMillis();
+            j.finish();
         }
     }
 
@@ -10743,6 +10762,11 @@ public final class UpdateManager {
                 }
             }
 
+            // La preparazione fatta si ricorda: la pagina guida il passo dopo (il comando da SSH) anche se la si
+            // riapre domani, e un passaggio preparato ma non cominciato si puo' annullare (cancelVersionJump).
+            writeJumpState(new JSONObject().put("phase", "prepared").put("target", target)
+                    .put("preparedUtc", java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString())
+                    .put("bootEnvironment", beName).put("steps", new JSONArray()));
             job.status = "completed";
             job.write("");
             job.write("=== " + I18n.tr("server.um.x.prepDone") + " ===");
@@ -10754,7 +10778,7 @@ public final class UpdateManager {
             job.errorMessage = e.getMessage();
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            job.finishedAt = System.currentTimeMillis();
+            job.finish();
         }
     }
 
@@ -10980,11 +11004,32 @@ public final class UpdateManager {
                 .put("installedKernel", os.optString("installedKernel"))
                 .put("runningKernel", os.optString("uname"))
                 .put("userland", os.optString("userland"))
-                .put("restartNeeded", os.optBoolean("restartNeeded"));
+                .put("restartNeeded", os.optBoolean("restartNeeded"))
+                .put("bootEnvironment", st.optString("bootEnvironment", ""))
+                // Il passo da SSH fatto: freebsd-update ha scaricato la release scelta e aspetta l'installazione.
+                .put("upgradeFetched", !st.optString("target", "").isEmpty() && os.optBoolean("readyExist")
+                        && os.optString("readyTarget", "").startsWith(st.optString("target") + "-"));
         // Se aspettavamo un riavvio e il kernel adesso combacia, il riavvio c'e' stato.
         if ("awaiting-restart".equals(st.optString("phase")) && !os.optBoolean("restartNeeded"))
             r.put("restartHappened", true);
         return r;
+    }
+
+    /**
+     * Annulla un passaggio di release preparato e non cominciato: si toglie solo il suo stato. Dopo che
+     * freebsd-update ha installato qualcosa no: da li' si va avanti, o si torna indietro col boot environment.
+     */
+    public static JSONObject cancelVersionJump() {
+        JSONObject st = readJumpState();
+        if (!"prepared".equals(st.optString("phase")))
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.jumpCancel.started"));
+        try {
+            Files.deleteIfExists(Paths.get(VERSION_JUMP_STATE));
+        } catch (Exception e) {
+            return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+        return new JSONObject().put("success", true)
+                .put("note", I18n.tr("server.um.jumpCancel.done", java.util.Map.of("be", st.optString("bootEnvironment", "?"))));
     }
 
     public static JSONObject startResumeVersionJump(String target) {
@@ -11127,7 +11172,7 @@ public final class UpdateManager {
             job.errorMessage = e.getMessage();
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            job.finishedAt = System.currentTimeMillis();
+            job.finish();
         }
     }
 
@@ -11529,7 +11574,7 @@ public final class UpdateManager {
                 j.errorMessage = I18n.tr("server.um.startBranchChange.3", java.util.Map.of("message", String.valueOf(e.getMessage())));
                 j.status = "error";
             } finally {
-                j.finishedAt = System.currentTimeMillis();
+                j.finish();
             }
         });
     }
@@ -11701,7 +11746,7 @@ public final class UpdateManager {
                     j.write(r ? I18n.tr("server.um.x.reprotectOk", java.util.Map.of("pkg", String.valueOf(correct))) : I18n.tr("server.um.x.reprotectFail", java.util.Map.of("pkg", String.valueOf(correct))));
                     if (r) clearState();
                 }
-                j.finishedAt = System.currentTimeMillis();
+                j.finish();
             }
         });
     }
@@ -11823,7 +11868,7 @@ public final class UpdateManager {
                 job.write("  " + I18n.tr("server.um.x.reprotectedCount", java.util.Map.of("n", String.valueOf(n), "tot", String.valueOf(unlockedPackages.size()))));
                 if (n == unlockedPackages.size()) clearState();
             }
-            job.finishedAt = System.currentTimeMillis();
+            job.finish();
         }
     }
 
@@ -11874,7 +11919,7 @@ public final class UpdateManager {
                 job.errorMessage = I18n.tr("server.um.runUpdateJob.7");
                 job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature), "currentSignature", String.valueOf(currentSignature))));
                 job.write(I18n.tr("server.um.runUpdateJob.8"));
-                job.finishedAt = System.currentTimeMillis();
+                job.finish();
                 return;
             }
             // Come la manutenzione: un piano che non si puo' eseguire non si esegue, e si
@@ -11885,7 +11930,7 @@ public final class UpdateManager {
                 job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errors", String.valueOf(String.join(" | ", jsonArrayToList(plan.getJSONArray("pkgErrors"))))))
                         + (plan.getJSONArray("changes").isEmpty() ? " " + I18n.tr("server.um.x.nothingToUpdate") : "");
                 job.write(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
-                job.finishedAt = System.currentTimeMillis();
+                job.finish();
                 return;
             }
             // La stessa regola degli altri due: niente rimozioni, niente retrocessioni.
@@ -11895,7 +11940,7 @@ public final class UpdateManager {
                 job.errorMessage = destructive;
                 job.write(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(destructive))));
                 job.write(I18n.tr("server.um.x.destructiveByHand"));
-                job.finishedAt = System.currentTimeMillis();
+                job.finish();
                 return;
             }
             job.write("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(currentSignature))));
@@ -11977,7 +12022,7 @@ public final class UpdateManager {
             job.status = "error"; job.errorMessage = e.getMessage();
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            job.finishedAt = System.currentTimeMillis();
+            job.finish();
         }
     }
 
@@ -12277,7 +12322,7 @@ public final class UpdateManager {
                 job.write("");
                 job.write(I18n.tr("server.um.runMaintenanceJob.25"));
             }
-            job.finishedAt = System.currentTimeMillis();
+            job.finish();
         }
     }
 }

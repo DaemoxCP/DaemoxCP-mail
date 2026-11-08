@@ -212,7 +212,8 @@ public class SSLMailServer {
         "panel_env", "dovecot24_preview", "rspamd_timeout", "web_diagnosis", "web443_status", "web443_config",
         "mtasts_plan", "watch", "watch_changes", "openssl_expiry", "port465_status",
         "python_preflight", "python_leftovers", "java_preflight", "java_status", "roundcube_preflight",
-        "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status", "interruption_status");
+        "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status", "interruption_status",
+        "journal_list", "journal_read");
 
     /** Le rotte dichiarate, con il loro accesso: le prove controllano che ci siano tutte. */
     private final Map<String, Access> routes = new java.util.LinkedHashMap<>();
@@ -7921,6 +7922,14 @@ public class SSLMailServer {
                     response = UpdateManager.startResumeVersionJump(req.optString("target", ""));
                     logAudit("RELEASE_JUMP_CONTINUE", ip, response.optString("jobId", ""));
                 }
+                case "jump_cancel" -> {
+                    if (!"CANCEL".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
+                        break;
+                    }
+                    response = UpdateManager.cancelVersionJump();
+                    logAudit("RELEASE_JUMP_CANCELLED", ip, response.optBoolean("success") ? "cancelled" : "refused");
+                }
                 case "os_upgrade_prepare" -> {
                     if (!"PREPARE UPGRADE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
@@ -8081,6 +8090,9 @@ public class SSLMailServer {
                     logAudit("MAINTENANCE_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
+                // I registri su disco dei lavori (JobJournal): restano dopo i riavvii, e si leggono da Diagnostica.
+                case "journal_list" -> response = org.mail_panel.system.JobJournal.list(40);
+                case "journal_read" -> response = org.mail_panel.system.JobJournal.read(req.optString("name", ""));
                 default -> response = new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
             }
             sendJsonResponse(exchange, response);

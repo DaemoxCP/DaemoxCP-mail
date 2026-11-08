@@ -7,7 +7,11 @@
 //     buttons for what there is to do (reperto 193: every row acts in place).
 //  3. No browser dialog (prompt, confirm): confirmations are the panel's own window, which shows the
 //     exact plan; the job starts with the plan's signature and the right keyword.
-//  4. FreeBSD patches: the confirmation, then os_patch_install with INSTALL PATCHES.
+//  4. FreeBSD patches: the confirmation, os_patch_install with INSTALL PATCHES, then the outcome with the one step left
+//     (the restart, with its button) and the details closed (reperto 196).
+//  4b. A new FreeBSD release, one step at a time: only when there is one; four steps, only the current one with its
+//     button; check and prepare with one confirmation, the command from SSH, the install, the final check by itself.
+//  4c. The checks stop the preparation: only the rows that stop it, and nothing starts.
 //  5. The restart window: what stops, the chosen delay, the time, cancelling; Escape closes it.
 //  6. Reads queue up: two "System state" calls at once both answer.
 //  7. At 375 px: no horizontal scrolling, 44 px buttons.
@@ -34,11 +38,27 @@ function check(what, ok) {
 const PLAN = { measured: true, command: 'pkg upgrade -n', changes: [
     { type: 'upgrade', name: 'libX11', from: '1.8.12,1', to: '1.8.14,1', reason: 'CVE-2026-88806' },
     { type: 'upgrade', name: 'brotli', from: '1.1.0,1', to: '1.2.1,1' }] };
-function replies(o) {
+// st is the server's state for one page: what the actions so far have changed.
+function replies(o, st) {
     return {
-        os_status: { success: true, installedKernel: '15.1-RELEASE', uname: '15.1-RELEASE', userland: '15.1-RELEASE', arch: 'arm64 GENERIC',
-            restartNeeded: false, endOfSupport: '2027-03-31', supportNotes: '', supportSource: 'freebsd.org', series: '15.1',
-            updatableWithFreebsdUpdate: true, readyExist: true, readyTarget: '15.1-RELEASE-p6', readyKernel: true, alreadyReady: 'There are updates available to install.' },
+        os_status: st.patched
+            ? { success: true, installedKernel: '15.1-RELEASE-p5', uname: '15.1-RELEASE', userland: '15.1-RELEASE-p6', arch: 'arm64 GENERIC',
+                restartNeeded: true, series: '15.1', updatableWithFreebsdUpdate: true, readyExist: false }
+            : { success: true, installedKernel: '15.1-RELEASE', uname: '15.1-RELEASE', userland: '15.1-RELEASE', arch: 'arm64 GENERIC',
+                restartNeeded: false, endOfSupport: '2027-03-31', supportNotes: '', supportSource: 'freebsd.org', series: '15.1',
+                updatableWithFreebsdUpdate: true, readyExist: !o.noPatches, readyTarget: '15.1-RELEASE-p6', readyKernel: true },
+        os_upgrade_targets: { success: true, current: '15.1', versions: o.targets ? [{ version: '15.2', endOfSupport: '30/06/2027', note: '' }] : [] },
+        jump_state: { success: true, inProgress: !!st.phase, phase: st.phase || '', target: st.phase ? '15.2' : '', upgradeFetched: !!st.fetched,
+            steps: [], restartNeeded: false, bootEnvironment: 'before-upgrade-15.2' },
+        os_upgrade_preflight: o.blocked
+            ? { success: true, blocked: true, checks: [{ label: 'Restart pending', level: 'block', detail: 'Restart the server first.' },
+                { label: 'Current version', level: 'ok', detail: '15.1-RELEASE' }] }
+            : { success: true, blocked: false, checks: [{ label: 'Current version', level: 'ok', detail: '15.1-RELEASE' },
+                { label: 'Space', level: 'ok', detail: 'Enough.' }, { label: 'Boot environments', level: 'ok', detail: 'ZFS.' }] },
+        os_upgrade_prepare: { success: true, jobId: 'prep-1' },
+        jump_continue: { success: true, jobId: 'jump-1' },
+        jump_cancel: { success: true, note: 'Move cancelled.' },
+        os_upgrade_verify: { success: true, allGood: true, checks: [{ label: 'Services', level: 'ok', detail: 'All up.' }], environments: { success: false } },
         packages_overview: { success: true, procedures: { java: true, roundcube: false, roundcubePackage: '', mysql84: false, python: false }, summary: { updates: 4, stackUpdates: 2, vulnerable: 3, fixable: 2, locked: 39 },
             packages: [
                 { name: 'dovecot-mysql', role: 'IMAP', installed: '2.3.21.1_3', available: '2.3.21.1_4', update: true, locked: true, stack: true, canUpdate: true },
@@ -64,7 +84,7 @@ function replies(o) {
 
 async function open(ctx, name, lang, o = {}) {
     const page = await ctx.newPage();
-    const calls = [], errors = [], dialogs = [];
+    const calls = [], errors = [], dialogs = [], st = {};
     page.on('pageerror', e => errors.push(String(e)));
     page.on('dialog', d => { dialogs.push(d.type() + ': ' + d.message()); d.dismiss(); });
     csp.watch(page, errors);
@@ -83,7 +103,11 @@ async function open(ctx, name, lang, o = {}) {
             const body = JSON.parse(req.postData() || '{}');
             calls.push(body);
             if (o.slow && body.action === 'os_status') await new Promise(r => setTimeout(r, 700));
-            const r = replies(o)[body.action] || { success: false, error: 'mock' };
+            const r = replies(o, st)[body.action] || { success: false, error: 'mock' };
+            if (body.action === 'os_patch_install') st.patched = true;
+            if (body.action === 'os_upgrade_prepare') st.phase = 'prepared';
+            if (body.action === 'jump_continue') st.phase = 'finished';
+            if (body.action === 'jump_cancel') st.phase = '';
             return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(r) });
         }
         if (p.startsWith('/api/')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":false,"error":"mock"}' });
@@ -93,7 +117,7 @@ async function open(ctx, name, lang, o = {}) {
         return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html, headers: csp.headers(pages) });
     });
     await page.goto(BASE + '/' + name);
-    return { page, calls, errors, dialogs };
+    return { page, calls, errors, dialogs, st };
 }
 
 // Ready when every row has its data: the card fills in as the other cards' reads arrive.
@@ -140,6 +164,8 @@ const allErrors = [], allDialogs = [];
         && await page.$('#ucList button[data-pkg="dovecot-mysql"]') !== null && !/openjdk/.test(rows[2]));
     check('the panel\'s Java: its row, with the versions and Prepare', /openjdk25: 25\.0\.4/.test(rows[3]) && /Prepare/.test(rows[3]));
     check('branch and restart', /quarterly branch/.test(rows[4]) && /needs a restart/.test(rows[5]));
+    check('no newer release: nothing about moving to one, no button for it (reperto 196)', !/available|Move to/.test(rows[0])
+        && await page.$('[data-on-click="ucRelease()"]') === null);
     check('one read each of packages and branch when the page opens (the card reuses the cards\' reads)',
         calls.filter(c => c.action === 'packages_overview').length === 1 && calls.filter(c => c.action === 'branch_status').length === 1);
     check('the state in words too, not only by color', await page.$$eval('#ucList .visually-hidden', s => s.map(x => x.textContent).join(' '))
@@ -166,9 +192,80 @@ const allErrors = [], allDialogs = [];
     check('the confirmation says what happens (boot environment, mail stays up)', /boot environment/.test(await page.innerText('#panelAskModal'))
         && /mail stays up/.test(await page.innerText('#panelAskModal')));
     await page.click('#panelAskGo');
-    await page.waitForFunction(() => document.getElementById('os-log').textContent.length > 0, null, { timeout: 10000 });
+    await page.waitForFunction(() => /Patches installed/.test(document.getElementById('os-body').innerText), null, { timeout: 10000 });
     const inst = calls.find(c => c.action === 'os_patch_install');
     check('os_patch_install with INSTALL PATCHES', inst && inst.confirm === 'INSTALL PATCHES');
+    const outcome = await page.innerText('#os-body');
+    console.log('    ' + outcome.replace(/\s+/g, ' '));
+    check('the outcome says what is installed and the one step left, the restart, with its button',
+        /Patches installed: FreeBSD 15\.1-RELEASE-p6/.test(outcome) && /One step left: restart the server/.test(outcome)
+        && await page.$('#os-body button[data-on-click="panelRebootOpen()"]') !== null);
+    check('  what the server did is there, closed', await page.$eval('#os-log-box', d => !d.hidden && !d.open));
+    check('  nothing about a new release under it', await page.$eval('#os-release', r => r.hidden));
+    await page.waitForFunction(() => /One step left/.test(document.querySelector('#uc-os .uc-head').innerText), null, { timeout: 10000 });
+    check('the FreeBSD row says it too, and the button is there once, not twice',
+        await page.$$eval('#uc-os button[data-on-click="panelRebootOpen()"]', b => b.filter(x => x.offsetParent).length) === 1);
+    if (shots) await page.locator('#uc-os').screenshot({ path: path.join(shots, 'os-patches-done.png') });
+
+    console.log('\n== 4b. A new FreeBSD release, one step at a time ==');
+    const mv = await open(ctx, 'updates', 'en', { targets: true, noPatches: true, reboot: 'none' });
+    allErrors.push(mv.errors); allDialogs.push(mv.dialogs);
+    await centerReady(mv.page);
+    const osRow = await mv.page.innerText('#uc-os .uc-head');
+    check('the FreeBSD row says the new release is there, with one button', /FreeBSD 15\.2 is available/.test(osRow)
+        && await mv.page.$$eval('#uc-os .uc-head button', b => b.map(x => x.textContent.trim())).then(b => b.length === 1 && /Move to FreeBSD 15\.2/.test(b[0])));
+    await mv.page.click('#uc-os button[data-on-click="ucRelease()"]');
+    const stepState = () => mv.page.$$eval('#os-steps > li', lis => lis.map(li => li.querySelector('.fw-semibold').innerText.replace(/\s+/g, ' ')));
+    const actions = () => mv.page.$$eval('#os-release button', b => b.filter(x => x.offsetParent).map(x => x.textContent.trim()));
+    let st1 = await stepState();
+    console.log('    ' + st1.join(' | '));
+    check('four steps, the first now and the others later', st1.length === 4 && /\(now\)/.test(st1[0]) && st1.slice(1).every(x => /\(later\)/.test(x)));
+    check('  one button only: ' + (await actions()).join(', '), (await actions()).length === 1);
+    check('  the patches part is not there', await mv.page.$eval('#os-patch', p => p.hidden));
+    await mv.page.click('#os-release button[data-on-click="osRelPrepare()"]');
+    await mv.page.waitForSelector('#panelAskModal.show');
+    check('one confirmation after the checks: all 3 fine, what happens', /All 3 checks are fine/.test(await mv.page.innerText('#panelAskModal')));
+    await mv.page.click('#panelAskGo');
+    await mv.page.waitForFunction(() => document.querySelector('#os-steps pre'), null, { timeout: 10000 });
+    const prep = mv.calls.find(c => c.action === 'os_upgrade_prepare');
+    check('prepared for 15.2 with PREPARE UPGRADE', prep && prep.target === '15.2' && prep.confirm === 'PREPARE UPGRADE');
+    st1 = await stepState();
+    check('step 1 done, step 2 now', /\(done\)/.test(st1[0]) && /\(now\)/.test(st1[1]));
+    check('  the row says step 2 of 4, without repeating the button of the open steps',
+        /step 2 of 4/.test(await mv.page.innerText('#uc-os .uc-head')) && await mv.page.$('#uc-os .uc-head button') === null);
+    check('  the command, ready to copy', (await mv.page.innerText('#os-cmd')) === 'freebsd-update -r 15.2-RELEASE upgrade');
+    check('  copy, I have run it, and cancel: ' + (await actions()).join(', '), (await actions()).length === 3);
+    if (shots) await mv.page.locator('#uc-os').screenshot({ path: path.join(shots, 'os-move-step2.png') });
+    await mv.page.click('#os-release button[data-on-click="osRelFetched()"]');
+    await mv.page.waitForFunction(() => /does not see the downloaded release/.test(document.getElementById('up-body').innerText), null, { timeout: 10000 });
+    check('"I have run it" before the command ended: the panel says it does not see the release yet', true);
+    mv.st.fetched = true;
+    await mv.page.click('#os-release button[data-on-click="osRelFetched()"]');
+    await mv.page.waitForSelector('#os-release button[data-on-click="osRelInstall()"]', { timeout: 10000 });
+    st1 = await stepState();
+    check('the panel sees the downloaded release by itself: step 3 now, one button', /\(now\)/.test(st1[2]) && (await actions()).length === 1);
+    await mv.page.click('#os-release button[data-on-click="osRelInstall()"]');
+    await mv.page.waitForSelector('#panelAskModal.show');
+    await mv.page.click('#panelAskGo');
+    await mv.page.waitForFunction(() => /\(now\)/.test((document.querySelectorAll('#os-steps > li')[3] || {}).innerText || ''), null, { timeout: 10000 });
+    const cont = mv.calls.find(c => c.action === 'jump_continue');
+    check('installed with CONTINUE and the target', cont && cont.confirm === 'CONTINUE' && cont.target === '15.2');
+    await mv.page.waitForFunction(() => /still there|All/.test(document.getElementById('up-body').innerText), null, { timeout: 10000 }).catch(() => {});
+    check('the final check runs by itself, once', mv.calls.filter(c => c.action === 'os_upgrade_verify').length === 1);
+    check('  and no button left to press', (await actions()).filter(x => !/Delete/.test(x)).length === 0);
+    await mv.page.close();
+
+    console.log('\n== 4c. The checks stop the preparation ==');
+    const bl = await open(ctx, 'updates', 'en', { targets: true, noPatches: true, blocked: true, reboot: 'none' });
+    allErrors.push(bl.errors); allDialogs.push(bl.dialogs);
+    await centerReady(bl.page);
+    await bl.page.click('#uc-os button[data-on-click="ucRelease()"]');
+    await bl.page.click('#os-release button[data-on-click="osRelPrepare()"]');
+    await bl.page.waitForFunction(() => /not ready yet/.test(document.getElementById('up-body').innerText), null, { timeout: 10000 });
+    const why = await bl.page.innerText('#up-body');
+    check('only the row that stops it, with what to do', /Restart pending/.test(why) && /Restart the server first/.test(why) && !/Current version/.test(why));
+    check('  nothing started', !bl.calls.some(c => c.action === 'os_upgrade_prepare') && !await bl.page.$('#panelAskModal.show'));
+    await bl.page.close();
 
     console.log('\n== 5. The restart window ==');
     await page.click('#panelRebootBanner button');

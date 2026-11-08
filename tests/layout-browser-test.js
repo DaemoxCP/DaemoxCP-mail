@@ -74,9 +74,9 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     const sections = await page.$$eval('.sidebar-section-title', e => e.map(x => x.textContent.trim()));
     check('four sections: ' + sections.join(', '), JSON.stringify(sections) === JSON.stringify(['nav.section.mail', 'nav.section.dns', 'nav.section.security', 'nav.section.system'].map(k => IT[k])));
     const items = await page.$$eval('.sidebar-link', e => e.map(x => x.textContent.trim()));
-    check(items.length + ' items, from Dashboard to Settings', items.length === 17 && items[0] === 'Dashboard' && items[items.length - 1] === IT['nav.settings']);
-    check('the pages no link reached before are in the menu (queue, limits, statistics, admins)', await page.evaluate(() =>
-        ['/queue', '/ratelimits', '/statistics', '/admins'].every(h => document.querySelector('.sidebar-link[href="' + h + '"]'))));
+    check(items.length + ' items, from Dashboard to Settings', items.length === 18 && items[0] === 'Dashboard' && items[items.length - 1] === IT['nav.settings']);
+    check('the pages no link reached before are in the menu (queue, limits, statistics, admins, diagnostics)', await page.evaluate(() =>
+        ['/queue', '/ratelimits', '/statistics', '/admins', '/diagnostics'].every(h => document.querySelector('.sidebar-link[href="' + h + '"]'))));
     check('Dashboard marked as the current page', await page.getAttribute('.sidebar-link.active', 'href') === '/home'
         && await page.getAttribute('.sidebar-link.active', 'aria-current') === 'page' && await page.locator('.sidebar-link.active').count() === 1);
     check('the sidebar is visible and fixed on the left', await page.isVisible('#sidebar')
