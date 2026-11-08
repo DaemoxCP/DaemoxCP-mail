@@ -85,6 +85,30 @@ public class DestructivePlanTest {
         check("three removals, all named",
              m4 != null && m4.contains("lmdb") && m4.contains("tinycdb") && m4.contains("libtlsrpt"));
 
+        // ===== The removals a job declares itself: they are the job, not a side effect =====
+        // The MySQL 8.4 migration removes mysql80-server and mysql80-client, the Python transition
+        // removes the old py3XX packages: PackagePlan.planRemoveThenInstall marks them "intended",
+        // they are in the signed plan and the inventory checks them. Any OTHER removal follows the
+        // rule, also inside the same plan.
+        JSONObject migration = plan(
+                change("remove", "mysql80-server", "8.0.46", "").put("intended", true),
+                change("remove", "mysql80-client", "8.0.46", "").put("intended", true),
+                change("install", "mysql84-server", "", "8.4.11"),
+                change("install", "mysql84-client", "", "8.4.11"));
+        check("the removals the job declares do not stop its plan",
+             UpdateManager.destructivePlanReason(migration) == null);
+        check("  and they are not counted as removals",
+             UpdateManager.destructiveChanges(migration).getJSONArray("removes").isEmpty());
+        String m5 = UpdateManager.destructivePlanReason(plan(
+                change("remove", "mysql80-client", "8.0.46", "").put("intended", true),
+                change("install", "mysql84-client", "", "8.4.11"),
+                change("remove", "postfix-mysql", "3.11.7_3,1", "")));
+        check("a removal the job did NOT declare still stops it, and only that one is named",
+             m5 != null && m5.contains("postfix-mysql") && !m5.contains("mysql80-client"));
+        check("\"intended\": false is an ordinary removal",
+             UpdateManager.destructivePlanReason(plan(
+                 change("remove", "lmdb", "1.0.2,1", "").put("intended", false))) != null);
+
         System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
     }

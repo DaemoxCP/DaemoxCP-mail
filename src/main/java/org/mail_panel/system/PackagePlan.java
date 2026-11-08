@@ -318,13 +318,36 @@ public final class PackagePlan {
      * prima di mostrare lo stato; qui conta che la simulazione e l'esecuzione usino lo STESSO.
      */
     public static JSONObject simulate(List<String> toUnlock, List<String> packages) {
+        return simulate(new Command("upgrade", packages, List.of()), toUnlock);
+    }
+
+    /**
+     * Che cosa chiede un lavoro a pkg: "upgrade" (i pacchetti dati, o tutti) o "install" (quelli dati), dopo aver tolto
+     * i pacchetti di 'forget' (che il lavoro toglie prima, con pkg delete, anche -f).
+     */
+    record Command(String verb, List<String> args, List<String> forget) {
+        String shown() {
+            String list = args.isEmpty() ? "" : " " + String.join(" ", args);
+            String f = forget.isEmpty() ? "" : "pkg delete -f " + String.join(" ", forget) + " ; ";
+            return f + "pkg " + verb + " -n -U" + list;
+        }
+    }
+
+    /**
+     * Come sopra, per un comando qualunque. La copia del database si fa se c'e' da sbloccare o da dimenticare; i
+     * pacchetti da dimenticare si tolgono dalla copia con JDBC (le righe, non i file: PKGDB_FORGET_PACKAGE), e il
+     * database vero non si tocca mai.
+     */
+    static JSONObject simulate(Command cmd, List<String> toUnlock) {
+        if (!"upgrade".equals(cmd.verb()) && !"install".equals(cmd.verb())) return failed("unknown pkg command: " + cmd.verb());
         for (String n : toUnlock) if (!isValidName(n)) return failed(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
-        for (String n : packages) if (!isValidName(n)) return failed(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
-        String list = packages.isEmpty() ? "" : " " + String.join(" ", packages);
+        for (String n : cmd.args()) if (!isValidName(n)) return failed(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
+        for (String n : cmd.forget()) if (!isValidName(n)) return failed(I18n.tr("server.plan.badName", java.util.Map.of("n", String.valueOf(n))));
+        String list = cmd.args().isEmpty() ? "" : " " + String.join(" ", cmd.args());
         String prefix = "pkg";
         String copy = null;
         try {
-            if (!toUnlock.isEmpty()) {
+            if (!toUnlock.isEmpty() || !cmd.forget().isEmpty()) {
                 String db = dbFolder();
                 long kb = number(sh("du -sk " + db + " 2>/dev/null | cut -f1", 120));
                 long free = number(sh("df -k /var/tmp 2>/dev/null | tail -1 | awk '{print $4}'", 30));
@@ -344,16 +367,73 @@ public final class PackagePlan {
                     Shell.Result u = Shell.runShell(Duration.ofSeconds(60), prefix + " unlock -y " + n + " 2>&1");
                     if (!u.success()) return failed(I18n.tr("server.plan.unlockFailed", java.util.Map.of("n", String.valueOf(n), "out", String.valueOf(u.outputTrim()))));
                 }
+                String forgotten = forget(copy, cmd.forget());
+                if (forgotten != null) return failed(forgotten);
             }
-            Shell.Result r = Shell.runShell(Duration.ofSeconds(600), prefix + " upgrade -n -U" + list + " 2>&1");
+            Shell.Result r = Shell.runShell(Duration.ofSeconds(600), prefix + " " + cmd.verb() + " -n -U" + list + " 2>&1");
             JSONObject plan = readPlan(r.output());
             return plan.put("success", true).put("code", r.exitCode()).put("output", r.outputTrim())
                     .put("onBackup", copy != null)
-                    .put("command", "pkg upgrade -n -U" + list);
+                    .put("command", cmd.shown());
         } finally {
             // La copia se ne va sempre. Il percorso e' quello creato da mktemp e verificato sopra.
             if (copy != null) Shell.runShell(Duration.ofSeconds(300), "rm -rf " + copy);
         }
+    }
+
+    /**
+     * Dimentica quei pacchetti nella COPIA del database di pkg (cartella 'copy', creata da mktemp qui sopra): righe del
+     * database, non file. null se e' andata, altrimenti il perche'. Un nome che non c'e' e' un errore: il piano direbbe
+     * di togliere qualcosa che non c'e'.
+     */
+    private static String forget(String copy, List<String> names) {
+        if (names.isEmpty()) return null;
+        if (copy == null || !copy.matches("/var/tmp/panel-simulation\\.[A-Za-z0-9]{6,}")) return "not a simulation copy: " + copy;
+        try (java.sql.Connection c = org.mail_panel.database.CatalogGuard.open("jdbc:sqlite:" + copy + "/local.sqlite")) {
+            try (java.sql.Statement st = c.createStatement()) {
+                st.execute(org.mail_panel.database.SqlCatalog.PKGDB_FOREIGN_KEYS_ON);
+            }
+            try (java.sql.PreparedStatement ps = c.prepareStatement(org.mail_panel.database.SqlCatalog.PKGDB_FORGET_PACKAGE)) {
+                for (String n : names) {
+                    ps.setString(1, n);
+                    if (ps.executeUpdate() != 1) return I18n.tr("server.plan.notInstalledToRemove", java.util.Map.of("n", n));
+                }
+            }
+            return null;
+        } catch (java.sql.SQLException e) {
+            return "the copy of pkg's database: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Il piano di un lavoro che prima toglie dei pacchetti (pkg delete, anche -f: la migrazione di MySQL, il passaggio
+     * di Python) e poi ne installa altri (pkg install -U). Sulla copia del database si dimenticano quelli da togliere e
+     * si chiede a pkg che cosa installerebbe: e' cio' che pkg fara' davvero dopo la rimozione, senza i conflitti con
+     * pacchetti che a quel punto non ci saranno piu'. In testa al piano le rimozioni, con la versione installata; le
+     * protezioni dei pacchetti tolti stanno fra quelle da togliere (il lavoro le toglie, nell'elenco su disco).
+     */
+    public static JSONObject planRemoveThenInstall(List<String> remove, List<String> install, Set<String> protectedNames,
+                                                   Function<JSONObject, String> reasonNotToUnlock) {
+        Map<String, String> installedNow = versionsOnly(installed());
+        for (String n : remove)
+            if (!isValidName(n) || !installedNow.containsKey(n))
+                return failed(I18n.tr("server.plan.notInstalledToRemove", java.util.Map.of("n", String.valueOf(n))));
+        JSONObject plan = planWith(new Command("install", install, remove), new LinkedHashSet<>(), protectedNames,
+                reasonNotToUnlock, n -> null, true);
+        if (!plan.optBoolean("measured")) return plan;
+        JSONArray changes = new JSONArray();
+        for (String n : remove)
+            changes.put(entry("remove", n, installedNow.get(n), "", I18n.tr("server.plan.removedFirst"), "", false)
+                    .put("intended", true));
+        JSONArray rest = plan.optJSONArray("changes");
+        for (int i = 0; rest != null && i < rest.length(); i++) changes.put(rest.get(i));
+        LinkedHashSet<String> unlock = new LinkedHashSet<>();
+        for (String n : remove) if (protectedNames.contains(n)) unlock.add(n);
+        JSONArray before = plan.optJSONArray("unlockedPackages");
+        for (int i = 0; before != null && i < before.length(); i++) unlock.add(before.getString(i));
+        plan.put("changes", changes).put("unlockedPackages", new JSONArray(new ArrayList<>(unlock)))
+            .put("removedFirst", new JSONArray(remove));
+        return plan.put("signature", signature(plan));
     }
 
     /**
@@ -386,7 +466,7 @@ public final class PackagePlan {
                                       Function<String, String> installedTwin) {
         LinkedHashSet<String> unlock = new LinkedHashSet<>();
         for (String p : packages) if (protectedNames.contains(p)) unlock.add(p);
-        return planWith(packages, unlock, protectedNames, reasonNotToUnlock, installedTwin, true);
+        return planWith(new Command("upgrade", packages, List.of()), unlock, protectedNames, reasonNotToUnlock, installedTwin, true);
     }
 
     /**
@@ -403,18 +483,19 @@ public final class PackagePlan {
     public static JSONObject fullPlan(Set<String> toUnlock, Set<String> protectedNames,
                                          Function<JSONObject, String> reasonNotToUnlock,
                                          Function<String, String> installedTwin) {
-        return planWith(List.of(), new LinkedHashSet<>(toUnlock), protectedNames, reasonNotToUnlock,
-                installedTwin, false);
+        return planWith(new Command("upgrade", List.of(), List.of()), new LinkedHashSet<>(toUnlock), protectedNames,
+                reasonNotToUnlock, installedTwin, false);
     }
 
-    private static JSONObject planWith(List<String> packages, LinkedHashSet<String> unlock, Set<String> protectedNames,
+    private static JSONObject planWith(Command cmd, LinkedHashSet<String> unlock, Set<String> protectedNames,
                                        Function<JSONObject, String> reasonNotToUnlock,
                                        Function<String, String> installedTwin, boolean blockersBlock) {
+        List<String> packages = cmd.args();
         JSONObject plan = null;
         JSONArray blockers = new JSONArray();
         JSONArray unlockedFamily = new JSONArray();
         for (int round = 0; round < 6; round++) {
-            plan = simulate(new ArrayList<>(unlock), packages);
+            plan = simulate(cmd, new ArrayList<>(unlock));
             if (!plan.optBoolean("success") || !plan.optBoolean("measured")) break;
             blockers = new JSONArray();
             boolean added = false;

@@ -34,6 +34,10 @@ import java.util.TreeSet;
  *       all its children; never an exception in place of the exit code
  *   M6  the periodic report says the packages without protection and the interrupted job
  *   M7  the machine switched off abruptly during pkg upgrade (-Dmeasure=m7, then the m7-after mode)
+ *   M8  the panel killed during a guided update: the panel SERVICE (which must run this build) completes the job by
+ *       itself: nginx, which still ran on the old files, restarted with a new pid, everything verified, the notice
+ *       says what it did and is not a thing to do any more
+ *   M8b the same for the update of the unprotected packages, which unlocks nothing and so left no trace before
  *
  * It touches the system: it installs and removes fake packages, creates and removes boot
  * environments, turns off the real repositories for the duration, unlocks and locks again. Only on
@@ -83,6 +87,8 @@ public class UpdaterRobustnessE2ETest {
             if (on.test("m4")) m4PanelKilledDuringPkg();
             if (on.test("m5")) m5Timeout();
             if (on.test("m6")) m6Report();
+            if (on.test("m8")) m8CompletedByThePanel();
+            if (on.test("m8b")) m8bUnprotectedCompleted();
         } finally {
             cleanup();
             sh("rm -f " + REPO_CONF + "; rm -rf /var/db/pkg/repos/robustprobe " + work + " " + DIR);
@@ -105,6 +111,7 @@ public class UpdaterRobustnessE2ETest {
         build(PKG, "1.0", false);
         build(PKG, "1.1", true);
         build(OTHER, "1.0", true);
+        build(OTHER, "0.9", false);
         if (!Files.isDirectory(Path.of(REPO_CONF).getParent())) {
             Files.createDirectories(Path.of(REPO_CONF).getParent());
             createdReposDir = true;
@@ -280,8 +287,100 @@ public class UpdaterRobustnessE2ETest {
                 && restart.contains("PROTECTED AGAIN IN THE BACKGROUND"));
         check("M4 the notice says which job, that pkg was working, and when it was locked again",
                 n.optString("description").contains(PKG) && !n.optString("pkgWasRunning").isEmpty() && n.has("relockedUtc"));
+        // The panel service then completes the job (M8): waited for here, so that its notice does not land in M5-M6.
+        JSONObject completed = waitCompleted(300);
+        System.out.println("  then the panel service: " + (completed.has("recovery") ? "completed it" : "did not complete it (an older build?)"));
         Files.writeString(SLEEP, "0");
         Files.deleteIfExists(PackageRecovery.notice);
+    }
+
+    // ===================== M8 =====================
+
+    /** Waits for the panel service to complete an interrupted job: the trace gone and the notice with its recovery. */
+    static JSONObject waitCompleted(int seconds) throws Exception {
+        long until = System.currentTimeMillis() + seconds * 1000L;
+        while (System.currentTimeMillis() < until) {
+            JSONObject n = PackageRecovery.notice();
+            if (!Files.exists(PackageQueue.running()) && n.has("recovery")) return n;
+            Thread.sleep(2000);
+        }
+        return PackageRecovery.notice();
+    }
+
+    static void m8CompletedByThePanel() throws Exception {
+        System.out.println("\n== M8. The panel killed during a guided update: the panel service completes the job ==");
+        fresh(25);
+        Files.deleteIfExists(PackageRecovery.notice);
+        String nginxBefore = sh("service nginx status 2>/dev/null").replaceAll("[^0-9]", "");
+        String cp = System.getProperty("java.class.path");
+        Process child = new ProcessBuilder("java", "-De2e.vm=yes", "-cp", cp, UpdaterRobustnessE2ETest.class.getName(), "run-guided")
+                .redirectErrorStream(true).redirectOutput(DIR.resolve("child.log").toFile())
+                .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null"))).start();
+        if (!waitFor(STARTED, 240)) {
+            check("M8: the job reached the install script", false);
+            child.destroyForcibly();
+            return;
+        }
+        check("M8 the job's trace is on disk while it runs", Files.exists(PackageQueue.running())
+                && PackageQueue.runningRecord().optLong("pid") == child.pid() && PackageQueue.runningRecord().has("inventory"));
+        sh("kill -9 " + child.pid());
+        child.waitFor();
+        // Nothing restarts the panel here: the panel service on this machine, with its watch, must do it all.
+        JSONObject n = waitCompleted(300);
+        JSONObject r = n.optJSONObject("recovery");
+        String nginxAfter = sh("service nginx status 2>/dev/null").replaceAll("[^0-9]", "");
+        System.out.println("  the notice: " + PackageRecovery.text(n));
+        System.out.println("  nginx pid: " + nginxBefore + " -> " + nginxAfter);
+        check("M8 completed by the panel service: trace gone, recovery ok", r != null && r.optBoolean("ok") && !Files.exists(PackageQueue.running()));
+        check("M8 the change seen: " + PKG + " 1.0 -> 1.1", r != null && r.optJSONArray("changed") != null
+                && r.getJSONArray("changed").toString().contains("\"name\":\"" + PKG + "\"") && r.getJSONArray("changed").toString().contains("\"to\":\"1.1\""));
+        boolean restarted = false;
+        JSONArray sv = r == null ? null : r.optJSONArray("services");
+        for (int i = 0; sv != null && i < sv.length(); i++) {
+            JSONObject o = sv.getJSONObject(i);
+            if ("nginx".equals(o.optString("name")) && "restart".equals(o.optString("action")) && o.optBoolean("ok")
+                    && !o.optString("pidAfter").isEmpty() && !o.optString("pidAfter").equals(o.optString("pidBefore"))) restarted = true;
+        }
+        check("M8 nginx, still on the old files, restarted with a new pid", restarted && !nginxAfter.equals(nginxBefore)
+                && sh("service nginx status >/dev/null 2>&1; echo $?").trim().equals("0"));
+        check("M8 " + PKG + " protected again, no list left", sh("pkg query '%v locked=%k' " + PKG).trim().equals("1.1 locked=1")
+                && !PackageQueue.statePresent());
+        check("M8 the notice is not a thing to do any more: not in the report, green on the page",
+                PackageRecovery.reportItem() == null && PackageRecovery.status().getJSONObject("notice").optBoolean("completed"));
+        Files.writeString(SLEEP, "0");
+        Files.deleteIfExists(PackageRecovery.notice);
+    }
+
+    static void m8bUnprotectedCompleted() throws Exception {
+        System.out.println("\n== M8b. The update of the unprotected packages killed halfway: completed too ==");
+        // robust-probe-other 1.0 installed, not protected; 1.1 in the catalog with the slow script.
+        sh("pkg delete -y " + OTHER + " >/dev/null 2>&1");
+        sh("pkg add " + work.resolve("pkgs/" + OTHER + "-0.9.pkg") + " >/dev/null 2>&1");
+        Files.writeString(SLEEP, "25");
+        Files.deleteIfExists(STARTED);
+        Files.deleteIfExists(DONE);
+        Files.deleteIfExists(PackageRecovery.notice);
+        String cp = System.getProperty("java.class.path");
+        Process child = new ProcessBuilder("java", "-De2e.vm=yes", "-cp", cp, UpdaterRobustnessE2ETest.class.getName(), "run-unprotected")
+                .redirectErrorStream(true).redirectOutput(DIR.resolve("child-b.log").toFile())
+                .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null"))).start();
+        if (!waitFor(STARTED, 240)) {
+            check("M8b: the job reached the install script", false);
+            System.out.println(Files.readString(DIR.resolve("child-b.log")));
+            child.destroyForcibly();
+            return;
+        }
+        check("M8b the job unlocked nothing: no list, but its trace is there", !PackageQueue.statePresent() && Files.exists(PackageQueue.running()));
+        sh("kill -9 " + child.pid());
+        child.waitFor();
+        JSONObject n = waitCompleted(300);
+        JSONObject r = n.optJSONObject("recovery");
+        System.out.println("  the notice: " + PackageRecovery.text(n));
+        check("M8b completed by the panel service, with a notice of its own (before, nothing at all)", r != null && r.optBoolean("ok")
+                && r.getJSONArray("changed").toString().contains(OTHER) && !Files.exists(PackageQueue.running()));
+        Files.writeString(SLEEP, "0");
+        Files.deleteIfExists(PackageRecovery.notice);
+        sh("pkg delete -y " + OTHER + " >/dev/null 2>&1");
     }
 
     // ===================== M5 =====================
@@ -473,6 +572,13 @@ public class UpdaterRobustnessE2ETest {
                 JSONObject job = guided();
                 System.out.println("child finished: " + (job == null ? "null" : job.optString("status")));
             }
+            case "run-unprotected" -> {
+                JSONObject st = UpdateManager.updatesStatus();
+                JSONObject start = UpdateManager.startUnlockedPackagesUpdate(st.optString("signature"));
+                System.out.println("child started: " + start);
+                String id = start.optString("jobId");
+                if (!id.isEmpty()) System.out.println("child finished: " + waitJob(id).optString("status"));
+            }
             case "restore" -> System.out.println(UpdateManager.restoreLocksAfterCrash());
             case "restore-and-stay" -> {
                 System.out.println(UpdateManager.restoreLocksAfterCrash());
@@ -568,6 +674,8 @@ public class UpdaterRobustnessE2ETest {
     }
 
     static void cleanup() {
+        // A trace of a job of this test never stays behind: the panel service would complete it after the test.
+        PackageQueue.deleteRunning();
         sh("pkill -f 'pkg (install|upgrade).*robust-probe' ; sleep 1; "
          + "pkg unlock -y " + PKG + " >/dev/null 2>&1; pkg delete -y " + PKG + " " + OTHER + " >/dev/null 2>&1; "
          + "rm -rf /usr/local/share/robust-probe /usr/local/share/" + OTHER + "; true");

@@ -40,6 +40,21 @@ import java.util.regex.Pattern;
 public final class UpdateManager {
 
     private static final Logger LOGGER = Logger.getLogger(UpdateManager.class.getName());
+
+    static {
+        // Ogni lavoro che prende il turno dei pacchetti scrive com'erano pacchetti e servizi all'inizio: se muore a
+        // meta', il pannello in servizio sa che cosa ha cambiato e lo completa (InterruptedJobRecovery).
+        PackageQueue.snapshot = UpdateManager::jobSnapshot;
+    }
+
+    /** I pacchetti installati (nome -> versione) e i servizi accesi adesso: la fotografia d'inizio di un lavoro. */
+    static JSONObject jobSnapshot() {
+        JSONObject inv = new JSONObject();
+        for (Map.Entry<String, String> e : PackagePlan.versionsOnly(PackagePlan.installed()).entrySet()) inv.put(e.getKey(), e.getValue());
+        JSONObject svc = new JSONObject();
+        for (Map.Entry<String, Boolean> e : servicesState().entrySet()) svc.put(e.getKey(), e.getValue());
+        return new JSONObject().put("inventory", inv).put("services", svc);
+    }
     private static final Map<String, Job> JOBS = new ConcurrentHashMap<>();
 
     /** Elenco dei pacchetti sbloccati durante una manutenzione, per rimetterli a posto dopo un crash. */
@@ -211,7 +226,7 @@ public final class UpdateManager {
     }
 
     /** Quali servizi risultano attivi adesso. Solo quelli davvero presenti sul sistema. */
-    private static Map<String, Boolean> servicesState() {
+    static Map<String, Boolean> servicesState() {
         Map<String, Boolean> m = new LinkedHashMap<>();
         for (String[] candidates : SERVICES) {
             // Un servizio non installato non e' "caduto": va distinto, altrimenti la verifica
@@ -2310,6 +2325,14 @@ public final class UpdateManager {
      * tocca niente. "" se non c'era niente da fare.
      */
     static String watchOnce() {
+        String relock = relockOnce();
+        // Poi, protetti i pacchetti e fermo pkg, il lavoro interrotto si completa: servizi rimessi in servizio e
+        // verificati (InterruptedJobRecovery). Solo qui, nel pannello in servizio: non nel menu da console.
+        String completed = InterruptedJobRecovery.completeIfInterrupted(new RecoveryMachine());
+        return relock + completed;
+    }
+
+    private static String relockOnce() {
         if (!PackageQueue.statePresent()) return "";
         JSONObject job = PackageQueue.jobRecord();
         if (job.optBoolean("expectsRestart")) return "";
@@ -2318,6 +2341,102 @@ public final class UpdateManager {
         if (pid == self && PackageQueue.holder() != null) return "";     // un lavoro di questo processo
         if (pid > 0 && pid != self && ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false)) return "";
         return restoreLocksAfterCrash(I18n.tr("server.recovery.turnWatch"));
+    }
+
+    /** Il sistema vero per InterruptedJobRecovery: pkg, i servizi rc.d, le ricerche della posta. */
+    static final class RecoveryMachine implements InterruptedJobRecovery.Machine {
+        @Override public long now() { return java.time.Instant.now().getEpochSecond(); }
+        @Override public boolean pkgRunning() { return !PackageRecovery.pkgRunning().isEmpty(); }
+        @Override public Map<String, String> inventory() { return PackagePlan.versionsOnly(PackagePlan.installed()); }
+        @Override public Map<String, Long> installTimes(java.util.Collection<String> names) {
+            Map<String, Long> out = new LinkedHashMap<>();
+            for (String n : names) {
+                if (!isValidName(n)) continue;
+                long t = number(sh("pkg query %t " + n + " 2>/dev/null", 20).trim());
+                if (t > 0) out.put(n, t);
+            }
+            return out;
+        }
+        @Override public java.util.List<String> servicesOf(String pkg) {
+            java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+            for (String logical : servicesToRestart(pkg)) {
+                String real = realServiceName(logical);
+                if (real != null) out.add(real);
+            }
+            return new ArrayList<>(out);
+        }
+        @Override public Map<String, Boolean> servicesState() { return UpdateManager.servicesState(); }
+        @Override public String pid(String service) { return servicePid(service); }
+        @Override public long processStart(String pid) {
+            if (pid == null || !pid.matches("[0-9]{1,10}")) return -1;
+            String e = sh("ps -o etimes= -p " + pid + " 2>/dev/null", 10).trim();
+            return e.matches("[0-9]+") ? now() - Long.parseLong(e) : -1;
+        }
+        @Override public Shell.Result configTest(String service) {
+            String test = testConfigOf(service);
+            return test == null ? null : Shell.runShell(Duration.ofSeconds(60), test + " 2>&1");
+        }
+        @Override public boolean restart(String service) { return isValidName(service) && ok("service " + service + " restart", 120); }
+        @Override public boolean start(String service) { return isValidName(service) && ok("service " + service + " start", 120); }
+        @Override public boolean running(String service) { return isValidName(service) && ok("service " + service + " status", 20); }
+        @Override public String dataCheck(String service) {
+            String[] after = testAfterOf(service);
+            if (after == null) return null;
+            String out = sh(after[1], 30).trim();
+            return number(out) > 0 ? "" : I18n.tr("server.recovery.complete.dataEmpty", java.util.Map.of("s", service,
+                    "what", I18n.tr(after[2])));
+        }
+        @Override public java.util.List<String> checksumFailures(java.util.Collection<String> pkgs) {
+            java.util.List<String> names = new ArrayList<>();
+            for (String p : pkgs) if (isValidName(p)) names.add(p);
+            if (names.isEmpty()) return java.util.List.of();
+            java.util.LinkedHashSet<String> bad = new java.util.LinkedHashSet<>();
+            String out = sh("pkg check -s " + String.join(" ", names) + " 2>&1", 600);
+            for (String line : out.split("\n")) {
+                String l = line.trim();
+                if (!l.contains("checksum mismatch") && !l.contains("missing file")) continue;
+                for (String n : names) if (l.startsWith(n + "-")) bad.add(n);
+            }
+            return new ArrayList<>(bad);
+        }
+        @Override public String reinstall(java.util.List<String> pkgs) {
+            for (String p : pkgs) if (!isValidName(p)) return "invalid package name: " + p;
+            java.util.List<String> toUnlock = new ArrayList<>();
+            Set<String> locked = lockedNames();
+            for (String p : pkgs) if (locked.contains(p)) toUnlock.add(p);
+            if (!toUnlock.isEmpty()) {
+                // Le regole di ogni sblocco: l'elenco su disco prima, poi lo sblocco; e si riprotegge sempre.
+                String err = PackageQueue.writeState(toUnlock);
+                if (err != null) return err;
+                for (String p : toUnlock) if (!ok("pkg unlock -y " + p, 30)) { relockAll(toUnlock); return "cannot unlock " + p; }
+            }
+            try {
+                Shell.Result r = Shell.runShell(Duration.ofSeconds(1800), "pkg install -f -y -U " + String.join(" ", pkgs) + " 2>&1");
+                if (r.success()) return null;
+                String[] lines = r.outputTrim().split("\n");
+                return "pkg install -f exit " + r.exitCode() + ": " + lines[lines.length - 1];
+            } finally {
+                if (!toUnlock.isEmpty()) relockAll(toUnlock);
+            }
+        }
+        private static void relockAll(java.util.List<String> names) {
+            int done = 0;
+            for (String p : names) if (ok("pkg info -e " + p, 15) && ok("pkg lock -y " + p, 30)) done++;
+            if (done == names.size()) clearState();
+        }
+        @Override public String mailLookups() {
+            java.util.List<String> problems = new ArrayList<>();
+            Path map = Paths.get("/usr/local/etc/postfix/mysql-virtual-mailboxes.cf");
+            if (Files.isRegularFile(map) && ok("service postfix status", 15)) {
+                Shell.Result r = Shell.run(Duration.ofSeconds(30), "/usr/local/sbin/postmap", "-q", MailDbUsers.PROBE, "mysql:" + map);
+                if (!MailDbUsers.postmapAnswered(r)) problems.add("postmap -q: exit " + r.exitCode() + " " + r.outputTrim());
+            }
+            if (Files.isExecutable(Paths.get(DovecotAuthWorker.DOVEADM)) && DovecotAuthWorker.running()) {
+                int rc = DovecotAuthWorker.lookup();
+                if (!DovecotAuthWorker.LOOKUP_OK.contains(rc)) problems.add("doveadm auth lookup: exit " + rc);
+            }
+            return problems.isEmpty() ? null : String.join("; ", problems);
+        }
     }
 
     static String restoreLocksAfterCrash(String turnDescription) {
@@ -2886,6 +3005,10 @@ public final class UpdateManager {
         for (int i = 0; c != null && i < c.length(); i++) {
             JSONObject x = c.getJSONObject(i);
             String n = x.optString("name");
+            // Le rimozioni che il lavoro stesso dichiara (MySQL 8.0 nella migrazione, il vecchio
+            // Python nel passaggio) sono il lavoro, non un effetto collaterale: stanno nel piano
+            // firmato, chi preme le legge, e l'inventario le verifica. Le altre seguono la regola.
+            if (x.optBoolean("intended")) continue;
             switch (x.optString("type")) {
                 case "remove" -> removed.put(n + " " + x.optString("from"));
                 case "downgrade" -> downgrades.put(n + " " + x.optString("from") + " -> " + x.optString("to"));
@@ -3003,6 +3126,248 @@ public final class UpdateManager {
         // Solo nomi di pacchetto e versioni, nessun segreto (r19).
         LOGGER.warning(who + ": " + outside.length() + " change(s) outside the signed plan: " + outside);
         return outside;
+    }
+
+    // ===================== il piano firmato, in ogni lavoro che esegue pkg =====================
+    //
+    // L'aggiornamento guidato, l'aggiornamento di Roundcube, il passaggio di Python e la migrazione
+    // a MySQL 8.4 eseguono pkg, e devono dare le stesse garanzie: un piano esatto calcolato su una
+    // copia del database di pkg, firmato e approvato da chi preme; ricalcolato all'avvio e dopo aver
+    // scaricato i pacchetti; l'inventario prima e dopo, ogni riga del piano verificata. Le regole
+    // stanno qui una volta: scritte in quattro lavori diventerebbero quattro regole.
+
+    /**
+     * I controlli sul piano, uguali per ogni lavoro che ne esegue uno: impedimenti, errori di pkg,
+     * rimozioni (salvo quelle che il lavoro dichiara, vedi PackagePlan.planRemoveThenInstall),
+     * mappe di Postfix, retrocessioni, pacchetti chiesti che non cambierebbero.
+     *
+     * @param asked        i pacchetti che il lavoro chiede a pkg: se uno non cambia, il piano non fa il suo mestiere
+     * @param family       i pacchetti del lavoro: le protezioni da togliere fuori da questi si segnalano
+     * @param blockedBefore vero se un controllo precedente ha gia' fermato il lavoro: allora la riga
+     *                     verde «piano esatto» non si scrive, perche' il lavoro non partira'
+     * @return vero se il piano non si puo' eseguire
+     */
+    static boolean addPlanChecks(JSONArray checks, JSONObject plan, java.util.List<String> asked,
+                                 java.util.Collection<String> family, boolean blockedBefore) {
+        boolean block = false;
+        if (!plan.optBoolean("success") || !plan.optBoolean("measured")) {
+            addCheck(checks, "plan", I18n.tr("server.um.packagePreflight.15"), "block",
+                    I18n.tr("server.um.x.noPlan", java.util.Map.of("e", String.valueOf(plan.optString("error", "?")))));
+            block = true;
+        } else {
+            JSONArray changes = plan.getJSONArray("changes");
+            // Rimozioni e retrocessioni dalla funzione condivisa: la regola e' la stessa dei
+            // due lavori, e scritta due volte diventerebbe due regole (e lo era).
+            JSONObject destructive = destructiveChanges(plan);
+            java.util.List<String> removed = jsonArrayToList(destructive.getJSONArray("removes"));
+            java.util.List<String> downgrades = jsonArrayToList(destructive.getJSONArray("downgrades"));
+            java.util.List<String> stillVulnerable = new ArrayList<>(), lines = new ArrayList<>();
+            for (int i = 0; i < changes.length(); i++) {
+                JSONObject c = changes.getJSONObject(i);
+                String n = c.getString("name");
+                if (c.optBoolean("stillVulnerable")) stillVulnerable.add(n + " " + c.getString("to"));
+                lines.add(n + " " + (c.getString("from").isEmpty() ? I18n.tr("server.um.x.newPkg") : c.getString("from"))
+                        + (c.getString("to").isEmpty() ? " " + I18n.tr("server.um.x.removedPkg") : " -> " + c.getString("to")));
+            }
+            JSONArray blockerList = plan.getJSONArray("blockers");
+            for (int i = 0; i < blockerList.length(); i++) {
+                JSONObject x = blockerList.getJSONObject(i);
+                addCheck(checks, "plan-blocker", I18n.tr("server.um.packagePreflight.16"), "block",
+                        I18n.tr("server.um.x.blockedBy", java.util.Map.of("name", String.valueOf(x.getString("name")), "reason", String.valueOf(x.getString("reason")))));
+                block = true;
+            }
+            JSONArray err = plan.getJSONArray("pkgErrors");
+            if (err.length() > 0 || plan.optBoolean("hasConflicts")) {
+                addCheck(checks, "plan-errors", I18n.tr("server.um.packagePreflight.17"), "block",
+                        String.join(" | ", jsonArrayToList(err)) + (plan.optBoolean("hasConflicts") ? " " + I18n.tr("server.um.x.pkgConflicts") : ""));
+                block = true;
+            }
+            if (!removed.isEmpty()) {
+                // Una sostituzione innocua e' un avviso; le altre fermano, e la pagina mostra le prove.
+                if (removalsRefused(plan).isEmpty()) {
+                    addCheck(checks, "plan-removals", I18n.tr("server.um.packagePreflight.18"), "review",
+                            I18n.tr("server.um.x.removalsAccepted", java.util.Map.of("list", String.join(", ", removed))));
+                } else {
+                    addCheck(checks, "plan-removals", I18n.tr("server.um.packagePreflight.18"), "block",
+                            removalsReason(plan));
+                    block = true;
+                }
+            }
+            String mapsBlocker = PostfixMaps.planBlocker(plan);
+            if (mapsBlocker != null) {
+                addCheck(checks, "plan-maps", I18n.tr("server.um.x.mapsCheck"), "block", mapsBlocker);
+                block = true;
+            }
+            if (!downgrades.isEmpty()) {
+                addCheck(checks, "plan-downgrades", I18n.tr("server.um.packagePreflight.19"), "block",
+                        I18n.tr("server.um.x.planDowngrades", java.util.Map.of("list", String.valueOf(String.join(", ", downgrades)))));
+                block = true;
+            }
+            java.util.List<String> stoppedAsked = new ArrayList<>(asked);
+            stoppedAsked.retainAll(jsonArrayToList(plan.getJSONArray("unchangedPackages")));
+            if (!stoppedAsked.isEmpty()) {
+                addCheck(checks, "plan-stopped", I18n.tr("server.um.packagePreflight.20"), "block",
+                        I18n.tr("server.um.packagePreflight.21", java.util.Map.of("name", String.join(", ", stoppedAsked))));
+                block = true;
+            }
+            if (!stillVulnerable.isEmpty()) {
+                addCheck(checks, "plan-vulnerable", I18n.tr("server.um.packagePreflight.22"), "review",
+                        I18n.tr("server.um.x.stillVulnerable", java.util.Map.of("list", String.valueOf(String.join(", ", stillVulnerable)))));
+            }
+            java.util.List<String> extra = new ArrayList<>(jsonArrayToList(plan.getJSONArray("unlockedPackages")));
+            extra.removeAll(family);
+            if (!extra.isEmpty()) {
+                addCheck(checks, "plan-dependencies", I18n.tr("server.um.packagePreflight.23"), "review",
+                        I18n.tr("server.um.x.depsProtected", java.util.Map.of("list", String.valueOf(String.join(", ", extra)))));
+            }
+            if (!block && !blockedBefore) {
+                addCheck(checks, "plan", I18n.tr("server.um.packagePreflight.15"), "ok",
+                        (changes.length() == 1
+                         ? I18n.tr("server.um.x.pkgChanges.one", java.util.Map.of("lines", String.valueOf(String.join("; ", lines))))
+                         : I18n.tr("server.um.x.pkgChanges.other", java.util.Map.of("n", String.valueOf(changes.length()), "lines", String.valueOf(String.join("; ", lines))))));
+            }
+        }
+        return block;
+    }
+
+    /**
+     * Il piano ricalcolato all'avvio del lavoro e' quello approvato? null se si', e allora lo
+     * scrive nel registro riga per riga; altrimenti il motivo per non partire.
+     */
+    static String approvedPlanMismatch(Job job, JSONObject plan, String currentSignature, String approvedSignature) {
+        if (plan == null || currentSignature == null || !currentSignature.equals(approvedSignature)) {
+            job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature),
+                    "currentSignature", String.valueOf(currentSignature))));
+            job.write(I18n.tr("server.um.runGuidedUpdate.4"));
+            return I18n.tr("server.um.plan.changedSinceRead");
+        }
+        job.write("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(currentSignature))));
+        for (String line : PackagePlan.changesInLines(plan)) job.write("    " + line);
+        return null;
+    }
+
+    /** Il formato dell'impronta che arriva dalla pagina: sedici cifre esadecimali, o niente. */
+    static boolean validSignature(String s) {
+        return s != null && s.matches("[0-9a-f]{16}");
+    }
+
+    /**
+     * Cio' che si fotografa subito prima di eseguire il piano: l'inventario dei pacchetti, la
+     * configurazione con gli indirizzi in ascolto (InstallSideEffects), le mappe di Postfix.
+     */
+    record PlanWatch(Map<String, String> inventoryBefore, InstallSideEffects.Watch sideEffects,
+                     PostfixMaps.Before mapsBefore) {
+        static PlanWatch take(InstallSideEffects.Watch sideEffects) {
+            Map<String, String> inventory = PackagePlan.versionsOnly(PackagePlan.installed());
+            sideEffects.takeBefore();
+            return new PlanWatch(inventory, sideEffects, PostfixMaps.before());
+        }
+    }
+
+    /**
+     * Com'e' andata l'esecuzione del piano: i cambiamenti fuori piano, le righe del piano non
+     * rispettate, il problema delle mappe di Postfix (null se non ce n'e').
+     */
+    record PlanOutcome(JSONArray outsidePlan, boolean planNotFollowed, String mapsProblem) {
+        boolean clean() { return outsidePlan.isEmpty() && !planNotFollowed && mapsProblem == null; }
+    }
+
+    /**
+     * Dopo pkg, anche se e' uscito con un errore (e' proprio il caso in cui la macchina puo' essere
+     * rimasta a meta'): inventario contro piano, configurazione toccata dagli script, mappe di
+     * Postfix, e ogni riga del piano alla versione che diceva.
+     *
+     * @param restartFollows vero se il lavoro riavvia i servizi subito dopo (vedi InstallSideEffects)
+     */
+    static PlanOutcome checkPlanOutcome(Job job, PlanWatch watch, JSONObject plan, String who, boolean restartFollows) {
+        JSONArray outside = compareWithInventory(job, watch.inventoryBefore(), plan, who);
+        watch.sideEffects().checkConfig(job, plan, outside, restartFollows);
+        String maps = PostfixMaps.afterUpgrade(watch.mapsBefore(), l -> job.write("  " + l)).problem();
+        job.write(I18n.tr("server.um.runGuidedUpdate.12"));
+        boolean notFollowed = false;
+        JSONArray verification = PackagePlan.verifyOutcome(plan);
+        for (int i = 0; i < verification.length(); i++) {
+            JSONObject v = verification.getJSONObject(i);
+            job.write("    " + (v.getBoolean("ok") ? "ok  " : "NO  ") + I18n.tr("server.um.x.expectedFound", java.util.Map.of(
+                    "name", String.valueOf(v.getString("name")), "expected", String.valueOf(v.getString("expected")),
+                    "found", String.valueOf(v.getString("found")))));
+            if (!v.getBoolean("ok")) notFollowed = true;
+        }
+        if (notFollowed) job.write(I18n.tr("server.um.runGuidedUpdate.13"));
+        return new PlanOutcome(outside, notFollowed, maps);
+    }
+
+    /** Le frasi dell'esito per un piano non rispettato o con cambiamenti fuori piano; vuote se e' andato come diceva. */
+    static java.util.List<String> planProblems(PlanOutcome o) {
+        java.util.List<String> p = new ArrayList<>();
+        if (o == null) return p;
+        if (o.planNotFollowed()) p.add(I18n.tr("server.um.plan.notFollowed"));
+        if (!o.outsidePlan().isEmpty()) p.add(divergenceMessage(o.outsidePlan()));
+        if (o.mapsProblem() != null) p.add(o.mapsProblem());
+        return p;
+    }
+
+    /**
+     * I pacchetti installati e scaricabili che il piano installa, aggiorna o reinstalla: quelli che
+     * pkg scarichera'. Per pkg fetch, prima di ricalcolare il piano (vedi fetchAndRecheck).
+     */
+    static java.util.List<String> planDownloads(JSONObject plan) {
+        java.util.List<String> out = new ArrayList<>();
+        JSONArray c = plan == null ? null : plan.optJSONArray("changes");
+        for (int i = 0; c != null && i < c.length(); i++) {
+            JSONObject x = c.getJSONObject(i);
+            String t = x.optString("type"), n = x.optString("name");
+            if (("install".equals(t) || "upgrade".equals(t) || "reinstall".equals(t) || "downgrade".equals(t))
+                    && isValidName(n) && !out.contains(n)) out.add(n);
+        }
+        return out;
+    }
+
+    /**
+     * Riprotegge i pacchetti dell'elenco che sono installati adesso; quelli che il lavoro ha tolto
+     * (o che non sono mai arrivati) si saltano, come fa il ripristino all'avvio. L'elenco su disco
+     * si chiude solo se tutti gli installati risultano protetti.
+     *
+     * @return i pacchetti che non si e' riusciti a riproteggere
+     */
+    static java.util.List<String> relockListed(Job job, java.util.List<String> names) {
+        java.util.List<String> failed = new ArrayList<>();
+        int done = 0;
+        for (String n : names) {
+            if (!isValidName(n) || !ok("pkg info -e " + n, 15)) continue;
+            if (ok("pkg lock -y " + n, 30)) done++; else failed.add(n);
+        }
+        job.write("");
+        job.write(failed.isEmpty()
+                ? I18n.tr("server.um.x.reprotectAll", java.util.Map.of("n", String.valueOf(done)))
+                : I18n.tr("server.um.x.reprotectSome", java.util.Map.of("list", String.valueOf(String.join(", ", failed)))));
+        if (failed.isEmpty()) clearState();
+        else job.write(I18n.tr("server.um.runPythonTransition.21", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
+        return failed;
+    }
+
+    /**
+     * Toglie le protezioni che il piano toglie, dopo aver scritto l'elenco su disco (con 'alsoListed',
+     * i pacchetti che il lavoro protegge alla fine). Se l'elenco non si scrive non si sblocca niente.
+     *
+     * @return l'elenco scritto, da passare a relockListed nel finally anche se lo sblocco fallisce a meta'
+     */
+    static java.util.List<String> unlockForPlan(Job job, JSONObject plan, java.util.List<String> alsoListed) {
+        java.util.List<String> toUnlock = jsonArrayToList(plan.optJSONArray("unlockedPackages"));
+        java.util.List<String> listed = new ArrayList<>(toUnlock);
+        for (String n : alsoListed) if (!listed.contains(n)) listed.add(n);
+        for (String m : listed)
+            if (!isValidName(m)) throw new IllegalStateException("invalid package name in the plan: " + m);
+        if (listed.isEmpty()) return listed;
+        String stateError = PackageQueue.writeState(listed);
+        if (stateError != null)
+            throw new IllegalStateException("I could not save the list for the restore, so I did not unlock anything: " + stateError);
+        for (String m : toUnlock) {
+            boolean u = ok("pkg unlock -y " + m, 30);
+            job.write("    " + m + ": " + (u ? I18n.tr("server.um.x.unlocked") : I18n.tr("server.um.runGuidedUpdate.8")));
+            if (!u) throw new IllegalStateException("I could not unlock " + m);
+        }
+        return listed;
     }
 
     /**
@@ -3204,9 +3569,29 @@ public final class UpdateManager {
         addCheck(checks, "services", I18n.tr("server.um.x.servicesInvolved"), "review",
                 I18n.tr("server.um.mysql84Preflight.27"));
 
+        // --- 10. Il piano ESATTO, come nell'aggiornamento guidato ---
+        // Su una copia del database di pkg si dimenticano server e client di adesso (il lavoro li
+        // toglie con pkg delete -f) e si chiede a pkg che cosa farebbe installando la 8.4: cio'
+        // che fara' davvero, dipendenze comprese. Lo si firma e lo si approva.
+        if (!r.optBoolean("alreadyDone", false) && isValidName(srvPkg) && isValidName(cliPkg)) {
+            JSONObject plan = mysql84Plan(srvPkg, cliPkg);
+            if (addPlanChecks(checks, plan, MYSQL84_PACKAGES,
+                    java.util.List.of(srvPkg, cliPkg, MYSQL84_PACKAGES.get(0), MYSQL84_PACKAGES.get(1)), block)) block = true;
+            r.put("plan", planForCard(plan)).put("signature", plan.optString("signature", ""));
+        }
+
         r.put("success", true).put("checks", checks)
          .put("canProceed", !block && !r.optBoolean("alreadyDone", false)).put("blocked", block);
         return r;
+    }
+
+    /** I pacchetti che la migrazione installa. */
+    static final java.util.List<String> MYSQL84_PACKAGES = java.util.List.of("mysql84-server", "mysql84-client");
+
+    /** Il piano esatto della migrazione: togliere server e client di adesso, poi installare la 8.4. */
+    private static JSONObject mysql84Plan(String srvPkg, String cliPkg) {
+        return judged(PackagePlan.planRemoveThenInstall(java.util.List.of(srvPkg, cliPkg), MYSQL84_PACKAGES,
+                lockedNames(), UpdateManager::reasonNotToUnlock));
     }
 
     private static final String MYSQL84_BACKUP = "/var/db/mailpanel/mysql84";
@@ -3317,10 +3702,17 @@ public final class UpdateManager {
         return new JSONObject().put("success", true).put("jobId", id).put("async", true);
     }
 
-    public static JSONObject startMysql84Migration() {
+    /**
+     * @param approvedSignature l'impronta del piano che chi preme ha letto: il lavoro ricalcola il
+     *                          piano e parte solo se e' lo stesso (vedi startGuidedUpdate)
+     */
+    public static JSONObject startMysql84Migration(String approvedSignature) {
+        if (!validSignature(approvedSignature))
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.plan.signatureMissing"));
         String id = "my84-" + System.currentTimeMillis();
         Job j = new Job(id, "mysql84_migration");
-        return startOnTurn(id, j, I18n.tr("server.um.x.jobMy84"), "mysql84-migration", () -> runMigration84(j));
+        return startOnTurn(id, j, I18n.tr("server.um.x.jobMy84"), "mysql84-migration",
+                () -> runMigration84(j, approvedSignature));
     }
 
     /**
@@ -3333,9 +3725,13 @@ public final class UpdateManager {
      * Dovecot di risolvere davvero una casella. Un servizio avviato che non legge piu' gli
      * utenti e' il modo peggiore di sembrare a posto.
      */
-    private static void runMigration84(Job job) {
+    private static void runMigration84(Job job, String approvedSignature) {
         job.status = "running";
         final int TOT = 12;
+        // L'elenco su disco di questo lavoro, da riproteggere nel finally: vuoto finche' non e' scritto.
+        java.util.List<String> listed = new ArrayList<>();
+        InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
+        PlanOutcome outcome = null;
         String backupDir = "", dataDir = "/var/db/mysql", srvPkg = "", cliPkg = "";
         boolean mysqlStopped = false, replacedPackages = false, reachedEnd = false;
         boolean postfixWasActive = false, dovecotWasActive = false;
@@ -3372,6 +3768,28 @@ public final class UpdateManager {
             mailboxesBefore = pf.optLong("mailboxCount", 0);
             testMailbox = mysqlOut(org.mail_panel.database.SqlCatalog.UM_FIRST_ACTIVE_MAILBOX).trim();
             job.write("  " + srvPkg + " + " + cliPkg + " -> mysql84-server + mysql84-client");
+            // Si esegue il piano che e' stato letto, o niente: prima di fermare la posta.
+            JSONObject plan = pf.optJSONObject("plan");
+            String mismatch = approvedPlanMismatch(job, plan, pf.optString("signature", null), approvedSignature);
+            if (mismatch != null) {
+                job.status = "error";
+                job.errorMessage = mismatch;
+                return;
+            }
+            // Si scaricano i pacchetti che il piano installa e lo si ricalcola: finche' non sono
+            // nella cache pkg non vede i conflitti sui file (vedi fetchAndRecheck). Tutto con la
+            // posta ancora in servizio: un piano cresciuto si ferma qui, senza aver toccato niente.
+            final String srv0 = srvPkg, cli0 = cliPkg;
+            java.util.List<String> downloads = planDownloads(plan);
+            if (!downloads.isEmpty()) {
+                Recheck grown = fetchAndRecheck(job, "pkg fetch -y -U " + String.join(" ", downloads) + " 2>&1", plan,
+                        () -> mysql84Plan(srv0, cli0));
+                if (grown.stop() != null) throw new IllegalStateException(grown.stop());
+                plan = grown.plan();
+            }
+            // L'inventario, la configurazione e gli indirizzi in ascolto adesso, con tutto in
+            // servizio: e' cio' con cui si confronta alla fine.
+            PlanWatch watch = PlanWatch.take(sideEffects);
             job.write(I18n.tr("server.um.runMigration84.5", java.util.Map.of("schemasBefore", String.valueOf(schemesBefore), "tablesBefore", String.valueOf(tablesBefore), "mailboxesBefore", String.valueOf(mailboxesBefore))));
             job.write("  " + (testMailbox.isEmpty()
                     ? I18n.tr("server.um.x.testBoxNone")
@@ -3438,16 +3856,27 @@ public final class UpdateManager {
             job.advance(5, TOT);
             job.write("");
             job.write("[5/" + TOT + "] " + I18n.tr("server.um.x.replacingPkgs"));
-            ok("pkg unlock -y " + srvPkg, 30);
-            ok("pkg unlock -y " + cliPkg, 30);
-            String del = sh("pkg delete -f -y " + srvPkg + " " + cliPkg + " 2>&1", 300);
-            for (String l : del.split("\n")) if (!l.trim().isEmpty()) job.write("    " + l);
+            // Le protezioni che il piano toglie (server e client di adesso, e le dipendenze che il
+            // piano aggiorna), con l'elenco su disco prima: nell'elenco anche la 8.4, che alla fine
+            // si protegge. Il finally riprotegge cio' che c'e', anche se il lavoro si ferma a meta'.
+            listed = unlockForPlan(job, plan, MYSQL84_PACKAGES);
+            int delCode = runLogged(job, "pkg delete -f -y " + srvPkg + " " + cliPkg + " 2>&1", 300);
             replacedPackages = true;
-            String ins = sh("pkg install -y mysql84-server mysql84-client 2>&1", 900);
-            for (String l : ins.split("\n")) if (!l.trim().isEmpty()) job.write("    " + l);
-            if (!ok("pkg info -e mysql84-server", 20) || !ok("pkg info -e mysql84-client", 20)) {
+            // -U: lo stesso catalogo su cui e' stato calcolato il piano.
+            int insCode = delCode != 0 ? -1 : runLogged(job, "pkg install -y -U " + String.join(" ", MYSQL84_PACKAGES) + " 2>&1", 900);
+            if (insCode == 4) {
+                job.write(I18n.tr("server.um.runGuidedUpdate.10"));
+                insCode = runLogged(job, "pkg install -y -U " + String.join(" ", MYSQL84_PACKAGES) + " 2>&1", 900);
+            }
+            // Il confronto col piano prima di decidere se fermarsi: un pkg uscito male e' proprio il
+            // caso in cui la macchina puo' essere rimasta a meta'. I servizi ripartono piu' sotto.
+            outcome = checkPlanOutcome(job, watch, plan, "MySQL 8.4 migration", true);
+            if (delCode != 0) throw new IllegalStateException("pkg delete exited with code " + delCode
+                    + ": the data is intact, the copy is in " + backupDir);
+            if (insCode != 0 || !ok("pkg info -e mysql84-server", 20) || !ok("pkg info -e mysql84-client", 20)) {
                 throw new IllegalStateException("the 8.4 installation did not succeed: the data is intact, the copy is in " + backupDir);
             }
+            if (outcome.mapsProblem() != null) throw new IllegalStateException(outcome.mapsProblem());
 
             job.advance(6, TOT);
             job.write("");
@@ -3594,11 +4023,15 @@ public final class UpdateManager {
             job.write("");
             job.write(I18n.tr("server.um.runMigration84.31"));
             boolean fallen = fallenServices(job, servicesBefore);
+            sideEffects.checkListening(job);
+            java.util.List<String> problems = planProblems(outcome);
+            problems.addAll(sideEffects.problems());
 
             reachedEnd = true;
-            if (!inventoryOk || !testOk || fallen || lost || !l1 || !l2) {
+            if (!inventoryOk || !testOk || fallen || lost || !l1 || !l2 || !problems.isEmpty()) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runMigration84.32", java.util.Map.of("backupDir", String.valueOf(backupDir)));
+                problems.add(I18n.tr("server.um.runMigration84.32", java.util.Map.of("backupDir", String.valueOf(backupDir))));
+                job.errorMessage = String.join(" ", problems);
             } else {
                 job.status = "completed";
                 job.write("");
@@ -3608,9 +4041,17 @@ public final class UpdateManager {
         } catch (Exception e) {
             job.status = "error";
             job.errorMessage = e.getMessage();
+            for (String p : sideEffects.problems()) job.errorMessage += " " + p;
+            if (outcome != null && !outcome.outsidePlan().isEmpty()) job.errorMessage += " " + divergenceMessage(outcome.outsidePlan());
             job.write("");
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
+            // Si protegge ogni pacchetto dell'elenco che e' installato adesso: la 8.4 se e' arrivata,
+            // la 8.0 se il lavoro si e' fermato prima di toglierla, le dipendenze sbloccate.
+            if (!listed.isEmpty() && !relockListed(job, listed).isEmpty() && "completed".equals(job.status)) {
+                job.status = "error";
+                job.errorMessage = I18n.tr("server.um.runGuidedUpdate.42");
+            }
             if (!reachedEnd) {
                 if (mysqlStopped && !replacedPackages) {
                     job.write("");
@@ -3836,8 +4277,23 @@ public final class UpdateManager {
                     + I18n.tr("server.um.x.rcRootFix", java.util.Map.of("n", String.valueOf(toMove.size()), "lines", String.valueOf(String.join(" ; ", toMove)))));
         }
 
+        // Il piano ESATTO, come nell'aggiornamento guidato: che cosa farebbe pkg aggiornando la
+        // webmail, calcolato su una copia del suo database con le stesse protezioni tolte. Si
+        // calcola solo se c'e' davvero un aggiornamento: altrimenti non c'e' niente da firmare.
+        if (!pkg.isEmpty() && !available.isEmpty() && !available.equals(ver)) {
+            JSONObject plan = roundcubePlan(pkg);
+            if (addPlanChecks(checks, plan, java.util.List.of(pkg), java.util.List.of(pkg), block)) block = true;
+            r.put("plan", planForCard(plan)).put("signature", plan.optString("signature", ""));
+        }
+
         r.put("success", true).put("checks", checks).put("canProceed", !block).put("blocked", block);
         return r;
+    }
+
+    /** Il piano esatto per aggiornare la webmail: lo stesso calcolo del guidato. */
+    private static JSONObject roundcubePlan(String pkg) {
+        return judged(PackagePlan.planFor(java.util.List.of(pkg), lockedNames(),
+                UpdateManager::reasonNotToUnlock, UpdateManager::installedFamilyTwin));
     }
 
     /**
@@ -4548,10 +5004,17 @@ public final class UpdateManager {
         }
     }
 
-    public static JSONObject startRoundcubeUpdate() {
+    /**
+     * @param approvedSignature l'impronta del piano che chi preme ha letto: il lavoro ricalcola il
+     *                          piano e parte solo se e' lo stesso (vedi startGuidedUpdate)
+     */
+    public static JSONObject startRoundcubeUpdate(String approvedSignature) {
+        if (!validSignature(approvedSignature))
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.plan.signatureMissing"));
         String id = "rc-" + System.currentTimeMillis();
         Job j = new Job(id, "roundcube");
-        return startOnTurn(id, j, I18n.tr("server.um.startRoundcubeUpdate.1"), "roundcube-update", () -> runRoundcubeUpdate(j));
+        return startOnTurn(id, j, I18n.tr("server.um.startRoundcubeUpdate.1"), "roundcube-update",
+                () -> runRoundcubeUpdate(j, approvedSignature));
     }
 
     /**
@@ -4563,11 +5026,15 @@ public final class UpdateManager {
      * L'altra insidia e' OPcache: aggiornati i file PHP, php-fpm continuerebbe a servire il
      * codice vecchio gia' compilato in memoria — aggiornato sul disco, non in servizio.
      */
-    private static void runRoundcubeUpdate(Job job) {
+    private static void runRoundcubeUpdate(Job job, String approvedSignature) {
         job.status = "running";
         final int TOT = 8;
-        boolean unlocked = false;
+        // L'elenco su disco di questo lavoro, da riproteggere nel finally: vuoto finche' non e' scritto.
+        java.util.List<String> listed = new ArrayList<>();
         String pkg = "", backupDir = "";
+        Map<String, Boolean> servicesBefore = servicesState();
+        InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
+        PlanOutcome outcome = null;
         try {
             job.advance(1, TOT);
             job.write(I18n.tr("server.um.runRoundcubeUpdate.1"));
@@ -4590,6 +5057,15 @@ public final class UpdateManager {
             pkg = pf.optString("pkg", "");
             long tablesBefore = pf.optLong("tables", 0);
             job.write("  " + pkg + " " + pf.optString("current") + " -> " + pf.optString("available"));
+            // Si esegue il piano che e' stato letto, o niente: prima della copia del database e di
+            // ogni altra cosa, cosi' un piano cambiato non lascia dietro niente.
+            JSONObject plan = pf.optJSONObject("plan");
+            String mismatch = approvedPlanMismatch(job, plan, pf.optString("signature", null), approvedSignature);
+            if (mismatch != null) {
+                job.status = "error";
+                job.errorMessage = mismatch;
+                return;
+            }
             job.write("  " + I18n.tr("server.um.x.dbTables", java.util.Map.of("db", String.valueOf(pf.optString("db")), "n", String.valueOf(tablesBefore))));
 
             job.advance(2, TOT);
@@ -4617,24 +5093,29 @@ public final class UpdateManager {
             job.advance(3, TOT);
             job.write("");
             job.write(I18n.tr("server.um.runRoundcubeUpdate.5", java.util.Map.of("total", String.valueOf(TOT))));
-            if (locked(sh("pkg lock -l 2>/dev/null"), pkg)) {
-                // Prima l'elenco su disco, poi lo sblocco: se l'elenco non si scrive, non si sblocca.
-                String stateError = PackageQueue.writeState(java.util.List.of(pkg));
-                if (stateError != null)
-                    throw new IllegalStateException("I could not save the list for the restore, so I do not unlock " + pkg + ": " + stateError);
-                // Da qui il finally riprotegge e chiude l'elenco, anche se lo sblocco fallisse a meta'.
-                unlocked = true;
-                if (!ok("pkg unlock -y " + pkg, 30)) throw new IllegalStateException("I could not unlock " + pkg);
-                job.write("    " + I18n.tr("server.um.x.unlockedTemp"));
-            }
-            String sim = sh("pkg upgrade -n " + pkg + " 2>&1", 300);
-            if (sim.toLowerCase().contains("conflicts with")) {
-                for (String l : sim.split("\n")) if (l.toLowerCase().contains("conflict")) job.write("      " + l.trim());
-                throw new IllegalStateException("the update would overwrite files of another package: I stop.");
-            }
+            // Le protezioni che il piano toglie, ne' una in meno ne' una in piu'; l'elenco su disco
+            // prima, e da qui il finally riprotegge anche se lo sblocco fallisse a meta'.
+            final String rcPkg = pkg;
+            listed = unlockForPlan(job, plan, java.util.List.of());
+            // Prima si scarica e si ricalcola: finche' i pacchetti non sono scaricati pkg non vede
+            // i conflitti sui file (vedi fetchAndRecheck). -U: lo stesso catalogo del piano.
+            Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U " + pkg + " 2>&1", plan,
+                    () -> roundcubePlan(rcPkg));
+            if (grown.stop() != null) throw new IllegalStateException(grown.stop());
+            plan = grown.plan();
+            PlanWatch watch = PlanWatch.take(sideEffects);
             StringBuilder cat = new StringBuilder();
-            int code = runLogged(job, "pkg upgrade -y " + pkg + " 2>&1", 1800, cat);
+            int code = runLogged(job, "pkg upgrade -y -U " + pkg + " 2>&1", 1800, cat);
+            // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso e si e' fermato li': lo stesso comando, una volta.
+            if (code == 4) {
+                job.write(I18n.tr("server.um.runGuidedUpdate.10"));
+                code = runLogged(job, "pkg upgrade -y -U " + pkg + " 2>&1", 1800, cat);
+            }
+            // Il confronto prima di decidere se fermarsi: un pkg uscito male e' proprio il caso in
+            // cui la macchina puo' essere rimasta a meta'. php-fpm si riavvia piu' sotto.
+            outcome = checkPlanOutcome(job, watch, plan, "Roundcube update", true);
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
+            if (outcome.mapsProblem() != null) throw new IllegalStateException(outcome.mapsProblem());
             for (String m : messagesAskingForAction(cat.toString())) {
                 job.write("    " + I18n.tr("server.um.x.pkgAsks", java.util.Map.of("m", String.valueOf(m.replace("\n", " | ")))));
             }
@@ -4681,9 +5162,35 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.runRoundcubeUpdate.ownership", java.util.Map.of("user", RoundcubeUser.USER,
                         "n", String.valueOf(given.size()))));
             String svc = realServiceName("php_fpm");
-            if (svc != null) {
-                ok("service " + svc + " restart", 120);
-                job.write("    " + svc + ": " + (ok("service " + svc + " status", 20) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigration84.26")));
+            // php-fpm non riavviato, o ripartito con lo stesso pid: la webmail serve ancora il codice vecchio.
+            boolean phpHeld = false;
+            if (svc != null && sideEffects.configChangedByScript()) {
+                // Uno script ha cambiato la configurazione e il piano non lo diceva: riavviare la
+                // metterebbe in vigore senza che nessuno l'abbia letta (reperto 42). Come nel guidato,
+                // php-fpm resta con quella di prima e chi legge decide.
+                phpHeld = true;
+                job.write(I18n.tr("server.drift.restartHeld", java.util.Map.of("list", svc)));
+                job.write(I18n.tr("server.drift.restartHeldCost"));
+                job.write("      service " + svc + " restart");
+            } else if (svc != null) {
+                String test = testConfigOf(svc);
+                Shell.Result pr = test == null ? null : Shell.runShell(Duration.ofSeconds(60), test + " 2>&1");
+                if (pr != null && !pr.success()) {
+                    // Riavviarlo con una configurazione che rifiuta lo spegnerebbe e basta.
+                    job.write(I18n.tr("server.um.runGuidedUpdate.22", java.util.Map.of("s", svc)));
+                    for (String l : pr.outputTrim().split("\n")) if (!l.trim().isEmpty()) job.write("      " + l);
+                    job.write(I18n.tr("server.um.runGuidedUpdate.23"));
+                    phpHeld = true;
+                } else {
+                    String pidBefore = servicePid(svc);
+                    ok("service " + svc + " restart", 120);
+                    boolean up = ok("service " + svc + " status", 20);
+                    String pidAfter = servicePid(svc);
+                    job.write("    " + svc + ": " + (up ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigration84.26"))
+                            + (pidBefore.isEmpty() || pidAfter.isEmpty() ? "" : "  (pid " + pidBefore + " -> " + pidAfter + ")"));
+                    // Lo stesso pid e' il processo di prima ancora in piedi: OPcache servirebbe la versione vecchia.
+                    if (!up || (!pidBefore.isEmpty() && pidBefore.equals(pidAfter))) phpHeld = true;
+                }
             } else job.write(I18n.tr("server.um.runRoundcubeUpdate.13"));
 
             job.advance(8, TOT);
@@ -4714,7 +5221,21 @@ public final class UpdateManager {
                     job.write(I18n.tr("server.um.runRoundcubeUpdate.17"));
             }
 
-            if (tabOk && webOk && rootOk) {
+            job.write("");
+            boolean fallen = fallenServices(job, servicesBefore);
+            sideEffects.checkListening(job);
+            java.util.List<String> problems = planProblems(outcome);
+            problems.addAll(sideEffects.problems());
+            if (phpHeld) problems.add(sideEffects.configChangedByScript()
+                    ? I18n.tr("server.drift.restartHeldProblem", java.util.Map.of("list", String.valueOf(svc)))
+                    : I18n.tr("server.um.runGuidedUpdate.37"));
+            if (fallen && problems.isEmpty()) problems.add(I18n.tr("server.um.runGuidedUpdate.37"));
+
+            if (!problems.isEmpty()) {
+                job.status = "error";
+                problems.add(I18n.tr("server.um.runRoundcubeUpdate.24", java.util.Map.of("backupDir", String.valueOf(backupDir))));
+                job.errorMessage = String.join(" ", problems);
+            } else if (tabOk && webOk && rootOk) {
                 job.status = "completed";
                 job.write("");
                 // "In servizio" si puo' dire solo se qualcuno l'ha visto rispondere. Senza quella
@@ -4736,13 +5257,14 @@ public final class UpdateManager {
         } catch (Exception e) {
             job.status = "error";
             job.errorMessage = e.getMessage();
+            // pkg fermo a meta' dopo che uno script ha gia' scritto: si dicono tutte e due.
+            for (String p : sideEffects.problems()) job.errorMessage += " " + p;
+            if (outcome != null && !outcome.outsidePlan().isEmpty()) job.errorMessage += " " + divergenceMessage(outcome.outsidePlan());
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
-            if (unlocked && !pkg.isEmpty()) {
-                boolean r = ok("pkg info -e " + pkg, 15) && ok("pkg lock -y " + pkg, 30);
-                job.write("");
-                job.write(r ? I18n.tr("server.um.x.reprotectOk", java.util.Map.of("pkg", String.valueOf(pkg))) : I18n.tr("server.um.x.reprotectFail", java.util.Map.of("pkg", String.valueOf(pkg))));
-                if (r) clearState();
+            if (!listed.isEmpty() && !relockListed(job, listed).isEmpty() && "completed".equals(job.status)) {
+                job.status = "error";
+                job.errorMessage = I18n.tr("server.um.runGuidedUpdate.42");
             }
             job.finishedAt = System.currentTimeMillis();
         }
@@ -5411,6 +5933,24 @@ public final class UpdateManager {
             addCheck(checks, "backup", I18n.tr("server.um.pythonPreflight.13"), "ok",
                     I18n.tr("server.um.pythonPreflight.14"));
 
+            // Il piano ESATTO del passaggio, come nell'aggiornamento guidato: su una copia del
+            // database di pkg si dimentica cio' che pkg delete togliera' (i pacchetti e chi dipende
+            // da loro) e si chiede a pkg che cosa installerebbe. Lo si firma e lo si approva.
+            if (!lock && !newOnes.isEmpty()) {
+                java.util.List<String> removed = reverseClosure(leaf);
+                JSONObject plan = pythonPlan(removed, newOnes);
+                java.util.List<String> family = new ArrayList<>(removed);
+                family.addAll(newOnes);
+                // Un corrispondente gia' installato (py312-packaging, dipendenza di un altro) non
+                // cambia nel piano, ed e' giusto: il lavoro deve solo togliere il vecchio. Il
+                // controllo «non cambierebbe» vale per quelli che il lavoro installa davvero.
+                java.util.List<String> toInstall = new ArrayList<>();
+                for (String n : newOnes) if (!ok("pkg info -e " + n, 15)) toInstall.add(n);
+                if (addPlanChecks(checks, plan, toInstall, family, lock)) lock = true;
+                r.put("plan", planForCard(plan)).put("signature", plan.optString("signature", ""))
+                 .put("removedFirst", new JSONArray(removed));
+            }
+
             r.put("success", true).put("checks", checks)
              .put("blocked", lock).put("canProceed", !lock && !newOnes.isEmpty());
             return r;
@@ -5621,19 +6161,52 @@ public final class UpdateManager {
         }
     }
 
-    public static JSONObject startPythonTransition() {
-        String id = "py-" + System.currentTimeMillis();
-        Job j = new Job(id, "python");
-        return startOnTurn(id, j, I18n.tr("server.um.startPythonTransition.1"), "python-move", () -> runPythonTransition(j));
+    /**
+     * Che cosa toglie davvero {@code pkg delete -y nomi} senza -f: quei pacchetti e, a catena,
+     * chi dipende da loro. Letto con pkg query, che non guarda le protezioni: pkg delete -n su un
+     * pacchetto protetto si rifiuta, e qui sono protetti tutti.
+     */
+    static java.util.List<String> reverseClosure(java.util.List<String> names) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>();
+        for (String n : names) if (isValidName(n) && out.add(n)) todo.add(n);
+        while (!todo.isEmpty()) {
+            String n = todo.poll();
+            for (String d : sh("pkg query %rn " + n + " 2>/dev/null").split("\n")) {
+                String t = d.trim();
+                if (isValidName(t) && out.add(t)) todo.add(t);
+            }
+        }
+        return new ArrayList<>(out);
     }
 
-    private static void runPythonTransition(Job job) {
+    /** Il piano esatto del passaggio di Python: togliere 'removed', poi installare 'newOnes'. */
+    private static JSONObject pythonPlan(java.util.List<String> removed, java.util.List<String> newOnes) {
+        return judged(PackagePlan.planRemoveThenInstall(removed, newOnes, lockedNames(), UpdateManager::reasonNotToUnlock));
+    }
+
+    /**
+     * @param approvedSignature l'impronta del piano che chi preme ha letto: il lavoro ricalcola il
+     *                          piano e parte solo se e' lo stesso (vedi startGuidedUpdate)
+     */
+    public static JSONObject startPythonTransition(String approvedSignature) {
+        if (!validSignature(approvedSignature))
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.plan.signatureMissing"));
+        String id = "py-" + System.currentTimeMillis();
+        Job j = new Job(id, "python");
+        return startOnTurn(id, j, I18n.tr("server.um.startPythonTransition.1"), "python-move",
+                () -> runPythonTransition(j, approvedSignature));
+    }
+
+    private static void runPythonTransition(Job job, String approvedSignature) {
         job.status = "running";
         final int TOT = 7;
-        java.util.List<String> unlockedPackages = new ArrayList<>();
-        java.util.List<String> toRelock = new ArrayList<>();
+        boolean installedNew = false;
         // L'elenco scritto su disco da questa esecuzione: vuoto finche' non e' scritto.
         java.util.List<String> listOnDisk = new ArrayList<>();
+        Map<String, Boolean> servicesBefore = servicesState();
+        InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
+        PlanOutcome outcome = null;
         try {
             job.advance(1, TOT);
             job.write(I18n.tr("server.um.runPythonTransition.1"));
@@ -5660,6 +6233,27 @@ public final class UpdateManager {
             java.util.List<String> services = jsonArrayToList(pf.optJSONArray("services"));
             job.write("  py" + old + " -> py" + fresh);
             job.write("  " + String.join(", ", leaf));
+            // Si esegue il piano che e' stato letto, o niente: prima delle copie e prima di fermare
+            // qualunque servizio.
+            JSONObject plan = pf.optJSONObject("plan");
+            String mismatch = approvedPlanMismatch(job, plan, pf.optString("signature", null), approvedSignature);
+            if (mismatch != null) {
+                job.status = "error";
+                job.errorMessage = mismatch;
+                return;
+            }
+            // Si scaricano i pacchetti che il piano installa e lo si ricalcola: finche' non sono
+            // nella cache pkg non vede i conflitti sui file (vedi fetchAndRecheck).
+            java.util.List<String> downloads = planDownloads(plan);
+            if (!downloads.isEmpty()) {
+                Recheck grown = fetchAndRecheck(job, "pkg fetch -y -U " + String.join(" ", downloads) + " 2>&1", plan,
+                        () -> pythonPlan(reverseClosure(leaf), newOnes));
+                if (grown.stop() != null) throw new IllegalStateException(grown.stop());
+                plan = grown.plan();
+            }
+            // L'inventario, la configurazione e gli indirizzi in ascolto adesso, prima di fermare i
+            // servizi: e' cio' che l'amministratore ha lasciato, e cio' con cui si confronta alla fine.
+            PlanWatch watch = PlanWatch.take(sideEffects);
 
             job.advance(2, TOT);
             job.write("");
@@ -5693,35 +6287,38 @@ public final class UpdateManager {
             job.advance(4, TOT);
             job.write("");
             job.write("[4/" + TOT + "] " + I18n.tr("server.um.x.pySwap", java.util.Map.of("old", String.valueOf(old), "newer", String.valueOf(fresh))));
-            String list = sh("pkg lock -l 2>/dev/null");
-            java.util.List<String> toUnlock = new ArrayList<>();
-            for (String v : leaf) if (locked(list, v)) toUnlock.add(v);
-            // L'elenco su disco PRIMA di sbloccare (prima lo si scriveva dopo): i vecchi, che vanno
-            // riprotetti se restano, e i nuovi, che alla fine vanno protetti. Se il pannello muore
-            // in mezzo, l'avvio protegge quelli che trova installati. Se l'elenco non si scrive,
-            // non si tocca niente.
-            java.util.List<String> toList = new ArrayList<>(toUnlock);
-            for (String n : newOnes) if (isValidName(n) && !toList.contains(n)) toList.add(n);
-            String stateError = PackageQueue.writeState(toList);
-            if (stateError != null)
-                throw new IllegalStateException("I could not save the list for the restore, so I did not touch anything: " + stateError);
-            listOnDisk.addAll(toList);
-            for (String v : toUnlock) { ok("pkg unlock -y " + v, 30); unlockedPackages.add(v); }
-            if (!unlockedPackages.isEmpty()) job.write("    " + I18n.tr("server.um.x.unlockedList", java.util.Map.of("list", String.valueOf(String.join(", ", unlockedPackages)))));
+            // L'elenco su disco PRIMA di sbloccare: le protezioni che il piano toglie (i vecchi, che
+            // vanno riprotetti se restano, e le dipendenze) e i nuovi, che alla fine vanno protetti.
+            // Se il pannello muore in mezzo, l'avvio protegge quelli che trova installati. Se
+            // l'elenco non si scrive, non si tocca niente.
+            listOnDisk.addAll(unlockForPlan(job, plan, newOnes));
             // L'ordine conta: prima togliere, poi installare. Cosi' nessun file va forzato,
             // ed e' esattamente l'errore che ha rotto il client MySQL.
             StringBuilder catDel = new StringBuilder();
             int cd = runLogged(job, "pkg delete -y " + String.join(" ", leaf) + " 2>&1", 900, catDel);
-            if (cd != 0) throw new IllegalStateException("pkg delete exited with code " + cd);
             StringBuilder catIns = new StringBuilder();
-            int ci = runLogged(job, "pkg install -y " + String.join(" ", newOnes) + " 2>&1", 1800, catIns);
+            int ci = -1;
+            if (cd == 0) {
+                // -U: lo stesso catalogo su cui e' stato calcolato il piano.
+                ci = runLogged(job, "pkg install -y -U " + String.join(" ", newOnes) + " 2>&1", 1800, catIns);
+                // 4 = EX_NEEDRESTART: pkg ha aggiornato se stesso e si e' fermato li'.
+                if (ci == 4) {
+                    job.write(I18n.tr("server.um.runGuidedUpdate.10"));
+                    ci = runLogged(job, "pkg install -y -U " + String.join(" ", newOnes) + " 2>&1", 1800, catIns);
+                }
+            }
+            // Il confronto col piano prima di decidere se fermarsi: un pkg uscito male e' proprio il
+            // caso in cui la macchina puo' essere rimasta a meta'. I servizi ripartono piu' sotto.
+            outcome = checkPlanOutcome(job, watch, plan, "Python transition", !services.isEmpty());
+            if (cd != 0) throw new IllegalStateException("pkg delete exited with code " + cd);
             if (ci != 0) {
                 job.write("");
                 job.write(I18n.tr("server.um.runPythonTransition.7"));
                 job.write(I18n.tr("server.um.x.toGoBack", java.util.Map.of("cmd", String.valueOf("pkg install -y " + String.join(" ", leaf)))));
                 throw new IllegalStateException("pkg install exited with code " + ci);
             }
-            toRelock.addAll(newOnes);
+            if (outcome.mapsProblem() != null) throw new IllegalStateException(outcome.mapsProblem());
+            installedNew = true;
             for (String m : messagesAskingForAction(catIns.toString()))
                 job.write("    " + I18n.tr("server.um.x.pkgAsks", java.util.Map.of("m", String.valueOf(m.replace("\n", " | ")))));
 
@@ -5741,8 +6338,26 @@ public final class UpdateManager {
             } else if (an.optInt("howMany", 0) == 0) {
                 job.write(I18n.tr("server.um.runPythonTransition.12"));
             } else {
-                job.write("    " + I18n.tr("server.um.x.toRemove", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(an.optJSONArray("removed")))))));
-                runLogged(job, "pkg autoremove -y 2>&1", 900);
+                // Anche l'autoremove ha il suo piano esatto: l'elenco appena letto, tutto della
+                // vecchia famiglia. Si esegue e si confronta l'inventario con quell'elenco: un
+                // pacchetto tolto in piu' e' una divergenza come nel piano firmato.
+                JSONObject autoremovePlan = PackagePlan.readPlan(ar);
+                if (!autoremovePlan.optBoolean("measured")) {
+                    job.write(I18n.tr("server.um.runPythonTransition.9"));
+                    job.write(I18n.tr("server.um.runPythonTransition.10"));
+                } else {
+                    job.write("    " + I18n.tr("server.um.x.toRemove", java.util.Map.of("list", String.valueOf(String.join(", ", jsonArrayToList(an.optJSONArray("removed")))))));
+                    Map<String, String> beforeAutoremove = PackagePlan.versionsOnly(PackagePlan.installed());
+                    runLogged(job, "pkg autoremove -y 2>&1", 900);
+                    JSONArray outsideAutoremove = compareWithInventory(job, beforeAutoremove, autoremovePlan,
+                            "Python transition autoremove");
+                    boolean autoremoveFollowed = true;
+                    for (Object v : PackagePlan.verifyOutcome(autoremovePlan))
+                        if (!((JSONObject) v).getBoolean("ok")) autoremoveFollowed = false;
+                    if (!outsideAutoremove.isEmpty() || !autoremoveFollowed)
+                        outcome = new PlanOutcome(merge(outcome.outsidePlan(), outsideAutoremove),
+                                outcome.planNotFollowed() || !autoremoveFollowed, outcome.mapsProblem());
+                }
             }
 
             job.advance(6, TOT);
@@ -5789,7 +6404,17 @@ public final class UpdateManager {
             long left = sh("pkg query %n 2>/dev/null").lines().filter(x -> x.startsWith("py" + old + "-")).count();
             job.write(I18n.tr("server.um.runPythonTransition.17", java.util.Map.of("old", String.valueOf(old), "left", String.valueOf(left))));
 
-            if (servicesOk && commandsOk) {
+            job.write("");
+            boolean fallen = fallenServices(job, servicesBefore);
+            sideEffects.checkListening(job);
+            java.util.List<String> problems = planProblems(outcome);
+            problems.addAll(sideEffects.problems());
+            if (!problems.isEmpty() || fallen) {
+                job.status = "error";
+                if (problems.isEmpty()) problems.add(I18n.tr("server.um.runGuidedUpdate.37"));
+                problems.add(I18n.tr("server.um.runPythonTransition.20", java.util.Map.of("backup", String.valueOf(bk))));
+                job.errorMessage = String.join(" ", problems);
+            } else if (servicesOk && commandsOk) {
                 job.status = "completed";
                 job.write("");
                 job.write(I18n.tr("server.um.runPythonTransition.18", java.util.Map.of("newer", String.valueOf(fresh))));
@@ -5801,30 +6426,37 @@ public final class UpdateManager {
         } catch (Exception e) {
             job.status = "error";
             job.errorMessage = e.getMessage();
+            // Il confronto col piano e gli script che hanno scritto si dicono anche qui: pkg fermo a
+            // meta' e' proprio il caso in cui contano.
+            for (String p : sideEffects.problems()) job.errorMessage += " " + p;
+            if (outcome != null && !outcome.outsidePlan().isEmpty()) job.errorMessage += " " + divergenceMessage(outcome.outsidePlan());
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
             // Si protegge ogni pacchetto dell'elenco che e' installato adesso: i nuovi arrivati e,
-            // se il passaggio si e' fermato prima di toglierli, i vecchi. Prima, con un pkg delete
-            // fallito, i vecchi restavano installati e sbloccati, con solo un avviso.
+            // se il passaggio si e' fermato prima di toglierli, i vecchi.
             if (!listOnDisk.isEmpty()) {
-                java.util.List<String> failed = new ArrayList<>();
-                int done = 0;
-                for (String n : listOnDisk) {
-                    if (!ok("pkg info -e " + n, 15)) continue;   // tolto, o mai arrivato
-                    if (ok("pkg lock -y " + n, 30)) done++; else failed.add(n);
+                java.util.List<String> failed = relockListed(job, listOnDisk);
+                if (!failed.isEmpty() && "completed".equals(job.status)) {
+                    job.status = "error";
+                    job.errorMessage = I18n.tr("server.um.runGuidedUpdate.42");
                 }
-                job.write("");
-                job.write(failed.isEmpty()
-                        ? I18n.tr("server.um.x.reprotectAll", java.util.Map.of("n", String.valueOf(done)))
-                        : I18n.tr("server.um.x.reprotectSome", java.util.Map.of("list", String.valueOf(String.join(", ", failed)))));
-                if (failed.isEmpty()) clearState();
-                else job.write(I18n.tr("server.um.runPythonTransition.21", java.util.Map.of("stateFile", String.valueOf(MAINTENANCE_STATE))));
-                if (toRelock.isEmpty() && !unlockedPackages.isEmpty()) {
-                    job.write(I18n.tr("server.um.x.unlockedNotReplaced", java.util.Map.of("list", String.valueOf(String.join(", ", unlockedPackages)))));
+                if (!installedNew) {
+                    java.util.List<String> stillThere = new ArrayList<>();
+                    for (String n : listOnDisk) if (ok("pkg info -e " + n, 15) && n.startsWith("py")) stillThere.add(n);
+                    if (!stillThere.isEmpty())
+                        job.write(I18n.tr("server.um.x.unlockedNotReplaced", java.util.Map.of("list", String.join(", ", stillThere))));
                 }
             }
             job.finishedAt = System.currentTimeMillis();
         }
+    }
+
+    /** Due elenchi di divergenze in uno. */
+    private static JSONArray merge(JSONArray a, JSONArray b) {
+        JSONArray out = new JSONArray();
+        for (int i = 0; a != null && i < a.length(); i++) out.put(a.get(i));
+        for (int i = 0; b != null && i < b.length(); i++) out.put(b.get(i));
+        return out;
     }
 
     // ===================== piano di manutenzione guidato =====================
@@ -6323,7 +6955,7 @@ public final class UpdateManager {
     }
 
     /** Nome effettivo dello script rc.d fra i candidati, o null se il servizio non c'e'. */
-    private static String realServiceName(String logical) {
+    static String realServiceName(String logical) {
         for (String[] candidates : SERVICES) {
             boolean belongs = false;
             for (String c : candidates) if (c.equals(logical)) belongs = true;
@@ -6489,7 +7121,7 @@ public final class UpdateManager {
         {"mysql-server", "su -m mysql -c '$(which mysqld 2>/dev/null || echo /usr/local/libexec/mysqld) --validate-config'"},
     };
 
-    private static String testConfigOf(String service) {
+    static String testConfigOf(String service) {
         for (String[] r : CONFIG_TEST) if (r[0].equals(service)) return r[1];
         return null;
     }
@@ -6507,13 +7139,13 @@ public final class UpdateManager {
         {"redis", "redis-cli DBSIZE 2>/dev/null", "server.um.testConfigOf.1"},
     };
 
-    private static String[] testAfterOf(String service) {
+    static String[] testAfterOf(String service) {
         for (String[] r : TEST_AFTER) if (r[0].equals(service)) return r;
         return null;
     }
 
     /** Il pid di un servizio, o stringa vuota. Confrontarlo prima e dopo prova che e' ripartito davvero. */
-    private static String servicePid(String service) {
+    static String servicePid(String service) {
         if (!isValidName(service)) return "";
         String o = sh("service " + service + " status 2>/dev/null", 15);
         Matcher m = Pattern.compile("pid[s]?[: ]+([0-9]+)").matcher(o.toLowerCase());
@@ -6668,80 +7300,9 @@ public final class UpdateManager {
         // che togliera' l'aggiornamento vero. Il database vero non viene toccato.
         JSONObject plan = judged(PackagePlan.planFor(family, lockedNames(lockList),
                 UpdateManager::reasonNotToUnlock, UpdateManager::installedFamilyTwin));
-        if (!plan.optBoolean("success") || !plan.optBoolean("measured")) {
-            addCheck(checks, "plan", I18n.tr("server.um.packagePreflight.15"), "block",
-                    I18n.tr("server.um.x.noPlan", java.util.Map.of("e", String.valueOf(plan.optString("error", "?")))));
-            block = true;
-        } else {
+        if (addPlanChecks(checks, plan, java.util.List.of(name), family, block)) block = true;
+        if (plan.optBoolean("success") && plan.optBoolean("measured")) {
             JSONArray changes = plan.getJSONArray("changes");
-            // Rimozioni e retrocessioni dalla funzione condivisa: la regola e' la stessa dei
-            // due lavori, e scritta due volte diventerebbe due regole (e lo era).
-            JSONObject destructive = destructiveChanges(plan);
-            java.util.List<String> removed = jsonArrayToList(destructive.getJSONArray("removes"));
-            java.util.List<String> downgrades = jsonArrayToList(destructive.getJSONArray("downgrades"));
-            java.util.List<String> stillVulnerable = new ArrayList<>(), lines = new ArrayList<>();
-            for (int i = 0; i < changes.length(); i++) {
-                JSONObject c = changes.getJSONObject(i);
-                String n = c.getString("name");
-                if (c.optBoolean("stillVulnerable")) stillVulnerable.add(n + " " + c.getString("to"));
-                lines.add(n + " " + (c.getString("from").isEmpty() ? I18n.tr("server.um.x.newPkg") : c.getString("from"))
-                        + (c.getString("to").isEmpty() ? " " + I18n.tr("server.um.x.removedPkg") : " -> " + c.getString("to")));
-            }
-            JSONArray blockerList = plan.getJSONArray("blockers");
-            for (int i = 0; i < blockerList.length(); i++) {
-                JSONObject x = blockerList.getJSONObject(i);
-                addCheck(checks, "plan-blocker", I18n.tr("server.um.packagePreflight.16"), "block",
-                        I18n.tr("server.um.x.blockedBy", java.util.Map.of("name", String.valueOf(x.getString("name")), "reason", String.valueOf(x.getString("reason")))));
-                block = true;
-            }
-            JSONArray err = plan.getJSONArray("pkgErrors");
-            if (err.length() > 0 || plan.optBoolean("hasConflicts")) {
-                addCheck(checks, "plan-errors", I18n.tr("server.um.packagePreflight.17"), "block",
-                        String.join(" | ", jsonArrayToList(err)) + (plan.optBoolean("hasConflicts") ? " " + I18n.tr("server.um.x.pkgConflicts") : ""));
-                block = true;
-            }
-            if (!removed.isEmpty()) {
-                // Una sostituzione innocua e' un avviso; le altre fermano, e la pagina mostra le prove.
-                if (removalsRefused(plan).isEmpty()) {
-                    addCheck(checks, "plan-removals", I18n.tr("server.um.packagePreflight.18"), "review",
-                            I18n.tr("server.um.x.removalsAccepted", java.util.Map.of("list", String.join(", ", removed))));
-                } else {
-                    addCheck(checks, "plan-removals", I18n.tr("server.um.packagePreflight.18"), "block",
-                            removalsReason(plan));
-                    block = true;
-                }
-            }
-            String mapsBlocker = PostfixMaps.planBlocker(plan);
-            if (mapsBlocker != null) {
-                addCheck(checks, "plan-maps", I18n.tr("server.um.x.mapsCheck"), "block", mapsBlocker);
-                block = true;
-            }
-            if (!downgrades.isEmpty()) {
-                addCheck(checks, "plan-downgrades", I18n.tr("server.um.packagePreflight.19"), "block",
-                        I18n.tr("server.um.x.planDowngrades", java.util.Map.of("list", String.valueOf(String.join(", ", downgrades)))));
-                block = true;
-            }
-            if (jsonArrayToList(plan.getJSONArray("unchangedPackages")).contains(name)) {
-                addCheck(checks, "plan-stopped", I18n.tr("server.um.packagePreflight.20"), "block",
-                        I18n.tr("server.um.packagePreflight.21", java.util.Map.of("name", String.valueOf(name))));
-                block = true;
-            }
-            if (!stillVulnerable.isEmpty()) {
-                addCheck(checks, "plan-vulnerable", I18n.tr("server.um.packagePreflight.22"), "review",
-                        I18n.tr("server.um.x.stillVulnerable", java.util.Map.of("list", String.valueOf(String.join(", ", stillVulnerable)))));
-            }
-            java.util.List<String> extra = new ArrayList<>(jsonArrayToList(plan.getJSONArray("unlockedPackages")));
-            extra.removeAll(family);
-            if (!extra.isEmpty()) {
-                addCheck(checks, "plan-dependencies", I18n.tr("server.um.packagePreflight.23"), "review",
-                        I18n.tr("server.um.x.depsProtected", java.util.Map.of("list", String.valueOf(String.join(", ", extra)))));
-            }
-            if (!block) {
-                addCheck(checks, "plan", I18n.tr("server.um.packagePreflight.15"), "ok",
-                        (changes.length() == 1
-                         ? I18n.tr("server.um.x.pkgChanges.one", java.util.Map.of("lines", String.valueOf(String.join("; ", lines))))
-                         : I18n.tr("server.um.x.pkgChanges.other", java.util.Map.of("n", String.valueOf(changes.length()), "lines", String.valueOf(String.join("; ", lines))))));
-            }
             // I servizi da riavviare si calcolano su tutto cio' che il piano cambia, non solo
             // sulla famiglia: una dipendenza come openssl tiene in memoria i suoi utenti.
             java.util.LinkedHashSet<String> serviceNames = new java.util.LinkedHashSet<>();
