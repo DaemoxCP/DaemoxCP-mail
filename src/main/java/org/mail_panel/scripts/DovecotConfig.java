@@ -443,7 +443,7 @@ public final class DovecotConfig {
 
             # Nella 2.4 il valore predefinito di protocols e' VUOTO: senza questa riga non
             # verrebbe abilitato nessun protocollo. POP3 no: nessuno lo usava, e una porta che
-            # nessuno usa e' solo una porta da attaccare (Pop3Off lo spegne sui server di prima).
+            # nessuno usa e' solo una porta da attaccare. Si accende dalle Impostazioni del pannello (Pop3).
             protocols = imap lmtp${SIEVE_PROTO}
             listen = *, ::
             sendmail_path = /usr/local/sbin/sendmail

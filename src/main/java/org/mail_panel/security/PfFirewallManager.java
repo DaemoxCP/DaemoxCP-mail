@@ -47,9 +47,15 @@ public class PfFirewallManager {
     // === Porte protette dalla geo-whitelist (AUTH/USER-facing) ===
     // Port 25 (SMTP receive) NON e' in whitelist by default: i mail server esteri
     // devono poter consegnare. Si puo' bloccare se l'utente lo vuole esplicitamente.
-    // POP3 (110, 995) non c'e' piu': Dovecot non lo serve (Pop3Off) e pf non lo fa entrare (PfPolicy).
-    private static final String AUTH_PORTS = "{ 465, 587, 143, 993 }";
-    private static final String MAIL_PORTS = "{ 25, 465, 587, 143, 993 }";
+    // POP3 (110, 995) solo se l'amministratore l'ha acceso (Pop3): spento, Dovecot non lo serve e pf
+    // non lo fa entrare (PfPolicy), e qui non c'e'.
+    private static String authPorts() {
+        return org.mail_panel.system.Pop3.wanted() ? "{ 465, 587, 143, 993, 110, 995 }" : "{ 465, 587, 143, 993 }";
+    }
+
+    private static String mailPorts() {
+        return org.mail_panel.system.Pop3.wanted() ? "{ 25, 465, 587, 143, 993, 110, 995 }" : "{ 25, 465, 587, 143, 993 }";
+    }
 
     // === Modi ===
     public enum Mode {
@@ -540,15 +546,15 @@ public class PfFirewallManager {
         // 3. Geo rules — solo se geoActive (zone files presenti)
         if (geoActive && state.mode == Mode.GEO_WHITELIST) {
             String ports = state.applyGeoToPort25
-                ? MAIL_PORTS
-                : AUTH_PORTS;
+                ? mailPorts()
+                : authPorts();
             sb.append("# Geo whitelist: solo paesi selezionati su porte AUTH\n");
             sb.append("pass in quick proto tcp from <panel_geo_wl> to any port ")
               .append(ports).append(" keep state\n");
             sb.append("block in quick proto tcp to any port ")
               .append(ports).append("\n");
         } else if (geoActive && state.mode == Mode.GEO_BLACKLIST) {
-            String ports = MAIL_PORTS;
+            String ports = mailPorts();
             sb.append("# Geo blacklist: paesi selezionati bloccati su tutte le porte mail\n");
             sb.append("block in quick proto tcp from <panel_geo_bl> to any port ")
               .append(ports).append("\n");

@@ -36,7 +36,8 @@ import java.util.regex.Pattern;
  *   <li>quello senza cui la macchina perde la rete: ICMP essenziale, ICMPv6 (vicini e router di IPv6),
  *       le risposte DHCP (il server vero prende l'indirizzo IPv4 con DHCP).</li>
  * </ul>
- * Chiusi, fra quelli che ascoltano oggi: POP3 (spento comunque da Pop3Off), ManageSieve da fuori
+ * POP3 (110, 995) entra solo se l'amministratore l'ha acceso nelle Impostazioni (Pop3). Chiusi, fra
+ * quelli che ascoltavano sul server vero: POP3 (spento finche' non si sceglie), ManageSieve da fuori
  * (Roundcube lo usa dalla macchina stessa, e il loopback non si filtra), ntpd come server.
  *
  * <p>Si trasforma solo un pf.conf del pannello, riconosciuto dalla prima riga e fatto solo di righe
@@ -170,12 +171,13 @@ public final class PfPolicy {
         return out;
     }
 
-    /** Le porte di adesso: sshd da sockstat, il pannello e la webmail dalla configurazione. */
+    /** Le porte di adesso: sshd da sockstat, il pannello e la webmail dalla configurazione, POP3 se e' acceso. */
     static Ports currentPorts() {
         SortedSet<Integer> ssh = sshPorts(Shell.run(Duration.ofSeconds(15), "sockstat", "-46l", "-P", "tcp").output());
         SortedSet<Integer> services = new TreeSet<>();
         addPort(services, configValue("mail_panel_port"));
         if (org.mail_panel.Main.dbManager != null) addPort(services, org.mail_panel.Main.dbManager.getRoundcubePort());
+        if (org.mail_panel.system.Pop3.wanted()) services.addAll(List.of(110, 995));
         return new Ports(ssh, services);
     }
 

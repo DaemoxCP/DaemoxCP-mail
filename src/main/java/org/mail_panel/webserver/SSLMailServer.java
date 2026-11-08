@@ -328,6 +328,8 @@ public class SSLMailServer {
         context("/api/report", Access.api(SETTINGS), this::handleApiReport);
         context("/api/hostname", Access.api(SETTINGS), this::handleApiHostname);
         context("/api/roundcube-domain", Access.api(SETTINGS), this::handleApiRoundcubeDomain);
+        // POP3 acceso o spento: Dovecot, le porte di pf e delle regole dei paesi (Pop3, PfPolicy).
+        context("/api/pop3", Access.api(SETTINGS), this::handleApiPop3);
     }
 
     /**
@@ -655,8 +657,9 @@ public class SSLMailServer {
             // root non gli serve. Si verifica con una ricerca vera, e se non va si rimette com'era.
             org.mail_panel.system.DovecotAuthWorker.ensureAtBoot();
 
-            // POP3 spento: nessuno lo usava, e le sue porte erano solo bersagli (Pop3Off verifica e torna indietro).
-            org.mail_panel.system.Pop3Off.ensureAtBoot();
+            // POP3 come l'ha scelto l'amministratore, spento se non ha scelto: nessuno lo usava, e le sue porte
+            // erano solo bersagli (Pop3 verifica e torna indietro).
+            org.mail_panel.system.Pop3.ensureAtBoot();
 
             // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.
@@ -2385,7 +2388,7 @@ public class SSLMailServer {
 
     /**
      * API endpoint for mail client configuration info
-     * Returns IMAP/SMTP settings for configuring email clients (POP3 is off: Pop3Off)
+     * Returns IMAP/SMTP settings for configuring email clients, and POP3 when the administrator turned it on (Pop3)
      */
     private void handleApiMailConfig(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
@@ -2413,6 +2416,17 @@ public class SSLMailServer {
             imap.put("security", "SSL/TLS");
             imap.put("auth_method", I18n.tr("server.autoconf.normalPassword"));
             response.put("imap", imap);
+
+            // POP3 solo se l'amministratore l'ha acceso (Impostazioni): spento, le sue porte sono chiuse.
+            if (org.mail_panel.system.Pop3.wanted()) {
+                JSONObject pop3 = new JSONObject();
+                pop3.put("server", mailServer);
+                pop3.put("port_ssl", 995);
+                pop3.put("port_starttls", 110);
+                pop3.put("security", "SSL/TLS");
+                pop3.put("auth_method", I18n.tr("server.autoconf.normalPassword"));
+                response.put("pop3", pop3);
+            }
 
             // SMTP Configuration
             JSONObject smtp = new JSONObject();
@@ -11380,6 +11394,49 @@ public class SSLMailServer {
      *   7. Reload Postfix, Dovecot, Nginx
      *   8. Return a checklist of what was done and what the user must do manually (DNS, SSL cert)
      */
+    /**
+     * GET: se POP3 e' acceso. POST {"enabled": true|false}: lo accende o lo spegne (Pop3.choose), poi le
+     * regole dei paesi, se attive, si rifanno con le porte di adesso. Una scelta che non si puo' applicare
+     * lascia tutto com'era.
+     */
+    private void handleApiPop3(HttpExchange exchange) throws IOException {
+        JSONObject response = new JSONObject();
+        try {
+            String method = exchange.getRequestMethod();
+            if ("GET".equals(method)) {
+                response.put("success", true).put("enabled", org.mail_panel.system.Pop3.wanted());
+            } else if ("POST".equals(method)) {
+                JSONObject req = new JSONObject(readRequestBodyWithLimit(exchange));
+                if (!(req.opt("enabled") instanceof Boolean on)) {
+                    sendJsonError(exchange, 400, I18n.tr("server.badRequest"));
+                    return;
+                }
+                String problem = org.mail_panel.system.Pop3.choose(on);
+                if (problem == null) {
+                    if (firewallManager != null) {
+                        org.mail_panel.security.PfFirewallManager.FirewallState fw = firewallManager.getState();
+                        if (fw.enabled && fw.mode != org.mail_panel.security.PfFirewallManager.Mode.DISABLED) firewallManager.applyConfiguration();
+                    }
+                    logAudit(on ? "POP3_ENABLED" : "POP3_DISABLED", getClientIp(exchange), "");
+                    response.put("success", true).put("enabled", on);
+                } else {
+                    LOGGER.warning("[Pop3] the administrator's choice was not applied: " + problem);
+                    logAudit("POP3_CHANGE_FAILED", getClientIp(exchange), on ? "on" : "off");
+                    response.put("success", false).put("enabled", org.mail_panel.system.Pop3.wanted())
+                            .put("error", I18n.tr("server.pop3.notApplied"));
+                }
+            } else {
+                exchange.getResponseHeaders().set("Allow", "GET, POST");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
+                return;
+            }
+        } catch (Exception e) {
+            LOGGER.warning("[Pop3] request failed: " + e.getMessage());
+            response = new JSONObject().put("success", false).put("error", I18n.tr("server.requestFailed"));
+        }
+        sendJsonResponse(exchange, response);
+    }
+
     private void handleApiHostname(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
             sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));

@@ -194,8 +194,9 @@ state() {
     # Le porte di MySQL: la 33060 (protocollo X) e l'indirizzo della 3306 li chiude il pannello stesso
     # al primo avvio (MysqlListen, che lo verifica e se non va rimette com'era). Qui contano come una
     # riga sola, cosi' chiuderle non sembra un guasto; che MySQL sia acceso lo dice la riga mysqld.
-    # Lo stesso per POP3 (110, 995): lo spegne il pannello al primo avvio (Pop3Off, che verifica che
-    # IMAP risponda ancora e se no rimette com'era); IMAP resta nella fotografia.
+    # Lo stesso per POP3 (110, 995): il pannello lo accende o lo spegne come ha scelto l'amministratore,
+    # spento finche' non sceglie (Pop3, che verifica che IMAP risponda ancora e se no rimette com'era);
+    # IMAP resta nella fotografia.
     sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:(33060|110|995)$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; print "porta in ascolto: " a}' | sort -u
     printf 'nginx -t: %s\n' "$(nginx -t >/dev/null 2>&1 && echo ok || echo ERRORE)"
     printf 'postfix check: %s\n' "$(postfix check >/dev/null 2>&1 && echo ok || echo ERRORE)"
