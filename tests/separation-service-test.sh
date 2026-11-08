@@ -69,6 +69,15 @@ login() {
 }
 
 get() { curl -sk -A "$UA" -b "$JAR_COOKIES" -o /var/tmp/sep-body -w '%{http_code}' "$BASE$1"; }
+# The confirmation the root part writes after a passkey or an email code, put
+# straight into MySQL as its root for the newest session: a test signed in with a console code has neither.
+confirm_session() {
+    f=$(mktemp /var/tmp/sep-root.XXXXXX); chmod 600 "$f"
+    printf '[client]\nuser=root\npassword="%s"\n' "$(sed -n 's/^mysql_root_password=//p' /usr/local/etc/mail-panel/root-secrets.properties | sed 's/\\\(.\)/\1/g')" > "$f"
+    db=$(/usr/local/bin/mysql --defaults-extra-file="$f" -N -e "SELECT DISTINCT routine_schema FROM information_schema.routines WHERE routine_name = 'check_session'")
+    /usr/local/bin/mysql --defaults-extra-file="$f" -N -e "UPDATE $db.panel_sessions SET reauth_at = UTC_TIMESTAMP() ORDER BY created_at DESC LIMIT 1"
+    rm -f "$f"
+}
 post() { curl -sk -A "$UA" -b "$JAR_COOKIES" -H 'Content-Type: application/json' ${3:+-H "X-CSRF-Token: $3"} -d "$2" -o /var/tmp/sep-body -w '%{http_code}' "$BASE$1"; }
 del() { curl -sk -A "$UA" -b "$JAR_COOKIES" -H "X-CSRF-Token: $CSRF" -X DELETE -o /var/tmp/sep-body -w '%{http_code}' "$BASE$1"; }
 probe_root() { "$JAVA" -cp "$TESTS:$JAR" org.mail_panel.webserver.RootSocketProbe "$@"; }
@@ -169,7 +178,10 @@ check "add a test mailbox: $c (id $MID, $(cut -c1-120 /var/tmp/sep-body))" "$(is
 check "the root part made its mail folders (the mail-folders operation)" $r
 check "  owned by vmail ($(stat -f %Su /var/vmail/$D/probe/Maildir 2>/dev/null))" "$(is "$(stat -f %Su /var/vmail/$D/probe/Maildir 2>/dev/null)" vmail)"
 c=$(post "/api/mailbox-password" "{\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
-check "the password comes back from the vault, read by the root part ($c)" "$(has "$B" "Sep-Test-Password-2026x")"
+check "Show password asks a recent confirmation first: $c, needs_reauth" "$(is "$c$(has "$B" '"needs_reauth":true')" 4030)"
+confirm_session
+c=$(post "/api/mailbox-password" "{\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
+check "  confirmed: the password comes back from the vault, read by the root part ($c)" "$(has "$B" "Sep-Test-Password-2026x")"
 c=$(post "/api/mailboxes" "{\"action\":\"reveal_password\",\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
 check "  the web part has no reveal of its own any more ($c $(printf '%s' "$B" | cut -c1-80))" "$(is "$(has "$B" "Sep-Test-Password-2026x")" 1)"
 c=$(post "/api/webmail" "{\"mailbox_id\":$MID}" "$CSRF"); check "POST /api/webmail, a sign-in token for the webmail: $c" "$(is "$c" 200)"

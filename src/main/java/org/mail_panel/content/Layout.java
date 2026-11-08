@@ -90,7 +90,8 @@ public final class Layout {
      */
     static void registerAssets() {
         // Basta il riferimento: i campi statici sono gia' inizializzati.
-        if (LANGUAGE_SCRIPT.isEmpty() || SIDEBAR_SCRIPT.isEmpty() || REBOOT_SCRIPT.isEmpty()) throw new IllegalStateException();
+        if (LANGUAGE_SCRIPT.isEmpty() || SIDEBAR_SCRIPT.isEmpty() || REBOOT_SCRIPT.isEmpty() || CONFIRM_SCRIPT.isEmpty())
+            throw new IllegalStateException();
     }
 
     /** Il segnaposto che una pagina mette al posto della cornice. */
@@ -230,8 +231,53 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
         <a class="btn btn-sm btn-logout text-white" href="#" id="logoutButton" title="{{t:nav.logout}}"><i class="fas fa-right-from-bracket" aria-hidden="true"></i><span class="d-none d-md-inline ms-1">{{t:nav.logout}}</span></a>
     </div>
 </header>
-""" + SIDEBAR_SCRIPT + LANGUAGE_SCRIPT + rebootFrame(viewer);
+""" + SIDEBAR_SCRIPT + LANGUAGE_SCRIPT + CONFIRM_TEMPLATE + CONFIRM_SCRIPT + rebootFrame(viewer);
     }
+
+    /**
+     * La finestra della conferma per le operazioni pericolose, in ogni pagina:
+     * la apre panel-confirm.js quando il server la chiede. Le strade sono quelle dell'account: passkey o codice via
+     * email per chi ha una passkey, solo il codice per chi non ne ha.
+     */
+    private static final String CONFIRM_TEMPLATE = """
+<template id="panelConfirmTemplate">
+<div class="modal fade" id="panelConfirmModal" tabindex="-1" aria-labelledby="panelConfirmTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="panelConfirmTitle"><i class="fas fa-user-shield me-2" aria-hidden="true"></i>{{t:acc.stepUpTitle}}</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" data-confirm="choose">{{t:acc.stepUpIntro}}</p>
+                <p class="text-muted" data-confirm="passkey-only" hidden>{{t:confirm.passkeyOnly}}</p>
+                <p class="text-muted" data-confirm="email-only" hidden>{{t:confirm.emailOnly}}</p>
+                <p class="text-danger" data-confirm="none" hidden>{{t:confirm.noMethod}}</p>
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-primary touch-target" data-confirm="passkey"><i class="fas fa-fingerprint me-2" aria-hidden="true"></i>{{t:acc.stepUpPasskey}}</button>
+                    <button type="button" class="btn btn-outline-secondary touch-target" data-confirm="email"><i class="fas fa-paper-plane me-2" aria-hidden="true"></i>{{t:acc.stepUpEmail}}</button>
+                </div>
+                <div class="mt-3" data-confirm="code" hidden>
+                    <label class="form-label" for="panelConfirmCode">{{t:login.codeLabel}}</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="panelConfirmCode" maxlength="6" minlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code" required aria-describedby="panelConfirmMsg">
+                        <button type="button" class="btn btn-primary touch-target" data-confirm="verify">{{t:login.verify}}</button>
+                    </div>
+                </div>
+                <div id="panelConfirmMsg" class="small mt-2" role="status" aria-live="polite"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary touch-target" data-bs-dismiss="modal">{{t:common.cancel}}</button>
+            </div>
+        </div>
+    </div>
+</div>
+</template>
+""";
+
+    /** Lo script della finestra, con le funzioni WebAuthn delle pagine d'accesso, chiuso in una funzione sua. */
+    private static final String CONFIRM_SCRIPT = PageAssets.script("(function () {\n" + MailPanelContent.getWebAuthnScript()
+            + readPage("pages/panel-confirm.js") + "})();\n", false);
 
     /**
      * La striscia "il server va riavviato" sotto la barra in alto di ogni pagina, la finestra del

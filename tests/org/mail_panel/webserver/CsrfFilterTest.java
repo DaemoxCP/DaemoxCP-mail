@@ -88,6 +88,9 @@ public class CsrfFilterTest {
         Main.mysqlAvailable = true;
         Main.setupRequired = false;
         String[] login = TestSessions.open(db, "csrf-test", UA);
+        // The routes tried here are dangerous operations: they ask a recent confirmation too, given here, so that what
+        // decides is the CSRF token alone.
+        TestSessions.confirm(login[0], UA);
         String session = login[0];
         String csrf = login[1];
         AuthHandlers.codeRequestMinMs = 50;

@@ -6701,5 +6701,8 @@
   "server.ssh.duplicate": "This key is already there.",
   "server.ssh.notFound": "This key is no longer there: reload the page.",
   "server.ssh.lastKey": "It is root's last key: without it nobody could sign in as root over SSH any more. Add another one first.",
-  "server.ssh.failed": "The SSH keys could not be read or written: the details are in the panel log."
+  "server.ssh.failed": "The SSH keys could not be read or written: the details are in the panel log.",
+  "confirm.passkeyOnly": "This is a sensitive operation: confirm with your passkey. The confirmation lasts 5 minutes.",
+  "confirm.emailOnly": "This is a sensitive operation: confirm with a code sent to your sign-in email. You have no passkey yet: once you add one from the Account page you can confirm with it too. The confirmation lasts 5 minutes.",
+  "confirm.noMethod": "This operation asks for a confirmation, but your account has neither a passkey nor a sign-in email: add one from the Account page."
 }
