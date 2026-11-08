@@ -15,7 +15,8 @@ import java.util.Properties;
  *
  * Measured on 07/11/2026 on the real server: root@localhost without a password, and any user of the
  * machine got in as root, from the socket and from 127.0.0.1. Here:
- *  1. pure: the option files and the ALTER USER statements, with a host that is not a host refused;
+ *  1. pure: the option files; the mysql client gets only statements of the catalog; a host that is not a host
+ *     refused before any SQL;
  *  2. with -De2e.vm=yes, as root, on the FreeBSD VM: a throwaway MySQL started by the test
  *     (--initialize-insecure, so root has no password, as on the server) on its own socket and port,
  *     and a secrets folder of its own. The repair sets the password and then root does not get in
@@ -37,19 +38,31 @@ public class MysqlRootTest {
     }
 
     public static void main(String[] args) throws Exception {
+        // Prima di tutto: i segreti in una cartella della prova. PanelSecrets fissa la cartella la prima volta che
+        // si carica, e una prova da root che la carica con quella vera scrive nei segreti veri della macchina.
+        base = Files.createTempDirectory(Path.of("/var/tmp"), "mysql-root-test");
+        secrets = Files.createDirectories(base.resolve("secrets"));
+        System.setProperty("mailpanel.secrets.dir", secrets.toString());
+        check("the secrets of the test are in its own folder, not in the machine's",
+                PanelSecrets.location(PanelSecrets.MYSQL_ROOT_PASSWORD).startsWith(secrets.toString()));
         System.out.println("== 1. Option files and statements ==");
         String none = MysqlRoot.options(null);
         check("without a password: user root and an empty password", none.contains("user=root\n") && none.contains("password=\n"));
         check("with a password: quoted, so a # is not a comment", MysqlRoot.options("a#b$c").contains("password=\"a#b$c\"\n"));
         check("TCP: 127.0.0.1 and the port", MysqlRoot.tcpOptions(null).contains("host=127.0.0.1\n") && MysqlRoot.tcpOptions(null).contains("protocol=TCP"));
-        check("one ALTER USER per account", MysqlRoot.alterStatements(List.of("localhost", "127.0.0.1"), "Pw1!")
-                .equals("ALTER USER 'root'@'localhost' IDENTIFIED BY 'Pw1!';\nALTER USER 'root'@'127.0.0.1' IDENTIFIED BY 'Pw1!';\n"));
         boolean refused = false;
-        try { MysqlRoot.alterStatements(List.of("x'; DROP USER root; --"), "p"); } catch (IllegalArgumentException e) { refused = true; }
+        try { MysqlRoot.setPassword(List.of("x'; DROP USER root; --"), "p"); } catch (IllegalArgumentException e) { refused = true; }
         check("a host that is not a host is refused before any SQL", refused);
+        refused = false;
+        try { MysqlRoot.query("SELECT 1; DROP USER root"); } catch (IllegalArgumentException e) { refused = true; }
+        check("the mysql client gets only statements of the catalog: another text refused before the client", refused);
+        refused = false;
+        try { MysqlRoot.mysql(MysqlRoot.options(null), "ALTER USER 'root'@'localhost' IDENTIFIED BY ''"); } catch (IllegalArgumentException e) { refused = true; }
+        check("  also through the option file's way", refused);
 
         if (!"yes".equals(System.getProperty("e2e.vm"))) {
             System.out.println("\n  (part 2 skipped: it starts a MySQL, turned on with -De2e.vm=yes on the VM)");
+            Shell.run(Duration.ofSeconds(30), "rm", "-rf", base.toString());
             finish();
             return;
         }
@@ -62,14 +75,11 @@ public class MysqlRootTest {
         System.exit(failed == 0 ? 0 : 1);
     }
 
-    static Path base;
+    static Path base, secrets;
     static Process mysqld;
 
     static void endToEnd() throws Exception {
         System.out.println("\n== 2. A throwaway MySQL, root without a password as on the server ==");
-        base = Files.createTempDirectory(Path.of("/var/tmp"), "mysql-root-test");
-        Path secrets = Files.createDirectories(base.resolve("secrets"));
-        System.setProperty("mailpanel.secrets.dir", secrets.toString());
         MysqlRoot.socket = base.resolve("m.sock").toString();
         MysqlRoot.port = "33063";
         MysqlRoot.workDir = base.toString();
@@ -87,16 +97,16 @@ public class MysqlRootTest {
             check("root no longer gets in without it, from the socket", !MysqlRoot.entersWith(MysqlRoot.options(null)));
             check("  nor from 127.0.0.1", !MysqlRoot.entersWith(MysqlRoot.tcpOptions(null)));
             check("  and gets in with it", MysqlRoot.entersWith(MysqlRoot.options(pw)));
-            check("the panel's root queries use it", "1".equals(MysqlRoot.query("SELECT 1;")));
+            check("the panel's root queries use it", "1".equals(MysqlRoot.query(SqlCatalog.MYSQL_ROOT_PING)));
             check("the second time: nothing to do", MysqlRoot.repair() == MysqlRoot.Outcome.NOTHING);
 
             // A password set by hand, which the panel does not know: never replaced.
-            MysqlRoot.mysql(MysqlRoot.options(pw), "ALTER USER 'root'@'localhost' IDENTIFIED BY 'Set-By-Hand-2026';");
+            plant(pw, "ALTER USER 'root'@'localhost' IDENTIFIED BY 'Set-By-Hand-2026';");
             check("a password set by hand: nothing to do", MysqlRoot.repair() == MysqlRoot.Outcome.NOTHING);
             check("  and it is still the one set by hand", MysqlRoot.entersWith(MysqlRoot.options("Set-By-Hand-2026")));
 
             // Back to no password, with a second root account also without one.
-            MysqlRoot.mysql(MysqlRoot.options("Set-By-Hand-2026"),
+            plant("Set-By-Hand-2026",
                     "ALTER USER 'root'@'localhost' IDENTIFIED BY ''; CREATE USER 'root'@'127.0.0.1' IDENTIFIED BY '';"
                     + " GRANT ALL ON *.* TO 'root'@'127.0.0.1';");
             check("two root accounts without a password", MysqlRoot.emptyRootHosts().equals(List.of("127.0.0.1", "localhost")));
@@ -106,7 +116,7 @@ public class MysqlRootTest {
                     && MysqlRoot.entersWith(MysqlRoot.tcpOptions(pw)));
 
             // The secrets file cannot be written: MySQL must not be touched.
-            MysqlRoot.mysql(MysqlRoot.options(pw), "ALTER USER 'root'@'localhost' IDENTIFIED BY ''; DROP USER 'root'@'127.0.0.1';");
+            plant(pw, "ALTER USER 'root'@'localhost' IDENTIFIED BY ''; DROP USER 'root'@'127.0.0.1';");
             Files.delete(file);
             // The test runs as root, which ignores the permission bits: the immutable flag stops it.
             Shell.run(Duration.ofSeconds(10), "chflags", "schg", secrets.toString());
@@ -120,6 +130,23 @@ public class MysqlRootTest {
             stop();
             Shell.run(Duration.ofSeconds(30), "rm", "-rf", base.toString());
         }
+    }
+
+    /**
+     * The test's own SQL, as root from the socket with that password: like anyone who has the database, with the
+     * mysql client and not through the panel (MysqlRoot sends only statements of the catalog).
+     */
+    static void plant(String password, String sql) throws Exception {
+        Path cnf = base.resolve("plant.cnf");
+        Files.writeString(cnf, "[client]\nuser=root\npassword=\"" + password + "\"\nsocket=" + MysqlRoot.socket + "\n");
+        Files.setPosixFilePermissions(cnf, PosixFilePermissions.fromString("rw-------"));
+        Process p = new ProcessBuilder("/usr/local/bin/mysql", "--defaults-file=" + cnf, "-N", "-B")
+                .redirectErrorStream(true).start();
+        p.getOutputStream().write((sql + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        p.getOutputStream().close();
+        String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        if (p.waitFor() != 0) throw new IllegalStateException("planting failed: " + out);
+        Files.delete(cnf);
     }
 
     /** PanelSecrets keeps a copy in memory: the test that removes the file must drop it. */

@@ -8,6 +8,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -34,7 +37,9 @@ import java.util.regex.Pattern;
  *
  * Tutte le domande come root passano di qui: la password in un file di opzioni 600 in una cartella
  * 700 che dura un comando, l'SQL nello standard input, mai sulla riga di comando che "ps" mostra a
- * tutti.
+ * tutti. Al client mysql vanno solo istruzioni fisse del catalogo (SqlCatalog), senza valori: lo
+ * controlla CatalogGuard.allowed prima di scrivere il file. La sola istruzione con un valore, la
+ * password di root, passa da JDBC come parametro ({@link #setPassword}).
  */
 public final class MysqlRoot {
 
@@ -69,9 +74,13 @@ public final class MysqlRoot {
 
     /**
      * Una domanda come root, con la password del file dei segreti se c'e' e funziona, altrimenti
-     * senza (un MySQL che non ce l'ha ancora). L'uscita, oppure "" se root non entra.
+     * senza (un MySQL che non ce l'ha ancora). L'uscita, oppure "" se root non entra. Solo
+     * un'istruzione del catalogo: un altro testo e' rifiutato prima del client.
      */
     public static String query(String sql) {
+        // Prima il testo, poi i segreti: un testo rifiutato non deve nemmeno far leggere la password.
+        if (!CatalogGuard.allowed(sql))
+            throw new IllegalArgumentException("not a statement of the catalog: the mysql client gets only SqlCatalog's fixed statements");
         String password = PanelSecrets.text(PanelSecrets.MYSQL_ROOT_PASSWORD);
         if (!password.isEmpty()) {
             Shell.Result r = mysql(options(password), sql);
@@ -86,6 +95,8 @@ public final class MysqlRoot {
      * nello standard input, in una cartella 700 che si cancella subito.
      */
     static Shell.Result mysql(String options, String sql) {
+        if (!CatalogGuard.allowed(sql))
+            throw new IllegalArgumentException("not a statement of the catalog: the mysql client gets only SqlCatalog's fixed statements");
         Path dir = null;
         List<String> cmd = new ArrayList<>();
         try {
@@ -94,7 +105,7 @@ public final class MysqlRoot {
             Path cnf = dir.resolve("client.cnf");
             Path in = dir.resolve("statements.sql");
             Files.writeString(cnf, options, StandardCharsets.UTF_8);
-            Files.writeString(in, sql + "\n", StandardCharsets.UTF_8);
+            Files.writeString(in, sql + ";\n", StandardCharsets.UTF_8);
             cmd.add("mysql");
             cmd.add("--defaults-file=" + cnf);
             cmd.add("-N");
@@ -127,28 +138,41 @@ public final class MysqlRoot {
     }
 
     static boolean entersWith(String options) {
-        Shell.Result r = mysql(options, "SELECT 1;");
+        Shell.Result r = mysql(options, SqlCatalog.MYSQL_ROOT_PING);
         return r.success() && "1".equals(r.outputTrim());
     }
 
     /** Gli account root senza password, dalla tabella degli account (solo user e host, nessun dato). */
     static List<String> emptyRootHosts() {
-        Shell.Result r = mysql(options(null),
-                "SELECT host FROM mysql.user WHERE user = 'root' AND authentication_string = '' ORDER BY host;");
+        Shell.Result r = mysql(options(null), SqlCatalog.MYSQL_ROOT_EMPTY_HOSTS);
         List<String> hosts = new ArrayList<>();
         if (!r.success()) return hosts;
         for (String h : r.outputTrim().split("\n")) if (!h.isBlank()) hosts.add(h.trim());
         return hosts;
     }
 
-    /** Le istruzioni che danno la password agli account: l'host passa da un elenco chiuso di caratteri. */
-    static String alterStatements(List<String> hosts, String password) {
-        StringBuilder sql = new StringBuilder();
-        for (String h : hosts) {
+    /**
+     * La password agli account root, da JDBC: root senza password da 127.0.0.1 (lo stesso account del socket,
+     * MySQL risolve 127.0.0.1 in localhost), host e password come parametri. Gli host passano prima da un
+     * elenco chiuso di caratteri. Null se e' andata; altrimenti il perche', e MySQL resta com'era per gli
+     * account che mancano.
+     */
+    static String setPassword(List<String> hosts, String password) {
+        for (String h : hosts)
             if (!HOST.matcher(h).matches()) throw new IllegalArgumentException("unexpected host for root: " + h);
-            sql.append("ALTER USER 'root'@'").append(h).append("' IDENTIFIED BY '").append(password).append("';\n");
+        String url = "jdbc:mysql://127.0.0.1:" + port + "/?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true"
+                + "&serverTimezone=UTC&connectTimeout=10000&socketTimeout=30000";
+        try (Connection c = CatalogGuard.open(url, "root", "");
+             PreparedStatement ps = c.prepareStatement(SqlCatalog.MYSQL_ROOT_SET_PASSWORD)) {
+            for (String h : hosts) {
+                ps.setString(1, h);
+                ps.setString(2, password);
+                ps.execute();
+            }
+            return null;
+        } catch (SQLException e) {
+            return e.getErrorCode() + " " + e.getMessage();
         }
-        return sql.toString();
     }
 
     /** Il risultato della riparazione, per la prova e per il log. */
@@ -187,7 +211,7 @@ public final class MysqlRoot {
                     + " MySQL root left without a password");
             return Outcome.NOT_APPLIED;
         }
-        Shell.Result alter = mysql(options(null), alterStatements(hosts, password));
+        String alter = setPassword(hosts, password);
         boolean withPassword = entersWith(options(password));
         boolean socketOpen = entersWith(options(null));
         boolean tcpOpen = entersWith(tcpOptions(null));
@@ -198,12 +222,12 @@ public final class MysqlRoot {
         }
         if (!withPassword && !socketOpen) {
             LOGGER.severe("[MysqlRoot] LOCKED_OUT: root refuses both the password of the panel secrets file and no password"
-                    + " (ALTER USER exit " + alter.exitCode() + "): the password to try by hand is mysql_root_password in "
+                    + " (ALTER USER: " + (alter == null ? "done" : alter) + "): the password to try by hand is mysql_root_password in "
                     + PanelSecrets.location(PanelSecrets.MYSQL_ROOT_PASSWORD));
             return Outcome.LOCKED_OUT;
         }
-        LOGGER.warning("[MysqlRoot] NOT_APPLIED: ALTER USER exit " + alter.exitCode() + " (" + firstLine(alter.outputTrim())
-                + "); with the password " + (withPassword ? "root gets in" : "root does not get in")
+        LOGGER.warning("[MysqlRoot] NOT_APPLIED: ALTER USER " + (alter == null ? "done" : firstLine(alter))
+                + "; with the password " + (withPassword ? "root gets in" : "root does not get in")
                 + ", without it " + (socketOpen || tcpOpen ? "root STILL gets in" : "root is refused"));
         return Outcome.NOT_APPLIED;
     }

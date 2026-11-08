@@ -1362,6 +1362,51 @@ public final class SqlCatalog {
     /** WebDbAccess: se l'utente della web avesse altro, gli si toglie tutto e gli si ridanno solo le procedure */
     public static final String WEB_DB_REVOKE_WEB = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'";
 
+    // ========== La root di MySQL e le domande degli aggiornamenti (MysqlRoot, MysqlListen, UpdateManager) ==========
+    //
+    // MysqlRoot.query manda al client mysql (root dal socket, con la password del file dei segreti) solo queste
+    // istruzioni fisse, senza valori: lo controlla CatalogGuard.allowed. Le domande con un valore passano da JDBC,
+    // col valore come parametro.
+
+    /** MysqlRoot, MysqlListen, UpdateManager: root risponde? */
+    public static final String MYSQL_ROOT_PING = "SELECT 1";
+
+    /** MysqlRoot: gli account root senza password (solo l'host, nessun dato) */
+    public static final String MYSQL_ROOT_EMPTY_HOSTS = "SELECT host FROM mysql.user WHERE user = 'root' AND authentication_string = '' ORDER BY host";
+
+    /** MysqlRoot, da JDBC come root: la password di un account root, host e password come parametri */
+    public static final String MYSQL_ROOT_SET_PASSWORD = "ALTER USER 'root'@? IDENTIFIED BY ?";
+
+    /** UpdateManager: una casella attiva, per le prove dopo un aggiornamento */
+    public static final String UM_FIRST_ACTIVE_MAILBOX = "SELECT email FROM mailboxes WHERE active = 1 LIMIT 1";
+
+    /** UpdateManager: la stessa condizione della password_query di Dovecot, senza leggere la password */
+    public static final String UM_ACTIVE_MAILBOX_COUNT = "SELECT COUNT(*) FROM mailboxes WHERE email = ? AND active = 1";
+
+    /** UpdateManager: chi chiede puo' leggere la tabella degli account? */
+    public static final String UM_CAN_READ_ACCOUNTS = "SELECT 1 FROM mysql.user LIMIT 1";
+
+    /** UpdateManager: gli account con mysql_native_password, che MySQL 8.4 non carica piu' */
+    public static final String UM_NATIVE_PASSWORD_ACCOUNTS = "SELECT CONCAT(user, '@', host) FROM mysql.user WHERE plugin = 'mysql_native_password'";
+
+    /** UpdateManager: i plugin di autenticazione in uso, con quanti account ciascuno */
+    public static final String UM_AUTH_PLUGINS = "SELECT CONCAT(plugin, ' ', COUNT(*)) FROM mysql.user GROUP BY plugin";
+
+    /** UpdateManager: quanti database, prima e dopo la migrazione di MySQL */
+    public static final String UM_COUNT_SCHEMATA = "SELECT COUNT(*) FROM information_schema.schemata";
+
+    /** UpdateManager: quante tabelle fuori da quelle di sistema, prima e dopo la migrazione di MySQL */
+    public static final String UM_COUNT_USER_TABLES = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')";
+
+    /** UpdateManager: quante caselle, prima e dopo la migrazione di MySQL */
+    public static final String UM_COUNT_MAILBOXES = "SELECT COUNT(*) FROM mailboxes";
+
+    /** UpdateManager, con l'utente di Roundcube: le tabelle del suo database, prima e dopo l'aggiornamento */
+    public static final String UM_COUNT_SCHEMA_TABLES = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ?";
+
+    /** UpdateManager, come root: perche' mysqldump chiede un FLUSH */
+    public static final String UM_GTID_STATE = "SELECT CONCAT('gtid_mode=', @@gtid_mode, '  log_bin=', @@log_bin, '  enforce_gtid_consistency=', @@enforce_gtid_consistency)";
+
     // ========== Gli utenti MySQL di Postfix e Dovecot (MailDbUsers) ==========
     //
     // Postfix e Dovecot leggono soltanto, ognuno le sue colonne: Postfix domini, caselle e alias, mai le password;

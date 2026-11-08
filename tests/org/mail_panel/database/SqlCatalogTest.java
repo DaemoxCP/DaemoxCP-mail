@@ -29,8 +29,8 @@ import java.util.stream.Stream;
  *     execute, executeQuery, executeUpdate, addBatch, also the ones a PreparedStatement inherits), and
  *     the statements and the metadata do not hand out the connection without the guard;
  *  3. from the project folder, the code (src/main/java):
- *     a. no SQL text outside the catalog, except the mysql client's SQL of the root part (listed below,
- *        next step of 0.8);
+ *     a. no SQL text outside the catalog, except the webmail user's migration (RoundcubeDbUser, listed
+ *        below, the second piece of 0.8.1) and the install scripts;
  *     b. what goes to a JDBC call is a catalog constant or a name that holds one, never a text built
  *        there (a +, a literal, String.format, a StringBuilder);
  *     c. only CatalogGuard opens a connection (DriverManager), and nobody takes the driver's statement
@@ -77,15 +77,14 @@ public class SqlCatalogTest {
     }
 
     /**
-     * The mysql client's SQL, run by the root part only (as MySQL's root, or with the credentials of
-     * Roundcube and of the panel, through the command line): not through JDBC, so not through the
-     * catalog yet. The install scripts are shell text for the mysql client and for Postfix and Dovecot.
+     * The mysql client's SQL that is not in the catalog yet: the webmail user's migration, run by the root part
+     * (as MySQL's root, or with the credentials of Roundcube and of the panel, through the command line). MysqlRoot,
+     * MysqlListen and UpdateManager are no longer here: the client gets only catalog statements from them
+     * (MysqlRoot.mysql refuses any other text) and the questions with a value go through JDBC. The install scripts
+     * are shell text for the mysql client and for Postfix and Dovecot.
      */
     static final Set<String> MYSQL_CLIENT = Set.of(
-            "org/mail_panel/database/MysqlRoot.java",
-            "org/mail_panel/system/MysqlListen.java",
-            "org/mail_panel/system/RoundcubeDbUser.java",
-            "org/mail_panel/system/UpdateManager.java");
+            "org/mail_panel/system/RoundcubeDbUser.java");
     static final String SCRIPTS = "org/mail_panel/scripts/";
 
     /** The start of an SQL statement, in the panel's style (keywords in capitals). */
@@ -142,22 +141,22 @@ public class SqlCatalogTest {
                 try (Statement s = c.createStatement()) { s.execute("DROP TABLE config"); }
             }));
             check("executeQuery, executeUpdate, addBatch of another text are refused", refused(() -> {
-                try (Statement s = c.createStatement()) { s.executeQuery("SELECT 1"); }
+                try (Statement s = c.createStatement()) { s.executeQuery("SELECT 2"); }
             }) && refused(() -> {
                 try (Statement s = c.createStatement()) { s.executeUpdate("DELETE FROM config"); }
             }) && refused(() -> {
                 try (Statement s = c.createStatement()) { s.addBatch("DELETE FROM config"); }
             }));
             check("prepareStatement, prepareCall, nativeSQL of another text are refused",
-                    refused(() -> c.prepareStatement("SELECT 1")) && refused(() -> c.prepareCall("SELECT 1"))
-                    && refused(() -> c.nativeSQL("SELECT 1")));
+                    refused(() -> c.prepareStatement("SELECT 2")) && refused(() -> c.prepareCall("SELECT 2"))
+                    && refused(() -> c.nativeSQL("SELECT 2")));
             check("a catalog statement with one character more is refused",
                     refused(() -> c.prepareStatement(SqlCatalog.CONFIG_GET_MYSQL_PASSWORD + " ")));
             check("the texts a PreparedStatement inherits are refused", refused(() -> {
                 try (PreparedStatement p = c.prepareStatement(SqlCatalog.CONFIG_GET_MYSQL_PASSWORD)) { p.execute("DROP TABLE config"); }
             }));
             check("the connection from a statement is the guarded one", refused(() -> {
-                try (Statement s = c.createStatement()) { s.getConnection().prepareStatement("SELECT 1"); }
+                try (Statement s = c.createStatement()) { s.getConnection().prepareStatement("SELECT 2"); }
             }));
             check("the connection from the metadata is the guarded one", refused(() -> {
                 DatabaseMetaData md = c.getMetaData();
