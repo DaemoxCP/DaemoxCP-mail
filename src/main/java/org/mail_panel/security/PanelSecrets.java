@@ -56,6 +56,11 @@ public final class PanelSecrets {
     public static final String ROUNDCUBE_DB_PASSWORD = "roundcube_db_password";
     /** La chiave privata TLS (PEM) del pannello (prima stava nel database SQLite di configurazione). */
     public static final String PANEL_TLS_KEY = "panel_tls_key";
+    /**
+     * La password dell'utente MySQL della parte web (mailpanel_web), che puo' solo chiamare le procedure della web.
+     * La scrive la root quando l'utente e' pronto e provato.
+     */
+    public static final String MYSQL_WEB_PASSWORD = "mysql_web_password";
 
     /** La cartella dei file; i test la spostano in una cartella temporanea. */
     static Path dir = Paths.get(System.getProperty("mailpanel.secrets.dir", "/usr/local/etc/mail-panel"));
@@ -70,6 +75,16 @@ public final class PanelSecrets {
     public static final Set<String> ROOT_ONLY = Set.of(MYSQL_ROOT_PASSWORD, ROUNDCUBE_DB_PASSWORD);
 
     /**
+     * I segreti che passano nel file di root quando la parte web ha il suo utente MySQL ({@link #MYSQL_WEB_PASSWORD}
+     * nel file della web): la password dell'utente MySQL del pannello, che puo' tutto nel database, e quella in
+     * sospeso dell'installazione. Finche' la web non ha il suo, stanno nel file della web, che li usa.
+     *
+     * <p>Si leggono da tutti e due i file, prima da quello giusto (a meta' di uno spostamento sono in entrambi,
+     * uguali). La web non legge mai il file di root: per lei esiste solo il suo.
+     */
+    static final Set<String> MOVE_TO_ROOT = Set.of(MYSQL_PASSWORD, MYSQL_PASSWORD_PENDING);
+
+    /**
      * Il gruppo della parte web del pannello separato. Col pannello separato (PanelSeparation) la cartella
      * e' 0750 root:mailpanel e il file della web 0640 root:mailpanel: la web lo legge, non lo scrive mai (le
      * chiavi le genera la root all'avvio, prima di avviarla). Ogni riscrittura da root crea un file nuovo
@@ -81,7 +96,16 @@ public final class PanelSecrets {
     static final Store WEB = new Store("panel-secrets.properties", "panel-secrets.lock", true);
     static final Store ROOT = new Store("root-secrets.properties", "root-secrets.lock", false);
 
-    private static Store storeFor(String name) { return ROOT_ONLY.contains(name) ? ROOT : WEB; }
+    private static Store storeFor(String name) {
+        if (ROOT_ONLY.contains(name)) return ROOT;
+        if (MOVE_TO_ROOT.contains(name) && webHasItsOwnUser()) return ROOT;
+        return WEB;
+    }
+
+    /** La parte web entra in MySQL col suo utente: i segreti di MOVE_TO_ROOT stanno nel file di root. */
+    static boolean webHasItsOwnUser() {
+        return !WEB.load().getProperty(MYSQL_WEB_PASSWORD, "").isEmpty();
+    }
 
     static synchronized void reset() { WEB.reset(); ROOT.reset(); }
 
@@ -228,6 +252,12 @@ public final class PanelSecrets {
     }
 
     private static String get(String name) {
+        if (MOVE_TO_ROOT.contains(name)) {
+            Store first = storeFor(name), other = first == ROOT ? WEB : ROOT;
+            String v = first == ROOT && !runningAsRoot() ? "" : first.load().getProperty(name, "");
+            if (!v.isEmpty() || (other == ROOT && !runningAsRoot())) return v;
+            return other.load().getProperty(name, "");
+        }
         return storeFor(name).load().getProperty(name, "");
     }
 
@@ -274,12 +304,51 @@ public final class PanelSecrets {
     /** Scrive (o con "" o null toglie) un segreto di testo; un processo alla volta, file 600. */
     public static synchronized void setText(String name, String value) {
         String v = value == null ? "" : value;
-        storeFor(name).update(p -> {
+        Store store = storeFor(name);
+        store.update(p -> {
             if (v.equals(p.getProperty(name, ""))) return null;
             if (v.isEmpty()) p.remove(name);
             else p.setProperty(name, v);
             return p;
         });
+        // Spostato nel file di root: nell'altro non deve restare un valore vecchio.
+        if (store == ROOT && MOVE_TO_ROOT.contains(name)) {
+            WEB.update(p -> p.remove(name) == null ? null : p);
+        }
+    }
+
+    /**
+     * WebDbAccess, da root, quando l'utente MySQL della web e' pronto e provato: la sua password nel file della
+     * web, e i segreti di {@link #MOVE_TO_ROOT} da quel file a quello di root. Prima si scrive il file di root e
+     * lo si rilegge; poi, in una sola scrittura del file della web, la password della web entra e gli altri
+     * escono. A meta' strada ogni segreto c'e' in almeno un file, e chi legge lo trova (get). Vero se ha
+     * cambiato qualcosa: al secondo avvio non scrive niente.
+     */
+    public static synchronized boolean giveWebItsOwnUser(String webPassword) {
+        if (webPassword == null || webPassword.isEmpty()) throw new IllegalArgumentException("no password for the web part's MySQL user");
+        Properties web = WEB.readFile();
+        boolean changed = false;
+        for (String name : MOVE_TO_ROOT) {
+            String v = web.getProperty(name, "");
+            if (v.isEmpty()) continue;
+            ROOT.update(p -> {
+                if (v.equals(p.getProperty(name, ""))) return null;
+                p.setProperty(name, v);
+                return p;
+            });
+            if (!v.equals(ROOT.readFile().getProperty(name, "")))
+                throw new IllegalStateException("Root secret " + name + " not saved in " + ROOT.file());
+            changed = true;
+        }
+        if (changed || !webPassword.equals(web.getProperty(MYSQL_WEB_PASSWORD, ""))) {
+            WEB.update(p -> {
+                p.setProperty(MYSQL_WEB_PASSWORD, webPassword);
+                for (String name : MOVE_TO_ROOT) p.remove(name);
+                return p;
+            });
+            changed = true;
+        }
+        return changed;
     }
 
     /**

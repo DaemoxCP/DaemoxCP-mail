@@ -179,13 +179,27 @@ public final class WebSessions {
         return LAST_CHECK_FAILED.get();
     }
 
-    /** La sessione del token, se esiste, non e' scaduta, e' dello stesso browser e l'amministratore e' attivo. */
+    /**
+     * La sessione del token, se esiste, non e' scaduta, e' dello stesso browser e l'amministratore e' attivo.
+     *
+     * <p>Nella parte web, con il suo utente MySQL, le procedure ricevono da qui l'impronta di questo token
+     * (CatalogGuard.useSession): il database ricontrolla la sessione a ogni chiamata. Se la sessione non c'e',
+     * l'impronta si dimentica subito.
+     */
     public Optional<Current> check(String token, String userAgent) {
+        Optional<Current> found = lookUp(token, userAgent);
+        if (found.isEmpty()) org.mail_panel.database.CatalogGuard.forgetSession();
+        return found;
+    }
+
+    private Optional<Current> lookUp(String token, String userAgent) {
         LAST_CHECK_FAILED.set(false);
         if (!wellFormed(token)) return Optional.empty();
         Instant now = Instant.now();
+        String hash = tokenHash(token);
+        org.mail_panel.database.CatalogGuard.useSession(hash);
         try (PreparedStatement p = AuthStore.connection.get().prepareStatement(SqlCatalog.SESSION_CHECK)) {
-            p.setString(1, tokenHash(token));
+            p.setString(1, hash);
             p.setObject(2, utc(now));
             p.setObject(3, utc(now.minusSeconds(IDLE_SECONDS)));
             try (ResultSet r = p.executeQuery()) {

@@ -245,7 +245,7 @@ public class SSLMailServer {
         context("/api/logout", Access.PUBLIC, this::handleLogout);
         // Solo per la webmail sullo stesso server (loopback + chiave): cambio password e copia nel vault
         context(org.mail_panel.integration.WebmailPasswordConfig.PATH, Access.PUBLIC, webmail::handlePasswordChange);
-        context("/api/internal/mailbox-vault", Access.PUBLIC, webmail::handleVaultCopy);
+        context(org.mail_panel.integration.WebmailPasswordConfig.VAULT_PATH, Access.PUBLIC, webmail::handleVaultCopy);
 
         // ---------- Home e account ----------
         context("/home", Access.page(HOME), this::handleProtectedPage);
@@ -357,6 +357,8 @@ public class SSLMailServer {
             served = exchange -> forwardToRoot(exchange, path);
         else if (mode == Mode.WEB_PART && path.equals("/api/login"))
             served = this::forwardSignIn;
+        else if (mode == Mode.WEB_PART && WEBMAIL_ROUTES.contains(path))
+            served = exchange -> forwardWebmail(exchange, path);
         HttpContext context = server.createContext(path, served);
         // Per prima, una HEAD diventa per tutti quelli che seguono una GET senza corpo (HeadExchange): ogni
         // gestore scrive la risposta come sempre, e nessuno deve sapere delle HEAD.
@@ -515,7 +517,7 @@ public class SSLMailServer {
     private static final java.util.Set<String> CSRF_EXEMPT = java.util.Set.of(
         "/api/login", "/api/language",
         // Le chiama la webmail, non un browser: niente cookie, si autentica con la sua chiave
-        org.mail_panel.integration.WebmailPasswordConfig.PATH, "/api/internal/mailbox-vault");
+        org.mail_panel.integration.WebmailPasswordConfig.PATH, org.mail_panel.integration.WebmailPasswordConfig.VAULT_PATH);
 
     /**
      * Le rotte che un Host diverso da quello del pannello lo ricevono per mestiere.
@@ -536,7 +538,14 @@ public class SSLMailServer {
      */
     private static final java.util.Set<String> HOST_CHECK_EXEMPT = java.util.Set.of(
         "/autoconfig", "/mta-sts",
-        org.mail_panel.integration.WebmailPasswordConfig.PATH, "/api/internal/mailbox-vault");
+        org.mail_panel.integration.WebmailPasswordConfig.PATH, org.mail_panel.integration.WebmailPasswordConfig.VAULT_PATH);
+
+    /**
+     * Le due rotte della webmail: col pannello separato le serve la root, che sola scrive le password delle caselle
+     * (forwardWebmail, serveWebmail).
+     */
+    static final java.util.Set<String> WEBMAIL_ROUTES = java.util.Set.of(
+        org.mail_panel.integration.WebmailPasswordConfig.PATH, org.mail_panel.integration.WebmailPasswordConfig.VAULT_PATH);
 
     /**
      * L'Host della richiesta raggiunge questo pannello? Vedi {@link HostCheck} per il perche'
@@ -742,16 +751,7 @@ public class SSLMailServer {
     /** Le colonne aggiunte dalle versioni successive, per le installazioni di prima. */
     private void ensureSchemaUpgrades() {
         try {
-            Main.mailDatabase.ensureMailboxReceiveEnabledColumn();
-            // Cifratura password mailbox per recovery dal pannello
-            Main.mailDatabase.ensureMailboxPasswordVaultColumns();
-            Main.mailDatabase.ensureThemeColumn();
-            // La lingua scelta dall'amministratore (per le installazioni di prima)
-            Main.mailDatabase.ensureLanguageColumn();
-            Main.mailDatabase.ensureDkimRotationColumns();
-            // Migra il token Cloudflare legacy se presente
-            Main.mailDatabase.ensureCloudflareAccountsSchema();
-            Main.mailDatabase.ensureDkimRotationHistoryTable();
+            Main.mailDatabase.ensureColumnUpgrades();
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Schema upgrade failed", e);
         }
@@ -1157,6 +1157,7 @@ public class SSLMailServer {
     /** Dopo un login o un'uscita la sessione della richiesta cambia: si dimentica quella cercata. */
     static void forgetCurrentSession() {
         CURRENT_SESSION.remove();
+        org.mail_panel.database.CatalogGuard.forgetSession();
     }
 
     // ============== IL PANNELLO SEPARATO: L'INOLTRO ==============
@@ -1187,6 +1188,10 @@ public class SSLMailServer {
         }
         if (r.route().equals("/api/login")) {
             serveSignIn(r, exchange);
+            return;
+        }
+        if (WEBMAIL_ROUTES.contains(r.route())) {
+            serveWebmail(r, exchange);
             return;
         }
         Access access = routes.get(r.route());
@@ -1250,6 +1255,38 @@ public class SSLMailServer {
                 return;
             }
             auth.handleLogin(exchange, false);
+        } finally {
+            I18n.clearCurrent();
+            forgetCurrentSession();
+        }
+    }
+
+    /**
+     * La parte root: una delle due rotte della webmail (cambio password, copia nel vault), che la web le passa senza
+     * amministratore dopo aver controllato che a chiamare sia la webmail sulla stessa macchina. La root non vede
+     * quel controllo e non ne ha bisogno: cambia o copia una password solo se quella attuale corrisponde all'hash
+     * (bcrypt), con il suo limite di tentativi per casella. Chi avesse preso la web non ottiene di piu' di chi
+     * conosce gia' la password della casella.
+     */
+    private void serveWebmail(RootChannel.Request r, ForwardedExchange exchange) throws IOException {
+        I18n.setCurrent(I18n.LANGUAGES.contains(r.lang()) ? r.lang() : I18n.FALLBACK_LANGUAGE);
+        try {
+            if (mode != Mode.ROOT_PART || !r.route().equals(r.path()) || r.query() != null || r.adminId() != 0
+                    || r.sessionId() != 0 || !"POST".equals(r.method())) {
+                LOGGER.warning("Root part: webmail request refused (" + r.method() + " " + r.path() + ")");
+                logAudit("FORWARD_REFUSED", r.clientIp(), "route=" + r.route() + " path=" + r.path());
+                sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
+                return;
+            }
+            String refused = RootGate.check(r);
+            if (refused != null) {
+                LOGGER.warning("Root part: webmail request refused: " + refused);
+                logAudit("FORWARD_REFUSED", r.clientIp(), "route=" + r.route() + " " + refused);
+                sendJsonError(exchange, 400, I18n.tr("server.rootPart.refused"));
+                return;
+            }
+            if (r.route().equals(org.mail_panel.integration.WebmailPasswordConfig.PATH)) webmail.handlePasswordChange(exchange, false);
+            else webmail.handleVaultCopy(exchange, false);
         } finally {
             I18n.clearCurrent();
             forgetCurrentSession();
@@ -1345,6 +1382,30 @@ public class SSLMailServer {
                 return;
             }
             relay(exchange, route, session.get().admin().id(), session.get().id(), body, false);
+        } catch (IOException e) {
+            if (exchange.getResponseCode() == -1) {
+                try { sendJsonError(exchange, 502, I18n.tr("server.rootPart.unavailable")); } catch (IOException ignored) { }
+            }
+            LOGGER.log(Level.FINE, "Web part: forwarding " + route + " failed", e);
+        } finally {
+            exchange.close();
+        }
+    }
+
+    /**
+     * La parte web: una delle due rotte della webmail. Qui solo quello che la root non puo' vedere, cioe' che a
+     * chiamare sia la webmail sulla stessa macchina (loopback senza proxy, con la sua chiave), e un POST; altrimenti
+     * 404 o 405 come oggi, senza disturbare la root. Poi la richiesta va alla root senza amministratore.
+     */
+    private void forwardWebmail(HttpExchange exchange, String route) throws IOException {
+        try {
+            if (WebmailPasswordHandler.callerRefused(exchange)) return;
+            byte[] body = RootChannel.readBody(exchange.getRequestBody());
+            if (body == null || body.length > WebmailPasswordHandler.maxBody()) {
+                sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
+                return;
+            }
+            relay(exchange, route, 0, 0, body, false);
         } catch (IOException e) {
             if (exchange.getResponseCode() == -1) {
                 try { sendJsonError(exchange, 502, I18n.tr("server.rootPart.unavailable")); } catch (IOException ignored) { }

@@ -1215,6 +1215,11 @@ public class Main {
                 try {
                     server = new SSLMailServer(port, certContent, keyContent, mode);
                     if (mode == SSLMailServer.Mode.ROOT_PART) {
+                        // Prima di accendere la web: il suo utente MySQL, che puo' solo chiamare le sue procedure
+                        // (0.8.2). Se non e' pronto la web entra come prima, e lo si dice.
+                        String webDb = org.mail_panel.database.WebDbAccess.ensure(mailDatabase);
+                        if (webDb != null)
+                            System.out.println(ANSI_YELLOW + "[WebDbAccess] the web part keeps the panel's MySQL user: " + webDb + ANSI_RESET);
                         final SSLMailServer root = server;
                         String failed = org.mail_panel.system.PanelSeparation.startWebPart(port, root::serveForwarded);
                         if (failed != null) {
@@ -1368,14 +1373,25 @@ public class Main {
                 return false;
             }
             mailDatabase = new MailDatabase();
-            mailDatabase.setPasswordSource(dbManager::mysqlPassword);
-            mailDatabase.setCredentials(mysqlUser, dbManager.mysqlPassword());
             mailDatabase.setHost(mysqlHost);
             mailDatabase.setPort(Integer.parseInt(mysqlPort));
             mailDatabase.setDatabase(mysqlDatabase);
+            // Il suo utente MySQL, che puo' solo chiamare le procedure della web (0.8.2, WebDbAccess), se la root
+            // lo ha preparato e provato; altrimenti, come prima, l'utente del pannello.
+            String webPassword = org.mail_panel.security.PanelSecrets.text(org.mail_panel.security.PanelSecrets.MYSQL_WEB_PASSWORD);
+            if (!webPassword.isEmpty()) {
+                mailDatabase.useRoutines(org.mail_panel.database.WebDbAccess.WEB_USER, () ->
+                        org.mail_panel.security.PanelSecrets.text(org.mail_panel.security.PanelSecrets.MYSQL_WEB_PASSWORD));
+            } else {
+                mailDatabase.setPasswordSource(dbManager::mysqlPassword);
+                mailDatabase.setCredentials(mysqlUser, dbManager.mysqlPassword());
+            }
             if (mailDatabase.connect()) {
                 mysqlAvailable = true;
                 setupRequired = !mailDatabase.hasAdminUser();
+                System.out.println("Web part: MySQL as " + (mailDatabase.usesRoutines()
+                        ? org.mail_panel.database.WebDbAccess.WEB_USER + ", only the web part's procedures"
+                        : mysqlUser + ", the panel's user (the web part's own user is not ready)"));
             } else {
                 System.out.println("[WARNING] Web part: could not connect to MySQL");
             }

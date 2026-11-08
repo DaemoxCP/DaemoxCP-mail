@@ -81,8 +81,12 @@ public final class RootChannel implements Closeable {
      */
     static final List<String> HEADERS = List.of("Content-type", "Accept-language", "User-agent", "Accept", "Host");
 
-    /** Le rotte che la web passa senza un amministratore (id 0 e 0): l'accesso e la chiave delle sessioni. */
-    public static final java.util.Set<String> BEFORE_SIGN_IN = java.util.Set.of("/api/login", "/op/session-key");
+    /**
+     * Le rotte che la web passa senza un amministratore (id 0 e 0): l'accesso, la chiave delle sessioni, e le due
+     * della webmail (cambio password e copia nel vault), che la web ha gia' controllato (loopback e chiave).
+     */
+    public static final java.util.Set<String> BEFORE_SIGN_IN = java.util.Set.of("/api/login", "/op/session-key",
+            org.mail_panel.integration.WebmailPasswordConfig.PATH, org.mail_panel.integration.WebmailPasswordConfig.VAULT_PATH);
 
     static final List<String> METHODS = List.of("GET", "HEAD", "POST", "PUT", "DELETE", "PATCH");
 

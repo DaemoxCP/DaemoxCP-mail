@@ -54,7 +54,10 @@ final class RootGate {
             // POP3 acceso o spento (Impostazioni).
             Map.entry("/api/pop3", GET_POST),
             // Le chiavi SSH di root (Impostazioni).
-            Map.entry("/api/ssh-keys", GET_POST));
+            Map.entry("/api/ssh-keys", GET_POST),
+            // La webmail: cambio password e copia nel vault, senza sessione (la web ha controllato chi chiama).
+            Map.entry(org.mail_panel.integration.WebmailPasswordConfig.PATH, POST),
+            Map.entry(org.mail_panel.integration.WebmailPasswordConfig.VAULT_PATH, POST));
 
     static final int MAX_STRING = 64 * 1024;
     static final int MAX_DEPTH = 4;

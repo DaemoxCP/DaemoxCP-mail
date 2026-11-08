@@ -137,7 +137,9 @@ public class SeparatedPanelTest {
         java.util.Set<String> forwarded = new java.util.TreeSet<>();
         root.routes().forEach((p, a) -> { if (a.kind() == Access.Kind.API && !SSLMailServer.WEB_LOCAL_API.contains(p)) forwarded.add(p); });
         forwarded.add("/api/login");
-        check("the root's closed list has exactly the routes the web part forwards, the sign-in too (" + forwarded.size() + ")",
+        forwarded.addAll(SSLMailServer.WEBMAIL_ROUTES);
+        check("the root's closed list has exactly the routes the web part forwards, the sign-in and the webmail's two too ("
+                + forwarded.size() + ")",
                 forwarded.equals(new java.util.TreeSet<>(RootGate.METHODS.keySet())));
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);

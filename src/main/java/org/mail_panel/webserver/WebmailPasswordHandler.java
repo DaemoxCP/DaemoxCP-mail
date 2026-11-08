@@ -35,6 +35,10 @@ import java.util.logging.Logger;
  * Chi chiama deve arrivare da 127.0.0.1 (o ::1) direttamente, senza intestazioni di un proxy
  * davanti, e mandare la chiave della webmail (X-MailPanel-Key, nel file dei segreti del pannello).
  * Altrimenti la risposta e' 404, come per una rotta che non c'e'. Nessuna password nei log.
+ *
+ * <p>Col pannello separato le serve la root: la web controlla chi chiama
+ * ({@link #callerRefused}) e passa la richiesta; la root rifa' tutto il resto, password attuale con bcrypt e
+ * limite dei tentativi compresi, senza il controllo del chiamante, che non vede.
  */
 final class WebmailPasswordHandler {
 
@@ -53,7 +57,12 @@ final class WebmailPasswordHandler {
     // ===================== Rotte =====================
 
     void handlePasswordChange(HttpExchange ex) throws IOException {
-        Map<String, String> form = authorizedForm(ex);
+        handlePasswordChange(ex, true);
+    }
+
+    /** checkCaller false: la parte root, con la richiesta che la web ha gia' controllato (callerRefused). */
+    void handlePasswordChange(HttpExchange ex, boolean checkCaller) throws IOException {
+        Map<String, String> form = authorizedForm(ex, checkCaller);
         if (form == null) return;
         String user = form.getOrDefault("user", "").trim().toLowerCase(java.util.Locale.ROOT);
         String current = form.getOrDefault("curpass", "");
@@ -92,7 +101,12 @@ final class WebmailPasswordHandler {
     }
 
     void handleVaultCopy(HttpExchange ex) throws IOException {
-        Map<String, String> form = authorizedForm(ex);
+        handleVaultCopy(ex, true);
+    }
+
+    /** checkCaller false: la parte root, con la richiesta che la web ha gia' controllato (callerRefused). */
+    void handleVaultCopy(HttpExchange ex, boolean checkCaller) throws IOException {
+        Map<String, String> form = authorizedForm(ex, checkCaller);
         if (form == null) return;
         String user = form.getOrDefault("user", "").trim().toLowerCase(java.util.Locale.ROOT);
         String pass = form.getOrDefault("pass", "");
@@ -144,17 +158,8 @@ final class WebmailPasswordHandler {
      * Il modulo della richiesta se chi chiama e' la webmail: POST, da loopback senza proxy, con la
      * chiave giusta. Altrimenti risponde lui (404 o 405) e torna null.
      */
-    private Map<String, String> authorizedForm(HttpExchange ex) throws IOException {
-        if (!fromLocalWebmail(ex)) {
-            drain(ex);
-            reply(ex, 404, "not found");
-            return null;
-        }
-        if (!"POST".equals(ex.getRequestMethod())) {
-            drain(ex);
-            reply(ex, 405, "method not allowed");
-            return null;
-        }
+    private Map<String, String> authorizedForm(HttpExchange ex, boolean checkCaller) throws IOException {
+        if (checkCaller ? callerRefused(ex) : methodRefused(ex)) return null;
         String body = readBody(ex);
         if (body == null) {
             reply(ex, 413, "too large");
@@ -166,6 +171,33 @@ final class WebmailPasswordHandler {
             return null;
         }
         return form;
+    }
+
+    /**
+     * Chi chiama non e' la webmail sulla stessa macchina, o non manda un POST: risposto (404 o 405) e vero. La
+     * parte web lo chiede prima di passare la richiesta alla root.
+     */
+    static boolean callerRefused(HttpExchange ex) throws IOException {
+        if (!fromLocalWebmail(ex)) {
+            drain(ex);
+            reply(ex, 404, "not found");
+            return true;
+        }
+        return methodRefused(ex);
+    }
+
+    private static boolean methodRefused(HttpExchange ex) throws IOException {
+        if (!"POST".equals(ex.getRequestMethod())) {
+            drain(ex);
+            reply(ex, 405, "method not allowed");
+            return true;
+        }
+        return false;
+    }
+
+    /** Quanto puo' essere grande il corpo (la parte web non passa alla root niente di piu'). */
+    static int maxBody() {
+        return MAX_BODY;
     }
 
     static boolean fromLocalWebmail(HttpExchange ex) {

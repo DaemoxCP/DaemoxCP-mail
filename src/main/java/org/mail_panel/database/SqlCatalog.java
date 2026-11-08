@@ -452,6 +452,9 @@ public final class SqlCatalog {
     public static final String MAIL_GET_DOMAIN_BY_NAME = "SELECT * FROM domains WHERE domain = ?";
 
     /** MailDatabase.getDomains */
+    /** DomainCache: i nomi dei domini ospitati, per autoconfig e MTA-STS (nella parte web la procedura pubblica list_domain_names) */
+    public static final String MAIL_GET_DOMAIN_NAMES = "SELECT domain FROM domains ORDER BY domain";
+
     public static final String MAIL_GET_DOMAINS = "SELECT d.*,\n"
             + "       (SELECT COUNT(*) FROM mailboxes m WHERE m.domain_id = d.id) as mailbox_count,\n"
             + "       (SELECT COUNT(*) FROM aliases a WHERE a.domain_id = d.id) as alias_count\n"
@@ -884,7 +887,7 @@ public final class SqlCatalog {
     public static final String MAIL_CREATE_MAILSERVER_USER = "CREATE USER IF NOT EXISTS 'mailserver'@'127.0.0.1' IDENTIFIED BY ?";
 
     /** MailDatabase.dropAllTables: le tabelle di MailDatabase.PANEL_TABLES, nello stesso ordine (lo controlla SqlCatalogTest) */
-    public static final String MAIL_DROP_PANEL_TABLES = "DROP TABLE IF EXISTS admin_passkeys, rspamd_training, panel_sessions, login_code_email, login_code_console, stepup_code, email_change_code, roundcube_tokens, auto_responders, sieve_filters, forwarding_rules, email_statistics, aliases, mailboxes, dkim_rotation_history, domains, cloudflare_accounts, audit_log, rate_limits, panel_settings, installed_components, panel_admin, virtual_aliases, virtual_users, virtual_domains";
+    public static final String MAIL_DROP_PANEL_TABLES = "DROP TABLE IF EXISTS admin_passkeys, rspamd_training, panel_sessions, login_code_email, login_code_console, stepup_code, email_change_code, roundcube_tokens, auto_responders, sieve_filters, forwarding_rules, email_statistics, aliases, mailboxes, dkim_rotation_history, domains, cloudflare_accounts, audit_log, rate_limits, panel_settings, panel_role_permissions, installed_components, panel_admin, virtual_aliases, virtual_users, virtual_domains";
 
     /** MailDatabase.createAuthTables */
     public static final String MAIL_CREATE_PANEL_SESSIONS = "CREATE TABLE IF NOT EXISTS panel_sessions (\n"
@@ -1243,4 +1246,939 @@ public final class SqlCatalog {
     /** PublicSurfaceRename.moveJailState */
     public static final String RENAME_MOVE_JAIL_LOGS = "UPDATE OR IGNORE logs SET jail = ?, path = ? WHERE jail = ? AND path = ?";
 
+    // ========== I permessi dei ruoli e gli utenti MySQL della parte web (WebDbAccess) ==========
+
+    /**
+     * WebDbAccess: i permessi di ogni ruolo, per le procedure della parte web. Li scrive la root a ogni avvio dai
+     * permessi del Java (AuthStore): la tabella e' una copia, la web non la scrive e non la legge. ASCII, come il
+     * parametro con cui la si confronta (web_session_admin): stesso ordinamento, qualunque sia quello del database.
+     */
+    public static final String ROLES_CREATE_TABLE = "CREATE TABLE IF NOT EXISTS panel_role_permissions (\n"
+            + "    role VARCHAR(16) CHARACTER SET ascii NOT NULL,\n"
+            + "    permission VARCHAR(32) CHARACTER SET ascii NOT NULL,\n"
+            + "    PRIMARY KEY (role, permission)\n"
+            + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4\n";
+
+    /** WebDbAccess */
+    public static final String ROLES_LIST = "SELECT role, permission FROM panel_role_permissions";
+
+    /** WebDbAccess */
+    public static final String ROLES_CLEAR = "DELETE FROM panel_role_permissions";
+
+    /** WebDbAccess */
+    public static final String ROLES_ADD = "INSERT INTO panel_role_permissions (role, permission) VALUES (?, ?)";
+
+    /** WebDbAccess, come root di MySQL: i due utenti nuovi, se ci sono e se sono bloccati */
+    public static final String WEB_DB_USERS = "SELECT user, host, account_locked FROM mysql.user WHERE user IN ('mailpanel_routines', 'mailpanel_web')";
+
+    /**
+     * WebDbAccess: chi possiede le procedure. Bloccato (nessuno entra con lui), e con una password che non e'
+     * scritta da nessuna parte: se qualcuno lo sbloccasse, non saprebbe comunque con cosa entrare.
+     */
+    public static final String WEB_DB_CREATE_ROUTINES_USER = "CREATE USER IF NOT EXISTS 'mailpanel_routines'@'localhost' IDENTIFIED BY ? ACCOUNT LOCK";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_LOCK_ROUTINES_USER = "ALTER USER 'mailpanel_routines'@'localhost' ACCOUNT LOCK";
+
+    /**
+     * WebDbAccess: i permessi di mailpanel_routines, quelli che servono alle procedure e niente di piu', nel
+     * database del pannello (quello della connessione). EXECUTE sul database: MySQL lo chiede anche a chi ha
+     * definito una procedura, per farla girare (e per web_session_admin, che le altre chiamano). Le UPDATE solo
+     * sulle colonne che le procedure cambiano; la SELECT anche dove si scrive, perche' MySQL la chiede per le
+     * colonne del WHERE.
+     */
+    public static final String WEB_DB_GRANT_ROUTINES_EXECUTE = "GRANT EXECUTE ON * TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_SESSIONS = "GRANT SELECT, UPDATE (last_seen_at) ON panel_sessions TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_ADMINS = "GRANT SELECT, UPDATE (theme, language) ON panel_admin TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_ROLES = "GRANT SELECT ON panel_role_permissions TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_SETTINGS = "GRANT SELECT ON panel_settings TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_AUDIT = "GRANT INSERT ON audit_log TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_DOMAINS = "GRANT SELECT, INSERT, UPDATE (description), DELETE ON domains TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_MAILBOXES = "GRANT SELECT, INSERT, UPDATE (name, quota_mb, active, receive_enabled, password, password_encrypted, password_encrypted_at), DELETE ON mailboxes TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_ALIASES = "GRANT SELECT, INSERT, UPDATE (active), DELETE ON aliases TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_RATE_LIMITS = "GRANT SELECT, DELETE ON rate_limits TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_AUTO_RESPONDERS = "GRANT SELECT ON auto_responders TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_FORWARDING = "GRANT SELECT ON forwarding_rules TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_FILTERS = "GRANT SELECT ON sieve_filters TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_STATISTICS = "GRANT SELECT ON email_statistics TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_TRAINING = "GRANT SELECT ON rspamd_training TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_GRANT_ROUTINES_WEBMAIL_TOKENS = "GRANT INSERT ON roundcube_tokens TO 'mailpanel_routines'@'localhost'";
+
+    /** WebDbAccess: le procedure del database del pannello, col loro commento (l'impronta del testo) e chi le ha definite */
+    public static final String WEB_DB_ROUTINES = "SELECT routine_name, routine_comment, definer, security_type FROM information_schema.routines WHERE routine_schema = DATABASE() AND routine_type = 'PROCEDURE'";
+
+    /** WebDbAccess: l'utente della parte web, coi due nomi con cui entra in MySQL (come l'utente del pannello) */
+    public static final String WEB_DB_CREATE_WEB_USER = "CREATE USER IF NOT EXISTS 'mailpanel_web'@'localhost' IDENTIFIED BY ?, 'mailpanel_web'@'127.0.0.1' IDENTIFIED BY ?";
+
+    /** WebDbAccess */
+    public static final String WEB_DB_SET_WEB_PASSWORD = "ALTER USER 'mailpanel_web'@'localhost' IDENTIFIED BY ?, 'mailpanel_web'@'127.0.0.1' IDENTIFIED BY ?";
+
+    /** WebDbAccess: i permessi dell'utente della web che non sono l'EXECUTE di una procedura (ce ne devono essere zero) */
+    public static final String WEB_DB_WEB_OTHER_PRIVILEGES = "SELECT privilege_type FROM information_schema.user_privileges WHERE grantee IN (?, ?) AND privilege_type <> 'USAGE'\n"
+            + "UNION ALL SELECT privilege_type FROM information_schema.schema_privileges WHERE grantee IN (?, ?)\n"
+            + "UNION ALL SELECT privilege_type FROM information_schema.table_privileges WHERE grantee IN (?, ?)\n"
+            + "UNION ALL SELECT privilege_type FROM information_schema.column_privileges WHERE grantee IN (?, ?)\n"
+            + "UNION ALL SELECT priv FROM mysql.global_grants WHERE user = 'mailpanel_web'\n"
+            + "UNION ALL SELECT from_user FROM mysql.role_edges WHERE to_user = 'mailpanel_web'";
+
+    /** WebDbAccess: le procedure su cui l'utente della web ha un permesso, in quale database e quale */
+    public static final String WEB_DB_WEB_ROUTINE_PRIVILEGES = "SELECT host, db, routine_name, routine_type, proc_priv FROM mysql.procs_priv WHERE user = 'mailpanel_web'";
+
+    /** WebDbAccess: se l'utente della web avesse altro, gli si toglie tutto e gli si ridanno solo le procedure */
+    public static final String WEB_DB_REVOKE_WEB = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'";
+
+    // ========== Le procedure della parte web ==========
+    //
+    // Ogni istruzione MySQL della parte web ha la sua procedura: la connessione della web (CatalogGuard,
+    // routines) chiama questa invece di mandare l'istruzione, con l'impronta della sessione della richiesta
+    // davanti agli stessi parametri. Le procedure sono di mailpanel_routines, bloccato, e girano coi suoi
+    // permessi; l'utente MySQL della web ha solo EXECUTE su queste (WebDbAccess). Ognuna ha quattro testi:
+    // la chiamata, la creazione (con il commento come parametro: l'impronta del testo stesso), la
+    // cancellazione e il permesso.
+
+    /** L'inizio di ogni procedura della web: di mailpanel_routines. */
+    private static final String WEB_CREATE = "CREATE DEFINER = 'mailpanel_routines'@'localhost' PROCEDURE ";
+    /** Dopo i parametri: il commento (l'impronta del testo, WebDbAccess) e i permessi di chi l'ha definita. */
+    private static final String WEB_BEGIN = " COMMENT ? SQL SECURITY DEFINER\nBEGIN\n";
+    /**
+     * Il primo parametro di ogni procedura: l'impronta del token della sessione della richiesta, o NULL.
+     *
+     * <p>I parametri che si confrontano con una colonna (impronte, nomi, indirizzi, chiavi, permessi) sono
+     * CHARACTER SET ascii. Senza, prenderebbero l'ordinamento del database (utf8mb4_unicode_ci, come lo crea
+     * l'installatore), diverso da quello delle tabelle (utf8mb4_0900_ai_ci), e MySQL rifiuta il confronto
+     * (Illegal mix of collations, visto sulla VM l'08/11/2026). Con un lato ASCII vince la colonna Unicode.
+     */
+    private static final String WEB_SESSION = "IN p_session CHAR(64) CHARACTER SET ascii";
+    /** Chi le puo' chiamare: l'utente della parte web, da tutti e due i nomi con cui entra. */
+    private static final String WEB_TO = " TO 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'";
+    /**
+     * La sessione s della richiesta: c'e', non e' scaduta e non e' ferma da piu' di 30 minuti
+     * (WebSessions.IDLE_SECONDS, lo controlla SqlCatalogTest), con l'ora del database.
+     */
+    private static final String WEB_SESSION_VALID = "s.token_hash = p_session AND s.expires_at > UTC_TIMESTAMP()"
+            + " AND s.last_seen_at > UTC_TIMESTAMP() - INTERVAL 1800 SECOND";
+
+    /**
+     * WebDbAccess: l'amministratore della sessione della richiesta, se la sessione e' valida, lui e' attivo e il
+     * suo ruolo ha uno dei permessi (nomi separati da virgole; vuoto: basta la sessione). Altrimenti ferma la
+     * procedura che la chiama. I ruoli li scrive la root a ogni avvio (panel_role_permissions). Non e' della web.
+     */
+    public static final String WEB_CREATE_SESSION_ADMIN = WEB_CREATE + "web_session_admin(" + WEB_SESSION
+            + ", IN p_permissions VARCHAR(255) CHARACTER SET ascii, OUT p_admin INT)" + WEB_BEGIN
+            + "    SET p_admin = (SELECT a.id FROM panel_sessions s JOIN panel_admin a ON a.id = s.admin_id\n"
+            + "        WHERE " + WEB_SESSION_VALID + " AND a.active = TRUE\n"
+            + "        AND (p_permissions = '' OR EXISTS (SELECT 1 FROM panel_role_permissions rp\n"
+            + "            WHERE rp.role = a.role AND FIND_IN_SET(rp.permission, p_permissions) > 0))\n"
+            + "        LIMIT 1);\n"
+            + "    IF p_admin IS NULL THEN\n"
+            + "        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Not allowed for this session';\n"
+            + "    END IF;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_SESSION_ADMIN = "DROP PROCEDURE IF EXISTS web_session_admin";
+
+    /**
+     * SESSION_CHECK nella parte web, pubblica: la sessione dell'impronta di un token, il controllo stesso: con
+     * l'ora del database, non quella che arriva.
+     */
+    public static final String WEB_CALL_CHECK_SESSION = "CALL check_session(?, ?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_CHECK_SESSION. */
+    public static final String WEB_CREATE_CHECK_SESSION = WEB_CREATE + "check_session(" + WEB_SESSION
+            + ", IN p_token_hash CHAR(64) CHARACTER SET ascii, IN p_now DATETIME"
+            + ", IN p_idle_since DATETIME)" + WEB_BEGIN
+            + "    SELECT s.id, s.admin_id, s.ua_hash, s.last_seen_at, s.reauth_at FROM panel_sessions s\n"
+            + "        WHERE s.token_hash = p_token_hash AND s.expires_at > UTC_TIMESTAMP()\n"
+            + "        AND s.last_seen_at > UTC_TIMESTAMP() - INTERVAL 1800 SECOND;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_CHECK_SESSION = "DROP PROCEDURE IF EXISTS check_session";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_CHECK_SESSION = "GRANT EXECUTE ON PROCEDURE check_session" + WEB_TO;
+
+    /**
+     * SESSION_TOUCH nella parte web, solo per la sessione della richiesta: la sua ultima attivita', con l'ora del
+     * database.
+     */
+    public static final String WEB_CALL_TOUCH_SESSION = "CALL touch_session(?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_TOUCH_SESSION. */
+    public static final String WEB_CREATE_TOUCH_SESSION = WEB_CREATE + "touch_session(" + WEB_SESSION
+            + ", IN p_time DATETIME, IN p_id BIGINT)" + WEB_BEGIN
+            + "    UPDATE panel_sessions s SET s.last_seen_at = UTC_TIMESTAMP() WHERE s.id = p_id AND " + WEB_SESSION_VALID + ";\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_TOUCH_SESSION = "DROP PROCEDURE IF EXISTS touch_session";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_TOUCH_SESSION = "GRANT EXECUTE ON PROCEDURE touch_session" + WEB_TO;
+
+    /**
+     * AUTH_ADMIN_BY_ID nella parte web, solo per la sessione della richiesta: il suo amministratore, e nessun
+     * altro (vuoto se l'id non e' il suo).
+     */
+    public static final String WEB_CALL_GET_SESSION_ADMIN = "CALL get_session_admin(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_GET_SESSION_ADMIN. */
+    public static final String WEB_CREATE_GET_SESSION_ADMIN = WEB_CREATE + "get_session_admin(" + WEB_SESSION
+            + ", IN p_id INT)" + WEB_BEGIN
+            + "    SELECT a.id, a.username, a.role, a.active, a.email_enc, a.user_handle, a.created_at, a.last_login\n"
+            + "        FROM panel_admin a JOIN panel_sessions s ON s.admin_id = a.id\n"
+            + "        WHERE a.id = p_id AND a.active = TRUE AND " + WEB_SESSION_VALID + ";\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_GET_SESSION_ADMIN = "DROP PROCEDURE IF EXISTS get_session_admin";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_GET_SESSION_ADMIN = "GRANT EXECUTE ON PROCEDURE get_session_admin" + WEB_TO;
+
+    /** MAIL_GET_ADMIN_LANGUAGE nella parte web, solo per la sessione della richiesta: la sua lingua. */
+    public static final String WEB_CALL_GET_ADMIN_LANGUAGE = "CALL get_admin_language(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_GET_ADMIN_LANGUAGE. */
+    public static final String WEB_CREATE_GET_ADMIN_LANGUAGE = WEB_CREATE + "get_admin_language(" + WEB_SESSION
+            + ", IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    SELECT a.language FROM panel_admin a JOIN panel_sessions s ON s.admin_id = a.id\n"
+            + "        WHERE a.username = p_username AND a.active = TRUE AND " + WEB_SESSION_VALID + ";\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_GET_ADMIN_LANGUAGE = "DROP PROCEDURE IF EXISTS get_admin_language";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_GET_ADMIN_LANGUAGE = "GRANT EXECUTE ON PROCEDURE get_admin_language" + WEB_TO;
+
+    /**
+     * MAIL_SET_ADMIN_LANGUAGE nella parte web, solo per l'amministratore della sessione: la sua lingua, solo it o
+     * en.
+     */
+    public static final String WEB_CALL_SET_ADMIN_LANGUAGE = "CALL set_admin_language(?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_SET_ADMIN_LANGUAGE. */
+    public static final String WEB_CREATE_SET_ADMIN_LANGUAGE = WEB_CREATE + "set_admin_language(" + WEB_SESSION
+            + ", IN p_language VARCHAR(5), IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, '', v_admin);\n"
+            + "    IF p_language IS NOT NULL AND p_language NOT IN ('it', 'en') THEN\n"
+            + "        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Language not allowed';\n"
+            + "    END IF;\n"
+            + "    UPDATE panel_admin SET language = p_language WHERE id = v_admin AND username = p_username;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_SET_ADMIN_LANGUAGE = "DROP PROCEDURE IF EXISTS set_admin_language";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_SET_ADMIN_LANGUAGE = "GRANT EXECUTE ON PROCEDURE set_admin_language" + WEB_TO;
+
+    /** MAIL_GET_ADMIN_THEME nella parte web, solo per la sessione della richiesta: il suo tema. */
+    public static final String WEB_CALL_GET_ADMIN_THEME = "CALL get_admin_theme(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_GET_ADMIN_THEME. */
+    public static final String WEB_CREATE_GET_ADMIN_THEME = WEB_CREATE + "get_admin_theme(" + WEB_SESSION
+            + ", IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    SELECT a.theme FROM panel_admin a JOIN panel_sessions s ON s.admin_id = a.id\n"
+            + "        WHERE a.username = p_username AND a.active = TRUE AND " + WEB_SESSION_VALID + ";\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_GET_ADMIN_THEME = "DROP PROCEDURE IF EXISTS get_admin_theme";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_GET_ADMIN_THEME = "GRANT EXECUTE ON PROCEDURE get_admin_theme" + WEB_TO;
+
+    /**
+     * MAIL_SET_ADMIN_THEME nella parte web, solo per l'amministratore della sessione: il suo tema, solo auto,
+     * light o dark.
+     */
+    public static final String WEB_CALL_SET_ADMIN_THEME = "CALL set_admin_theme(?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_SET_ADMIN_THEME. */
+    public static final String WEB_CREATE_SET_ADMIN_THEME = WEB_CREATE + "set_admin_theme(" + WEB_SESSION
+            + ", IN p_theme VARCHAR(10), IN p_username VARCHAR(50) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, '', v_admin);\n"
+            + "    IF p_theme IS NULL OR p_theme NOT IN ('auto', 'light', 'dark') THEN\n"
+            + "        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Theme not allowed';\n"
+            + "    END IF;\n"
+            + "    UPDATE panel_admin SET theme = p_theme WHERE id = v_admin AND username = p_username;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_SET_ADMIN_THEME = "DROP PROCEDURE IF EXISTS set_admin_theme";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_SET_ADMIN_THEME = "GRANT EXECUTE ON PROCEDURE set_admin_theme" + WEB_TO;
+
+    /**
+     * MAIL_HAS_ADMIN_USER nella parte web, pubblica: c'e' gia' un amministratore? Pubblica: la pagina di accesso
+     * lo deve sapere.
+     */
+    public static final String WEB_CALL_HAS_ADMIN = "CALL has_admin(?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_HAS_ADMIN. */
+    public static final String WEB_CREATE_HAS_ADMIN = WEB_CREATE + "has_admin(" + WEB_SESSION + ")" + WEB_BEGIN
+            + "    SELECT 1 FROM panel_admin WHERE active = TRUE LIMIT 1;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_HAS_ADMIN = "DROP PROCEDURE IF EXISTS has_admin";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_HAS_ADMIN = "GRANT EXECUTE ON PROCEDURE has_admin" + WEB_TO;
+
+    /**
+     * MAIL_GET_SETTING nella parte web, pubblica: un'impostazione, solo di quelle che la web legge: mai il token
+     * di Cloudflare o le sfide DNS.
+     */
+    public static final String WEB_CALL_GET_SETTING = "CALL get_setting(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_GET_SETTING. */
+    public static final String WEB_CREATE_GET_SETTING = WEB_CREATE + "get_setting(" + WEB_SESSION
+            + ", IN p_key VARCHAR(64) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    SELECT setting_value FROM panel_settings\n"
+            + "        WHERE setting_key = p_key AND setting_key IN ('mail_hostname', 'mta_sts_mode', 'pop3_enabled', 'audit_log_file_path');\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_GET_SETTING = "DROP PROCEDURE IF EXISTS get_setting";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_GET_SETTING = "GRANT EXECUTE ON PROCEDURE get_setting" + WEB_TO;
+
+    /**
+     * MAIL_LOG_AUDIT_EVENT nella parte web, pubblica: una riga nel registro di controllo: pubblica, la web
+     * registra anche chi non ha fatto l'accesso.
+     */
+    public static final String WEB_CALL_LOG_AUDIT_EVENT = "CALL log_audit_event(?, ?, ?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_LOG_AUDIT_EVENT. */
+    public static final String WEB_CREATE_LOG_AUDIT_EVENT = WEB_CREATE + "log_audit_event(" + WEB_SESSION
+            + ", IN p_action VARCHAR(100), IN p_username VARCHAR(255), IN p_ip VARCHAR(45)"
+            + ", IN p_details TEXT)" + WEB_BEGIN
+            + "    INSERT INTO audit_log (action, username, ip_address, details) VALUES (p_action, p_username, p_ip, p_details);\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_LOG_AUDIT_EVENT = "DROP PROCEDURE IF EXISTS log_audit_event";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_LOG_AUDIT_EVENT = "GRANT EXECUTE ON PROCEDURE log_audit_event" + WEB_TO;
+
+    /**
+     * MAIL_GET_DOMAIN_NAMES nella parte web, pubblica: i nomi dei domini ospitati, per autoconfig e MTA-STS:
+     * pubblica, sono gia' nel DNS.
+     */
+    public static final String WEB_CALL_LIST_DOMAIN_NAMES = "CALL list_domain_names(?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_LIST_DOMAIN_NAMES. */
+    public static final String WEB_CREATE_LIST_DOMAIN_NAMES = WEB_CREATE + "list_domain_names(" + WEB_SESSION + ")" + WEB_BEGIN
+            + "    SELECT domain FROM domains ORDER BY domain;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_LIST_DOMAIN_NAMES = "DROP PROCEDURE IF EXISTS list_domain_names";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_LIST_DOMAIN_NAMES = "GRANT EXECUTE ON PROCEDURE list_domain_names" + WEB_TO;
+
+    /**
+     * MAIL_GET_DOMAINS nella parte web, con mail.view o security.view: i domini, senza le chiavi DKIM private
+     * (has_dkim dice se c'e').
+     */
+    public static final String WEB_CALL_LIST_DOMAINS = "CALL list_domains(?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_LIST_DOMAINS. */
+    public static final String WEB_CREATE_LIST_DOMAINS = WEB_CREATE + "list_domains(" + WEB_SESSION + ")" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view,security.view', v_admin);\n"
+            + "    SELECT d.id, d.domain, d.description, d.active, d.created_at, d.dkim_selector, d.dkim_public_key,\n"
+            + "            (d.dkim_private_key IS NOT NULL AND d.dkim_private_key <> '') AS has_dkim,\n"
+            + "            d.dkim_pending_selector, d.dkim_pending_public_key, d.dkim_rotation_state, d.dkim_rotation_started_at,\n"
+            + "            d.dkim_rotation_activated_at, d.dkim_previous_selector, d.dkim_previous_public_key, d.dkim_dns_zone_id,\n"
+            + "            d.dkim_pending_dns_record_id, d.dkim_previous_dns_record_id, d.dkim_rotation_interval_days,\n"
+            + "            d.dkim_last_rotation_at, d.dkim_rotation_mode, d.cloudflare_account_id,\n"
+            + "            (SELECT COUNT(*) FROM mailboxes m WHERE m.domain_id = d.id) AS mailbox_count,\n"
+            + "            (SELECT COUNT(*) FROM aliases a WHERE a.domain_id = d.id) AS alias_count\n"
+            + "        FROM domains d ORDER BY d.domain;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_LIST_DOMAINS = "DROP PROCEDURE IF EXISTS list_domains";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_LIST_DOMAINS = "GRANT EXECUTE ON PROCEDURE list_domains" + WEB_TO;
+
+    /** MAIL_GET_DOMAIN_BY_NAME nella parte web, con mail.view: un dominio per nome, senza le chiavi DKIM private. */
+    public static final String WEB_CALL_GET_DOMAIN_BY_NAME = "CALL get_domain_by_name(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_GET_DOMAIN_BY_NAME. */
+    public static final String WEB_CREATE_GET_DOMAIN_BY_NAME = WEB_CREATE + "get_domain_by_name(" + WEB_SESSION
+            + ", IN p_domain VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT d.id, d.domain, d.description, d.active, d.created_at, d.dkim_selector, d.dkim_public_key,\n"
+            + "            (d.dkim_private_key IS NOT NULL AND d.dkim_private_key <> '') AS has_dkim,\n"
+            + "            d.dkim_pending_selector, d.dkim_pending_public_key, d.dkim_rotation_state, d.dkim_rotation_started_at,\n"
+            + "            d.dkim_rotation_activated_at, d.dkim_previous_selector, d.dkim_previous_public_key, d.dkim_dns_zone_id,\n"
+            + "            d.dkim_pending_dns_record_id, d.dkim_previous_dns_record_id, d.dkim_rotation_interval_days,\n"
+            + "            d.dkim_last_rotation_at, d.dkim_rotation_mode, d.cloudflare_account_id\n"
+            + "        FROM domains d WHERE d.domain = p_domain;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_GET_DOMAIN_BY_NAME = "DROP PROCEDURE IF EXISTS get_domain_by_name";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_GET_DOMAIN_BY_NAME = "GRANT EXECUTE ON PROCEDURE get_domain_by_name" + WEB_TO;
+
+    /** MAIL_ADD_DOMAIN nella parte web, con domains.manage: un dominio nuovo. */
+    public static final String WEB_CALL_ADD_DOMAIN = "CALL add_domain(?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_ADD_DOMAIN. */
+    public static final String WEB_CREATE_ADD_DOMAIN = WEB_CREATE + "add_domain(" + WEB_SESSION
+            + ", IN p_domain VARCHAR(255), IN p_description TEXT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'domains.manage', v_admin);\n"
+            + "    INSERT INTO domains (domain, description) VALUES (p_domain, p_description);\n"
+            + "    SELECT ROW_COUNT() AS affected, LAST_INSERT_ID() AS id;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_ADD_DOMAIN = "DROP PROCEDURE IF EXISTS add_domain";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_ADD_DOMAIN = "GRANT EXECUTE ON PROCEDURE add_domain" + WEB_TO;
+
+    /** MAIL_UPDATE_DOMAIN_DESCRIPTION nella parte web, con domains.manage: la descrizione di un dominio. */
+    public static final String WEB_CALL_SET_DOMAIN_DESCRIPTION = "CALL set_domain_description(?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_SET_DOMAIN_DESCRIPTION. */
+    public static final String WEB_CREATE_SET_DOMAIN_DESCRIPTION = WEB_CREATE + "set_domain_description(" + WEB_SESSION
+            + ", IN p_description TEXT, IN p_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'domains.manage', v_admin);\n"
+            + "    UPDATE domains SET description = p_description WHERE id = p_id;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_SET_DOMAIN_DESCRIPTION = "DROP PROCEDURE IF EXISTS set_domain_description";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_SET_DOMAIN_DESCRIPTION = "GRANT EXECUTE ON PROCEDURE set_domain_description" + WEB_TO;
+
+    /** MAIL_DELETE_DOMAIN nella parte web, con domains.manage: un dominio, e per le chiavi esterne quello che ha. */
+    public static final String WEB_CALL_DELETE_DOMAIN = "CALL delete_domain(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_DELETE_DOMAIN. */
+    public static final String WEB_CREATE_DELETE_DOMAIN = WEB_CREATE + "delete_domain(" + WEB_SESSION
+            + ", IN p_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'domains.manage', v_admin);\n"
+            + "    DELETE FROM domains WHERE id = p_id;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_DELETE_DOMAIN = "DROP PROCEDURE IF EXISTS delete_domain";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_DELETE_DOMAIN = "GRANT EXECUTE ON PROCEDURE delete_domain" + WEB_TO;
+
+    /**
+     * MAIL_GET_MAILBOXES nella parte web, con mail.view: le caselle di un dominio, senza hash e copie delle
+     * password.
+     */
+    public static final String WEB_CALL_LIST_DOMAIN_MAILBOXES = "CALL list_domain_mailboxes(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_LIST_DOMAIN_MAILBOXES. */
+    public static final String WEB_CREATE_LIST_DOMAIN_MAILBOXES = WEB_CREATE + "list_domain_mailboxes(" + WEB_SESSION
+            + ", IN p_domain_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT m.id, m.domain_id, d.domain AS domain_name, m.email, m.name, m.quota_mb, m.active, m.receive_enabled,\n"
+            + "            m.created_at, m.last_login\n"
+            + "        FROM mailboxes m JOIN domains d ON m.domain_id = d.id WHERE m.domain_id = p_domain_id ORDER BY m.email;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_LIST_DOMAIN_MAILBOXES = "DROP PROCEDURE IF EXISTS list_domain_mailboxes";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_LIST_DOMAIN_MAILBOXES = "GRANT EXECUTE ON PROCEDURE list_domain_mailboxes" + WEB_TO;
+
+    /** MAIL_GET_ALL_MAILBOXES nella parte web, con mail.view: tutte le caselle, senza hash e copie delle password. */
+    public static final String WEB_CALL_LIST_MAILBOXES = "CALL list_mailboxes(?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_LIST_MAILBOXES. */
+    public static final String WEB_CREATE_LIST_MAILBOXES = WEB_CREATE + "list_mailboxes(" + WEB_SESSION + ")" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT m.id, m.domain_id, d.domain AS domain_name, m.email, m.name, m.quota_mb, m.active, m.receive_enabled,\n"
+            + "            m.created_at, m.last_login,\n"
+            + "            (SELECT COUNT(*) FROM forwarding_rules fr WHERE fr.mailbox_id = m.id AND fr.enabled = 1) AS forwarding_count,\n"
+            + "            (SELECT COUNT(*) FROM sieve_filters sf WHERE sf.mailbox_id = m.id AND sf.enabled = 1) AS filters_count,\n"
+            + "            (SELECT COALESCE(ar.enabled, 0) FROM auto_responders ar WHERE ar.mailbox_id = m.id) AS autoresponder_enabled\n"
+            + "        FROM mailboxes m JOIN domains d ON m.domain_id = d.id ORDER BY m.email;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_LIST_MAILBOXES = "DROP PROCEDURE IF EXISTS list_mailboxes";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_LIST_MAILBOXES = "GRANT EXECUTE ON PROCEDURE list_mailboxes" + WEB_TO;
+
+    /** MAIL_GET_MAILBOX nella parte web, con mail.view: una casella per id. */
+    public static final String WEB_CALL_GET_MAILBOX = "CALL get_mailbox(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_GET_MAILBOX. */
+    public static final String WEB_CREATE_GET_MAILBOX = WEB_CREATE + "get_mailbox(" + WEB_SESSION
+            + ", IN p_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT m.id, m.domain_id, d.domain AS domain_name, m.email, m.name, m.quota_mb, m.active, m.receive_enabled,\n"
+            + "            m.created_at, m.last_login\n"
+            + "        FROM mailboxes m JOIN domains d ON m.domain_id = d.id WHERE m.id = p_id;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_GET_MAILBOX = "DROP PROCEDURE IF EXISTS get_mailbox";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_GET_MAILBOX = "GRANT EXECUTE ON PROCEDURE get_mailbox" + WEB_TO;
+
+    /** MAIL_GET_MAILBOX_BY_EMAIL nella parte web, con mail.view: una casella per indirizzo. */
+    public static final String WEB_CALL_GET_MAILBOX_BY_EMAIL = "CALL get_mailbox_by_email(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_GET_MAILBOX_BY_EMAIL. */
+    public static final String WEB_CREATE_GET_MAILBOX_BY_EMAIL = WEB_CREATE + "get_mailbox_by_email(" + WEB_SESSION
+            + ", IN p_email VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT m.id, m.domain_id, d.domain AS domain_name, m.email, m.name, m.quota_mb, m.active, m.receive_enabled,\n"
+            + "            m.created_at, m.last_login\n"
+            + "        FROM mailboxes m JOIN domains d ON m.domain_id = d.id WHERE m.email = p_email;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_GET_MAILBOX_BY_EMAIL = "DROP PROCEDURE IF EXISTS get_mailbox_by_email";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_GET_MAILBOX_BY_EMAIL = "GRANT EXECUTE ON PROCEDURE get_mailbox_by_email" + WEB_TO;
+
+    /** MAIL_INSERT_MAILBOX nella parte web, con mailboxes.manage: una casella nuova. */
+    public static final String WEB_CALL_ADD_MAILBOX = "CALL add_mailbox(?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_ADD_MAILBOX. */
+    public static final String WEB_CREATE_ADD_MAILBOX = WEB_CREATE + "add_mailbox(" + WEB_SESSION
+            + ", IN p_domain_id INT, IN p_email VARCHAR(255), IN p_password VARCHAR(255)"
+            + ", IN p_password_encrypted TEXT, IN p_password_encrypted_at DATETIME"
+            + ", IN p_name VARCHAR(255), IN p_quota_mb INT, IN p_receive_enabled BOOLEAN)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    INSERT INTO mailboxes (domain_id, email, password, password_encrypted, password_encrypted_at, name, quota_mb, receive_enabled)\n"
+            + "        VALUES (p_domain_id, p_email, p_password, p_password_encrypted, p_password_encrypted_at, p_name, p_quota_mb, p_receive_enabled);\n"
+            + "    SELECT ROW_COUNT() AS affected, LAST_INSERT_ID() AS id;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_ADD_MAILBOX = "DROP PROCEDURE IF EXISTS add_mailbox";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_ADD_MAILBOX = "GRANT EXECUTE ON PROCEDURE add_mailbox" + WEB_TO;
+
+    /** MAIL_UPDATE_MAILBOX nella parte web, con mailboxes.manage: nome, spazio e stato di una casella. */
+    public static final String WEB_CALL_UPDATE_MAILBOX = "CALL update_mailbox(?, ?, ?, ?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_UPDATE_MAILBOX. */
+    public static final String WEB_CREATE_UPDATE_MAILBOX = WEB_CREATE + "update_mailbox(" + WEB_SESSION
+            + ", IN p_name VARCHAR(255), IN p_quota_mb INT, IN p_active BOOLEAN"
+            + ", IN p_receive_enabled BOOLEAN, IN p_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    UPDATE mailboxes SET name = p_name, quota_mb = p_quota_mb, active = p_active, receive_enabled = p_receive_enabled WHERE id = p_id;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_UPDATE_MAILBOX = "DROP PROCEDURE IF EXISTS update_mailbox";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_UPDATE_MAILBOX = "GRANT EXECUTE ON PROCEDURE update_mailbox" + WEB_TO;
+
+    /**
+     * MAIL_UPDATE_MAILBOX_PASSWORD nella parte web, con mailboxes.manage: la password di una casella: l'hash e la
+     * copia insieme.
+     */
+    public static final String WEB_CALL_SET_MAILBOX_PASSWORD = "CALL set_mailbox_password(?, ?, ?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_SET_MAILBOX_PASSWORD. */
+    public static final String WEB_CREATE_SET_MAILBOX_PASSWORD = WEB_CREATE + "set_mailbox_password(" + WEB_SESSION
+            + ", IN p_password VARCHAR(255), IN p_password_encrypted TEXT"
+            + ", IN p_password_encrypted_at DATETIME, IN p_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    UPDATE mailboxes SET password = p_password, password_encrypted = p_password_encrypted,\n"
+            + "        password_encrypted_at = p_password_encrypted_at WHERE id = p_id;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_SET_MAILBOX_PASSWORD = "DROP PROCEDURE IF EXISTS set_mailbox_password";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_SET_MAILBOX_PASSWORD = "GRANT EXECUTE ON PROCEDURE set_mailbox_password" + WEB_TO;
+
+    /** MAIL_DELETE_MAILBOX nella parte web, con mailboxes.manage: una casella. */
+    public static final String WEB_CALL_DELETE_MAILBOX = "CALL delete_mailbox(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_DELETE_MAILBOX. */
+    public static final String WEB_CREATE_DELETE_MAILBOX = WEB_CREATE + "delete_mailbox(" + WEB_SESSION
+            + ", IN p_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    DELETE FROM mailboxes WHERE id = p_id;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_DELETE_MAILBOX = "DROP PROCEDURE IF EXISTS delete_mailbox";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_DELETE_MAILBOX = "GRANT EXECUTE ON PROCEDURE delete_mailbox" + WEB_TO;
+
+    /**
+     * MAIL_GET_MAILBOX_PASSWORD_ENCRYPTED nella parte web, con mailboxes.manage: la copia cifrata della password
+     * di una casella (Mostra password; col vault asimmetrico passera' alla root).
+     */
+    public static final String WEB_CALL_GET_MAILBOX_VAULT_COPY = "CALL get_mailbox_vault_copy(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_GET_MAILBOX_VAULT_COPY. */
+    public static final String WEB_CREATE_GET_MAILBOX_VAULT_COPY = WEB_CREATE + "get_mailbox_vault_copy(" + WEB_SESSION
+            + ", IN p_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    SELECT password_encrypted FROM mailboxes WHERE id = p_id;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_GET_MAILBOX_VAULT_COPY = "DROP PROCEDURE IF EXISTS get_mailbox_vault_copy";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_GET_MAILBOX_VAULT_COPY = "GRANT EXECUTE ON PROCEDURE get_mailbox_vault_copy" + WEB_TO;
+
+    /**
+     * MAIL_MAILBOX_HAS_ENCRYPTED_PASSWORD nella parte web, con mail.view: se una casella ha la copia della
+     * password.
+     */
+    public static final String WEB_CALL_MAILBOX_HAS_VAULT_COPY = "CALL mailbox_has_vault_copy(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_MAILBOX_HAS_VAULT_COPY. */
+    public static final String WEB_CREATE_MAILBOX_HAS_VAULT_COPY = WEB_CREATE + "mailbox_has_vault_copy(" + WEB_SESSION
+            + ", IN p_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT 1 FROM mailboxes WHERE id = p_id AND password_encrypted IS NOT NULL AND password_encrypted <> '';\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_MAILBOX_HAS_VAULT_COPY = "DROP PROCEDURE IF EXISTS mailbox_has_vault_copy";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_MAILBOX_HAS_VAULT_COPY = "GRANT EXECUTE ON PROCEDURE mailbox_has_vault_copy" + WEB_TO;
+
+    /**
+     * MAIL_MAILBOX_PASSWORD_MATCHES nella parte web, con mailboxes.manage: l'hash bcrypt di una casella, per
+     * Mostra password (col vault asimmetrico passera' alla root).
+     */
+    public static final String WEB_CALL_GET_MAILBOX_PASSWORD_HASH = "CALL get_mailbox_password_hash(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_GET_MAILBOX_PASSWORD_HASH. */
+    public static final String WEB_CREATE_GET_MAILBOX_PASSWORD_HASH = WEB_CREATE + "get_mailbox_password_hash(" + WEB_SESSION
+            + ", IN p_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    SELECT password FROM mailboxes WHERE id = p_id;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_GET_MAILBOX_PASSWORD_HASH = "DROP PROCEDURE IF EXISTS get_mailbox_password_hash";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_GET_MAILBOX_PASSWORD_HASH = "GRANT EXECUTE ON PROCEDURE get_mailbox_password_hash" + WEB_TO;
+
+    /** MAIL_GET_ALIASES_BY_SOURCE nella parte web, con mail.view: gli alias con questa sorgente. */
+    public static final String WEB_CALL_LIST_ALIASES_BY_SOURCE = "CALL list_aliases_by_source(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_LIST_ALIASES_BY_SOURCE. */
+    public static final String WEB_CREATE_LIST_ALIASES_BY_SOURCE = WEB_CREATE + "list_aliases_by_source(" + WEB_SESSION
+            + ", IN p_source VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT a.id, a.domain_id, a.source, a.destination, a.active, a.created_at, d.domain AS domain_name\n"
+            + "        FROM aliases a JOIN domains d ON a.domain_id = d.id WHERE a.source = p_source ORDER BY a.destination;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_LIST_ALIASES_BY_SOURCE = "DROP PROCEDURE IF EXISTS list_aliases_by_source";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_LIST_ALIASES_BY_SOURCE = "GRANT EXECUTE ON PROCEDURE list_aliases_by_source" + WEB_TO;
+
+    /** MAIL_GET_ALIASES_BY_DESTINATION nella parte web, con mail.view: gli alias verso questo indirizzo. */
+    public static final String WEB_CALL_LIST_ALIASES_BY_DESTINATION = "CALL list_aliases_by_destination(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_LIST_ALIASES_BY_DESTINATION. */
+    public static final String WEB_CREATE_LIST_ALIASES_BY_DESTINATION = WEB_CREATE + "list_aliases_by_destination(" + WEB_SESSION
+            + ", IN p_destination VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT a.id, a.domain_id, a.source, a.destination, a.active, a.created_at, d.domain AS domain_name\n"
+            + "        FROM aliases a JOIN domains d ON a.domain_id = d.id WHERE a.destination = p_destination ORDER BY a.source;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_LIST_ALIASES_BY_DESTINATION = "DROP PROCEDURE IF EXISTS list_aliases_by_destination";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_LIST_ALIASES_BY_DESTINATION = "GRANT EXECUTE ON PROCEDURE list_aliases_by_destination" + WEB_TO;
+
+    /** MAIL_GET_AUTO_RESPONDER nella parte web, con mail.view: la risposta automatica di una casella. */
+    public static final String WEB_CALL_GET_AUTO_RESPONDER = "CALL get_auto_responder(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_GET_AUTO_RESPONDER. */
+    public static final String WEB_CREATE_GET_AUTO_RESPONDER = WEB_CREATE + "get_auto_responder(" + WEB_SESSION
+            + ", IN p_mailbox_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT ar.id, ar.mailbox_id, ar.enabled, ar.subject, ar.body, ar.start_date, ar.end_date, ar.interval_hours, m.email\n"
+            + "        FROM auto_responders ar JOIN mailboxes m ON ar.mailbox_id = m.id WHERE ar.mailbox_id = p_mailbox_id;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_GET_AUTO_RESPONDER = "DROP PROCEDURE IF EXISTS get_auto_responder";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_GET_AUTO_RESPONDER = "GRANT EXECUTE ON PROCEDURE get_auto_responder" + WEB_TO;
+
+    /** MAIL_GET_FORWARDING_RULES nella parte web, con mail.view: gli inoltri di una casella. */
+    public static final String WEB_CALL_LIST_FORWARDING_RULES = "CALL list_forwarding_rules(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_LIST_FORWARDING_RULES. */
+    public static final String WEB_CREATE_LIST_FORWARDING_RULES = WEB_CREATE + "list_forwarding_rules(" + WEB_SESSION
+            + ", IN p_mailbox_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT fr.id, fr.mailbox_id, fr.destination, fr.keep_copy, fr.enabled, m.email\n"
+            + "        FROM forwarding_rules fr JOIN mailboxes m ON fr.mailbox_id = m.id WHERE fr.mailbox_id = p_mailbox_id;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_LIST_FORWARDING_RULES = "DROP PROCEDURE IF EXISTS list_forwarding_rules";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_LIST_FORWARDING_RULES = "GRANT EXECUTE ON PROCEDURE list_forwarding_rules" + WEB_TO;
+
+    /** MAIL_GET_SIEVE_FILTERS nella parte web, con mail.view: i filtri di una casella. */
+    public static final String WEB_CALL_LIST_SIEVE_FILTERS = "CALL list_sieve_filters(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_LIST_SIEVE_FILTERS. */
+    public static final String WEB_CREATE_LIST_SIEVE_FILTERS = WEB_CREATE + "list_sieve_filters(" + WEB_SESSION
+            + ", IN p_mailbox_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT sf.id, sf.mailbox_id, sf.name, sf.priority, sf.enabled, sf.conditions, sf.actions, m.email\n"
+            + "        FROM sieve_filters sf JOIN mailboxes m ON sf.mailbox_id = m.id WHERE sf.mailbox_id = p_mailbox_id ORDER BY sf.priority, sf.id;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_LIST_SIEVE_FILTERS = "DROP PROCEDURE IF EXISTS list_sieve_filters";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_LIST_SIEVE_FILTERS = "GRANT EXECUTE ON PROCEDURE list_sieve_filters" + WEB_TO;
+
+    /**
+     * MAIL_TRANSFORM_MAILBOX_TO_ALIAS nella parte web, con mailboxes.manage: un alias (una casella che diventa
+     * alias).
+     */
+    public static final String WEB_CALL_DELETE_ALIAS = "CALL delete_alias(?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_DELETE_ALIAS. */
+    public static final String WEB_CREATE_DELETE_ALIAS = WEB_CREATE + "delete_alias(" + WEB_SESSION
+            + ", IN p_source VARCHAR(255) CHARACTER SET ascii"
+            + ", IN p_destination VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    DELETE FROM aliases WHERE source = p_source AND destination = p_destination;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_DELETE_ALIAS = "DROP PROCEDURE IF EXISTS delete_alias";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_DELETE_ALIAS = "GRANT EXECUTE ON PROCEDURE delete_alias" + WEB_TO;
+
+    /**
+     * MAIL_TRANSFORM_MAILBOX_TO_ALIAS_2 nella parte web, con mailboxes.manage: il limite di invio di una casella
+     * (una casella che diventa alias).
+     */
+    public static final String WEB_CALL_DELETE_MAILBOX_RATE_LIMIT = "CALL delete_mailbox_rate_limit(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_DELETE_MAILBOX_RATE_LIMIT. */
+    public static final String WEB_CREATE_DELETE_MAILBOX_RATE_LIMIT = WEB_CREATE + "delete_mailbox_rate_limit(" + WEB_SESSION
+            + ", IN p_mailbox_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    DELETE FROM rate_limits WHERE target_type = 'mailbox' AND target_id = p_mailbox_id;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_DELETE_MAILBOX_RATE_LIMIT = "DROP PROCEDURE IF EXISTS delete_mailbox_rate_limit";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_DELETE_MAILBOX_RATE_LIMIT = "GRANT EXECUTE ON PROCEDURE delete_mailbox_rate_limit" + WEB_TO;
+
+    /**
+     * MAIL_TRANSFORM_MAILBOX_TO_ALIAS_3 nella parte web, con mailboxes.manage: una casella con questo id e questo
+     * indirizzo (una casella che diventa alias).
+     */
+    public static final String WEB_CALL_DELETE_MAILBOX_BY_ADDRESS = "CALL delete_mailbox_by_address(?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_DELETE_MAILBOX_BY_ADDRESS. */
+    public static final String WEB_CREATE_DELETE_MAILBOX_BY_ADDRESS = WEB_CREATE + "delete_mailbox_by_address(" + WEB_SESSION
+            + ", IN p_id INT, IN p_email VARCHAR(255) CHARACTER SET ascii)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    DELETE FROM mailboxes WHERE id = p_id AND email = p_email;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_DELETE_MAILBOX_BY_ADDRESS = "DROP PROCEDURE IF EXISTS delete_mailbox_by_address";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_DELETE_MAILBOX_BY_ADDRESS = "GRANT EXECUTE ON PROCEDURE delete_mailbox_by_address" + WEB_TO;
+
+    /**
+     * MAIL_TRANSFORM_ALIAS_TO_MAILBOX nella parte web, con mailboxes.manage: un alias attivo (una casella che
+     * diventa alias).
+     */
+    public static final String WEB_CALL_ADD_ALIAS = "CALL add_alias(?, ?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_ADD_ALIAS. */
+    public static final String WEB_CREATE_ADD_ALIAS = WEB_CREATE + "add_alias(" + WEB_SESSION
+            + ", IN p_domain_id INT, IN p_source VARCHAR(255), IN p_destination VARCHAR(255))" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    INSERT INTO aliases (domain_id, source, destination, active) VALUES (p_domain_id, p_source, p_destination, 1)\n"
+            + "        ON DUPLICATE KEY UPDATE active = 1;\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_ADD_ALIAS = "DROP PROCEDURE IF EXISTS add_alias";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_ADD_ALIAS = "GRANT EXECUTE ON PROCEDURE add_alias" + WEB_TO;
+
+    /**
+     * MAIL_CREATE_AUTO_LOGIN_TOKEN nella parte web, con mailboxes.manage: il gettone di accesso alla webmail di
+     * una casella.
+     */
+    public static final String WEB_CALL_CREATE_WEBMAIL_TOKEN = "CALL create_webmail_token(?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_CREATE_WEBMAIL_TOKEN. */
+    public static final String WEB_CREATE_CREATE_WEBMAIL_TOKEN = WEB_CREATE + "create_webmail_token(" + WEB_SESSION
+            + ", IN p_token VARCHAR(64), IN p_mailbox_id INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
+            + "    INSERT INTO roundcube_tokens (token, mailbox_id, expires_at) VALUES (p_token, p_mailbox_id, DATE_ADD(NOW(), INTERVAL 5 MINUTE));\n"
+            + "    SELECT ROW_COUNT() AS affected;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_CREATE_WEBMAIL_TOKEN = "DROP PROCEDURE IF EXISTS create_webmail_token";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_CREATE_WEBMAIL_TOKEN = "GRANT EXECUTE ON PROCEDURE create_webmail_token" + WEB_TO;
+
+    /** MAIL_GET_EMAIL_STATISTICS nella parte web, con mail.view: le statistiche degli ultimi giorni. */
+    public static final String WEB_CALL_LIST_EMAIL_STATISTICS = "CALL list_email_statistics(?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_LIST_EMAIL_STATISTICS. */
+    public static final String WEB_CREATE_LIST_EMAIL_STATISTICS = WEB_CREATE + "list_email_statistics(" + WEB_SESSION
+            + ", IN p_days INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT es.stat_date, es.mailbox_id, es.domain_id, es.sent_count, es.received_count, es.spam_count, es.virus_count,\n"
+            + "            es.bounced_count, es.bytes_sent, es.bytes_received, COALESCE(m.email, d.domain, 'Total') AS name\n"
+            + "        FROM email_statistics es LEFT JOIN mailboxes m ON es.mailbox_id = m.id LEFT JOIN domains d ON es.domain_id = d.id\n"
+            + "        WHERE es.stat_date >= DATE_SUB(CURDATE(), INTERVAL p_days DAY)\n"
+            + "        ORDER BY es.stat_date DESC, es.domain_id, es.mailbox_id;\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_LIST_EMAIL_STATISTICS = "DROP PROCEDURE IF EXISTS list_email_statistics";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_LIST_EMAIL_STATISTICS = "GRANT EXECUTE ON PROCEDURE list_email_statistics" + WEB_TO;
+
+    /** MAIL_GET_TRAINING_COUNT nella parte web, con mail.view: quanti messaggi rspamd ha imparato. */
+    public static final String WEB_CALL_COUNT_TRAINING = "CALL count_training(?, ?, ?)";
+
+    /** WebDbAccess: la procedura di WEB_CALL_COUNT_TRAINING. */
+    public static final String WEB_CREATE_COUNT_TRAINING = WEB_CREATE + "count_training(" + WEB_SESSION
+            + ", IN p_trained_as VARCHAR(4) CHARACTER SET ascii, IN p_days INT)" + WEB_BEGIN
+            + "    DECLARE v_admin INT;\n"
+            + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
+            + "    SELECT COUNT(*) FROM rspamd_training WHERE trained_as = p_trained_as AND trained_at >= DATE_SUB(NOW(), INTERVAL p_days DAY);\n"
+            + "END";
+
+    /** WebDbAccess */
+    public static final String WEB_DROP_COUNT_TRAINING = "DROP PROCEDURE IF EXISTS count_training";
+
+    /** WebDbAccess */
+    public static final String WEB_GRANT_COUNT_TRAINING = "GRANT EXECUTE ON PROCEDURE count_training" + WEB_TO;
 }

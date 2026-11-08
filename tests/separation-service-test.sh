@@ -167,6 +167,17 @@ check "the root part made its mail folders (the mail-folders operation)" $r
 check "  owned by vmail ($(stat -f %Su /var/vmail/$D/probe/Maildir 2>/dev/null))" "$(is "$(stat -f %Su /var/vmail/$D/probe/Maildir 2>/dev/null)" vmail)"
 c=$(post "/api/mailboxes" "{\"action\":\"reveal_password\",\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
 check "the password comes back from the vault, read by the web part ($c)" "$(has "$B" "Sep-Test-Password-2026x")"
+c=$(post "/api/webmail" "{\"mailbox_id\":$MID}" "$CSRF"); check "POST /api/webmail, a sign-in token for the webmail: $c" "$(is "$c" 200)"
+# The webmail's two routes: the web part checks who calls (loopback and the webmail's key), the root serves them.
+# The key as Roundcube sends it: base64url without padding.
+WKEY=$(sed -n 's/^webmail_key=//p' $E/panel-secrets.properties | sed 's/\\//g' | tr '+/' '-_' | tr -d '=')
+webmail() { curl -sk -H "X-MailPanel-Key: $1" --data-urlencode "user=probe@$D" --data-urlencode "$3" ${4:+--data-urlencode "$4"} -o /var/tmp/sep-body -w '%{http_code}' "$BASE$2"; }
+c=$(webmail "$WKEY" /api/internal/mailbox-vault "pass=Sep-Test-Password-2026x"); check "the webmail's copy route, through the root: $c $(cat /var/tmp/sep-body)" "$(is "$c" 200)"
+c=$(webmail "not-the-key-$$" /api/internal/mailbox-vault "pass=Sep-Test-Password-2026x"); check "  without the webmail's key: 404 from the web part ($c)" "$(is "$c" 404)"
+c=$(webmail "$WKEY" /api/internal/mailbox-password "curpass=wrong-$$" "newpass=Sep-Test-Password-2026y"); check "the webmail's password change with a wrong current password: 403 ($c)" "$(is "$c" 403)"
+c=$(webmail "$WKEY" /api/internal/mailbox-password "curpass=Sep-Test-Password-2026x" "newpass=Sep-Test-Password-2026y"); check "  with the right one: $c $(cat /var/tmp/sep-body)" "$(is "$c" 200)"
+c=$(post "/api/mailboxes" "{\"action\":\"reveal_password\",\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
+check "  the root wrote the hash and the copy: Show password gives the new one ($c)" "$(has "$B" "Sep-Test-Password-2026y")"
 for p in /api/domains /api/mailboxes "/api/statistics?days=7" /api/mailconfig /api/theme; do
     c=$(get "$p"); check "GET $p: $c" "$(is "$c" 200)"
 done
@@ -184,6 +195,26 @@ check "sign out through the web part: $c" "$(is "$c" 200)"
 c=$(get "/api/domains"); check "  the root removed the session: the same cookie gets 401 ($c)" "$(is "$c" 401)"
 SQLREF=$(tail -c +$((WM3 + 1)) $WEBLOG | grep "outside the panel's catalog" | head -3)
 check "the web part ran only statements of its list, from the sign-in to the sign-out ($SQLREF)" "$(is "$SQLREF" "")"
+
+echo
+echo "== 3c. The web part's MySQL user =="
+check "the web part entered MySQL as mailpanel_web ($(grep 'Web part: MySQL as' $WEBLOG | tail -1))" "$(has "$(grep 'Web part: MySQL as' $WEBLOG | tail -1)" "as mailpanel_web, only")"
+check "its password is in its secrets file" "$(is "$(grep -c '^mysql_web_password=' $E/panel-secrets.properties)" 1)"
+check "the panel user's password is not there any more" "$(is "$(grep -c '^mysql_password' $E/panel-secrets.properties)" 0)"
+check "  it is in root's file" "$(is "$(grep -c '^mysql_password=' $E/root-secrets.properties)" 1)"
+MYOPT=$(mktemp /var/tmp/sep-my.XXXXXX)
+printf '[client]\nuser=mailpanel_web\npassword=%s\nhost=127.0.0.1\nport=3306\n' "$(sed -n 's/^mysql_web_password=//p' $E/panel-secrets.properties)" > "$MYOPT"
+chown mailpanel "$MYOPT"; chmod 600 "$MYOPT"
+my() { as_web /usr/local/bin/mysql --defaults-extra-file="$MYOPT" -N -e "$1" 2>&1; }
+DB=$(my "SELECT DISTINCT routine_schema FROM information_schema.routines WHERE routine_name = 'has_admin'")
+check "mailpanel, with its own MySQL user, sees the procedures of the panel's database ($DB)" "$(is "$([ -n "$DB" ] && echo y)" y)"
+R=$(my "CALL $DB.has_admin(NULL)"); check "  a public procedure answers ($R)" "$(is "$R" 1)"
+R=$(my "CALL $DB.list_domains(NULL)"); check "  a procedure bound to a session, without one: refused ($R)" "$(has "$R" "ERROR 1644")"
+R=$(my "SELECT COUNT(*) FROM $DB.panel_admin"); check "  a SELECT on the administrators: refused ($R)" "$(has "$R" "ERROR 1142")"
+R=$(my "SELECT COUNT(*) FROM $DB.mailboxes"); check "  a SELECT on the mailboxes: refused ($R)" "$(has "$R" "ERROR 1142")"
+R=$(my "INSERT INTO $DB.panel_sessions (token_hash) VALUES ('x')"); check "  writing a session: refused ($R)" "$(has "$R" "ERROR 1142")"
+R=$(my "CALL $DB.web_session_admin(NULL, '', @a)"); check "  the procedures' own helper: refused ($R)" "$(has "$R" "ERROR 1370")"
+rm -f "$MYOPT"
 
 echo
 echo "== 4. The root socket =="

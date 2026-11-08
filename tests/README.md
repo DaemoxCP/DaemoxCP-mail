@@ -760,6 +760,28 @@ without a live session, and an operation that is not in the list.
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelSeparationTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.SecretsSplitTest
 
+**SqlCatalogTest** — the panel runs only the SQL of its catalog (SqlCatalog):
+every statement is a fixed text; the guard (CatalogGuard) refuses any other text by every way one reaches
+the driver; from the project folder, no SQL outside the catalog and every JDBC call gets a catalog
+constant; the web part's list, and its procedures: one for every MySQL statement of the list, with the
+session first and then the same parameters, bound to the session save the public ones, the idle time of
+WebSessions, no DKIM private key and no password hash or copy out of the database save Show password's two.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.SqlCatalogTest
+
+**WebRoutinesTest** — the web part's own MySQL user, on the test MySQL as
+its root. The migration (WebDbAccess): the locked owner of the procedures, the 40 procedures, the web
+user with EXECUTE on its 39 and nothing else, the role permissions, its password in the web's secrets
+file and the panel user's moved to root's; a second run changes nothing; a dropped procedure, a table
+privilege given by hand, a changed password, an unlocked owner are put back. The web user by itself: no
+table, no helper, no DDL; the public procedures answer; the others need a live session (not expired,
+not idle, administrator active) whose role allows it; only the settings the web reads. The web part's
+connection used like the handlers use it: the same answers as the panel user's, new ids, rows touched,
+a transaction of four procedures, no DKIM private key, a viewer and an operator stopped where their role
+stops, the session check of every request. Planting a procedure that ignores the role makes it fail.
+
+    java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.WebRoutinesTest
+
 **RootDistrustsDataTest** — the root part does not trust the names it reads from MySQL, which the
 web part can write. Names planted straight into MySQL, as a
 broken-into web part would: SafeNames' shapes; DKIM key paths with ".." or a quote refused; Sieve with
