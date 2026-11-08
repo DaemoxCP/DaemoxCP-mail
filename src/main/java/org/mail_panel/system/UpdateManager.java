@@ -795,6 +795,27 @@ public final class UpdateManager {
             if (names.contains(e.getKey()) || !inst.containsKey(e.getKey())) continue;
             others.put(new JSONObject().put("name", e.getKey()).put("installed", inst.get(e.getKey())[0]).put("available", e.getValue()));
         }
+        // Le procedure dedicate che servono adesso, lette dagli stessi dati: la pagina mostra una riga per ognuna
+        // solo quando c'e' qualcosa da fare (reperto 193). Niente di lento: nomi e versioni gia' letti qui sopra.
+        JSONObject procedures = new JSONObject();
+        procedures.put("java", jvm != null && !jvm.isEmpty() && update.containsKey(jvm));
+        String webmail = null;
+        for (String n : inst.keySet()) if (n.matches("roundcube(-php[0-9]+)?")) webmail = n;
+        procedures.put("roundcube", webmail != null && update.containsKey(webmail)).put("roundcubePackage", webmail == null ? "" : webmail);
+        boolean olderMysql = false;
+        for (String n : inst.keySet()) {
+            Matcher mm = Pattern.compile("^mysql([0-9]+)-server$").matcher(n);
+            if (mm.find() && Integer.parseInt(mm.group(1)) < 84) olderMysql = true;
+        }
+        procedures.put("mysql84", olderMysql);
+        String python = pyDefault();
+        boolean olderPython = false;
+        for (String n : inst.keySet()) {
+            Matcher mp = Pattern.compile("^(?:py|python)(3[0-9]{2})(?:-|$)").matcher(n);
+            if (mp.find() && !mp.group(1).equals(python)) olderPython = true;
+        }
+        procedures.put("python", olderPython);
+        r.put("procedures", procedures);
         return r.put("success", true).put("packages", rows).put("others", others)
                 .put("summary", new JSONObject().put("updates", updatable + others.length()).put("stackUpdates", updatable)
                         .put("vulnerable", vulnerable).put("fixable", resolvable).put("locked", lockedPackages)

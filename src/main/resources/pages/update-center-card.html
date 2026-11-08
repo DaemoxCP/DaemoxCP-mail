@@ -1,8 +1,10 @@
-            <!-- Aggiorna il server: cosa c'e' da fare, in ordine, e il pulsante per ognuna (reperto 186). Le
-                 schede qui sotto restano per i casi particolari e le diagnosi; i motori sono gli stessi. -->
+            <!-- Aggiorna il server: una riga per ogni cosa da aggiornare, e ogni riga fa la sua sul posto. Il pulsante
+                 apre sotto la riga stessa quello che serve (il piano, la conferma, il registro): nessun salto verso
+                 un'altra scheda (reperto 193). Le righe di Java, Roundcube, MySQL e Python ci sono solo quando c'e'
+                 qualcosa da fare. I motori dietro sono gli stessi di prima. -->
             <section class="card mb-4 border-primary" id="update-center" aria-labelledby="ucTitle">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <h3 class="h5 mb-0" id="ucTitle"><i class="fas fa-circle-arrow-up me-2" aria-hidden="true"></i>{{t:uc.title}}</h3>
+                    <h3 class="h5 mb-0" id="ucTitle" tabindex="-1"><i class="fas fa-circle-arrow-up me-2" aria-hidden="true"></i>{{t:uc.title}}</h3>
                     <div class="d-flex flex-wrap gap-2">
                         <button type="button" class="btn btn-sm btn-outline-secondary touch-target" data-on-click="ucLoad(true)"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:uc.reread}}</button>
                         <button type="button" class="btn btn-sm btn-primary touch-target" id="ucSearchButton" data-on-click="ucSearch()"><i class="fas fa-magnifying-glass me-1" aria-hidden="true"></i>{{t:uc.search}}</button>
@@ -12,7 +14,86 @@
                     <p class="small text-muted">{{t:uc.intro}}</p>
                     <p class="small mb-2" id="ucState" role="status">{{t:uc.reading}}</p>
                     <div id="ucOutcome" role="status" aria-live="polite"></div>
-                    <ul class="list-group mb-0" id="ucList"></ul>
+                    <ul class="list-group mb-0" id="ucList">
+                        <li class="list-group-item" id="uc-os">
+                            <div class="uc-head"></div>
+                            <div class="uc-detail mt-3" id="uc-os-detail" hidden>
+                                <div id="os-body"></div>
+                                <pre id="os-log" class="upd-log mt-2" data-style="display:none"></pre>
+                                <h4 class="h6 mt-3">{{t:up.release}}</h4>
+                                <p class="small text-muted mb-2">{{t:up.releaseIntro.html}}</p>
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                    <label class="visually-hidden" for="os-target">{{t:up.targetVersionLabel}}</label>
+                                    <select id="os-target" class="form-select form-select-sm w-auto">
+                                        <option value="">{{t:up.targetVersion}}</option>
+                                    </select>
+                                    <button type="button" class="btn btn-sm btn-outline-danger touch-target" data-on-click="upPre()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkPre}}</button>
+                                    <button type="button" class="btn btn-sm btn-warning touch-target" data-on-click="jumpState()"><i class="fas fa-forward me-1" aria-hidden="true"></i>{{t:up.continueJump}}</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary touch-target" data-on-click="upCheck()"><i class="fas fa-clipboard-check me-1" aria-hidden="true"></i>{{t:up.checkAfter}}</button>
+                                </div>
+                                <div id="up-body"></div>
+                                <pre id="up-log" class="upd-log mt-2" data-style="display:none"></pre>
+                            </div>
+                        </li>
+                        <li class="list-group-item" id="uc-packages">
+                            <div class="uc-head"></div>
+                            <div class="uc-detail mt-3" id="uc-packages-detail" hidden></div>
+                        </li>
+                        <li class="list-group-item" id="uc-stack">
+                            <div class="uc-head"></div>
+                            <div class="uc-detail mt-3" id="uc-stack-detail" hidden></div>
+                        </li>
+                        <li class="list-group-item" id="uc-java" hidden>
+                            <div class="uc-head"></div>
+                            <div class="uc-detail mt-3" id="uc-java-detail" hidden>
+                                <p class="small text-muted mb-2">{{t:up.jvmIntro.html}}</p>
+                                <div id="jv-pre"></div>
+                                <pre id="jv-log" class="upd-log mt-2" data-style="display:none"></pre>
+                            </div>
+                        </li>
+                        <li class="list-group-item" id="uc-roundcube" hidden>
+                            <div class="uc-head"></div>
+                            <div class="uc-detail mt-3" id="uc-roundcube-detail" hidden>
+                                <p class="small text-muted mb-2">{{t:up.rcIntro.html}}</p>
+                                <div id="rc-pre"></div>
+                                <pre id="rc-log" class="upd-log mt-2" data-style="display:none"></pre>
+                            </div>
+                        </li>
+                        <li class="list-group-item" id="uc-mysql" hidden>
+                            <div class="uc-head"></div>
+                            <div class="uc-detail mt-3" id="uc-mysql-detail" hidden>
+                                <p class="small text-muted mb-2">{{t:up.my84Intro.html}}</p>
+                                <div id="my84-pre"></div>
+                                <pre id="my84-log" class="upd-log mt-2" data-style="display:none"></pre>
+                            </div>
+                        </li>
+                        <li class="list-group-item" id="uc-python" hidden>
+                            <div class="uc-head"></div>
+                            <div class="uc-detail mt-3" id="uc-python-detail" hidden>
+                                <p class="small text-muted mb-2">{{t:up.pyIntro.html}}</p>
+                                <div id="py-pre"></div>
+                                <pre id="py-log" class="upd-log mt-2" data-style="display:none"></pre>
+                            </div>
+                        </li>
+                        <li class="list-group-item" id="uc-branch">
+                            <div class="uc-head"></div>
+                            <div class="uc-detail mt-3" id="uc-branch-detail" hidden>
+                                <div id="branch-body" role="status"></div>
+                                <div id="branch-preview" class="mt-3"></div>
+                                <div id="branch-outcome" class="mt-2" role="status"></div>
+                                <pre id="branch-log" class="upd-log mt-2" data-style="display:none"></pre>
+                            </div>
+                        </li>
+                        <li class="list-group-item" id="uc-reboot">
+                            <div class="uc-head"></div>
+                        </li>
+                    </ul>
+                    <!-- Il piano dei pacchetti (verifica, manutenzione completa): uno solo, si sposta sotto la riga
+                         che lo chiede. -->
+                    <div id="uc-updates-panel" hidden>
+                        <div id="upd-status"></div>
+                        <pre id="upd-log" class="upd-log mt-2" data-style="display:none"></pre>
+                    </div>
                     <pre id="uc-log" class="upd-log mt-3" hidden></pre>
                 </div>
             </section>
