@@ -409,6 +409,7 @@ public class MailPanelContent {
         })();
     </script>
     <script src="/i18n/{{lang}}.js?v={{i18nVersion}}"></script>
+    <link rel="icon" type="image/svg+xml" href="/vendor/favicon.svg">
     <link href="/vendor/bootstrap.min.css" rel="stylesheet">
     <link href="/fa/css/all.min.css" rel="stylesheet">
     <style>
@@ -605,6 +606,7 @@ public class MailPanelContent {
     <title>{{t:login.title}} - Mail Control Panel</title>
     """ + PageAssets.ACTIONS + """
     <script src="/i18n/{{lang}}.js?v={{i18nVersion}}"></script>
+    <link rel="icon" type="image/svg+xml" href="/vendor/favicon.svg">
     <link href="/vendor/bootstrap.min.css" rel="stylesheet">
     <link href="/fa/css/all.min.css" rel="stylesheet">
     <style>
@@ -929,6 +931,7 @@ public class MailPanelContent {
     <title>{{t:su.pageTitle}} - FreeBSD Mail Panel</title>
     """ + PageAssets.ACTIONS + """
     <script src="/i18n/{{lang}}.js?v={{i18nVersion}}"></script>
+    <link rel="icon" type="image/svg+xml" href="/vendor/favicon.svg">
     <link href="/vendor/bootstrap.min.css" rel="stylesheet">
     <link href="/fa/css/all.min.css" rel="stylesheet">
     <style>

@@ -5747,7 +5747,7 @@
   "up.my80Eol.html": "MySQL 8.0 is at <strong>end of life</strong>: it no longer receives security fixes. On FreeBSD 8.4 is a different, conflicting package, so no <code>pkg upgrade</code> gets there: it takes a dedicated migration, with a cold copy while the database is stopped.",
   "up.my84": "MySQL 8.0 → 8.4 migration",
   "up.my84Checks": "Running checks: packages, client library, configuration, accounts, space, inventory...",
-  "up.my84Intro.html": "On FreeBSD 8.4 is a <strong>different and conflicting</strong> package: no upgrade gets there. The delicate point here is not the database but the <strong>client library</strong>: Postfix and Dovecot read the mailboxes through it, and they must be checked before replacing it.",
+  "up.my84Intro.html": "On FreeBSD, 8.4 is a <strong>different and conflicting</strong> package: no upgrade gets there. The delicate point here is not the database but the <strong>client library</strong>: Postfix and Dovecot read the mailboxes through it, and they must be checked before replacing it.",
   "up.my84Sub": "the mysql80 port will be removed from FreeBSD after 31/12/2026",
   "up.mycnfClean": "No option removed in 8.4 is active in my.cnf.",
   "up.mycnfOneEnough": "Just one of them keeps the server from starting:",
