@@ -5880,6 +5880,29 @@ public class MailPanelContent {
     }
 
     /**
+     * Le chiavi SSH di root (RootSshKeys, /api/ssh-keys): l'elenco, una chiave nuova, toglierne una. Aggiungere e
+     * togliere chiedono una conferma recente (withIdentity), come il vault.
+     */
+    private static String getRootSshKeysCard() {
+        return """
+                    <!-- Root's SSH keys -->
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="fas fa-terminal me-2" aria-hidden="true"></i>{{t:set.sshTitle}}</div>
+                        <div class="card-body">
+                            <p class="small text-muted">{{t:set.sshIntro}}</p>
+                            <div id="sshKeysList" aria-live="polite"><span class="text-muted small">{{t:common.loading}}</span></div>
+                            <label class="form-label small mt-3 mb-1" for="sshNewKey">{{t:set.sshNewKey}}</label>
+                            <textarea class="form-control form-control-sm font-monospace" id="sshNewKey" rows="3" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-describedby="sshNewKeyHint"></textarea>
+                            <small class="text-muted d-block" id="sshNewKeyHint">{{t:set.sshNewKeyHint}}</small>
+                            <button class="btn btn-primary btn-sm mt-2" data-on-click="sshAdd()"><i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:set.sshAdd}}</button>
+                            <div id="sshMsg" class="mt-2" aria-live="polite"></div>
+                        </div>
+                    </div>
+
+""";
+    }
+
+    /**
      * Gli script dell'accesso nelle Impostazioni: email di accesso, passkey, sessioni, nome utente,
      * conferma d'identita' e chiave del vault. Tutto passa da /api/account (e /api/admins per il
      * vault); il token CSRF lo aggiunge a ogni fetch lo script della <head>.
@@ -6153,8 +6176,8 @@ public class MailPanelContent {
             if (r.success) stepUpDone(); else accMsg('stepUpMsg', 'danger', r.error || t('common.failed'));
         }
         // Una richiesta a /api/admins: se il server chiede la conferma, la si chiede e si riprova una volta.
-        async function withIdentity(body) {
-            const call = async () => (await fetch('/api/admins', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        async function withIdentity(body, url) {
+            const call = async () => (await fetch(url || '/api/admins', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body) })).json();
             let d = await call();
             if (d && d.needs_reauth) {
@@ -6162,6 +6185,54 @@ public class MailPanelContent {
                 d = await call();
             }
             return d;
+        }
+
+        // ===== Root's SSH keys =====
+        function sshMsg(kind, text) {
+            document.getElementById('sshMsg').innerHTML = text ? '<div class="alert alert-' + kind + ' py-2 small mb-0">' + escHtml(text) + '</div>' : '';
+        }
+        async function sshLoad() {
+            const box = document.getElementById('sshKeysList');
+            if (!box) return;
+            let d;
+            try { d = await (await fetch('/api/ssh-keys')).json(); }
+            catch (e) { box.textContent = t('common.networkError', { message: e.message }); return; }
+            if (!d.success) { box.textContent = d.error || t('common.unknownError'); return; }
+            if (!d.keys.length) { box.innerHTML = '<p class="small text-muted mb-0">' + escHtml(t('set.sshNone')) + '</p>'; return; }
+            let html = '<div class="table-responsive"><table class="table table-sm align-middle mb-0"><caption class="visually-hidden">'
+                + escHtml(t('set.sshTitle')) + '</caption><thead><tr><th scope="col">' + escHtml(t('set.sshType')) + '</th><th scope="col">'
+                + escHtml(t('set.sshComment')) + '</th><th scope="col">' + escHtml(t('set.sshFingerprint')) + '</th><th scope="col"><span class="visually-hidden">'
+                + escHtml(t('set.sshActions')) + '</span></th></tr></thead><tbody>';
+            for (const k of d.keys) {
+                html += '<tr><td class="small">' + escHtml(k.type) + (k.has_options ? ' <span class="badge text-bg-secondary">' + escHtml(t('set.sshOptions')) + '</span>' : '')
+                    + '</td><td class="small text-long">' + escHtml(k.comment || '—') + '</td><td class="small font-monospace text-long">' + escHtml(k.fingerprint)
+                    + '</td><td class="text-end"><button class="btn btn-outline-danger btn-sm" data-on-click="sshRemove(\'' + escHtml(k.fingerprint) + '\')" aria-label="'
+                    + escHtml(t('set.sshRemoveOne', { fingerprint: k.fingerprint })) + '"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>';
+            }
+            box.innerHTML = html + '</tbody></table></div>';
+        }
+        async function sshAdd() {
+            const field = document.getElementById('sshNewKey');
+            const key = field.value.trim();
+            if (!key) { sshMsg('danger', t('set.sshEmpty')); field.focus(); return; }
+            let d;
+            try { d = await withIdentity({ action: 'add', key: key }, '/api/ssh-keys'); }
+            catch (e) { sshMsg('danger', t('common.networkError', { message: e.message })); return; }
+            if (d === null) { sshMsg('', ''); return; }
+            if (!d.success) { sshMsg('danger', d.error || t('common.unknownError')); return; }
+            field.value = '';
+            sshMsg('success', t('set.sshAdded', { fingerprint: d.fingerprint }));
+            sshLoad();
+        }
+        async function sshRemove(fingerprint) {
+            if (!confirm(t('set.sshConfirmRemove', { fingerprint: fingerprint }))) return;
+            let d;
+            try { d = await withIdentity({ action: 'remove', fingerprint: fingerprint }, '/api/ssh-keys'); }
+            catch (e) { sshMsg('danger', t('common.networkError', { message: e.message })); return; }
+            if (d === null) { sshMsg('', ''); return; }
+            if (!d.success) { sshMsg('danger', d.error || t('common.unknownError')); return; }
+            sshMsg('success', t('set.sshRemoved', { fingerprint: fingerprint }));
+            sshLoad();
         }
 
         // ===== Vault management =====
@@ -7987,7 +8058,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
             <div class="row">
                 <div class="col-md-6">
-""" + getVaultManagementCard() + """
+""" + getVaultManagementCard() + getRootSshKeysCard() + """
                 </div>
 
                 <div class="col-md-6">
@@ -8222,6 +8293,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         checkRcDomainDnsStatus();
         repLoad();
         pop3Load();
+        sshLoad();
 
         let csrfToken = document.getElementById('csrf_token').value;
 """ + """
@@ -9895,6 +9967,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         {"adm.area.system", "system.view", "system.manage"},
         {"adm.area.settings", "settings.manage", "settings.manage"},
         {"adm.area.admins", "admins.manage", "admins.manage"},
+        {"adm.area.ssh", "ssh.manage", "ssh.manage"},
     };
 
     /** Il nome di un ruolo nei file di lingua (adm.rSuperadmin, adm.rAdmin...). */

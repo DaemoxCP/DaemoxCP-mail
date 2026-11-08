@@ -102,8 +102,10 @@ public class SeparatedPanelTest {
             System.exit(1);
         }
         Path dir = Files.createTempDirectory("separated");
-        // Before anything touches PanelSeparation: the socket goes in the test folder.
+        // Before anything touches PanelSeparation: the socket goes in the test folder; and root's SSH keys
+        // (RootSshKeys) too, never the real ones.
         System.setProperty("mailpanel.run.dir", dir.toString());
+        System.setProperty("mailpanel.root.ssh.dir", dir.resolve("ssh").toString());
         System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
         Path audit = dir.resolve("audit.log");
         MailDatabase db = new MailDatabase();
@@ -293,6 +295,26 @@ public class SeparatedPanelTest {
                     AuthStore.setRole(vera.adminId(), "superadmin")
                     && forge(sock, "/api/admins", "GET", "/api/admins", null, null, vera.adminId(), vera.sessionId(), answer).status() == 200);
             AuthStore.setRole(vera.adminId(), "viewer");
+
+            System.out.println("\n== 3b. Root's SSH keys, through both parts (in a test folder) ==");
+            r = send("GET", "/api/ssh-keys", null, boss, false);
+            check("the superadmin lists root's keys: none yet (" + r.statusCode() + " " + r.body() + ")",
+                    r.statusCode() == 200 && r.body().contains("\"keys\":[]"));
+            String sshKey = org.mail_panel.system.RootSshKeysTest.ed25519() + " sep-test";
+            String addKey = new org.json.JSONObject().put("action", "add").put("key", sshKey).toString();
+            r = send("POST", "/api/ssh-keys", addKey, boss, true);
+            check("adding without a recent confirmation: the panel asks for it (" + r.body() + ")",
+                    r.statusCode() == 200 && r.body().contains("\"needs_reauth\":true"));
+            Main.sessions.markReauthenticated(boss.sessionId());
+            r = send("POST", "/api/ssh-keys", addKey, boss, true);
+            check("after the confirmation the key is added (" + r.body() + ")", r.statusCode() == 200 && r.body().contains("\"success\":true")
+                    && Files.readString(dir.resolve("ssh").resolve("authorized_keys")).contains(sshKey));
+            r = send("GET", "/api/ssh-keys", null, vera, false);
+            check("a viewer does not even see them: 403 (" + r.statusCode() + ")", r.statusCode() == 403);
+            r = send("POST", "/api/ssh-keys", "{\"action\":\"remove\",\"fingerprint\":\"x; rm -rf /\"}", boss, true);
+            check("a fingerprint that is not one: refused by the root's list, 400 (" + r.statusCode() + ")", r.statusCode() == 400);
+            org.mail_panel.util.Shell.run("rm", "-rf", dir.resolve("ssh").toString());
+
             Main.sessions.revokeById(vera.sessionId(), vera.adminId());
             h = forge(sock, "/api/logs", "GET", "/api/logs", null, null, vera.adminId(), vera.sessionId(), answer);
             check("a revoked session: 401 (" + h.status() + ")", h.status() == 401);

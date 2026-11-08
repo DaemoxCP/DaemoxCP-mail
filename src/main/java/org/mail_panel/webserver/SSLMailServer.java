@@ -191,7 +191,7 @@ public class SSLMailServer {
     private static final String DNS_VIEW = "dns.view", DNS_MANAGE = "dns.manage";
     private static final String SECURITY_VIEW = "security.view", SECURITY_MANAGE = "security.manage";
     private static final String SYSTEM_VIEW = "system.view", SYSTEM_MANAGE = "system.manage";
-    private static final String SETTINGS = "settings.manage", ADMINS = "admins.manage", VAULT = "vault.manage";
+    private static final String SETTINGS = "settings.manage", ADMINS = "admins.manage", VAULT = "vault.manage", SSH_KEYS = "ssh.manage";
 
     /** L'intestazione del 401 di una sessione che non c'e' (piu'): la pagina aperta va all'accesso (reperto 184). */
     static final String SESSION_ENDED_HEADER = "X-Panel-Session";
@@ -328,6 +328,8 @@ public class SSLMailServer {
         context("/api/report", Access.api(SETTINGS), this::handleApiReport);
         context("/api/hostname", Access.api(SETTINGS), this::handleApiHostname);
         context("/api/roundcube-domain", Access.api(SETTINGS), this::handleApiRoundcubeDomain);
+        // Le chiavi SSH di root: vederle, aggiungerne, toglierne (con una conferma recente). Mai sshd_config.
+        context("/api/ssh-keys", Access.api(SSH_KEYS), this::handleApiSshKeys);
         // POP3 acceso o spento: Dovecot, le porte di pf e delle regole dei paesi (Pop3, PfPolicy).
         context("/api/pop3", Access.api(SETTINGS), this::handleApiPop3);
     }
@@ -11433,6 +11435,73 @@ public class SSLMailServer {
         } catch (Exception e) {
             LOGGER.warning("[Pop3] request failed: " + e.getMessage());
             response = new JSONObject().put("success", false).put("error", I18n.tr("server.requestFailed"));
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * /api/ssh-keys: le chiavi SSH di root (RootSshKeys), permesso ssh.manage. Aggiungere e togliere vogliono
+     * anche una conferma recente con passkey o con un codice (REAUTH_SECONDS), come il vault: una chiave di
+     * root e' l'accesso completo al server. Solo il file authorized_keys di root: sshd_config, la porta 22 e
+     * pf non si toccano.
+     *
+     *  GET  le chiavi: tipo, impronta, commento, se ha opzioni scritte a mano
+     *  POST {action: add, key} | {action: remove, fingerprint}
+     */
+    private void handleApiSshKeys(HttpExchange exchange) throws IOException {
+        Optional<WebSessions.Current> session = currentSession(exchange);
+        if (session.isEmpty()) {
+            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
+            return;
+        }
+        AuthStore.Admin me = session.get().admin();
+        String ip = getClientIp(exchange);
+        JSONObject response = new JSONObject();
+        try {
+            String method = exchange.getRequestMethod();
+            if ("GET".equals(method)) {
+                JSONArray keys = new JSONArray();
+                for (org.mail_panel.system.RootSshKeys.Key k : org.mail_panel.system.RootSshKeys.list())
+                    keys.put(new JSONObject().put("type", k.type()).put("fingerprint", k.fingerprint())
+                            .put("comment", k.comment()).put("has_options", !k.options().isEmpty()));
+                sendJsonResponse(exchange, response.put("success", true).put("keys", keys));
+                return;
+            }
+            if (!"POST".equals(method)) {
+                exchange.getResponseHeaders().set("Allow", "GET, POST");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
+                return;
+            }
+            String body = readRequestBodyWithLimit(exchange);
+            if (body == null) {
+                sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
+                return;
+            }
+            JSONObject req = new JSONObject(body);
+            String action = req.optString("action", "");
+            if (!action.equals("add") && !action.equals("remove")) {
+                sendJsonError(exchange, 400, I18n.tr("server.unknownAction"));
+                return;
+            }
+            if (!session.get().reauthenticatedWithin(AuthHandlers.REAUTH_SECONDS)) {
+                sendJsonResponse(exchange, response.put("success", false).put("needs_reauth", true)
+                        .put("error", I18n.tr("server.reauth.needed")));
+                return;
+            }
+            org.mail_panel.system.RootSshKeys.Outcome o = action.equals("add")
+                    ? org.mail_panel.system.RootSshKeys.add(req.optString("key", ""))
+                    : org.mail_panel.system.RootSshKeys.remove(req.optString("fingerprint", ""));
+            if (o.success()) {
+                logAudit(action.equals("add") ? "SSH_KEY_ADDED" : "SSH_KEY_REMOVED", ip, "user=" + me.username()
+                        + " fingerprint=" + o.key().fingerprint() + " type=" + o.key().type());
+                response.put("success", true).put("fingerprint", o.key().fingerprint());
+            } else {
+                logAudit("SSH_KEY_REFUSED", ip, "user=" + me.username() + " action=" + action + " reason=" + o.errorKey());
+                response.put("success", false).put("error", I18n.tr(o.errorKey(), o.params()));
+            }
+        } catch (java.io.IOException | org.json.JSONException e) {
+            LOGGER.warning("[RootSshKeys] request failed: " + e.getMessage());
+            response = new JSONObject().put("success", false).put("error", I18n.tr("server.ssh.failed"));
         }
         sendJsonResponse(exchange, response);
     }
