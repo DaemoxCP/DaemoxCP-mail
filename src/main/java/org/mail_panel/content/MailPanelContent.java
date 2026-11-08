@@ -14038,11 +14038,17 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- aggiornamento della JVM ----------
+        // L'impronta del piano letto nella scheda: l'aggiornamento parte solo se il piano ricalcolato e' lo stesso
+        // (reperto 195: prima pkg aggiornava anche librerie che la pagina non mostrava).
+        let jvSignature = '';
+
         async function jvPre() {
             const el = document.getElementById('jv-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.jvmChecks')) + '';
             const r = await updApi('java_preflight');
+            jvSignature = '';
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            jvSignature = r.signature || '';
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
                   + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
             (r.checks || []).forEach(c => {
@@ -14050,6 +14056,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
             });
             h += '</tbody></table></div>';
+            if (r.plan) h += updPlanHtml(r.plan, r.signature);
             if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.latestAlready')) + '</div>';
             else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
             else h += '<div class="alert alert-danger py-2"><strong>' + escHtml(t('up.pageWillStopShort')) + '</strong> ' + escHtml(t('up.jvmStopNote')) + '</div>'
@@ -14060,7 +14067,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function jvRun() {
             if (!updConfirm(t('up.javaStops'), t('up.wUpgradeJava'))) return;
             const el = document.getElementById('jv-pre');
-            const r = await updApi('java_update', { confirm: 'UPGRADE JAVA' });
+            const r = await updApi('java_update', { confirm: 'UPGRADE JAVA', signature: jvSignature });
             if (!r.success) { alert(r.error || t('common.failed')); return; }
             el.innerHTML = '<div class="alert alert-warning mb-0"><strong>' + escHtml(t('up.started')) + '</strong> ' + escHtml(t('up.panelStopping')) + ' '
                 + updEsc(r.note || '') + '<br>' + t('up.reportWrittenIn.html', { path: updEsc(r.log || '') }) + '</div>';

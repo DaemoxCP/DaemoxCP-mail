@@ -7981,7 +7981,7 @@ public class SSLMailServer {
                         break;
                     }
                     logAudit("JAVA_UPDATE_STARTED", ip, "the panel will shut down");
-                    response = UpdateManager.startJavaUpdate();
+                    response = UpdateManager.startJavaUpdate(req.optString("signature", ""));
                 }
                 case "roundcube_preflight" -> response = UpdateManager.roundcubePreflight();
                 case "roundcube_diag" -> response = UpdateManager.roundcubeDiagnostics();
