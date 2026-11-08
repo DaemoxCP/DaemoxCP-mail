@@ -380,6 +380,12 @@ public class LoginRoutesTest {
                 noSecrets &= !a.has("password_hash") && !a.has("totp_enabled");
             }
             check("the superadmin sees the list: emails, no password or TOTP fields", list.getBoolean("success") && emails && noSecrets);
+            HttpResponse<String> unconfirmed = ask("POST", "/api/admins", "{\"action\":\"create\",\"username\":\"new" + suffix + "\",\"email\":\"new"
+                    + suffix + "@example.org\",\"role\":\"admin\"}", "Cookie", sc, "X-CSRF-Token", csrf);
+            check("creating an administrator asks a recent confirmation first: 403, needs_reauth, nobody created",
+                    unconfirmed.statusCode() == 403 && unconfirmed.body().contains("\"needs_reauth\":true")
+                    && AuthStore.adminByEmail("new" + suffix + "@example.org").isEmpty());
+            TestSessions.confirm(session, UA);
             JSONObject noEmail = new JSONObject(ask("POST", "/api/admins", "{\"action\":\"create\",\"username\":\"new" + suffix + "\",\"role\":\"admin\"}",
                     "Cookie", sc, "X-CSRF-Token", csrf).body());
             check("a new administrator without an email: refused", !noEmail.getBoolean("success"));
@@ -398,6 +404,13 @@ public class LoginRoutesTest {
             check("deleting another administrator: done, and its sessions go with it", new JSONObject(ask("POST", "/api/admins",
                     "{\"action\":\"delete\",\"id\":" + newId + "}", "Cookie", sc, "X-CSRF-Token", csrf).body()).getBoolean("success")
                     && count("SELECT COUNT(*) FROM panel_admin WHERE id = ?", newId) == 0);
+
+            // Back to no confirmation, for the vault's checks below.
+            try (java.sql.PreparedStatement p = org.mail_panel.TestSql.mysql().prepareStatement(
+                    "UPDATE panel_sessions SET reauth_at = NULL WHERE token_hash = ?")) {
+                p.setString(1, WebSessions.tokenHash(session));
+                p.executeUpdate();
+            }
 
             System.out.println("\n== The vault wants a recent confirmation ==");
             JSONObject vault = new JSONObject(ask("POST", "/api/admins", "{\"action\":\"vault_backup_key\"}", "Cookie", sc, "X-CSRF-Token", csrf).body());

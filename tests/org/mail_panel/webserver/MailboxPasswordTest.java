@@ -128,6 +128,9 @@ public class MailboxPasswordTest {
         Main.mysqlAvailable = true;
         Main.setupRequired = false;
         String[] login = TestSessions.open(db, "vault-test", UA);
+        // Show password asks a recent confirmation every time: given here (the checks of the request itself are in
+        // RolesTest and SeparatedPanelTest).
+        TestSessions.confirm(login[0], UA);
         db.ensureMailboxPasswordVaultColumns();
         String session = "__Host-MailPanel=" + login[0] + "; __Host-lang=en";
         String csrf = login[1];

@@ -253,11 +253,38 @@ public class SeparatedPanelTest {
             check("a viewer's session asking to create an administrator: 403 (" + h.status() + " " + answer + ")",
                     h.status() == 403 && answer.toString().contains("\"forbidden\":true"));
             check("  and no administrator was created", AuthStore.adminByUsername("sep-forged").isEmpty());
+            System.out.println("\n== 3c. The fresh confirmation for dangerous operations ==");
+            int beforeConfirm = seen.size();
+            r = send("POST", "/api/service", "{\"service\":\"nothing-sep\",\"action\":\"status\"}", boss, true);
+            check("through the web part, a superadmin without a recent confirmation: 403 with X-Panel-Confirmation, needs_reauth ("
+                    + r.statusCode() + " " + r.body() + ")", r.statusCode() == 403
+                    && "needed".equals(r.headers().firstValue("X-Panel-Confirmation").orElse("")) && r.body().contains("\"needs_reauth\":true"));
+            check("  stopped in the web part: nothing reached the root", seen.size() == beforeConfirm);
+            h = forge(sock, "/api/service", "POST", "/api/service", null, "{\"service\":\"nothing-sep\",\"action\":\"status\"}",
+                    boss.adminId(), boss.sessionId(), answer);
+            check("forged on the root's socket, the same request: the root asks it by itself (" + h.status() + " " + answer + ")",
+                    h.status() == 403 && answer.toString().contains("\"needs_reauth\":true"));
+            h = forge(sock, "/api/mailbox-password", "POST", "/api/mailbox-password", null, "{\"id\":999999999}",
+                    boss.adminId(), boss.sessionId(), answer);
+            check("  Show password too, whatever the permission (" + h.status() + ")", h.status() == 403 && answer.toString().contains("\"needs_reauth\":true"));
+            h = forge(sock, "/api/logs", "POST", "/api/logs", null, "{\"action\":\"search\",\"query\":\"x\"}", boss.adminId(), boss.sessionId(), answer);
+            check("  a read sent with a POST (the logs' search) does not ask it (" + h.status() + ")", h.status() != 403);
+            Main.sessions.markReauthenticated(boss.sessionId());
+            h = forge(sock, "/api/mailbox-password", "POST", "/api/mailbox-password", null, "{\"id\":999999999}",
+                    boss.adminId(), boss.sessionId(), answer);
+            check("after the confirmation (written by the root), the request reaches the handler (" + h.status() + " " + answer + ")",
+                    h.status() == 200 && answer.toString().contains("\"success\":false") && !answer.toString().contains("needs_reauth"));
             int beforeGate = seen.size();
             r = send("POST", "/api/roundcube-domain", "{\"action\":\"check\",\"domain\":\"-f /etc/master.passwd\"}", boss, true);
             check("through the web part, a host name that is an option of dig: refused by the root's list, 400 (" + r.statusCode() + ")",
                     r.statusCode() == 400 && seen.size() == beforeGate + 1
                     && r.body().contains(org.mail_panel.i18n.I18n.t("en", "server.rootPart.refused").substring(0, 20)));
+            // Back to no confirmation: the sections below check that it is asked (the one above needed it to reach the root).
+            try (java.sql.PreparedStatement p = org.mail_panel.TestSql.mysql().prepareStatement(
+                    "UPDATE panel_sessions SET reauth_at = NULL WHERE id = ?")) {
+                p.setLong(1, boss.sessionId());
+                p.executeUpdate();
+            }
             h = forge(sock, "/api/logs", "GET", "/api/logs", null, null, boss.adminId(), vera.sessionId(), answer);
             check("a session with someone else's administrator id: 401 (" + h.status() + ")", h.status() == 401);
             h = forge(sock, "/api/logs", "GET", "/api/logs", null, null, boss.adminId(), 999_999_999L, answer);
@@ -305,8 +332,9 @@ public class SeparatedPanelTest {
             String sshKey = org.mail_panel.system.RootSshKeysTest.ed25519() + " sep-test";
             String addKey = new org.json.JSONObject().put("action", "add").put("key", sshKey).toString();
             r = send("POST", "/api/ssh-keys", addKey, boss, true);
-            check("adding without a recent confirmation: the panel asks for it (" + r.body() + ")",
-                    r.statusCode() == 200 && r.body().contains("\"needs_reauth\":true"));
+            check("adding without a recent confirmation: the panel asks for it (" + r.statusCode() + " " + r.body() + ")",
+                    r.statusCode() == 403 && "needed".equals(r.headers().firstValue("X-Panel-Confirmation").orElse(""))
+                    && r.body().contains("\"needs_reauth\":true"));
             Main.sessions.markReauthenticated(boss.sessionId());
             r = send("POST", "/api/ssh-keys", addKey, boss, true);
             check("after the confirmation the key is added (" + r.body() + ")", r.statusCode() == 200 && r.body().contains("\"success\":true")

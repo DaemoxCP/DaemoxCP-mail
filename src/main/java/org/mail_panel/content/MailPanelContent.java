@@ -386,7 +386,15 @@ public class MailPanelContent {
                 // pagina va all'accesso, che dice perche', invece di riempirsi di errori. Gli altri
                 // 401 (un codice di conferma sbagliato) restano alla pagina.
                 var own = new URL(url, location.href).origin === location.origin;
+                var self = this;
                 return send.call(this, input, init).then(function (res) {
+                    // Un'operazione pericolosa senza una conferma recente: la
+                    // finestra comune (panel-confirm.js) chiede la passkey o un codice via email, e la richiesta si
+                    // ripete una volta. Se la si chiude, la pagina riceve la risposta com'era (needs_reauth).
+                    if (own && res.status === 403 && res.headers.get('X-Panel-Confirmation') === 'needed'
+                            && typeof window.panelConfirmIdentity === 'function') {
+                        return window.panelConfirmIdentity().then(function (ok) { return ok ? send.call(self, input, init) : res; });
+                    }
                     // Durante un riavvio chiesto dal pannello la pagina aspetta che il server torni davvero
                     // (panel-reboot.js): un 401 mentre si spegne porterebbe a una pagina d'accesso che sta
                     // per sparire.
@@ -5263,37 +5271,6 @@ public class MailPanelContent {
             </div>
         </div>
     </div>
-
-    <!-- Conferma che sei tu -->
-    <div class="modal fade" id="stepUpModal" tabindex="-1" aria-labelledby="stepUpTitle" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="stepUpTitle"><i class="fas fa-user-shield me-2" aria-hidden="true"></i>{{t:acc.stepUpTitle}}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="text-muted">{{t:acc.stepUpIntro}}</p>
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-primary" id="stepUpPasskeyBtn" data-on-click="stepUpPasskey()">
-                            <i class="fas fa-fingerprint me-2" aria-hidden="true"></i>{{t:acc.stepUpPasskey}}
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary" id="stepUpEmailBtn" data-on-click="stepUpEmail()">
-                            <i class="fas fa-paper-plane me-2" aria-hidden="true"></i>{{t:acc.stepUpEmail}}
-                        </button>
-                    </div>
-                    <div id="stepUpCodeBox" class="d-none mt-3">
-                        <label class="form-label" for="stepUpCode">{{t:login.codeLabel}}</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="stepUpCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="000000">
-                            <button type="button" class="btn btn-primary" data-on-click="stepUpVerify()">{{t:login.verify}}</button>
-                        </div>
-                    </div>
-                    <div id="stepUpMsg" class="small mt-2" role="status" aria-live="polite"></div>
-                </div>
-            </div>
-        </div>
-    </div>
 """;
     }
 
@@ -6119,72 +6096,13 @@ public class MailPanelContent {
             document.getElementById('newUsername').value = '';
         }
 
-        // ----- conferma d'identita' per le operazioni delicate: passkey o codice via email -----
-        let stepUpResolve = null;
-        // Passkey ed email dell'account, per sapere quali conferme offrire: la finestra si apre
-        // anche da pagine che non mostrano l'account (Impostazioni, per il vault).
-        async function accState() {
-            try {
-                const d = await (await fetch('/api/account')).json();
-                if (d.success) {
-                    acc.passkeysAvailable = !!d.passkeysAvailable;
-                    acc.hasEmail = !!d.email;
-                    acc.hasPasskeys = (d.passkeys || []).length > 0;
-                }
-            } catch (e) { /* restano i valori di prima: al peggio i pulsanti sono spenti */ }
-        }
-        async function confirmIdentity() {
-            await accState();
-            return new Promise(resolve => {
-                stepUpResolve = resolve;
-                document.getElementById('stepUpCodeBox').classList.add('d-none');
-                document.getElementById('stepUpCode').value = '';
-                accMsg('stepUpMsg', '', '');
-                document.getElementById('stepUpPasskeyBtn').disabled = !acc.passkeysAvailable || !acc.hasPasskeys;
-                document.getElementById('stepUpEmailBtn').disabled = !acc.hasEmail;
-                const modal = document.getElementById('stepUpModal');
-                modal.addEventListener('hidden.bs.modal', () => { if (stepUpResolve) { stepUpResolve(false); stepUpResolve = null; } }, { once: true });
-                bootstrap.Modal.getOrCreateInstance(modal).show();
-            });
-        }
-        function stepUpDone() {
-            const resolve = stepUpResolve;
-            stepUpResolve = null;
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('stepUpModal')).hide();
-            if (resolve) resolve(true);
-        }
-        async function stepUpPasskey() {
-            const o = await accPost('stepup_options');
-            if (!o.success) { accMsg('stepUpMsg', 'danger', o.error || t('common.failed')); return; }
-            let cred;
-            try { cred = await navigator.credentials.get(webauthnGetOptions(o.options)); }
-            catch (err) { accMsg('stepUpMsg', 'danger', err && err.name === 'NotAllowedError' ? t('login.cancelled') : t('login.passkeyError', { message: err.message })); return; }
-            const r = await accPost('stepup_verify', { request: o.request, credential: webauthnCredentialJson(cred) });
-            if (r.success) stepUpDone(); else accMsg('stepUpMsg', 'danger', r.error || t('login.passkeyFailed'));
-        }
-        async function stepUpEmail() {
-            const r = await accPost('stepup_code_request');
-            if (!r.success) { accMsg('stepUpMsg', 'danger', r.error || t('common.failed')); return; }
-            document.getElementById('stepUpCodeBox').classList.remove('d-none');
-            accMsg('stepUpMsg', 'success', r.message);
-            document.getElementById('stepUpCode').focus();
-        }
-        async function stepUpVerify() {
-            const code = document.getElementById('stepUpCode').value.trim();
-            if (!/^[0-9]{6}$/.test(code)) { accMsg('stepUpMsg', 'danger', t('login.enterOtp')); return; }
-            const r = await accPost('stepup_code_verify', { code: code });
-            if (r.success) stepUpDone(); else accMsg('stepUpMsg', 'danger', r.error || t('common.failed'));
-        }
-        // Una richiesta a /api/admins: se il server chiede la conferma, la si chiede e si riprova una volta.
+        // Una richiesta che puo' chiedere la conferma (vault, chiavi SSH): la finestra comune la chiede e ripete la
+        // richiesta da se' (l'involucro di fetch e panel-confirm.js); null se chi era davanti l'ha chiusa.
         async function withIdentity(body, url) {
-            const call = async () => (await fetch(url || '/api/admins', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body) })).json();
-            let d = await call();
-            if (d && d.needs_reauth) {
-                if (!(await confirmIdentity())) return null;
-                d = await call();
-            }
-            return d;
+            const r = await fetch(url || '/api/admins', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body) });
+            if (r.status === 403 && r.headers.get('X-Panel-Confirmation') === 'needed') return null;
+            return r.json();
         }
 
         // ===== Root's SSH keys =====

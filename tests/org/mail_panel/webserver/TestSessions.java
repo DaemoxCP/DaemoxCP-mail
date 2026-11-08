@@ -58,6 +58,14 @@ final class TestSessions {
         return c.id() > 0 ? c.id() : AuthStore.adminByUsername(name).orElseThrow().id();
     }
 
+    /**
+     * The session of that token confirmed now (passkey or email code), as the root part writes it after checking one:
+     * the dangerous operations ask it.
+     */
+    static void confirm(String token, String userAgent) {
+        Main.sessions.markReauthenticated(Main.sessions.check(token, userAgent).orElseThrow().id());
+    }
+
     /** {session token, CSRF token} of a new session for that administrator. */
     static String[] open(MailDatabase db, String adminName, String userAgent) throws Exception {
         prepare(db);

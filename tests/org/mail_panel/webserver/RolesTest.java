@@ -67,6 +67,17 @@ public class RolesTest {
         return new Who("__Host-MailPanel=" + token + "; __Host-lang=en", WebSessions.csrfToken(token));
     }
 
+    /** The session of that administrator confirmed now, as the root part writes it after a passkey or a code. */
+    static void confirm(Who who) throws Exception {
+        String token = who.cookie().replaceAll("^__Host-MailPanel=([^;]+).*$", "$1");
+        Main.sessions.markReauthenticated(Main.sessions.check(token, UA).orElseThrow().id());
+    }
+
+    static boolean asksConfirmation(HttpResponse<String> r) {
+        return r.statusCode() == 403 && "needed".equals(r.headers().firstValue("X-Panel-Confirmation").orElse(""))
+                && r.body().contains("\"needs_reauth\":true") && !r.body().contains("\"forbidden\":true");
+    }
+
     static boolean refused(HttpResponse<String> r) {
         return r.statusCode() == 403 && r.body().contains("\"forbidden\":true");
     }
@@ -239,6 +250,34 @@ public class RolesTest {
                 "{\"action\":\"reinstall_way_back\",\"name\":\"reinstall-before-2000-01-01-000000\",\"confirm\":\"GO BACK\"}", viewer)));
         check("admin cannot either (system.manage is superadmin's)", refused(send("POST", "/api/updates",
                 "{\"action\":\"reinstall_way_back\",\"name\":\"reinstall-before-2000-01-01-000000\",\"confirm\":\"GO BACK\"}", admin)));
+        System.out.println("\n== The fresh confirmation for dangerous operations ==");
+        check("superadmin without a recent confirmation, rebooting: 403 with X-Panel-Confirmation and needs_reauth",
+                asksConfirmation(send("POST", "/api/updates", "{\"action\":\"reboot_now\"}", superadmin)));
+        check("  stopping a service, changing the firewall, a Settings change, the root's SSH keys, Show password: the same",
+                asksConfirmation(send("POST", "/api/service", "{\"service\":\"nothing\",\"action\":\"status\"}", superadmin))
+                && asksConfirmation(send("POST", "/api/firewall", "{\"action\":\"apply\"}", superadmin))
+                && asksConfirmation(send("POST", "/api/hostname", "{\"action\":\"change\"}", superadmin))
+                && asksConfirmation(send("POST", "/api/ssh-keys", "{\"action\":\"remove\",\"fingerprint\":\"SHA256:x\"}", superadmin))
+                && asksConfirmation(send("POST", "/api/mailbox-password", "{\"id\":1}", superadmin)));
+        check("  a read sent with a POST does not ask it (a job status, the logs' search, the DNS check of the host name)",
+                passed(send("POST", "/api/updates", "{\"action\":\"job_status\",\"jobId\":\"none\"}", superadmin))
+                && passed(send("POST", "/api/logs", "{\"action\":\"search\",\"query\":\"x\"}", superadmin))
+                && passed(send("POST", "/api/hostname", "{\"action\":\"check_dns\"}", superadmin)));
+        check("  nor a GET, nor an everyday write (a mailbox, the queue)", passed(send("GET", "/api/admins", null, superadmin))
+                && passed(send("POST", "/api/mailboxes", "{\"action\":\"nothing\"}", superadmin))
+                && passed(send("POST", "/api/queue", "{\"action\":\"nothing\"}", superadmin)));
+        check("  a role without the permission is refused first, with no confirmation asked",
+                refused(send("POST", "/api/service", "{\"service\":\"nothing\",\"action\":\"status\"}", admin)));
+        confirm(superadmin);
+        check("after the confirmation the request reaches the handler", passed(send("POST", "/api/mailbox-password", "{\"id\":999999999}", superadmin)));
+        try (java.sql.PreparedStatement p = org.mail_panel.TestSql.mysql().prepareStatement(
+                "UPDATE panel_sessions SET reauth_at = UTC_TIMESTAMP() - INTERVAL 6 MINUTE WHERE admin_id = ?")) {
+            p.setLong(1, AuthStore.adminByUsername("boss").orElseThrow().id());
+            p.executeUpdate();
+        }
+        check("  six minutes later it is asked again", asksConfirmation(send("POST", "/api/mailbox-password", "{\"id\":999999999}", superadmin)));
+        confirm(superadmin);
+
         HttpResponse<String> back = send("POST", "/api/updates",
                 "{\"action\":\"reinstall_way_back\",\"name\":\"reinstall-before-2000-01-01-000000\"}", superadmin);
         check("superadmin without the confirmation: refused by the handler, nothing touched", back.statusCode() == 200

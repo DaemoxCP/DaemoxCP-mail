@@ -193,6 +193,12 @@ public class SSLMailServer {
     private static final String SYSTEM_VIEW = "system.view", SYSTEM_MANAGE = "system.manage";
     private static final String SETTINGS = "settings.manage", ADMINS = "admins.manage", VAULT = "vault.manage", SSH_KEYS = "ssh.manage";
 
+    /**
+     * L'intestazione del 403 di un'operazione pericolosa senza una conferma recente: l'involucro di fetch delle pagine
+     * apre la finestra comune di conferma (panel-confirm.js) e ripete la richiesta.
+     */
+    static final String CONFIRMATION_HEADER = "X-Panel-Confirmation";
+
     /** L'intestazione del 401 di una sessione che non c'e' (piu'): la pagina aperta va all'accesso (reperto 184). */
     static final String SESSION_ENDED_HEADER = "X-Panel-Session";
 
@@ -262,7 +268,7 @@ public class SSLMailServer {
         context("/mailboxes", Access.page(MAIL_VIEW), this::handleProtectedPage);
         context("/api/mailboxes", Access.api(MAIL_VIEW, MAILBOXES), this::handleApiMailboxes);
         // «Mostra password»: la copia dal vault la legge solo la root, che sola ha la chiave privata (0.8, punto 3).
-        context("/api/mailbox-password", Access.api(MAILBOXES), this::handleApiMailboxPassword);
+        context("/api/mailbox-password", Access.api(MAILBOXES).confirmingAlways(), this::handleApiMailboxPassword);
         context("/api/mailconfig", Access.api(MAIL_VIEW), this::handleApiMailConfig);
         context("/aliases", Access.page(MAIL_VIEW), this::handleProtectedPage);
         context("/api/aliases", Access.api(MAIL_VIEW, DOMAINS), this::handleApiAliases);
@@ -300,19 +306,20 @@ public class SSLMailServer {
         // ---------- Sicurezza ----------
         context("/security", Access.page(SECURITY_VIEW), this::handleProtectedPage);
         context("/firewall", Access.page(SECURITY_VIEW), this::handleProtectedPage);
-        context("/api/fail2ban", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "verify_filter", "pf_comparison")), this::handleApiFail2ban);
+        context("/api/fail2ban", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "verify_filter", "pf_comparison"))
+                .reading("banned", "get_jail_config", "ip_info", "jail", "live_state", "live_state_all", "permaban_list", "status"), this::handleApiFail2ban);
         context("/api/fail2ban_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE), this::handleApiFail2banHealth);
         context("/api/clamav_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "test_eicar")), this::handleApiClamavHealth);
         context("/api/unbound_health", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "test_query")), this::handleApiUnboundHealth);
         context("/api/blacklist_check", Access.api(SECURITY_VIEW), this::handleApiBlacklistCheck);
         context("/api/firewall", Access.api(SECURITY_VIEW, SECURITY_MANAGE), this::handleApiFirewall);
-        context("/api/rspamd", Access.api(SECURITY_VIEW, SECURITY_MANAGE), this::handleApiRspamd);
+        context("/api/rspamd", Access.api(SECURITY_VIEW, SECURITY_MANAGE).reading("quarantine", "stats", "scan"), this::handleApiRspamd);
 
         // ---------- Sistema ----------
         context("/updates", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
-        context("/api/updates", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE, UPDATES_ACTIONS), this::handleApiUpdates);
+        context("/api/updates", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE, UPDATES_ACTIONS).reading("service_users"), this::handleApiUpdates);
         context("/logs", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
-        context("/api/logs", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiLogs);
+        context("/api/logs", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE).reading("search"), this::handleApiLogs);
         context("/paths", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
         context("/api/system_paths", Access.api(SYSTEM_VIEW), this::handleApiSystemPaths);
         // La scheda del pannello in cima alla dashboard (reperto 183): da quando gira per chi vede la
@@ -321,14 +328,14 @@ public class SSLMailServer {
         context("/api/service", Access.api(SYSTEM_MANAGE), this::handleApiService);
         context("/api/timezone-diag", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiTimezoneDiag);
         context("/api/postfix-aliases-health", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiPostfixAliases);
-        context("/api/sso", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiSso);
+        context("/api/sso", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE).reading("status"), this::handleApiSso);
         context("/admins", Access.page(ADMINS), this::handleProtectedPage);
         // La chiave del vault: esportarla o cambiarla vuole vault.manage (e una conferma recente).
         context("/api/admins", Access.api(ADMINS, ADMINS, Access.actions(VAULT, "vault_backup_key", "vault_rotate_key")), this::handleApiAdmins);
         context("/settings", Access.page(SETTINGS), this::handleProtectedPage);
-        context("/api/report", Access.api(SETTINGS), this::handleApiReport);
-        context("/api/hostname", Access.api(SETTINGS), this::handleApiHostname);
-        context("/api/roundcube-domain", Access.api(SETTINGS), this::handleApiRoundcubeDomain);
+        context("/api/report", Access.api(SETTINGS).reading("identity", "preview", "status"), this::handleApiReport);
+        context("/api/hostname", Access.api(SETTINGS).reading("check_dns"), this::handleApiHostname);
+        context("/api/roundcube-domain", Access.api(SETTINGS).reading("check_dns"), this::handleApiRoundcubeDomain);
         // Le chiavi SSH di root: vederle, aggiungerne, toglierne (con una conferma recente). Mai sshd_config.
         context("/api/ssh-keys", Access.api(SSH_KEYS), this::handleApiSshKeys);
         // POP3 acceso o spento: Dovecot, le porte di pf e delle regole dei paesi (Pop3, PfPolicy).
@@ -432,6 +439,19 @@ public class SSLMailServer {
                 }
             });
         }
+        if (access.kind() == Access.Kind.API) {
+            context.getFilters().add(new Filter() {
+                @Override
+                public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+                    if (!confirmationMissing(exchange, access)) chain.doFilter(exchange);
+                }
+
+                @Override
+                public String description() {
+                    return "a recent confirmation (passkey or email code) for dangerous operations";
+                }
+            });
+        }
         return context;
     }
 
@@ -442,6 +462,36 @@ public class SSLMailServer {
      * una API risponde 403 con forbidden: true. Per le API a azioni l'azione viene da ?action= o
      * dal corpo JSON, che si rimette al suo posto per il gestore.
      */
+    /** Dove accessAllowed lascia l'azione della richiesta che ha letto (dal corpo, per una POST). */
+    private static final String ACTION_ATTRIBUTE = "mailpanel.action";
+
+    /**
+     * Un'operazione pericolosa senza una conferma recente (Access.needsConfirmation): vero, e la risposta e' gia'
+     * data (sendConfirmationNeeded). La data della conferma la scrive solo la root, che verifica passkey e codici
+     * (A); la root la rilegge dal database per ogni richiesta che le arriva e la controlla anche lei, quindi una web
+     * che saltasse questo controllo non ottiene niente. Va dopo il permesso, e nella web anche dopo il CSRF: una
+     * richiesta di un altro sito non arriva fin qui.
+     */
+    private boolean confirmationMissing(HttpExchange exchange, Access access) throws IOException {
+        Object action = exchange.getAttribute(ACTION_ATTRIBUTE);
+        if (!access.needsConfirmation(exchange.getRequestMethod(), action instanceof String a ? a : null)) return false;
+        Optional<WebSessions.Current> session = currentSession(exchange);
+        if (session.isPresent() && session.get().reauthenticatedWithin(AuthHandlers.REAUTH_SECONDS)) return false;
+        sendConfirmationNeeded(exchange);
+        return true;
+    }
+
+    /** 403 con needs_reauth: serve una conferma recente (passkey o codice via email), poi la richiesta si ripete. */
+    private void sendConfirmationNeeded(HttpExchange exchange) throws IOException {
+        byte[] json = new JSONObject().put("success", false).put("needs_reauth", true)
+                .put("error", I18n.tr("server.reauth.needed")).toString().getBytes(StandardCharsets.UTF_8);
+        addSecurityHeaders(exchange);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.getResponseHeaders().set(CONFIRMATION_HEADER, "needed");
+        exchange.sendResponseHeaders(403, json.length);
+        try (OutputStream os = exchange.getResponseBody()) { os.write(json); }
+    }
+
     private boolean accessAllowed(HttpExchange exchange, Access access) throws IOException {
         Optional<WebSessions.Current> session = currentSession(exchange);
         boolean pageGet = access.kind() == Access.Kind.PAGE && "GET".equals(exchange.getRequestMethod());
@@ -485,7 +535,11 @@ public class SSLMailServer {
         }
         String permission = access.permissionFor(method, action);
         AuthStore.Admin admin = session.get().admin();
-        if (AuthStore.may(admin, permission)) return true;
+        if (AuthStore.may(admin, permission)) {
+            // L'azione letta qui serve anche alla conferma recente (confirmationMissing), che viene dopo il CSRF.
+            if (action != null) exchange.setAttribute(ACTION_ATTRIBUTE, action);
+            return true;
+        }
         LOGGER.info("Permission " + permission + " denied to " + admin.username() + " (" + admin.role() + ") on "
                 + method + " " + exchange.getRequestURI().getPath());
         logAudit("PERMISSION_DENIED", getClientIp(exchange), "user=" + admin.username() + " permission=" + permission
@@ -1235,6 +1289,7 @@ public class SSLMailServer {
             HttpExchange ex = "HEAD".equals(r.method()) ? new HeadExchange(exchange) : exchange;
             CURRENT_SESSION.set(new Object[]{ex, session});
             if (!accessAllowed(ex, access)) return;
+            if (confirmationMissing(ex, access)) return;
             handler.handle(ex);
         } finally {
             I18n.clearCurrent();
@@ -10479,11 +10534,7 @@ public class SSLMailServer {
                     sendJsonError(exchange, 403, I18n.tr("server.admins.forbidden"));
                     return;
                 }
-                if (!session.get().reauthenticatedWithin(AuthHandlers.REAUTH_SECONDS)) {
-                    sendJsonResponse(exchange, response.put("success", false).put("needs_reauth", true)
-                            .put("error", I18n.tr("server.reauth.needed")));
-                    return;
-                }
+                // La conferma recente l'ha gia' chiesta il filtro della rotta (Access.needsConfirmation).
                 if ("vault_backup_key".equals(action)) vaultBackupKey(response, me, ip);
                 else vaultRotateKey(response, me, ip);
                 sendJsonResponse(exchange, response);
@@ -11549,11 +11600,7 @@ public class SSLMailServer {
                 sendJsonError(exchange, 400, I18n.tr("server.unknownAction"));
                 return;
             }
-            if (!session.get().reauthenticatedWithin(AuthHandlers.REAUTH_SECONDS)) {
-                sendJsonResponse(exchange, response.put("success", false).put("needs_reauth", true)
-                        .put("error", I18n.tr("server.reauth.needed")));
-                return;
-            }
+            // La conferma recente l'ha gia' chiesta il filtro della rotta (Access.needsConfirmation).
             org.mail_panel.system.RootSshKeys.Outcome o = action.equals("add")
                     ? org.mail_panel.system.RootSshKeys.add(req.optString("key", ""))
                     : org.mail_panel.system.RootSshKeys.remove(req.optString("fingerprint", ""));

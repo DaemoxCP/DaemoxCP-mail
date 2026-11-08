@@ -120,6 +120,8 @@ public class VersionsApiTest {
         Main.mysqlAvailable = true;
         Main.setupRequired = false;
         String[] login = TestSessions.open(db, "versions-test", UA);
+        // Restarting a service is a dangerous operation: it asks a recent confirmation, given here.
+        TestSessions.confirm(login[0], UA);
         code = login[0];
         String csrf = login[1];
 

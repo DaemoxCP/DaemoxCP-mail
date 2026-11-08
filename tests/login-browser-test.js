@@ -200,14 +200,19 @@ async function shot(page, name) {
         check('Account has no vault card (it is in Settings, for the superadmin)', await page.locator('button[data-on-click="vaultBackupKey()"]').count() === 0);
         await page.goto(BASE + '/settings');
         await page.click('button[data-on-click="vaultBackupKey()"]');
-        await page.waitForSelector('#stepUpModal.show');
-        check('the confirmation window offers the passkey and an email code', await page.locator('#stepUpPasskeyBtn').isEnabled()
-            && await page.locator('#stepUpEmailBtn').isEnabled());
+        // The shared confirmation window (panel-confirm.js), the same on every page: the server asked it (403 with
+        // X-Panel-Confirmation), and once confirmed the request is sent again by itself.
+        await page.waitForSelector('#panelConfirmModal.show');
+        check('the confirmation window offers the passkey and an email code (the account has both)',
+            await page.locator('#panelConfirmModal [data-confirm="passkey"]').isVisible()
+            && await page.locator('#panelConfirmModal [data-confirm="email"]').isVisible()
+            && await page.locator('#panelConfirmModal [data-confirm="choose"]').isVisible());
         await shot(page, 'step-up');
-        await page.click('#stepUpPasskeyBtn');
+        await page.click('#panelConfirmModal [data-confirm="passkey"]');
         await page.waitForSelector('#vaultBackupKeyValue', { timeout: 15000 });
         const key = await page.locator('#vaultBackupKeyValue').inputValue();
-        check('with the passkey: the key is exported', /^[A-Za-z0-9+/=]{40,}$/.test(key));
+        check('with the passkey: the request is sent again and the key is exported', /^[A-Za-z0-9+/=]{40,}$/.test(key));
+        check('  the window closed and focus came back to the page', await page.locator('#panelConfirmModal.show').count() === 0);
 
         console.log('\n== 4. Logout, then the passkey alone ==');
         await Promise.all([page.waitForURL(u => ['/', '/index'].includes(new URL(u).pathname)), page.click('#logoutButton')]);

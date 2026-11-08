@@ -6701,5 +6701,8 @@
   "server.ssh.duplicate": "Questa chiave c'è già.",
   "server.ssh.notFound": "Questa chiave non c'è più: ricarica la pagina.",
   "server.ssh.lastKey": "È l'ultima chiave di root: senza, via SSH come root non entrerebbe più nessuno. Aggiungine prima un'altra.",
-  "server.ssh.failed": "Le chiavi SSH non si sono potute leggere o scrivere: i dettagli sono nel log del pannello."
+  "server.ssh.failed": "Le chiavi SSH non si sono potute leggere o scrivere: i dettagli sono nel log del pannello.",
+  "confirm.passkeyOnly": "Questa operazione è delicata: conferma con la tua passkey. La conferma vale 5 minuti.",
+  "confirm.emailOnly": "Questa operazione è delicata: conferma con un codice mandato alla tua email di accesso. Non hai ancora una passkey: aggiungendone una dalla pagina Account potrai confermare anche con quella. La conferma vale 5 minuti.",
+  "confirm.noMethod": "Questa operazione chiede una conferma, ma il tuo account non ha né una passkey né un'email di accesso: aggiungine una dalla pagina Account."
 }
