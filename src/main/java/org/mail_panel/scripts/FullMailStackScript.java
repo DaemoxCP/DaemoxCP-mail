@@ -783,7 +783,7 @@ RCCONF
             echo "  - MySQL 8.0 (database)"
             echo "  - Redis (caching)"
             echo "  - Postfix (SMTP - ports 25, 587, 465)"
-            echo "  - Dovecot (IMAP/POP3 - ports 143, 993, 110, 995)"
+            echo "  - Dovecot (IMAP - ports 143, 993)"
             echo "  - Rspamd (anti-spam - port 11334)"
             echo "  - ClamAV (antivirus)"
             echo "  - Roundcube (webmail - port 80)"

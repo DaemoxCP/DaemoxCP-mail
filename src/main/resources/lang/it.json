@@ -367,7 +367,6 @@
   "cfg.imapPortSec": "Porta IMAP / Sicurezza",
   "cfg.imapServer": "Server IMAP",
   "cfg.inImap": "Posta in Arrivo — IMAP (consigliato)",
-  "cfg.inPop": "Posta in Arrivo — POP3 (alternativa)",
   "cfg.inPortSec": "Porta in arrivo / Sicurezza",
   "cfg.inServer": "Server in arrivo",
   "cfg.inServerImap": "Server posta in arrivo (IMAP)",

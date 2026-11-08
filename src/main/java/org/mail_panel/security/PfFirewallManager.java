@@ -47,7 +47,9 @@ public class PfFirewallManager {
     // === Porte protette dalla geo-whitelist (AUTH/USER-facing) ===
     // Port 25 (SMTP receive) NON e' in whitelist by default: i mail server esteri
     // devono poter consegnare. Si puo' bloccare se l'utente lo vuole esplicitamente.
-    private static final String AUTH_PORTS = "{ 465, 587, 143, 993, 110, 995 }";
+    // POP3 (110, 995) non c'e' piu': Dovecot non lo serve (Pop3Off) e pf non lo fa entrare (PfPolicy).
+    private static final String AUTH_PORTS = "{ 465, 587, 143, 993 }";
+    private static final String MAIL_PORTS = "{ 25, 465, 587, 143, 993 }";
 
     // === Modi ===
     public enum Mode {
@@ -538,7 +540,7 @@ public class PfFirewallManager {
         // 3. Geo rules — solo se geoActive (zone files presenti)
         if (geoActive && state.mode == Mode.GEO_WHITELIST) {
             String ports = state.applyGeoToPort25
-                ? "{ 25, 465, 587, 143, 993, 110, 995 }"
+                ? MAIL_PORTS
                 : AUTH_PORTS;
             sb.append("# Geo whitelist: solo paesi selezionati su porte AUTH\n");
             sb.append("pass in quick proto tcp from <panel_geo_wl> to any port ")
@@ -546,7 +548,7 @@ public class PfFirewallManager {
             sb.append("block in quick proto tcp to any port ")
               .append(ports).append("\n");
         } else if (geoActive && state.mode == Mode.GEO_BLACKLIST) {
-            String ports = "{ 25, 465, 587, 143, 993, 110, 995 }";
+            String ports = MAIL_PORTS;
             sb.append("# Geo blacklist: paesi selezionati bloccati su tutte le porte mail\n");
             sb.append("block in quick proto tcp from <panel_geo_bl> to any port ")
               .append(ports).append("\n");

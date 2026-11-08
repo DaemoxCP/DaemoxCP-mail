@@ -152,7 +152,6 @@ MASTER_EOF
             echo ""
             echo "Ports:"
             echo "  IMAP:  143 (STARTTLS), 993 (SSL)"
-            echo "  POP3:  110 (STARTTLS), 995 (SSL)"
             echo ""
             """;
     }

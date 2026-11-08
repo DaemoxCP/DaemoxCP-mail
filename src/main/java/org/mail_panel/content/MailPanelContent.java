@@ -1077,7 +1077,7 @@ public class MailPanelContent {
                     <thead class="table-light"><tr><th scope="col">{{t:home.colService}}</th><th scope="col">{{t:home.colVersion}}</th><th scope="col">{{t:home.colState}}</th><th scope="col">{{t:home.colActions}}</th></tr></thead>
                     <tbody>
 """ + serviceLine("postfix", "postfix", "fa-paper-plane", "Postfix (SMTP)", "Postfix")
-    + serviceLine("dovecot", "dovecot", "fa-inbox", "Dovecot (IMAP/POP3)", "Dovecot")
+    + serviceLine("dovecot", "dovecot", "fa-inbox", "Dovecot (IMAP)", "Dovecot")
     + serviceLine("mysql", "mysql-server", "fa-database", "MySQL (Database)", "MySQL")
     + serviceLine("rspamd", "rspamd", "fa-shield-alt", "Rspamd (Anti-Spam)", "Rspamd")
     + serviceLine("redis", "redis", "fa-memory", "Redis ({{t:home.redisRole}})", "Redis")
@@ -1685,7 +1685,7 @@ public class MailPanelContent {
 
     // ============== MAILBOXES.HTML ==============
     /**
-     * Modal "Configurazione Client Email" — credenziali + server IMAP/SMTP/POP3,
+     * Modal "Configurazione Client Email" — credenziali + server IMAP/SMTP (POP3 spento: Pop3Off),
      * con bottoni copia per ogni campo e reveal della password se nel vault.
      */
     private static String getMailConfigModal() {
@@ -1749,19 +1749,6 @@ public class MailPanelContent {
                                 </div>
                                 <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.port}}</label>
                                     <div class="input-group input-group-sm"><input type="text" class="form-control" value="993" id="cfgImapPort" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgImapPort')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
-                                </div>
-                                <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.security}}</label>
-                                    <input type="text" class="form-control form-control-sm" value="SSL/TLS" readonly>
-                                </div>
-                            </div>
-
-                            <h6 class="mb-2 text-secondary"><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:cfg.inPop}}</h6>
-                            <div class="row g-2 mb-3">
-                                <div class="col-md-8"><label class="form-label small mb-1">Server</label>
-                                    <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgPop3Server" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgPop3Server')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
-                                </div>
-                                <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.port}}</label>
-                                    <div class="input-group input-group-sm"><input type="text" class="form-control" value="995" id="cfgPop3Port" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgPop3Port')"><i class="fas fa-copy" aria-hidden="true"></i></button></div>
                                 </div>
                                 <div class="col-md-2"><label class="form-label small mb-1">{{t:cfg.security}}</label>
                                     <input type="text" class="form-control form-control-sm" value="SSL/TLS" readonly>
@@ -3507,7 +3494,6 @@ public class MailPanelContent {
                     const server = data.server;
                     // Generale
                     setValIfExists('cfgImapServer', server);
-                    setValIfExists('cfgPop3Server', server);
                     setValIfExists('cfgSmtpServer', server);
                     // Outlook
                     setValIfExists('cfgOutlookImap', server);
