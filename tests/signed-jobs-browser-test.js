@@ -53,7 +53,8 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
     for (const c of CARDS.filter(c => ONLY.includes(c.key))) {
         console.log('\n== ' + c.key + ' ==');
         const box = page.locator(c.box);
-        const card = box.locator('xpath=ancestor::div[contains(concat(" ", @class, " "), " card ")][1]');
+        // The procedure's row of "Update the server" (a <li> in a <section class="card">): its pictures.
+        const card = box.locator('xpath=ancestor::li[1]');
         // The row appears when the packages have been read and the procedure applies.
         await page.waitForSelector(`button[data-on-click="${c.pre}"]`, { timeout: 300000 });
         await page.click(`button[data-on-click="${c.pre}"]`);

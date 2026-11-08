@@ -294,6 +294,7 @@ const allErrors = [], allDialogs = [];
     await rc.page.waitForSelector('#rc-pre button[data-on-click="rcRun()"]', { timeout: 10000 });
     const ready = await rc.page.innerText('#rc-pre');
     console.log('    ' + ready.replace(/\s+/g, ' ').slice(0, 300));
+    check('  the row\'s own button is gone while its panel is open (no duplicate)', await rc.page.$$eval('#uc-roundcube .uc-head button', b => b.length) === 0);
     check('one line on the checks, what to know before, the plan, one button', /All 2 checks are fine/.test(ready) && /Good to know before you start/.test(ready)
         && /The webmail is off for about a minute/.test(ready) && /roundcube-php84/.test(ready)
         && await rc.page.$$eval('#rc-pre button', b => b.filter(x => x.offsetParent).length) === 1);

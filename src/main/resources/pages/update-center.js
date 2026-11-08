@@ -77,11 +77,16 @@
 
         // Le azioni delle righe: aprono il pannello sotto la riga e partono da li'.
         function ucOsInstall() { ucOpen('os'); osShow('patch'); osInstall(); }
-        function ucJava() { ucOpen('java'); jvPre(); }
+        // Aperto il pannello di una riga, il suo pulsante sta li' dentro: la testata si ridisegna senza (reperto 197).
+        function ucOpened(key) {
+            const d = document.getElementById('uc-' + key + '-detail');
+            return !!(d && !d.hidden);
+        }
+        function ucJava() { ucOpen('java'); ucRender(); jvPre(); }
         function ucJavaReport() { ucOpen('java'); jvState(); }
-        function ucRoundcube() { ucOpen('roundcube'); rcPre(); }
-        function ucMysql() { ucOpen('mysql'); my84Pre(); }
-        function ucPython() { ucOpen('python'); pyPre(); }
+        function ucRoundcube() { ucOpen('roundcube'); ucRender(); rcPre(); }
+        function ucMysql() { ucOpen('mysql'); ucRender(); my84Pre(); }
+        function ucPython() { ucOpen('python'); ucRender(); pyPre(); }
         function ucPythonLeftovers() { ucOpen('python'); pyLeftovers(); }
         function ucBranch() { ucToggle('branch'); }
 
@@ -160,7 +165,7 @@
             else if (plain > 0) {
                 ucHead('packages', 'todo', t('uc.packages'), tn('uc.packagesTodo', plain)
                     + (sum.fixable ? ' ' + tn('uc.packagesFix', sum.fixable) : ''),
-                    [ucButton('btn-primary', 'fa-arrow-up', t('uc.packagesGo'), 'ucPackages()')]);
+                    ucOpened('packages') ? [] : [ucButton('btn-primary', 'fa-arrow-up', t('uc.packagesGo'), 'ucPackages()')]);
             } else ucHead('packages', 'ok', t('uc.packages'), t('uc.packagesOk'));
 
             // 3. Quelli del server di posta: protetti, uno alla volta col suo controllo, o tutti insieme in un piano
@@ -188,20 +193,20 @@
             const jvm = rows.find(p => p.javaFlow);
             if (proc.java && jvm) {
                 ucHead('java', 'todo', t('uc.java'), t('uc.javaTodo', { name: jvm.name, from: jvm.installed, to: jvm.available }),
-                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucJava()')]);
+                    ucOpened('java') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucJava()')]);
             } else doneRow('java', t('uc.java'));
             const rc = rows.find(p => p.name === proc.roundcubePackage);
             if (proc.roundcube && rc) {
                 ucHead('roundcube', 'todo', t('uc.roundcube'), t('uc.roundcubeTodo', { name: rc.name, from: rc.installed, to: rc.available }),
-                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucRoundcube()')]);
+                    ucOpened('roundcube') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucRoundcube()')]);
             } else doneRow('roundcube', t('uc.roundcube'));
             if (proc.mysql84) {
                 ucHead('mysql', 'todo', t('uc.mysql'), t('uc.mysqlTodo'),
-                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucMysql()')]);
+                    ucOpened('mysql') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucMysql()')]);
             } else doneRow('mysql', t('uc.mysql'));
             if (proc.python) {
                 ucHead('python', 'todo', t('uc.python'), t('uc.pythonTodo'),
-                    [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucPython()')]);
+                    ucOpened('python') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucPython()')]);
             } else if (gdDone.python) {
                 // Il passaggio fatto: il passo dopo e' togliere i resti della famiglia vecchia, con il suo pulsante.
                 ucHead('python', 'ok', t('uc.python'), gdDone.python + ' ' + t('gd.pyNext'),
@@ -274,6 +279,7 @@
         // qui sotto, e non parte niente.
         async function ucPackages() {
             ucOpen('packages');
+            ucRender();
             const box = document.getElementById('pk-run');
             const say = (cls, text) => { box.innerHTML = '<div class="alert ' + cls + ' py-2 mb-0">' + escHtml(text) + '</div>'; };
             box.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('uc.planning'));

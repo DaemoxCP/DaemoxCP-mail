@@ -145,9 +145,9 @@ inventory photo and pkg (`UpdateManager.PlanWatch.afterTaken`, null in the servi
 The job must end in error naming it, with every line of the plan still where it said; with `-Doutside.when=before`
 the package goes in before the job instead, and those three checks must fail (reperto 190).
 
-`signed-jobs-browser-test.js` uses the same three cards in a real browser (Playwright with the Chrome installed on
+`signed-jobs-browser-test.js` uses the same three procedures (from their rows of "Update the server", reperto 197) in a real browser (Playwright with the Chrome installed on
 the Mac), against the panel of the test VM through an SSH tunnel: "Check prerequisites", the plan and its
-fingerprint in the card, start with the confirmation word, the log to the end. It checks that the start request
+fingerprint in the card, start from the panel's window (the word goes in the request), the log to the end. It checks that the start request
 carries the fingerprint the card showed and that the job ran that one. It signs in with a console code and gives
 its session the fresh confirmation with the `confirm` mode of `signed-jobs-setup.sh` (VM only). It also reports
 every JavaScript error of the pages it opens.
@@ -720,10 +720,13 @@ session getting in.
 **update-center-browser-test.js** — updating from the panel (reperti 185-187), with a simulated
 server: the restart banner on every page (and the Italian text taken from it.json), the "Update the
 server" card with its rows in words (a dedicated procedure only when it applies; every row acts in place,
-reperto 193), the package update confirmed in the panel's window with
-the exact plan and its signature, the FreeBSD patch install with INSTALL PATCHES, the restart window
-(what stops, the chosen delay, the time, cancelling, Escape), reads that queue up instead of
-failing, 44 px touch buttons at 375 px, and no browser dialog at all.
+reperto 193; one button at most per row, reperto 197), the package update confirmed in the panel's window
+with the exact plan and its signature and its outcome under the row, the FreeBSD patches with their outcome
+and the restart left (reperto 196), a new FreeBSD release in four steps with only the current one's button,
+the checks that stop a preparation, a dedicated procedure guided (Roundcube: one line on the checks, what to
+know before, the plan, one button, the panel's window, the outcome that stays in the row; and when the checks
+stop it), the restart window (what stops, the chosen delay, the time, cancelling, Escape), reads that queue
+up instead of failing, 44 px touch buttons at 375 px, and no browser dialog at all.
 
 **OsPatchTest** — the decisions behind installing FreeBSD patches (OsPatch): the target version from
 freebsd-update's tag file, its outputs (nothing to fetch, nothing to install, reboot then install
