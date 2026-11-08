@@ -367,7 +367,6 @@
   "cfg.imapPortSec": "IMAP port / Security",
   "cfg.imapServer": "IMAP server",
   "cfg.inImap": "Incoming mail — IMAP (recommended)",
-  "cfg.inPop": "Incoming mail — POP3 (alternative)",
   "cfg.inPortSec": "Incoming port / Security",
   "cfg.inServer": "Incoming server",
   "cfg.inServerImap": "Incoming mail server (IMAP)",
@@ -6666,5 +6665,14 @@
   "server.paths.panelWebLogDesc": "What the web part writes, which runs as the mailpanel user: sign-ins, pages, requests handed to the root part",
   "server.paths.rootSocket": "Root part socket",
   "server.paths.rootSocketDesc": "Where the web part hands the signed-in requests to the root part, which opens no network ports",
-  "server.rootPart.refused": "The request does not have the shape the panel expects: nothing was changed."
+  "server.rootPart.refused": "The request does not have the shape the panel expects: nothing was changed.",
+  "cfg.inPop": "Incoming mail — POP3 (alternative)",
+  "set.pop3Title": "POP3",
+  "set.pop3Label": "Accept mail programs that use POP3",
+  "set.pop3Hint": "POP3 downloads the mail to the device and usually removes it from the server; IMAP keeps it in sync on every device. Off, ports 110 and 995 stay closed, in the firewall too: turn it on only if a mail program needs it.",
+  "set.pop3On": "On: ports 110 and 995 are open.",
+  "set.pop3Off": "Off: ports 110 and 995 are closed.",
+  "set.pop3Applying": "Applying the choice to Dovecot and the firewall…",
+  "set.pop3Failed": "POP3 could not be changed: it stays as it was. The details are in the panel log.",
+  "server.pop3.notApplied": "POP3 could not be changed: Dovecot and the firewall stay as they were. The details are in the panel log."
 }

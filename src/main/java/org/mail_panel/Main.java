@@ -51,12 +51,10 @@ import java.sql.ResultSet;
  * ║  └─────────────────────────────────────────────────────────────────────────┘ ║
  * ║                                                                               ║
  * ║  ┌─────────────────────────────────────────────────────────────────────────┐ ║
- * ║  │  IMAP/POP3 SERVER: Dovecot                                              │ ║
+ * ║  │  IMAP SERVER: Dovecot (POP3 off)                                        │ ║
  * ║  │  ──────────────────────────────                                         │ ║
  * ║  │  • Port 143  - IMAP (STARTTLS)                                          │ ║
  * ║  │  • Port 993  - IMAPS (SSL)                                              │ ║
- * ║  │  • Port 110  - POP3 (STARTTLS)                                          │ ║
- * ║  │  • Port 995  - POP3S (SSL)                                              │ ║
  * ║  │  • LMTP socket: /var/run/dovecot/lmtp                                   │ ║
  * ║  │  • Config: /usr/local/etc/dovecot/                                      │ ║
  * ║  │  • Mailboxes: /var/vmail/{domain}/{user}                                │ ║

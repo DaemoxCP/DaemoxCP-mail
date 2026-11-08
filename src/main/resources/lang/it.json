@@ -367,7 +367,6 @@
   "cfg.imapPortSec": "Porta IMAP / Sicurezza",
   "cfg.imapServer": "Server IMAP",
   "cfg.inImap": "Posta in Arrivo — IMAP (consigliato)",
-  "cfg.inPop": "Posta in Arrivo — POP3 (alternativa)",
   "cfg.inPortSec": "Porta in arrivo / Sicurezza",
   "cfg.inServer": "Server in arrivo",
   "cfg.inServerImap": "Server posta in arrivo (IMAP)",
@@ -6666,5 +6665,14 @@
   "server.paths.panelWebLogDesc": "Quello che scrive la parte web, che gira con l'utente mailpanel: accessi, pagine, richieste passate alla parte root",
   "server.paths.rootSocket": "Socket della parte root",
   "server.paths.rootSocketDesc": "Da qui la parte web passa le richieste di chi ha fatto l'accesso alla parte root, che non apre porte di rete",
-  "server.rootPart.refused": "La richiesta non ha la forma che il pannello si aspetta: niente è stato cambiato."
+  "server.rootPart.refused": "La richiesta non ha la forma che il pannello si aspetta: niente è stato cambiato.",
+  "cfg.inPop": "Posta in Arrivo — POP3 (alternativa)",
+  "set.pop3Title": "POP3",
+  "set.pop3Label": "Accetta i programmi di posta che usano POP3",
+  "set.pop3Hint": "POP3 scarica la posta sul dispositivo e di solito la toglie dal server; IMAP la tiene sincronizzata su tutti i dispositivi. Spento, le porte 110 e 995 restano chiuse, anche nel firewall: accendilo solo se un programma di posta ne ha bisogno.",
+  "set.pop3On": "Acceso: le porte 110 e 995 sono aperte.",
+  "set.pop3Off": "Spento: le porte 110 e 995 sono chiuse.",
+  "set.pop3Applying": "Sto applicando la scelta a Dovecot e al firewall…",
+  "set.pop3Failed": "Non è stato possibile cambiare POP3: è rimasto com'era. I dettagli sono nel log del pannello.",
+  "server.pop3.notApplied": "Non è stato possibile cambiare POP3: Dovecot e il firewall sono rimasti com'erano. I dettagli sono nel log del pannello."
 }
