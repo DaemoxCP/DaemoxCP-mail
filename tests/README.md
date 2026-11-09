@@ -635,16 +635,24 @@ names and addresses only as text, the preview, the branch name typed by hand to 
 fingerprint and CSRF token in the request, the job followed to its outcome, the error of a change
 that does not start; dark theme and phone.
 
-**packages-browser-test.js** — the Packages tab of the Updates page, with the simulated server: it
-reads by itself; the summary; the warning about the stack's unlocked packages with the button to
-lock them; for every row installed and catalog version, verdict on the vulnerability (text, never
-HTML), lock; "Update" also on a locked package, "held" where the advisory says to wait, the panel's
-JDK saying it has its own procedure (its row in "Update the server", without a button that jumps
-there); Lock/Unlock with name and CSRF token. The update window: exact
-plan, the steps in plain words, the button off until the package name is typed right, the request
-with confirmation and fingerprint, the job followed to its outcome. And in the Updates tab the
-header of a vulnerability saying the same verdict as the detail (it was "the update fixes it" above
-a "the update is not enough"), with the Update button next to it.
+**packages-browser-test.js** — the packages on the Updates page, with the simulated server (reperto 202): ONE row
+of "Update the server", no separate card and no separate row for the mail server packages. The row says how many go in
+one plan and how many of the mail server one at a time (by name, the held one with its reason, not the panel's JDK),
+the fix available and the vulnerability the update does not fix yet, and has one button, the step after: first
+protecting the mail server packages that are not locked, then the plan of the others, then the mail server ones one at
+a time; a plan that cannot run (it would remove a package) does not start and hands the step to the mail server
+packages. Under the row, closed, the list one by one: the summary, the warning about the unlocked ones with the button
+to lock them, for every package installed and catalog version, verdict on the vulnerability (text, never HTML), lock,
+"held" where the advisory says to wait, the JDK saying it has its own procedure, no update button (the row has the
+step); Lock with name and CSRF token, after which the row's step moves on. The update window of a mail server
+package: exact plan, the steps in plain words, the button off until the package name is typed right, the request with
+confirmation and fingerprint, the job followed to its outcome. And the header of a vulnerability saying the same
+verdict as the detail (it was "the update fixes it" above a "the update is not enough").
+
+**packages-row-browser-test.js** — on the real panel of the test VM, only reads (reperto 202): the packages are
+one row of "Update the server" with at most one button, no separate card and no separate mail server row; the list
+under the row is closed, and opened shows the packages with version and lock in words and no update button; at 375 px
+no horizontal scrolling with the list open and every visible button 44 px; no request that changes anything.
 
 **address-conversion-browser-test.js** — the "Turn into mailbox" (Aliases page) and "Turn into
 alias" (Mailboxes page) windows: the preview, the password proposed by the generator, the mandatory
@@ -738,8 +746,9 @@ session getting in.
 **update-center-browser-test.js** — updating from the panel (reperti 185-187), with a simulated
 server: the restart banner on every page (and the Italian text taken from it.json), the "Update the
 server" card with its rows in words (a dedicated procedure only when it applies; every row acts in place,
-reperto 193; one button at most per row, reperto 197), the package update confirmed in the panel's window
-with the exact plan and its signature and its outcome under the row, the FreeBSD patches with their outcome
+reperto 193; one button at most per row, reperto 197; one row for all the packages and no separate Packages card,
+reperto 202), the package update confirmed in the panel's window with the exact plan and its signature and its outcome
+under the row, after which the same row's step is the mail server package by name, the FreeBSD patches with their outcome
 and the restart left (reperto 196), a new FreeBSD release in four steps with only the current one's button,
 the checks that stop a preparation, a dedicated procedure guided (Roundcube: one line on the checks, what to
 know before, the plan, one button, the panel's window, the outcome that stays in the row; and when the checks

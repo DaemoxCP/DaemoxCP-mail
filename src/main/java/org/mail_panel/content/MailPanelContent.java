@@ -12111,28 +12111,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div id="upd-interrupted" aria-live="polite"></div>
 """ + resource("pages/update-center-card.html") + """
 
-            <div class="card mb-4" id="packages">
-                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <span><i class="fas fa-cubes me-2" aria-hidden="true"></i><strong>{{t:pkgs.title}}</strong></span>
-                    <div class="d-flex flex-wrap gap-2">
-                        <button type="button" class="btn btn-sm btn-outline-secondary touch-target" id="pk-all" aria-pressed="false" data-on-click="pkToggleAll()"><i class="fas fa-list me-1" aria-hidden="true"></i><span id="pk-all-label">{{t:pkgs.showAllShort}}</span></button>
-                        <button type="button" class="btn btn-sm btn-outline-primary touch-target" data-on-click="pkOverview()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:common.refresh}}</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-2">{{t:pkgs.intro.html}}</p>
-                    <div id="pk-body" role="status" aria-live="polite"><span class="text-muted">{{t:pkgs.loading}}</span></div>
-                    <div id="pk-result" class="mt-2"></div>
-                </div>
-                <div class="card-footer">
-                    <div class="small text-muted mb-2">{{t:pkgs.bulk.introShort}}</div>
-                    <div class="d-flex flex-wrap gap-1">
-                        <button type="button" class="btn btn-sm btn-outline-success" data-on-click="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>{{t:pkgs.bulk.lockAll}}</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-on-click="updLockAll(false)"><i class="fas fa-lock-open me-1" aria-hidden="true"></i>{{t:pkgs.bulk.unlockAll}}</button>
-                    </div>
-                </div>
-            </div>
-
             <div class="modal fade" id="pkUpdModal" tabindex="-1" aria-labelledby="pkUpdTitle" aria-hidden="true">
                 <div class="modal-dialog modal-lg modal-dialog-scrollable">
                     <div class="modal-content">
@@ -12489,7 +12467,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (s.stackUnlocked > 0) {
                 h += '<div class="alert alert-warning py-2 small d-flex flex-wrap align-items-center gap-2"><span><i class="fas fa-lock-open me-1" aria-hidden="true"></i>'
                    + escHtml(tn('pkgs.stackUnlocked', s.stackUnlocked)) + '</span>'
-                   + '<button type="button" class="btn btn-sm btn-success" data-on-click="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.bulk.lockAll')) + '</button></div>';
+                   + '<button type="button" class="btn btn-sm btn-success touch-target" data-on-click="updLockAll(true)"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.bulk.lockAll')) + '</button></div>';
             }
             h += '<div class="table-responsive"><table class="table table-cards table-sm align-middle mb-2 pk-table"><thead><tr>'
                + '<th scope="col">' + escHtml(t('pkgs.colPackage')) + '</th><th scope="col">' + escHtml(t('pkgs.colInstalled')) + '</th><th scope="col">' + escHtml(t('pkgs.colAvailable')) + '</th>'
@@ -12497,20 +12475,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             shown.forEach((p, i) => {
                 const detailInfo = pkDetails(p);
                 let actionItems = '';
-                // Java del pannello e Roundcube, quando hanno la loro procedura, si fanno dalla loro riga in
-                // «Aggiorna il server», in cima: qui lo si dice, senza un pulsante che porti altrove.
+                // Gli aggiornamenti si fanno dalla riga «Pacchetti» qui sopra, un passo alla volta (reperto 202): qui
+                // nessun pulsante che la ripeta. Si dice solo quando un pacchetto ha una procedura sua (Java del
+                // pannello, Roundcube: la loro riga in «Aggiorna il server») o e' trattenuto, col motivo nei dettagli.
                 const own = p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);
                 if (p.update && own) {
                     actionItems += '<span class="badge bg-info text-dark me-1 mb-1">' + escHtml(t('pkgs.ownProcedure')) + '</span>';
-                } else if (p.update) {
-                    if (p.canUpdate) {
-                        actionItems += '<button type="button" class="btn btn-sm ' + (p.vuln ? 'btn-warning' : 'btn-outline-primary') + ' me-1 mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-on-click="pkUpdOpen(this.dataset.pkg)">'
-                                + '<i class="fas fa-arrow-up me-1" aria-hidden="true"></i>' + escHtml(t('pkgs.update', { v: p.available })) + '</button>';
-                    } else {
-                        actionItems += '<span class="badge bg-secondary me-1 mb-1">' + escHtml(t('pkgs.heldBack')) + '</span>';
-                    }
+                } else if (p.update && !p.canUpdate) {
+                    actionItems += '<span class="badge bg-secondary me-1 mb-1">' + escHtml(t('pkgs.heldBack')) + '</span>';
                 }
-                actionItems += '<button type="button" class="btn btn-sm btn-outline-secondary mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-lock="' + (p.locked ? '0' : '1') + '" data-on-click="pkLock(this.dataset.pkg, this.dataset.lock === \\'1\\')">'
+                actionItems += '<button type="button" class="btn btn-sm btn-outline-secondary touch-target mb-1 text-nowrap" data-pkg="' + escHtml(p.name) + '" data-lock="' + (p.locked ? '0' : '1') + '" data-on-click="pkLock(this.dataset.pkg, this.dataset.lock === \\'1\\')">'
                         + '<i class="fas ' + (p.locked ? 'fa-lock-open' : 'fa-lock') + ' me-1" aria-hidden="true"></i>' + escHtml(p.locked ? t('pkgs.unlock') : t('pkgs.lock')) + '</button>';
                 h += '<tr class="upd-cell' + (p.vuln ? ' table-danger' : '') + '">'
                    + '<td data-label="' + escHtml(t('pkgs.colPackage')) + '"><code>' + escHtml(p.name) + '</code>'
@@ -12521,7 +12495,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         + (p.majorJump ? ' <span class="badge bg-danger">' + escHtml(t('pkgs.majorJump')) + '</span>' : '')
                         : '<span class="text-muted">' + escHtml(t('pkgs.upToDate')) + '</span>') + '</td>'
                    + '<td data-label="' + escHtml(t('pkgs.colSecurity')) + '">' + pkVulnBadge(p.vuln)
-                   + (detailInfo ? ' <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" aria-expanded="false" aria-controls="pk-det-' + i + '" data-on-click="pkDetail(this, ' + i + ')">' + escHtml(t('pkgs.details')) + '</button>' : '') + '</td>'
+                   + (detailInfo ? ' <button type="button" class="btn btn-link btn-sm touch-target p-0 ms-1 align-baseline" aria-expanded="false" aria-controls="pk-det-' + i + '" data-on-click="pkDetail(this, ' + i + ')">' + escHtml(t('pkgs.details')) + '</button>' : '') + '</td>'
                    + '<td data-label="' + escHtml(t('pkgs.colLock')) + '"><span class="badge ' + (p.locked ? 'bg-success' : 'bg-warning text-dark') + '"><i class="fas '
                    + (p.locked ? 'fa-lock' : 'fa-lock-open') + ' me-1" aria-hidden="true"></i>' + escHtml(p.locked ? t('pkgs.locked') : t('pkgs.unlocked')) + '</span></td>'
                    + '<td class="text-end">' + actionItems + '</td></tr>';
@@ -14161,8 +14135,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ---------- protezione pacchetti ----------
-        // La tabella dei pacchetti e' una sola, nella scheda Pacchetti: chi chiedeva di rileggere
-        // le protezioni rilegge quella.
+        // La tabella dei pacchetti e' una sola, nell'elenco sotto la riga «Pacchetti» di «Aggiorna il server»
+        // (reperto 202): chi chiedeva di rileggere le protezioni rilegge quella.
         function updPackages() { pkOverview(); }
 
         async function updLockOne(entryName, doLock) {
@@ -14178,7 +14152,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const el = document.getElementById('pk-result');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(doLock ? t('up.locking') : t('up.unlocking'));
             const r = await updApi('packages_lock', { lock: doLock, package: '' });
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            // Il pulsante sta anche nella riga «Pacchetti», con l'elenco chiuso (reperto 202): l'errore si dice anche
+            // fuori dall'elenco, dove si vede.
+            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; panelSay('danger', r.error || t('common.failed')); return; }
             el.textContent = '';
             updPackages();
         }

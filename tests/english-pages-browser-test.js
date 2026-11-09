@@ -301,6 +301,8 @@ const VISITS = [
         await page.waitForSelector('#branch-body table');
         await page.click('#uc-os button[data-on-click="ucRelease()"]');
         await page.waitForSelector('#os-steps pre');
+        // The package list is under the Packages row, closed (reperto 202): opened, as a person would.
+        await page.click('#pk-list summary');
         for (const [fn, sel] of [['pkOverview', '#pk-body table']]) {
             await page.evaluate(f => window[f](), fn);
             await page.waitForSelector(sel);

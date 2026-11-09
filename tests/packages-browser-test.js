@@ -1,10 +1,13 @@
-// The "Packages" card of the Updates page in Chromium, on the English page, with the simulated
-// server: the real reads (pkg version, pkg query, pkg audit) are tested by PackagePlanTest. Here it
-// is checked that the card reads itself, that every row says version, vulnerability and lock as
-// text, that the Update button opens the window with the exact plan and asks for the package name
-// before starting, that it follows the job to its outcome, that Lock/Unlock send the right name,
-// that the panel's JDK points to its procedure and that a vulnerability's header gives the same
-// verdict as the detail (it was "the update fixes it" above an "the update is not enough").
+// The packages of the Updates page in Chromium, on the English page, with the simulated server: the real reads (pkg
+// version, pkg query, pkg audit) are tested by PackagePlanTest. Since reperto 202 the packages are ONE row of "Update
+// the server" (no separate card, no separate row for the mail server ones): it says how many go in one plan and how many
+// of the mail server one at a time, and has one button, the step after: first protect the mail server packages that are
+// not locked, then the plan of the others, then the mail server ones one at a time. Under it, closed, the list one by
+// one: every row says version, vulnerability and lock as text, with Lock/Unlock and no update button (the row has it).
+// Checked: the order of the steps; a plan that cannot run hands the step to the mail server packages; the window of a
+// package shows the exact plan and asks for its name before starting, and follows the job to its outcome; Lock sends
+// the right name; the panel's JDK points to its procedure; a vulnerability's header gives the same verdict as the
+// detail (it was "the update fixes it" above an "the update is not enough").
 //
 // Usage (from the project root, after mvn package):
 //   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java \
@@ -27,6 +30,8 @@ function real(whatItem, ok) {
 
 const requests = [];
 let rounds = 0, readings = 0;
+// Locking clamav (or all) protects the only mail server package without protection.
+let clamavLocked = false;
 
 const VULN_NGINX = { verdict: 'fixed-by-upgrade', installedVersion: '1.30.4,3', catalog: '1.30.5_1,3', firstFixed: '1.30.5,3',
     explanation: 'Yes: upgrading to 1.30.5_1,3, which your catalog offers, fixes the problem.',
@@ -38,7 +43,7 @@ const VULN_EXPAT = { verdict: 'upgrade-not-enough', installedVersion: '2.8.1', c
 
 function overview() {
     return { success: true,
-        summary: { updates: 7, stackUpdates: 4, vulnerable: 2, fixable: 1, locked: 3, stackUnlocked: 1, panelRestart: false },
+        summary: { updates: 7, stackUpdates: 4, vulnerable: 2, fixable: 1, locked: clamavLocked ? 4 : 3, stackUnlocked: clamavLocked ? 0 : 1, panelRestart: false },
         packages: [
             { name: 'nginx', installed: '1.30.4,3', available: '1.30.5_1,3', update: true, locked: true, stack: true, role: 'Webmail web server',
               majorJump: false, canUpdate: true, whyNot: '', vuln: VULN_NGINX },
@@ -48,7 +53,7 @@ function overview() {
             { name: 'openjdk25', installed: '25.0.3+9.f.1', available: '25.0.4+7.f.1_1', update: true, locked: true, stack: true, role: 'Java runtime',
               inUse: 'the panel runs on this', panelRuntime: true, javaFlow: true, canUpdate: false,
               whyNot: 'The panel runs on this Java: it is updated with its own procedure.' },
-            { name: 'clamav', installed: '1.5.4_1,1', available: '', update: false, locked: false, stack: true, role: 'Antivirus', canUpdate: false, whyNot: '' },
+            { name: 'clamav', installed: '1.5.4_1,1', available: '', update: false, locked: clamavLocked, stack: true, role: 'Antivirus', canUpdate: false, whyNot: '' },
             { name: 'expat', installed: '2.8.1', available: '2.8.4', update: true, locked: false, stack: false, role: '', canUpdate: true, whyNot: '', vuln: VULN_EXPAT },
         ],
         others: [{ name: 'curl', installed: '8.20.0', available: '8.22.0' }, { name: 'pcre2', installed: '10.47_1', available: '10.49' }] };
@@ -77,7 +82,9 @@ async function served(route) {
     if (p !== '/api/updates' || !bodyText) return json(route, { success: true });
     switch (bodyText.action) {
         case 'packages_overview': readings++; return json(route, overview());
-        case 'packages_lock': return json(route, { success: true, changed: 1, output: '  ' + bodyText.package + ': ' + (bodyText.lock ? 'locked' : 'unlocked') + '\n' });
+        case 'packages_lock':
+            if (bodyText.lock && (bodyText.package === 'clamav' || bodyText.package === '')) clamavLocked = true;
+            return json(route, { success: true, changed: 1, output: '  ' + bodyText.package + ': ' + (bodyText.lock ? 'locked' : 'unlocked') + '\n' });
         case 'package_preflight': return json(route, { success: true, name: bodyText.package, current: '1.30.4,3', available: '1.30.5_1,3',
             signature: '0123456789abcdef', blocked: false, canProceed: true, cve: ['CVE-2026-90439'],
             services: [{ name: 'nginx', running: true }],
@@ -93,7 +100,11 @@ async function served(route) {
             if (rounds < 2) return json(route, { success: true, job: { status: 'running', percent: 50, consoleLog: '[3/6] Upgrading...\n' } });
             return json(route, { success: true, job: { status: 'completed', percent: 100, elapsedSeconds: 12, errorMessage: '',
                 consoleLog: '[3/6] Upgrading...\n[6/6] Locking again...\n=== nginx 1.30.5_1,3 in service ===\n' } });
-        case 'updates_status': return json(route, { success: true, dryRun: 'Your packages are up to date.', upToDate: false,
+        // The plan of the other packages would remove lmdb: it does not run from here (reperto 36), and the step after
+        // passes to the mail server packages.
+        case 'updates_status': return json(route, { success: true, dryRun: 'Your packages are up to date.', upToDate: false, signature: 'fedcba9876543210',
+            plan: { measured: true, command: 'pkg upgrade -n', changes: [{ type: 'remove', name: 'lmdb', from: '1.0.2,1', to: '' },
+                { type: 'upgrade', name: 'expat', from: '2.8.1', to: '2.8.4' }], blockers: [] },
             vulnerable: [
                 { name: 'expat', role: '', locked: false, fixedByUpgrade: true, updateAvailable: true, cve: ['CVE-2026-93990'], fix: VULN_EXPAT },
                 { name: 'nginx', role: 'Webmail web server', locked: true, fixedByUpgrade: false, updateAvailable: true, cve: ['CVE-2026-90439'], fix: VULN_NGINX },
@@ -112,10 +123,28 @@ async function served(route) {
     csp.watch(page, errorList);
     page.on('console', m => { if (m.type() === 'error') errorList.push(m.text()); });
 
-    console.log('\n== The card reads itself ==');
+    console.log('\n== The Packages row: one, with the step after ==');
     await page.goto(BASE + '/updates');
-    await page.waitForSelector('#pk-body table');
+    await page.waitForSelector('#uc-packages .uc-head button');
     real('one read when the page opens', readings === 1);
+    real('no separate Packages card, no separate row for the mail server packages', await page.$('#packages') === null && await page.$('#uc-stack') === null);
+    let row = await page.innerText('#uc-packages .uc-head');
+    console.log('    ' + row.replace(/\s+/g, ' '));
+    real('how many in one plan, how many of the mail server one at a time', row.includes('4 packages to update, all together in one plan')
+        && row.includes('2 mail server packages have an update: they are protected, and they are updated one at a time'));
+    real('  the fix available and the vulnerability the update does not fix yet', row.includes('1 security fix available')
+        && row.includes('1 package has a known vulnerability that the update does not fix yet'));
+    real('  the mail server ones by name, the held one with its reason, not the JDK (its own procedure)',
+        row.includes('nginx: 1.30.4,3 → 1.30.5_1,3') && row.includes('dovecot-mysql: 2.3.21.1_3 → 2.4.2 (Dovecot 2.4 rewrites') && !row.includes('openjdk25'));
+    real('a mail server package without protection: said, and protecting them is the step, before the plan',
+        row.includes('1 mail stack package is not locked')
+        && await page.$$eval('#uc-packages .uc-head button', b => b.length === 1 && b[0].getAttribute('data-on-click') === 'updLockAll(true)'));
+    if (photos) await page.locator('#uc-packages').screenshot({ path: path.join(photos, 'packages-row.png') });
+
+    console.log('\n== The list under it, closed ==');
+    real('the list is under the row and closed', await page.$eval('#uc-packages #pk-list', d => !d.open));
+    await page.click('#pk-list summary');
+    await page.waitForSelector('#pk-body table');
     const head = await page.textContent('#pk-body');
     real('summary: updates, vulnerable, fixable, locked', head.includes('7 updates available') && head.includes('2 vulnerable packages')
         && head.includes('1 can be fixed now') && head.includes('3 locked'));
@@ -126,12 +155,10 @@ async function served(route) {
     const nginx = await page.textContent('#pk-body tbody tr:nth-child(1)');
     real('nginx: versions, "the update fixes it", locked', nginx.includes('1.30.4,3') && nginx.includes('1.30.5_1,3')
         && nginx.includes('vulnerable · the update fixes it') && nginx.includes('locked'));
-    real('locked nginx still has the Update button (unlock, update, lock again) and Unlock',
-        await page.locator('#pk-body button[data-pkg="nginx"]', { hasText: 'Update to 1.30.5_1,3' }).count() === 1
+    real('no update button in the list: the row above has the step (reperto 202), here only Unlock',
+        await page.locator('#pk-body button', { hasText: 'Update' }).count() === 0
         && await page.locator('#pk-body button[data-pkg="nginx"]', { hasText: 'Unlock' }).count() === 1);
-    real('dovecot with the "wait" advisory: no Update, only "held back"',
-        await page.locator('#pk-body button[data-pkg="dovecot-mysql"]', { hasText: 'Update' }).count() === 0
-        && (await page.textContent('#pk-body tbody tr:nth-of-type(3)')).includes('held back'));
+    real('dovecot with the "wait" advisory: "held back"', (await page.textContent('#pk-body tbody tr:nth-of-type(3)')).includes('held back'));
     // Its own procedure is a row of "Update the server", above: here it is said, without a button that jumps there (reperto 193).
     real('the panel\'s JDK says it has its own procedure, without a button', await page.locator('#pk-body .badge', { hasText: 'own procedure' }).count() === 1
         && await page.locator('#pk-body button', { hasText: 'Java update procedure' }).count() === 0);
@@ -145,19 +172,37 @@ async function served(route) {
         && await page.getAttribute('#pk-det-0 a', 'href') === 'https://vuxml.FreeBSD.org/freebsd/7dc8fd4b.html');
     real('the description with HTML in it stays text', await page.locator('#pk-body img').count() === 0 && await page.evaluate(() => window.injectedRan) === undefined);
     real('every cell has its label for the phone', await page.locator('#pk-body tbody tr:not([id]) td:not([data-label]):not(.text-end)').count() === 0);
-    if (photos) await page.locator('#packages').screenshot({ path: path.join(photos, 'packages-card.png') });
+    if (photos) await page.locator('#uc-packages').screenshot({ path: path.join(photos, 'packages-list.png') });
 
-    console.log('\n== Lock and unlock a package ==');
+    console.log('\n== Lock a package: the step after moves to the plan ==');
     let beforeValue = requests.length;
     await page.click('#pk-body button[data-pkg="clamav"]:has-text("Lock")');
     await page.waitForFunction(() => document.getElementById('pk-result').textContent.includes('clamav'));
     const lock = requests.slice(beforeValue).find(r => r.body && r.body.action === 'packages_lock');
     real('Lock clamav: sends name, lock=true and CSRF token', lock && lock.body.package === 'clamav' && lock.body.lock === true && lock.body.csrf_token === 'csrf-test');
-    await page.waitForSelector('#pk-body table');
-    real('and the table reads itself again', readings >= 2);
+    await page.waitForFunction(() => /Update the packages/.test(document.querySelector('#uc-packages .uc-head').innerText), null, { timeout: 10000 }).catch(() => {});
+    real('the list read itself again', readings >= 2);
+    row = await page.innerText('#uc-packages .uc-head');
+    real('every mail server package protected: the step is the plan of the others, one button',
+        !row.includes('is not locked') && await page.$$eval('#uc-packages .uc-head button', b => b.length === 1 && b[0].getAttribute('data-on-click') === 'ucPackages()'));
 
-    console.log('\n== Updating a package: the window ==');
-    await page.click('#pk-body button[data-pkg="nginx"]:has-text("Update")');
+    console.log('\n== A plan that cannot run: the step passes to the mail server packages ==');
+    await page.click('#uc-packages .uc-head button[data-on-click="ucPackages()"]');
+    await page.waitForSelector('#upd-status li');
+    real('the plan would remove a package: it does not start, and it says why', (await page.innerText('#pk-run')).includes('would remove or downgrade')
+        && !requests.some(r => r.body && r.body.action === 'updates_apply'));
+    await page.waitForSelector('#uc-packages .uc-head button[data-pkg="nginx"]', { timeout: 5000 }).catch(() => {});
+    row = await page.innerText('#uc-packages .uc-head');
+    real('  the step after is the next mail server package, by name: nginx (1 of 1)', row.includes('Update nginx (1 of 1)')
+        && await page.$$eval('#uc-packages .uc-head button', b => b.length === 1));
+
+    console.log('\n== Vulnerabilities: the header says the verdict ==');
+    const lis = await page.$$eval('#upd-status li', l => l.map(x => x.textContent));
+    real('expat: "not enough" in the header, not "fixes it"', lis[0].includes('the update is not enough') && !lis[0].includes('the update fixes it'));
+    real('locked nginx: "fixes it", the lock apart', lis[1].includes('the update fixes it') && lis[1].includes('locked'));
+
+    console.log('\n== Updating a mail server package: the window ==');
+    await page.click('#uc-packages .uc-head button[data-pkg="nginx"]');
     await page.waitForSelector('#pkUpdConfirm:not([hidden])');
     const finalText = await page.textContent('#pkUpdModal .modal-content');
     real('title, versions and CVEs closed', finalText.includes('Update nginx') && finalText.includes('1.30.4,3') && finalText.includes('CVE-2026-90439'));
@@ -180,15 +225,6 @@ async function served(route) {
     if (photos) await page.locator('#pkUpdModal .modal-content').screenshot({ path: path.join(photos, 'packages-window.png') });
     await page.click('#pkUpdModal .btn-close');
     await page.waitForSelector('#pkUpdModal', { state: 'hidden' });
-
-    console.log('\n== Vulnerabilities: the header says the verdict ==');
-    // The plan of the packages opens under the row of "Update the server" that asks for it (reperto 193).
-    await page.evaluate(() => { ucOpen('packages', 'uc-updates-panel'); updStatus(); });
-    await page.waitForSelector('#upd-status li');
-    const lis = await page.$$eval('#upd-status li', l => l.map(x => x.textContent));
-    real('expat: "not enough" in the header, not "fixes it"', lis[0].includes('the update is not enough') && !lis[0].includes('the update fixes it'));
-    real('locked nginx: "fixes it", the lock apart and the Update button', lis[1].includes('the update fixes it') && lis[1].includes('locked')
-        && await page.locator('#upd-status li button[data-pkg="nginx"]', { hasText: 'Update to 1.30.5_1,3' }).count() === 1);
 
     real('no error in the page' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
     await browser.close();

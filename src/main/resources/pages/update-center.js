@@ -4,7 +4,7 @@
         // pulsanti), che si ridisegna quando arrivano i dati, e il suo pannello sotto, che resta dov'e': il pulsante lo
         // apre sul posto, senza mandare a un'altra scheda. Le righe di Java, Roundcube, MySQL e Python compaiono solo
         // quando il server dice che servono (packages_overview, «procedures»). I lavori sono quelli di sempre.
-        const uc = { os: null, pk: null, branch: null, reboot: null, targets: null, jump: null };
+        const uc = { os: null, pk: null, branch: null, reboot: null, targets: null, jump: null, plainBlocked: false };
 
         function ucEl(tag, cls, text) {
             const e = document.createElement(tag);
@@ -97,6 +97,8 @@
             if (!state || !document.getElementById('ucList')) return;
             state.textContent = t('uc.reading');
             if (all) {
+                // Rileggendo, il piano dei pacchetti si rifa': se prima non si poteva eseguire, adesso si vedra'.
+                uc.plainBlocked = false;
                 pkOverview();
                 branchStatus();
                 if (typeof panelRebootRefresh === 'function') panelRebootRefresh();
@@ -156,39 +158,51 @@
             // Le procedure dedicate hanno la loro riga: qui sotto non si contano due volte.
             const own = p => p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);
 
-            // 2. I pacchetti che non sono del server di posta: un piano, un pulsante
+            // 2. I pacchetti, in una riga sola (reperto 202). Due modi di aggiornarli, perche' due rischi diversi:
+            //    quelli fuori dal server di posta tutti insieme in un piano; quelli del server di posta, protetti, uno
+            //    alla volta, ognuno col suo controllo e il riavvio dei servizi che lo usano (reperti 42, 197). La frase
+            //    dice quanti per tipo; il pulsante e' UNO, il passo dopo: prima il piano, poi il prossimo della posta. Se
+            //    il piano non si puo' eseguire (toglierebbe pacchetti), il passo dopo passa a quelli della posta.
             const sum = pk.summary || {};
             const stack = rows.filter(p => p.update && p.locked && !own(p));
             const plain = (sum.updates || 0) - rows.filter(p => p.update && p.locked).length;
+            const ready = stack.filter(p => p.canUpdate);
             if (!uc.pk) reading('packages', t('uc.packages'));
             else if (!pk.success) ucHead('packages', 'error', t('uc.packages'), pk.error || t('common.errorShort'));
-            else if (plain > 0) {
-                ucHead('packages', 'todo', t('uc.packages'), tn('uc.packagesTodo', plain)
-                    + (sum.fixable ? ' ' + tn('uc.packagesFix', sum.fixable) : ''),
-                    ucOpened('packages') ? [] : [ucButton('btn-primary', 'fa-arrow-up', t('uc.packagesGo'), 'ucPackages()')]);
-            } else ucHead('packages', 'ok', t('uc.packages'), t('uc.packagesOk'));
-
-            // 3. Quelli del server di posta: protetti, uno alla volta col suo controllo, o tutti insieme in un piano
-            if (!uc.pk) reading('stack', t('uc.stack'));
-            else if (!pk.success) ucHide('stack');
-            else if (!stack.length) ucHead('stack', 'ok', t('uc.stack'), t('uc.stackOk'));
+            else if (pk.catalogError) ucHead('packages', 'error', t('uc.packages'), t('pkgs.catalogError', { error: pk.catalogError }));
             else {
-                // Uno alla volta, ognuno col suo controllo e il suo piano (la finestra del pacchetto): UN pulsante, il
-                // prossimo da fare, col numero di quanti restano (reperto 197). Quelli trattenuti dicono perche'.
-                const items = ucEl('ul', 'list-unstyled small mb-0 mt-1');
-                stack.forEach(p => items.append(ucEl('li', '', p.name + ': ' + p.installed + ' → ' + p.available
-                    + (p.canUpdate ? '' : ' (' + (p.whyNot || t('pkgs.heldBack')) + ')'))));
-                const ready = stack.filter(p => p.canUpdate);
+                const words = [];
+                if (plain > 0) words.push(tn('uc.pkPlain', plain));
+                if (stack.length) words.push(tn('uc.pkStack', stack.length) + (ready.length ? '' : ' ' + t('uc.stackHeld')));
+                if (sum.fixable) words.push(tn('uc.packagesFix', sum.fixable));
+                const open = (sum.vulnerable || 0) - (sum.fixable || 0);
+                if (open > 0) words.push(tn('uc.pkVulnOpen', open));
+                const extra = ucEl('div');
+                if (stack.length) {
+                    const items = ucEl('ul', 'list-unstyled small mb-0 mt-1');
+                    stack.forEach(p => items.append(ucEl('li', '', p.name + ': ' + p.installed + ' → ' + p.available
+                        + (p.canUpdate ? '' : ' (' + (p.whyNot || t('pkgs.heldBack')) + ')'))));
+                    extra.append(items);
+                }
+                // Un pacchetto della posta senza protezione: il piano degli altri (pkg upgrade) lo cambierebbe senza i suoi
+                // controlli. Proteggerli e' quindi il PRIMO passo, prima del piano: lo si dice qui, dove si guarda.
+                if (sum.stackUnlocked > 0)
+                    extra.append(ucEl('div', 'mt-2 small text-warning-emphasis', tn('pkgs.stackUnlocked', sum.stackUnlocked)));
                 const buttons = [];
-                if (ready.length) {
+                if (sum.stackUnlocked > 0) {
+                    buttons.push(ucButton('btn-primary', 'fa-lock', t('pkgs.bulk.lockAll'), 'updLockAll(true)'));
+                } else if (!ucOpened('packages') && plain > 0 && !uc.plainBlocked) {
+                    buttons.push(ucButton('btn-primary', 'fa-arrow-up', t('uc.packagesGo'), 'ucPackages()'));
+                } else if (ready.length && (plain <= 0 || uc.plainBlocked)) {
                     const b = ucButton('btn-primary', 'fa-arrow-up', t('uc.stackNext', { name: ready[0].name, n: 1, total: ready.length }), 'pkUpdOpen(this.dataset.pkg)');
                     b.dataset.pkg = ready[0].name;
                     buttons.push(b);
                 }
-                ucHead('stack', 'todo', t('uc.stack'), tn('uc.stackTodo', stack.length) + (ready.length ? '' : ' ' + t('uc.stackHeld')), buttons, items);
+                if (words.length || sum.stackUnlocked > 0) ucHead('packages', 'todo', t('uc.packages'), words.join(' '), buttons, extra);
+                else ucHead('packages', 'ok', t('uc.packages'), t('uc.pkOk'), buttons, extra);
             }
 
-            // 4. Le procedure dedicate, solo quando servono
+            // 3. Le procedure dedicate, solo quando servono
             const doneRow = (key, title) => gdDone[key] ? ucHead(key, 'ok', title, gdDone[key]) : ucHide(key);
             const jvm = rows.find(p => p.javaFlow);
             if (proc.java && jvm) {
@@ -213,14 +227,14 @@
                     [ucButton('btn-outline-primary', 'fa-broom', t('up.leftovers'), 'ucPythonLeftovers()')]);
             } else ucHide('python');
 
-            // 5. Il ramo: la scelta si apre qui sotto
+            // 4. Il ramo: la scelta si apre qui sotto
             if (!uc.branch) reading('branch', t('uc.branch'));
             else if (br.success) {
                 ucHead('branch', 'info', t('uc.branch'), t('uc.branchNow', { branch: br.branch || '?' }),
                     [ucButton('btn-outline-secondary', 'fa-code-branch', t('uc.branchGo'), 'ucBranch()')]);
             } else ucHead('branch', 'error', t('uc.branch'), br.error || t('up.branchUnreadable'));
 
-            // 6. Il riavvio: la finestra del pannello, la stessa di ogni pagina
+            // 5. Il riavvio: la finestra del pannello, la stessa di ogni pagina
             if (!uc.reboot) reading('reboot', t('uc.reboot'));
             else if (rb.success && rb.state === 'needed' && os.restartNeeded) ucHide('reboot');
             else if (rb.success) {
@@ -286,10 +300,14 @@
             const r = await updApi('updates_status');
             if (!r.success) { say('alert-danger', r.error || t('common.errorShort')); return; }
             const plan = r.plan || {};
-            if (!plan.measured) { say('alert-warning', t('up.planUnavailable') + ' ' + (plan.error || '')); return; }
+            // Un piano che non si esegue (non misurato, vuoto, o che toglierebbe pacchetti): il passo dopo della riga
+            // passa ai pacchetti del server di posta, che hanno ognuno il suo piano (reperto 202).
+            const blocked = () => { uc.plainBlocked = true; ucRender(); };
+            if (!plan.measured) { blocked(); say('alert-warning', t('up.planUnavailable') + ' ' + (plan.error || '')); return; }
             const changes = plan.changes || [];
-            if (!changes.length) { say('alert-success', t('up.planNoChange')); return; }
+            if (!changes.length) { blocked(); say('alert-success', t('up.planNoChange')); return; }
             if (changes.some(c => c.type === 'remove' || c.type === 'downgrade')) {
+                blocked();
                 say('alert-warning', t('uc.planRemoves'));
                 ucOpen('packages', 'uc-updates-panel');
                 updStatus();
