@@ -83,7 +83,7 @@
             if (!sel) return;
             const modeValue = sel.value;
             const el = document.getElementById('stsOutcome');
-            if (modeValue === 'enforce' && !adConfirm(t('sts.confirmEnforce'), 'ENFORCE')) return;
+            if (modeValue === 'enforce' && !await adConfirm(t('sts.confirmEnforce'), 'ENFORCE')) return;
             const r = await stsApi('mtasts_mode', { mode: modeValue });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'
                          + stsEsc(r.note || r.error) + '</div>';
@@ -92,7 +92,7 @@
 
         async function stsPublish() {
             const el = document.getElementById('stsOutcome');
-            if (!adConfirm(t('sts.confirmPublish'), t('ad.wordCreate'))) return;
+            if (!await adConfirm(t('sts.confirmPublish'), t('ad.wordCreate'))) return;
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sts.publishing'));
             const r = await stsApi('mtasts_txt', { confirm: 'CREATE' });
             el.innerHTML = '<div class="alert alert-' + (r.success ? 'success' : 'danger') + ' py-2 small mb-0">'

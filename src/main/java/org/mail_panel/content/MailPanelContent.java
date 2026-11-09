@@ -332,6 +332,9 @@ public class MailPanelContent {
         @media (pointer: coarse) {
             .touch-target { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
         }
+        /* Gli avvisi del pannello al posto di panelSay('info', ) (reperto 198): in alto, sopra la pagina, chiudibili. */
+        .panel-notices { position: fixed; top: 4.5rem; left: 1rem; right: 1rem; z-index: 2000; max-width: 34rem; margin-left: auto; }
+        .panel-notices .alert p:last-of-type { margin-bottom: 0; }
         """;
     }
 
@@ -1122,9 +1125,9 @@ public class MailPanelContent {
             'roundcube:stop': t('home.confirm.roundcube.stop')
         };
 
-        function serviceAction(service, action) {
+        async function serviceAction(service, action) {
             const question = serviceQuestions[service + ':' + action];
-            if (question && !confirm(question)) return;
+            if (question && !await panelConfirm(question)) return;
             fetch('/api/service', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1133,11 +1136,11 @@ public class MailPanelContent {
             .then(r => r.json())
             .then(data => {
                 if (data.csrf_token) csrfToken = data.csrf_token;
-                alert(data.success ? t('common.done') : t('common.error', { message: data.error || data.message || t('common.unknown') }));
+                panelSay('danger', data.success ? t('common.done') : t('common.error', { message: data.error || data.message || t('common.unknown') }));
                 checkStatus();
                 loadVersions(true);
             })
-            .catch(() => alert(t('home.noAnswer')));
+            .catch(() => panelSay('warning', t('home.noAnswer')));
         }
 
         function checkStatus() {
@@ -1625,13 +1628,13 @@ public class MailPanelContent {
                     bootstrap.Modal.getInstance(document.getElementById('addDomainModal')).hide();
                     loadDomains();
                 } else {
-                    alert(t('common.error', { message: data.error || t('common.unknown') }));
+                    panelSay('danger', t('common.error', { message: data.error || t('common.unknown') }));
                 }
             });
         }
 
-        function deleteDomain(id) {
-            if (!confirm(t('dom.confirmDelete'))) return;
+        async function deleteDomain(id) {
+            if (!await panelConfirmDanger(t('dom.confirmDelete'))) return;
             fetch('/api/domains?id=' + id, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrf_token: csrfToken }) })
                 .then(() => loadDomains());
         }
@@ -1682,7 +1685,7 @@ public class MailPanelContent {
                     bootstrap.Modal.getInstance(document.getElementById('editDescModal')).hide();
                     loadDomains();
                 } else {
-                    alert(t('common.error', { message: data.error || t('common.unknown') }));
+                    panelSay('danger', t('common.error', { message: data.error || t('common.unknown') }));
                 }
             });
         }
@@ -2497,7 +2500,7 @@ public class MailPanelContent {
             const sy = document.getElementById('pwgenIncludeSymbols').checked;
 
             if (!lo && !up && !nu && !sy) {
-                alert(t('pw.pickCategory'));
+                panelSay('warning', t('pw.pickCategory'));
                 return;
             }
 
@@ -2518,7 +2521,7 @@ public class MailPanelContent {
             .then(r => r.json())
             .then(data => {
                 if (!data.success) {
-                    alert(t('common.error', { message: data.error || '' }));
+                    panelSay('danger', t('common.error', { message: data.error || '' }));
                     return;
                 }
                 document.getElementById('pwgenPreview').value = data.password;
@@ -2532,7 +2535,7 @@ public class MailPanelContent {
                 else                              badge.className = 'badge bg-danger';
                 document.getElementById('pwgenUseBtn').disabled = false;
             })
-            .catch(e => alert(t('common.networkError', { message: e.message })));
+            .catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         function pwgenCopy() {
@@ -2647,6 +2650,12 @@ public class MailPanelContent {
                         <div class="d-flex gap-2 mb-2">
                             <button class="btn btn-sm btn-outline-primary" data-on-click="bulkRotateCopyAll()"><i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:bulk.copyAll}}</button>
                             <button class="btn btn-sm btn-outline-secondary" data-on-click="bulkRotateShowHide()" id="bulkRotateToggleVis"><i class="fas fa-eye me-1" aria-hidden="true"></i>{{t:bulk.showHide}}</button>
+                        </div>
+                        <!-- Se il browser non copia: il CSV qui, gia' selezionato, da copiare a mano (reperto 198; prima
+                             era il prompt del browser, con le password dentro). -->
+                        <div class="mb-2" id="bulkRotateCsvBox" hidden>
+                            <label class="form-label small" for="bulkRotateCsv">{{t:bulk.copyCsvPrompt}}</label>
+                            <textarea class="form-control form-control-sm font-monospace" id="bulkRotateCsv" rows="4" readonly></textarea>
                         </div>
                         <div class="table-responsive" data-style="max-height:60vh">
                             <table class="table table-sm align-middle mb-0">
@@ -2771,7 +2780,7 @@ public class MailPanelContent {
         function bulkRotatePreviewSample() {
             const opts = bulkRotateGetGeneratorOpts();
             if (!opts.include_lowercase && !opts.include_uppercase && !opts.include_numbers && !opts.include_symbols) {
-                alert(t('bulk.pickCategory'));
+                panelSay('warning', t('bulk.pickCategory'));
                 return;
             }
             const box = document.getElementById('bulkRotatePreviewBox');
@@ -2801,15 +2810,15 @@ public class MailPanelContent {
             .catch(e => { box.innerHTML = '<span class="text-danger">' + escapeHtmlBl(t('common.networkError', { message: e.message })) + '</span>'; });
         }
 
-        function bulkRotateRun() {
+        async function bulkRotateRun() {
             const ids = Array.from(document.querySelectorAll('.bulk-rotate-chk:checked')).map(c => parseInt(c.value));
-            if (ids.length === 0) { alert(t('bulk.pickMailbox')); return; }
+            if (ids.length === 0) { panelSay('warning', t('bulk.pickMailbox')); return; }
             const opts = bulkRotateGetGeneratorOpts();
             if (!opts.include_lowercase && !opts.include_uppercase && !opts.include_numbers && !opts.include_symbols) {
-                alert(t('bulk.pickCategory'));
+                panelSay('warning', t('bulk.pickCategory'));
                 return;
             }
-            if (!confirm(t('bulk.confirm', { n: ids.length, type: opts.type, length: opts.length }))) return;
+            if (!await panelConfirm(t('bulk.confirm', { n: ids.length, type: opts.type, length: opts.length }))) return;
 
             const btn = document.getElementById('bulkRotateRunBtn');
             const origBtn = btn.innerHTML;
@@ -2830,7 +2839,7 @@ public class MailPanelContent {
                 btn.disabled = false;
                 btn.innerHTML = origBtn;
                 if (!data.success) {
-                    alert(t('common.error', { message: data.error || t('common.unknown') }));
+                    panelSay('danger', t('common.error', { message: data.error || t('common.unknown') }));
                     return;
                 }
                 bulkRotateResults = data.results || [];
@@ -2850,7 +2859,7 @@ public class MailPanelContent {
             .catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = origBtn;
-                alert(t('common.networkError', { message: e.message }));
+                panelSay('danger', t('common.networkError', { message: e.message }));
             });
         }
 
@@ -2901,10 +2910,14 @@ public class MailPanelContent {
             });
             const csv = lines.join('\\n');
             navigator.clipboard.writeText(csv).then(() => {
-                alert(tn('bulk.copiedCsv', lines.length - 1));
+                panelSay('success', tn('bulk.copiedCsv', lines.length - 1));
             }).catch(() => {
-                // Fallback: prompt
-                window.prompt(t('bulk.copyCsvPrompt'), csv);
+                // Il browser non ha copiato: il testo nella casella sotto, gia' selezionato, da copiare a mano.
+                const box = document.getElementById('bulkRotateCsvBox'), area = document.getElementById('bulkRotateCsv');
+                area.value = csv;
+                box.hidden = false;
+                area.focus();
+                area.select();
             });
         }
 
@@ -3361,15 +3374,15 @@ public class MailPanelContent {
                     document.getElementById('mbQuota').value = '1024';
                     document.getElementById('mbReceive').checked = true;
                 } else {
-                    alert(t('common.error', { message: data.error || t('common.unknown') }));
+                    panelSay('danger', t('common.error', { message: data.error || t('common.unknown') }));
                 }
             });
         }
 
-        function deleteMailbox(id) {
+        async function deleteMailbox(id) {
             const m = currentMailboxes.find(x => x.id === id);
             // La posta non e' nel database: eliminare la casella la lascia sul disco del server (prima diceva "e tutte le email").
-            if (!confirm(t('mbx.confirmDelete', { email: m ? m.email : '' }))) return;
+            if (!await panelConfirmDanger(t('mbx.confirmDelete', { email: m ? m.email : '' }))) return;
             fetch('/api/mailboxes?id=' + id, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
@@ -3404,7 +3417,7 @@ public class MailPanelContent {
                     document.getElementById('editMbNoCopyBox').style.display = m.has_encrypted_password ? 'none' : '';
                     new bootstrap.Modal(document.getElementById('editMailboxModal')).show();
                 } else {
-                    alert(t('mbx.loadFailed'));
+                    panelSay('danger', t('mbx.loadFailed'));
                 }
             });
         }
@@ -3416,10 +3429,10 @@ public class MailPanelContent {
         });
 
 """ + getPasswordGeneratorJs() + getMailboxToAliasJs() + """
-        function revealMailboxStoredPassword() {
+        async function revealMailboxStoredPassword() {
             const id = parseInt(document.getElementById('editMbId').value);
             if (!id) return;
-            if (!confirm(t('mbx.confirmReveal'))) return;
+            if (!await panelConfirm(t('mbx.confirmReveal'))) return;
             fetch('/api/mailbox-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -3432,10 +3445,10 @@ public class MailPanelContent {
                     revealedBox.classList.remove('d-none');
                     document.getElementById('editMbRevealedValue').value = data.password || '';
                 } else {
-                    alert(data.error || t('mbx.revealFailed'));
+                    panelSay('danger', data.error || t('mbx.revealFailed'));
                 }
             })
-            .catch(e => alert(t('common.networkError', { message: e.message })));
+            .catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         function copyRevealedPassword() {
@@ -3475,10 +3488,10 @@ public class MailPanelContent {
                     bootstrap.Modal.getInstance(document.getElementById('editMailboxModal')).hide();
                     loadMailboxes();
                     if (result.warning) {
-                        alert(result.warning);
+                        panelSay('warning', result.warning);
                     }
                 } else {
-                    alert(t('common.error', { message: result.error || t('common.unknown') }));
+                    panelSay('danger', t('common.error', { message: result.error || t('common.unknown') }));
                 }
             });
         }
@@ -3580,9 +3593,9 @@ public class MailPanelContent {
             }
         }
 
-        function revealCfgPassword() {
+        async function revealCfgPassword() {
             if (!__cfgCurrentMailboxId) {
-                alert(t('mbx.unknownBox'));
+                panelSay('warning', t('mbx.unknownBox'));
                 return;
             }
             const btn = document.getElementById('cfgPasswordRevealBtn');
@@ -3590,7 +3603,7 @@ public class MailPanelContent {
             const pwToggle = document.getElementById('cfgPasswordToggleBtn');
             const pwCopy = document.getElementById('cfgPasswordCopyBtn');
             const pwHint = document.getElementById('cfgPasswordHint');
-            if (!confirm(t('mbx.confirmRevealOf', { email: __cfgCurrentEmail }))) return;
+            if (!await panelConfirm(t('mbx.confirmRevealOf', { email: __cfgCurrentEmail }))) return;
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
             fetch('/api/mailbox-password', {
@@ -3633,7 +3646,7 @@ public class MailPanelContent {
                 if (data.success && data.redirect_url) {
                     window.open(data.redirect_url, '_blank');
                 } else {
-                    alert(t('mbx.ssoError', { message: data.error || t('mbx.ssoFailed') }));
+                    panelSay('danger', t('mbx.ssoError', { message: data.error || t('mbx.ssoFailed') }));
                 }
             });
         }
@@ -3677,13 +3690,13 @@ public class MailPanelContent {
                     bootstrap.Modal.getInstance(document.getElementById('autoResponderModal')).hide();
                     loadMailboxes();
                 } else {
-                    alert(data.error || t('common.errorShort'));
+                    panelSay('danger', data.error || t('common.errorShort'));
                 }
             });
         }
 
-        function resetVacationTracking() {
-            if (!confirm(t('mbx.confirmReset'))) {
+        async function resetVacationTracking() {
+            if (!await panelConfirmDanger(t('mbx.confirmReset'))) {
                 return;
             }
             fetch('/api/autoresponder', {
@@ -3695,9 +3708,9 @@ public class MailPanelContent {
                 })
             }).then(r => r.json()).then(data => {
                 if (data.success) {
-                    alert(t('mbx.resetDone'));
+                    panelSay('success', t('mbx.resetDone'));
                 } else {
-                    alert(data.error || t('common.errorShort'));
+                    panelSay('danger', data.error || t('common.errorShort'));
                 }
             });
         }
@@ -3741,7 +3754,7 @@ public class MailPanelContent {
 
         function addForwarding() {
             const dest = document.getElementById('fwDestination').value.trim();
-            if (!dest) { alert(t('mbx.enterEmail')); return; }
+            if (!dest) { panelSay('warning', t('mbx.enterEmail')); return; }
 
             fetch('/api/forwarding', {
                 method: 'POST',
@@ -3758,13 +3771,13 @@ public class MailPanelContent {
                     loadForwardingRules(document.getElementById('fwMailboxId').value);
                     loadMailboxes();
                 } else {
-                    alert(data.error || t('common.errorShort'));
+                    panelSay('danger', data.error || t('common.errorShort'));
                 }
             });
         }
 
-        function deleteForwarding(id) {
-            if (!confirm(t('mbx.confirmFwDelete'))) return;
+        async function deleteForwarding(id) {
+            if (!await panelConfirmDanger(t('mbx.confirmFwDelete'))) return;
             fetch('/api/forwarding', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -3927,9 +3940,9 @@ public class MailPanelContent {
 
         function saveSieveFilter() {
             const name = document.getElementById('svName').value.trim();
-            if (!name) { alert(t('mbx.svNeedName')); return; }
-            if (sieveConditions.length === 0) { alert(t('mbx.svNeedCond')); return; }
-            if (sieveActions.length === 0) { alert(t('mbx.svNeedAct')); return; }
+            if (!name) { panelSay('warning', t('mbx.svNeedName')); return; }
+            if (sieveConditions.length === 0) { panelSay('warning', t('mbx.svNeedCond')); return; }
+            if (sieveActions.length === 0) { panelSay('warning', t('mbx.svNeedAct')); return; }
 
             const filterId = document.getElementById('svFilterId').value;
             fetch('/api/sieve', {
@@ -3951,7 +3964,7 @@ public class MailPanelContent {
                     document.getElementById('sieveEditor').style.display = 'none';
                     document.getElementById('sieveHelp').style.display = 'block';
                 } else {
-                    alert(data.error || t('common.errorShort'));
+                    panelSay('danger', data.error || t('common.errorShort'));
                 }
             });
         }
@@ -4133,10 +4146,10 @@ public class MailPanelContent {
             }).catch(() => { err.textContent = t('common.noAnswer'); });
         }
 
-        function toggleAlias(id, isOn) {
+        async function toggleAlias(id, isOn) {
             const a = currentAliases.find(x => parseInt(x.id) === id);
             if (!a) return;
-            if (!isOn && !confirm(t('al.confirmDisable', { source: a.source, dest: a.destination }))) return;
+            if (!isOn && !await panelConfirmDanger(t('al.confirmDisable', { source: a.source, dest: a.destination }))) return;
             fetch('/api/aliases', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -4175,8 +4188,8 @@ public class MailPanelContent {
             }).catch(() => { err.textContent = t('common.noAnswer'); });
         }
 
-        function deleteAlias(id) {
-            if (!confirm(t('al.confirmDelete'))) return;
+        async function deleteAlias(id) {
+            if (!await panelConfirmDanger(t('al.confirmDelete'))) return;
             fetch('/api/aliases?id=' + id, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
@@ -4395,18 +4408,18 @@ public class MailPanelContent {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'rotate_start', domain_id: parseInt(currentDomainId), auto: useAuto })
             }).then(r => r.json()).then(data => {
-                if (!data.success) { alert(t('common.error', { message: data.error || t('common.unknownError') })); return; }
+                if (!data.success) { panelSay('danger', t('common.error', { message: data.error || t('common.unknownError') })); return; }
                 if (data.warning) {
-                    alert('⚠ ' + data.warning);
+                    panelSay('warning', '⚠ ' + data.warning);
                 } else if (data.message && useAuto) {
-                    alert('✓ ' + data.message);
+                    panelSay('success', '✓ ' + data.message);
                 }
                 loadDkimRotationStatus(currentDomainId);
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        function rotateDkimStart() {
-            if (!currentDomainId) { alert(t('dns.chooseDomainFirst')); return; }
+        async function rotateDkimStart() {
+            if (!currentDomainId) { panelSay('warning', t('dns.chooseDomainFirst')); return; }
             // Identifica l'account CF collegato (se c'è)
             const domInfo = cfDomainsCf.find(d => d.id === parseInt(currentDomainId));
             const linkedAccount = domInfo && domInfo.cloudflare_account_id
@@ -4418,7 +4431,7 @@ public class MailPanelContent {
 
             // Se NON c'è CF assegnato → solo manuale
             if (!cloudflareConfigured) {
-                if (!confirm(t('dns.confirmManualStart'))) return;
+                if (!await panelConfirm(t('dns.confirmManualStart'))) return;
                 rotateDkimStartExec(false);
                 return;
             }
@@ -4439,11 +4452,11 @@ public class MailPanelContent {
             rotateDkimStartExec(true);
         }
 
-        function rotateDkimStartChooseManual() {
+        async function rotateDkimStartChooseManual() {
             const modalEl = document.getElementById('rotateModeChooserModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
-            if (!confirm(t('dns.confirmManual'))) return;
+            if (!await panelConfirm(t('dns.confirmManual'))) return;
             rotateDkimStartExec(false);
         }
 
@@ -4454,62 +4467,62 @@ public class MailPanelContent {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'rotate_check', domain_id: parseInt(currentDomainId) })
             }).then(r => r.json()).then(data => {
-                if (!data.success) { alert(t('common.error', { message: data.message || t('common.unknownError') })); return; }
+                if (!data.success) { panelSay('danger', t('common.error', { message: data.message || t('common.unknownError') })); return; }
                 if (data.propagated) {
-                    alert('✓ ' + t('dns.propagatedNow'));
+                    panelSay('success', '✓ ' + t('dns.propagatedNow'));
                 } else {
-                    alert('⚠ ' + (data.message || t('dns.notPropagatedYet')));
+                    panelSay('warning', '⚠ ' + (data.message || t('dns.notPropagatedYet')));
                 }
                 loadDkimRotationStatus(currentDomainId);
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        function rotateDkimActivate(force) {
+        async function rotateDkimActivate(force) {
             if (!currentDomainId) return;
             const msg = force
                 ? t('dns.confirmForce')
                 : t('dns.confirmActivate');
-            if (!confirm(msg)) return;
+            if (!await panelConfirm(msg)) return;
             fetch('/api/dkim', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'rotate_activate', domain_id: parseInt(currentDomainId), force: !!force })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || ''));
+                panelSay('success', (data.success ? '✓ ' : '✗ ') + (data.message || ''));
                 if (data.success) {
                     loadDkimStatus(currentDomainId);
                     loadDnsRecords();
                 }
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        function rotateDkimComplete() {
+        async function rotateDkimComplete() {
             if (!currentDomainId) return;
-            if (!confirm(t('dns.confirmComplete'))) return;
+            if (!await panelConfirm(t('dns.confirmComplete'))) return;
             fetch('/api/dkim', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'rotate_complete', domain_id: parseInt(currentDomainId) })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || ''));
+                panelSay('success', (data.success ? '✓ ' : '✗ ') + (data.message || ''));
                 if (data.success) {
                     loadDkimStatus(currentDomainId);
                     loadDnsRecords();
                 }
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        function rotateDkimCancel() {
+        async function rotateDkimCancel() {
             if (!currentDomainId) return;
-            if (!confirm(t('dns.confirmCancel'))) return;
+            if (!await panelConfirm(t('dns.confirmCancel'))) return;
             fetch('/api/dkim', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'rotate_cancel', domain_id: parseInt(currentDomainId) })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || ''));
+                panelSay('success', (data.success ? '✓ ' : '✗ ') + (data.message || ''));
                 loadDkimRotationStatus(currentDomainId);
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         // ===== Blacklist Check =====
@@ -4603,9 +4616,9 @@ public class MailPanelContent {
             return d.innerHTML;
         }
 
-        function generateDkim() {
+        async function generateDkim() {
             if (!currentDomainId) return;
-            if (!confirm(t('dns.confirmGenerate'))) return;
+            if (!await panelConfirm(t('dns.confirmGenerate'))) return;
 
             fetch('/api/dkim', {
                 method: 'POST',
@@ -4613,17 +4626,17 @@ public class MailPanelContent {
                 body: JSON.stringify({ action: 'generate', domain_id: parseInt(currentDomainId), selector: 'mail' })
             }).then(r => r.json()).then(data => {
                 if (data.success) {
-                    alert(t('dns.generated'));
+                    panelSay('success', t('dns.generated'));
                     loadDnsRecords();
                 } else {
-                    alert(t('common.error', { message: data.error }));
+                    panelSay('danger', t('common.error', { message: data.error }));
                 }
             });
         }
 
         function verifyDns() {
             const domain = document.getElementById('domainSelect').value;
-            if (!domain) { alert(t('dns.chooseDomainFirst')); return; }
+            if (!domain) { panelSay('warning', t('dns.chooseDomainFirst')); return; }
 
             fetch('/api/dns', {
                 method: 'POST',
@@ -4671,7 +4684,7 @@ public class MailPanelContent {
             const name = el.querySelector('.record-name').textContent;
             const value = el.querySelector('.record-value').textContent;
             navigator.clipboard.writeText(value).then(() => {
-                alert(t('dns.copiedClipboard'));
+                panelSay('success', t('dns.copiedClipboard'));
             });
         }
 
@@ -4748,7 +4761,7 @@ public class MailPanelContent {
         }
 
         function scanDkimOrphans() {
-            if (!currentDomainId) { alert(t('dns.chooseDomainFirst')); return; }
+            if (!currentDomainId) { panelSay('warning', t('dns.chooseDomainFirst')); return; }
             const btn = document.getElementById('scanDkimOrphansBtn');
             const out = document.getElementById('dkimOrphansResult');
             const originalBtn = btn.innerHTML;
@@ -4832,22 +4845,22 @@ public class MailPanelContent {
             });
         }
 
-        function deleteDkimOrphan(recordId, selector) {
+        async function deleteDkimOrphan(recordId, selector) {
             if (!currentDomainId) return;
-            if (!confirm(t('dns.confirmOrphanDelete', { selector: selector }))) return;
+            if (!await panelConfirmDanger(t('dns.confirmOrphanDelete', { selector: selector }))) return;
             fetch('/api/dkim', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'orphans_delete', domain_id: parseInt(currentDomainId), record_id: recordId })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                panelSay('danger', (data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) {
                     // Re-scansiona per aggiornare la lista
                     scanDkimOrphans();
                     // Aggiorna anche lo storico (è stato loggato un evento orphan_record_deleted)
                     if (typeof loadDkimHistory === 'function') loadDkimHistory(currentDomainId);
                 }
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         // ===== Storico rotazioni DKIM =====
@@ -5063,14 +5076,14 @@ public class MailPanelContent {
             table.innerHTML = html;
         }
 
-        function tzSyncToSystem() {
-            if (!confirm(t('dns.tzConfirmSync'))) return;
+        async function tzSyncToSystem() {
+            if (!await panelConfirm(t('dns.tzConfirmSync'))) return;
             tzPerformAction({ action: 'sync_to_system' });
         }
 
         function tzSetManual() {
             const v = document.getElementById('tzManualValue').value.trim();
-            if (!v) { alert(t('dns.tzNeedValue')); return; }
+            if (!v) { panelSay('warning', t('dns.tzNeedValue')); return; }
             tzPerformAction({ action: 'set', value: v });
         }
 
@@ -5529,7 +5542,7 @@ public class MailPanelContent {
             ).join('');
         }
 
-        function saveJailFilter() {
+        async function saveJailFilter() {
             const jail = document.getElementById('cfgJailSelect').value;
             const status = document.getElementById('cfgJailStatus');
             // Il filtro selezionato e' sia il preset cliccato che il testo custom.
@@ -5544,7 +5557,7 @@ public class MailPanelContent {
                 status.className = 'ms-2 small text-danger';
                 return;
             }
-            if (!confirm(t('jc.confirmFilter', { jail: jail, filter: filter }))) return;
+            if (!await panelConfirm(t('jc.confirmFilter', { jail: jail, filter: filter }))) return;
             status.textContent = t('jc.savingFilter');
             status.className = 'ms-2 small text-muted';
             fetch('/api/fail2ban', {
@@ -5586,10 +5599,10 @@ public class MailPanelContent {
             });
         }
 
-        function removeIgnoreIp(ip) {
+        async function removeIgnoreIp(ip) {
             const jail = document.getElementById('cfgJailSelect').value;
             const status = document.getElementById('cfgJailStatus');
-            if (!confirm(t('jc.confirmRemoveIgnore', { ip: ip, jail: jail }))) return;
+            if (!await panelConfirmDanger(t('jc.confirmRemoveIgnore', { ip: ip, jail: jail }))) return;
             fetch('/api/fail2ban', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -5642,7 +5655,7 @@ public class MailPanelContent {
             });
         }
 
-        function saveJailConfigAllJails() {
+        async function saveJailConfigAllJails() {
             const maxRetry = parseInt(document.getElementById('cfgMaxRetry').value, 10);
             const findTime = parseInt(document.getElementById('cfgFindTime').value, 10);
             const banTime = parseInt(document.getElementById('cfgBanTime').value, 10);
@@ -5652,7 +5665,7 @@ public class MailPanelContent {
                 status.className = 'ms-2 small text-danger';
                 return;
             }
-            if (!confirm(t('jc.confirmAll', { maxretry: maxRetry, findtime: findTime, bantime: banTime }))) return;
+            if (!await panelConfirm(t('jc.confirmAll', { maxretry: maxRetry, findtime: findTime, bantime: banTime }))) return;
             status.textContent = t('jc.applying');
             status.className = 'ms-2 small text-muted';
             fetch('/api/fail2ban', {
@@ -5999,15 +6012,15 @@ public class MailPanelContent {
             document.getElementById('btnRevokeOthers').disabled = !list.some(s => !s.current);
         }
         async function revokeSession(id, current) {
-            if (!confirm(current ? t('acc.confirmRevokeCurrent') : t('acc.confirmRevoke'))) return;
+            if (!await panelConfirmDanger(current ? t('acc.confirmRevokeCurrent') : t('acc.confirmRevoke'))) return;
             const r = await accPost('revoke_session', { id: id });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
+            if (!r.success) { panelSay('danger', r.error || t('common.failed')); return; }
             if (r.current) window.location.href = '/'; else loadAccount();
         }
         async function revokeOthers() {
-            if (!confirm(t('acc.confirmRevokeOthers'))) return;
+            if (!await panelConfirmDanger(t('acc.confirmRevokeOthers'))) return;
             const r = await accPost('revoke_other_sessions');
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
+            if (!r.success) { panelSay('danger', r.error || t('common.failed')); return; }
             loadAccount();
         }
 
@@ -6035,20 +6048,20 @@ public class MailPanelContent {
 
         // ----- passkey -----
         async function addPasskey() {
-            if (!window.PublicKeyCredential || !navigator.credentials) { alert(t('login.passkeyUnsupported')); return; }
+            if (!window.PublicKeyCredential || !navigator.credentials) { panelSay('warning', t('login.passkeyUnsupported')); return; }
             const btn = document.getElementById('addPasskeyBtn');
             btn.disabled = true;
             try {
                 const o = await accPost('passkey_register_options');
-                if (!o.success) { alert(o.error || t('common.failed')); return; }
+                if (!o.success) { panelSay('danger', o.error || t('common.failed')); return; }
                 let cred;
                 try { cred = await navigator.credentials.create(webauthnCreateOptions(o.options)); }
-                catch (err) { alert(err && err.name === 'NotAllowedError' ? t('set.regCancelled') : t('common.error', { message: err.message })); return; }
+                catch (err) { panelSay('danger', err && err.name === 'NotAllowedError' ? t('set.regCancelled') : t('common.error', { message: err.message })); return; }
                 pendingPasskey = { request: o.request, credential: webauthnCredentialJson(cred) };
                 document.getElementById('passkeyName').value = '';
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('passkeyNameModal')).show();
             } catch (e) {
-                alert(t('common.networkError', { message: e.message }));
+                panelSay('danger', t('common.networkError', { message: e.message }));
             } finally {
                 btn.disabled = !acc.passkeysAvailable;
             }
@@ -6056,15 +6069,15 @@ public class MailPanelContent {
         async function confirmPasskeyName() {
             if (!pendingPasskey) return;
             const name = document.getElementById('passkeyName').value.trim() || 'Passkey';
-            if (!ACC_PASSKEY_NAME.test(name)) { alert(t('acc.passkeyNameHint')); return; }
+            if (!ACC_PASSKEY_NAME.test(name)) { panelSay('warning', t('acc.passkeyNameHint')); return; }
             const r = await accPost('passkey_register', Object.assign({ name: name }, pendingPasskey));
             pendingPasskey = null;
             bootstrap.Modal.getOrCreateInstance(document.getElementById('passkeyNameModal')).hide();
             if (r.success) {
-                alert(t('set.passkeyAdded'));
+                panelSay('success', t('set.passkeyAdded'));
                 history.replaceState(null, '', location.pathname);
             } else {
-                alert(r.error || t('common.failed'));
+                panelSay('danger', r.error || t('common.failed'));
             }
             loadAccount();
         }
@@ -6076,27 +6089,27 @@ public class MailPanelContent {
         async function confirmRenamePasskey() {
             const id = Number(document.getElementById('renamePasskeyId').value);
             const name = document.getElementById('renamePasskeyName').value.trim();
-            if (!ACC_PASSKEY_NAME.test(name)) { alert(t('acc.passkeyNameHint')); return; }
+            if (!ACC_PASSKEY_NAME.test(name)) { panelSay('warning', t('acc.passkeyNameHint')); return; }
             const r = await accPost('passkey_rename', { id: id, name: name });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
+            if (!r.success) { panelSay('danger', r.error || t('common.failed')); return; }
             bootstrap.Modal.getOrCreateInstance(document.getElementById('renamePasskeyModal')).hide();
             loadAccount();
         }
         async function deletePasskey(id, name) {
-            if (!confirm(t('set.confirmDeletePasskey', { name: name }))) return;
+            if (!await panelConfirmDanger(t('set.confirmDeletePasskey', { name: name }))) return;
             const r = await accPost('passkey_delete', { id: id });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
+            if (!r.success) { panelSay('danger', r.error || t('common.failed')); return; }
             loadAccount();
         }
 
         // ----- nome utente (con il nome non si entra: serve a riconoscersi nell'elenco) -----
         async function changeUsername() {
             const newUsername = document.getElementById('newUsername').value.trim();
-            if (!/^[A-Za-z0-9_-]{3,50}$/.test(newUsername)) { alert(t('set.usernameInvalid')); return; }
-            if (!confirm(t('set.confirmUsername', { name: newUsername }))) return;
+            if (!/^[A-Za-z0-9_-]{3,50}$/.test(newUsername)) { panelSay('danger', t('set.usernameInvalid')); return; }
+            if (!await panelConfirm(t('set.confirmUsername', { name: newUsername }))) return;
             const r = await accPost('change_username', { username: newUsername });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            alert(t('set.usernameChanged'));
+            if (!r.success) { panelSay('danger', r.error || t('common.failed')); return; }
+            panelSay('success', t('set.usernameChanged'));
             document.getElementById('newUsername').value = '';
         }
 
@@ -6147,7 +6160,7 @@ public class MailPanelContent {
             sshLoad();
         }
         async function sshRemove(fingerprint) {
-            if (!confirm(t('set.sshConfirmRemove', { fingerprint: fingerprint }))) return;
+            if (!await panelConfirmDanger(t('set.sshConfirmRemove', { fingerprint: fingerprint }))) return;
             let d;
             try { d = await withIdentity({ action: 'remove', fingerprint: fingerprint }, '/api/ssh-keys'); }
             catch (e) { sshMsg('danger', t('common.networkError', { message: e.message })); return; }
@@ -6186,7 +6199,7 @@ public class MailPanelContent {
         function vaultCopyBackupKey() {
             const v = document.getElementById('vaultBackupKeyValue').value;
             if (!v) return;
-            navigator.clipboard.writeText(v).then(() => alert(t('set.keyCopied'))).catch(() => {});
+            navigator.clipboard.writeText(v).then(() => panelSay('success', t('set.keyCopied'))).catch(() => {});
         }
         function vaultDownloadBackupKey() {
             const field = document.getElementById('vaultBackupKeyValue');
@@ -6202,7 +6215,7 @@ public class MailPanelContent {
             URL.revokeObjectURL(url);
         }
         async function vaultRotateKey() {
-            if (!confirm(t('set.confirmRotate'))) return;
+            if (!await panelConfirmDanger(t('set.confirmRotate'))) return;
             const out = document.getElementById('vaultRotateResult');
             out.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('set.rotating')) + '</div>';
             let data;
@@ -7239,7 +7252,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         function copyToClipboard(elementId) {
             const text = document.getElementById(elementId).textContent;
             navigator.clipboard.writeText(text).then(() => {
-                alert(t('dns.copiedClipboard'));
+                panelSay('success', t('dns.copiedClipboard'));
             });
         }
 
@@ -7263,7 +7276,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 output.querySelector('pre').textContent = data.output || data.message;
                 if (data.success) {
                     loadSslStatus();
-                    alert(t('ssl.generated'));
+                    panelSay('success', t('ssl.generated'));
                 }
             });
         });
@@ -7272,7 +7285,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         function generateDnsChallenge() {
             const hostname = document.getElementById('dns01Hostname').value;
             if (!hostname) {
-                alert(t('ssl.needHostname'));
+                panelSay('warning', t('ssl.needHostname'));
                 return;
             }
 
@@ -7300,7 +7313,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     document.getElementById('dns01Step1').classList.add('d-none');
                     document.getElementById('dns01CertExists').classList.remove('d-none');
                 } else {
-                    alert(t('common.error', { message: data.message }));
+                    panelSay('danger', t('common.error', { message: data.message }));
                 }
             });
         }
@@ -7317,11 +7330,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 })
             }).then(r => r.json()).then(data => {
                 if (data.success) {
-                    alert(t('ssl.deployed'));
+                    panelSay('success', t('ssl.deployed'));
                     loadSslStatus();
                     resetDnsChallenge();
                 } else {
-                    alert(t('common.error', { message: data.message }));
+                    panelSay('danger', t('common.error', { message: data.message }));
                 }
             });
         }
@@ -7348,14 +7361,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     document.getElementById('dns01Step2').classList.remove('d-none');
                     document.getElementById('dns01Step3').classList.remove('d-none');
                 } else {
-                    alert(t('common.error', { message: data.message }));
+                    panelSay('danger', t('common.error', { message: data.message }));
                 }
             });
         }
 
         function verifyDnsAndGenerate() {
             if (!currentDnsChallenge) {
-                alert(t('ssl.challengeFirst'));
+                panelSay('warning', t('ssl.challengeFirst'));
                 return;
             }
 
@@ -7376,7 +7389,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 output.querySelector('pre').textContent = data.output || data.message;
                 if (data.success) {
                     loadSslStatus();
-                    alert(t('ssl.generated'));
+                    panelSay('success', t('ssl.generated'));
                     resetDnsChallenge();
                 }
             });
@@ -7413,7 +7426,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 output.querySelector('pre').textContent = data.message;
                 if (data.success) {
                     loadSslStatus();
-                    alert(t('ssl.saved'));
+                    panelSay('success', t('ssl.saved'));
                 }
             });
         });
@@ -7466,7 +7479,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     out.innerHTML = '<span class="text-danger"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>'
                         + escSslCf(data.message || data.error || t('common.errorShort')) + '</span>';
                 }
-            }).catch(e => alert(t('common.error', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.error', { message: e.message })));
         }
 
         function testCfMailServer() {
@@ -7491,7 +7504,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     out.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>'
                         + escSslCf(data.error || data.message || t('dns.checkFailed')) + '</div>';
                 }
-            }).catch(e => alert(t('common.error', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.error', { message: e.message })));
         }
 
         // ===== Auto-Renewal =====
@@ -7534,7 +7547,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 })
             }).then(r => r.json()).then(data => {
                 if (data.success) loadAutoRenewSettings();
-                else alert(t('common.error', { message: data.message || data.error || t('common.unknownError') }));
+                else panelSay('danger', t('common.error', { message: data.message || data.error || t('common.unknownError') }));
             });
         }
 
@@ -7551,16 +7564,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;
                 if (data.success) {
-                    alert(data.message || t('ssl.checkDone'));
+                    panelSay('success', data.message || t('ssl.checkDone'));
                     loadAutoRenewSettings();
                     loadSslStatus();
                 } else {
-                    alert(t('common.error', { message: data.message || data.error || t('common.unknownError') }));
+                    panelSay('danger', t('common.error', { message: data.message || data.error || t('common.unknownError') }));
                 }
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;
-                alert(t('common.error', { message: e.message }));
+                panelSay('danger', t('common.error', { message: e.message }));
             });
         }
 
@@ -7947,8 +7960,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
 
-        function installComponent(component) {
-            if (!confirm(t('ins.confirm', { component: component }))) return;
+        async function installComponent(component) {
+            if (!await panelConfirm(t('ins.confirm', { component: component }))) return;
 
             document.getElementById('installOutput').classList.remove('d-none');
             document.getElementById('outputText').textContent = t('ins.running');
@@ -7960,7 +7973,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }).then(r => r.json()).then(data => {
                 document.getElementById('outputText').textContent = data.output || data.error || t('common.done');
                 if (data.success) {
-                    alert(t('ins.done'));
+                    panelSay('success', t('ins.done'));
                 }
             });
         }
@@ -8381,18 +8394,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             new bootstrap.Modal(document.getElementById('changeHostnameModal')).show();
         }
 
-        function executeHostnameChange() {
+        async function executeHostnameChange() {
             const newHostname = document.getElementById('newHostnameInput').value.trim().toLowerCase();
             if (!newHostname || !newHostname.includes('.')) {
-                alert(t('set.needHostname'));
+                panelSay('warning', t('set.needHostname'));
                 return;
             }
 
             const currentHostname = document.getElementById('mailHostnameDisplay').textContent.trim();
             if (newHostname === currentHostname) {
-                if (!confirm(t('set.confirmRealignHost'))) return;
+                if (!await panelConfirm(t('set.confirmRealignHost'))) return;
             } else {
-                if (!confirm(t('set.confirmChangeHost', { from: currentHostname, to: newHostname }))) return;
+                if (!await panelConfirm(t('set.confirmChangeHost', { from: currentHostname, to: newHostname }))) return;
             }
 
             // Show progress
@@ -8453,7 +8466,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             .catch(err => {
                 document.getElementById('hostnameStep2').style.display = 'none';
                 document.getElementById('hostnameStep1').style.display = 'block';
-                alert(t('common.error', { message: err.message }));
+                panelSay('danger', t('common.error', { message: err.message }));
             });
         }
 
@@ -8565,18 +8578,18 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             new bootstrap.Modal(document.getElementById('changeRcDomainModal')).show();
         }
 
-        function executeRcDomainChange() {
+        async function executeRcDomainChange() {
             const newDomain = document.getElementById('newRcDomainInput').value.trim().toLowerCase();
             if (!newDomain || !newDomain.includes('.')) {
-                alert(t('set.needDomain'));
+                panelSay('warning', t('set.needDomain'));
                 return;
             }
 
             const currentDomain = document.getElementById('rcDomainCurrent').textContent.trim();
             if (newDomain === currentDomain) {
-                if (!confirm(t('set.confirmRealignRc'))) return;
+                if (!await panelConfirm(t('set.confirmRealignRc'))) return;
             } else {
-                if (!confirm(t('set.confirmChangeRc', { from: currentDomain, to: newDomain }))) return;
+                if (!await panelConfirm(t('set.confirmChangeRc', { from: currentDomain, to: newDomain }))) return;
             }
 
             // Show progress
@@ -8635,7 +8648,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             .catch(err => {
                 document.getElementById('rcDomainStep2').style.display = 'none';
                 document.getElementById('rcDomainStep1').style.display = 'block';
-                alert(t('common.error', { message: err.message }));
+                panelSay('danger', t('common.error', { message: err.message }));
             });
         }
 
@@ -8677,24 +8690,24 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
         }
 
-        function executeRcSslChange() {
+        async function executeRcSslChange() {
             const sslCert = document.getElementById('rcSslCertInput').value.trim();
             const sslKey = document.getElementById('rcSslKeyInput').value.trim();
             const sslChain = document.getElementById('rcSslChainInput').value.trim();
 
             if (!sslCert && !sslKey) {
-                if (!confirm(t('set.confirmEmptySsl'))) return;
+                if (!await panelConfirm(t('set.confirmEmptySsl'))) return;
             }
             if ((sslCert && !sslKey) || (!sslCert && sslKey)) {
-                alert(t('set.needBoth'));
+                panelSay('warning', t('set.needBoth'));
                 return;
             }
             if (sslCert && !sslCert.includes('BEGIN')) {
-                alert(t('set.certPem'));
+                panelSay('info', t('set.certPem'));
                 return;
             }
             if (sslKey && !sslKey.includes('BEGIN')) {
-                alert(t('set.keyPem'));
+                panelSay('info', t('set.keyPem'));
                 return;
             }
 
@@ -8739,7 +8752,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             .catch(err => {
                 document.getElementById('rcDomainStep2').style.display = 'none';
                 document.getElementById('rcDomainStep1').style.display = 'block';
-                alert(t('common.error', { message: err.message }));
+                panelSay('danger', t('common.error', { message: err.message }));
             });
         }
 
@@ -8972,12 +8985,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // I pulsanti delle righe: l'identificativo sta in un attributo, non in un onclick scritto a mano
-        document.getElementById('queueBody').addEventListener('click', e => {
+        document.getElementById('queueBody').addEventListener('click', async e => {
             const b = e.target.closest('button');
             if (!b) return;
             if (b.dataset.queueView) viewMessage(b.dataset.queueView);
             else if (b.dataset.queueRetry) queueAction({ action: 'schedule', id: b.dataset.queueRetry });
-            else if (b.dataset.queueRemove && confirm(t('que.confirmRemove', { id: b.dataset.queueRemove }))) {
+            else if (b.dataset.queueRemove && await panelConfirmDanger(t('que.confirmRemove', { id: b.dataset.queueRemove }))) {
                 queueAction({ action: 'remove', id: b.dataset.queueRemove });
             }
         });
@@ -9038,12 +9051,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }).catch(() => queueMsg(t('common.noAnswer'), 'danger'));
         }
 
-        function flushQueue() {
-            if (confirm(t('que.confirmFlush'))) queueAction({ action: 'flush' });
+        async function flushQueue() {
+            if (await panelConfirmDanger(t('que.confirmFlush'))) queueAction({ action: 'flush' });
         }
 
-        function holdAll() {
-            if (confirm(t('que.confirmHold'))) queueAction({ action: 'hold' });
+        async function holdAll() {
+            if (await panelConfirm(t('que.confirmHold'))) queueAction({ action: 'hold' });
         }
 
         function releaseAll() {
@@ -9054,16 +9067,17 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             // Prima si guarda, poi si cancella: la conferma porta gli identificativi visti e il
             // loro numero, scritto a mano. Un messaggio arrivato nel frattempo non si tocca.
             queueMsg('', '');
-            queuePost({ action: 'purge_permfails' }).then(data => {
+            queuePost({ action: 'purge_permfails' }).then(async data => {
                 if (!data.success) { queueMsg(data.error || data.message || t('common.unknownErrorCap'), 'danger'); return; }
                 if (!data.count) { queueMsg(data.message, 'info'); return; }
                 const list = data.messages || [];
                 const lines = list.slice(0, 15)
                     .map(m => '• ' + (m.recipients || []).map(r => r.address).join(', ') + '  —  ' + (m.error || '')).join('\\n');
                 const extra = list.length > 15 ? '\\n' + tn('que.andMore', list.length - 15) : '';
-                const typed = prompt(data.message + '\\n\\n' + lines + extra + '\\n\\n' + tn('que.typeCount', list.length));
-                if (typed === null) return;
-                if (typed.trim() !== String(list.length)) { queueMsg(t('que.confirmWrong'), 'warning'); return; }
+                // La finestra del pannello con i messaggi che se ne vanno (reperto 198); al server va il loro numero,
+                // che la prova contro quelli che ha davvero.
+                if (!await panelAsk({ title: tn('que.purgeTitle', list.length), text: data.message + '\\n' + lines + extra,
+                        confirm: tn('que.purgeGo', list.length), danger: true })) return;
                 queueAction({ action: 'purge_permfails', ids: list.map(m => m.id), confirm: String(list.length) });
             }).catch(() => queueMsg(t('common.noAnswer'), 'danger'));
         }
@@ -9505,15 +9519,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const ip = document.getElementById('banIp').value.trim();
             const jail = document.getElementById('banJail').value;
 
-            if (!ip) { alert(t('sec.needIp')); return; }
-            if (!jail) { alert(t('sec.needJail')); return; }
+            if (!ip) { panelSay('warning', t('sec.needIp')); return; }
+            if (!jail) { panelSay('warning', t('sec.needJail')); return; }
 
             fetch('/api/fail2ban', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'ban', ip: ip, jail: jail })
             }).then(r => r.json()).then(data => {
-                alert(data.message);
+                panelSay('info', data.message);
                 if (data.success) {
                     document.getElementById('banIp').value = '';
                     loadStatus();
@@ -9521,15 +9535,15 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
         }
 
-        function unbanIp(ip, jail) {
-            if (!confirm(t('sec.confirmUnban', { ip: ip }))) return;
+        async function unbanIp(ip, jail) {
+            if (!await panelConfirmDanger(t('sec.confirmUnban', { ip: ip }))) return;
 
             fetch('/api/fail2ban', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'unban', ip: ip, jail: jail })
             }).then(r => r.json()).then(data => {
-                alert(data.message);
+                panelSay('info', data.message);
                 loadStatus();
             });
         }
@@ -9595,20 +9609,20 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: action })
             }).then(r => r.json()).then(data => {
-                alert(data.message);
+                panelSay('info', data.message);
                 loadStatus();
             });
         }
 
-        function installMailJails() {
-            if (!confirm(t('sec.confirmMailJails'))) return;
+        async function installMailJails() {
+            if (!await panelConfirm(t('sec.confirmMailJails'))) return;
 
             fetch('/api/fail2ban', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'install_mail_jails' })
             }).then(r => r.json()).then(data => {
-                alert(data.message || data.error);
+                panelSay('danger', data.message || data.error);
                 loadStatus();
             });
         }
@@ -10234,17 +10248,17 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const username = document.getElementById('newUsername').value.trim();
             const email = document.getElementById('newEmail').value.trim();
             const role = document.getElementById('newRole').value;
-            if (!/^[A-Za-z0-9_-]{3,50}$/.test(username)) { alert(t('set.usernameInvalid')); return; }
-            if (!ADM_EMAIL.test(email) || email.length > 254) { alert(t('login.emailInvalid')); return; }
+            if (!/^[A-Za-z0-9_-]{3,50}$/.test(username)) { panelSay('danger', t('set.usernameInvalid')); return; }
+            if (!ADM_EMAIL.test(email) || email.length > 254) { panelSay('danger', t('login.emailInvalid')); return; }
             admPost({ action: 'create', username: username, email: email, role: role }).then(data => {
                 if (data.success) {
                     bootstrap.Modal.getOrCreateInstance(document.getElementById('addAdminModal')).hide();
                     document.getElementById('addAdminForm').reset();
                     loadAdmins();
                 } else {
-                    alert(data.error || t('common.failed'));
+                    panelSay('danger', data.error || t('common.failed'));
                 }
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
         function editAdmin(id) {
             const admin = admList.find(a => a.id === id);
@@ -10259,22 +10273,22 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const id = Number(document.getElementById('editAdminId').value);
             const role = document.getElementById('editRole').value;
             const email = document.getElementById('editEmail').value.trim();
-            if (email && (!ADM_EMAIL.test(email) || email.length > 254)) { alert(t('login.emailInvalid')); return; }
+            if (email && (!ADM_EMAIL.test(email) || email.length > 254)) { panelSay('danger', t('login.emailInvalid')); return; }
             admPost({ action: 'update', id: id, role: role, email: email }).then(data => {
                 if (data.success) {
                     bootstrap.Modal.getOrCreateInstance(document.getElementById('editAdminModal')).hide();
                     loadAdmins();
                 } else {
-                    alert(data.error || t('common.failed'));
+                    panelSay('danger', data.error || t('common.failed'));
                 }
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
-        function deleteAdmin(id) {
+        async function deleteAdmin(id) {
             const admin = admList.find(a => a.id === id);
-            if (!admin || !confirm(t('adm.confirmDelete', { name: admin.username }))) return;
+            if (!admin || !await panelConfirmDanger(t('adm.confirmDelete', { name: admin.username }))) return;
             admPost({ action: 'delete', id: id }).then(data => {
-                if (data.success) loadAdmins(); else alert(data.error || t('common.failed'));
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+                if (data.success) loadAdmins(); else panelSay('danger', data.error || t('common.failed'));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
         // Load on page load
         loadAdmins();
@@ -10557,8 +10571,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }).catch(() => { err.textContent = t('common.noAnswer'); });
         }
 
-        function deleteLimit(limit) {
-            if (!confirm(t('rl.confirmDelete', { mailbox: limit.email }))) return;
+        async function deleteLimit(limit) {
+            if (!await panelConfirmDanger(t('rl.confirmDelete', { mailbox: limit.email }))) return;
             rlPost({ action: 'delete', id: limit.id }).then(data => {
                 rlMsg(data.success ? t('rl.deleted', { mailbox: limit.email }) : (data.error || t('common.unknownErrorCap')), data.success ? 'success' : 'danger');
                 if (data.success) loadRateLimits();
@@ -11255,7 +11269,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const enabled = document.getElementById('fwAutoSyncEnabled').checked;
             const interval = parseInt(document.getElementById('fwAutoSyncInterval').value, 10) || 7;
             fwPost({ action: 'set_auto_sync', enabled: enabled, interval_days: interval }, (data) => {
-                alert(data.message || t('fw.saved'));
+                panelSay('success', data.message || t('fw.saved'));
                 loadFirewall();
             });
         }
@@ -11319,7 +11333,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return formatted.join(', ');
         }
 
-        function fwApplyPresetGroup(groupId) {
+        async function fwApplyPresetGroup(groupId) {
             const grp = (__fwState.preset_groups || []).find(g => g.id === groupId);
             if (!grp) return;
             const modeEl = document.querySelector('input[name="fwPresetMode"]:checked');
@@ -11330,12 +11344,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 const existing = new Set(__fwState.geo_countries || []);
                 const toAdd = grp.codes.filter(c => !existing.has(c));
                 if (toAdd.length === 0) {
-                    alert(t('fw.presetAllSelected', { preset: fwGroupLabel(grp) }));
+                    panelSay('info', t('fw.presetAllSelected', { preset: fwGroupLabel(grp) }));
                     return;
                 }
                 const msg = tn('fw.confirmPresetAdd', toAdd.length, { preset: fwGroupLabel(grp), list: fwFormatCountryList(toAdd, 20),
                                                                        current: existing.size, total: existing.size + toAdd.length });
-                if (!confirm(msg)) return;
+                if (!await panelConfirm(msg)) return;
                 fwPost({ action: 'bulk_add_countries', countries: toAdd }, () => loadFirewall());
             } else {
                 // Modalita' SOSTITUISCI: dettagliamo chi viene aggiunto e chi rimosso
@@ -11354,7 +11368,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (toAdd.length === 0 && toRemove.length === 0) {
                     msg += t('fw.noChangePreset');
                 }
-                if (!confirm(msg)) return;
+                if (!await panelConfirm(msg)) return;
                 fwPost({ action: 'apply_preset_group', group_id: groupId }, () => loadFirewall());
             }
         }
@@ -11371,29 +11385,29 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return codes;
         }
 
-        function fwSelectAllVisible() {
+        async function fwSelectAllVisible() {
             const codes = fwGetVisibleCountryCodes();
-            if (codes.length === 0) { alert(t('fw.noVisible')); return; }
+            if (codes.length === 0) { panelSay('warning', t('fw.noVisible')); return; }
             const alreadySelected = new Set(__fwState.geo_countries || []);
             const toAdd = codes.filter(c => !alreadySelected.has(c));
-            if (toAdd.length === 0) { alert(t('fw.allVisibleSelected')); return; }
-            if (!confirm(tn('fw.confirmAddN', toAdd.length))) return;
+            if (toAdd.length === 0) { panelSay('warning', t('fw.allVisibleSelected')); return; }
+            if (!await panelConfirm(tn('fw.confirmAddN', toAdd.length))) return;
             fwPost({ action: 'bulk_add_countries', countries: toAdd }, () => loadFirewall());
         }
 
-        function fwDeselectAllVisible() {
+        async function fwDeselectAllVisible() {
             const codes = fwGetVisibleCountryCodes();
             const selected = new Set(__fwState.geo_countries || []);
             const toRemove = codes.filter(c => selected.has(c));
-            if (toRemove.length === 0) { alert(t('fw.noVisibleSelected')); return; }
-            if (!confirm(tn('fw.confirmDeselectN', toRemove.length))) return;
+            if (toRemove.length === 0) { panelSay('warning', t('fw.noVisibleSelected')); return; }
+            if (!await panelConfirmDanger(tn('fw.confirmDeselectN', toRemove.length))) return;
             fwPost({ action: 'bulk_remove_countries', countries: toRemove }, () => loadFirewall());
         }
 
-        function fwClearAllCountries() {
+        async function fwClearAllCountries() {
             const n = (__fwState.geo_countries || []).length;
-            if (n === 0) { alert(t('fw.noneSelected')); return; }
-            if (!confirm(tn('fw.confirmClear', n))) return;
+            if (n === 0) { panelSay('warning', t('fw.noneSelected')); return; }
+            if (!await panelConfirmDanger(tn('fw.confirmClear', n))) return;
             fwPost({ action: 'clear_countries' }, () => loadFirewall());
         }
 
@@ -11492,19 +11506,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             fwPost({ action: checked ? 'add_country' : 'remove_country', country: cc }, () => loadFirewall());
         }
 
-        function fwSyncAll() {
+        async function fwSyncAll() {
             const selectedCount = (__fwState && __fwState.geo_countries) ? __fwState.geo_countries.length : 0;
             if (selectedCount === 0) {
-                alert(t('fw.syncNoCountries'));
+                panelSay('warning', t('fw.syncNoCountries'));
                 return;
             }
-            if (!confirm(tn('fw.confirmSync', selectedCount, { seconds: Math.max(2, selectedCount * 2) }))) return;
+            if (!await panelConfirm(tn('fw.confirmSync', selectedCount, { seconds: Math.max(2, selectedCount * 2) }))) return;
             fwPost({ action: 'sync_geo_all' }, (data) => {
                 let msg = data.message || '';
                 if (Array.isArray(data.results)) {
                     msg += '\\n\\n' + data.results.map(r => (r.success ? '✓' : '✗') + ' ' + r.country + ': ' + (r.message || '')).join('\\n');
                 }
-                alert(msg);
+                panelSay('info', msg);
                 loadFirewall();
             });
         }
@@ -11529,26 +11543,26 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         function fwAddCidr(kind) {
             const input = document.getElementById(kind === 'wl' ? 'fwWlInput' : 'fwBlInput');
             const cidr = (input.value || '').trim();
-            if (!cidr) { alert(t('jc.needIp')); return; }
+            if (!cidr) { panelSay('warning', t('jc.needIp')); return; }
             fwPost({ action: kind === 'wl' ? 'add_cidr_wl' : 'add_cidr_bl', cidr: cidr }, (data) => {
                 if (data.success) input.value = '';
-                else alert(data.message || t('common.errorShort'));
+                else panelSay('danger', data.message || t('common.errorShort'));
                 loadFirewall();
             });
         }
 
-        function fwRemoveCidr(kind, cidr) {
-            if (!confirm(kind === 'wl' ? t('fw.confirmRemoveWl', { cidr: cidr }) : t('fw.confirmRemoveBl', { cidr: cidr }))) return;
+        async function fwRemoveCidr(kind, cidr) {
+            if (!await panelConfirmDanger(kind === 'wl' ? t('fw.confirmRemoveWl', { cidr: cidr }) : t('fw.confirmRemoveBl', { cidr: cidr }))) return;
             fwPost({ action: kind === 'wl' ? 'remove_cidr_wl' : 'remove_cidr_bl', cidr: cidr }, () => loadFirewall());
         }
 
         // ===== Apply =====
-        function fwApply() {
-            if (!confirm(t('fw.confirmApply'))) return;
+        async function fwApply() {
+            if (!await panelConfirm(t('fw.confirmApply'))) return;
             fwPost({ action: 'apply' }, (data) => {
                 let msg = data.message || '';
                 if (data.backup_path) msg += '\\n\\n' + t('fw.backup', { path: data.backup_path });
-                alert((data.success ? '✓ ' : '✗ ') + msg);
+                panelSay('success', (data.success ? '✓ ' : '✗ ') + msg);
                 loadFirewall();
             });
         }
@@ -11562,7 +11576,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 body: JSON.stringify(payload)
             }).then(r => r.json()).then(data => {
                 if (onSuccess) onSuccess(data);
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         // Init
@@ -11710,7 +11724,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             }).then(r => r.json()).then(data => { if (onDone) onDone(data); })
-              .catch(e => alert(t('common.networkError', { message: e.message })));
+              .catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         function cfLoad() {
@@ -11804,7 +11818,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         function cfAssignMailServer(accountId) {
             cfPost({ action: 'assign_mailserver', account_id: parseInt(accountId, 10) || 0 }, data => {
-                if (!data.success) { alert('✗ ' + (data.message || data.error || t('cf.assignFailed'))); }
+                if (!data.success) { panelSay('danger', '✗ ' + (data.message || data.error || t('cf.assignFailed'))); }
                 else if (data.message) { /* feedback silenzioso, lo stato si aggiorna sotto */ }
                 cfLoad();
             });
@@ -11865,8 +11879,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const email = document.getElementById('cfEmail').value.trim();
             const token = document.getElementById('cfToken').value.trim();
 
-            if (!label) { alert(t('cf.needLabel')); return; }
-            if (id === 0 && !token) { alert(t('cf.needApiToken')); return; }
+            if (!label) { panelSay('warning', t('cf.needLabel')); return; }
+            if (id === 0 && !token) { panelSay('warning', t('cf.needApiToken')); return; }
 
             const body = id > 0
                 ? { action: 'update', account_id: id, label: label, email: email }
@@ -11877,19 +11891,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (data.success) {
                     cfResetForm();
                     cfLoad();
-                    alert('✓ ' + (data.message || t('ssl.savedShort')));
+                    panelSay('success', '✓ ' + (data.message || t('ssl.savedShort')));
                 } else {
-                    alert('✗ ' + (data.message || data.error || t('common.failed')));
+                    panelSay('danger', '✗ ' + (data.message || data.error || t('common.failed')));
                 }
             });
         }
 
-        function cfDelete(id) {
+        async function cfDelete(id) {
             const a = cfState.accounts.find(x => x.id === id);
             const name = a ? (a.label || ('#' + id)) : ('#' + id);
-            if (!confirm(t('dns.cfConfirmDelete', { label: name }))) return;
+            if (!await panelConfirmDanger(t('dns.cfConfirmDelete', { label: name }))) return;
             cfPost({ action: 'delete', account_id: id }, data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                panelSay('danger', (data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 cfLoad();
             });
         }
@@ -12361,7 +12375,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
         return resource("pages/upd-api.js") + getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js")
-                + resource("pages/os-update.js") + resource("pages/update-center.js");
+                + resource("pages/os-update.js") + resource("pages/guided.js") + resource("pages/update-center.js");
     }
 
     /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */
@@ -12644,7 +12658,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updWayBack(name) {
-            if (!confirm(t('up.wayBackConfirm', { name: name }))) return;
+            // La finestra del pannello, non quella del browser (reperto 197).
+            if (!await panelAsk({ title: t('gd.wayBackTitle'), text: t('up.wayBackConfirm', { name: name }), confirm: t('gd.wayBackGo') })) return;
             const el = document.getElementById('upd-interrupted');
             const r = await updApi('reinstall_way_back', { name: name, confirm: 'GO BACK' });
             if (!r || !r.success) {
@@ -12921,22 +12936,22 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updRegenDovecot() {
-            if (!updConfirm(t('up.confirmRegenDovecot'), t('up.wRegen'))) return;
+            if (!await updConfirm(t('up.confirmRegenDovecot'), t('up.wRegen'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
             const r = await updApi('dovecot_config_regen', { confirm: 'REGENERATE' });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
+            if (!r.success) { panelSay('danger', r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.regenRunning')) + '</span>';
             pre.style.display = 'block';
             updPoll(r.jobId, el, pre);
         }
 
         async function cleanClient(foreign, correct) {
-            if (!updConfirm('', t('up.wRemove'))) return;
+            if (!await updConfirm('', t('up.wRemove'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
             const r = await updApi('clean_client', { confirm: 'REMOVE', foreign: foreign, correct: correct });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
+            if (!r.success) { panelSay('danger', r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.cleaning')) + '</span>';
             pre.style.display = 'block';
             planPoll(r.jobId, el, pre);
@@ -12949,7 +12964,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         function rebPrev() { panelRebootOpen(); }
 
         async function rebGo() {
-            if (!updConfirm('', t('up.wReboot'))) return;
+            if (!await updConfirm('', t('up.wReboot'))) return;
             const el = document.getElementById('os-body');
             const r = await updApi('reboot_now', { confirm: 'REBOOT THE SERVER', minutes: 1 });
             if (!r.success) {
@@ -13034,7 +13049,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcRemoveGo() {
-            if (!updConfirm(t('up.confirmRemoveRc'), t('up.wRemoveRc'))) return;
+            if (!await updConfirm(t('up.confirmRemoveRc'), t('up.wRemoveRc'))) return;
             const el = document.getElementById('os-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingAutostart')) + '';
             const r = await updApi('rc_remove', { confirm: 'REMOVE RC' });
@@ -13045,7 +13060,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcGo() {
-            if (!updConfirm('', t('up.wInstallRc'))) return;
+            if (!await updConfirm('', t('up.wInstallRc'))) return;
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
             const r = await updApi('rc_install', { confirm: 'INSTALL RC' });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
@@ -13110,7 +13125,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- eliminazione di un ambiente di avvio ----------
         async function beDelete(entryName) {
-            if (!updConfirm(t('up.confirmBeDelete', { name: entryName }), t('up.wDelete'))) return;
+            if (!await updConfirm(t('up.confirmBeDelete', { name: entryName }), t('up.wDelete'))) return;
             const el = document.getElementById('up-body');
             const r = await updApi('be_destroy', { confirm: 'DELETE', name: entryName });
             const box = document.createElement('div');
@@ -13433,7 +13448,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // ---------- alzare il livello di compatibilita' di Postfix ----------
         async function pfRaise(levelValue, opened) {
             const noticeText = opened > 0 ? tn('up.paramsChange', opened) : t('up.paramsSame');
-            if (!updConfirm(t('up.confirmLevel', { level: levelValue, note: noticeText }), t('up.wRaise'))) return;
+            if (!await updConfirm(t('up.confirmLevel', { level: levelValue, note: noticeText }), t('up.wRaise'))) return;
             const el = document.getElementById('pf-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.raising')) + '';
             const r = await updApi('postfix_level', { confirm: 'RAISE', level: levelValue });
@@ -13677,7 +13692,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         // ---------- togliere un pacchetto, dal pannello ----------
         async function rmRemove(entryName) {
-            if (!updConfirm(t('up.confirmRemovePkg', { pkg: entryName }), t('up.wRemove'))) return;
+            if (!await updConfirm(t('up.confirmRemovePkg', { pkg: entryName }), t('up.wRemove'))) return;
             const el = document.getElementById('rim-esec-' + entryName);
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removingChecking')) + '';
             const r = await updApi('pkg_remove', { confirm: 'REMOVE', name: entryName });
@@ -13721,11 +13736,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function libsRelink() {
-            if (!updConfirm('', t('up.wRelink'))) return;
+            if (!await updConfirm('', t('up.wRelink'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
             const r = await updApi('relink', { confirm: 'RELINK' });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
+            if (!r.success) { panelSay('danger', r.error || t('common.failed')); return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.relinking')) + '</span>';
             pre.style.display = 'block';
             planPoll(r.jobId, el, pre);
@@ -13787,7 +13802,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (s.job.status === 'completed') {
                     el.innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>'
                                  + escHtml(t('up.stepDone', { s: s.job.elapsedSeconds })) + '</span>';
-                    setTimeout(after || (() => ucLoad(true)), 1500);
+                    // Chi aspetta riceve il lavoro: l'esito (job.result) e' suo, da mostrare (reperto 197).
+                    setTimeout(() => (after || (() => ucLoad(true)))(s.job), 1500);
                     return;
                 }
                 if (s.job.status === 'error') {
@@ -13863,7 +13879,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         return """
 
         async function pyLeftoversGo() {
-            if (!updConfirm('', t('up.wCleanPython'))) return;
+            if (!await panelAsk({ title: t('gd.pyCleanTitle'), text: t('gd.pyCleanText'), confirm: t('gd.pyCleanGo') })) return;
             const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.removing')) + '';
             const r = await updApi('python_leftovers_clean', { confirm: 'CLEAN PYTHON' });
@@ -13884,30 +13900,23 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.pyChecks')) + '';
             const r = await updApi('python_preflight');
             pySignature = '';
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            pyPlan = r;
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             pySignature = r.signature || '';
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
-            (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
-                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            if (r.plan) h += updPlanHtml(r.plan, r.signature);
-            if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.nothingToMove')) + '</div>';
-            else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
-            else h += '<button class="btn btn-danger" data-on-click="pyRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.moveTo', { to: 'py' + r.newVersion })) + '</button>';
-            el.innerHTML = h;
+            el.innerHTML = gdReady(r, { already: r.already, alreadyText: t('up.nothingToMove'),
+                go: { label: t('up.moveTo', { to: 'py' + r.newVersion }), action: 'pyRun()' } });
         }
 
+        let pyPlan = null;
+
         async function pyRun() {
-            if (!updConfirm('', t('up.wMovePython'))) return;
-            const el = document.getElementById('py-pre'), pre = document.getElementById('py-log');
+            const to = 'py' + ((pyPlan && pyPlan.newVersion) || '');
+            if (!await panelAsk({ title: t('gd.pyAskTitle', { to: to }), text: t('gd.pyAskText') + '\\n' + gdPlanLines(pyPlan),
+                confirm: t('up.moveTo', { to: to }) })) return;
+            const el = document.getElementById('py-pre');
             const r = await updApi('python_move', { confirm: 'MOVE PYTHON', signature: pySignature });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.runningKeepOpen')) + '</span>';
-            pre.style.display = 'block';
-            planPoll(r.jobId, el, pre);
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
+            gdFollow('python', 'py-pre', 'py-log-box', 'py-log', r.jobId, t('up.runningKeepOpen'));
         }
 
         // ---------- aggiornamento della JVM ----------
@@ -13920,28 +13929,21 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.jvmChecks')) + '';
             const r = await updApi('java_preflight');
             jvSignature = '';
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            jvPlan = r;
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             jvSignature = r.signature || '';
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
-            (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
-                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            if (r.plan) h += updPlanHtml(r.plan, r.signature);
-            if (r.already) h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.latestAlready')) + '</div>';
-            else if (r.blocked) h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
-            else h += '<div class="alert alert-danger py-2"><strong>' + escHtml(t('up.pageWillStopShort')) + '</strong> ' + escHtml(t('up.jvmStopNote')) + '</div>'
-                   + '<button class="btn btn-danger" data-on-click="jvRun()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.jvmRun')) + '</button>';
-            el.innerHTML = h;
+            el.innerHTML = gdReady(r, { already: r.already, alreadyText: t('up.latestAlready'),
+                note: t('up.pageWillStopShort') + ' ' + t('up.jvmStopNote'), go: { label: t('up.jvmRun'), action: 'jvRun()' } });
         }
 
+        let jvPlan = null;
+
         async function jvRun() {
-            if (!updConfirm(t('up.javaStops'), t('up.wUpgradeJava'))) return;
+            if (!await panelAsk({ title: t('gd.jvAskTitle'), text: t('up.javaStops') + ' ' + t('up.jvmStopNote') + '\\n' + gdPlanLines(jvPlan),
+                confirm: t('up.jvmRun') })) return;
             const el = document.getElementById('jv-pre');
             const r = await updApi('java_update', { confirm: 'UPGRADE JAVA', signature: jvSignature });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
             el.innerHTML = '<div class="alert alert-warning mb-0"><strong>' + escHtml(t('up.started')) + '</strong> ' + escHtml(t('up.panelStopping')) + ' '
                 + updEsc(r.note || '') + '<br>' + t('up.reportWrittenIn.html', { path: updEsc(r.log || '') }) + '</div>';
         }
@@ -13976,7 +13978,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcNginxGo() {
-            if (!updConfirm('', t('up.wFixNginx'))) return;
+            if (!await updConfirm('', t('up.wFixNginx'))) return;
             const pre = document.getElementById('rc-log');
             const el = document.getElementById('rc-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.inProgress')) + '';
@@ -14010,38 +14012,21 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.rcChecks')) + '';
             const r = await updApi('roundcube_preflight');
             rcSignature = '';
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            rcPlan = r;
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             rcSignature = r.signature || '';
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
-            (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
-                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            if (r.plan) h += updPlanHtml(r.plan, r.signature);
-            if (r.already) {
-                h += '<div class="alert alert-success py-2 mb-0"><strong>' + escHtml(t('up.nothingToDoTitle')) + '</strong> ' + escHtml(t('up.rcLatest')) + '</div>';
-            } else if (r.unknown) {
-                h += '<div class="alert alert-warning py-2 mb-0">' + escHtml(t('up.repoUnknown')) + '</div>';
-            } else if (r.blocked) {
-                h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.cannotStart')) + '</strong> ' + escHtml(t('up.fixRedRows')) + '</div>';
-            } else {
-                h += '<div class="alert alert-warning py-2">' + escHtml(t('up.rcDowntime')) + '</div>'
-                   + '<button class="btn btn-danger" data-on-click="rcRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.rcRun')) + '</button>';
-            }
-            el.innerHTML = h;
+            el.innerHTML = gdReady(r, { already: r.already, alreadyText: t('up.nothingToDoTitle') + ' ' + t('up.rcLatest'),
+                unknownText: r.unknown ? t('up.repoUnknown') : '', note: t('up.rcDowntime'), go: { label: t('up.rcRun'), action: 'rcRun()' } });
         }
 
+        let rcPlan = null;
+
         async function rcRun() {
-            if (!updConfirm('', t('up.wUpgradeRc'))) return;
+            if (!await panelAsk({ title: t('gd.rcAskTitle'), text: t('up.rcDowntime') + '\\n' + gdPlanLines(rcPlan), confirm: t('up.rcRun') })) return;
             const el = document.getElementById('rc-pre');
-            const pre = document.getElementById('rc-log');
             const r = await updApi('roundcube_update', { confirm: 'UPGRADE ROUNDCUBE', signature: rcSignature });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
-            pre.style.display = 'block';
-            planPoll(r.jobId, el, pre);
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
+            gdFollow('roundcube', 'rc-pre', 'rc-log-box', 'rc-log', r.jobId, t('up.upgradingKeepOpen'));
         }
 
         // ---------- migrazione MySQL 8.4: solo verifica ----------
@@ -14052,52 +14037,36 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.my84Checks')) + '';
             const r = await updApi('mysql84_preflight');
             my84Signature = '';
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
+            my84Plan = r;
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             my84Signature = r.signature || '';
-            let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><thead><tr>'
-                  + '<th scope="col" data-style="width:8rem">' + escHtml(t('up.colResult')) + '</th><th scope="col" data-style="width:16rem">' + escHtml(t('up.colCheck')) + '</th><th scope="col">' + escHtml(t('up.colDetail')) + '</th></tr></thead><tbody>';
-            (r.checks || []).forEach(c => {
-                h += '<tr class="upd-cell"><td>' + updBadge(c.level === 'block' ? 'wait' : c.level) + '</td>'
-                   + '<td><strong>' + updEsc(c.label) + '</strong></td><td>' + updEsc(c.detail) + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
+            let extra = '';
             if ((r.dependents || []).length) {
-                h += '<div class="small mb-2"><strong>' + escHtml(t('up.linkedPkgs')) + '</strong><ul class="mb-0">';
+                extra = '<div class="small mb-2"><strong>' + escHtml(t('up.linkedPkgs')) + '</strong><ul class="mb-0">';
                 r.dependents.forEach(d => {
-                    h += '<li>' + t('up.requires.html', { pkg: updEsc(d.name), lib: updEsc(d.requires) }) + ' '
+                    extra += '<li>' + t('up.requires.html', { pkg: updEsc(d.name), lib: updEsc(d.requires) }) + ' '
                        + (d.compatible ? '<span class="text-success">' + escHtml(t('up.compatible')) + '</span>'
                                         : '<span class="text-danger">' + escHtml(t('up.notCompatible84')) + '</span>') + '</li>';
                 });
-                h += '</ul></div>';
+                extra += '</ul></div>';
             }
-            if (r.plan) h += updPlanHtml(r.plan, r.signature);
-            if (r.alreadyDone) {
-                h += '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.already84')) + '</div>';
-            } else if (r.blocked) {
-                h += '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.migrationCannotStart')) + '</strong> ' + escHtml(t('up.migrationRedRows')) + '</div>';
-            } else {
-                h += '<div class="alert alert-warning py-2"><strong>' + escHtml(t('up.prereqPassed')) + '</strong> ' + escHtml(t('up.migrationNote')) + '</div>'
-                   + '<button class="btn btn-danger" data-on-click="my84Run()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.migrate84')) + '</button>';
-            }
-            el.innerHTML = h;
+            el.innerHTML = gdReady(r, { already: r.alreadyDone, alreadyText: t('up.already84'), extra: extra,
+                note: t('up.migrationNote'), go: { label: t('up.migrate84'), action: 'my84Run()' } });
         }
 
+        let my84Plan = null;
+
         async function my84Run() {
-            if (!updConfirm('', t('up.wMigrate84'))) return;
+            if (!await panelAsk({ title: t('gd.myAskTitle'), text: t('up.migrationNote') + '\\n' + gdPlanLines(my84Plan), confirm: t('up.migrate84') })) return;
             const el = document.getElementById('my84-pre');
-            // Il log va nel riquadro DI QUESTA scheda: prima finiva in quello del piano, in
-            // un'altra parte della pagina, e chi guardava sotto il messaggio di errore non
-            // trovava niente. Un log che esiste ma non e' dove lo cerchi e' un log perduto.
-            const pre = document.getElementById('my84-log');
+            // Il registro nel riquadro DI QUESTA scheda, chiuso sotto: prima finiva in quello del piano, in un'altra
+            // parte della pagina. Un registro che esiste ma non e' dove lo cerchi e' un registro perduto.
             const r = await updApi('mysql84_migrate', { confirm: 'MIGRATE TO 8.4', signature: my84Signature });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.migrating')) + '</span>';
-            pre.style.display = 'block';
-            planPoll(r.jobId, el, pre);
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
+            gdFollow('mysql', 'my84-pre', 'my84-log-box', 'my84-log', r.jobId, t('up.migrating'));
         }
 
         // ---------- aggiornamento guidato ----------
-        let updMaintenanceSignature = '';
 
         /* Le prove su ogni pacchetto che il piano toglie: una sostituzione innocua, o una rimozione
            che il pannello non esegue (non c'e' modo di confermarla). */
@@ -14170,12 +14139,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         async function updLockOne(entryName, doLock) {
             const r = await updApi('packages_lock', { lock: doLock, package: entryName });
-            if (!r.success) { alert(r.error || t('common.failed')); return; }
+            if (!r.success) { panelSay('danger', r.error || t('common.failed')); return; }
             updPackages();
         }
 
         async function updLockAll(doLock) {
-            if (!doLock && !confirm(t('up.confirmUnlockAll'))) return;
+            if (!doLock && !await panelConfirm(t('up.confirmUnlockAll'))) return;
             // Nel riquadro dell'esito della scheda dei pacchetti: 'upd-packages' non esisteva piu', e il pulsante si
             // fermava alla prima riga senza dire niente (trovato col controllo degli id, reperto 193).
             const el = document.getElementById('pk-result');
@@ -14301,67 +14270,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function updApply() {
             /* Senza la firma non si parte: vuol dire che la scheda non e' stata letta, cioe'
                che nessuno ha visto il piano che si sta per eseguire. */
-            if (!updUnprotectedSignature) { alert(t('up.readFirst')); return; }
-            if (!confirm(t('up.confirmApply'))) return;
-            if (!updConfirm('', t('up.wUpgrade'))) return;
+            if (!updUnprotectedSignature) { panelSay('warning', t('up.readFirst')); return; }
+            if (!await panelConfirm(t('up.confirmApply'))) return;
+            if (!await updConfirm('', t('up.wUpgrade'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
             const r = await updApi('updates_apply', { confirm: 'UPDATE', signature: updUnprotectedSignature });
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.upgradingKeepOpen')) + '</span>';
-            pre.style.display = 'block';
-            updPoll(r.jobId, el, pre);
-        }
-
-        async function updMaintPreview() {
-            const el = document.getElementById('upd-status');
-            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.computingChange')) + '';
-            const r = await updApi('maintenance_preview');
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            let h = '<div class="alert alert-secondary py-2 small">' + updEsc(r.generalNote) + '</div>';
-            /* Se il piano rimuove o retrocede pacchetti il pannello non lo esegue: si dice
-               QUI, prima del pulsante, non dopo aver scritto MANUTENZIONE. */
-            if (r.blockedReason) {
-                h += '<div class="alert alert-danger py-2 small"><strong>'
-                   + escHtml(t('up.notRunnable')) + '</strong> ' + updEsc(r.blockedReason) + '</div>';
-            }
-            const pk = r.packages || [];
-            if (!pk.length) {
-                h += '<div class="small text-muted">' + escHtml(t('up.noLockedUpd')) + '</div>';
-                el.innerHTML = h;
-                return;
-            }
-            h += '<div class="table-responsive"><table class="table table-sm"><thead><tr>'
-               + '<th scope="col">' + escHtml(t('up.colPackage')) + '</th><th scope="col">' + escHtml(t('up.colFrom')) + '</th><th scope="col">' + escHtml(t('up.colTo')) + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
-            pk.forEach(p => {
-                const a = p.advisory;
-                h += '<tr class="upd-cell"><td><code>' + updEsc(p.name) + '</code></td>'
-                   + '<td class="small">' + updEsc(p.current) + '</td>'
-                   + '<td class="small">' + updEsc(p.available) + '</td>'
-                   + '<td>' + (a ? updBadge(a.level) : '<span class="badge bg-secondary">-</span>') + '</td></tr>';
-            });
-            h += '</tbody></table></div>';
-            if (r.waitCount > 0) {
-                h += '<div class="alert alert-warning py-2 small"><strong>' + escHtml(tn('up.staysLocked', r.waitCount)) + '</strong> '
-                   + escHtml(t('up.staysLockedNote')) + '</div>';
-            }
-            h += updPlanHtml(r.plan, r.signature);
-            updMaintenanceSignature = r.signature || '';
-            if (r.plan && r.plan.runnable && !r.blockedReason) {
-                h += '<button class="btn btn-sm btn-danger" data-on-click="updMaintRun()"><i class="fas fa-play me-1" aria-hidden="true"></i>' + escHtml(t('up.runMaint')) + '</button>';
-            } else {
-                h += '<div class="alert alert-secondary py-2 small mb-0">' + escHtml(t('up.nothingToRun')) + '</div>';
-            }
-            el.innerHTML = h;
-        }
-
-        async function updMaintRun() {
-            if (!updConfirm(t('up.confirmMaint'), t('up.wMaint'))) return;
-            const el = document.getElementById('upd-status');
-            const pre = document.getElementById('upd-log');
-            const r = await updApi('maintenance_run', { confirm: 'MAINTENANCE', signature: updMaintenanceSignature });
-            if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
-            el.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.maintRunning')) + '</span>';
             pre.style.display = 'block';
             updPoll(r.jobId, el, pre);
         }

@@ -101,35 +101,35 @@
 
         function cfTestNewToken() {
             const tok = document.getElementById('cfNewToken').value.trim();
-            if (!tok) { alert(t('dns.cfPasteFirst')); return; }
+            if (!tok) { panelSay('warning', t('dns.cfPasteFirst')); return; }
             fetch('/api/cloudflare', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'test', token: tok })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+                panelSay('danger', (data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         function cfAddAccount() {
             const label = document.getElementById('cfNewLabel').value.trim();
             const email = document.getElementById('cfNewEmail').value.trim();
             const token = document.getElementById('cfNewToken').value.trim();
-            if (!label) { alert(t('dns.cfLabelRequired')); return; }
-            if (!token) { alert(t('dns.cfTokenRequired')); return; }
+            if (!label) { panelSay('info', t('dns.cfLabelRequired')); return; }
+            if (!token) { panelSay('info', t('dns.cfTokenRequired')); return; }
             fetch('/api/cloudflare', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'add', label: label, email: email, token: token })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                panelSay('danger', (data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) {
                     document.getElementById('cfNewLabel').value = '';
                     document.getElementById('cfNewEmail').value = '';
                     document.getElementById('cfNewToken').value = '';
                     refreshCloudflare();
                 }
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         function cfEditOpen(id) {
@@ -157,7 +157,7 @@
             const label = document.getElementById('cfEditLabel-' + id).value.trim();
             const email = document.getElementById('cfEditEmail-' + id).value.trim();
             const token = document.getElementById('cfEditToken-' + id).value.trim();
-            if (!label) { alert(t('dns.cfLabelRequired')); return; }
+            if (!label) { panelSay('info', t('dns.cfLabelRequired')); return; }
             const payload = { action: 'update', account_id: id, label: label, email: email };
             // Includi il token SOLO se l'utente l'ha effettivamente compilato
             if (token) payload.token = token;
@@ -166,24 +166,24 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                panelSay('danger', (data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) {
                     cfEditClose(id);
                     refreshCloudflare();
                 }
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        function cfDeleteAccount(id, label) {
-            if (!confirm(t('dns.cfConfirmDelete', { label: label }))) return;
+        async function cfDeleteAccount(id, label) {
+            if (!await panelConfirmDanger(t('dns.cfConfirmDelete', { label: label }))) return;
             fetch('/api/cloudflare', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'delete', account_id: id })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                panelSay('danger', (data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) refreshCloudflare();
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         function cfAssignDomain(domainId, accountId) {
@@ -192,20 +192,20 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'assign', domain_id: domainId, account_id: parseInt(accountId) })
             }).then(r => r.json()).then(data => {
-                if (!data.success) alert('✗ ' + (data.message || data.error || ''));
+                if (!data.success) panelSay('danger', '✗ ' + (data.message || data.error || ''));
                 refreshCloudflare();
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         function loadDnsRecords() {
             const domain = document.getElementById('domainSelect').value;
-            if (!domain) { alert(t('dns.chooseDomainFirst')); return; }
+            if (!domain) { panelSay('warning', t('dns.chooseDomainFirst')); return; }
 
             currentDomainId = document.getElementById('domainSelect').selectedOptions[0].dataset.id;
             document.getElementById('generateDkimBtn').disabled = false;
 
             fetch('/api/dns?domain=' + encodeURIComponent(domain)).then(r => r.json()).then(data => {
-                if (!data.success) { alert(t('common.error', { message: data.error })); return; }
+                if (!data.success) { panelSay('danger', t('common.error', { message: data.error })); return; }
 
                 // Extract mail hostname parent domain
                 const mailHostname = data.mail_hostname;
@@ -748,40 +748,40 @@
             }
         }
 
-        function resetLastRotationTimestamp() {
+        async function resetLastRotationTimestamp() {
             if (!currentDomainId) return;
-            if (!confirm(t('dns.confirmResetNow'))) return;
+            if (!await panelConfirmDanger(t('dns.confirmResetNow'))) return;
             fetch('/api/dkim', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'last_rotation_reset', domain_id: parseInt(currentDomainId) })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                panelSay('danger', (data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) loadDkimSchedule(currentDomainId);
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        function clearLastRotationTimestamp() {
+        async function clearLastRotationTimestamp() {
             if (!currentDomainId) return;
-            if (!confirm(t('dns.confirmClearTs'))) return;
+            if (!await panelConfirmDanger(t('dns.confirmClearTs'))) return;
             fetch('/api/dkim', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'last_rotation_clear', domain_id: parseInt(currentDomainId) })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                panelSay('danger', (data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) loadDkimSchedule(currentDomainId);
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         function saveDkimSchedule() {
-            if (!currentDomainId) { alert('Seleziona un dominio'); return; }
+            if (!currentDomainId) { panelSay('warning', t('dns.chooseDomainFirst')); return; }
             const sel = document.getElementById('dkimSchedulePreset');
             let days;
             if (sel.value === 'custom') {
                 const v = parseInt(document.getElementById('dkimScheduleCustomDays').value);
                 if (isNaN(v) || v < 1 || v > 3650) {
-                    alert(t('dns.daysRange'));
+                    panelSay('warning', t('dns.daysRange'));
                     return;
                 }
                 days = v;
@@ -793,12 +793,12 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'schedule_set', domain_id: parseInt(currentDomainId), interval_days: days })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
+                panelSay('danger', (data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) {
                     loadDkimSchedule(currentDomainId);
                     loadDkimHistory(currentDomainId);
                 }
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
 

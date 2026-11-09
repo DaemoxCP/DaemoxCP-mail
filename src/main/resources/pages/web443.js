@@ -60,7 +60,7 @@
         // Su questo server nginx tiene tutto nel file principale e non include cartelle:
         // senza questa riga, qualunque file aggiuntivo verrebbe ignorato.
         async function w443Include() {
-            if (!updConfirm(t('w4.confirmInclude'), t('w4.wAdd'))) return;
+            if (!await updConfirm(t('w4.confirmInclude'), t('w4.wAdd'))) return;
             const el = document.getElementById('w443Outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.changing')) + '';
             const r = await updApi('web443_include', { confirm: 'ADD' });
@@ -73,7 +73,7 @@
         }
 
         async function w443Install() {
-            if (!updConfirm(t('w4.confirmInstall'), t('w4.wOpen'))) return;
+            if (!await updConfirm(t('w4.confirmInstall'), t('w4.wOpen'))) return;
             const el = document.getElementById('w443Outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.writing')) + '';
             const r = await updApi('web443_install', { confirm: 'OPEN' });
@@ -86,7 +86,7 @@
         }
 
         async function w443Jail() {
-            if (!updConfirm(t('w4.confirmJail'), t('w4.wEnable'))) return;
+            if (!await updConfirm(t('w4.confirmJail'), t('w4.wEnable'))) return;
             const el = document.getElementById('w443Outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.jailWriting')) + '';
             const r = await updApi('web443_jail', { confirm: 'ENABLE' });

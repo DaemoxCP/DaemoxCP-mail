@@ -103,7 +103,7 @@
         }
 
         async function acInstall() {
-            if (!adConfirm(t('acf.confirmInstall'), t('acf.wordInstall'))) return;
+            if (!await adConfirm(t('acf.confirmInstall'), t('acf.wordInstall'))) return;
             const el = document.getElementById('acOutcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('acf.installing'));
             const r = await acApi('install', { confirm: 'INSTALL' });

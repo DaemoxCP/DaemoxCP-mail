@@ -90,19 +90,23 @@ async function open(page) {
     real('the button is there, with the name of the way back', await btn.count() === 1 && (await btn.textContent()).includes(WAY_BACK));
 
     console.log('\n== Cancelling the confirmation sends nothing ==');
-    let asked = '';
-    page.once('dialog', d => { asked = d.message(); d.dismiss(); });
+    // The panel's window (reperto 197): what it says, then "Cancel".
     const before = requests.filter(r => r.body && r.body.action === 'reinstall_way_back').length;
     await btn.click();
-    await page.waitForTimeout(300);
+    await page.waitForSelector('#panelAskModal.show');
+    const asked = await page.innerText('#panelAskModal');
+    await page.click('#panelAskModal .modal-footer [data-bs-dismiss="modal"]');
+    await page.waitForFunction(() => !document.getElementById('panelAskModal').classList.contains('show'), null, { timeout: 5000 });
+    await page.waitForTimeout(400);
     real('it asks for confirmation, with the name', asked.includes(WAY_BACK));
     real('and cancelling does not send the request', requests.filter(r => r.body && r.body.action === 'reinstall_way_back').length === before);
 
     console.log('\n== Confirming: the request and the outcome ==');
     wayBackAnswer = { success: true, name: WAY_BACK, merged: 3, note: 'At the next restart the server is the one from before.',
                       log: ['3 mail files that arrived later copied inside.'], reboot: { success: true } };
-    page.once('dialog', d => d.accept());
     await btn.click();
+    await page.waitForSelector('#panelAskModal.show');
+    await page.click('#panelAskGo');
     await page.waitForSelector('#upd-interrupted .alert-success');
     const sent = requests.filter(r => r.body && r.body.action === 'reinstall_way_back').pop();
     real('it sends action, name and confirmation', sent && sent.body.name === WAY_BACK && sent.body.confirm === 'GO BACK');
@@ -114,16 +118,18 @@ async function open(page) {
     console.log('\n== The server refuses ==');
     await open(page);
     wayBackAnswer = { success: false, error: 'The boot environment is no longer there: I did nothing.' };
-    page.once('dialog', d => d.accept());
     await page.locator('#upd-way-back-btn').click();
+    await page.waitForSelector('#panelAskModal.show');
+    await page.click('#panelAskGo');
     await page.waitForSelector('#upd-interrupted .alert-danger');
     real('the refusal can be read', (await page.textContent('#upd-interrupted .alert-danger')).includes('no longer there'));
 
     console.log('\n== The restart cannot be scheduled ==');
     await open(page);
     wayBackAnswer = { success: true, note: 'Ready.', log: [], reboot: { success: false } };
-    page.once('dialog', d => d.accept());
     await page.locator('#upd-way-back-btn').click();
+    await page.waitForSelector('#panelAskModal.show');
+    await page.click('#panelAskGo');
     await page.waitForSelector('#upd-interrupted .alert-success');
     real('it says to restart by hand', (await page.textContent('#upd-interrupted')).includes('shutdown -r now'));
 

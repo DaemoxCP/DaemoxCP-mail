@@ -136,32 +136,42 @@ async function served(route) {
     real('the buttons have a name: Start/Restart/Stop Postfix, Stop the webmail',
         await page.locator('button[aria-label="' + IT['home.start'] + ' Postfix"]').count() === 1 && await page.locator('button[aria-label="' + IT['home.restart'] + ' Postfix"]').count() === 1
         && await page.locator('button[aria-label="' + IT['home.stop'] + ' Postfix"]').count() === 1 && await page.locator('button[aria-label="' + IT['home.stop'] + ' ' + IT['home.theWebmail'] + '"]').count() === 1);
-    let question = '';
-    page.once('dialog', d => { question = d.message(); d.dismiss(); });
+    // The panel's window and its notices (reperto 198), not the browser's dialogs.
+    const ask = async accept => {
+        await page.waitForSelector('#panelAskModal.show', { timeout: 5000 });
+        const q = await page.innerText('#panelAskModal .modal-body');
+        await page.click(accept ? '#panelAskGo' : '#panelAskModal .modal-footer [data-bs-dismiss="modal"]');
+        await page.waitForFunction(() => !document.getElementById('panelAskModal').classList.contains('show'), null, { timeout: 5000 });
+        return q;
+    };
+    const notices = () => page.$$eval('#panelNotices .alert', a => a.map(x => x.innerText.trim()));
+    const clearNotices = () => page.evaluate(() => { const b = document.getElementById('panelNotices'); if (b) b.replaceChildren(); });
     const beforeValue = requests.length;
     await page.click('button[aria-label="' + IT['home.stop'] + ' Postfix"]');
-    await page.waitForTimeout(300);
-    real('Stop Postfix: it asks, and says what happens — ' + question, question.includes(IT['home.confirm.postfix.stop']));
+    const question = await ask(false);
+    real('Stop Postfix: it asks in the panel\'s window, and says what happens — ' + question.replace(/\s+/g, ' '), question.includes(IT['home.confirm.postfix.stop'].split('\n')[0]));
     real('cancelled: no request', !requests.slice(beforeValue).some(r => r.path === '/api/service'));
-    const dialogs2 = [];
-    page.on('dialog', d => { dialogs2.push(d.message()); d.accept(); });
     await page.click('button[aria-label="' + IT['home.stop'] + ' Postfix"]');
-    await page.waitForFunction(() => true);
+    await ask(true);
     await page.waitForTimeout(500);
     const post = requests.find(r => r.path === '/api/service');
     real('confirmed: POST with service, action and CSRF token', post && post.body.service === 'postfix' && post.body.action === 'stop'
         && post.body.csrf_token === 'csrf-test');
     real('after the command the versions are read again at once (?fresh=1)', requests.some(r => r.path === '/api/versions?fresh=1'));
-    dialogs2.length = 0;
+    await clearNotices();
     await page.click('button[aria-label="' + IT['home.restart'] + ' Postfix"]');
     await page.waitForTimeout(400);
-    real('Restart Postfix: no question, only the outcome', dialogs2.length === 1 && dialogs2[0] === IT['common.done']);
-    dialogs2.length = 0;
+    const said = await notices();
+    real('Restart Postfix: no question, only the outcome, as a notice of the panel', !await page.$('#panelAskModal.show')
+        && said.length === 1 && said[0].includes(IT['common.done']));
+    await clearNotices();
     await page.click('button[aria-label="' + IT['home.restart'] + ' MySQL"]');
+    const mysqlQuestion = await ask(true);
     await page.waitForTimeout(400);
-    real('Restart MySQL: it asks first — ' + dialogs2[0], dialogs2.length === 2 && dialogs2[0].includes(IT['home.confirm.mysql.restart']));
+    real('Restart MySQL: it asks first — ' + mysqlQuestion.replace(/\s+/g, ' ').slice(0, 80), mysqlQuestion.includes(IT['home.confirm.mysql.restart'].split('\n')[0])
+        && (await notices()).length === 1);
     const mysql = requests.filter(r => r.path === '/api/service').pop();
-    real('e manda mysql-server', mysql.body.service === 'mysql-server' && mysql.body.action === 'restart');
+    real('and it sends mysql-server', mysql.body.service === 'mysql-server' && mysql.body.action === 'restart');
     const n = requests.filter(r => r.path === '/api/versions?fresh=1').length;
     await page.click('#versionsReread');
     await page.waitForFunction(k => true, n);

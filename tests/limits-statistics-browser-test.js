@@ -103,9 +103,16 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     const errors = [];
     page.on('pageerror', e => errors.push(String(e)));
     csp.watch(page, errors);
+    // Confirmations are the panel's window (reperto 198): a browser dialog is a fault, counted and closed.
     const dialogs = [];
-    let accept = true;
-    page.on('dialog', async d => { dialogs.push(d.message()); if (accept) await d.accept(); else await d.dismiss(); });
+    page.on('dialog', async d => { dialogs.push(d.message()); await d.dismiss(); });
+    const answer = async (accept) => {
+        await page.waitForSelector('#panelAskModal.show', { timeout: 5000 });
+        const asked = await page.innerText('#panelAskModal .modal-body');
+        await page.click(accept ? '#panelAskGo' : '#panelAskModal .modal-footer [data-bs-dismiss="modal"]');
+        await page.waitForFunction(() => !document.getElementById('panelAskModal').classList.contains('show'), null, { timeout: 5000 });
+        return asked;
+    };
 
     console.log('\n== Sending limits, in Italian ==');
     await page.goto(BASE + '/ratelimits');
@@ -149,12 +156,11 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     await page.waitForSelector('#addLimitModal', { state: 'hidden' });
     check('saved for the same mailbox', posts[posts.length - 1].mailbox_id === 11 && posts[posts.length - 1].daily === 250);
 
-    accept = false;
     await page.click('[data-limit-delete="4"]');
-    await page.waitForTimeout(200);
-    check('delete cancelled: nothing sent', posts[posts.length - 1].action === 'save_mailbox' && dialogs[dialogs.length - 1].includes('info@example.com'));
-    accept = true;
+    const asked = await answer(false);
+    check('delete cancelled: nothing sent', posts[posts.length - 1].action === 'save_mailbox' && asked.includes('info@example.com'));
     await page.click('[data-limit-delete="4"]');
+    await answer(true);
     await page.waitForFunction(() => !document.querySelector('[data-limit-delete="4"]'));
     check('delete confirmed: id and token', posts[posts.length - 1].action === 'delete' && posts[posts.length - 1].id === 4
         && posts[posts.length - 1].csrf_token === 'csrf-test');
@@ -207,6 +213,7 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     }
 
     check('no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''), errors.length === 0);
+    check('no browser dialog (confirmations are the panel\'s window)' + (dialogs.length ? ': ' + dialogs.join(' | ') : ''), dialogs.length === 0);
     await browser.close();
     console.log('\n' + (failed === 0 ? 'ALL GREEN' : failed + ' CHECKS FAILED'));
     process.exit(failed ? 1 : 0);

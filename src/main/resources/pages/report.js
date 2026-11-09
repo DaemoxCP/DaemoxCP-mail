@@ -12,10 +12,10 @@
             return await r.json();
         }
 
-        // Conferma scritta: la parola si mostra nella lingua della pagina, al server va il suo codice.
-        function repConfirm(textValue, keyword) {
-            const typed = prompt(textValue + '\n\n' + t('ad.typeToConfirm', { word: keyword }));
-            return typed !== null && typed.trim().toUpperCase() === keyword.toUpperCase();
+        // La conferma: la finestra del pannello (reperto 198), non il prompt del browser con la parola da scrivere. Al
+        // server la parola va comunque, nel codice di chi chiama.
+        function repConfirm(textValue) {
+            return panelConfirm(textValue);
         }
 
         function repEsc(v) {
@@ -103,7 +103,7 @@
         }
 
         async function repCreateIdentity(address) {
-            if (!repConfirm(t('rep.confirmCreate', { address: address }), t('ad.wordCreate'))) return;
+            if (!await repConfirm(t('rep.confirmCreate', { address: address }), t('ad.wordCreate'))) return;
             const el = document.getElementById('rep-outcome-identity');
             el.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.inProgress')) + '</span>';
             const r = await repApi('identity_create', { confirm: 'CREATE', address: address });
@@ -129,8 +129,8 @@
 
         async function repTest() {
             const a = document.getElementById('repTo').value.trim();
-            if (!a) { alert(t('rep.needTo')); return; }
-            if (!repConfirm(t('rep.confirmSend', { address: a }), t('rep.wordSend'))) return;
+            if (!a) { panelSay('warning', t('rep.needTo')); return; }
+            if (!await repConfirm(t('rep.confirmSend', { address: a }), t('rep.wordSend'))) return;
             const el = document.getElementById('rep-outcome');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('rep.sending')) + '';
             const r = await repApi('send', { confirm: 'SEND', recipient: a });

@@ -143,8 +143,8 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ language: lang, csrf_token: token ? token.value : '' })
         }).then(function (r) { return r.json(); }).then(function (d) {
-            if (d.success) location.reload(); else alert(t('layout.languageError'));
-        }).catch(function () { alert(t('layout.languageError')); });
+            if (d.success) location.reload(); else panelSay('danger', t('layout.languageError'));
+        }).catch(function () { panelSay('danger', t('layout.languageError')); });
     });
 });
 """, true);

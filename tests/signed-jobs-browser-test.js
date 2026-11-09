@@ -20,10 +20,11 @@ const BASE = 'https://127.0.0.1:2096';
 const OUT = process.argv[2];
 const ONLY = (process.argv[3] || 'python,roundcube,mysql').split(',');
 const VM = 'ssh -i ' + process.env.HOME + '/.ssh/freebsd_test_vm -o IdentitiesOnly=yes -o ConnectTimeout=10 root@192.168.1.20';
+// The rows of "Update the server" (reperti 193, 197): the row's one button, "Prepare", opens the guided panel under it.
 const CARDS = [
-    { key: 'python', pre: 'pyPre()', run: 'pyRun()', box: '#py-pre', log: '#py-log', word: 'MOVE PYTHON' },
-    { key: 'roundcube', pre: 'rcPre()', run: 'rcRun()', box: '#rc-pre', log: '#rc-log', word: 'UPGRADE ROUNDCUBE' },
-    { key: 'mysql', pre: 'my84Pre()', run: 'my84Run()', box: '#my84-pre', log: '#my84-log', word: 'MIGRATE TO 8.4' },
+    { key: 'python', pre: 'ucPython()', run: 'pyRun()', box: '#py-pre', log: '#py-log', word: 'MOVE PYTHON' },
+    { key: 'roundcube', pre: 'ucRoundcube()', run: 'rcRun()', box: '#rc-pre', log: '#rc-log', word: 'UPGRADE ROUNDCUBE' },
+    { key: 'mysql', pre: 'ucMysql()', run: 'my84Run()', box: '#my84-pre', log: '#my84-log', word: 'MIGRATE TO 8.4' },
 ];
 let failed = 0;
 const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + what); if (!ok) failed++; };
@@ -52,7 +53,10 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
     for (const c of CARDS.filter(c => ONLY.includes(c.key))) {
         console.log('\n== ' + c.key + ' ==');
         const box = page.locator(c.box);
-        const card = box.locator('xpath=ancestor::div[contains(concat(" ", @class, " "), " card ")][1]');
+        // The procedure's row of "Update the server" (a <li> in a <section class="card">): its pictures.
+        const card = box.locator('xpath=ancestor::li[1]');
+        // The row appears when the packages have been read and the procedure applies.
+        await page.waitForSelector(`button[data-on-click="${c.pre}"]`, { timeout: 300000 });
         await page.click(`button[data-on-click="${c.pre}"]`);
         await page.waitForFunction(sel => {
             const el = document.querySelector(sel);
@@ -63,7 +67,8 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
         const text = await box.innerText();
         fs.writeFileSync(`${OUT}/${c.key}-1-plan.txt`, text);
         const fp = (text.match(/fingerprint[^0-9a-f]*([0-9a-f]{16})/i) || [])[1];
-        const planRows = await box.locator('table').nth(1).locator('tbody tr').allInnerTexts().catch(() => []);
+        // The plan's table comes first; all the checks are closed below it (reperto 197).
+        const planRows = await box.locator('table').first().locator('tbody tr').allInnerTexts().catch(() => []);
         console.log('  plan:\n    ' + planRows.map(r => r.replace(/\s+/g, ' ').trim()).join('\n    '));
         console.log('  ' + (text.split('\n').find(l => /worked out with/i.test(l)) || "(no \"worked out with\" line)"));
         check(c.key + ': the plan is in the card', planRows.length > 0);
@@ -74,21 +79,24 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
 
         // The request that starts the job: it must carry the fingerprint shown in the card.
         const sent = page.waitForRequest(r => r.url().includes('/api/updates') && (r.postData() || '').includes('"confirm"'));
-        page.once('dialog', d => d.accept(c.word));
+        // The panel's window, not the browser's (reperto 197): the word goes to the server in the request.
         await runButton.click();
+        await page.waitForSelector('#panelAskModal.show');
+        await page.click('#panelAskGo');
         const body = JSON.parse((await sent).postData());
         check(c.key + ': the page sends the fingerprint it showed', body.signature === fp);
         await page.waitForFunction(sel => {
             const el = document.querySelector(sel);
-            return el && (el.querySelector('.text-success .fa-check') || el.querySelector('.alert-danger'));
+            return el && (el.querySelector('.alert-success') || el.querySelector('.alert-danger'));
         }, c.box, { timeout: 1800000 });
         const outcome = await box.innerText();
-        const log = await page.locator(c.log).innerText();
+        const log = await page.locator(c.log).textContent();
         fs.writeFileSync(`${OUT}/${c.key}-2-log.txt`, log);
         await card.scrollIntoViewIfNeeded();
         await card.screenshot({ path: `${OUT}/${c.key}-2-done.png` });
         console.log('  outcome: ' + outcome.replace(/\s+/g, ' ').trim());
-        check(c.key + ': completed', /done in/i.test(outcome) && !/failed/i.test(outcome));
+        check(c.key + ': completed', /Done\./.test(outcome) && !/failed/i.test(outcome));
+        check(c.key + ': the confirmation went with its word', body.confirm === c.word);
         check(c.key + ': the job ran the fingerprint shown', log.includes('exact plan (fingerprint ' + fp + ')'));
         check(c.key + ': nothing changed outside the plan', log.includes('ok  no change outside the plan') && !/NO  /.test(log));
         // planPoll reloads the plan list after a success: wait for it before the next card.

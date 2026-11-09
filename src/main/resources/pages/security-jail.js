@@ -210,8 +210,8 @@
             if (fwInput && data.root_forward) fwInput.value = data.root_forward;
         }
 
-        function paliasFix() {
-            if (!confirm(t('sj.confirmFix'))) return;
+        async function paliasFix() {
+            if (!await panelConfirm(t('sj.confirmFix'))) return;
             const fixBtn = document.getElementById('paliasFixBtn');
             const origBtn = fixBtn.innerHTML;
             fixBtn.disabled = true;
@@ -241,10 +241,10 @@
             });
         }
 
-        function paliasSetRootForward() {
+        async function paliasSetRootForward() {
             const v = document.getElementById('paliasRootForward').value.trim();
-            if (!v) { alert(t('sj.needAddress')); return; }
-            if (!confirm(t('sj.confirmRootFwd', { to: v }))) return;
+            if (!v) { panelSay('warning', t('sj.needAddress')); return; }
+            if (!await panelConfirm(t('sj.confirmRootFwd', { to: v }))) return;
             const logEl = document.getElementById('paliasLog');
             logEl.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('jc.saving')) + '</div>';
             fetch('/api/postfix-aliases-health', {
@@ -321,9 +321,9 @@
                 });
         }
 
-        function runFhcFixAll() {
+        async function runFhcFixAll() {
             const confirmMsg = t('sj.confirmFixAll');
-            if (!confirm(confirmMsg)) return;
+            if (!await panelConfirm(confirmMsg)) return;
 
             const btn = document.getElementById('btnFixAll');
             const original = btn.innerHTML;
@@ -369,17 +369,17 @@
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                alert(t('common.networkError', { message: e.message }));
+                panelSay('danger', t('common.networkError', { message: e.message }));
             });
         }
 
-        function runFhcFix(action, btn) {
+        async function runFhcFix(action, btn) {
             // Warning rafforzato per le azioni pf (rischio lockout SSH)
             const pfActions = { 'start_pf': true, 'enable_pf_at_boot': true, 'add_pf_anchor': true };
             let confirmMsg = t('sj.confirmOne');
             if (pfActions[action]) confirmMsg = t('sj.confirmPf');
             if (action === 'repair_ban_action') confirmMsg = t('sj.confirmBanAction');
-            if (!confirm(confirmMsg)) return;
+            if (!await panelConfirm(confirmMsg)) return;
             const original = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>' + escHtml(t('sj.inProgress')) + '';
@@ -425,14 +425,14 @@
                 } else if (data.steps) {
                     loadFail2banHealth();
                 } else {
-                    alert(t('common.error', { message: data.message || data.error || t('common.unknownError') }) +
+                    panelSay('danger', t('common.error', { message: data.message || data.error || t('common.unknownError') }) +
                         (data.output ? '\n\n' + t('sj.output') + ':\n' + data.output : ''));
                     loadFail2banHealth();
                 }
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                alert(t('common.networkError', { message: e.message }));
+                panelSay('danger', t('common.networkError', { message: e.message }));
             });
         }
 
@@ -446,38 +446,38 @@
         }
 
         // Reload morbido (fail2ban-client reload): rilegge i file senza killare il daemon
-        function reloadFail2banFromPanel() {
-            if (!confirm(t('sj.confirmReload'))) return;
+        async function reloadFail2banFromPanel() {
+            if (!await panelConfirm(t('sj.confirmReload'))) return;
             fetch('/api/fail2ban_health', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'reload_fail2ban', csrf_token: ensureFhcCsrfToken() })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✅ ' : '❌ ') + (data.message || t('common.done')) +
+                panelSay('success', (data.success ? '✅ ' : '❌ ') + (data.message || t('common.done')) +
                     (data.output ? '\n\n' + t('sj.output') + ':\n' + data.output : ''));
                 loadFail2banHealth();
                 if (typeof loadJailLiveState === 'function') loadJailLiveState();
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         // Restart pulito (service fail2ban restart): killa il daemon e lo riavvia
-        function restartFail2banFromPanel() {
-            if (!confirm(t('sj.confirmRestart'))) return;
+        async function restartFail2banFromPanel() {
+            if (!await panelConfirm(t('sj.confirmRestart'))) return;
             fetch('/api/fail2ban_health', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'restart_service', csrf_token: ensureFhcCsrfToken() })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✅ ' : '❌ ') + (data.message || t('common.done')) +
+                panelSay('success', (data.success ? '✅ ' : '❌ ') + (data.message || t('common.done')) +
                     (data.output ? '\n\n' + t('sj.output') + ':\n' + data.output : ''));
                 loadFail2banHealth();
                 if (typeof loadJailLiveState === 'function') loadJailLiveState();
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         // Avvio di fail2ban dal pannello. Esiste gia' l'azione start_service: quello che
         // mancava era il modo di premerla dalla pagina dove il problema si vede.
-        function startFail2banFromPanel() {
+        async function startFail2banFromPanel() {
             // La barra rovesciata va DOPPIA qui dentro. Dentro un text block Java la sequenza
             // barra-n e' un a capo VERO: arriva al browser come un ritorno a capo dentro una
             // stringa JavaScript, la stringa non si chiude, il parser si ferma e l'INTERO blocco
@@ -486,17 +486,17 @@
             //
             // Questo commento stesso, scritto la prima volta con la sequenza singola per
             // spiegarla, ha rotto la pagina allo stesso modo: qui non si nomina, si descrive.
-            if (!confirm(t('sj.confirmStart'))) return;
+            if (!await panelConfirm(t('sj.confirmStart'))) return;
             fetch('/api/fail2ban_health', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'start_service', csrf_token: ensureFhcCsrfToken() })
             }).then(r => r.json()).then(data => {
-                alert((data.success ? '✅ ' : '❌ ') + (data.message || t('common.done')) +
+                panelSay('success', (data.success ? '✅ ' : '❌ ') + (data.message || t('common.done')) +
                     (data.output ? '\n\n' + t('sj.output') + ':\n' + data.output : ''));
                 if (typeof loadFail2banHealth === 'function') loadFail2banHealth();
                 if (typeof loadJailLiveState === 'function') loadJailLiveState();
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         // ===== End Health Check =====

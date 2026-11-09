@@ -213,6 +213,45 @@ function panelAsk(options) {
     });
 }
 
+// Una conferma di una frase, al posto di confirm() (reperto 198): «Procedere?», la frase, e il pulsante; rosso quando
+// si toglie qualcosa. Restituisce una promessa, come panelAsk.
+function panelConfirm(text, danger) {
+    return panelAsk({ title: t('gd.confirmTitle'), text: text, confirm: t(danger ? 'gd.confirmDanger' : 'gd.confirmGo'), danger: !!danger });
+}
+
+// Un avviso del pannello, al posto di alert() (reperto 198): non ferma la pagina, lo leggono gli screen reader (role
+// alert per errori e richieste, status per gli esiti), il colore dice cos'e' e lo dice anche la parola nascosta. Gli
+// esiti riusciti spariscono da soli dopo 10 s; errori e richieste restano finche' non li si chiude.
+function panelSay(kind, text) {
+    var s = String(text === undefined || text === null ? '' : text);
+    var k = { success: 1, danger: 1, warning: 1, info: 1 }[kind] ? kind : 'info';
+    if (/^\u2713/.test(s)) k = 'success'; else if (/^\u2717/.test(s)) k = 'danger'; else if (/^\u26a0/.test(s)) k = 'warning';
+    var box = document.getElementById('panelNotices');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'panelNotices';
+        box.className = 'panel-notices';
+        document.body.appendChild(box);
+    }
+    var n = panelRebootEl('div', 'alert alert-' + k + ' alert-dismissible shadow-sm mb-2');
+    n.setAttribute('role', k === 'danger' || k === 'warning' ? 'alert' : 'status');
+    n.append(panelRebootEl('span', 'visually-hidden', t('notice.' + k) + ': '));
+    s.split('\n').forEach(function (line) { if (line.trim()) n.append(panelRebootEl('p', 'mb-1', line)); });
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn-close';
+    close.setAttribute('aria-label', t('common.close'));
+    close.addEventListener('click', function () { n.remove(); });
+    n.append(close);
+    box.append(n);
+    if (k === 'success' || k === 'info') setTimeout(function () { n.remove(); }, 10000);
+}
+
+// La stessa, col pulsante rosso: per quello che toglie, revoca o azzera.
+function panelConfirmDanger(text) {
+    return panelConfirm(text, true);
+}
+
 function panelAskYes() {
     if (panelAsk.resolve) panelAsk.resolve(true);
     bootstrap.Modal.getOrCreateInstance(document.getElementById('panelAskModal')).hide();

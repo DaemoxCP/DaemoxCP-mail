@@ -44,9 +44,9 @@
             });
         }
 
-        function runUbFix(action, btn) {
+        async function runUbFix(action, btn) {
             const warning = (action === 'switch_resolv_conf') ? '\n\n' + t('shu.resolvWarning') : '';
-            if (!confirm(t('shu.confirmFix') + warning)) return;
+            if (!await panelConfirm(t('shu.confirmFix') + warning)) return;
             const original = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>' + escHtml(t('sj.inProgress')) + '';
@@ -58,17 +58,17 @@
                 btn.disabled = false;
                 btn.innerHTML = original;
                 if (data.success) loadUnboundHealth();
-                else alert(t('common.error', { message: data.message || data.error || t('common.unknownError') }) + (data.output ? '\n\n' + data.output : ''));
+                else panelSay('danger', t('common.error', { message: data.message || data.error || t('common.unknownError') }) + (data.output ? '\n\n' + data.output : ''));
                 loadUnboundHealth();
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                alert(t('common.networkError', { message: e.message }));
+                panelSay('danger', t('common.networkError', { message: e.message }));
             });
         }
 
-        function runUbFixAll() {
-            if (!confirm(t('shu.confirmUbFixAll'))) return;
+        async function runUbFixAll() {
+            if (!await panelConfirm(t('shu.confirmUbFixAll'))) return;
 
             const btn = document.getElementById('btnUbFixAll');
             const original = btn.innerHTML;
@@ -102,7 +102,7 @@
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                alert(t('common.networkError', { message: e.message }));
+                panelSay('danger', t('common.networkError', { message: e.message }));
             });
         }
 
@@ -126,7 +126,7 @@
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                alert(t('common.networkError', { message: e.message }));
+                panelSay('danger', t('common.networkError', { message: e.message }));
             });
         }
 
@@ -184,8 +184,8 @@
                 });
         }
 
-        function runCavFix(action, btn) {
-            if (!confirm(t('shu.confirmAutoFix'))) return;
+        async function runCavFix(action, btn) {
+            if (!await panelConfirm(t('shu.confirmAutoFix'))) return;
             const original = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>' + escHtml(t('shu.inProgressSlow')) + '';
@@ -197,17 +197,17 @@
                 btn.disabled = false;
                 btn.innerHTML = original;
                 if (data.success) loadClamavHealth();
-                else alert(t('common.error', { message: data.message || data.error || t('common.unknownError') }) + (data.output ? '\n\n' + data.output : ''));
+                else panelSay('danger', t('common.error', { message: data.message || data.error || t('common.unknownError') }) + (data.output ? '\n\n' + data.output : ''));
                 loadClamavHealth();
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                alert(t('common.networkError', { message: e.message }));
+                panelSay('danger', t('common.networkError', { message: e.message }));
             });
         }
 
-        function runCavFixAll() {
-            if (!confirm(t('shu.confirmCavFixAll'))) return;
+        async function runCavFixAll() {
+            if (!await panelConfirm(t('shu.confirmCavFixAll'))) return;
 
             const btn = document.getElementById('btnCavFixAll');
             const original = btn.innerHTML;
@@ -241,7 +241,7 @@
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                alert(t('common.networkError', { message: e.message }));
+                panelSay('danger', t('common.networkError', { message: e.message }));
             });
         }
 
@@ -282,7 +282,7 @@
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                alert(t('common.networkError', { message: e.message }));
+                panelSay('danger', t('common.networkError', { message: e.message }));
             });
         }
 
@@ -318,8 +318,8 @@
         }
 
         // ===== Permaban =====
-        function permabanAdd(ip) {
-            if (!confirm(t('shu.confirmPermaban', { ip: ip }))) return;
+        async function permabanAdd(ip) {
+            if (!await panelConfirmDanger(t('shu.confirmPermaban', { ip: ip }))) return;
             fetch('/api/fail2ban', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -329,16 +329,16 @@
                     permabanList();
                     loadStatus();
                 } else {
-                    alert(t('common.error', { message: data.message || t('common.unknownError') }));
+                    panelSay('danger', t('common.error', { message: data.message || t('common.unknownError') }));
                 }
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        function permabanAddManual() {
+        async function permabanAddManual() {
             const input = document.getElementById('permabanIpInput');
             const ip = input.value.trim();
-            if (!ip) { alert(t('sec.needIp')); return; }
-            if (!confirm(t('shu.confirmPermabanPf', { ip: ip }))) return;
+            if (!ip) { panelSay('warning', t('sec.needIp')); return; }
+            if (!await panelConfirmDanger(t('shu.confirmPermabanPf', { ip: ip }))) return;
             fetch('/api/fail2ban', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -348,21 +348,21 @@
                     input.value = '';
                     permabanList();
                 } else {
-                    alert(t('common.error', { message: data.message || t('common.unknownError') }));
+                    panelSay('danger', t('common.error', { message: data.message || t('common.unknownError') }));
                 }
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        function permabanRemove(ip) {
-            if (!confirm(t('shu.confirmUnban', { ip: ip }))) return;
+        async function permabanRemove(ip) {
+            if (!await panelConfirmDanger(t('shu.confirmUnban', { ip: ip }))) return;
             fetch('/api/fail2ban', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'permaban_remove', ip: ip })
             }).then(r => r.json()).then(data => {
                 if (data.success) permabanList();
-                else alert(t('common.error', { message: data.message || t('common.unknownError') }));
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+                else panelSay('danger', t('common.error', { message: data.message || t('common.unknownError') }));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         function permabanReload() {
@@ -371,9 +371,9 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'permaban_reload' })
             }).then(r => r.json()).then(data => {
-                alert(data.message || (data.success ? t('common.done') : t('common.errorShort')));
+                panelSay('danger', data.message || (data.success ? t('common.done') : t('common.errorShort')));
                 permabanList();
-            }).catch(e => alert(t('common.networkError', { message: e.message })));
+            }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
         function permabanList() {
