@@ -12174,7 +12174,25 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <h2><i class="fas fa-stethoscope me-2" aria-hidden="true"></i>{{t:diag.title}}</h2>
             <p class="text-muted">{{t:diag.intro}}</p>
 
-            <div class="card mb-4">
+            <!-- Controlla tutto (reperto 199): un pulsante, i controlli che leggono uno dopo l'altro, e l'elenco con prima
+                 quello da guardare, ognuno col suo passo dopo. Le schede qui sotto restano per i dettagli. -->
+            <section class="card mb-4 border-primary" id="diag-all" aria-labelledby="diagAllTitle">
+                <div class="card-header">
+                    <h3 class="h5 mb-0" id="diagAllTitle"><i class="fas fa-list-check me-2" aria-hidden="true"></i>{{t:diag.all.title}}</h3>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">{{t:diag.all.intro}}</p>
+                    <button type="button" class="btn btn-primary touch-target" id="diagAllGo" data-on-click="diagAll()"><i class="fas fa-play me-1" aria-hidden="true"></i>{{t:diag.all.go}}</button>
+                    <p class="small mt-2 mb-2" id="diagAllState" role="status" aria-live="polite"></p>
+                    <ul class="list-group" id="diagAllList"></ul>
+                    <details class="mt-2" id="diagAllOkBox" hidden>
+                        <summary class="small" id="diagAllOkTitle"></summary>
+                        <ul class="list-group mt-2" id="diagAllOk"></ul>
+                    </details>
+                </div>
+            </section>
+
+            <div id="diag-os" tabindex="-1" class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fab fa-freebsd me-2" aria-hidden="true"></i><strong>{{t:up.os}}</strong>
                         <span class="small text-muted ms-2">{{t:up.osSub}}</span></span>
@@ -12220,7 +12238,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4">
+            <div id="diag-svc" tabindex="-1" class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-user-shield me-2" aria-hidden="true"></i><strong>{{t:up.svcUsers}}</strong>
                         <span class="small text-muted ms-2">{{t:up.svcUsersSub}}</span></span>
@@ -12232,7 +12250,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4">
+            <div id="diag-watch" tabindex="-1" class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-binoculars me-2" aria-hidden="true"></i><strong>{{t:up.watch}}</strong>
                         <span class="small text-muted ms-2">{{t:up.watchSub}}</span></span>
@@ -12245,7 +12263,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4 border-danger">
+            <div id="diag-libs" tabindex="-1" class="card mb-4 border-danger">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-link-slash me-2" aria-hidden="true"></i><strong>{{t:up.libs}}</strong>
                         <span class="small text-muted ms-2">{{t:up.libsSub}}</span></span>
@@ -12261,7 +12279,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4">
+            <div id="diag-compat" tabindex="-1" class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-vial me-2" aria-hidden="true"></i><strong>{{t:up.compat}}</strong>
                         <span class="small text-muted ms-2">{{t:up.compatSub}}</span></span>
@@ -12292,7 +12310,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4">
+            <div id="diag-java" tabindex="-1" class="card mb-4">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span><i class="fab fa-java me-2" aria-hidden="true"></i><strong>{{t:uc.java}}</strong>
                         <span class="small text-muted ms-2">{{t:diag.jvmSub}}</span></span>
@@ -12304,7 +12322,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4">
+            <div id="diag-web" tabindex="-1" class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-globe me-2" aria-hidden="true"></i><strong>{{t:up.web}}</strong>
                         <span class="small text-muted ms-2">{{t:up.webSub}}</span></span>
@@ -12317,7 +12335,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4">
+            <div id="diag-defaults" tabindex="-1" class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-scale-balanced me-2" aria-hidden="true"></i><strong>{{t:up.defaults}}</strong>
                         <span class="small text-muted ms-2">{{t:up.defaultsSub}}</span></span>
@@ -12329,7 +12347,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <div class="card mb-4 border-info">
+            <div id="diag-env" tabindex="-1" class="card mb-4 border-info">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-terminal me-2" aria-hidden="true"></i><strong>{{t:up.env}}</strong>
                         <span class="small text-muted ms-2">{{t:up.envSub}}</span></span>
@@ -12375,7 +12393,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // in una sola costante e il limite torna. Una chiamata a metodo non e' una costante,
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
         return resource("pages/upd-api.js") + getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js")
-                + resource("pages/os-update.js") + resource("pages/guided.js") + resource("pages/update-center.js");
+                + resource("pages/os-update.js") + resource("pages/guided.js") + resource("pages/update-center.js")
+                + resource("pages/diag-all.js");
     }
 
     /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */

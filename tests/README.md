@@ -166,6 +166,11 @@ VM through `java-update-state.sh`: the service sees the panel again (its pidfile
 runs as mailpanel and holds the port, the JVM is the new one and protected again. It needs a JVM update waiting on
 the VM; the test's header says how the way back the script leaves puts the old JVM back.
 
+`diagnostics-browser-test.js` presses "Check everything" in Diagnostics on the panel of the test VM (reperto 199):
+the ten read-only checks one after the other, each with its verdict, what needs a look first and the most important
+first, its state in words and at most one button, what is fine closed below; "Open the details" brings its card into
+view. Read only.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the
@@ -726,7 +731,10 @@ and the restart left (reperto 196), a new FreeBSD release in four steps with onl
 the checks that stop a preparation, a dedicated procedure guided (Roundcube: one line on the checks, what to
 know before, the plan, one button, the panel's window, the outcome that stays in the row; and when the checks
 stop it), the restart window (what stops, the chosen delay, the time, cancelling, Escape), reads that queue
-up instead of failing, 44 px touch buttons at 375 px, and no browser dialog at all.
+up instead of failing, 44 px touch buttons at 375 px, and no browser dialog at all. Diagnostics, "Check everything"
+(reperto 199): one button, every check run, what needs a look first with one button each (the failed job's log, the
+patches on Updates), what is fine closed below with how many, and the compatibility verdict saying what and whose,
+component by component, with the card's own rules.
 
 **panel-dialogs-browser-test.js** — on the real panel of the test VM (reperto 198): every page of the menu loads with
 no page error and no browser dialog; on Domains and Mailboxes "Delete" opens the panel's window with the red button,

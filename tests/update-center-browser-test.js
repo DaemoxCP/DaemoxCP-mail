@@ -12,6 +12,8 @@
 //  4b. A new FreeBSD release, one step at a time: only when there is one; four steps, only the current one with its
 //     button; check and prepare with one confirmation, the command from SSH, the install, the final check by itself.
 //  4c. The checks stop the preparation: only the rows that stop it, and nothing starts.
+//  9. Diagnostics, check everything (reperto 199): one button, every read-only check in turn, first what needs a look
+//     (most important first), each with one button for its next step; what is fine closed below.
 //  4d. A dedicated procedure, guided (reperto 197): Roundcube. "Prepare": one line on the checks, what to know before,
 //      the exact plan and one button, all the checks closed below; the panel's window, not the browser's; the job's
 //      outcome stays in the row after the card reads its state again. When the checks stop it: only the rows that stop.
@@ -66,6 +68,19 @@ function replies(o, st) {
                 { label: 'Downtime', level: 'wait', detail: 'The webmail is off for about a minute.' }],
                 plan: { measured: true, command: 'pkg upgrade -n', changes: [{ type: 'upgrade', name: 'roundcube-php84', from: '1.6.11', to: '1.7.0' }] } },
         roundcube_update: { success: true, jobId: 'rc-1' },
+        // Diagnostics: two to look at (a failed job, a newer standard), one step (patches ready), the rest fine.
+        journal_list: { success: true, dir: '/var/db/mailpanel/jobs', journals: [
+            { name: '20261109-000000-os-patch__osp-1.log', type: 'os-patch', startedUtc: '2026-11-09T00:00:00Z', status: 'error', bytes: 100 },
+            { name: '20261108-230000-search__srch-1.log', type: 'search', startedUtc: '2026-11-08T23:00:00Z', status: 'completed', bytes: 90 }] },
+        journal_read: { success: true, name: '20261109-000000-os-patch__osp-1.log', truncated: false, text: '=== job osp-1 (os-patch) started ===\n=== end: error ===' },
+        watch: { success: true, replaced: 0, updated: 1, unread: 0, note: '1 standard has a newer version.', standard: [], source: 'rfc-editor' },
+        broken_libs: { success: true, packages: [] },
+        compatibility: { success: true, dovecot: { scanned: true, compatible24: true, doveconfOk: true }, postfix: { verdict: 'ALIGNED' },
+            rspamd: { verdict: 'NOTHING_TO_REPORT' }, mysql: { present: true, issues: [], eol: false }, webmail: { consistent: true } },
+        java_status: { success: true, present: false },
+        web_diagnosis: { success: true, plainContents: false, verdict: 'nginx serves only what it should.' },
+        defaults_check: { success: true, lines: [{ component: 'OpenSSL', outcome: 'consistent' }] },
+        panel_env: { success: true, unreachable: false, absent: false, explanation: 'Every tool is reachable.', tools: [] },
         jump_continue: { success: true, jobId: 'jump-1' },
         jump_cancel: { success: true, note: 'Move cancelled.' },
         os_upgrade_verify: { success: true, allGood: true, checks: [{ label: 'Services', level: 'ok', detail: 'All up.' }], environments: { success: false } },
@@ -364,6 +379,42 @@ const allErrors = [], allDialogs = [];
     check('  with the label for screen readers (' + suRows[0].hidden.join('|') + ')', suRows[0].hidden.some(x => x.trim() === 'Why root:'));
     check('redis, without root, says nothing', !suRows[1].text.includes('Root only') && suRows[1].hidden.length === 0);
     await su.page.close();
+
+    console.log('\n== 9. Diagnostics, check everything ==');
+    const dg = await open(ctx, 'diagnostics', 'en', { noPatches: false, reboot: 'none' });
+    allErrors.push(dg.errors); allDialogs.push(dg.dialogs);
+    check('one button to start', await dg.page.$$eval('#diag-all button', b => b.length) === 1);
+    await dg.page.click('#diagAllGo');
+    await dg.page.waitForFunction(() => /things to look at|checks are fine/.test(document.getElementById('diagAllState').textContent), null, { timeout: 20000 });
+    const items = await dg.page.$$eval('#diagAllList > li', lis => lis.map(li => ({ key: li.dataset.diag, level: li.dataset.level,
+        text: li.innerText.replace(/\s+/g, ' '), buttons: li.querySelectorAll('button, a.btn').length })));
+    items.forEach(x => console.log('    ' + x.level + ' ' + x.key + ': ' + x.text.slice(0, 110)));
+    check('every check ran, one after the other', ['os_status', 'journal_list', 'service_users', 'watch', 'broken_libs', 'compatibility', 'java_status',
+        'web_diagnosis', 'defaults_check', 'panel_env'].every(a => dg.calls.some(c => c.action === a)));
+    check('first what needs a look, the most important first: the two to look at, then the step to do',
+        items.length === 3 && items[0].level === 'warn' && items[1].level === 'warn' && items[2].level === 'todo' && items[2].key === 'os');
+    check('  each with its state in words and one button', items.every(x => x.buttons === 1) && /\(to look at\)/.test(items[0].text));
+    check('  the patches: go to Updates', await dg.page.$('#diagAllList li[data-diag="os"] a[href="/updates"]') !== null);
+    check('the state says how many', /2|3 things to look at/.test(await dg.page.textContent('#diagAllState')));
+    check('what is fine is closed below, with how many', await dg.page.$eval('#diagAllOkBox', d => !d.hidden && !d.open)
+        && /7 checks are fine/.test(await dg.page.textContent('#diagAllOkTitle')));
+    if (shots) await dg.page.locator('#diag-all').screenshot({ path: path.join(shots, 'diagnostics-check-all.png') });
+    const cmp = await dg.page.evaluate(() => [
+        diagCompat({ dovecot: { scanned: true, compatible24: false, doveconfOk: true }, postfix: { verdict: 'LEVEL_BEHIND' },
+            rspamd: { present: false }, mysql: { present: true, eol: true, issues: [] }, webmail: { consistent: false } }),
+        diagCompat({ dovecot: { scanned: true, compatible24: true, doveconfOk: true }, postfix: { verdict: 'LEVEL_BEHIND' },
+            rspamd: { present: true, verdict: 'BEHAVIOR_DIFFS' }, mysql: { present: false }, webmail: { consistent: true } }),
+        diagCompat({ dovecot: { scanned: true, compatible24: true, doveconfOk: true }, postfix: { verdict: 'ALIGNED' },
+            rspamd: { present: true, verdict: 'NOTHING_TO_REPORT' }, mysql: { present: true, issues: [] }, webmail: { consistent: true } })]);
+    console.log('    ' + cmp.map(c => c[0] + ': ' + c[1]).join('\n    '));
+    check('compatibility says what and whose: Dovecot first (red), then Postfix, MySQL, webmail (yellow)', cmp[0][0] === 'problem'
+        && /^Dovecot: the configuration is not ready for 2\.4; Postfix: .+; MySQL: this version is at the end of its support; Webmail: PHP and Roundcube do not match\.$/.test(cmp[0][1]));
+    check('  only Postfix behind: to look at, the card\'s verdict inside the sentence', cmp[1][0] === 'warn' && cmp[1][1] === 'Postfix: the level is behind.');
+    check('  all in order: fine', cmp[2][0] === 'ok');
+    await dg.page.click('#diagAllList li[data-diag="journal"] button');
+    await dg.page.waitForFunction(() => /=== end: error ===/.test(document.getElementById('jr-text').textContent), null, { timeout: 10000 });
+    check('the failed job: its log, from the operation logs', dg.calls.some(c => c.action === 'journal_read' && c.name === '20261109-000000-os-patch__osp-1.log'));
+    await dg.page.close();
 
     console.log('\n== 7. At 375 px ==');
     const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, locale: 'en-GB' });
