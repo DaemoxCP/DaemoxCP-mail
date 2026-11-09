@@ -213,7 +213,7 @@ public class SSLMailServer {
         "mtasts_plan", "watch", "watch_changes", "openssl_expiry", "port465_status",
         "python_preflight", "python_leftovers", "java_preflight", "java_status", "roundcube_preflight",
         "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status", "interruption_status",
-        "journal_list", "journal_read");
+        "journal_list", "journal_read", "package_turn");
 
     /** Le rotte dichiarate, con il loro accesso: le prove controllano che ci siano tutte. */
     private final Map<String, Access> routes = new java.util.LinkedHashMap<>();
@@ -7819,6 +7819,7 @@ public class SSLMailServer {
                 case "mysql_client_diag" -> response = UpdateManager.mysqlClientDiagnostics();
                 case "defaults_check" -> response = UpdateManager.defaultsConsistency();
                 case "branch_status" -> response = UpdateManager.branchStatus();
+                case "package_turn" -> response = UpdateManager.packageTurn();
                 case "branch_preview" -> response = UpdateManager.branchPreview(req.optString("destination", ""));
                 case "branch_change" -> {
                     // La conferma e' il nome del ramo scritto a mano, e l'impronta e' quella

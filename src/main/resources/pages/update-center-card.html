@@ -13,6 +13,15 @@
                 <div class="card-body">
                     <p class="small text-muted">{{t:uc.intro}}</p>
                     <p class="small mb-2" id="ucState" role="status">{{t:uc.reading}}</p>
+                    <!-- Il lavoro sui pacchetti in corso, chiunque l'abbia avviato (reperto 206): cosa, da quanto, cosa sta
+                         facendo. Finche' gira i pulsanti dei passi aspettano. -->
+                    <div class="alert alert-info py-2 small mb-2" id="ucRunning" role="status" aria-live="polite" hidden>
+                        <div><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i><span id="ucRunningText"></span></div>
+                        <details class="mt-1" id="ucRunningLogBox" hidden>
+                            <summary>{{t:uc.runningLog}}</summary>
+                            <pre id="ucRunningLog" class="upd-log mt-2 mb-0"></pre>
+                        </details>
+                    </div>
                     <div id="ucOutcome" role="status" aria-live="polite"></div>
                     <ul class="list-group mb-0" id="ucList">
                         <li class="list-group-item" id="uc-os">

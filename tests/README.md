@@ -65,6 +65,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallSideEffectsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallScriptDriftTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdateAllTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.ResetDatabaseTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/monitoring/*.java
@@ -664,6 +665,11 @@ back to quarterly (16 hex digits, each job followed to the end; the VM put back 
 into mailbox" on a test alias (64 hex digits), with the mailbox deleted after; no forwarded request refused in the
 root's log while it ran.
 
+**running-job-browser-test.js** — on the real panel of the test VM (reperto 206): "Check for updates" started in one
+tab, and in a second tab the Updates page says what is running and since when, with its log, while the buttons of the steps
+and "Check for updates" wait; a job asked meanwhile is refused and leaves no log in the jobs folder; when the search ends
+the line goes and the buttons come back. The search only downloads the lists.
+
 **address-conversion-browser-test.js** — the "Turn into mailbox" (Aliases page) and "Turn into
 alias" (Mailboxes page) windows: the preview, the password proposed by the generator, the mandatory
 choice about the earlier mail, the address typed to confirm, the fingerprint and the CSRF token in
@@ -769,6 +775,8 @@ patches on Updates), what is fine closed below with how many, and the compatibil
 component by component, with the card's own rules. A restart scheduled (reperto 200): the strip with the time and
 "only reads", a button of the page that does nothing and says why (once), a refused change (409) that makes the strip
 read again, cancelling that unlocks the page; with a job running, the restart window says which and has no button.
+A job in progress started elsewhere (reperto 206): the card says what and since when with its log, the buttons of the steps
+wait saying why, and when it ends the card reads itself again.
 
 **panel-dialogs-browser-test.js** — on the real panel of the test VM (reperto 198): every page of the menu loads with
 no page error and no browser dialog; on Domains and Mailboxes "Delete" opens the panel's window with the red button,

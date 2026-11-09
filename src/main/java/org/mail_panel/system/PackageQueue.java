@@ -229,6 +229,12 @@ public final class PackageQueue {
         IN_PROGRESS.compareAndSet(t, null);
     }
 
+    /** L'id del lavoro che tiene il turno adesso, o null se e' libero (reperto 206: la pagina lo segue). */
+    public static String holderId() {
+        Turn t = IN_PROGRESS.get();
+        return t == null ? null : t.id();
+    }
+
     /** Chi tiene il turno adesso ("manutenzione, in corso da 3 minuti"), o null se e' libero. */
     public static String holder() {
         Turn t = IN_PROGRESS.get();
