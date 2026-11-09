@@ -126,7 +126,7 @@ async function served(route) {
     real('typed differently (Latest): it stays off', await page.isDisabled('#branch-go'));
     await page.fill('#branch-confirm', 'latest');
     real('typed right: it turns on', await page.isEnabled('#branch-go'));
-    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-preview-shot.png') });
+    if (photos) await page.locator('#uc-branch').screenshot({ path: path.join(photos, 'branch-preview-shot.png') });
 
     console.log('\n== The change, followed to its outcome ==');
     await page.click('#branch-go');
@@ -139,7 +139,7 @@ async function served(route) {
     await page.waitForFunction(() => document.getElementById('branch-body').textContent.includes('the latest branch'));
     real('the card reads itself again: now latest, with the panel\'s file', readings === 2
         && (await page.textContent('#branch-body')).includes('The branch is decided by the panel\'s file'));
-    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-after.png') });
+    if (photos) await page.locator('#uc-branch').screenshot({ path: path.join(photos, 'branch-after.png') });
 
     console.log('\n== A change that does not start ==');
     changeSucceeds = false;
@@ -154,13 +154,13 @@ async function served(route) {
     console.log('\n== Dark theme and phone ==');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     await page.waitForTimeout(600);   // the theme change has a transition
-    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-dark.png') });
+    if (photos) await page.locator('#uc-branch').screenshot({ path: path.join(photos, 'branch-dark.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
     await page.waitForTimeout(300);
     const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     real('on the phone the page does not scroll sideways: ' + pageWidth + 'px', pageWidth <= 390);
-    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-phone.png') });
+    if (photos) await page.locator('#uc-branch').screenshot({ path: path.join(photos, 'branch-phone.png') });
 
     real('no error in the page' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
     await browser.close();

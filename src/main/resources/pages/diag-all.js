@@ -10,19 +10,22 @@
 
         function diagOpen(key) { return { label: t('diag.all.open'), action: "diagOpenCard('" + key + "')" }; }
 
-        // Le regole di compatibilita' della scheda (updCompat): Dovecot, Postfix, Rspamd, MySQL, la webmail.
+        // Le regole di compatibilita' della scheda (updCompat), le stesse: rosso dove la scheda e' rossa, giallo dove e'
+        // gialla. Il testo dice cosa e di chi, componente per componente; i dettagli restano nella scheda.
         function diagCompat(r) {
             const bad = [], warn = [];
             const d = r.dovecot || {}, pf = r.postfix || {}, rs = r.rspamd || {}, m = r.mysql || {}, w = r.webmail || {};
-            if (d.scanned && !d.compatible24) bad.push('Dovecot');
-            else if (d.doveconfAvailable !== false && d.doveconfOk === false) warn.push('Dovecot');
-            if (pf.verdict && pf.verdict !== 'ALIGNED') warn.push('Postfix');
-            if (rs.verdict && rs.verdict !== 'NOTHING_TO_REPORT' && rs.verdict !== 'BEHAVIOR_DIFFS') bad.push('Rspamd');
-            if (m.present && (m.issues || []).length) bad.push('MySQL');
-            else if (m.present && m.eol) warn.push('MySQL');
-            if (w.consistent === false) warn.push(t('up.webmailPhp'));
-            if (bad.length) return ['problem', t('diag.v.compatIssues', { list: bad.concat(warn).join(', ') }), diagOpen('compat')];
-            if (warn.length) return ['warn', t('diag.v.compatIssues', { list: warn.join(', ') }), diagOpen('compat')];
+            // Il verdetto della scheda e' un titolo in maiuscolo: qui sta dentro una frase.
+            const verdict = v => String(typeof updVerdict === 'function' ? updVerdict(v) : v).toLocaleLowerCase();
+            if (d.scanned && !d.compatible24) bad.push(t('diag.c.dovecot24'));
+            if (r.dovecot && d.doveconfAvailable !== false && !d.doveconfOk) warn.push(t('diag.c.doveconf'));
+            if (pf.verdict && pf.verdict !== 'ALIGNED') warn.push(t('diag.c.postfix', { verdict: verdict(pf.verdict) }));
+            if (rs.present && rs.verdict !== 'NOTHING_TO_REPORT' && rs.verdict !== 'BEHAVIOR_DIFFS') bad.push(t('diag.c.rspamd', { verdict: verdict(rs.verdict) }));
+            if (m.present && (m.issues || []).length) bad.push(t('diag.c.mysqlOptions'));
+            if (m.present && m.eol) warn.push(t('diag.c.mysqlEol'));
+            if (r.webmail && !w.consistent) warn.push(t('diag.c.webmail'));
+            if (bad.length) return ['problem', bad.concat(warn).join('; ') + '.', diagOpen('compat')];
+            if (warn.length) return ['warn', warn.join('; ') + '.', diagOpen('compat')];
             return ['ok', t('diag.v.compatOk')];
         }
 

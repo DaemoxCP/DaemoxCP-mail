@@ -399,6 +399,18 @@ const allErrors = [], allDialogs = [];
     check('what is fine is closed below, with how many', await dg.page.$eval('#diagAllOkBox', d => !d.hidden && !d.open)
         && /7 checks are fine/.test(await dg.page.textContent('#diagAllOkTitle')));
     if (shots) await dg.page.locator('#diag-all').screenshot({ path: path.join(shots, 'diagnostics-check-all.png') });
+    const cmp = await dg.page.evaluate(() => [
+        diagCompat({ dovecot: { scanned: true, compatible24: false, doveconfOk: true }, postfix: { verdict: 'LEVEL_BEHIND' },
+            rspamd: { present: false }, mysql: { present: true, eol: true, issues: [] }, webmail: { consistent: false } }),
+        diagCompat({ dovecot: { scanned: true, compatible24: true, doveconfOk: true }, postfix: { verdict: 'LEVEL_BEHIND' },
+            rspamd: { present: true, verdict: 'BEHAVIOR_DIFFS' }, mysql: { present: false }, webmail: { consistent: true } }),
+        diagCompat({ dovecot: { scanned: true, compatible24: true, doveconfOk: true }, postfix: { verdict: 'ALIGNED' },
+            rspamd: { present: true, verdict: 'NOTHING_TO_REPORT' }, mysql: { present: true, issues: [] }, webmail: { consistent: true } })]);
+    console.log('    ' + cmp.map(c => c[0] + ': ' + c[1]).join('\n    '));
+    check('compatibility says what and whose: Dovecot first (red), then Postfix, MySQL, webmail (yellow)', cmp[0][0] === 'problem'
+        && /^Dovecot: the configuration is not ready for 2\.4; Postfix: .+; MySQL: this version is at the end of its support; Webmail: PHP and Roundcube do not match\.$/.test(cmp[0][1]));
+    check('  only Postfix behind: to look at, the card\'s verdict inside the sentence', cmp[1][0] === 'warn' && cmp[1][1] === 'Postfix: the level is behind.');
+    check('  all in order: fine', cmp[2][0] === 'ok');
     await dg.page.click('#diagAllList li[data-diag="journal"] button');
     await dg.page.waitForFunction(() => /=== end: error ===/.test(document.getElementById('jr-text').textContent), null, { timeout: 10000 });
     check('the failed job: its log, from the operation logs', dg.calls.some(c => c.action === 'journal_read' && c.name === '20261109-000000-os-patch__osp-1.log'));

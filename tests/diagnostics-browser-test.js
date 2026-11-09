@@ -40,8 +40,10 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
     const items = await page.$$eval('#diagAllList > li', lis => lis.map(li => ({ key: li.dataset.diag, level: li.dataset.level,
         text: li.innerText.replace(/\s+/g, ' '), buttons: li.querySelectorAll('button, a.btn').length })));
     items.forEach(x => console.log('    ' + x.level + ' ' + x.key + ': ' + x.text.slice(0, 160)));
-    const fine = await page.$$eval('#diagAllOk > li', lis => lis.map(li => li.dataset.diag + ': ' + li.innerText.replace(/\s+/g, ' ').slice(0, 100)));
-    fine.forEach(x => console.log('    ok ' + x));
+    // What is fine sits in a closed <details>: innerText is empty there, textContent is not.
+    const fine = await page.$$eval('#diagAllOk > li', lis => lis.map(li => ({ key: li.dataset.diag, text: li.textContent.replace(/\s+/g, ' ').trim() })));
+    fine.forEach(x => console.log('    ok ' + x.key + ': ' + x.text.slice(0, 120)));
+    check('what is fine says so in words too', fine.every(x => /\(fine\)/.test(x.text) && x.text.length > 20));
     check('ten checks, every one with a verdict', items.length + fine.length === 10);
     const order = { problem: 0, warn: 1, todo: 2, info: 3 };
     check('the most important first', items.every((x, i) => i === 0 || order[items[i - 1].level] <= order[x.level]));
