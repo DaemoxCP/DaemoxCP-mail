@@ -2126,6 +2126,13 @@ public final class UpdateManager {
          */
         private java.nio.file.Path journal;
         private boolean journalOpened;
+        /**
+         * Quello che va fatto prima della fine scritta: la pulizia della via di ritorno (withWayBack). Prima girava
+         * dopo il lavoro, quindi dopo la fine: sulla VM, il 09/11/2026, «Aggiorna tutto» ha scritto «Way back: older
+         * boot environment ... removed» dopo «=== end», e l'elenco dei registri, che legge l'ultima riga, lo dava
+         * per «senza una fine» (reperto 207). E la pagina vedeva il lavoro finito mentre bectl lavorava ancora.
+         */
+        private final java.util.List<Runnable> beforeEnd = new java.util.ArrayList<>();
 
         Job(String id, String type) {
             this.id = id;
@@ -2156,10 +2163,33 @@ public final class UpdateManager {
          * La fine del lavoro: l'ora, e nel registro su disco l'esito (stato, errore, durata). Una volta sola: chi la
          * scrive per secondo non cambia niente.
          */
-        public synchronized void finish() {
-            if (finishedAt != 0) return;
-            finishedAt = System.currentTimeMillis();
-            JobJournal.end(journal(), status, errorMessage, outcome, (finishedAt - startedAt) / 1000);
+        public void finish() {
+            synchronized (this) { if (finishedAt != 0) return; }
+            // Fuori dal lucchetto: bectl puo' metterci minuti, e la pagina intanto chiede lo stato (toJson).
+            runBeforeEnd();
+            synchronized (this) {
+                if (finishedAt != 0) return;
+                finishedAt = System.currentTimeMillis();
+                JobJournal.end(journal(), status, errorMessage, outcome, (finishedAt - startedAt) / 1000);
+            }
+        }
+
+        /** Da fare prima della fine scritta, una volta sola. La fine la scrive il thread del lavoro. */
+        void beforeEnd(Runnable r) {
+            synchronized (this) { beforeEnd.add(r); }
+        }
+
+        /** Quello che aspetta la fine, adesso: ognuno una volta sola, anche se uno lancia un'eccezione. */
+        void runBeforeEnd() {
+            java.util.List<Runnable> todo;
+            synchronized (this) {
+                todo = new java.util.ArrayList<>(beforeEnd);
+                beforeEnd.clear();
+            }
+            for (Runnable r : todo) {
+                try { r.run(); }
+                catch (RuntimeException e) { LOGGER.warning("[Job " + id + "] before the end: " + e); }
+            }
         }
 
         /** Scrive la fine, se il lavoro non l'ha gia' scritta da se': vedi withEndMarked. */
@@ -3324,11 +3354,43 @@ public final class UpdateManager {
     }
 
     /**
+     * I cambiamenti che la conferma di «Aggiorna tutto» ha mostrato, nome -> versione di arrivo: esistono solo nel filo del
+     * suo lavoro (reperto 207). I passi di quel lavoro calcolano il loro piano quando tocca a loro, e lo trovano spesso
+     * diverso da quello letto prima: i passi precedenti hanno gia' aggiornato qualcosa che lui avrebbe aggiornato
+     * (postfix-mysql e lmdb, nginx e pcre2). Con la sola impronta il passo si fermerebbe; cosi' parte se ogni suo
+     * cambiamento e' fra quelli mostrati, alla stessa versione, e niente si toglie o torna indietro.
+     */
+    static final ThreadLocal<Map<String, String>> APPROVED_CHANGES = new ThreadLocal<>();
+
+    /** Il piano si esegue? Se l'impronta e' quella letta si'; dentro «Aggiorna tutto», anche se resta fra il mostrato. */
+    static boolean planAccepted(String approvedSignature, String currentSignature, JSONObject plan) {
+        if (currentSignature != null && !currentSignature.isEmpty() && currentSignature.equals(approvedSignature)) return true;
+        return withinApproved(plan, APPROVED_CHANGES.get());
+    }
+
+    /** Ogni cambiamento del piano e' fra quelli approvati, alla stessa versione? Niente rimozioni ne' ritorni indietro. */
+    static boolean withinApproved(JSONObject plan, Map<String, String> approved) {
+        if (approved == null || plan == null || !plan.optBoolean("measured", false)) return false;
+        JSONArray changes = plan.optJSONArray("changes");
+        if (changes == null) return false;
+        for (int i = 0; i < changes.length(); i++) {
+            JSONObject c = changes.optJSONObject(i);
+            if (c == null) return false;
+            String type = c.optString("type"), name = c.optString("name"), to = c.optString("to");
+            String version = approved.get(name);
+            if (version == null) return false;
+            if (type.equals("reinstall")) continue;
+            if (!(type.equals("upgrade") || type.equals("install")) || !version.equals(to)) return false;
+        }
+        return true;
+    }
+
+    /**
      * Il piano ricalcolato all'avvio del lavoro e' quello approvato? null se si', e allora lo
      * scrive nel registro riga per riga; altrimenti il motivo per non partire.
      */
     static String approvedPlanMismatch(Job job, JSONObject plan, String currentSignature, String approvedSignature) {
-        if (plan == null || currentSignature == null || !currentSignature.equals(approvedSignature)) {
+        if (plan == null || !planAccepted(approvedSignature, currentSignature, plan)) {
             job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature),
                     "currentSignature", String.valueOf(currentSignature))));
             job.write(I18n.tr("server.um.runGuidedUpdate.4"));
@@ -3786,8 +3848,10 @@ public final class UpdateManager {
                 return;
             }
             j.write("");
+            // Prima della fine scritta: se il lavoro la scrive da se', la pulizia gira li'; se no, qui.
+            j.beforeEnd(() -> PackageWayBack.after(j::write, wb));
             try { work.run(); }
-            finally { PackageWayBack.after(j::write, wb); }
+            finally { j.runBeforeEnd(); }
         };
     }
 
@@ -5130,6 +5194,15 @@ public final class UpdateManager {
      * codice vecchio gia' compilato in memoria — aggiornato sul disco, non in servizio.
      */
     private static void runRoundcubeUpdate(Job job, String approvedSignature) {
+        try {
+            roundcubeSteps(job, approvedSignature);
+        } finally {
+            job.finish();
+        }
+    }
+
+    /** I passi dell'aggiornamento di Roundcube, senza chiudere il registro: li usa anche «Aggiorna tutto» (reperto 207). */
+    private static void roundcubeSteps(Job job, String approvedSignature) {
         job.status = "running";
         final int TOT = 8;
         // L'elenco su disco di questo lavoro, da riproteggere nel finally: vuoto finche' non e' scritto.
@@ -5287,7 +5360,7 @@ public final class UpdateManager {
                 } else {
                     String pidBefore = servicePid(svc);
                     ok("service " + svc + " restart", 120);
-                    boolean up = ok("service " + svc + " status", 20);
+                    boolean up = cameUp(svc);
                     String pidAfter = servicePid(svc);
                     job.write("    " + svc + ": " + (up ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigration84.26"))
                             + (pidBefore.isEmpty() || pidAfter.isEmpty() ? "" : "  (pid " + pidBefore + " -> " + pidAfter + ")"));
@@ -5369,7 +5442,6 @@ public final class UpdateManager {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runGuidedUpdate.42");
             }
-            job.finish();
         }
     }
 
@@ -5701,7 +5773,7 @@ public final class UpdateManager {
                         .put("error", pf.optBoolean("already", false)
                                 ? I18n.tr("server.um.x.alreadyLatest") : I18n.tr("server.um.startJavaUpdateNow.1"));
             // Il piano ricalcolato adesso e' quello letto nella pagina? Altrimenti non si parte.
-            if (!approvedSignature.equals(pf.optString("signature", "")))
+            if (!planAccepted(approvedSignature, pf.optString("signature", ""), pf.optJSONObject("plan")))
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.um.plan.changedSinceRead"));
             String pkg = pf.getString("pkg");
             if (!isValidName(pkg)) return new JSONObject().put("success", false).put("error", I18n.tr("server.um.changeLocks.1"));
@@ -7400,6 +7472,31 @@ public final class UpdateManager {
         return null;
     }
 
+    /**
+     * Il servizio e' ripartito? Si chiede piu' volte, non una: MySQL 8.4 aggiorna i suoi dati all'avvio, e passando da
+     * 8.4.11 a 8.4.13 sulla VM «service mysql-server status» diceva che non girava subito dopo il riavvio, e girava pochi
+     * secondi dopo. Un solo sguardo lo dava per caduto, e «Aggiorna tutto» si fermava col servizio che stava partendo
+     * (reperto 207). Fino a cinque minuti per MySQL, trenta secondi per gli altri.
+     */
+    static boolean cameUp(String service) {
+        return waitUntil("mysql-server".equals(service) ? 300 : 30, 2000, () -> ok("service " + service + " status", 20));
+    }
+
+    /** Vero appena check risponde si', falso se non lo fa entro seconds secondi; fra un tentativo e l'altro pauseMs. */
+    static boolean waitUntil(int seconds, long pauseMs, java.util.function.BooleanSupplier check) {
+        long until = System.currentTimeMillis() + seconds * 1000L;
+        while (true) {
+            if (check.getAsBoolean()) return true;
+            if (System.currentTimeMillis() >= until) return false;
+            try {
+                Thread.sleep(pauseMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+    }
+
     /** Il pid di un servizio, o stringa vuota. Confrontarlo prima e dopo prova che e' ripartito davvero. */
     static String servicePid(String service) {
         if (!isValidName(service)) return "";
@@ -7665,73 +7762,145 @@ public final class UpdateManager {
     }
 
     /**
-     * «Aggiorna tutti»: i passi del server di posta (un pacchetto, o una famiglia col suo principale) in un lavoro solo,
-     * uno dopo l'altro. Il committente, 09/11/2026, davanti a «Update nginx (1 of 4)»: «non è possibile fare un aggiorna
-     * tutto e basta?» (reperto 205). Ogni passo e' l'aggiornamento guidato di sempre, col suo piano firmato (la firma
-     * letta nella conferma, una per passo: se il piano e' cambiato, quel passo si ferma), i suoi controlli e il
-     * riavvio dei suoi servizi. Un turno e una via di ritorno per tutti; al primo passo che non va il lavoro si ferma e
-     * dice quale, e i passi dopo non partono.
+     * «Aggiorna tutto» (reperto 207): tutto quello che c'e' da aggiornare, in un lavoro solo, in quest'ordine: le patch di
+     * FreeBSD, gli altri pacchetti (un piano), i passi del server di posta (un pacchetto, o una famiglia col suo
+     * principale), Roundcube con la sua procedura (copia del database, schema), e per ultima la Java del pannello, che
+     * lo ferma e lo riaccende col suo script. Il committente, 09/11/2026: «c'è ancora disorganizzazione [...] devi
+     * sensibilmente rivedere tutto in maniera logica e semplice, perché ho Webmail (Roundcube) separato con un suo
+     * aggiornamento separato?».
      *
-     * @param names      i pacchetti principali dei passi, nell'ordine
-     * @param signatures l'impronta del piano di ogni passo, come la conferma l'ha mostrata
+     * Ogni passo e' il lavoro di sempre (gli stessi controlli, la stessa riprotezione, gli stessi riavvii), e si esegue
+     * se il suo piano e' quello letto (l'impronta) o, se nel frattempo e' cambiato perche' un passo prima ha gia'
+     * aggiornato qualcosa, se ogni suo cambiamento e' fra quelli mostrati nella conferma (APPROVED_CHANGES). Un turno e
+     * una via di ritorno per tutti; al primo passo che non va il lavoro si ferma, dice quale e quali non sono partiti.
+     *
+     * @param steps    i passi, nell'ordine; kind: os, plain, package (col nome del principale), roundcube, java
+     * @param approved i cambiamenti mostrati nella conferma: nome -> versione di arrivo
      */
-    public static JSONObject startGuidedUpdateAll(java.util.List<String> names, java.util.List<String> signatures) {
-        String bad = updateAllProblem(names, signatures);
+    public static JSONObject startEverything(java.util.List<EverythingStep> steps, Map<String, String> approved) {
+        String bad = everythingProblem(steps, approved);
         if (bad != null) return new JSONObject().put("success", false).put("error", bad);
-        String id = "guid-all-" + System.currentTimeMillis();
-        Job j = new Job(id, "guided_update_all");
-        java.util.List<String> n = new ArrayList<>(names), sig = new ArrayList<>(signatures);
-        return startOnTurn(id, j, I18n.tr("server.um.updateAll.job", java.util.Map.of("n", String.valueOf(n.size()))),
-                "guided-update-all", () -> runGuidedUpdateAll(j, n, sig));
+        String id = "all-" + System.currentTimeMillis();
+        Job j = new Job(id, "update_everything");
+        java.util.List<EverythingStep> list = new ArrayList<>(steps);
+        Map<String, String> ok = new java.util.HashMap<>(approved);
+        return startOnTurn(id, j, I18n.tr("server.um.everything.job", java.util.Map.of("n", String.valueOf(list.size()))),
+                "update-everything", () -> runEverything(j, list, ok));
     }
 
-    /** Null se i passi si possono eseguire; altrimenti il perche'. Da 1 a 20, nomi e firme validi, una famiglia sola volta. */
-    static String updateAllProblem(java.util.List<String> names, java.util.List<String> signatures) {
-        if (names == null || signatures == null || names.isEmpty() || names.size() > 20 || names.size() != signatures.size())
-            return I18n.tr("server.um.updateAll.bad");
-        java.util.Set<String> seen = new java.util.HashSet<>();
-        for (int i = 0; i < names.size(); i++) {
-            String n = names.get(i);
-            if (!isValidName(n) || !validSignature(signatures.get(i))) return I18n.tr("server.um.updateAll.bad");
-            String family = familyOf(n);
-            if (!seen.add(family == null ? n : family)) return I18n.tr("server.um.updateAll.bad");
+    /** Un passo di «Aggiorna tutto»: che cosa (kind), il pacchetto principale per i passi di un pacchetto, l'impronta. */
+    public record EverythingStep(String kind, String name, String signature) { }
+
+    private static final java.util.List<String> EVERYTHING_ORDER = java.util.List.of("os", "plain", "package", "roundcube", "java");
+    private static final java.util.regex.Pattern VERSION = java.util.regex.Pattern.compile("[A-Za-z0-9._,+-]{1,64}");
+
+    /**
+     * Null se i passi si possono eseguire; altrimenti il perche'. Da 1 a 30 passi, nell'ordine fisso (patch, altri
+     * pacchetti, passi del server di posta, Roundcube, Java), ognuno al piu' una volta tranne i pacchetti, una famiglia
+     * una volta sola, nomi e impronte validi; i cambiamenti approvati con nomi e versioni validi, al piu' 2000.
+     */
+    static String everythingProblem(java.util.List<EverythingStep> steps, Map<String, String> approved) {
+        String bad = I18n.tr("server.um.everything.bad");
+        if (steps == null || approved == null || steps.isEmpty() || steps.size() > 30 || approved.size() > 2000) return bad;
+        int last = -1;
+        java.util.Set<String> families = new java.util.HashSet<>();
+        for (EverythingStep st : steps) {
+            if (st == null) return bad;
+            int at = EVERYTHING_ORDER.indexOf(st.kind());
+            if (at < 0 || at < last || (at == last && !"package".equals(st.kind()))) return bad;
+            last = at;
+            switch (st.kind()) {
+                case "os" -> { if (!st.name().isEmpty() || !st.signature().isEmpty()) return bad; }
+                case "package" -> {
+                    // L'impronta vuota: un passo che i controlli fermavano solo per un pacchetto che un passo prima
+                    // aggiorna (postfix-mysql dopo mysql84-client). Si controlla quando tocca a lui, e parte solo se il
+                    // suo piano resta fra i cambiamenti mostrati (APPROVED_CHANGES).
+                    if (!isValidName(st.name()) || !(st.signature().isEmpty() || validSignature(st.signature()))) return bad;
+                    String family = familyOf(st.name());
+                    if (!families.add(family == null ? st.name() : family)) return bad;
+                }
+                default -> { if (!st.name().isEmpty() || !validSignature(st.signature())) return bad; }
+            }
         }
+        for (Map.Entry<String, String> e : approved.entrySet())
+            if (!isValidName(e.getKey()) || e.getValue() == null || !VERSION.matcher(e.getValue()).matches()) return bad;
         return null;
     }
 
-    private static void runGuidedUpdateAll(Job job, java.util.List<String> names, java.util.List<String> signatures) {
-        int total = names.size();
+    private static void runEverything(Job job, java.util.List<EverythingStep> steps, Map<String, String> approved) {
+        int total = steps.size();
+        APPROVED_CHANGES.set(approved);
+        // L'esito delle patch di FreeBSD («Installato: ... serve un riavvio»): l'esito della catena lo sostituirebbe, e il
+        // riavvio che manca non si leggerebbe piu' sotto la riga. Va in coda all'esito, riuscito o fermato.
+        String osNote = "";
         try {
             for (int i = 0; i < total; i++) {
-                String name = names.get(i);
+                EverythingStep st = steps.get(i);
+                String label = everythingLabel(st);
                 job.status = "running";
                 job.errorMessage = "";
                 job.write("");
-                job.write("=== " + I18n.tr("server.um.updateAll.step", java.util.Map.of(
-                        "i", String.valueOf(i + 1), "n", String.valueOf(total), "name", name)) + " ===");
-                guidedUpdateSteps(job, name, signatures.get(i));
+                job.write("=== " + I18n.tr("server.um.everything.step", java.util.Map.of(
+                        "i", String.valueOf(i + 1), "n", String.valueOf(total), "name", label)) + " ===");
+                switch (st.kind()) {
+                    case "os" -> {
+                        osPatchSteps(job);
+                        if ("completed".equals(job.status) && job.outcome != null) osNote = job.outcome;
+                    }
+                    case "plain" -> updateJobSteps(job, st.signature());
+                    case "package" -> guidedUpdateSteps(job, st.name(), st.signature());
+                    case "roundcube" -> roundcubeSteps(job, st.signature());
+                    case "java" -> {
+                        // L'ultimo: lo script della Java ferma il pannello e lo riaccende, fuori da questo lavoro.
+                        JSONObject r = startJavaUpdateNow(st.signature());
+                        if (r.optBoolean("success")) {
+                            job.status = "completed";
+                            job.write("  " + I18n.tr("server.um.everything.javaHanded"));
+                        } else {
+                            job.status = "error";
+                            job.errorMessage = r.optString("error", "");
+                        }
+                    }
+                    default -> { job.status = "error"; job.errorMessage = I18n.tr("server.um.everything.bad"); }
+                }
                 if (!"completed".equals(job.status)) {
-                    String rest = String.join(", ", names.subList(i + 1, total));
+                    java.util.List<String> rest = new ArrayList<>();
+                    for (EverythingStep after : steps.subList(i + 1, total)) rest.add(everythingLabel(after));
                     String why = job.errorMessage == null ? "" : job.errorMessage;
                     job.status = "error";
-                    job.errorMessage = I18n.tr(rest.isEmpty() ? "server.um.updateAll.stoppedLast" : "server.um.updateAll.stopped",
-                            java.util.Map.of("i", String.valueOf(i + 1), "n", String.valueOf(total), "name", name,
-                                    "why", why, "rest", rest));
+                    job.errorMessage = I18n.tr(rest.isEmpty() ? "server.um.everything.stoppedLast" : "server.um.everything.stopped",
+                            java.util.Map.of("i", String.valueOf(i + 1), "n", String.valueOf(total), "name", label,
+                                    "why", why, "rest", String.join(", ", rest)))
+                            + (osNote.isEmpty() ? "" : " " + osNote);
                     job.write("");
                     job.write("=== " + job.errorMessage + " ===");
                     return;
                 }
             }
+            boolean javaLast = "java".equals(steps.get(total - 1).kind());
             job.status = "completed";
-            job.outcome = I18n.tr("server.um.updateAll.done", java.util.Map.of("n", String.valueOf(total), "list", String.join(", ", names)));
+            job.outcome = I18n.tr(javaLast ? "server.um.everything.doneJava" : "server.um.everything.done",
+                    java.util.Map.of("n", String.valueOf(total))) + (osNote.isEmpty() ? "" : " " + osNote);
             job.write("");
             job.write("=== " + job.outcome + " ===");
         } catch (Exception e) {
             job.status = "error";
             job.errorMessage = String.valueOf(e.getMessage());
         } finally {
+            APPROVED_CHANGES.remove();
             job.finish();
         }
+    }
+
+    /** Il nome di un passo, per il registro e per i messaggi. */
+    private static String everythingLabel(EverythingStep st) {
+        return switch (st.kind()) {
+            case "os" -> I18n.tr("server.um.everything.patches");
+            case "plain" -> I18n.tr("server.um.everything.plain");
+            case "roundcube" -> I18n.tr("server.um.everything.roundcube");
+            case "java" -> I18n.tr("server.um.everything.java");
+            default -> st.name();
+        };
     }
 
     /**
@@ -7807,7 +7976,7 @@ public final class UpdateManager {
             // frattempo (di solito il catalogo) e il piano che partirebbe non l'ha visto nessuno.
             plan = pf.getJSONObject("plan");
             String currentSignature = pf.optString("signature", "");
-            if (!currentSignature.equals(approvedSignature)) {
+            if (!planAccepted(approvedSignature, currentSignature, plan)) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runGuidedUpdate.2");
                 job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature), "currentSignature", String.valueOf(currentSignature))));
@@ -7996,7 +8165,7 @@ public final class UpdateManager {
                     job.write(I18n.tr("server.um.runGuidedUpdate.24", java.util.Map.of("s", String.valueOf(s))));
                 }
                 boolean r1 = ok("service " + s + " restart", 120);
-                boolean active = ok("service " + s + " status", 20);
+                boolean active = cameUp(s);
                 String pidAfter = servicePid(s);
                 String pidP = pidBefore.getOrDefault(s, "");
                 String note = "";
@@ -9719,6 +9888,15 @@ public final class UpdateManager {
     }
 
     private static void runOsPatchInstall(Job j) {
+        try {
+            osPatchSteps(j);
+        } finally {
+            j.finish();
+        }
+    }
+
+    /** I passi delle patch di FreeBSD, senza chiudere il registro: li usa anche «Aggiorna tutto» (reperto 207). */
+    private static void osPatchSteps(Job j) {
         j.status = "running";
         final int TOT = 5;
         try {
@@ -9812,8 +9990,6 @@ public final class UpdateManager {
             j.status = "error";
             j.errorMessage = e.getMessage();
             j.write(I18n.tr("server.um.startMtaStsActivation.1", Map.of("message", String.valueOf(e.getMessage()))));
-        } finally {
-            j.finish();
         }
     }
 
@@ -12044,6 +12220,15 @@ public final class UpdateManager {
 
     /** Aggiorna solo cio' che non e' protetto: e' pkg stesso a saltare i pacchetti bloccati. */
     private static void runUpdateJob(Job job, String approvedSignature) {
+        try {
+            updateJobSteps(job, approvedSignature);
+        } finally {
+            job.finish();
+        }
+    }
+
+    /** I passi del lavoro sugli altri pacchetti, senza chiudere il registro: li usa anche «Aggiorna tutto» (reperto 207). */
+    private static void updateJobSteps(Job job, String approvedSignature) {
         job.status = "running";
         // Lo stato dei servizi PRIMA dell'aggiornamento: e' l'unico modo di distinguere un
         // servizio caduto da uno che non era attivo nemmeno prima.
@@ -12063,12 +12248,11 @@ public final class UpdateManager {
                 throw new IllegalStateException("I could not work out the exact plan: "
                         + plan.optString("error", "?"));
             String currentSignature = plan.optString("signature");
-            if (!currentSignature.equals(approvedSignature)) {
+            if (!planAccepted(approvedSignature, currentSignature, plan)) {
                 job.status = "error";
                 job.errorMessage = I18n.tr("server.um.runUpdateJob.7");
                 job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature), "currentSignature", String.valueOf(currentSignature))));
                 job.write(I18n.tr("server.um.runUpdateJob.8"));
-                job.finish();
                 return;
             }
             // Come la manutenzione: un piano che non si puo' eseguire non si esegue, e si
@@ -12079,7 +12263,6 @@ public final class UpdateManager {
                 job.errorMessage = I18n.tr("server.um.x.planNotRunnable", java.util.Map.of("errors", String.valueOf(String.join(" | ", jsonArrayToList(plan.getJSONArray("pkgErrors"))))))
                         + (plan.getJSONArray("changes").isEmpty() ? " " + I18n.tr("server.um.x.nothingToUpdate") : "");
                 job.write(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
-                job.finish();
                 return;
             }
             // La stessa regola degli altri due: niente rimozioni, niente retrocessioni.
@@ -12089,7 +12272,6 @@ public final class UpdateManager {
                 job.errorMessage = destructive;
                 job.write(I18n.tr("server.um.runMaintenanceJob.8", java.util.Map.of("errorMessage", String.valueOf(destructive))));
                 job.write(I18n.tr("server.um.x.destructiveByHand"));
-                job.finish();
                 return;
             }
             job.write("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(currentSignature))));
@@ -12170,8 +12352,6 @@ public final class UpdateManager {
         } catch (Exception e) {
             job.status = "error"; job.errorMessage = e.getMessage();
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
-        } finally {
-            job.finish();
         }
     }
 

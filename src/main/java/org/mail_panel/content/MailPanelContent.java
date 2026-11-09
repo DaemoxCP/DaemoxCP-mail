@@ -12099,6 +12099,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
            sicurezza ("vulnerabile · fix non ancora nel tuo catalogo") vanno a capo invece di allargarla
            fino a nascondere i pulsanti, a 1280 px. */
         .pk-table .badge { white-space: normal; text-align: start; }
+        /* Il testo di una riga di «Aggiorna il server» accanto alla sua icona, anche quando e' lungo: senza base zero
+           andava a capo sotto l'icona (reperto 207). */
+        .uc-head > .flex-grow-1 { flex: 1 1 0; min-width: 0; }
         """;
     }
 

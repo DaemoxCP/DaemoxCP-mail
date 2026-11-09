@@ -2,22 +2,20 @@
 //
 //  1. The restart banner at the top of every page (Updates and Home), with the reason and the button;
 //     on the Italian page the text is the one of it.json.
-//  2. "Update the server": one row each for FreeBSD, the packages (ONE row for all of them, reperto 202: how many go in
-//     one plan, how many of the mail server one at a time, and one button for the step after), the dedicated procedures
-//     only when they apply (here the panel's Java) and restart (the branch has its own card, reperto 205), in words and not only by color, with the
-//     buttons for what there is to do (reperto 193: every row acts in place). No separate Packages card.
-//  3. No browser dialog (prompt, confirm): confirmations are the panel's own window, which shows the
-//     exact plan; the job starts with the plan's signature and the right keyword.
-//  4. FreeBSD patches: the confirmation, os_patch_install with INSTALL PATCHES, then the outcome with the one step left
-//     (the restart, with its button) and the details closed (reperto 196).
+//  2. "Update the server" (reperto 207): at the top "Update everything", the numbered list of what it will do, in order
+//     (the FreeBSD patches, the other packages in one plan, the mail server steps, Roundcube, the panel's Java last) and
+//     ONE button; below, the state of FreeBSD and of the packages without update buttons, no rows for Java and
+//     Roundcube, the restart with its button. The branch has its own card (reperto 205). In words, not only by color.
+//  3. "Update everything": the checks of every step, one confirmation with the numbered steps (the panel's window, not
+//     the browser's); cancelling starts nothing and the button stays; confirming sends ONE request with every step's
+//     signature and the changes shown; the outcome under the row; the card reads itself again (the restart left).
 //  4b. A new FreeBSD release, one step at a time: only when there is one; four steps, only the current one with its
 //     button; check and prepare with one confirmation, the command from SSH, the install, the final check by itself.
 //  4c. The checks stop the preparation: only the rows that stop it, and nothing starts.
 //  9. Diagnostics, check everything (reperto 199): one button, every read-only check in turn, first what needs a look
 //     (most important first), each with one button for its next step; what is fine closed below.
-//  4d. A dedicated procedure, guided (reperto 197): Roundcube. "Prepare": one line on the checks, what to know before,
-//      the exact plan and one button, all the checks closed below; the panel's window, not the browser's; the job's
-//      outcome stays in the row after the card reads its state again. When the checks stop it: only the rows that stop.
+//  4d. Roundcube is a step of "Update everything", before Java: its checks with the others, its signature in the job;
+//      when its checks stop it, it is left out with the reason and the rest still goes.
 //  5. The restart window: what stops, the chosen delay, the time, cancelling; Escape closes it.
 //  6. Reads queue up: two "System state" calls at once both answer.
 //  7. At 375 px: no horizontal scrolling, 44 px buttons.
@@ -49,11 +47,13 @@ function check(what, ok) {
 
 const PLAN = { measured: true, command: 'pkg upgrade -n', changes: [
     { type: 'upgrade', name: 'libX11', from: '1.8.12,1', to: '1.8.14,1', reason: 'CVE-2026-88806' },
-    { type: 'upgrade', name: 'brotli', from: '1.1.0,1', to: '1.2.1,1' }] };
+    { type: 'upgrade', name: 'brotli', from: '1.1.0,1', to: '1.2.1,1' },
+    // On the VM the plan of the other packages also reinstalled cyrus-sasl: not an update (reperto 207).
+    { type: 'reinstall', name: 'cyrus-sasl', from: '2.1.28_6', to: '2.1.28_6' }] };
 // st is the server's state for one page: what the actions so far have changed.
 function replies(o, st) {
     return {
-        os_status: st.patched
+        os_status: st.patched || st.allDone
             ? { success: true, installedKernel: '15.1-RELEASE-p5', uname: '15.1-RELEASE', userland: '15.1-RELEASE-p6', arch: 'arm64 GENERIC',
                 restartNeeded: true, series: '15.1', updatableWithFreebsdUpdate: true, readyExist: false }
             : { success: true, installedKernel: '15.1-RELEASE', uname: '15.1-RELEASE', userland: '15.1-RELEASE', arch: 'arm64 GENERIC',
@@ -69,9 +69,9 @@ function replies(o, st) {
                 { label: 'Space', level: 'ok', detail: 'Enough.' }, { label: 'Boot environments', level: 'ok', detail: 'ZFS.' }] },
         os_upgrade_prepare: { success: true, jobId: 'prep-1' },
         roundcube_preflight: o.rcBlocked
-            ? { success: true, blocked: true, checks: [{ label: 'Database copy', level: 'block', detail: 'No space for the copy of the database.' },
+            ? { success: true, blocked: true, canProceed: false, checks: [{ label: 'Database copy', level: 'block', detail: 'No space for the copy of the database.' },
                 { label: 'Version', level: 'ok', detail: '1.6.11 -> 1.7.0' }] }
-            : { success: true, blocked: false, signature: 'fedcba9876543210', checks: [{ label: 'Version', level: 'ok', detail: '1.6.11 -> 1.7.0' },
+            : { success: true, blocked: false, canProceed: true, signature: 'fedcba9876543210', checks: [{ label: 'Version', level: 'ok', detail: '1.6.11 -> 1.7.0' },
                 { label: 'Downtime', level: 'wait', detail: 'The webmail is off for about a minute.' }],
                 plan: { measured: true, command: 'pkg upgrade -n', changes: [{ type: 'upgrade', name: 'roundcube-php84', from: '1.6.11', to: '1.7.0' }] } },
         roundcube_update: { success: true, jobId: 'rc-1' },
@@ -91,8 +91,11 @@ function replies(o, st) {
         jump_continue: { success: true, jobId: 'jump-1' },
         jump_cancel: { success: true, note: 'Move cancelled.' },
         os_upgrade_verify: { success: true, allGood: true, checks: [{ label: 'Services', level: 'ok', detail: 'All up.' }], environments: { success: false } },
-        // After the plan of the other packages (st.plainDone) only the mail server ones and the panel's Java are left.
-        packages_overview: { success: true, procedures: { java: true, roundcube: !!o.roundcube && !st.rcDone, roundcubePackage: 'roundcube-php84', mysql84: false, python: false },
+        // After "Update everything" (st.allDone, reperto 207) nothing is left; before, the other packages, dovecot and Java.
+        packages_overview: st.allDone ? { success: true, procedures: { java: false, roundcube: false, roundcubePackage: 'roundcube-php84', mysql84: false, python: false },
+            summary: { updates: 0, stackUpdates: 0, vulnerable: 1, fixable: 0, locked: 39 }, others: [],
+            packages: [{ name: 'postfix-mysql', role: 'SMTP', installed: '3.11.7', available: '', update: false, locked: true, stack: true }] }
+        : { success: true, procedures: { java: true, roundcube: !!o.roundcube && !st.rcDone, roundcubePackage: 'roundcube-php84', mysql84: false, python: false },
             summary: { updates: st.plainDone ? 2 : 4, stackUpdates: 2, vulnerable: 3, fixable: 2, locked: 39 },
             packages: [
                 ...(o.roundcube ? [{ name: 'roundcube-php84', role: 'Webmail', installed: '1.6.11', available: '1.7.0', update: true, locked: true, stack: true, canUpdate: false }] : []),
@@ -111,13 +114,21 @@ function replies(o, st) {
         reboot_cancel: { success: true, existedBefore: true },
         updates_status: { success: true, plan: PLAN, signature: '0123456789abcdef', vulnerable: [], lockedUpdates: [] },
         updates_apply: { success: true, jobId: 'upd-1' },
+        // The checks of the steps of "Update everything" (reperto 207), and the job itself.
+        package_preflight: { success: true, canProceed: true, signature: '1111222233334444', services: [{ name: 'dovecot', running: true }],
+            plan: { measured: true, changes: [{ type: 'upgrade', name: 'dovecot-mysql', from: '2.3.21.1_3', to: '2.3.21.1_4' }] } },
+        java_preflight: { success: true, canProceed: true, signature: 'aaaabbbbccccdddd',
+            plan: { measured: true, changes: [{ type: 'upgrade', name: 'openjdk25', from: '25.0.4', to: '25.0.5' }] } },
+        update_everything: { success: true, jobId: 'all-1' },
         updates_search: { success: true, jobId: 'srch-1' },
         // The job in progress (reperto 206): with o.turn a search holds the turn for the first two reads, then ends.
         package_turn: o.turn && st.turnCalls <= 2 ? { success: true, running: true, who: 'check for updates, just started', jobId: 'srch-9' }
             : { success: true, running: false },
         os_patch_install: { success: true, jobId: 'osp-1' },
         job_status: { success: true, job: { status: 'completed', consoleLog: 'done', elapsedSeconds: 3,
-            result: st.rcDone ? 'Roundcube 1.7.0 is in place and answers.' : 'Lists updated.' } },
+            result: st.allDone ? 'All 4 steps done: the panel now stops to finish updating its Java, and starts again in a couple of minutes. Then you sign in again.'
+                + ' Installed: FreeBSD 15.1-RELEASE-p6. The new kernel (15.1-RELEASE-p6) takes effect with a restart: the panel says so at the top of every page, and you can restart from there.'
+                : st.rcDone ? 'Roundcube 1.7.0 is in place and answers.' : 'Lists updated.' } },
         service_users: { success: true, problems: [], pools: [], services: [
             { service: 'php-fpm', users: ['root', 'roundcube'], ok: true, processes: 4,
               rootWhy: 'Root only for the master process <b>bold</b>: it creates the webmail socket.' },
@@ -154,6 +165,7 @@ async function open(ctx, name, lang, o = {}) {
             if (body.action === 'jump_cancel') st.phase = '';
             if (body.action === 'roundcube_update') st.rcDone = true;
             if (body.action === 'updates_apply') st.plainDone = true;
+            if (body.action === 'update_everything') st.allDone = true;
             if (body.action === 'reboot_cancel') st.cancelled = true;
             return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(r) });
         }
@@ -172,7 +184,7 @@ async function open(ctx, name, lang, o = {}) {
 }
 
 // Ready when every row has its data: the card fills in as the other cards' reads arrive.
-const centerReady = page => page.waitForFunction(() => document.querySelectorAll('#ucList > li:not([hidden])').length >= 4
+const centerReady = page => page.waitForFunction(() => document.querySelectorAll('#ucList > li:not([hidden])').length >= 3
     && document.getElementById('ucState').textContent === '' && !document.getElementById('ucList').textContent.includes(t('uc.reading')),
     null, { timeout: 20000 });
 const allErrors = [], allDialogs = [];
@@ -203,79 +215,78 @@ const allErrors = [], allDialogs = [];
     check('when not needed, it is not there', await none.page.$eval('#panelRebootBanner', b => b.hidden));
     await none.page.close();
 
-    console.log('\n== 2. Update the server ==');
+    console.log('\n== 2. Update the server: one button for everything, the state below (reperto 207) ==');
     await centerReady(page);
     const rows = await page.$$eval('#ucList > li:not([hidden])', lis => lis.map(li => li.querySelector('.uc-head').innerText.replace(/\s+/g, ' ').trim()));
     console.log('    ' + rows.join('\n    '));
-    check('four rows: FreeBSD, the packages, the panel\'s Java (it has an update), restart', rows.length === 4);
+    check('four rows: Update everything first, FreeBSD, the packages, restart', rows.length === 4 && /^Update everything/.test(rows[0]));
+    check('  no rows of their own for Java and Roundcube: they are steps of Update everything', await page.$$eval('#uc-java, #uc-roundcube', l => l.every(x => x.hidden)));
     check('  the branch in a card of its own under the card, not a row (reperto 205)', await page.$('#uc-branch') === null
         && await page.$('section#branch.card #branch-body') !== null && /quarterly/.test(await page.innerText('#branch-body')));
-    // One row for all the packages (reperto 202): no row of its own for the mail server ones, no separate Packages card.
-    check('  one row for the packages: no mail server row, no Packages card, the list closed under the row',
-        await page.$('#uc-stack') === null && await page.$('#packages') === null
-        && await page.$eval('#uc-packages #pk-list', d => !d.open) && await page.$$eval('#pk-body', b => b.length === 1));
-    check('  the procedures with nothing to do have no row (Roundcube, MySQL, Python)', await page.$$eval('#uc-roundcube, #uc-mysql, #uc-python', l => l.every(x => x.hidden)));
-    check('FreeBSD: now and what is ready, with the button', /Now 15\.1-RELEASE; patches up to 15\.1-RELEASE-p6/.test(rows[0]) && /Install the FreeBSD updates/.test(rows[0]));
-    check('packages: two in one plan, one of the mail server one at a time, the fixes, the one still open', /2 packages to update, all together in one plan/.test(rows[1])
-        && /1 mail server package has an update: it is protected, and it is updated on its own/.test(rows[1])
-        && /2 security fixes/.test(rows[1]) && /1 package has a known vulnerability that the update does not fix yet/.test(rows[1]));
-    check('  the mail server one by name, and not Java (it has its own row)', /dovecot-mysql: 2\.3\.21\.1_3 → 2\.3\.21\.1_4/.test(rows[1]) && !/openjdk/.test(rows[1]));
-    check('  one button, the step after: the plan first, dovecot not yet', /Update the packages/.test(rows[1])
-        && await page.$('#uc-packages .uc-head button[data-pkg="dovecot-mysql"]') === null);
-    check('the panel\'s Java: its row, with the versions and Prepare', /openjdk25: 25\.0\.4/.test(rows[2]) && /Prepare/.test(rows[2]));
-    check('restart', /needs a restart/.test(rows[3]));
-    check('no newer release: nothing about moving to one, no button for it (reperto 196)', !/available|Move to/.test(rows[0])
+    check('  one row for the packages, with the list closed under it (reperto 202)', await page.$('#uc-stack') === null && await page.$('#packages') === null
+        && await page.$eval('#uc-packages #pk-list', d => !d.open));
+    const steps = await page.$$eval('#uc-all .uc-head li', l => l.map(x => x.textContent));
+    console.log('    steps: ' + steps.join(' | '));
+    check('Update everything lists what it will do, in order: the patches, the other packages, dovecot, Java last',
+        steps.length === 4 && /FreeBSD patches up to 15\.1-RELEASE-p6/.test(steps[0]) && /2 packages, all together in one plan/.test(steps[1])
+        && /dovecot-mysql: 2\.3\.21\.1_3 → 2\.3\.21\.1_4/.test(steps[2]) && /The panel's Java 25\.0\.4 → 25\.0\.5: last/.test(steps[3]));
+    check('  with ONE button for all of it', /Update everything \(4 steps\)/.test(rows[0])
+        && await page.$$eval('#uc-all .uc-head button', b => b.length === 1 && b[0].getAttribute('data-on-click') === 'ucEverything()'));
+    check('the other rows say the state, with no update button: FreeBSD (patches ready), the packages (security)',
+        /Now 15\.1-RELEASE; patches up to 15\.1-RELEASE-p6/.test(rows[1]) && await page.$$eval('#uc-os .uc-head button, #uc-packages .uc-head button', b => b.length === 0)
+        && /2 security fixes/.test(rows[2]) && /1 package has a known vulnerability that the update does not fix yet/.test(rows[2]));
+    check('  only the restart keeps its button, it is not an update', /needs a restart/.test(rows[3])
+        && await page.$$eval('#ucList .uc-head button', b => b.map(x => x.getAttribute('data-on-click')).join(',')) === 'ucEverything(),panelRebootOpen()');
+    check('no newer release: nothing about moving to one, no button for it (reperto 196)', !/available|Move to/.test(rows[1])
         && await page.$('[data-on-click="ucRelease()"]') === null);
     check('one read each of packages and branch when the page opens (the card reuses the cards\' reads)',
         calls.filter(c => c.action === 'packages_overview').length === 1 && calls.filter(c => c.action === 'branch_status').length === 1);
-    check('one button at most in every row (reperto 197)', await page.$$eval('#ucList > li:not([hidden]) .uc-head', hs => hs.every(h => h.querySelectorAll('button').length <= 1)));
-    // Every row here has something to do; the branch, the one row "information", has its own card now (reperto 205).
     check('the state in words too, not only by color', await page.$$eval('#ucList > li:not([hidden])', l => l.every(li =>
         /\((to do|up to date|information|error)\)/.test(li.querySelector('.uc-head .visually-hidden') ? li.querySelector('.uc-head .visually-hidden').textContent : ''))));
     if (shots) await page.locator('#update-center').screenshot({ path: path.join(shots, 'update-center.png') });
 
-    console.log('\n== 3. Packages, with the panel\'s confirmation ==');
-    await page.click('#ucList button[data-on-click="ucPackages()"]');
-    await page.waitForSelector('#panelAskModal.show');
+    console.log('\n== 3. Update everything: the checks, one confirmation, cancel, one job ==');
+    await page.click('#uc-all .uc-head button[data-on-click="ucEverything()"]');
+    await page.waitForSelector('#panelAskModal.show', { timeout: 15000 });
     const ask = await page.innerText('#panelAskModal .modal-content');
-    check('the confirmation shows the exact plan', /libX11: 1\.8\.12,1 → 1\.8\.14,1/.test(ask) && /brotli/.test(ask) && /Update 2 packages/.test(ask));
+    console.log('    ' + ask.replace(/\s+/g, ' ').slice(0, 500));
+    check('the checks of every step first: the plan of the other packages, dovecot\'s, Java\'s', ['updates_status', 'package_preflight', 'java_preflight']
+        .every(a => calls.some(c => c.action === a)));
+    check('one confirmation with every step, numbered, in order', /1\. FreeBSD patches up to 15\.1-RELEASE-p6/.test(ask) && /2\. 2 packages, all together in one plan \(and 1 reinstalled, because a package it uses changed\)/.test(ask)
+        && /3\. dovecot-mysql: 2\.3\.21\.1_3 → 2\.3\.21\.1_4 — restarts dovecot/.test(ask) && /4\. The panel's Java/.test(ask));
+    check('  what happens: one after the other, it stops at the first that does not go well; the page reloads after Java',
+        /stops at the first step that does not go well/.test(ask) && /this page reloads by itself on the sign-in page: sign in again/.test(ask) && /Update everything \(4 steps\)/.test(ask));
     await page.waitForFunction(() => document.getElementById('panelAskModal').contains(document.activeElement), null, { timeout: 2000 }).catch(() => {});
-    check('  it is labelled, with the focus inside', await page.$eval('#panelAskModal', m => m.getAttribute('aria-labelledby') === 'panelAskTitle'
+    check('  the panel\'s window, labelled, with the focus inside', await page.$eval('#panelAskModal', m => m.getAttribute('aria-labelledby') === 'panelAskTitle'
         && m.contains(document.activeElement)));
+    await page.click('#panelAskModal .modal-footer [data-bs-dismiss="modal"]');
+    await page.waitForSelector('#panelAskModal', { state: 'hidden' });
+    await page.waitForTimeout(300);
+    check('cancelled: nothing starts, and the button is still there (it disappeared before)', !calls.some(c => c.action === 'update_everything')
+        && await page.$$eval('#uc-all .uc-head button[data-on-click="ucEverything()"]', b => b.length === 1) && await page.$eval('#uc-all-detail', d => d.hidden));
+    await page.click('#uc-all .uc-head button[data-on-click="ucEverything()"]');
+    await page.waitForSelector('#panelAskModal.show', { timeout: 15000 });
     await page.click('#panelAskGo');
-    await page.waitForFunction(() => /Lists updated\./.test(document.getElementById('pk-run').innerText), null, { timeout: 10000 });
+    await page.waitForFunction(() => /All 4 steps done/.test(document.getElementById('all-run').innerText), null, { timeout: 15000 });
+    const all = calls.find(c => c.action === 'update_everything');
+    check('ONE request: the word, the steps in order with their signatures', all && all.confirm === 'UPDATE' && JSON.stringify(all.steps) === JSON.stringify([
+        { kind: 'os', package: '', signature: '' }, { kind: 'plain', package: '', signature: '0123456789abcdef' },
+        { kind: 'package', package: 'dovecot-mysql', signature: '1111222233334444' }, { kind: 'java', package: '', signature: 'aaaabbbbccccdddd' }]));
+    const approvedShown = Object.fromEntries((all && all.approved || []).map(a => [a.name, a.to]));
+    check('  and every change the confirmation showed, with its version', approvedShown.libX11 === '1.8.14,1' && approvedShown.brotli === '1.2.1,1'
+        && approvedShown['dovecot-mysql'] === '2.3.21.1_4' && approvedShown.openjdk25 === '25.0.5');
+    check('  no job of the old buttons', !calls.some(c => ['updates_apply', 'os_patch_install', 'package_update', 'java_update'].includes(c.action)));
     await page.waitForTimeout(800);
-    check('the job\'s outcome stays under its row after the card reads its state again (reperto 197)',
-        /Done\. Lists updated\./.test(await page.innerText('#pk-run')) && await page.$eval('#uc-packages-detail', d => !d.hidden));
-    check('  what the server did is there, closed', await page.$eval('#pk-log-box', d => !d.hidden && !d.open));
-    const apply = calls.find(c => c.action === 'updates_apply');
-    check('the job starts with UPDATE and the signature of the plan shown', apply && apply.confirm === 'UPDATE' && apply.signature === '0123456789abcdef');
-    await page.waitForSelector('#uc-packages .uc-head button[data-pkg="dovecot-mysql"]', { timeout: 10000 }).catch(() => {});
-    const afterPlan = await page.innerText('#uc-packages .uc-head');
-    check('after the plan, the same row gives the step after: the mail server package, by name (reperto 202)',
-        /Update dovecot-mysql \(1 of 1\)/.test(afterPlan) && !/packages to update/.test(afterPlan)
-        && await page.$$eval('#uc-packages .uc-head button', b => b.length === 1));
-
-    console.log('\n== 4. FreeBSD patches ==');
-    await page.click('#ucList button[data-on-click="ucOsInstall()"]');
-    await page.waitForSelector('#panelAskModal.show');
-    check('the confirmation says what happens (boot environment, mail stays up)', /boot environment/.test(await page.innerText('#panelAskModal'))
-        && /mail stays up/.test(await page.innerText('#panelAskModal')));
-    await page.click('#panelAskGo');
-    await page.waitForFunction(() => /Patches installed/.test(document.getElementById('os-body').innerText), null, { timeout: 10000 });
-    const inst = calls.find(c => c.action === 'os_patch_install');
-    check('os_patch_install with INSTALL PATCHES', inst && inst.confirm === 'INSTALL PATCHES');
-    const outcome = await page.innerText('#os-body');
-    console.log('    ' + outcome.replace(/\s+/g, ' '));
-    check('the outcome says what is installed and the one step left, the restart, with its button',
-        /Patches installed: FreeBSD 15\.1-RELEASE-p6/.test(outcome) && /One step left: restart the server/.test(outcome)
-        && await page.$('#os-body button[data-on-click="panelRebootOpen()"]') !== null);
-    check('  what the server did is there, closed', await page.$eval('#os-log-box', d => !d.hidden && !d.open));
-    check('  nothing about a new release under it', await page.$eval('#os-release', r => r.hidden));
-    await page.waitForFunction(() => /One step left/.test(document.querySelector('#uc-os .uc-head').innerText), null, { timeout: 10000 });
-    check('the FreeBSD row says it too, and the button is there once, not twice',
-        await page.$$eval('#uc-os button[data-on-click="panelRebootOpen()"]', b => b.filter(x => x.offsetParent).length) === 1);
-    if (shots) await page.locator('#uc-os').screenshot({ path: path.join(shots, 'os-patches-done.png') });
+    check('the outcome stays under the row, with the restart the patches left, the log closed below',
+        /All 4 steps done/.test(await page.innerText('#all-run')) && /takes effect with a restart/.test(await page.innerText('#all-run'))
+        && await page.$eval('#all-log-box', d => !d.hidden && !d.open));
+    await page.waitForFunction(() => /One step left/.test(document.querySelector('#uc-os .uc-head').innerText), null, { timeout: 10000 }).catch(() => {});
+    check('the card reads itself again: the FreeBSD patches in, the restart left with its button, once',
+        /One step left/.test(await page.innerText('#uc-os .uc-head'))
+        && await page.$$eval('#uc-os button[data-on-click="panelRebootOpen()"]', b => b.filter(x => x.offsetParent).length) === 1);
+    check('  and nothing left to update', /All 4 steps done|Nothing to update/.test(await page.innerText('#uc-all .uc-head'))
+        && await page.$('#uc-all .uc-head button[data-on-click="ucEverything()"]') === null);
+    if (shots) await page.locator('#update-center').screenshot({ path: path.join(shots, 'update-everything-done.png') });
 
     console.log('\n== 4b. A new FreeBSD release, one step at a time ==');
     const mv = await open(ctx, 'updates', 'en', { targets: true, noPatches: true, reboot: 'none' });
@@ -337,40 +348,33 @@ const allErrors = [], allDialogs = [];
     check('  nothing started', !bl.calls.some(c => c.action === 'os_upgrade_prepare') && !await bl.page.$('#panelAskModal.show'));
     await bl.page.close();
 
-    console.log('\n== 4d. Roundcube, guided ==');
+    console.log('\n== 4d. Roundcube is a step of Update everything (reperto 207) ==');
     const rc = await open(ctx, 'updates', 'en', { roundcube: true, noPatches: true, reboot: 'none' });
     allErrors.push(rc.errors); allDialogs.push(rc.dialogs);
     await centerReady(rc.page);
-    check('the Roundcube row: the versions and one button', /roundcube-php84: 1\.6\.11/.test(await rc.page.innerText('#uc-roundcube .uc-head'))
-        && await rc.page.$$eval('#uc-roundcube .uc-head button', b => b.length) === 1);
-    await rc.page.click('#uc-roundcube button[data-on-click="ucRoundcube()"]');
-    await rc.page.waitForSelector('#rc-pre button[data-on-click="rcRun()"]', { timeout: 10000 });
-    const ready = await rc.page.innerText('#rc-pre');
-    console.log('    ' + ready.replace(/\s+/g, ' ').slice(0, 300));
-    check('  the row\'s own button is gone while its panel is open (no duplicate)', await rc.page.$$eval('#uc-roundcube .uc-head button', b => b.length) === 0);
-    check('one line on the checks, what to know before, the plan, one button', /All 2 checks are fine/.test(ready) && /Good to know before you start/.test(ready)
-        && /The webmail is off for about a minute/.test(ready) && /roundcube-php84/.test(ready)
-        && await rc.page.$$eval('#rc-pre button', b => b.filter(x => x.offsetParent).length) === 1);
-    check('  all the checks closed below', await rc.page.$eval('#rc-pre details', d => !d.open && /Show all 2 checks/.test(d.querySelector('summary').textContent)));
-    await rc.page.click('#rc-pre button[data-on-click="rcRun()"]');
-    await rc.page.waitForSelector('#panelAskModal.show');
-    check('the panel\'s window, with the plan', /roundcube-php84: 1\.6\.11 → 1\.7\.0/.test(await rc.page.innerText('#panelAskModal')));
+    const rcSteps = await rc.page.$$eval('#uc-all .uc-head li', l => l.map(x => x.textContent));
+    console.log('    steps: ' + rcSteps.join(' | '));
+    check('no Roundcube row of its own: the webmail is a step, before Java', await rc.page.$eval('#uc-roundcube', li => li.hidden)
+        && /Webmail \(Roundcube\) 1\.6\.11 → 1\.7\.0: a copy of its database/.test(rcSteps[rcSteps.length - 2]) && /The panel's Java/.test(rcSteps[rcSteps.length - 1]));
+    await rc.page.click('#uc-all .uc-head button[data-on-click="ucEverything()"]');
+    await rc.page.waitForSelector('#panelAskModal.show', { timeout: 15000 });
+    check('  its checks read with the others, and its step in the confirmation', rc.calls.some(c => c.action === 'roundcube_preflight')
+        && /Webmail \(Roundcube\) 1\.6\.11 → 1\.7\.0/.test(await rc.page.innerText('#panelAskModal')));
     await rc.page.click('#panelAskGo');
-    await rc.page.waitForFunction(() => /Roundcube 1\.7\.0 is in place/.test(document.querySelector('#uc-roundcube .uc-head').innerText), null, { timeout: 15000 });
-    const upd = rc.calls.find(c => c.action === 'roundcube_update');
-    check('started with its word and the plan\'s signature', upd && upd.confirm === 'UPGRADE ROUNDCUBE' && upd.signature === 'fedcba9876543210');
-    check('the row stays, with the outcome, and nothing left to press', await rc.page.$eval('#uc-roundcube', li => !li.hidden)
-        && await rc.page.$$eval('#uc-roundcube .uc-head button', b => b.length) === 0);
-    check('  the details closed', await rc.page.$eval('#rc-log-box', d => !d.hidden && !d.open));
+    await rc.page.waitForFunction(() => /steps done/.test(document.getElementById('all-run').innerText), null, { timeout: 15000 });
+    const rcAll = rc.calls.find(c => c.action === 'update_everything');
+    check('  the job has the Roundcube step with its signature, before Java', rcAll && rcAll.steps.map(x => x.kind).join(',') === 'plain,package,roundcube,java'
+        && rcAll.steps[2].signature === 'fedcba9876543210');
     await rc.page.close();
     const rcb = await open(ctx, 'updates', 'en', { roundcube: true, rcBlocked: true, noPatches: true, reboot: 'none' });
     allErrors.push(rcb.errors); allDialogs.push(rcb.dialogs);
     await centerReady(rcb.page);
-    await rcb.page.click('#uc-roundcube button[data-on-click="ucRoundcube()"]');
-    await rcb.page.waitForFunction(() => /Not ready yet/.test(document.getElementById('rc-pre').innerText), null, { timeout: 10000 });
-    const stop = await rcb.page.innerText('#rc-pre');
-    check('the checks stop it: only the row that stops, no button', /No space for the copy/.test(stop) && !/1\.6\.11 -> 1\.7\.0/.test(stop.split('Show all')[0])
-        && await rcb.page.$('#rc-pre button') === null);
+    await rcb.page.click('#uc-all .uc-head button[data-on-click="ucEverything()"]');
+    await rcb.page.waitForSelector('#panelAskModal.show', { timeout: 15000 });
+    const stop = await rcb.page.innerText('#panelAskModal');
+    check('the checks stop Roundcube: left out, with the reason, the rest still goes', /Left out, the checks stop them: Webmail \(Roundcube\).*Database copy — No space for the copy of the database/.test(stop.replace(/\s+/g, ' '))
+        && !/\d\. Webmail/.test(stop));
+    await rcb.page.click('#panelAskModal .modal-footer [data-bs-dismiss="modal"]');
     await rcb.page.close();
 
     console.log('\n== 5. The restart window ==');

@@ -70,15 +70,11 @@
         }
 
         // Le azioni delle righe: aprono il pannello sotto la riga e partono da li'.
-        function ucOsInstall() { ucOpen('os'); osShow('patch'); osInstall(); }
         // Aperto il pannello di una riga, il suo pulsante sta li' dentro: la testata si ridisegna senza (reperto 197).
         function ucOpened(key) {
             const d = document.getElementById('uc-' + key + '-detail');
             return !!(d && !d.hidden);
         }
-        function ucJava() { ucOpen('java'); ucRender(); jvPre(); }
-        function ucJavaReport() { ucOpen('java'); jvState(); }
-        function ucRoundcube() { ucOpen('roundcube'); ucRender(); rcPre(); }
         function ucMysql() { ucOpen('mysql'); ucRender(); my84Pre(); }
         function ucPython() { ucOpen('python'); ucRender(); pyPre(); }
         function ucPythonLeftovers() { ucOpen('python'); pyLeftovers(); }
@@ -134,6 +130,28 @@
             const rows = pk.packages || [];
             const reading = (key, title) => ucHead(key, 'info', title, t('uc.reading'));
 
+            // 0. «Aggiorna tutto», in cima (reperto 207): l'elenco di cio' che fara', nell'ordine, e un pulsante solo. Se un
+            //    pacchetto del server di posta non e' protetto, prima si protegge: il piano degli altri lo cambierebbe.
+            if (!uc.os || !uc.pk) reading('all', t('uc.everythingTitle'));
+            else {
+                const planned = ucPlanned();
+                const unlocked = ((uc.pk || {}).summary || {}).stackUnlocked || 0;
+                if (unlocked > 0) {
+                    ucHead('all', 'todo', t('uc.everythingTitle'), tn('pkgs.stackUnlocked', unlocked) + ' ' + t('uc.everythingProtectFirst'),
+                        [ucButton('btn-primary', 'fa-lock', t('pkgs.bulk.lockAll'), 'updLockAll(true)')]);
+                } else if (planned.length) {
+                    const list = ucEl('ol', 'small mb-0 mt-1 ps-3');
+                    planned.forEach(p => list.append(ucEl('li', '', p.label)));
+                    // Il pulsante resta sempre: anche con l'esito di un lavoro aperto sotto (lo nascondeva, e restava una riga
+                    // senza pulsante: «sparisce proprio la possibilita' di aggiornare»). Mentre un lavoro gira, aspetta.
+                    ucHead('all', 'todo', t('uc.everythingTitle'), tn('uc.everythingSummary', planned.length),
+                        [ucButton('btn-primary', 'fa-arrow-up', tn('uc.everything', planned.length), 'ucEverything()')], list);
+                } else if (uc.plainBlocked) {
+                    // Il piano degli altri pacchetti toglierebbe o retrocederebbe qualcosa: non e' «niente da aggiornare».
+                    ucHead('all', 'todo', t('uc.everythingTitle'), t('uc.everythingPlainBlocked'));
+                } else ucHead('all', 'ok', t('uc.everythingTitle'), gdDone.all || t('uc.everythingNone'));
+            }
+
             // 1. Il sistema di base, guidato (reperto 196): una frase e il pulsante del passo dopo. Prima un passaggio di
             //    release cominciato, poi un riavvio che manca, poi le patch pronte. Una release nuova solo se c'e'.
             // Col pannello della riga aperto, il pulsante del passo dopo sta li' dentro: in testata sarebbe un doppione.
@@ -152,8 +170,7 @@
             } else if (!os.updatableWithFreebsdUpdate) ucHead('os', 'info', t('uc.os'), os.updatesNote || '');
             else if (os.readyExist) {
                 ucHead('os', 'todo', t('uc.os'), t('uc.osReady', { now: os.userland, target: os.readyTarget || '?' })
-                    + (os.readyKernel ? ' ' + t('osp.readyKernel') : ''),
-                    [ucButton('btn-primary', 'fa-download', t('osp.install'), 'ucOsInstall()')]);
+                    + (os.readyKernel ? ' ' + t('osp.readyKernel') : ''));
             } else ucHead('os', 'ok', t('uc.os'), t('uc.osOk', { now: os.userland }));
             // Una release nuova: una riga in piu' con il suo pulsante, solo quando c'e' e niente altro e' in corso.
             const tv = (uc.targets && uc.targets.success && uc.targets.versions) || [];
@@ -180,67 +197,43 @@
             const plain = (sum.updates || 0) - rows.filter(p => p.update && p.locked).length;
             const steps = ucSteps(stack);
             const ready = steps.filter(s => !s.held.length);
+            // Quello che l'elenco di «Aggiorna tutto» mostra gia' qui non si ripete (reperto 207: due volte gli stessi conti).
+            const listed = uc.os && uc.pk && !(sum.stackUnlocked > 0) ? ucPlanned() : [];
+            const plainListed = listed.some(p => p.kind === 'plain'), stackListed = listed.some(p => p.kind === 'package');
             if (!uc.pk) reading('packages', t('uc.packages'));
             else if (!pk.success) ucHead('packages', 'error', t('uc.packages'), pk.error || t('common.errorShort'));
             else if (pk.catalogError) ucHead('packages', 'error', t('uc.packages'), t('pkgs.catalogError', { error: pk.catalogError }));
             else {
                 const words = [];
-                if (plain > 0) words.push(tn('uc.pkPlain', plain));
+                if (plainListed || stackListed) words.push(t('uc.pkInAll'));
+                if (plain > 0 && !plainListed) words.push(tn('uc.pkPlain', plain));
                 // Piu' pacchetti in un passo solo (una famiglia) non sono «in 1 passi»: hanno la loro frase.
-                if (stack.length) words.push((steps.length === 1 && stack.length > 1 ? t('uc.pkStackFamily', { n: stack.length })
+                if (stack.length && !stackListed) words.push((steps.length === 1 && stack.length > 1 ? t('uc.pkStackFamily', { n: stack.length })
                     : tn('uc.pkStack', stack.length, { steps: steps.length })) + (ready.length ? '' : ' ' + t('uc.stackHeld')));
                 if (sum.fixable) words.push(tn('uc.packagesFix', sum.fixable));
                 const open = (sum.vulnerable || 0) - (sum.fixable || 0);
                 if (open > 0) words.push(tn('uc.pkVulnOpen', open));
+                // I passi da fare sono nell'elenco di «Aggiorna tutto», in cima (reperto 207): qui solo quelli trattenuti, col
+                // motivo, e la protezione che manca.
                 const extra = ucEl('div');
-                if (stack.length) {
-                    // Una riga per passo: un pacchetto da solo col suo nome, una famiglia col principale e quanti altri.
+                const held = steps.filter(x => x.held.length);
+                if (held.length) {
                     const items = ucEl('ul', 'list-unstyled small mb-0 mt-1');
-                    steps.forEach(s => {
-                        const h = s.head;
-                        const text = s.members.length === 1 ? h.name + ': ' + h.installed + ' → ' + h.available
-                            : t('uc.pkFamilyLine', { name: h.name, more: s.members.length - 1, from: h.installed, to: h.available });
-                        const why = s.held.map(p => (s.members.length > 1 ? p.name + ': ' : '') + (p.whyNot || t('pkgs.heldBack')));
-                        items.append(ucEl('li', '', text + (why.length ? ' (' + why.join('; ') + ')' : '')));
-                    });
+                    held.forEach(x => items.append(ucEl('li', '', x.head.name + ': ' + x.head.installed + ' → ' + x.head.available + ' ('
+                        + x.held.map(p => (x.members.length > 1 ? p.name + ': ' : '') + (p.whyNot || t('pkgs.heldBack'))).join('; ') + ')')));
                     extra.append(items);
                 }
-                // Un pacchetto della posta senza protezione: il piano degli altri (pkg upgrade) lo cambierebbe senza i suoi
-                // controlli. Proteggerli e' quindi il PRIMO passo, prima del piano: lo si dice qui, dove si guarda.
                 if (sum.stackUnlocked > 0)
                     extra.append(ucEl('div', 'mt-2 small text-warning-emphasis', tn('pkgs.stackUnlocked', sum.stackUnlocked)));
-                const buttons = [];
-                if (sum.stackUnlocked > 0) {
-                    buttons.push(ucButton('btn-primary', 'fa-lock', t('pkgs.bulk.lockAll'), 'updLockAll(true)'));
-                } else if (!ucOpened('packages') && plain > 0 && !uc.plainBlocked) {
-                    buttons.push(ucButton('btn-primary', 'fa-arrow-up', t('uc.packagesGo'), 'ucPackages()'));
-                } else if (ready.length > 1 && (plain <= 0 || uc.plainBlocked)) {
-                    // Due passi o piu': uno solo, «Aggiorna tutti», che li fa uno dopo l'altro (reperto 205).
-                    buttons.push(ucButton('btn-primary', 'fa-arrow-up', tn('uc.updateAll', ready.length), 'ucUpdateAll()'));
-                } else if (ready.length && (plain <= 0 || uc.plainBlocked)) {
-                    const s = ready[0], more = s.members.length - 1;
-                    const label = more ? t('uc.stackNextFamily', { name: s.head.name, more: more, n: 1, total: ready.length })
-                                       : t('uc.stackNext', { name: s.head.name, n: 1, total: ready.length });
-                    const b = ucButton('btn-primary', 'fa-arrow-up', label, 'pkUpdOpen(this.dataset.pkg)');
-                    b.dataset.pkg = s.head.name;
-                    buttons.push(b);
-                }
-                if (words.length || sum.stackUnlocked > 0) ucHead('packages', 'todo', t('uc.packages'), words.join(' '), buttons, extra);
-                else ucHead('packages', 'ok', t('uc.packages'), t('uc.pkOk'), buttons, extra);
+                if (words.length || sum.stackUnlocked > 0) ucHead('packages', 'todo', t('uc.packages'), words.join(' '), [], extra);
+                else ucHead('packages', 'ok', t('uc.packages'), t('uc.pkOk'), [], extra);
             }
 
             // 3. Le procedure dedicate, solo quando servono
             const doneRow = (key, title) => gdDone[key] ? ucHead(key, 'ok', title, gdDone[key]) : ucHide(key);
-            const jvm = rows.find(p => p.javaFlow);
-            if (proc.java && jvm) {
-                ucHead('java', 'todo', t('uc.java'), t('uc.javaTodo', { name: jvm.name, from: jvm.installed, to: jvm.available }),
-                    ucOpened('java') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucJava()')]);
-            } else doneRow('java', t('uc.java'));
-            const rc = rows.find(p => p.name === proc.roundcubePackage);
-            if (proc.roundcube && rc) {
-                ucHead('roundcube', 'todo', t('uc.roundcube'), t('uc.roundcubeTodo', { name: rc.name, from: rc.installed, to: rc.available }),
-                    ucOpened('roundcube') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucRoundcube()')]);
-            } else doneRow('roundcube', t('uc.roundcube'));
+            // La Java del pannello e Roundcube sono passi di «Aggiorna tutto» (reperto 207): niente righe loro.
+            ucHide('java');
+            ucHide('roundcube');
             if (proc.mysql84) {
                 ucHead('mysql', 'todo', t('uc.mysql'), t('uc.mysqlTodo'),
                     ucOpened('mysql') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucMysql()')]);
@@ -361,83 +354,126 @@
             setTimeout(() => ucFollow(id, after), 3000);
         }
 
-        // I pacchetti fuori dal server di posta: il piano esatto, una conferma che lo mostra, e il lavoro che esegue quel
-        // piano o niente (la firma). Se il piano toglierebbe o retrocederebbe pacchetti, il piano con le prove si apre
-        // qui sotto, e non parte niente.
-        async function ucPackages() {
-            ucOpen('packages');
-            ucRender();
-            const box = document.getElementById('pk-run');
-            const say = (cls, text) => { box.innerHTML = '<div class="alert ' + cls + ' py-2 mb-0">' + escHtml(text) + '</div>'; };
-            box.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('uc.planning'));
-            const r = await updApi('updates_status');
-            if (!r.success) { say('alert-danger', r.error || t('common.errorShort')); return; }
-            const plan = r.plan || {};
-            // Un piano che non si esegue (non misurato, vuoto, o che toglierebbe pacchetti): il passo dopo della riga
-            // passa ai pacchetti del server di posta, che hanno ognuno il suo piano (reperto 202).
-            const blocked = () => { uc.plainBlocked = true; ucRender(); };
-            if (!plan.measured) { blocked(); say('alert-warning', t('up.planUnavailable') + ' ' + (plan.error || '')); return; }
-            const changes = plan.changes || [];
-            if (!changes.length) { blocked(); say('alert-success', t('up.planNoChange')); return; }
-            if (changes.some(c => c.type === 'remove' || c.type === 'downgrade')) {
-                blocked();
-                say('alert-warning', t('uc.planRemoves'));
-                ucOpen('packages', 'uc-updates-panel');
-                updStatus();
-                return;
-            }
-            box.innerHTML = '';
-            const lines = changes.map(c => c.name + ': ' + (c.from || '-') + ' → ' + (c.to || '-')).join('\n');
-            const yes = await panelAsk({ title: tn('uc.pkAskTitle', changes.length), text: t('uc.pkAskText') + '\n' + lines,
-                confirm: tn('uc.pkAskGo', changes.length) });
-            if (!yes) return;
-            updUnprotectedSignature = r.signature;
-            const a = await updApi('updates_apply', { confirm: 'UPDATE', signature: r.signature });
-            ucTurn();
-            if (!a.success) { say('alert-danger', a.error || t('common.errorShort')); return; }
-            gdFollow('packages', 'pk-run', 'pk-log-box', 'pk-log', a.jobId, t('up.upgradingKeepOpen'));
+        // Quello che «Aggiorna tutto» farebbe adesso, nell'ordine (reperto 207): le patch di FreeBSD, gli altri pacchetti in un
+        // piano, i passi del server di posta (un pacchetto, o una famiglia col suo principale), Roundcube con la sua
+        // procedura, e per ultima la Java del pannello, che lo ferma e lo riaccende.
+        function ucPlanned() {
+            const os = uc.os || {}, pk = uc.pk || {}, proc = pk.procedures || {}, rows = pk.packages || [], sum = pk.summary || {};
+            const own = p => p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);
+            const out = [];
+            if (os.success && os.updatableWithFreebsdUpdate && os.readyExist && !os.restartNeeded && !osMoving())
+                out.push({ kind: 'os', label: t('uc.allOs', { target: os.readyTarget || '?' }) });
+            if (!pk.success || pk.catalogError) return out;
+            const plain = (sum.updates || 0) - rows.filter(p => p.update && p.locked).length;
+            if (plain > 0 && !uc.plainBlocked) out.push({ kind: 'plain', label: tn('uc.allPlain', plain) });
+            ucSteps(rows.filter(p => p.update && p.locked && !own(p))).filter(x => !x.held.length).forEach(x => out.push({ kind: 'package', step: x,
+                label: x.members.length > 1 ? t('uc.pkFamilyLine', { name: x.head.name, more: x.members.length - 1, from: x.head.installed, to: x.head.available })
+                                            : x.head.name + ': ' + x.head.installed + ' → ' + x.head.available }));
+            const rc = rows.find(p => p.name === proc.roundcubePackage);
+            if (proc.roundcube && rc) out.push({ kind: 'roundcube', label: t('uc.allRoundcube', { from: rc.installed, to: rc.available }) });
+            const jvm = rows.find(p => p.javaFlow);
+            if (proc.java && jvm) out.push({ kind: 'java', label: t('uc.allJava', { from: jvm.installed, to: jvm.available }) });
+            return out;
         }
 
-        // «Aggiorna tutti» (reperto 205): il committente, davanti a «Update nginx (1 of 4)», «non è possibile fare un
-        // aggiorna tutto e basta?». Prima i controlli di ogni passo, gli stessi della sua finestra; poi UNA conferma che
-        // li mostra tutti, coi servizi che ripartono; poi un lavoro che li fa uno dopo l'altro, ognuno col suo piano
-        // firmato, e si ferma al primo che non va. Un passo che i controlli fermano resta fuori, e la conferma lo dice.
-        async function ucUpdateAll() {
-            ucOpen('packages');
+        // «Aggiorna tutto» (reperto 207). Il committente: «c'è ancora disorganizzazione, poi se clicco annulla all'aggiornamento,
+        // sparisce proprio la possibilità di aggiornare, devi sensibilmente rivedere tutto in maniera logica e semplice».
+        // Prima i controlli di ogni passo, gli stessi della sua procedura; poi UNA conferma che li elenca; poi UN lavoro che li
+        // fa uno dopo l'altro e si ferma al primo che non va. Annullare non cambia niente: il pulsante resta dov'e'.
+        async function ucEverything() {
+            ucOpen('all');
             ucRender();
-            const box = document.getElementById('pk-run');
+            const box = document.getElementById('all-run');
             const say = (cls, text) => { box.innerHTML = '<div class="alert ' + cls + ' py-2 mb-0">' + escHtml(text) + '</div>'; };
-            const pk = uc.pk || {}, proc = pk.procedures || {};
-            const own = p => p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);
-            const ready = ucSteps((pk.packages || []).filter(p => p.update && p.locked && !own(p))).filter(s => !s.held.length);
-            const go = [], out = [];
-            for (let i = 0; i < ready.length; i++) {
-                const h = ready[i].head;
-                box.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
-                    + escHtml(t('uc.allChecking', { n: i + 1, total: ready.length, name: h.name }));
-                const r = await updApi('package_preflight', { package: h.name });
-                if (r.success && r.canProceed && r.signature) { go.push({ step: ready[i], pf: r }); continue; }
-                const stop = (r.checks || []).find(c => c.level === 'block');
-                out.push(h.name + ': ' + (stop ? stop.label + ' — ' + stop.detail : (r.error || t('common.errorShort'))));
+            const busy = text => { box.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(text); };
+            const planned = ucPlanned();
+            const go = [], out = [], approved = {}, waiting = [];
+            const add = plan => ((plan && plan.changes) || []).forEach(c => { if (c.name && c.to) approved[c.name] = c.to; });
+            const stopOf = r => { const c = (r.checks || []).find(x => x.level === 'block'); return c ? c.label + ' — ' + c.detail : (r.error || t('common.errorShort')); };
+            for (let i = 0; i < planned.length; i++) {
+                const p = planned[i];
+                busy(t('uc.allChecking', { n: i + 1, total: planned.length, name: p.label }));
+                if (p.kind === 'os') { go.push({ kind: 'os', label: p.label }); continue; }
+                if (p.kind === 'plain') {
+                    const r = await updApi('updates_status');
+                    const plan = r.plan || {};
+                    const changes = plan.changes || [];
+                    if (!r.success || !plan.measured || !changes.length) { out.push(p.label + ': ' + (r.error || plan.error || t('up.planNoChange'))); continue; }
+                    if (changes.some(c => c.type === 'remove' || c.type === 'downgrade')) { uc.plainBlocked = true; out.push(p.label + ': ' + t('uc.allPlanRemoves')); continue; }
+                    // Un pacchetto reinstallato (e' cambiato uno che usa) non e' un aggiornamento: si dice a parte, cosi' i
+                    // conti tornano con l'elenco (sulla VM: 9 aggiornamenti e cyrus-sasl reinstallato, non «10 pacchetti»).
+                    const again = changes.filter(c => c.type === 'reinstall').length;
+                    const label = again && again < changes.length ? tn('uc.allPlain', changes.length - again) + ' ' + tn('uc.allPlainReinstall', again)
+                        : tn('uc.allPlain', changes.length);
+                    go.push({ kind: 'plain', signature: r.signature, label: label });
+                    add(plan);
+                    continue;
+                }
+                const action = { package: 'package_preflight', roundcube: 'roundcube_preflight', java: 'java_preflight' }[p.kind];
+                const r = await updApi(action, p.kind === 'package' ? { package: p.step.head.name } : {});
+                if (!(r.success && r.canProceed && r.signature)) {
+                    // Fermato da pacchetti protetti che hanno un aggiornamento loro: se e' un passo di prima a farlo, questo
+                    // si controlla quando tocca a lui (sotto). Sulla VM: postfix-mysql dietro mysql84-client.
+                    const blockers = ((r.plan && r.plan.blockers) || []).map(b => b.name).filter(Boolean);
+                    if (p.kind === 'package' && blockers.length) { waiting.push({ p: p, r: r, blockers: blockers }); continue; }
+                    out.push(p.label + ': ' + stopOf(r));
+                    continue;
+                }
+                const services = (r.services || []).map(x => x.name || x).filter(Boolean);
+                go.push({ kind: p.kind, package: p.kind === 'package' ? p.step.head.name : '', signature: r.signature,
+                    label: p.label + (services.length ? ' — ' + t('uc.allRestarts', { list: services.join(', ') }) : '') });
+                add(r.plan);
+            }
+            // I passi fermati solo da un pacchetto che un passo di prima aggiorna: dopo gli altri pacchetti, prima di Roundcube
+            // e della Java, senza impronta. Il server li controlla quando tocca a loro, e li esegue solo se il loro piano
+            // resta fra i cambiamenti mostrati qui (reperto 207).
+            const deferred = [];
+            waiting.forEach(w => {
+                if (!w.blockers.every(b => Object.prototype.hasOwnProperty.call(approved, b))) { out.push(w.p.label + ': ' + stopOf(w.r)); return; }
+                w.p.step.members.forEach(m => { approved[m.name] = m.available; });
+                deferred.push({ kind: 'package', package: w.p.step.head.name, signature: '',
+                    label: w.p.label + ' — ' + t('uc.allDeferred', { after: w.blockers.join(', ') }) });
+            });
+            if (deferred.length) {
+                const late = go.findIndex(g => g.kind === 'roundcube' || g.kind === 'java');
+                go.splice(late < 0 ? go.length : late, 0, ...deferred);
             }
             box.innerHTML = '';
             if (!go.length) { say('alert-warning', t('uc.allNone') + ' ' + out.join('; ')); return; }
-            const lines = go.map(g => {
-                const s = g.step, more = s.members.length - 1;
-                const what = more ? t('uc.pkFamilyLine', { name: s.head.name, more: more, from: s.head.installed, to: s.head.available })
-                                  : s.head.name + ': ' + s.head.installed + ' → ' + s.head.available;
-                const services = (g.pf.services || []).map(x => x.name);
-                return what + (services.length ? ' — ' + t('uc.allRestarts', { list: services.join(', ') }) : '');
-            });
-            const yes = await panelAsk({ title: tn('uc.allAskTitle', go.length),
-                text: t('uc.allAskText') + '\n' + lines.join('\n') + (out.length ? '\n' + t('uc.allLeftOut') + ' ' + out.join('; ') : ''),
-                confirm: tn('uc.allAskGo', go.length) });
-            if (!yes) return;
-            const a = await updApi('guided_update_all', { confirm: 'UPDATE',
-                steps: go.map(g => ({ package: g.step.head.name, signature: g.pf.signature })) });
+            const lines = go.map((g, i) => (i + 1) + '. ' + g.label);
+            const yes = await panelAsk({ title: tn('uc.everythingAskTitle', go.length),
+                text: t('uc.everythingAskText') + '\n' + lines.join('\n')
+                    + (out.length ? '\n' + t('uc.allLeftOut') + ' ' + out.join('; ') : '')
+                    + (go.some(g => g.kind === 'java') ? '\n' + t('uc.everythingJavaNote') : ''),
+                confirm: tn('uc.everythingGo', go.length) });
+            if (!yes) {
+                // Annullato: tutto com'era, col pulsante al suo posto.
+                document.getElementById('uc-all-detail').hidden = true;
+                ucRender();
+                return;
+            }
+            const a = await updApi('update_everything', { confirm: 'UPDATE',
+                steps: go.map(g => ({ kind: g.kind, package: g.package || '', signature: g.signature || '' })),
+                approved: Object.keys(approved).map(n => ({ name: n, to: approved[n] })) });
             ucTurn();
             if (!a.success) { say('alert-danger', a.error || t('common.errorShort')); return; }
-            gdFollow('packages', 'pk-run', 'pk-log-box', 'pk-log', a.jobId, t('uc.allRunning'));
+            gdFollow('all', 'all-run', 'all-log-box', 'all-log', a.jobId, t('uc.everythingRunning'));
+            if (go.some(g => g.kind === 'java')) ucAwaitPanel();
+        }
+
+        // Con la Java del pannello per ultima, il pannello si ferma e si riaccende: si aspetta che risponda di nuovo e si
+        // ricarica la pagina. Solo se e' davvero sparito per un po' (lo script parte alla fine del lavoro).
+        function ucAwaitPanel() {
+            let wasDown = false, rounds = 0;
+            const tick = async () => {
+                rounds++;
+                let up = false;
+                try { up = (await fetch('/api/panel_info', { cache: 'no-store' })).status > 0; } catch (e) { up = false; }
+                if (!up) wasDown = true;
+                if (wasDown && up) { location.reload(); return; }
+                if (rounds < 180) setTimeout(tick, 5000);
+            };
+            setTimeout(tick, 5000);
         }
 
         // Dopo il cambio di ramo: si torna in cima a questa scheda, a vedere cosa c'e' da aggiornare adesso.

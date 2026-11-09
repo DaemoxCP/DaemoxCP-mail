@@ -198,7 +198,7 @@
             const kind = { 'os-patch': t('jr.type.osPatch'), 'os-fetch': t('jr.type.osFetch'), system: t('jr.type.system'), jump: t('jr.type.jump'),
                 search: t('jr.type.search'), update: t('jr.type.update'), guided_update: t('jr.type.guidedUpdate'),
                 maintenance: t('jr.type.maintenance'), roundcube: t('jr.type.roundcube'), python: t('jr.type.python'),
-                mysql84_migration: t('jr.type.mysql84'), pkg_branch: t('jr.type.branch') };
+                mysql84_migration: t('jr.type.mysql84'), pkg_branch: t('jr.type.branch'), update_everything: t('jr.type.everything') };
             const outcome = { completed: t('jr.ok'), error: t('jr.error'), unfinished: t('jr.unfinished'), ended: t('jr.ended') };
             const badge = { completed: 'upd-badge-ok', error: 'upd-badge-warn', unfinished: 'upd-badge-warn', ended: 'upd-badge-info' };
             let h = '<div class="table-responsive"><table class="table table-sm align-middle mb-2"><caption class="visually-hidden">' + escHtml(t('jr.title')) + '</caption>'

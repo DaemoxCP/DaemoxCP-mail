@@ -796,6 +796,8 @@ mydestination = localhost
 # In uscita root@localhost diventa root@<nome del server>: vedi lo script di installazione
 smtp_generic_maps = inline:{ @localhost=@\\$myhostname }
 mynetworks = 127.0.0.0/8 [::1]/128
+# In chiaro: senza, lo script di ogni aggiornamento di postfix scrive inet_protocols = ipv4 (reperto 207)
+inet_protocols = all
 
 # Virtual mailbox settings
 virtual_mailbox_domains = mysql:/usr/local/etc/postfix/mysql-virtual-domains.cf

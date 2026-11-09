@@ -824,6 +824,9 @@ public class SSLMailServer {
             // dopo gli alias, perche' senza aliases.db la posta di sistema resterebbe in coda.
             // Idempotente, e non attiva niente se la posta di sistema rimbalzerebbe.
             org.mail_panel.system.LocalMtaRepair.ensureAtBoot();
+            // inet_protocols scritto in chiaro col valore in uso: senza, lo script di ogni aggiornamento di postfix
+            // scrive ipv4 e al riavvio IPv6 sparisce (reperti 42, 207). Non cambia niente di quello che Postfix fa.
+            org.mail_panel.system.PostfixInetProtocols.ensureAtBoot();
 
             // Roundcube col suo utente e il suo pool di php-fpm, non piu' con l'utente di nginx: sui
             // server installati prima. Prima del plugin SSO, che da' la sua configurazione al gruppo
@@ -8152,24 +8155,31 @@ public class SSLMailServer {
                     response = UpdateManager.startGuidedUpdate(pk, req.optString("signature", ""));
                     logAudit("GUIDED_UPDATE_STARTED", ip, pk + " -> " + response.optString("jobId", ""));
                 }
-                case "guided_update_all" -> {
-                    // «Aggiorna tutti» (reperto 205): i passi del server di posta, ognuno col nome del suo pacchetto
-                    // principale e l'impronta del piano che la conferma ha mostrato. La conferma e' quella della
-                    // finestra del pannello, che elenca tutti i passi; la parola la manda la pagina, come per il piano
-                    // degli altri pacchetti.
+                case "update_everything" -> {
+                    // «Aggiorna tutto» (reperto 207): i passi nell'ordine, ognuno con l'impronta del piano letto, e i
+                    // cambiamenti che la conferma ha mostrato. La conferma e' la finestra del pannello che li elenca
+                    // tutti; la parola la manda la pagina, come per il piano degli altri pacchetti.
                     if (!"UPDATE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
                     }
-                    java.util.List<String> names = new java.util.ArrayList<>(), signatures = new java.util.ArrayList<>();
-                    JSONArray steps = req.optJSONArray("steps");
-                    for (int i = 0; steps != null && i < steps.length(); i++) {
-                        JSONObject st = steps.optJSONObject(i);
-                        names.add(st == null ? "" : st.optString("package", ""));
-                        signatures.add(st == null ? "" : st.optString("signature", ""));
+                    java.util.List<UpdateManager.EverythingStep> steps = new java.util.ArrayList<>();
+                    JSONArray list = req.optJSONArray("steps");
+                    for (int i = 0; list != null && i < list.length(); i++) {
+                        JSONObject st = list.optJSONObject(i);
+                        steps.add(st == null ? null : new UpdateManager.EverythingStep(st.optString("kind", ""),
+                                st.optString("package", ""), st.optString("signature", "")));
                     }
-                    response = UpdateManager.startGuidedUpdateAll(names, signatures);
-                    logAudit("GUIDED_UPDATE_ALL_STARTED", ip, String.join(", ", names) + " -> " + response.optString("jobId", ""));
+                    java.util.Map<String, String> approved = new java.util.HashMap<>();
+                    JSONArray shown = req.optJSONArray("approved");
+                    for (int i = 0; shown != null && i < shown.length(); i++) {
+                        JSONObject a = shown.optJSONObject(i);
+                        if (a != null) approved.put(a.optString("name", ""), a.optString("to", ""));
+                    }
+                    response = UpdateManager.startEverything(steps, approved);
+                    java.util.List<String> names = new java.util.ArrayList<>();
+                    for (UpdateManager.EverythingStep st : steps) if (st != null) names.add(st.name().isEmpty() ? st.kind() : st.name());
+                    logAudit("UPDATE_EVERYTHING_STARTED", ip, String.join(", ", names) + " -> " + response.optString("jobId", ""));
                 }
                 case "packages_lock" -> {
                     boolean lock = req.optBoolean("lock", true);
