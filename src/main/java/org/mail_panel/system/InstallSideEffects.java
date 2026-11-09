@@ -218,10 +218,14 @@ final class InstallSideEffects {
      * gli esempi: accanto a config.inc.php.sample Roundcube installa defaults.inc.php, e un
      * file del pacchetto preso per configurazione di nessuno darebbe l'allarme a ogni suo
      * aggiornamento.
+     *
+     * E i file a cui punta un .sample che e' un collegamento (vedi {@link #linkedSample}): servono
+     * a dire che il collegamento porta a un file dello stesso pacchetto.
      */
     static Map<String, String> owners(String pkgQueryOutput, List<String> roots) {
         List<String[]> all = new ArrayList<>();
         Set<String> sampleDirs = new TreeSet<>();
+        Set<String> linkTargets = new TreeSet<>();
         for (String line : (pkgQueryOutput == null ? "" : pkgQueryOutput).split("\n")) {
             int tab = line.indexOf('\t');
             if (tab <= 0) continue;
@@ -229,11 +233,26 @@ final class InstallSideEffects {
             if (!UpdateManager.isValidName(name) || !path.startsWith("/")) continue;
             all.add(new String[]{path, name});
             if (isSample(path) && !underRoots(path, roots)) sampleDirs.add(parentOf(path));
+            if (isSample(path)) {
+                Path target = linkTarget(Paths.get(path));
+                if (target != null) linkTargets.add(target.toString());
+            }
         }
         Map<String, String> r = new TreeMap<>();
         for (String[] e : all)
-            if (underRoots(e[0], roots) || sampleDirs.contains(parentOf(e[0]))) r.put(e[0], e[1]);
+            if (underRoots(e[0], roots) || sampleDirs.contains(parentOf(e[0])) || linkTargets.contains(e[0]))
+                r.put(e[0], e[1]);
         return r;
+    }
+
+    /** Dove porta un collegamento, un passo solo; null se non e' un collegamento o non si legge. */
+    static Path linkTarget(Path link) {
+        try {
+            if (!Files.isSymbolicLink(link)) return null;
+            return link.resolveSibling(Files.readSymbolicLink(link)).normalize();
+        } catch (IOException | UnsupportedOperationException | SecurityException e) {
+            return null;
+        }
     }
 
     private static String parentOf(String path) {
@@ -429,12 +448,31 @@ final class InstallSideEffects {
     /** Il file vivo e' identico al .sample del suo pacchetto, cioe' e' il predefinito nuovo. */
     private static boolean isNewDefault(String p, FileState a, ConfigSnapshot after, Set<String> changedPackages) {
         for (String suffix : new String[]{".sample", ".dist"}) {
-            FileState sample = after.files().get(p + suffix);
             String sampleOwner = after.owners().get(p + suffix);
-            if (sample != null && sampleOwner != null && changedPackages.contains(sampleOwner)
-                    && sample.sha256().equals(a.sha256())) return true;
+            if (sampleOwner == null || !changedPackages.contains(sampleOwner)) continue;
+            FileState sample = after.files().get(p + suffix);
+            if (sample == null) sample = linkedSample(Paths.get(p + suffix), sampleOwner, after.owners());
+            if (sample != null && sample.sha256().equals(a.sha256())) return true;
         }
         return false;
+    }
+
+    /**
+     * Il .sample che e' un collegamento: il contenuto del file a cui porta, se e' un file normale
+     * dello STESSO pacchetto; altrimenti null, e il cambiamento resta da segnalare.
+     *
+     * Visto sul server vero il 09/11/2026 (reperto 201): ca_root_nss installa
+     * etc/ssl/cert.pem.sample come collegamento a share/certs/ca-root-nss.crt, e aggiornandolo
+     * pkg ha rimesso in cert.pem, intatto, l'elenco nuovo delle autorita' di certificazione. La
+     * fotografia non segue i collegamenti (uno verso / fotograferebbe il disco), quindi il .sample
+     * non c'era, e il predefinito nuovo e' stato preso per uno script: «Passo non riuscito» su un
+     * aggiornamento andato bene. Qui si segue questo collegamento solo, di un passo.
+     */
+    static FileState linkedSample(Path link, String owner, Map<String, String> owners) {
+        Path target = linkTarget(link);
+        if (target == null || !owner.equals(owners.get(target.toString()))) return null;
+        if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) return null;
+        return state(target);
     }
 
     /** Il file vivo se n'e' andato insieme al .sample del pacchetto che il lavoro ha tolto. */

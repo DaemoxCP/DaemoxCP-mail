@@ -36,6 +36,7 @@ public class InstallSideEffectsTest {
         savedCopies();
         lines();
         owners();
+        linkedOwners();
         listening();
         System.out.println(failures == 0 ? "\nALL OK" : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
@@ -65,13 +66,32 @@ public class InstallSideEffectsTest {
             write(etc.resolve("comments-perms.cf"), "w = 4\n", "rw-r-----");
             // A file of ANOTHER package, which the job did not touch.
             write(other.resolve("dovecot-owned.conf"), "protocols = imap\n", "rw-r--r--");
+            // Reperto 201, as ca_root_nss lays it out: the sample is a LINK to a file of the package outside the
+            // configuration (etc/ssl/cert.pem.sample -> ../../share/certs/ca-root-nss.crt), the live file a copy.
+            Path ssl = Files.createDirectories(d.resolve("etc/ssl"));
+            Path certs = Files.createDirectories(d.resolve("share/certs"));
+            write(certs.resolve("bundle.crt"), "-----BEGIN CERTIFICATE-----\nold roots\n", "rw-r--r--");
+            write(certs.resolve("foreign.crt"), "-----BEGIN CERTIFICATE-----\nnew roots\n", "rw-r--r--");
+            write(ssl.resolve("cert.pem"), "-----BEGIN CERTIFICATE-----\nold roots\n", "rw-r--r--");
+            Files.createSymbolicLink(ssl.resolve("cert.pem.sample"), Path.of("../../share/certs/bundle.crt"));
+            // The same layout, but the link leads to a file of another package: it proves nothing.
+            write(ssl.resolve("foreign.pem"), "-----BEGIN CERTIFICATE-----\nold roots\n", "rw-r--r--");
+            Files.createSymbolicLink(ssl.resolve("foreign.pem.sample"), Path.of("../../share/certs/foreign.crt"));
+            // And a live file the administrator changed: it is not the new default, whatever the link says.
+            write(ssl.resolve("custom.pem"), "-----BEGIN CERTIFICATE-----\nold roots\nmy own root\n", "rw-r--r--");
+            Files.createSymbolicLink(ssl.resolve("custom.pem.sample"), Path.of("../../share/certs/bundle.crt"));
 
             Map<String, String> owners = new TreeMap<>();
             owners.put(etc.resolve("main.cf.sample").toString(), "postfix-mysql");
             owners.put(etc.resolve("main.cf.default").toString(), "postfix-mysql");
             owners.put(other.resolve("other.conf.sample").toString(), "other");
             owners.put(other.resolve("dovecot-owned.conf").toString(), "dovecot");
-            Set<String> changed = Set.of("postfix-mysql", "other");
+            owners.put(ssl.resolve("cert.pem.sample").toString(), "ca_root_nss");
+            owners.put(ssl.resolve("foreign.pem.sample").toString(), "ca_root_nss");
+            owners.put(ssl.resolve("custom.pem.sample").toString(), "ca_root_nss");
+            owners.put(certs.resolve("bundle.crt").toString(), "ca_root_nss");
+            owners.put(certs.resolve("foreign.crt").toString(), "dovecot");
+            Set<String> changed = Set.of("postfix-mysql", "other", "ca_root_nss");
 
             InstallSideEffects.ConfigSnapshot before =
                     InstallSideEffects.configSnapshot(List.of(d.resolve("etc")), List.of(), owners);
@@ -90,6 +110,11 @@ public class InstallSideEffectsTest {
             write(etc.resolve("order.cf"), "b = 2\na = 1\n", "rw-r--r--");
             write(other.resolve("dovecot-owned.conf"), "protocols = imap pop3\n", "rw-r--r--");
             write(etc.resolve("comments-perms.cf"), "w = 4\n# new comment\n", "rw-rw-rw-");
+            // pkg updates the bundle and puts it in place of the untouched copies.
+            write(certs.resolve("bundle.crt"), "-----BEGIN CERTIFICATE-----\nnew roots\n", "rw-r--r--");
+            write(ssl.resolve("cert.pem"), "-----BEGIN CERTIFICATE-----\nnew roots\n", "rw-r--r--");
+            write(ssl.resolve("foreign.pem"), "-----BEGIN CERTIFICATE-----\nnew roots\n", "rw-r--r--");
+            write(ssl.resolve("custom.pem"), "-----BEGIN CERTIFICATE-----\nnew roots\nmy own root changed\n", "rw-r--r--");
 
             InstallSideEffects.ConfigSnapshot after =
                     InstallSideEffects.configSnapshot(List.of(d.resolve("etc")), List.of(), owners);
@@ -121,6 +146,21 @@ public class InstallSideEffectsTest {
             JSONObject newDefault = find(c, other.resolve("other.conf"));
             check("the default never touched, now the new default: no alarm",
                     newDefault != null && "newDefault".equals(newDefault.getString("kind")) && !newDefault.getBoolean("alarm"));
+
+            JSONObject cert = find(c, ssl.resolve("cert.pem"));
+            check("the untouched copy of a sample that is a link, now the new default: no alarm (reperto 201)",
+                    cert != null && "newDefault".equals(cert.getString("kind")) && !cert.getBoolean("alarm"));
+            JSONObject foreignLink = find(c, ssl.resolve("foreign.pem"));
+            check("  a sample link that leads to a file of another package: alarm", foreignLink != null
+                    && foreignLink.getBoolean("alarm") && "script".equals(foreignLink.getString("kind")));
+            JSONObject custom = find(c, ssl.resolve("custom.pem"));
+            check("  a live file that is not the linked default: alarm", custom != null
+                    && custom.getBoolean("alarm") && "script".equals(custom.getString("kind")));
+            check("  the link itself is not a change", find(c, ssl.resolve("cert.pem.sample")) == null);
+            check("  a link is followed one step only, and only to a regular file of the same package",
+                    InstallSideEffects.linkedSample(ssl.resolve("cert.pem.sample"), "ca_root_nss", owners) != null
+                    && InstallSideEffects.linkedSample(ssl.resolve("cert.pem.sample"), "dovecot", owners) == null
+                    && InstallSideEffects.linkedSample(ssl.resolve("cert.pem"), "ca_root_nss", owners) == null);
 
             JSONObject created = find(c, etc.resolve("created.cf"));
             check("a created file that belongs to nobody: alarm", created != null && created.getBoolean("alarm")
@@ -336,6 +376,30 @@ public class InstallSideEffectsTest {
         List<Path> dirs = InstallSideEffects.sampleDirsOutside(o, InstallSideEffects.CONFIG_ROOTS);
         check("folders to look at outside the roots: only Roundcube's configuration one",
                 dirs.size() == 1 && dirs.get(0).toString().equals("/usr/local/www/roundcube/config"));
+    }
+
+    // ===== a sample that is a link: its target is kept (reperto 201) =====
+    private static void linkedOwners() throws Exception {
+        Path d = Files.createTempDirectory("side-effects-links");
+        try {
+            Path ssl = Files.createDirectories(d.resolve("etc/ssl"));
+            Path certs = Files.createDirectories(d.resolve("share/certs"));
+            write(certs.resolve("ca-root-nss.crt"), "roots\n", "rw-r--r--");
+            write(certs.resolve("other.crt"), "x\n", "rw-r--r--");
+            Files.createSymbolicLink(ssl.resolve("cert.pem.sample"), Path.of("../../share/certs/ca-root-nss.crt"));
+            String query = "ca_root_nss\t" + ssl.resolve("cert.pem.sample") + "\n"
+                    + "ca_root_nss\t" + certs.resolve("ca-root-nss.crt") + "\n"
+                    + "ca_root_nss\t" + certs.resolve("other.crt") + "\n";
+            Map<String, String> o = InstallSideEffects.owners(query, List.of(d.resolve("etc").toString()));
+            check("owners: the sample link under the roots is there", "ca_root_nss".equals(o.get(ssl.resolve("cert.pem.sample").toString())));
+            check("  and so is the file it leads to, outside the roots", "ca_root_nss".equals(o.get(certs.resolve("ca-root-nss.crt").toString())));
+            check("  but not the package's other files next to it", !o.containsKey(certs.resolve("other.crt").toString()));
+            check("  and the folder of the target is not looked at", InstallSideEffects.sampleDirsOutside(o, List.of(d.resolve("etc").toString())).isEmpty());
+        } finally {
+            try (var s = Files.walk(d)) {
+                s.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+            }
+        }
     }
 
     // ===== the listening addresses =====
