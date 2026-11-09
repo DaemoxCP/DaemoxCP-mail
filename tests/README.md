@@ -69,6 +69,10 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.CloudflareCommentsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMoveTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveStorageTest
+    javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/integration/*.java
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.integration.SieveGeneratorTest
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveForcedKeepTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveActionsE2ETest   (VM, as root, real deliveries)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -243,7 +247,10 @@ reperto 214 it also tries Sieve: a script of the mailbox's own through ManageSie
 (PUTSCRIPT, SETACTIVE) and a rule of the panel written as the panel writes it, then a real delivery
 through Postfix: the panel's rule must run first and the mailbox's own script after it, `doveadm
 sieve list` must open the scripts, and no "dovecot.sieve" may show among the folders. With the Sieve
-layout of before it fails there (ManageSieve: "BYE Internal error"). As root, in the panel folder:
+layout of before it fails there (ManageSieve: "BYE Internal error"). Since reperto 216 a second delivery
+with a panel's rule that moves, written with no keep at the end as the panel writes it now: the message
+only in the panel's folder, not in INBOX, and the mailbox's own script does not run on it (with a `keep;`
+put back at the end, measured, the own script runs too and it fails). As root, in the panel folder:
 
     sh tests/mail-login-probe.sh
 
@@ -415,6 +422,30 @@ the panel writes on 2.3 and 2.4 (`sieve_before` / a `before` script from /var/ma
 migration of servers installed before (the exact block the panel wrote becomes the new one, the rest untouched; done,
 hand-written or twice: nothing); a ManageSieve link made by hand under /var/mail/sieve is seen and left; the mailbox to
 try `doveadm sieve list` on. On the VM.
+
+**SieveGeneratorTest** — the panel's Sieve rules with no keep forced at the end (reperto 216): until 09/11/2026 every
+script ended with an explicit `keep;`, so "move" left the message in INBOX too, a forward without a copy kept one and
+"delete" deleted nothing. Rule by rule (move, copy, delete, forward with and without a copy, a filter's forward,
+autoresponder, all together): the action as Sieve means it and no top-level keep; a script without rules is just the
+require line. With `-De2e.vm=yes` every script also goes through the real sievec. With the forced keep put back in the
+jar: 10 checks fail.
+
+**SieveForcedKeepTest** — the boot repair of the scripts written before (reperto 216, SieveForcedKeep): a script with
+either require line the panel ever wrote loses only the tail and becomes what the generator writes now; already fixed,
+hand-written, another require or the tail not at the end: nothing. On a folder like /var/mail/sieve only
+domain/user/.dovecot.sieve regular files, owner and mode kept, compiled once, a ManageSieve link and other depths left,
+a script the compiler refuses put back, nothing the second time. With `-De2e.vm=yes` the real sievec, the binary newer
+than the script.
+
+**SieveActionsE2ETest** — the same rules with real deliveries, on the VM as root with `-De2e.vm=yes` (it creates
+`sieve-actions.test` with three mailboxes in the mail database and removes it): each rule written by SieveGenerator and
+saveSieveScript, a message through Postfix's sendmail, `doveadm search` for where it landed. Move: only in the folder;
+copy: folder and INBOX; forward without a copy: only at the destination, with a copy: both; delete: nowhere;
+autoresponder: INBOX and the reply at the sender; reject: not kept, the refusal at the sender; the mailbox's own script
+saved through ManageSieve runs when the panel's rules keep the message and does not when they move it; a script written
+before is fixed by SieveForcedKeep.repair and then the move moves. Measured on 09/11/2026 on Dovecot 2.3.21: 25 checks
+pass; with the forced keep put back in the jar 7 fail (move, forward without a copy, delete and reject keep INBOX, the
+own script runs after a move, and in the last part the faulty generator writes the keep again).
 
 **DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what

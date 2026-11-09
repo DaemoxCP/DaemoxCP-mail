@@ -814,6 +814,9 @@ public class SSLMailServer {
             // del pannello prima di loro: prima non si salvava niente, la cartella era di root (SieveStorage verifica e
             // torna indietro).
             org.mail_panel.system.SieveStorage.ensureAtBoot();
+            // Le regole Sieve del pannello gia' scritte senza il keep forzato in fondo: con quello «Sposta» lasciava anche
+            // la INBOX e «Inoltra» senza copia ne teneva una (SieveForcedKeep ricompila, e se sievec non accetta torna com'era).
+            org.mail_panel.system.SieveForcedKeep.ensureAtBoot();
 
             // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.

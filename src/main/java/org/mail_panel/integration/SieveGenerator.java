@@ -17,14 +17,35 @@ public class SieveGenerator {
     private static final String SIEVE_DIR = "/var/mail/sieve";
     private static final String GLOBAL_SIEVE = "/usr/local/etc/dovecot/sieve/global.sieve";
 
+    /** La prima riga di ogni script del pannello (date serve a currentdate, nella risposta automatica). */
+    public static final String REQUIRE = "require [\"fileinto\", \"reject\", \"vacation\", \"copy\", \"imap4flags\", \"regex\", \"relational\", \"comparator-i;ascii-numeric\", \"date\"];\n\n";
+
+    /**
+     * La coda che il pannello metteva in fondo a ogni script fino al 09/11/2026: un keep esplicito. SieveForcedKeep la
+     * toglie all'avvio dagli script gia' scritti.
+     */
+    public static final String OLD_FORCED_KEEP = "\n# Default action\nkeep;\n";
+
     /**
      * Generate Sieve script for a mailbox
+     *
+     * Nessun keep in fondo. Il keep implicito (RFC 5228, 2.10.2) mette gia' il messaggio nella INBOX quando nessuna
+     * regola lo toglie; un keep esplicito in fondo lo metteva nella INBOX SEMPRE, quindi «Sposta» lasciava il messaggio
+     * nella cartella e nella INBOX, «Inoltra» senza copia ne teneva una e «Elimina» non eliminava niente (misurato sulla
+     * VM il 09/11/2026: dopo un fileinto "Junk", doveadm search dava INBOX 1, Junk 1). Le azioni che lasciano anche la
+     * INBOX lo dicono da sole: fileinto :copy, redirect :copy (RFC 3894).
+     *
+     * Lo script gira come script «before» (sieve_before nella 2.3, type = before nella 2.4, reperto 214). Nella
+     * documentazione di Pigeonhole (2.3, «Executing Multiple Scripts Sequentially»): lo script dopo, quello della casella,
+     * gira solo se e' in vigore un keep, implicito o esplicito; e la INBOX la scrive solo il keep dell'ultimo script.
+     * Quindi senza il keep forzato: se le regole del pannello tengono il messaggio, gira lo script della casella e decide
+     * lui; se lo spostano, inoltrano senza copia o eliminano, lo script della casella su quel messaggio non gira.
      */
     public String generateSieveScript(int mailboxId, MailDatabase database) {
         StringBuilder script = new StringBuilder();
 
         // Sieve requires capabilities (date extension needed for currentdate)
-        script.append("require [\"fileinto\", \"reject\", \"vacation\", \"copy\", \"imap4flags\", \"regex\", \"relational\", \"comparator-i;ascii-numeric\", \"date\"];\n\n");
+        script.append(REQUIRE);
 
         // Get auto-responder
         MailDatabase.AutoResponder autoResponder = database.getAutoResponder(mailboxId);
@@ -48,9 +69,8 @@ public class SieveGenerator {
             }
         }
 
-        // Default: keep in inbox
-        script.append("\n# Default action\nkeep;\n");
-
+        // Niente keep in fondo: il keep implicito tiene il messaggio nella INBOX se nessuna regola qui sopra lo toglie
+        // (vedi sopra). Uno script senza regole e' solo il require, e Sieve lo accetta.
         return script.toString();
     }
 
