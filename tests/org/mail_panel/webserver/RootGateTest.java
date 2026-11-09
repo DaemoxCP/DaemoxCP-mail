@@ -94,6 +94,23 @@ public class RootGateTest {
                 !passes("/api/ssl", "POST", null, new org.json.JSONObject().put("ssl_key", "-----BEGIN PRIVATE KEY-----\nAAAA\n").toString())
                 && !passes("/api/ssl", "POST", null, new org.json.JSONObject().put("ssl_cert", "just text").toString()));
 
+        // Reperto 204: one field name, three fingerprints. The SSH key's (Settings), and two the panel computes itself
+        // and the page sends back: the state of the package branch (16 hex, PkgBranch) and of an address before it is
+        // turned into a mailbox (64 hex, AddressTransform). With the SSH shape alone, the branch change and "Turn into
+        // mailbox" were refused on the separated panel.
+        check("the SSH key fingerprint passes", passes("/api/ssh-keys", "POST", null,
+                "{\"action\":\"remove\",\"fingerprint\":\"SHA256:" + "Ab1+/".repeat(8) + "Abc\"}"));
+        check("the package branch fingerprint passes (16 hex)", passes("/api/updates", "POST", null,
+                "{\"action\":\"branch_change\",\"destination\":\"latest\",\"fingerprint\":\"0123456789abcdef\",\"confirm\":\"latest\"}"));
+        check("the address fingerprint passes (64 hex)", passes("/api/aliases", "POST", null,
+                "{\"action\":\"transform_to_mailbox\",\"source\":\"info@example.org\",\"fingerprint\":\"" + "a1".repeat(32) + "\"}"));
+        check("any other fingerprint is refused: another length, capitals, an option, a space inside",
+                !passes("/api/updates", "POST", null, "{\"fingerprint\":\"0123456789abcde\"}")
+                && !passes("/api/updates", "POST", null, "{\"fingerprint\":\"" + "a".repeat(32) + "\"}")
+                && !passes("/api/updates", "POST", null, "{\"fingerprint\":\"0123456789ABCDEF\"}")
+                && !passes("/api/updates", "POST", null, "{\"fingerprint\":\"-oProxyCommand=x\"}")
+                && !passes("/api/updates", "POST", null, "{\"fingerprint\":\"01234567 89abcdef\"}"));
+
         Path pages = Path.of("src/main/resources/pages");
         if (Files.isDirectory(pages)) {
             System.out.println("\n== 4. The pages' calls to the root routes ==");
