@@ -167,6 +167,8 @@ changes the VM: patches, a boot environment, a restart.
 the top with the steps in order and one button, "Cancel" that leaves the button where it is, the confirmation with
 every step numbered, the request with the fingerprints read and the changes shown, the one job to its end with the
 end as the last line of its log. With the panel's Java last (it took the place of `java-update-browser-test.js`): the
+page reloaded while the Java script works says "In progress: the update of the panel's Java", where it is ("Now: [n/7]
+..."), offers nothing and warns of no job that did not finish (reperto 210); then the
 page that reloads by itself on the sign-in page when the panel comes back (a restart ends every session), the sign-in
 again, the Java report in Diagnostics, and on the VM through `java-update-state.sh` the service that sees the panel
 again (its pidfile is the root part), the web part as mailpanel holding the port, the JVM new and protected again.

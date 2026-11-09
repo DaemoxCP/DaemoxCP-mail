@@ -2099,7 +2099,17 @@ public final class UpdateManager {
     public static JSONObject packageTurn() {
         JSONObject r = new JSONObject().put("success", true);
         String who = PackageQueue.holder();
-        if (who == null) return r.put("running", false);
+        if (who == null) {
+            // L'aggiornamento della Java: lo script lavora fuori dal pannello, quindi il turno del pannello e' libero.
+            // Sul server vero, il 09/11/2026, «Aggiorna tutto» gli ha passato la mano e lo script ha lavorato 4 minuti:
+            // ricaricata la pagina, la scheda diceva «1 passo da fare: la Java» e un avviso su un lavoro «che non e'
+            // finito», niente su quello che stava succedendo (reperto 210). Adesso il turno lo dice, col suo registro.
+            JSONObject java = javaUpdateInProgress();
+            if (java == null) return r.put("running", false);
+            String text = java.optString("text");
+            return r.put("running", true).put("java", true).put("who", I18n.tr("server.um.javaRunningWho"))
+                    .put("log", text.length() > 6000 ? text.substring(text.length() - 6000) : text);
+        }
         r.put("running", true).put("who", who);
         String id = PackageQueue.holderId();
         if (id != null && JOBS.containsKey(id)) r.put("jobId", id);
@@ -5868,6 +5878,23 @@ public final class UpdateManager {
                     .put("note", st.getString("note"));
         } catch (Exception e) {
             return new JSONObject().put("success", false).put("error", e.getMessage());
+        }
+    }
+
+    /**
+     * L'aggiornamento della Java in corso adesso, o null: l'elenco dei pacchetti sbloccati scritto per lo script (che
+     * aspetta il riavvio del pannello), e il registro dello script senza la sua fine, toccato da meno di 30 minuti. Un
+     * registro piu' vecchio senza fine e' uno script morto: allora vale l'avviso dell'elenco di sempre.
+     */
+    static JSONObject javaUpdateInProgress() {
+        if (!PackageQueue.statePresent() || !PackageQueue.jobRecord().optBoolean("expectsRestart")) return null;
+        JSONObject st = javaUpdateStatus();
+        if (!st.optBoolean("present") || st.optBoolean("finished")) return null;
+        try {
+            long age = System.currentTimeMillis() - Files.getLastModifiedTime(Paths.get(st.getString("file"))).toMillis();
+            return age < 30 * 60_000L ? st : null;
+        } catch (Exception e) {
+            return null;
         }
     }
 
