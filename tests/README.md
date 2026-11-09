@@ -80,6 +80,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesOwnerTest   (VM, as root)
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.FreshInstallDovecotTest
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -422,6 +423,11 @@ problem the test adds makes it put 2.3 back. Afterwards the job is in error sayi
 before; the packages, their versions and protections are those of before; the configuration is the one of before file
 by file, the refused 2.4 one kept in the copy (0700); Dovecot runs and listens where it did; the tests again on 2.3
 all pass; no list of unlocked packages left.
+
+**FreshInstallDovecotTest** — an installation from scratch puts in Dovecot 2.4 where the catalog offers it (reperto
+215): the three installers use the one choice (`DovecotConfig.packagesShell`) and install `$DOVECOT_PACKAGES`, never the
+2.3 names written out, and still parse with `sh -n`; the choice with a fake pkg: 2.4 offered -> 2.4, not offered ->
+2.3, 2.4 already installed -> stays 2.4, always the MySQL flavor and its Pigeonhole. On the VM.
 
 **SieveStorageTest** — users' Sieve scripts in their mail folder, the panel's rules before them (reperto 214): what
 the panel writes on 2.3 and 2.4 (`sieve_before` / a `before` script from /var/mail/sieve, the users' storage in

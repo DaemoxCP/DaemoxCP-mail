@@ -70,7 +70,7 @@ public class DovecotScript {
             sleep 2
 
             echo "[CLEANUP] Removing Dovecot packages..."
-            pkg delete -fy dovecot dovecot-pigeonhole 2>/dev/null || true
+            pkg delete -fy dovecot dovecot-pigeonhole dovecot24 dovecot24-pigeonhole 2>/dev/null || true
             pkg autoremove -fy 2>/dev/null || true
 
             echo "[CLEANUP] Removing Dovecot data and config..."
@@ -98,7 +98,10 @@ public class DovecotScript {
 
             # Install Dovecot with MySQL and Sieve support
             echo "[1/7] Installing Dovecot..."
-            pkg install -y dovecot-mysql dovecot-pigeonhole-mysql
+            # Dove il catalogo offre la 2.4 (ramo latest) si installa quella (DovecotConfig.packagesShell, reperto 215).
+            """
+            + DovecotConfig.packagesShell() + """
+            pkg install -y $DOVECOT_PACKAGES
 
             # Create vmail user if not exists
             echo "[2/7] Creating vmail user..."

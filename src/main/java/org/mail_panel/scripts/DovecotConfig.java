@@ -73,6 +73,27 @@ public final class DovecotConfig {
         return (v != null && v.matches("[A-Za-z0-9_]{1,64}")) ? v : fallback;
     }
 
+    /**
+     * Quale Dovecot installa un'installazione da zero, in un punto solo per i tre installatori: la 2.4 dove il catalogo
+     * la offre (nel ramo latest e' un port a parte, dovecot24-mysql), altrimenti la 2.3. Sempre il sapore MySQL e il suo
+     * Pigeonhole, mai quelli senza sapore (PackageInstall: pkg toglieva dovecot-mysql in silenzio). Una 2.4 gia'
+     * installata resta la 2.4: la 2.3 non legge la sua configurazione. La configurazione la scrive poi scriptFragment(),
+     * che sceglie il formato dalla versione installata; con la 2.4 e' quella provata dal passaggio guidato (reperto 213).
+     * Imposta DOVECOT_PACKAGES.
+     */
+    public static String packagesShell() {
+        return """
+            # Dovecot: la 2.4 dove il catalogo la offre (ramo latest: dovecot24-mysql, un port a parte), altrimenti la 2.3.
+            # Sempre il sapore MySQL e il suo Pigeonhole. Una 2.4 gia' installata resta la 2.4.
+            if pkg info -e dovecot24-mysql >/dev/null 2>&1 || [ -n "$(pkg rquery %v dovecot24-mysql 2>/dev/null)" ]; then
+                DOVECOT_PACKAGES="dovecot24-mysql dovecot24-pigeonhole-mysql"
+            else
+                DOVECOT_PACKAGES="dovecot-mysql dovecot-pigeonhole-mysql"
+            fi
+            echo "  Dovecot: $DOVECOT_PACKAGES"
+            """;
+    }
+
     public String getDbName() { return dbName; }
     public String getDbUser() { return dbUser; }
 
