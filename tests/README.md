@@ -174,6 +174,12 @@ Afterwards: nothing left to update, Update everything completed in the operation
 protected packages protected again, postfix's `inet_protocols` written and postfix listening as before. It needs
 updates waiting on the VM; the way back is the boot environment the job makes before the first step.
 
+`database-restart-browser-test.js` stops MySQL on the test VM for about 25 seconds with the panel open (reperto 209):
+a read asked meanwhile waits with the strip that says the database is restarting and gets its answer when it is back;
+a page opened in that moment answers 503 "the database is restarting" and reloads by itself into the page, not the
+sign-in; afterwards the session is the same. With the jar of main three of its checks fail (the page opened during the
+stop lands on the sign-in page).
+
 `diagnostics-browser-test.js` presses "Check everything" in Diagnostics on the panel of the test VM (reperto 199):
 the ten read-only checks one after the other, each with its verdict, what needs a look first and the most important
 first, its state in words and at most one button, what is fine closed below; "Open the details" brings its card into

@@ -44,7 +44,9 @@ import java.util.concurrent.Executors;
  *     /index?session=ended and the cookie removed (Strict); on an API, 401 with X-Panel-Session:
  *     ended; without a cookie, /index and nothing else; a wrong confirmation code (also a 401)
  *     without X-Panel-Session; logout removes the cookie and sends Clear-Site-Data; with the
- *     database not answering the cookie stays and there is no X-Panel-Session (reperto 185).
+ *     database not answering the cookie stays and there is no X-Panel-Session (reperto 185), and the
+ *     answer is 503 with X-Panel-Database: a page that says it and reloads by itself, an API the
+ *     pages ask again, never the sign-in page nor a 401 (reperto 209).
  *
  * Usage (with the test MySQL of README.md, on the test VM):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
@@ -170,13 +172,20 @@ public class SessionRunTest {
                         throw new java.sql.SQLException("MySQL is not reachable (test)");
                     });
             try {
+                // Until reperto 209 a page went to /index and an API had 401: on the real server, MySQL restarting inside
+                // "Update everything" sent an open page to the sign-in page and filled the Updates card with errors.
                 HttpResponse<String> downPage = send(http, base, "GET", "/home", null, dead, null);
-                check("the database does not answer: a page goes to /index without saying the session ended, and the cookie stays",
-                        downPage.statusCode() == 302 && "/index".equals(downPage.headers().firstValue("Location").orElse(""))
-                        && downPage.headers().allValues("Set-Cookie").isEmpty());
+                check("the database does not answer: a page says so (503, X-Panel-Database) and reloads by itself, not the sign-in; the cookie stays",
+                        downPage.statusCode() == 503 && "unavailable".equals(downPage.headers().firstValue("X-Panel-Database").orElse(""))
+                        && downPage.headers().firstValue("Location").isEmpty() && downPage.body().contains("http-equiv=\"refresh\"")
+                        && downPage.headers().allValues("Set-Cookie").isEmpty() && downPage.headers().firstValue("X-Panel-Session").isEmpty());
                 HttpResponse<String> downApi = send(http, base, "GET", "/api/domains", null, dead, null);
-                check("  an API: 401 without X-Panel-Session (the open page does not go to the sign-in page)", downApi.statusCode() == 401
-                        && downApi.headers().firstValue("X-Panel-Session").isEmpty());
+                check("  an API: 503 with X-Panel-Database and Retry-After, never 401 nor X-Panel-Session (the page asks again)",
+                        downApi.statusCode() == 503 && "unavailable".equals(downApi.headers().firstValue("X-Panel-Database").orElse(""))
+                        && downApi.headers().firstValue("Retry-After").isPresent() && downApi.headers().firstValue("X-Panel-Session").isEmpty());
+                HttpResponse<String> downNone = send(http, base, "GET", "/home", null, null, null);
+                check("  without a cookie it is not a session that could not be read: /index as always", downNone.statusCode() == 302
+                        && "/index".equals(downNone.headers().firstValue("Location").orElse("")));
             } finally {
                 org.mail_panel.security.AuthStore.connection = real;
             }

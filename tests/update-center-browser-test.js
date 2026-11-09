@@ -157,6 +157,13 @@ async function open(ctx, name, lang, o = {}) {
         }
         if (p === '/api/updates') {
             const body = JSON.parse(req.postData() || '{}');
+            // The database restarting (reperto 209): the server refuses before doing anything, 503 with its header.
+            if (st.dbDown > 0) {
+                st.dbDown--;
+                st.dbRefused = (st.dbRefused || 0) + 1;
+                return route.fulfill({ status: 503, contentType: 'application/json', headers: { 'X-Panel-Database': 'unavailable', 'Retry-After': '3' },
+                    body: JSON.stringify({ success: false, error: 'The database is not answering (it is restarting): nothing was done. The page tries again by itself.' }) });
+            }
             calls.push(body);
             if (o.slow && body.action === 'os_status') await new Promise(r => setTimeout(r, 700));
             if (body.action === 'package_turn') st.turnCalls = (st.turnCalls || 0) + 1;
@@ -521,6 +528,27 @@ const allErrors = [], allDialogs = [];
         && await busy.page.$$eval('#ucList .uc-head button, #ucSearchButton', b => b.every(x => !x.disabled && !x.title)));
     check('  and the card reads itself again', busy.calls.filter(c => c.action === 'packages_overview').length > readsBefore);
     await busy.page.close();
+
+    console.log('\n== 12. The database restarting: the page waits and tries again (reperto 209) ==');
+    // On the real server MySQL restarted inside "Update everything": for 9 seconds every request got 401, the card lost
+    // the job in progress and filled with errors. Now the server says 503 "database", and the page waits.
+    const db = await open(ctx, 'updates', 'en');
+    allErrors.push(db.errors); allDialogs.push(db.dialogs);
+    await centerReady(db.page);
+    const searchesBefore = db.calls.filter(c => c.action === 'updates_search').length;
+    db.st.dbDown = 3;
+    await db.page.click('#ucSearchButton');
+    await db.page.waitForSelector('#panelDbWait', { timeout: 10000 }).catch(() => {});
+    const dbStrip = await db.page.$('#panelDbWait') ? await db.page.innerText('#panelDbWait') : '';
+    check('while it is down: the strip says it, and the page waits (no error under the button)', /The database is restarting: the panel waits and tries again/.test(dbStrip)
+        && await db.page.$eval('#panelDbWait', n => n.getAttribute('role') === 'status') && !/not answering|mock|Unauthorized/.test(await db.page.innerText('#update-center')));
+    await db.page.waitForSelector('#panelDbWait', { state: 'detached', timeout: 20000 }).catch(() => {});
+    await db.page.waitForFunction(() => /Lists updated/.test(document.getElementById('ucOutcome').innerText), null, { timeout: 15000 }).catch(() => {});
+    check('when it is back: the strip goes, and the search was asked again and done once (' + db.st.dbRefused + ' refused)',
+        await db.page.$('#panelDbWait') === null && db.st.dbRefused === 3
+        && db.calls.filter(c => c.action === 'updates_search').length === searchesBefore + 1
+        && /Lists updated/.test(await db.page.innerText('#ucOutcome')));
+    await db.page.close();
 
     console.log('\n== 7. At 375 px ==');
     const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, locale: 'en-GB' });

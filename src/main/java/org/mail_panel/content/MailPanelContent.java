@@ -378,6 +378,25 @@ public class MailPanelContent {
         // venticinque rotte non lo chiedevano affatto.
         (function () {
             var send = window.fetch;
+            // La striscia «il database si sta riavviando», fra gli avvisi del pannello: c'e' finche' una richiesta aspetta.
+            function panelDatabaseWait(on) {
+                var n = document.getElementById('panelDbWait');
+                if (!on) { if (n) n.remove(); return; }
+                if (n) return;
+                var box = document.getElementById('panelNotices');
+                if (!box) {
+                    box = document.createElement('div');
+                    box.id = 'panelNotices';
+                    box.className = 'panel-notices';
+                    document.body.appendChild(box);
+                }
+                n = document.createElement('div');
+                n.id = 'panelDbWait';
+                n.className = 'alert alert-warning shadow-sm mb-2';
+                n.setAttribute('role', 'status');
+                n.textContent = t('panel.dbWait');
+                box.append(n);
+            }
             window.fetch = function (input, init) {
                 init = init || {};
                 var method = String(init.method || (input && input.method) || 'GET').toUpperCase();
@@ -394,7 +413,23 @@ public class MailPanelContent {
                 // 401 (un codice di conferma sbagliato) restano alla pagina.
                 var own = new URL(url, location.href).origin === location.origin;
                 var self = this;
-                return send.call(this, input, init).then(function (res) {
+                // Il database che si riavvia (503 con X-Panel-Database, reperto 209): la richiesta e' stata fermata prima
+                // di fare qualunque cosa, quindi si ripete ogni 2 secondi, per 5 minuti al massimo, con la striscia che lo
+                // dice. Intanto chi aspetta la risposta aspetta: un lavoro seguito resta «in corso», niente errori finti.
+                // Solo per un indirizzo: una Request gia' mandata non si rimanda (il suo corpo e' letto).
+                var again = typeof input === 'string' || input instanceof URL;
+                var tries = 0;
+                function waitDatabase(res) {
+                    if (own && again && res.status === 503 && res.headers.get('X-Panel-Database') === 'unavailable' && tries < 150) {
+                        tries++;
+                        panelDatabaseWait(true);
+                        return new Promise(function (go) { setTimeout(go, 2000); })
+                            .then(function () { return send.call(self, input, init); }).then(waitDatabase);
+                    }
+                    if (own && res.status !== 503) panelDatabaseWait(false);
+                    return res;
+                }
+                return send.call(this, input, init).then(waitDatabase).then(function (res) {
                     // Un'operazione pericolosa senza una conferma recente: la
                     // finestra comune (panel-confirm.js) chiede la passkey o un codice via email, e la richiesta si
                     // ripete una volta. Se la si chiude, la pagina riceve la risposta com'era (needs_reauth).
