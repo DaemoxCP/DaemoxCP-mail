@@ -116,7 +116,9 @@ function replies(o, st) {
         updates_apply: { success: true, jobId: 'upd-1' },
         // The checks of the steps of "Update everything" (reperto 207), and the job itself.
         package_preflight: { success: true, canProceed: true, signature: '1111222233334444', services: [{ name: 'dovecot', running: true }],
-            plan: { measured: true, changes: [{ type: 'upgrade', name: 'dovecot-mysql', from: '2.3.21.1_3', to: '2.3.21.1_4' }] } },
+            // A new library the new version needs, as lmdb0 for postfix-mysql on the real server (reperto 208).
+            plan: { measured: true, changes: [{ type: 'upgrade', name: 'dovecot-mysql', from: '2.3.21.1_3', to: '2.3.21.1_4' },
+                { type: 'install', name: 'libsodium', from: '', to: '1.0.21' }] } },
         java_preflight: { success: true, canProceed: true, signature: 'aaaabbbbccccdddd',
             plan: { measured: true, changes: [{ type: 'upgrade', name: 'openjdk25', from: '25.0.4', to: '25.0.5' }] } },
         update_everything: { success: true, jobId: 'all-1' },
@@ -253,7 +255,7 @@ const allErrors = [], allDialogs = [];
     check('the checks of every step first: the plan of the other packages, dovecot\'s, Java\'s', ['updates_status', 'package_preflight', 'java_preflight']
         .every(a => calls.some(c => c.action === a)));
     check('one confirmation with every step, numbered, in order', /1\. FreeBSD patches up to 15\.1-RELEASE-p6/.test(ask) && /2\. 2 packages, all together in one plan \(and 1 reinstalled, because a package it uses changed\)/.test(ask)
-        && /3\. dovecot-mysql: 2\.3\.21\.1_3 → 2\.3\.21\.1_4 — restarts dovecot/.test(ask) && /4\. The panel's Java/.test(ask));
+        && /3\. dovecot-mysql: 2\.3\.21\.1_3 → 2\.3\.21\.1_4 — restarts dovecot — also installs libsodium 1\.0\.21/.test(ask) && /4\. The panel's Java/.test(ask));
     check('  what happens: one after the other, it stops at the first that does not go well; the page reloads after Java',
         /stops at the first step that does not go well/.test(ask) && /this page reloads by itself on the sign-in page: sign in again/.test(ask) && /Update everything \(4 steps\)/.test(ask));
     await page.waitForFunction(() => document.getElementById('panelAskModal').contains(document.activeElement), null, { timeout: 2000 }).catch(() => {});
@@ -274,7 +276,7 @@ const allErrors = [], allDialogs = [];
         { kind: 'package', package: 'dovecot-mysql', signature: '1111222233334444' }, { kind: 'java', package: '', signature: 'aaaabbbbccccdddd' }]));
     const approvedShown = Object.fromEntries((all && all.approved || []).map(a => [a.name, a.to]));
     check('  and every change the confirmation showed, with its version', approvedShown.libX11 === '1.8.14,1' && approvedShown.brotli === '1.2.1,1'
-        && approvedShown['dovecot-mysql'] === '2.3.21.1_4' && approvedShown.openjdk25 === '25.0.5');
+        && approvedShown['dovecot-mysql'] === '2.3.21.1_4' && approvedShown.libsodium === '1.0.21' && approvedShown.openjdk25 === '25.0.5');
     check('  no job of the old buttons', !calls.some(c => ['updates_apply', 'os_patch_install', 'package_update', 'java_update'].includes(c.action)));
     await page.waitForTimeout(800);
     check('the outcome stays under the row, with the restart the patches left, the log closed below',

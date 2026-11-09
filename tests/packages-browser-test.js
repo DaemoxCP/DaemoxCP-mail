@@ -96,7 +96,9 @@ async function served(route) {
         // The PHP family's checks, for "Update all": its own plan and signature, php-fpm to restart.
         case 'package_preflight': if (bodyText.package === 'php84' && phpBlockedBy) return json(route, { success: true, name: 'php84', canProceed: false,
             blocked: true, checks: [{ level: 'block', label: 'Protected package in the way', detail: phpBlockedBy + ' has its own update.' }],
-            plan: { measured: true, changes: [], blockers: [{ name: phpBlockedBy, reason: phpBlockedBy + ' has its own update.' }] } });
+            // What the stopped plan already knows: a new library (reperto 208), shown and counted as shown.
+            plan: { measured: true, changes: [{ type: 'install', name: 'libxml3', from: '', to: '3.0.1' }],
+                blockers: [{ name: phpBlockedBy, reason: phpBlockedBy + ' has its own update.' }] } });
             if (bodyText.package === 'php84') return json(route, { success: true, name: 'php84', current: '8.4.26',
             available: '8.4.27_2', signature: '1111222233334444', blocked: false, canProceed: true, services: [{ name: 'php_fpm', running: true }],
             family: ['php84', 'php84-ctype', 'php84-curl'], checks: [{ level: 'ok', label: 'Package installed', detail: 'php84 8.4.26' }],
@@ -276,7 +278,7 @@ async function served(route) {
     await page.waitForSelector('#panelAskModal.show', { timeout: 15000 });
     let held = await page.innerText('#panelAskModal .modal-content');
     real('PHP, held by nginx which step 1 updates, stays in: after it, "checked when its turn comes, after nginx"',
-        held.includes('1. nginx: 1.30.4,3 → 1.30.5_1,3') && held.includes('2. php84 and 2 more of its family: 8.4.26 → 8.4.27_2 — checked when its turn comes, after nginx'));
+        held.includes('1. nginx: 1.30.4,3 → 1.30.5_1,3') && held.includes('2. php84 and 2 more of its family: 8.4.26 → 8.4.27_2 — checked when its turn comes, after nginx — also installs libxml3 3.0.1'));
     beforeValue = requests.length;
     await page.click('#panelAskGo');
     await page.waitForFunction(() => /steps done/.test(document.getElementById('all-run').innerText), null, { timeout: 15000 }).catch(() => {});
@@ -284,7 +286,8 @@ async function served(route) {
     const laterShown = Object.fromEntries(((later && later.body.approved) || []).map(a => [a.name, a.to]));
     real('  in the job without a signature, with the versions of the whole family shown', later
         && JSON.stringify(later.body.steps[1]) === JSON.stringify({ kind: 'package', package: 'php84', signature: '' })
-        && laterShown.php84 === '8.4.27_2' && laterShown['php84-ctype'] === '8.4.27_2' && laterShown['php84-curl'] === '8.4.27_2');
+        && laterShown.php84 === '8.4.27_2' && laterShown['php84-ctype'] === '8.4.27_2' && laterShown['php84-curl'] === '8.4.27_2'
+        && laterShown.libxml3 === '3.0.1');
     nginxDone = false; phpDone = false; allJob = false; phpBlockedBy = 'libfoo';
     await page.goto(BASE + '/updates');
     await page.waitForSelector('#uc-all .uc-head button[data-on-click="ucEverything()"]', { timeout: 10000 });

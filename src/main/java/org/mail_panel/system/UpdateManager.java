@@ -3373,16 +3373,51 @@ public final class UpdateManager {
         if (approved == null || plan == null || !plan.optBoolean("measured", false)) return false;
         JSONArray changes = plan.optJSONArray("changes");
         if (changes == null) return false;
-        for (int i = 0; i < changes.length(); i++) {
+        for (int i = 0; i < changes.length(); i++) if (changes.optJSONObject(i) == null) return false;
+        return outsideApproved(plan, approved).isEmpty();
+    }
+
+    /**
+     * I cambiamenti del piano che la conferma non ha mostrato, come righe del registro («install lmdb0 -> 0.9.36_1»):
+     * vuoto se tutti erano li'. Sul server vero, il 09/11/2026, postfix-mysql aspettava mysql84-client e il suo piano
+     * completo non si conosceva: quando e' toccato a lui installava anche lmdb0, una libreria nuova, e il passo si e'
+     * fermato dicendo solo «il piano e' cambiato» (reperto 208). Adesso si dice quale riga.
+     */
+    static List<String> outsideApproved(JSONObject plan, Map<String, String> approved) {
+        List<String> out = new ArrayList<>();
+        JSONArray changes = plan == null ? null : plan.optJSONArray("changes");
+        for (int i = 0; changes != null && i < changes.length(); i++) {
             JSONObject c = changes.optJSONObject(i);
-            if (c == null) return false;
+            if (c == null) continue;
             String type = c.optString("type"), name = c.optString("name"), to = c.optString("to");
-            String version = approved.get(name);
-            if (version == null) return false;
-            if (type.equals("reinstall")) continue;
-            if (!(type.equals("upgrade") || type.equals("install")) || !version.equals(to)) return false;
+            String version = approved == null ? null : approved.get(name);
+            boolean shown = version != null && (type.equals("reinstall")
+                    || ((type.equals("upgrade") || type.equals("install")) && version.equals(to)));
+            if (!shown) out.addAll(PackagePlan.changesInLines(new JSONObject().put("changes", new JSONArray().put(c))));
         }
-        return true;
+        return out;
+    }
+
+    /**
+     * Il rifiuto di un piano che non e' quello letto, scritto per intero nel registro: le due impronte, il piano com'e'
+     * adesso, e dentro «Aggiorna tutto» i cambiamenti che la conferma non ha mostrato. Restituisce il motivo: dentro la
+     * catena quei cambiamenti; fuori, 'standaloneKey'.
+     */
+    static String planRefused(Job job, JSONObject plan, String approvedSignature, String currentSignature, String standaloneKey) {
+        job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature),
+                "currentSignature", String.valueOf(currentSignature))));
+        List<String> lines = PackagePlan.changesInLines(plan);
+        if (!lines.isEmpty()) {
+            job.write("  " + I18n.tr("server.um.x.planNow"));
+            for (String line : lines) job.write("    " + line);
+        }
+        job.write(I18n.tr("server.um.runGuidedUpdate.4"));
+        Map<String, String> shown = APPROVED_CHANGES.get();
+        List<String> outside = shown == null || plan == null || !plan.optBoolean("measured", false) ? List.of() : outsideApproved(plan, shown);
+        if (outside.isEmpty()) return I18n.tr(standaloneKey);
+        String list = String.join("; ", outside);
+        job.write("  " + I18n.tr("server.um.everything.notShown", java.util.Map.of("changes", list)));
+        return I18n.tr("server.um.everything.outsideShown", java.util.Map.of("changes", list));
     }
 
     /**
@@ -3390,12 +3425,8 @@ public final class UpdateManager {
      * scrive nel registro riga per riga; altrimenti il motivo per non partire.
      */
     static String approvedPlanMismatch(Job job, JSONObject plan, String currentSignature, String approvedSignature) {
-        if (plan == null || !planAccepted(approvedSignature, currentSignature, plan)) {
-            job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature),
-                    "currentSignature", String.valueOf(currentSignature))));
-            job.write(I18n.tr("server.um.runGuidedUpdate.4"));
-            return I18n.tr("server.um.plan.changedSinceRead");
-        }
+        if (plan == null || !planAccepted(approvedSignature, currentSignature, plan))
+            return planRefused(job, plan, approvedSignature, currentSignature, "server.um.plan.changedSinceRead");
         job.write("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(currentSignature))));
         for (String line : PackagePlan.changesInLines(plan)) job.write("    " + line);
         return null;
@@ -7978,9 +8009,7 @@ public final class UpdateManager {
             String currentSignature = pf.optString("signature", "");
             if (!planAccepted(approvedSignature, currentSignature, plan)) {
                 job.status = "error";
-                job.errorMessage = I18n.tr("server.um.runGuidedUpdate.2");
-                job.write(I18n.tr("server.um.runGuidedUpdate.3", java.util.Map.of("approvedSignature", String.valueOf(approvedSignature), "currentSignature", String.valueOf(currentSignature))));
-                job.write(I18n.tr("server.um.runGuidedUpdate.4"));
+                job.errorMessage = planRefused(job, plan, approvedSignature, currentSignature, "server.um.runGuidedUpdate.2");
                 return;
             }
             job.write("  " + I18n.tr("server.um.x.exactPlan", java.util.Map.of("f", String.valueOf(currentSignature))));

@@ -108,6 +108,40 @@ public class EverythingTest {
         check("a step checked at its turn (no signature) runs inside the chain only within what was shown",
                 !UpdateManager.planAccepted("", "ffffffffffffffff", postfix));
 
+        System.out.println("\n== What was not shown, said by name (reperto 208) ==");
+        // The real server: postfix-mysql waited for mysql84-client; at its turn its plan also installed lmdb0.
+        JSONObject withLmdb0 = plan("install lmdb0 0.9.36_1", "upgrade postfix-mysql 3.11.7_5,1 3.11.7_1,1");
+        java.util.List<String> outside = UpdateManager.outsideApproved(withLmdb0, shown);
+        check("the new library not shown is named: " + outside, outside.size() == 1 && outside.get(0).contains("lmdb0") && outside.get(0).contains("0.9.36_1")
+                && !UpdateManager.withinApproved(withLmdb0, shown));
+        Map<String, String> withIt = new HashMap<>(shown);
+        withIt.put("lmdb0", "0.9.36_1");
+        check("  shown in the confirmation: nothing outside, it runs", UpdateManager.outsideApproved(withLmdb0, withIt).isEmpty()
+                && UpdateManager.withinApproved(withLmdb0, withIt));
+        check("  a version other than the one shown is named too, a removal as well",
+                UpdateManager.outsideApproved(plan("upgrade nginx 1.30.6_11,3", "remove lmdb 1.0.3,1"), shown).size() == 2);
+        // What the step says when it stops, and what its log says (the real server's case, with its fingerprint).
+        org.mail_panel.i18n.I18n.setCurrent("en");
+        try {
+            JobJournal.dir = java.nio.file.Files.createTempDirectory("everything-test").resolve("jobs");
+        } catch (java.io.IOException e) { throw new RuntimeException(e); }
+        UpdateManager.Job job = new UpdateManager.Job("all-9", "update_everything");
+        String why;
+        UpdateManager.APPROVED_CHANGES.set(shown);
+        try { why = UpdateManager.planRefused(job, withLmdb0, "", "ff78b7795ec38548", "server.um.runGuidedUpdate.2"); }
+        finally { UpdateManager.APPROVED_CHANGES.remove(); }
+        String log = job.toJson().getString("consoleLog");
+        System.out.println("    " + why + "\n    " + log.trim().replace("\n", "\n    "));
+        check("  the reason names it and says nothing of the step was done", why.contains("lmdb0") && why.contains("nothing of this step was done")
+                && !why.contains("Prepare"));
+        check("  the log has the plan as it is now and the line not shown", log.contains("what pkg would do now:") && log.contains("install lmdb0")
+                && log.contains("not in what the confirmation showed: install lmdb0"));
+        UpdateManager.Job alone = new UpdateManager.Job("guid-9", "guided_update");
+        String whyAlone = UpdateManager.planRefused(alone, withLmdb0, "0123456789abcdef", "ff78b7795ec38548", "server.um.runGuidedUpdate.2");
+        check("  outside the chain: «the plan has changed», with the plan in the log, and no button that is not there any more",
+                whyAlone.startsWith("The plan has changed since you read it") && !whyAlone.contains("Prepare")
+                && alone.toJson().getString("consoleLog").contains("install lmdb0"));
+
         System.out.println("\n== A service that takes a while to start ==");
         // MySQL 8.4.11 -> 8.4.13 on the VM: «not running» right after the restart, running a few seconds later.
         int[] asked = {0};
