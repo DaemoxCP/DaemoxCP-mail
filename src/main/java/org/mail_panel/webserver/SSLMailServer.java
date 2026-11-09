@@ -201,6 +201,14 @@ public class SSLMailServer {
 
     /** L'intestazione del 401 di una sessione che non c'e' (piu'): la pagina aperta va all'accesso (reperto 184). */
     static final String SESSION_ENDED_HEADER = "X-Panel-Session";
+    /**
+     * Il database non risponde, quindi la sessione non si e' potuta leggere: 503 con questa intestazione, mai 401.
+     * Sul server vero, il 09/11/2026, MySQL si e' riavviato dentro «Aggiorna tutto»: per 9 secondi ogni richiesta ha
+     * avuto «non autorizzato», la scheda ha perso il lavoro in corso e si e' riempita di errori, e una pagina aperta in
+     * quel momento portava all'accesso con una sessione buona (reperto 209). La richiesta e' fermata prima di fare
+     * qualunque cosa: le pagine la ripetono da sole quando il database torna (l'involucro di fetch nella testa).
+     */
+    static final String DATABASE_HEADER = "X-Panel-Database";
 
     /** /api/updates: le azioni che leggono (anteprime, stati, diagnosi). Tutte le altre cambiano il sistema. */
     static final Map<String, String> UPDATES_ACTIONS = Access.actions(SYSTEM_VIEW,
@@ -566,6 +574,10 @@ public class SSLMailServer {
     private boolean accessAllowed(HttpExchange exchange, Access access) throws IOException {
         Optional<WebSessions.Current> session = currentSession(exchange);
         boolean pageGet = access.kind() == Access.Kind.PAGE && "GET".equals(exchange.getRequestMethod());
+        if (session.isEmpty() && Main.mysqlAvailable && !Main.setupRequired && WebSessions.lastCheckFailed()) {
+            databaseUnavailable(exchange, pageGet);
+            return false;
+        }
         if (session.isEmpty()) {
             // Un cookie di sessione che non vale (il jar e' ripartito, o la sessione e' scaduta): si
             // toglie, e la pagina d'accesso dice perche' si e' di nuovo li' (reperto 184).
@@ -1356,6 +1368,10 @@ public class SSLMailServer {
                 return;
             }
             Optional<WebSessions.Current> session = Main.sessions.forwarded(r.sessionId(), r.adminId());
+            if (session.isEmpty() && WebSessions.lastCheckFailed()) {
+                databaseUnavailable(exchange, false);
+                return;
+            }
             if (session.isEmpty()) {
                 if (!WebSessions.lastCheckFailed()) exchange.getResponseHeaders().set(SESSION_ENDED_HEADER, "ended");
                 sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
@@ -3860,6 +3876,29 @@ public class SSLMailServer {
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
         }
+    }
+
+    /**
+     * La risposta quando la sessione non si e' potuta leggere perche' il database non risponde (DATABASE_HEADER): alle
+     * richieste delle pagine un 503 che dicono di ripetere; a una pagina aperta in quel momento una pagina che lo dice
+     * e si ricarica da sola, invece dell'accesso.
+     */
+    private void databaseUnavailable(HttpExchange exchange, boolean page) throws IOException {
+        exchange.getResponseHeaders().set(DATABASE_HEADER, "unavailable");
+        exchange.getResponseHeaders().set("Retry-After", "3");
+        if (!page) {
+            sendJsonError(exchange, 503, I18n.tr("server.databaseWait"));
+            return;
+        }
+        String title = escapeHtmlSimple(I18n.tr("server.databaseWaitTitle"));
+        byte[] html = ("<!doctype html>\n<html lang=\"" + escapeHtmlSimple(I18n.current()) + "\"><head><meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                + "<meta http-equiv=\"refresh\" content=\"5\"><title>" + title + "</title></head>"
+                + "<body><main><h1>" + title + "</h1><p role=\"status\">" + escapeHtmlSimple(I18n.tr("server.databaseWaitText"))
+                + "</p></main></body></html>\n").getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+        exchange.sendResponseHeaders(503, html.length);
+        try (OutputStream os = exchange.getResponseBody()) { os.write(html); }
     }
 
     private void redirect(HttpExchange exchange, String location) throws IOException {
