@@ -810,6 +810,11 @@ public class SSLMailServer {
             // erano solo bersagli (Pop3 verifica e torna indietro).
             org.mail_panel.system.Pop3.ensureAtBoot();
 
+            // Gli script Sieve dell'utente (ManageSieve, i Filtri della webmail) nella sua cartella di posta, e le regole
+            // del pannello prima di loro: prima non si salvava niente, la cartella era di root (SieveStorage verifica e
+            // torna indietro).
+            org.mail_panel.system.SieveStorage.ensureAtBoot();
+
             // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.
             // Ognuna si verifica, e se non va torna com'era; al secondo avvio non fanno niente.
