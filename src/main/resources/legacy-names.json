@@ -47,6 +47,9 @@
   "inventoryServiceStates": [
     ["attivo", "active"]
   ],
+  "cloudflareRecordComments": [
+    ["Creato dal pannello di posta", "Created by the mail panel"]
+  ],
   "javaScriptOutcomes": [
     ["=== ESITO: RIUSCITO", "=== OUTCOME: SUCCEEDED"],
     ["=== ESITO: ANNULLATO", "=== OUTCOME: CANCELLED"],

@@ -30,9 +30,17 @@ public class CloudflareManager {
 
     private final MailDatabase database;
     private final HttpClient http;
+    /** L'indirizzo dell'API: quello di Cloudflare, o nelle prove un server finto sulla macchina. */
+    private final String apiBase;
 
     public CloudflareManager(MailDatabase database) {
+        this(database, API_BASE);
+    }
+
+    /** Per le prove: lo stesso gestore, verso un'API finta. */
+    CloudflareManager(MailDatabase database, String apiBase) {
         this.database = database;
+        this.apiBase = apiBase;
         this.http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NORMAL)
@@ -337,6 +345,47 @@ public class CloudflareManager {
     static final String RECORD_COMMENT = "Created by the mail panel";
 
     /**
+     * I record di questa zona che hanno il commento di prima (in italiano fino al 30/10/2026, legacy-names.json,
+     * cloudflareRecordComments) prendono quello di adesso. Il committente, il 09/11/2026: «quando aggiunge un record,
+     * non usi l'italiano nei commenti tipo "Creato dal pannello di posta" ma sempre e comunque l'inglese» (reperto 211).
+     * Cambia SOLO il commento, con PATCH: nome, contenuto, TTL e proxy restano come sono, quindi il DNS non cambia.
+     * Restituisce quanti ne ha cambiati, o -1 se Cloudflare non ha risposto come doveva (si riprova al prossimo avvio).
+     */
+    public int renameLegacyComments(String token, String zoneId) {
+        int renamed = 0;
+        try {
+            for (String[] pair : org.mail_panel.system.LegacyNames.pairs("cloudflareRecordComments")) {
+                // Si cerca col filtro esatto di Cloudflare, e si ricontrolla qui: si tocca solo cio' che ha quel testo. Un
+                // record cambiato esce dal filtro, quindi si rilegge sempre la prima pagina finche' ne resta qualcuno; un
+                // giro che non cambia niente chiude (niente giri a vuoto).
+                for (int round = 0; round < 50; round++) {
+                    HttpResponse<String> resp = call("GET", "/zones/" + zoneId + "/dns_records?per_page=100&comment.exact="
+                            + URLEncoder.encode(pair[0], StandardCharsets.UTF_8), token, null);
+                    JSONObject body = new JSONObject(resp.body());
+                    if (!body.optBoolean("success", false)) return -1;
+                    JSONArray arr = body.optJSONArray("result");
+                    if (arr == null || arr.length() == 0) break;
+                    int before = renamed;
+                    for (int i = 0; i < arr.length(); i++) {
+                        JSONObject r = arr.getJSONObject(i);
+                        if (!pair[0].equals(r.optString("comment"))) continue;
+                        String id = r.optString("id", "");
+                        if (!id.matches("[0-9a-f]{32}")) continue;
+                        RecordOp op = outcome(call("PATCH", "/zones/" + zoneId + "/dns_records/" + id, token,
+                                new JSONObject().put("comment", pair[1]).toString()));
+                        if (!op.success) return -1;
+                        renamed++;
+                    }
+                    if (renamed == before) break;
+                }
+            }
+        } catch (Exception e) {
+            return -1;
+        }
+        return renamed;
+    }
+
+    /**
      * Crea un CNAME. Sempre con proxied=false, e non e' una preferenza: un CNAME
      * proxato non risponde piu' con il CNAME ma con gli indirizzi di Cloudflare, quindi
      * il client di posta non troverebbe piu' l'host che cerca e la verifica del pannello
@@ -553,7 +602,7 @@ public class CloudflareManager {
 
     private HttpResponse<String> call(String method, String path, String token, String jsonBody) throws Exception {
         HttpRequest.Builder b = HttpRequest.newBuilder()
-            .uri(URI.create(API_BASE + path))
+            .uri(URI.create(apiBase + path))
             .timeout(Duration.ofSeconds(15))
             .header("Authorization", "Bearer " + token)
             .header("Content-Type", "application/json");

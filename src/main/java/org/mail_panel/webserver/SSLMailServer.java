@@ -836,6 +836,9 @@ public class SSLMailServer {
             // dopo gli alias, perche' senza aliases.db la posta di sistema resterebbe in coda.
             // Idempotente, e non attiva niente se la posta di sistema rimbalzerebbe.
             org.mail_panel.system.LocalMtaRepair.ensureAtBoot();
+            // I commenti dei record Cloudflare scritti in italiano prima del 30/10/2026 passano all'inglese (reperto 211):
+            // solo il commento, in un thread suo.
+            org.mail_panel.security.CloudflareCommentsEnglish.ensureAtBoot(cloudflareManager, Main.mailDatabase);
             // inet_protocols scritto in chiaro col valore in uso: senza, lo script di ogni aggiornamento di postfix
             // scrive ipv4 e al riavvio IPv6 sparisce (reperti 42, 207). Non cambia niente di quello che Postfix fa.
             org.mail_panel.system.PostfixInetProtocols.ensureAtBoot();
