@@ -389,6 +389,12 @@
             const planned = ucPlanned();
             const go = [], out = [], approved = {}, waiting = [];
             const add = plan => ((plan && plan.changes) || []).forEach(c => { if (c.name && c.to) approved[c.name] = c.to; });
+            // I pacchetti nuovi che un passo installa (una libreria che la versione nuova vuole): si dicono nella conferma,
+            // perche' la conferma mostra quello che si fara' (reperto 208: lmdb0 per postfix-mysql, sul server vero).
+            const installs = plan => {
+                const list = ((plan && plan.changes) || []).filter(c => c.type === 'install' && c.name && c.to).map(c => c.name + ' ' + c.to);
+                return list.length ? ' — ' + t('uc.allInstalls', { list: list.join(', ') }) : '';
+            };
             const stopOf = r => { const c = (r.checks || []).find(x => x.level === 'block'); return c ? c.label + ' — ' + c.detail : (r.error || t('common.errorShort')); };
             for (let i = 0; i < planned.length; i++) {
                 const p = planned[i];
@@ -421,7 +427,7 @@
                 }
                 const services = (r.services || []).map(x => x.name || x).filter(Boolean);
                 go.push({ kind: p.kind, package: p.kind === 'package' ? p.step.head.name : '', signature: r.signature,
-                    label: p.label + (services.length ? ' — ' + t('uc.allRestarts', { list: services.join(', ') }) : '') });
+                    label: p.label + (services.length ? ' — ' + t('uc.allRestarts', { list: services.join(', ') }) : '') + installs(r.plan) });
                 add(r.plan);
             }
             // I passi fermati solo da un pacchetto che un passo di prima aggiorna: dopo gli altri pacchetti, prima di Roundcube
@@ -430,9 +436,12 @@
             const deferred = [];
             waiting.forEach(w => {
                 if (!w.blockers.every(b => Object.prototype.hasOwnProperty.call(approved, b))) { out.push(w.p.label + ': ' + stopOf(w.r)); return; }
+                // Quello che il suo piano, fermato, sapeva gia' (una dipendenza nuova, per esempio) si mostra e vale come
+                // mostrato; i membri del passo alla versione del catalogo. Il resto, se al suo turno c'e', lo ferma.
+                add(w.r.plan);
                 w.p.step.members.forEach(m => { approved[m.name] = m.available; });
                 deferred.push({ kind: 'package', package: w.p.step.head.name, signature: '',
-                    label: w.p.label + ' — ' + t('uc.allDeferred', { after: w.blockers.join(', ') }) });
+                    label: w.p.label + ' — ' + t('uc.allDeferred', { after: w.blockers.join(', ') }) + installs(w.r.plan) });
             });
             if (deferred.length) {
                 const late = go.findIndex(g => g.kind === 'roundcube' || g.kind === 'java');
