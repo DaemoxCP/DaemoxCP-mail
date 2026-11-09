@@ -133,6 +133,18 @@ public final class Access {
         return confirmAlways || CONFIRMED.contains(permissionFor(method, action));
     }
 
+    /**
+     * Vero se questa richiesta puo' cambiare qualcosa: non e' una GET, non e' un'azione che legge soltanto, e il suo
+     * permesso non e' uno di quelli che vedono e basta ("x.view"). E' la regola del riavvio programmato
+     * (RestartLock): fino al riavvio passano solo le richieste per cui questo e' falso.
+     */
+    public boolean changes(String method, String action) {
+        if (kind != Kind.API || "GET".equals(method) || "HEAD".equals(method)) return false;
+        if (action != null && reads.contains(action)) return false;
+        String p = permissionFor(method, action);
+        return p == null || !p.endsWith(".view");
+    }
+
     /** Il permesso di una richiesta: il metodo e, se c'e', l'azione. */
     public String permissionFor(String method, String action) {
         String p = action == null ? null : actions.get(action);

@@ -52,6 +52,14 @@ public class SeparatedPanelTest {
     static String base;
     static final String UA = "separated-panel-test";
 
+    /** The root's question from the web part (reperto 200): not a request of the user. */
+    static final String RESTART_STATE = "/op/restart-state";
+
+    /** What the web part passed to the root, without its questions on the restart. */
+    static int forwarded(List<RootChannel.Request> seen) {
+        return (int) seen.stream().filter(q -> !RESTART_STATE.equals(q.route())).count();
+    }
+
     static void check(String what, boolean ok) {
         System.out.println((ok ? "  OK     " : "  FAILED ") + what);
         if (!ok) failed++;
@@ -254,12 +262,16 @@ public class SeparatedPanelTest {
                     h.status() == 403 && answer.toString().contains("\"forbidden\":true"));
             check("  and no administrator was created", AuthStore.adminByUsername("sep-forged").isEmpty());
             System.out.println("\n== 3c. The fresh confirmation for dangerous operations ==");
-            int beforeConfirm = seen.size();
+            int beforeConfirm = forwarded(seen), questionsBefore = seen.size() - forwarded(seen);
             r = send("POST", "/api/service", "{\"service\":\"nothing-sep\",\"action\":\"status\"}", boss, true);
             check("through the web part, a superadmin without a recent confirmation: 403 with X-Panel-Confirmation, needs_reauth ("
                     + r.statusCode() + " " + r.body() + ")", r.statusCode() == 403
                     && "needed".equals(r.headers().firstValue("X-Panel-Confirmation").orElse("")) && r.body().contains("\"needs_reauth\":true"));
-            check("  stopped in the web part: nothing reached the root", seen.size() == beforeConfirm);
+            check("  stopped in the web part: nothing reached the root", forwarded(seen) == beforeConfirm);
+            // Reperto 200: before the confirmation the web part asks the root whether a restart is scheduled (it cannot
+            // see the root's processes). A question with no request in it: no route, no body, only who asks.
+            check("  the web part only asked the root whether a restart is scheduled (no body)", seen.size() - forwarded(seen) == questionsBefore + 1
+                    && seen.stream().filter(q -> RESTART_STATE.equals(q.route())).allMatch(q -> q.body().length == 0));
             h = forge(sock, "/api/service", "POST", "/api/service", null, "{\"service\":\"nothing-sep\",\"action\":\"status\"}",
                     boss.adminId(), boss.sessionId(), answer);
             check("forged on the root's socket, the same request: the root asks it by itself (" + h.status() + " " + answer + ")",
@@ -274,10 +286,10 @@ public class SeparatedPanelTest {
                     boss.adminId(), boss.sessionId(), answer);
             check("after the confirmation (written by the root), the request reaches the handler (" + h.status() + " " + answer + ")",
                     h.status() == 200 && answer.toString().contains("\"success\":false") && !answer.toString().contains("needs_reauth"));
-            int beforeGate = seen.size();
+            int beforeGate = forwarded(seen);
             r = send("POST", "/api/roundcube-domain", "{\"action\":\"check\",\"domain\":\"-f /etc/master.passwd\"}", boss, true);
             check("through the web part, a host name that is an option of dig: refused by the root's list, 400 (" + r.statusCode() + ")",
-                    r.statusCode() == 400 && seen.size() == beforeGate + 1
+                    r.statusCode() == 400 && forwarded(seen) == beforeGate + 1
                     && r.body().contains(org.mail_panel.i18n.I18n.t("en", "server.rootPart.refused").substring(0, 20)));
             // Back to no confirmation: the sections below check that it is asked (the one above needed it to reach the root).
             try (java.sql.PreparedStatement p = org.mail_panel.TestSql.mysql().prepareStatement(

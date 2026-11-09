@@ -335,6 +335,9 @@ public class MailPanelContent {
         /* Gli avvisi del pannello al posto di panelSay('info', ) (reperto 198): in alto, sopra la pagina, chiudibili. */
         .panel-notices { position: fixed; top: 4.5rem; left: 1rem; right: 1rem; z-index: 2000; max-width: 34rem; margin-left: auto; }
         .panel-notices .alert p:last-of-type { margin-bottom: 0; }
+        /* Riavvio programmato: la pagina in sola lettura (panel-reboot.js). Lo dicono anche la striscia e l'avviso. */
+        body.panel-restart-locked #main .btn:not(.btn-close):not([data-bs-toggle]):not([data-bs-dismiss]) { opacity: .55; cursor: not-allowed; }
+        body.panel-restart-locked #panelRebootBanner .btn { opacity: 1; cursor: pointer; }
         """;
     }
 
@@ -398,6 +401,12 @@ public class MailPanelContent {
                     if (own && res.status === 403 && res.headers.get('X-Panel-Confirmation') === 'needed'
                             && typeof window.panelConfirmIdentity === 'function') {
                         return window.panelConfirmIdentity().then(function (ok) { return ok ? send.call(self, input, init) : res; });
+                    }
+                    // Un cambiamento rifiutato perche' e' programmato un riavvio (RestartLock): la striscia in alto si
+                    // rilegge e la pagina diventa di sola lettura; il messaggio lo mostra la pagina come ogni errore.
+                    if (own && res.status === 409 && res.headers.get('X-Panel-Restart') === 'scheduled'
+                            && typeof window.panelRebootRefresh === 'function') {
+                        window.panelRebootRefresh();
                     }
                     // Durante un riavvio chiesto dal pannello la pagina aspetta che il server torni davvero
                     // (panel-reboot.js): un 401 mentre si spegne porterebbe a una pagina d'accesso che sta

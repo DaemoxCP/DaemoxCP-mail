@@ -292,7 +292,10 @@ public class SSLMailServer {
         // ---------- DNS e certificati ----------
         context("/dns", Access.page(DNS_VIEW), this::handleProtectedPage);
         context("/api/dns", Access.api(DNS_VIEW, DNS_MANAGE), this::handleApiDns);
-        context("/api/dkim", Access.api(DNS_VIEW, DNS_MANAGE), this::handleApiDkim);
+        // Le azioni che leggono soltanto (controllato metodo per metodo: nessuna scrittura): passano anche col riavvio
+        // programmato. rotate_check e verify_active_dns scrivono lo stato o il registro della rotazione: cambiano.
+        context("/api/dkim", Access.api(DNS_VIEW, DNS_MANAGE).reading("domains_summary", "orphans_scan", "rotate_status", "schedule_get"),
+                this::handleApiDkim);
         context("/ssl", Access.page(DNS_VIEW), this::handleProtectedPage);
         context("/api/ssl", Access.api(DNS_VIEW, DNS_MANAGE, Access.actions(DNS_VIEW, "get_auto_renewal_settings", "check_self_signed")), this::handleApiSsl);
         context("/cloudflare", Access.page(DNS_VIEW), this::handleProtectedPage);
@@ -442,6 +445,18 @@ public class SSLMailServer {
             });
         }
         if (access.kind() == Access.Kind.API) {
+            // Prima della conferma recente: con un riavvio programmato non si chiede la passkey per poi rifiutare.
+            context.getFilters().add(new Filter() {
+                @Override
+                public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+                    if (!restartLocked(exchange, access, path)) chain.doFilter(exchange);
+                }
+
+                @Override
+                public String description() {
+                    return "no change while a restart of the server is scheduled";
+                }
+            });
             context.getFilters().add(new Filter() {
                 @Override
                 public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
@@ -481,6 +496,60 @@ public class SSLMailServer {
         if (session.isPresent() && session.get().reauthenticatedWithin(AuthHandlers.REAUTH_SECONDS)) return false;
         sendConfirmationNeeded(exchange);
         return true;
+    }
+
+    /** L'intestazione della risposta che rifiuta un cambiamento col riavvio programmato: le pagine rileggono la striscia. */
+    static final String RESTART_HEADER = "X-Panel-Restart";
+
+    /**
+     * Un riavvio del server e' programmato e questa richiesta cambierebbe qualcosa (Access.changes): vero, e la
+     * risposta e' gia' data (409). Restano le letture, annullare il riavvio e riavviare subito (RestartLock.exempt).
+     * Lo decide chi sa: la root e il pannello in un pezzo solo guardano il processo shutdown; la web, che non vede
+     * i processi della root, lo chiede alla root, per ogni cambiamento (prima della conferma recente, che altrimenti
+     * chiederebbe la passkey per una richiesta che la root rifiutera'); la root lo ricontrolla per quelle che le passa.
+     * Se non si riesce a sapere, si rifiuta: un cambiamento rimandato di un minuto costa meno di uno lasciato a meta'.
+     */
+    private boolean restartLocked(HttpExchange exchange, Access access, String route) throws IOException {
+        if (access.kind() != Access.Kind.API) return false;
+        Object a = exchange.getAttribute(ACTION_ATTRIBUTE);
+        String action = a instanceof String x ? x : null;
+        if (!access.changes(exchange.getRequestMethod(), action)
+                || org.mail_panel.system.RestartLock.exempt(route, action)) return false;
+        org.mail_panel.system.RestartLock.State st = mode == Mode.WEB_PART ? askRootRestartState()
+                : org.mail_panel.system.RestartLock.current();
+        if (st.known() && !st.scheduled()) return false;
+        logAudit("RESTART_LOCK_REFUSED", getClientIp(exchange), "route=" + route + (action == null ? "" : " action=" + action)
+                + (st.known() ? "" : " (restart state unknown)"));
+        JSONObject body = new JSONObject().put("success", false).put("restart_scheduled", st.scheduled())
+                .put("error", I18n.tr(st.known() ? "server.restartLock.refused" : "server.restartLock.unknown"));
+        if (st.at() > 0) body.put("restart_at", st.at());
+        byte[] json = body.toString().getBytes(StandardCharsets.UTF_8);
+        addSecurityHeaders(exchange);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.getResponseHeaders().set(RESTART_HEADER, "scheduled");
+        exchange.sendResponseHeaders(409, json.length);
+        try (OutputStream os = exchange.getResponseBody()) { os.write(json); }
+        return true;
+    }
+
+    /** La parte web chiede alla root se c'e' un riavvio programmato, per chi ha fatto la richiesta in corso. */
+    @SuppressWarnings("unchecked")
+    private org.mail_panel.system.RestartLock.State askRootRestartState() {
+        Object[] cached = CURRENT_SESSION.get();
+        Optional<WebSessions.Current> s = cached == null ? Optional.empty() : (Optional<WebSessions.Current>) cached[1];
+        if (s.isEmpty()) return org.mail_panel.system.RestartLock.State.UNKNOWN;
+        HttpExchange ex = (HttpExchange) cached[0];
+        String route = "/op/restart-state";
+        RootChannel.Request req = new RootChannel.Request(route, "POST", route, null, Map.of(), getClientIp(ex), I18n.current(),
+                s.get().admin().id(), s.get().id(), null);
+        try (RootChannel.Exchange answer = RootChannel.send(org.mail_panel.system.PanelSeparation.socket(), req)) {
+            JSONObject j = new JSONObject(new String(answer.body().readAllBytes(), StandardCharsets.UTF_8));
+            if (answer.head().status() != 200 || !j.optBoolean("success")) return org.mail_panel.system.RestartLock.State.UNKNOWN;
+            return new org.mail_panel.system.RestartLock.State(j.optBoolean("scheduled"), j.optLong("at"), true);
+        } catch (Exception e) {
+            LOGGER.warning("Web part: the root part did not say whether a restart is scheduled: " + e.getMessage());
+            return org.mail_panel.system.RestartLock.State.UNKNOWN;
+        }
     }
 
     /** 403 con needs_reauth: serve una conferma recente (passkey o codice via email), poi la richiesta si ripete. */
@@ -1294,6 +1363,7 @@ public class SSLMailServer {
             HttpExchange ex = "HEAD".equals(r.method()) ? new HeadExchange(exchange) : exchange;
             CURRENT_SESSION.set(new Object[]{ex, session});
             if (!accessAllowed(ex, access)) return;
+            if (restartLocked(ex, access, r.route())) return;
             if (confirmationMissing(ex, access)) return;
             handler.handle(ex);
         } finally {
@@ -1381,6 +1451,23 @@ public class SSLMailServer {
                 byte[] key = WebSessions.runKeyForWebPart();
                 sendJsonResponse(exchange, new JSONObject().put("success", true).put("key", Base64.getEncoder().encodeToString(key)));
                 java.util.Arrays.fill(key, (byte) 0);
+                return;
+            }
+            if (r.route().equals("/op/restart-state")) {
+                // La web non vede i processi della root (see_other_uids=0): lo chiede qui, per le sue rotte. Basta
+                // una sessione valida: e' lo stesso fatto che la striscia mostra a chi vede il sistema.
+                if (mode != Mode.ROOT_PART || !"POST".equals(r.method()) || !r.route().equals(r.path())
+                        || r.body().length > 0 || r.query() != null) {
+                    sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
+                    return;
+                }
+                if (Main.sessions.forwarded(r.sessionId(), r.adminId()).isEmpty()) {
+                    sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
+                    return;
+                }
+                org.mail_panel.system.RestartLock.State st = org.mail_panel.system.RestartLock.current();
+                sendJsonResponse(exchange, new JSONObject().put("success", st.known())
+                        .put("scheduled", st.scheduled()).put("at", st.at()));
                 return;
             }
             RootOperation op = rootOperations().get(r.route().substring("/op/".length()));
@@ -9340,6 +9427,10 @@ public class SSLMailServer {
         // controllo piu' severo non e' un riepilogo: e' la stessa mezza verita' che ha tenuto
         // nascoste per mesi una jail cieca e due che bannavano nel vuoto.
         boolean appliedBans = true;
+        // Solo jail che non si sono potute leggere, e nessun guasto trovato: non e' un guasto, e' un "non ho potuto
+        // guardare" (09/11/2026: sul server vero mailpanel-public «non misurata» per un momento, con il rimedio delle
+        // jail della posta, che non la tocca, e «se non lo sistemi»). Si dice il motivo e si chiede di riprovare.
+        boolean appliedBansUnmeasured = false;
         String appliedBansDetail;
         try {
             if (!f2bRunning) {
@@ -9347,6 +9438,12 @@ public class SSLMailServer {
                 appliedBansDetail = I18n.tr("server.f2b.pf.notRunning");
             } else {
                 Fail2banManager.PfComparison cf = fail2banManager.compareBansWithPf();
+                if (cf.totalUnmeasured() > 0) {
+                    // Fail2ban che non risponde in tempo (un reload, un registro grande da rileggere) dura un attimo:
+                    // una seconda lettura dopo qualche secondo, prima di dire qualcosa.
+                    try { Thread.sleep(3000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    cf = fail2banManager.compareBansWithPf();
+                }
                 int withoutRule = cf.totalWithoutRule();
                 int notApplied = cf.totalNotApplied();
                 int unmeasured = cf.totalUnmeasured();
@@ -9359,9 +9456,15 @@ public class SSLMailServer {
                     d.append(I18n.tr("server.f2b.pf.allOk", Map.of("n", ok)));
                 } else {
                     appliedBans = false;
+                    appliedBansUnmeasured = withoutRule == 0 && notApplied == 0;
                     d.append(I18n.tr("server.f2b.pf.someOk", Map.of("ok", ok, "total", cf.jails.size())));
                     for (Fail2banManager.JailPf j : cf.jails) {
-                        if (!j.read) { d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.notMeasured")); continue; }
+                        if (!j.read) {
+                            d.append(" | ").append(j.jail).append(": ").append(j.note == null || j.note.isBlank()
+                                    ? I18n.tr("server.f2b.pf.notMeasured")
+                                    : I18n.tr("server.f2b.pf.notMeasuredWhy", Map.of("why", j.note.strip())));
+                            continue;
+                        }
                         if (j.missingTable) { d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noTable")); continue; }
                         if (j.ruleVerified && !j.rulePresent) {
                             d.append(" | ").append(j.jail).append(": ").append(I18n.tr("server.f2b.pf.noRule", Map.of("table", String.valueOf(j.table))));
@@ -9377,14 +9480,20 @@ public class SSLMailServer {
             appliedBans = false;
             appliedBansDetail = I18n.tr("server.f2b.pf.compareFailed", Map.of("error", String.valueOf(e.getMessage())));
         }
-        checks.put(makeCheck("bans-applied-in-pf",
-            I18n.tr("server.f2b.pf.check"),
-            appliedBans,
-            appliedBansDetail,
-            appliedBans ? null
-                : I18n.tr("server.f2b.pf.impact"),
-            (appliedBans || !f2bInstalled) ? null : "install_mail_jails",
-            I18n.tr("server.f2b.pf.fix")));
+        if (appliedBansUnmeasured) {
+            // Nessun rimedio da proporre: rigenerare le jail della posta non tocca una jail che non si e' letta.
+            checks.put(makeCheck("bans-applied-in-pf", I18n.tr("server.f2b.pf.check"), false, appliedBansDetail,
+                    I18n.tr("server.f2b.pf.unmeasuredImpact"), null, null).put("unknown", true));
+        } else {
+            checks.put(makeCheck("bans-applied-in-pf",
+                I18n.tr("server.f2b.pf.check"),
+                appliedBans,
+                appliedBansDetail,
+                appliedBans ? null
+                    : I18n.tr("server.f2b.pf.impact"),
+                (appliedBans || !f2bInstalled) ? null : "install_mail_jails",
+                I18n.tr("server.f2b.pf.fix")));
+        }
 
         checks.put(makeCheck("mail-jails-logpath",
             I18n.tr("server.f2b.log.check"),
@@ -9551,15 +9660,19 @@ public class SSLMailServer {
         // dimenticanza non e' piu' possibile.
         boolean allOk = true;
         boolean somethingToRepair = false;
+        int unchecked = 0;
         for (int i = 0; i < checks.length(); i++) {
             JSONObject c = checks.getJSONObject(i);
             if (c.optBoolean("ok", false)) continue;
+            // Un controllo che non ha potuto guardare non e' un guasto: non chiede rimedi, chiede di riprovare.
+            if (c.optBoolean("unknown", false)) { unchecked++; continue; }
             allOk = false;
             if (c.has("fix_action")) somethingToRepair = true;
         }
         r.put("can_fix_all", somethingToRepair);
         r.put("success", true);
         r.put("all_ok", allOk);
+        r.put("unchecked", unchecked);
         r.put("checks", checks);
         // Stato CSRF token per i POST successivi
         try {

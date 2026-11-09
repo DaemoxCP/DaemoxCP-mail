@@ -278,7 +278,11 @@
                         c.innerHTML = '<div class="alert alert-danger mb-0">' + escHtml(t('common.error', { message: data.error || t('common.unknownError') })) + '</div>';
                         return;
                     }
-                    if (data.all_ok) {
+                    if (data.all_ok && data.unchecked) {
+                        // Niente di rotto, ma non tutto si e' potuto guardare: non "tutto a posto", e niente "Ripara tutto".
+                        overall.innerHTML = '<span class="badge bg-warning text-dark">' + escHtml(t('sj.unchecked')) + '</span>';
+                        if (btnFixAll) btnFixAll.classList.add('d-none');
+                    } else if (data.all_ok) {
                         overall.innerHTML = '<span class="badge bg-success">' + escHtml(t('sj.allOk')) + '</span>';
                         if (btnFixAll) btnFixAll.classList.add('d-none');
                     } else {
@@ -289,13 +293,18 @@
                     (data.checks || []).forEach((chk, idx) => {
                         const icon = chk.ok
                             ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.succeeded')) + '</span>'
+                            : chk.unknown
+                            ? '<i class="fas fa-circle-question text-warning" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('sj.notChecked')) + '</span>'
                             : '<i class="fas fa-times-circle text-danger" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(t('dns.failed')) + '</span>';
                         html += '<div class="list-group-item">';
                         html += '<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">';
                         html += '<div class="flex-grow-1">';
                         html += '<div><strong>' + icon + ' ' + escapeHtml(chk.label) + '</strong></div>';
                         html += '<div class="small text-muted">' + escapeHtml(chk.status || '') + '</div>';
-                        if (!chk.ok && chk.impact) {
+                        if (!chk.ok && chk.unknown && chk.impact) {
+                            // Non ha potuto guardare: cosa vuol dire e cosa fare, non «se non lo sistemi».
+                            html += '<div class="small mt-1"><i class="fas fa-circle-info text-warning me-1" aria-hidden="true"></i>' + escHtml(chk.impact) + '</div>';
+                        } else if (!chk.ok && chk.impact) {
                             html += '<div class="small text-danger mt-1"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + escHtml(t('sj.ifNotFixed', { impact: chk.impact })) + '</div>';
                         }
                         if (!chk.ok && chk.fix_description) {
@@ -311,7 +320,7 @@
                         html += '</div>';
                     });
                     html += '</div>';
-                    if (data.all_ok) {
+                    if (data.all_ok && !data.unchecked) {
                         html += '<div class="alert alert-success mb-0 mt-3 py-2"><i class="fas fa-shield-alt me-2" aria-hidden="true"></i>' + escHtml(t('sj.complete')) + '</div>';
                     }
                     c.innerHTML = html;
