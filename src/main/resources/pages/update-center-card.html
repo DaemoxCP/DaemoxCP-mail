@@ -24,6 +24,19 @@
                     </div>
                     <div id="ucOutcome" role="status" aria-live="polite"></div>
                     <ul class="list-group mb-0" id="ucList">
+                        <!-- «Aggiorna tutto» (reperto 207): in cima, l'elenco di cio' che fara', nell'ordine, e UN pulsante;
+                             sotto, il suo lavoro. Le righe dopo dicono lo stato di ogni parte, senza pulsanti d'aggiornamento. -->
+                        <li class="list-group-item" id="uc-all">
+                            <div class="uc-head"></div>
+                            <div class="uc-detail mt-3" id="uc-all-detail" hidden>
+                                <div id="all-run" role="status" aria-live="polite"></div>
+                                <details class="mt-2" id="all-log-box" hidden>
+                                    <summary class="small">{{t:osu.showLog}}</summary>
+                                    <pre id="all-log" class="upd-log mt-2"></pre>
+                                    <p class="small text-muted mb-0">{{t:osu.logKept}}</p>
+                                </details>
+                            </div>
+                        </li>
                         <li class="list-group-item" id="uc-os">
                             <div class="uc-head"></div>
                             <div class="uc-detail mt-3" id="uc-os-detail" hidden>

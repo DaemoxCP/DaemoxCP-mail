@@ -76,6 +76,48 @@ public class JobJournalTest {
             }
             check("a well formed name that does not exist: refused", !JobJournal.read("20000101-000000-x__y.log").optBoolean("success"));
 
+            System.out.println("\n== what is done before the end (reperto 207) ==");
+            // On the VM "Update everything" wrote the way back's cleanup AFTER "=== end", and the list, which reads the
+            // last line, called it unfinished. The cleanup now runs before the end, outside the job's lock.
+            UpdateManager.Job e = new UpdateManager.Job("all-5", "update_everything");
+            e.write("step 1 of 1");
+            String[] seen = {""};
+            e.beforeEnd(() -> {
+                Thread t = new Thread(() -> seen[0] = e.toJson().getString("status"));
+                t.start();
+                try { t.join(5000); } catch (InterruptedException x) { Thread.currentThread().interrupt(); }
+                e.write("Way back: older boot environment packages-before-x removed");
+            });
+            e.status = "completed";
+            e.finish();
+            e.runBeforeEnd();
+            e.finish();
+            String te = Files.readString(JobJournal.files().stream().filter(p -> p.toString().contains("update_everything__all-5")).findFirst().get());
+            String[] lines = te.trim().split("\n");
+            check("the cleanup line before the end, once; the end the last line, once",
+                    te.indexOf("Way back") > 0 && te.indexOf("Way back") < te.indexOf("=== end:") && lines[lines.length - 1].contains("=== end: completed")
+                    && te.split("Way back", -1).length == 2 && te.split("=== end:", -1).length == 2);
+            check("meanwhile the page, asking from another thread, gets an answer: still running (" + seen[0] + ")", seen[0].equals("running"));
+            UpdateManager.Job g = new UpdateManager.Job("g-6", "search");
+            g.beforeEnd(() -> { throw new IllegalStateException("bectl failed"); });
+            g.status = "error";
+            g.finish();
+            check("a cleanup that throws does not stop the end", Files.readString(JobJournal.files().stream()
+                    .filter(p -> p.toString().contains("search__g-6")).findFirst().get()).contains("=== end: error"));
+            UpdateManager.Job h = new UpdateManager.Job("h-7", "update_plain");
+            h.write("a job that does not write its end");
+            h.beforeEnd(() -> h.write("cleanup"));
+            h.runBeforeEnd();
+            h.markFinished();
+            String th = Files.readString(JobJournal.files().stream().filter(p -> p.toString().contains("update_plain__h-7")).findFirst().get());
+            check("without its own end: the cleanup when the work returns, the end after it",
+                    th.indexOf("cleanup") > 0 && th.indexOf("cleanup") < th.indexOf("=== end:") && th.split("cleanup", -1).length == 2);
+            JSONArray after = JobJournal.list(20).getJSONArray("journals");
+            boolean listed = false;
+            for (int i = 0; i < after.length(); i++)
+                if (after.getJSONObject(i).getString("type").equals("update_everything")) listed = after.getJSONObject(i).getString("status").equals("completed");
+            check("listed as completed, not as unfinished", listed);
+
             System.out.println("\n== only the newest stay ==");
             JobJournal.keep = 4;
             for (int i = 0; i < 6; i++) {

@@ -64,7 +64,8 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LockTraceTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallSideEffectsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallScriptDriftTest
-    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdateAllTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.EverythingTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PostfixInetProtocolsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.ResetDatabaseTest
@@ -147,7 +148,7 @@ inventory photo and pkg (`UpdateManager.PlanWatch.afterTaken`, null in the servi
 The job must end in error naming it, with every line of the plan still where it said; with `-Doutside.when=before`
 the package goes in before the job instead, and those three checks must fail (reperto 190).
 
-`signed-jobs-browser-test.js` uses the same three procedures (from their rows of "Update the server", reperto 197) in a real browser (Playwright with the Chrome installed on
+`signed-jobs-browser-test.js` uses two of the same procedures, Python's move and the move to MySQL 8.4 (from their rows of "Update the server", reperto 197; Roundcube is a step of "Update everything" since reperto 207) in a real browser (Playwright with the Chrome installed on
 the Mac), against the panel of the test VM through an SSH tunnel: "Check prerequisites", the plan and its
 fingerprint in the card, start from the panel's window (the word goes in the request), the log to the end. It checks that the start request
 carries the fingerprint the card showed and that the job ran that one. It signs in with a console code and gives
@@ -155,18 +156,23 @@ its session the fresh confirmation with the `confirm` mode of `signed-jobs-setup
 every JavaScript error of the pages it opens.
 
 `os-patch-browser-test.js` does the FreeBSD patches on the test VM as a person would (reperto 196), in two phases:
-`install` (check for updates if none is known, the row with the patches ready and one button, the confirmation, the
-progress in one line with the details closed, the outcome with the one step left, the restart, and its button; the
-operation logs in Diagnostics with the job's log on disk; the restart from the panel's window) and `after` (once the
-VM is back: nothing left in the FreeBSD row, the logs written before the restart still there). It changes the VM:
-patches, a boot environment, a restart.
+`install` (check for updates if none is known; the FreeBSD row with the patches ready and no button of its own, the
+patches as the first step of "Update everything" at the top, reperto 207; the confirmation, the progress in one line
+with the details closed, the outcome with what is installed and the restart left, the FreeBSD row with the restart's
+button; the operation logs in Diagnostics with the job's log on disk; the restart from the panel's window) and
+`after` (once the VM is back: nothing left in the FreeBSD row, the logs written before the restart still there). It
+changes the VM: patches, a boot environment, a restart.
 
-`java-update-browser-test.js` does the same with the Java row (reperto 195), the one procedure that stops the panel
-itself: "Prepare", the checks and the exact plan with its fingerprint, start with the word, the panel going down
-and coming back, the sign-in again (a restart ends every session), the last report from Diagnostics. Then, on the
-VM through `java-update-state.sh`: the service sees the panel again (its pidfile is the root part), the web part
-runs as mailpanel and holds the port, the JVM is the new one and protected again. It needs a JVM update waiting on
-the VM; the test's header says how the way back the script leaves puts the old JVM back.
+`everything-browser-test.js` does "Update everything" on the test VM as a person would (reperto 207): the row at
+the top with the steps in order and one button, "Cancel" that leaves the button where it is, the confirmation with
+every step numbered, the request with the fingerprints read and the changes shown, the one job to its end with the
+end as the last line of its log. With the panel's Java last (it took the place of `java-update-browser-test.js`): the
+page that reloads by itself on the sign-in page when the panel comes back (a restart ends every session), the sign-in
+again, the Java report in Diagnostics, and on the VM through `java-update-state.sh` the service that sees the panel
+again (its pidfile is the root part), the web part as mailpanel holding the port, the JVM new and protected again.
+Afterwards: nothing left to update, Update everything completed in the operation logs, every service up, the
+protected packages protected again, postfix's `inet_protocols` written and postfix listening as before. It needs
+updates waiting on the VM; the way back is the boot environment the job makes before the first step.
 
 `diagnostics-browser-test.js` presses "Check everything" in Diagnostics on the panel of the test VM (reperto 199):
 the ten read-only checks one after the other, each with its verdict, what needs a look first and the most important
@@ -637,22 +643,16 @@ names and addresses only as text, the preview, the branch name typed by hand to 
 fingerprint and CSRF token in the request, the job followed to its outcome, the error of a change
 that does not start; dark theme and phone.
 
-**packages-browser-test.js** — the packages on the Updates page, with the simulated server (reperto 202): ONE row
-of "Update the server", no separate card and no separate row for the mail server packages. The row says how many go in
-one plan and how many of the mail server one at a time (by name, the held one with its reason, not the panel's JDK),
-the fix available and the vulnerability the update does not fix yet, and has one button, the step after: first
-protecting the mail server packages that are not locked, then the plan of the others, then the mail server ones one at
-a time; a plan that cannot run (it would remove a package) does not start and hands the step to the mail server
-packages. A family (php84 and its extensions, reperto 203) is ONE step and one line, "php84 and 2 more of its family",
-with the button on php84; a family alone has its own sentence instead of "in 1 steps". With two steps ready or more, ONE button, "Update
-all" (reperto 205): the checks of every step first, one confirmation listing them with the services that restart,
-cancelling starts nothing, confirming sends ONE request with every step's signature; with one step left, its window. Under the row, closed, the list one by one: the summary, the warning about the unlocked ones with the button
-to lock them, for every package installed and catalog version, verdict on the vulnerability (text, never HTML), lock,
-"held" where the advisory says to wait, the JDK saying it has its own procedure, no update button (the row has the
-step); Lock with name and CSRF token, after which the row's step moves on. The update window of a mail server
-package: exact plan, the steps in plain words, the button off until the package name is typed right, the request with
-confirmation and fingerprint, the job followed to its outcome. And the header of a vulnerability saying the same
-verdict as the detail (it was "the update fixes it" above a "the update is not enough").
+**packages-browser-test.js** — the packages on the Updates page, with the simulated server (reperti 202, 203, 207): one
+row says the state (how many in one plan, how many of the mail server and in how many steps, the fixes, the
+vulnerabilities not fixed yet, the held ones with their reason) with no button; "Update everything" at the top has the
+one button: first protecting a mail server package that is not locked, then the steps in order (the PHP family one
+step). Its checks first; a plan of the other packages that would remove a package is left out with the reason;
+cancelling starts nothing and the button stays; confirming sends ONE request with the signature of every step and the changes
+shown. Under the row, closed, the list one by one: the summary, the warning about the unlocked ones with the button to
+lock them, for every package installed and catalog version, verdict on the vulnerability (text, never HTML), lock,
+"held" where the advisory says to wait, the JDK saying it has its own procedure, no update button; Lock with name and
+CSRF token.
 
 **packages-row-browser-test.js** — on the real panel of the test VM, only reads (reperto 202): the packages are
 one row of "Update the server" with at most one button, no separate card and no separate mail server row; the list

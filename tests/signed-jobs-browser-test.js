@@ -1,29 +1,29 @@
-// The three cards of the Updates page on the VM panel, in a real browser, as a person would use them (reperto 190):
+// The procedures of the Updates page with a row of their own on the VM panel, in a real browser, as a person would use
+// them (reperto 190): Python's move and the move to MySQL 8.4. Roundcube was the third: since reperto 207 it is a step
+// of "Update everything", tested by everything-browser-test.js.
 // "Check prerequisites", the exact plan and its fingerprint in the card, start, the confirmation word, the log to
 // the end. It checks that the card shows the plan, that the start request carries the fingerprint the card showed,
 // and that the job ran that one and changed nothing outside it.
 //
 // Against the panel of the TEST VM, through an SSH tunnel to its port 2096 (the panel answers only to its name,
-// 127.0.0.1 there), with the three old situations prepared by tests/signed-jobs-setup.sh (roundcube, python,
-// mysql84). It signs in with a console code taken from the VM, and gives its session the fresh confirmation with
+// 127.0.0.1 there), with the old situations prepared by tests/signed-jobs-setup.sh (python, mysql84). It signs in with a console code taken from the VM, and gives its session the fresh confirmation with
 // the "confirm" mode of tests/signed-jobs-setup.sh, copied to /root/signed on the VM (MySQL, as
 // separation-service-test.sh does: on the VM only, never on a real server); "confirm-stop" ends it.
 // The VM's certificate is self-signed: certificate errors are ignored here, for this test machine only.
 //
 // Usage:
 //   ssh -i ~/.ssh/freebsd_test_vm -N -L 127.0.0.1:2096:127.0.0.1:2096 root@192.168.1.20 &
-//   NODE_PATH=<playwright node_modules> node tests/signed-jobs-browser-test.js <screenshot-folder> [python,roundcube,mysql]
+//   NODE_PATH=<playwright node_modules> node tests/signed-jobs-browser-test.js <screenshot-folder> [python,mysql]
 const { chromium } = require('playwright');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const BASE = 'https://127.0.0.1:2096';
 const OUT = process.argv[2];
-const ONLY = (process.argv[3] || 'python,roundcube,mysql').split(',');
+const ONLY = (process.argv[3] || 'python,mysql').split(',');
 const VM = 'ssh -i ' + process.env.HOME + '/.ssh/freebsd_test_vm -o IdentitiesOnly=yes -o ConnectTimeout=10 root@192.168.1.20';
 // The rows of "Update the server" (reperti 193, 197): the row's one button, "Prepare", opens the guided panel under it.
 const CARDS = [
     { key: 'python', pre: 'ucPython()', run: 'pyRun()', box: '#py-pre', log: '#py-log', word: 'MOVE PYTHON' },
-    { key: 'roundcube', pre: 'ucRoundcube()', run: 'rcRun()', box: '#rc-pre', log: '#rc-log', word: 'UPGRADE ROUNDCUBE' },
     { key: 'mysql', pre: 'ucMysql()', run: 'my84Run()', box: '#my84-pre', log: '#my84-log', word: 'MIGRATE TO 8.4' },
 ];
 let failed = 0;

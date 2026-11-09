@@ -1,6 +1,6 @@
 #!/bin/sh
 # What the Java update touches, on the TEST VM: the panel's processes, the service's pidfile, the port and who holds
-# it, the JVM and its protection, the package jobs, the services. Read only. Used by java-update-browser-test.js
+# it, the JVM and its protection, the package jobs, the services. Read only. Used by everything-browser-test.js
 # (copied to /root/signed on the VM).
 echo "service: $(service mailpanel status 2>&1)"
 echo "pidfile: $(cat /var/run/mailpanel.pid 2>/dev/null || echo none)"
