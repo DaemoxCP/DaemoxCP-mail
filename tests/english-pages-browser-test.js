@@ -24,6 +24,8 @@ const BASE = 'http://panel.test';
 let failed = 0;
 // The API calls of the page being visited that the simulated server does not know (see serve).
 const unsimulated = new Set();
+// The Fail2ban checks answer, on /security, a second time with a jail that could not be read (see the API below).
+let f2bUnmeasured = false;
 function check(what, ok) {
     console.log((ok ? '  OK   ' : '  FAILED ') + what);
     if (!ok) failed++;
@@ -82,9 +84,16 @@ const API = {
     'POST /api/fail2ban': (q, body) => ({
         get_jail_config: { success: true, max_retry: 5, find_time: 600, ban_time: 3600, filter: 'postfix-sasl', ignoreip: ['127.0.0.1/8'] },
     })[body.action] || { success: true },
-    'GET /api/fail2ban_health': { success: true, all_ok: false, checks: [
+    // The second answer (reperto 200): nothing broken, but one jail could not be read. Not a fault: no "if you do not
+    // fix it", no fix, no "all good", and the reason in the text.
+    'GET /api/fail2ban_health': () => !f2bUnmeasured ? { success: true, all_ok: false, checks: [
         { ok: true, label: 'Fail2ban installed', status: 'version 1.1.0' },
-        { ok: false, label: 'Ban action', status: 'the pf table is missing', impact: 'bans block nothing', fix_description: 'Creates the table', fix_action: 'fix_pf' }] },
+        { ok: false, label: 'Ban action', status: 'the pf table is missing', impact: 'bans block nothing', fix_description: 'Creates the table', fix_action: 'fix_pf' }] }
+        : { success: true, all_ok: true, unchecked: 1, can_fix_all: false, checks: [
+        { ok: true, label: 'Fail2ban installed', status: 'version 1.1.0' },
+        { ok: false, unknown: true, label: 'The bans are really in the firewall (pf table and rule)',
+          status: '6 of 7 jails checked and fine | mailpanel-public: not measured: fail2ban did not answer: it is restarting.',
+          impact: 'This is not a fault found: I could not look, even reading a second time a few seconds later.' }] },
     'GET /api/unbound_health': { success: true, all_ok: true, checks: [{ ok: true, label: 'unbound running', status: 'listening on 127.0.0.1' }] },
     'GET /api/clamav_health': { success: true, all_ok: false, checks: [
         { ok: true, label: 'ClamAV installed', status: 'clamav 1.4' },
@@ -233,6 +242,17 @@ const VISITS = [
         await page.waitForSelector('#jailLiveBody .p-2');
         await page.waitForFunction(() => /\S/.test(document.getElementById('cfgJailStatus').textContent)
             && !document.getElementById('cfgJailStatus').textContent.includes('...'));
+        f2bUnmeasured = true;
+        await page.evaluate(() => loadFail2banHealth());
+        await page.waitForFunction(() => /could be checked/.test(document.getElementById('fhcOverallStatus').textContent));
+        const fhc = await page.innerText('#fhcContainer');
+        check('a jail that could not be read: the reason, what to do, no "if you do not fix it"', /it is restarting/.test(fhc)
+            && /not a fault found/.test(fhc) && !/If you do not fix it/.test(fhc));
+        check('  no fix button, no "fix all", no "nothing to do"', await page.$('#fhcContainer button[data-on-click^="runFhcFix"]') === null
+            && await page.$eval('#btnFixAll', b => b.classList.contains('d-none')) && !/nothing to do/.test(fhc));
+        check('  said in words too, not only by the colour', (await page.$$eval('#fhcContainer .visually-hidden', h => h.map(x => x.textContent))).includes('not checked'));
+        if (shots) await page.locator('#fhcContainer').screenshot({ path: path.join(shots, 'fail2ban-unmeasured.png') });
+        f2bUnmeasured = false;
         await page.waitForTimeout(500);
     } },
     { path: '/firewall', prepare: async page => {

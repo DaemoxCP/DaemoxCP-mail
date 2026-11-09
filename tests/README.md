@@ -171,6 +171,13 @@ the ten read-only checks one after the other, each with its verdict, what needs 
 first, its state in words and at most one button, what is fine closed below; "Open the details" brings its card into
 view. Read only.
 
+`restart-lock-browser-test.js` schedules a restart on the test VM with a stand-in (reperto 200): a program called
+`shutdown` that only sleeps, compiled with cc and started as `shutdown -r +7`, so nothing can restart the VM. On the
+real panel: the strip with the time and "only reads", a button of the page that does nothing and says why; 409 on a
+route of the web part, on one of the root and on one that asks for a recent confirmation (without asking for it
+first); reads that pass; "Cancel the restart" (with the session's fresh confirmation from `signed-jobs-setup.sh
+confirm`) ends the stand-in, and the same change is no longer refused. The stand-in is ended by its exact PID anyway.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the
@@ -356,6 +363,12 @@ the panel restarted to close it; no way back; the port held by root instead of m
 CHECK); the new java does not start and the way back goes in. Plus the service detection (rc script
 and pidfile). FreeBSD only (`stat -f`): on the VM. The same flow from the browser, on the real VM
 panel, is in reperto 195.
+
+**RestartLockTest** — the rules behind "no change while a restart is scheduled" (`RestartLock`, reperto 200): which
+requests change something (`Access.changes`: a GET never; a POST unless its action only reads or its permission only
+views; the DKIM reads), what stays possible (cancelling, restarting now, the state, nothing else), the time of the
+restart from ps ("+N" minutes and "now"; any other form unknown), the time the panel records and that cancelling
+removes it. Pure, on the VM.
 
 **JobJournalTest** — the jobs' log on disk (`JobJournal`, reperto 196): one file per job in
 `/var/db/mailpanel/jobs` (here a temporary folder), that survives a restart of the panel or of the server and is
@@ -734,7 +747,9 @@ stop it), the restart window (what stops, the chosen delay, the time, cancelling
 up instead of failing, 44 px touch buttons at 375 px, and no browser dialog at all. Diagnostics, "Check everything"
 (reperto 199): one button, every check run, what needs a look first with one button each (the failed job's log, the
 patches on Updates), what is fine closed below with how many, and the compatibility verdict saying what and whose,
-component by component, with the card's own rules.
+component by component, with the card's own rules. A restart scheduled (reperto 200): the strip with the time and
+"only reads", a button of the page that does nothing and says why (once), a refused change (409) that makes the strip
+read again, cancelling that unlocks the page; with a job running, the restart window says which and has no button.
 
 **panel-dialogs-browser-test.js** — on the real panel of the test VM (reperto 198): every page of the menu loads with
 no page error and no browser dialog; on Domains and Mailboxes "Delete" opens the panel's window with the red button,
@@ -1006,7 +1021,9 @@ aria-label and placeholder, has no Italian words left. For the DNS page a domain
 check, the time diagnostics and the autodns, autoconfig and MTA-STS tabs. Every API the page calls
 must have a simulated reply: an unknown call still gets `{ success: true }`, but the page fails. A
 bare reply hides the fields the page reads, and the error that follows looks like the page's fault
-(Settings and `GET /api/ssh-keys`, red from #116 until it was added; reperto 194).
+(Settings and `GET /api/ssh-keys`, red from #116 until it was added; reperto 194). On the Security page the Fail2ban
+checks answer a second time with a jail that could not be read (reperto 200): the reason and what to do, no "if you
+do not fix it", no fix and no "fix all", "Not everything could be checked" on top, and "not checked" in words.
 
 **pkg-simulation-test.sh** — the simulation on a COPY of pkg's database, against a fake pkg that
 keeps the "locks" as files in `$FAKE_DB/locked`. It shows that the unlock happens in the copy and

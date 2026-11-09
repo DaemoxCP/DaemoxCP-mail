@@ -61,6 +61,7 @@ function panelRebootRefresh() {
     if (!box) return Promise.resolve(null);
     return panelRebootApi('reboot_state').then(function (r) {
         panelReboot.state = r;
+        panelRestartLock(!!(r && r.success && r.scheduled));
         document.dispatchEvent(new CustomEvent('panel:reboot', { detail: r }));
         if (!r || !r.success || (r.state === 'none' && !r.scheduled)) {
             box.hidden = true;
@@ -72,7 +73,8 @@ function panelRebootRefresh() {
         alert.setAttribute('role', 'status');
         var icon = panelRebootEl('i', 'fas fa-rotate-right');
         icon.setAttribute('aria-hidden', 'true');
-        var text = panelRebootEl('span', 'flex-grow-1', r.scheduled ? t('rb.scheduled') : panelRebootWhy(r));
+        var text = panelRebootEl('span', 'flex-grow-1', r.scheduled
+            ? (r.at ? t('rb.lockedAt', { time: panelRebootTime(r.at) }) : t('rb.locked')) : panelRebootWhy(r));
         alert.append(icon, text);
         if (box.getAttribute('data-can-reboot') === 'true') {
             alert.append(r.scheduled
@@ -86,6 +88,37 @@ function panelRebootRefresh() {
         return r;
     });
 }
+
+// L'ora del riavvio nel fuso di chi guarda (r13: si converte solo per mostrarla).
+function panelRebootTime(ms) {
+    return new Intl.DateTimeFormat(window.I18N_LANG || undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
+        .format(new Date(ms));
+}
+
+// Col riavvio programmato il pannello e' in sola lettura (RestartLock sul server, che rifiuta comunque): i
+// pulsanti della pagina si vedono spenti e non fanno niente, e chi ne preme uno legge perche' e cosa puo' fare.
+// Restano la striscia del riavvio, le sue finestre, il menu, le schede e le parti da aprire e chiudere: si blocca
+// solo il contenuto della pagina (#main).
+function panelRestartLock(on) {
+    document.body.classList.toggle('panel-restart-locked', on);
+}
+
+function panelRestartBlocked(e) {
+    if (!document.body.classList.contains('panel-restart-locked')) return;
+    var el = e.type === 'submit' ? e.target
+        : e.target.closest && e.target.closest('button, input[type="submit"], input[type="button"], input[type="checkbox"], input[type="radio"], [data-on-click]');
+    if (!el || !el.closest('#main')) return;
+    if (el.closest('#panelRebootBanner, .modal, .panel-notices, [data-bs-toggle], [data-bs-dismiss], summary, .btn-close')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (!panelReboot.notice || !panelReboot.notice.isConnected) {
+        panelSay('warning', t('rb.lockedClick'));
+        var all = document.querySelectorAll('#panelNotices .alert');
+        panelReboot.notice = all.length ? all[all.length - 1] : null;
+    }
+}
+document.addEventListener('click', panelRestartBlocked, true);
+document.addEventListener('submit', panelRestartBlocked, true);
 
 // La finestra: perche', cosa si ferma, quando; poi il conto alla rovescia e il ritorno del server.
 function panelRebootOpen() {
@@ -132,9 +165,7 @@ function panelRebootGo() {
         panelReboot.at = Date.now() + minutes * 60000;
         panelReboot.sawDown = false;
         window.panelRebootPending = true;
-        var time = new Intl.DateTimeFormat(window.I18N_LANG || undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
-            .format(new Date(panelReboot.at));
-        body.replaceChildren(panelRebootEl('p', 'fw-semibold', t('rb.at', { time: time })),
+        body.replaceChildren(panelRebootEl('p', 'fw-semibold', t('rb.at', { time: panelRebootTime(panelReboot.at) })),
             panelRebootButton('btn btn-outline-secondary touch-target', 'fa-ban', t('rb.cancel'), 'panelRebootCancel()'));
         go.hidden = true;
         document.getElementById('panelRebootWhen').hidden = true;

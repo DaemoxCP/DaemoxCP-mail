@@ -2066,6 +2066,24 @@ public final class UpdateManager {
 
     // ===================== lavori in corso =====================
 
+    /**
+     * Il lavoro che sta girando adesso, a parole, o null: il turno dei pacchetti (PackageQueue) o un lavoro del
+     * pannello che non ha ancora scritto la sua fine. Per il riavvio, che non si programma sopra un lavoro a meta'.
+     */
+    public static String runningWork() {
+        String holder = PackageQueue.holder();
+        if (holder != null) return holder;
+        // Finche' la fine non e' scritta il lavoro gira, anche con l'esito gia' messo (visibleStatus). Uno fermo da
+        // piu' di sei ore non e' un lavoro, e' un difetto: non deve impedire per sempre il riavvio, che spesso e' la cura.
+        long now = System.currentTimeMillis();
+        for (Job j : JOBS.values()) {
+            String v = j.visibleStatus();
+            if (("running".equals(v) || "pending".equals(v)) && now - j.startedAt < 6 * 3_600_000L)
+                return j.type + " (" + j.id + ")";
+        }
+        return null;
+    }
+
     /** Un'operazione lunga che il pannello segue mentre avviene. */
     public static final class Job {
         public final String id;
@@ -9762,8 +9780,11 @@ public final class UpdateManager {
             LOGGER.log(Level.FINE, "os-patch state unreadable", e);
         }
         JSONObject r = OsPatch.rebootState(installedKernel, runningKernel, installedAt, boot, to);
-        String pid = sh("pgrep -x shutdown 2>/dev/null | head -1", 10).trim();
-        r.put("scheduled", pid.matches("[0-9]{1,7}"));
+        RestartLock.forget();
+        RestartLock.State lock = RestartLock.current();
+        r.put("scheduled", lock.scheduled());
+        if (lock.at() > 0) r.put("at", lock.at());
+        if (!lock.known()) r.put("scheduledUnknown", true);
         return r;
     }
 
@@ -9881,6 +9902,7 @@ public final class UpdateManager {
             // La prova che conta: il processo e' davvero sparito?
             String still = sh("pgrep -x shutdown 2>/dev/null | head -1", 20).trim();
             boolean via = still.isEmpty();
+            if (via) RestartLock.cleared(); else RestartLock.forget();
             return new JSONObject().put("success", via).put("existedBefore", true)
                     .put("pid", pid).put("command", line)
                     .put("note", via
@@ -9923,6 +9945,15 @@ public final class UpdateManager {
             }
             r.put("services", services);
             r.put("effect", I18n.tr("server.um.restartServer.2", java.util.Map.of("length", String.valueOf(services.length()))));
+
+            // Un lavoro in corso il riavvio lo interromperebbe a meta' (un pkg che sostituisce le librerie, un file
+            // riscritto senza il reload): finche' c'e', il riavvio non si programma. Lo si dice gia' nella finestra,
+            // prima del pulsante.
+            String busy = runningWork();
+            if (busy != null) {
+                return r.put("success", false).put("busy", busy)
+                        .put("error", I18n.tr("server.restartLock.busy", java.util.Map.of("what", busy)));
+            }
 
             String pending = sh("ps -axo command | grep '^shutdown ' | head -1", 20).trim();
             r.put("gaScheduled", pending);
@@ -9968,6 +9999,7 @@ public final class UpdateManager {
                             + "  " + (output.isEmpty() ? I18n.tr("server.um.x.shutdownSilent")
                                              : I18n.tr("server.um.x.shutdownWrote", java.util.Map.of("u", String.valueOf(output)))));
             }
+            RestartLock.record(pidS, System.currentTimeMillis() + minutes * 60_000L);
             return r.put("success", true).put("executed", true).put("pid", pidS)
                     .put("output", output)
                     .put("note", minutes == 1

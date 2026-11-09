@@ -20,6 +20,9 @@
 //  5. The restart window: what stops, the chosen delay, the time, cancelling; Escape closes it.
 //  6. Reads queue up: two "System state" calls at once both answer.
 //  7. At 375 px: no horizontal scrolling, 44 px buttons.
+//  10. A restart scheduled (reperto 200): the strip says the time and that the panel only reads; a button of the page
+//      does nothing and says why (once); a change the server refuses (409) makes the strip read again; cancelling
+//      unlocks the page. With a job running, the restart window says which and has no restart button.
 //
 // Usage (from the project root, with the pages of PageGenerator in $D, see csp-browser-test.js):
 //   NODE_PATH=$(npm root -g) node tests/update-center-browser-test.js $D [screenshot-folder]
@@ -92,8 +95,12 @@ function replies(o, st) {
                 { name: 'postfix-mysql', role: 'SMTP', installed: '3.11.7', available: '', update: false, locked: true, stack: true }],
             others: [{ name: 'libX11', installed: '1.8.12,1', available: '1.8.14,1' }, { name: 'brotli', installed: '1.1.0,1', available: '1.2.1,1' }] },
         branch_status: { success: true, branch: 'quarterly', explanation: 'Quarterly.', changeable: true, destination: ['latest'], panelOwnedFile: false, repository: [] },
-        reboot_state: { success: true, state: o.reboot || 'needed', installedKernel: '15.1-RELEASE-p5', runningKernel: '15.1-RELEASE', scheduled: !!o.scheduled },
-        reboot_preview: { success: true, services: ['postfix', 'dovecot', 'mysql-server'], minutes: 1, autoStart: { active: true } },
+        reboot_state: Object.assign({ success: true, state: o.reboot || 'needed', installedKernel: '15.1-RELEASE-p5', runningKernel: '15.1-RELEASE',
+            scheduled: !!o.scheduled && !st.cancelled }, o.rebootAt && !st.cancelled ? { at: o.rebootAt } : {}),
+        reboot_preview: o.busy
+            ? { success: false, busy: 'Package update (dovecot), started 2 minutes ago',
+                error: 'Still running: Package update (dovecot), started 2 minutes ago. A restart now would stop it halfway.' }
+            : { success: true, services: ['postfix', 'dovecot', 'mysql-server'], minutes: 1, autoStart: { active: true } },
         reboot_now: { success: true, executed: true, pid: '4242' },
         reboot_cancel: { success: true, existedBefore: true },
         updates_status: { success: true, plan: PLAN, signature: '0123456789abcdef', vulnerable: [], lockedUpdates: [] },
@@ -136,8 +143,13 @@ async function open(ctx, name, lang, o = {}) {
             if (body.action === 'jump_continue') st.phase = 'finished';
             if (body.action === 'jump_cancel') st.phase = '';
             if (body.action === 'roundcube_update') st.rcDone = true;
+            if (body.action === 'reboot_cancel') st.cancelled = true;
             return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(r) });
         }
+        // With a restart scheduled the server refuses a change (RestartLock): 409 and the header the pages read.
+        if (p === '/api/aliases' && req.method() === 'POST' && o.scheduled && !st.cancelled)
+            return route.fulfill({ status: 409, contentType: 'application/json', headers: { 'X-Panel-Restart': 'scheduled' },
+                body: JSON.stringify({ success: false, restart_scheduled: true, error: 'A server restart is scheduled.' }) });
         if (p.startsWith('/api/')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":false,"error":"mock"}' });
         const f = path.join(pages, name + (lang === 'it' ? '' : '.' + lang) + '.html');
         const html = fs.readFileSync(f, 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-test').replace(/\{\{THEME\}\}/g, 'light')
@@ -415,6 +427,48 @@ const allErrors = [], allDialogs = [];
     await dg.page.waitForFunction(() => /=== end: error ===/.test(document.getElementById('jr-text').textContent), null, { timeout: 10000 });
     check('the failed job: its log, from the operation logs', dg.calls.some(c => c.action === 'journal_read' && c.name === '20261109-000000-os-patch__osp-1.log'));
     await dg.page.close();
+
+    console.log('\n== 10. A restart scheduled: the panel only reads (reperto 200) ==');
+    const lk = await open(ctx, 'updates', 'en', { scheduled: true, rebootAt: Date.now() + 7 * 60000, noPatches: true });
+    allErrors.push(lk.errors); allDialogs.push(lk.dialogs);
+    await centerReady(lk.page);
+    await lk.page.waitForFunction(() => document.body.classList.contains('panel-restart-locked'), null, { timeout: 10000 });
+    const strip = await lk.page.innerText('#panelRebootBanner');
+    check('the strip: the time, the panel only reads, the cancel button', /restarts at \d\d:\d\d/.test(strip) && /only reads/.test(strip)
+        && await lk.page.$('#panelRebootBanner button[data-on-click="panelRebootCancel()"]') !== null);
+    if (shots) await lk.page.locator('#panelRebootBanner').screenshot({ path: path.join(shots, 'restart-read-only.png') });
+    const pageButton = lk.page.locator('#update-center button[data-on-click]:not([data-bs-toggle])').first();
+    const before = lk.calls.length;
+    await pageButton.click();
+    await lk.page.waitForSelector('#panelNotices .alert-warning', { timeout: 5000 });
+    check('a button of the page does nothing, and says why', lk.calls.length === before
+        && /Not now: a server restart is scheduled/.test(await lk.page.innerText('#panelNotices')));
+    await pageButton.click();
+    check('  pressed again: still one notice', (await lk.page.$$('#panelNotices .alert-warning')).length === 1 && lk.calls.length === before);
+    check('  the button looks off', await pageButton.evaluate(b => Number(getComputedStyle(b).opacity) < 0.7));
+    const reads = () => lk.calls.filter(c => c.action === 'reboot_state').length;
+    const r0 = reads();
+    const refused = await lk.page.evaluate(() => fetch('/api/aliases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(r => r.status));
+    await lk.page.waitForTimeout(800);
+    check('a change the server refuses (409): the strip reads its state again', refused === 409 && reads() > r0);
+    await lk.page.click('#panelRebootBanner button[data-on-click="panelRebootCancel()"]');
+    await lk.page.waitForFunction(() => !document.body.classList.contains('panel-restart-locked'), null, { timeout: 10000 });
+    check('cancelled: reboot_cancel, and the page acts again', lk.calls.some(c => c.action === 'reboot_cancel')
+        && !/only reads/.test(await lk.page.innerText('#panelRebootBanner')));
+    const after = lk.calls.length;
+    await pageButton.click();
+    await lk.page.waitForTimeout(800);
+    check('  the same button works again', lk.calls.length > after);
+    await lk.page.close();
+    const bz = await open(ctx, 'updates', 'en', { busy: true, noPatches: true });
+    allErrors.push(bz.errors); allDialogs.push(bz.dialogs);
+    await bz.page.waitForSelector('#panelRebootBanner button', { timeout: 10000 });
+    await bz.page.click('#panelRebootBanner button');
+    await bz.page.waitForFunction(() => /Still running/.test(document.getElementById('panelRebootBody').innerText), null, { timeout: 10000 });
+    check('a job running: the restart window says which, and there is no restart button',
+        /Package update \(dovecot\)/.test(await bz.page.innerText('#panelRebootBody')) && await bz.page.$eval('#panelRebootGo', b => b.hidden));
+    await bz.page.close();
 
     console.log('\n== 7. At 375 px ==');
     const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, locale: 'en-GB' });
