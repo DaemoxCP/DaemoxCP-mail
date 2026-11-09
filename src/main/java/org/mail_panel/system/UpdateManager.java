@@ -2090,6 +2090,22 @@ public final class UpdateManager {
         return null;
     }
 
+    /**
+     * Il lavoro sui pacchetti in corso adesso, per «Aggiorna il server» (reperto 206): chi tiene il turno, da quanto, e
+     * il suo id se e' un lavoro che la pagina puo' seguire. Il committente, rifiutato due volte mentre girava una ricerca:
+     * «non fa vedere cosa sta facendo né niente». Il turno e' quello di questo processo (PackageQueue): i lavori del
+     * pannello, chiunque li abbia avviati, da questa pagina, da un'altra o da un'altra scheda.
+     */
+    public static JSONObject packageTurn() {
+        JSONObject r = new JSONObject().put("success", true);
+        String who = PackageQueue.holder();
+        if (who == null) return r.put("running", false);
+        r.put("running", true).put("who", who);
+        String id = PackageQueue.holderId();
+        if (id != null && JOBS.containsKey(id)) r.put("jobId", id);
+        return r;
+    }
+
     /** Un'operazione lunga che il pannello segue mentre avviene. */
     public static final class Job {
         public final String id;
@@ -2102,13 +2118,26 @@ public final class UpdateManager {
         public final long startedAt = System.currentTimeMillis();
         public volatile long finishedAt;
         private final StringBuilder log = new StringBuilder();
-        /** Il registro su disco di questo lavoro (JobJournal), o null se non si e' potuto aprire. */
-        private final java.nio.file.Path journal;
+        /**
+         * Il registro su disco di questo lavoro (JobJournal), o null se non si e' potuto aprire. Si apre alla prima riga,
+         * non quando il lavoro nasce: un lavoro rifiutato perche' il turno e' di un altro non scrive niente, e prima
+         * lasciava un registro con l'inizio e senza la fine, che la Diagnostica contava fra quelli «finiti senza una
+         * fine». Sul server vero, il 09/11/2026, due «Aggiorna i pacchetti» premuti durante una ricerca (reperto 206).
+         */
+        private java.nio.file.Path journal;
+        private boolean journalOpened;
 
         Job(String id, String type) {
             this.id = id;
             this.type = type;
-            this.journal = JobJournal.open(id, type, startedAt);
+        }
+
+        private java.nio.file.Path journal() {
+            if (!journalOpened) {
+                journalOpened = true;
+                journal = JobJournal.open(id, type, startedAt);
+            }
+            return journal;
         }
 
         public synchronized void write(String line) {
@@ -2118,7 +2147,7 @@ public final class UpdateManager {
             // Un pkg upgrade di cento pacchetti produce migliaia di righe: senza un tetto il
             // job terrebbe in memoria tutto l'output e la pagina diventerebbe illeggibile.
             if (log.length() > 200_000) log.delete(0, log.length() - 150_000);
-            JobJournal.append(journal, line);
+            JobJournal.append(journal(), line);
         }
 
         public void advance(int s, int t) { this.step = s; this.total = t; }
@@ -2130,7 +2159,7 @@ public final class UpdateManager {
         public synchronized void finish() {
             if (finishedAt != 0) return;
             finishedAt = System.currentTimeMillis();
-            JobJournal.end(journal, status, errorMessage, outcome, (finishedAt - startedAt) / 1000);
+            JobJournal.end(journal(), status, errorMessage, outcome, (finishedAt - startedAt) / 1000);
         }
 
         /** Scrive la fine, se il lavoro non l'ha gia' scritta da se': vedi withEndMarked. */

@@ -24,6 +24,9 @@
 //  10. A restart scheduled (reperto 200): the strip says the time and that the panel only reads; a button of the page
 //      does nothing and says why (once); a change the server refuses (409) makes the strip read again; cancelling
 //      unlocks the page. With a job running, the restart window says which and has no restart button.
+//  11. A job in progress started elsewhere (reperto 206): the card says what and since when, with its log closed below;
+//      the buttons of the steps and "Check for updates" wait, saying why; when it ends the line goes, the buttons come back
+//      and the card reads itself again.
 //
 // Usage (from the project root, with the pages of PageGenerator in $D, see csp-browser-test.js):
 //   NODE_PATH=$(npm root -g) node tests/update-center-browser-test.js $D [screenshot-folder]
@@ -109,6 +112,9 @@ function replies(o, st) {
         updates_status: { success: true, plan: PLAN, signature: '0123456789abcdef', vulnerable: [], lockedUpdates: [] },
         updates_apply: { success: true, jobId: 'upd-1' },
         updates_search: { success: true, jobId: 'srch-1' },
+        // The job in progress (reperto 206): with o.turn a search holds the turn for the first two reads, then ends.
+        package_turn: o.turn && st.turnCalls <= 2 ? { success: true, running: true, who: 'check for updates, just started', jobId: 'srch-9' }
+            : { success: true, running: false },
         os_patch_install: { success: true, jobId: 'osp-1' },
         job_status: { success: true, job: { status: 'completed', consoleLog: 'done', elapsedSeconds: 3,
             result: st.rcDone ? 'Roundcube 1.7.0 is in place and answers.' : 'Lists updated.' } },
@@ -140,6 +146,7 @@ async function open(ctx, name, lang, o = {}) {
             const body = JSON.parse(req.postData() || '{}');
             calls.push(body);
             if (o.slow && body.action === 'os_status') await new Promise(r => setTimeout(r, 700));
+            if (body.action === 'package_turn') st.turnCalls = (st.turnCalls || 0) + 1;
             const r = replies(o, st)[body.action] || { success: false, error: 'mock' };
             if (body.action === 'os_patch_install') st.patched = true;
             if (body.action === 'os_upgrade_prepare') st.phase = 'prepared';
@@ -488,6 +495,26 @@ const allErrors = [], allDialogs = [];
     check('a job running: the restart window says which, and there is no restart button',
         /Package update \(dovecot\)/.test(await bz.page.innerText('#panelRebootBody')) && await bz.page.$eval('#panelRebootGo', b => b.hidden));
     await bz.page.close();
+
+    console.log('\n== 11. A job in progress, started elsewhere (reperto 206) ==');
+    const busy = await open(ctx, 'updates', 'en', { turn: true });
+    allErrors.push(busy.errors); allDialogs.push(busy.dialogs);
+    await centerReady(busy.page);
+    await busy.page.waitForSelector('#ucRunning:not([hidden])', { timeout: 10000 });
+    check('the card says what is running and since when', /In progress: check for updates, just started/.test(await busy.page.innerText('#ucRunning')));
+    check('  with what it is doing, closed below', await busy.page.$eval('#ucRunningLogBox', d => !d.hidden && !d.open)
+        && /done/.test(await busy.page.textContent('#ucRunningLog')));
+    check('  and the steps wait: every button of the rows and "Check for updates" off, saying why',
+        await busy.page.$$eval('#ucList .uc-head button, #ucSearchButton', b => b.length > 1 && b.every(x => x.disabled && x.title === 'After the job in progress')));
+    if (shots) await busy.page.locator('#update-center').screenshot({ path: path.join(shots, 'update-center-running.png') });
+    const readsBefore = busy.calls.filter(c => c.action === 'packages_overview').length;
+    await busy.page.waitForSelector('#ucRunning', { state: 'hidden', timeout: 15000 }).catch(() => {});
+    for (let i = 0; i < 20 && busy.calls.filter(c => c.action === 'packages_overview').length <= readsBefore; i++) await busy.page.waitForTimeout(250);
+    await busy.page.waitForTimeout(500);
+    check('when it ends: the line goes, the buttons are back', await busy.page.$eval('#ucRunning', b => b.hidden)
+        && await busy.page.$$eval('#ucList .uc-head button, #ucSearchButton', b => b.every(x => !x.disabled && !x.title)));
+    check('  and the card reads itself again', busy.calls.filter(c => c.action === 'packages_overview').length > readsBefore);
+    await busy.page.close();
 
     console.log('\n== 7. At 375 px ==');
     const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, locale: 'en-GB' });

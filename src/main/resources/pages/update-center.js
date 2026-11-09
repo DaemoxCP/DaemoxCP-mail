@@ -4,7 +4,7 @@
         // pulsanti), che si ridisegna quando arrivano i dati, e il suo pannello sotto, che resta dov'e': il pulsante lo
         // apre sul posto, senza mandare a un'altra scheda. Le righe di Java, Roundcube, MySQL e Python compaiono solo
         // quando il server dice che servono (packages_overview, «procedures»). I lavori sono quelli di sempre.
-        const uc = { os: null, pk: null, reboot: null, targets: null, jump: null, plainBlocked: false };
+        const uc = { os: null, pk: null, reboot: null, targets: null, jump: null, plainBlocked: false, turn: null };
 
         function ucEl(tag, cls, text) {
             const e = document.createElement(tag);
@@ -266,6 +266,56 @@
                         document.getElementById('panelRebootModal') ? [ucButton('btn-warning', 'fa-rotate-right', t('rb.open'), 'panelRebootOpen()')] : []);
                 } else ucHead('reboot', 'ok', t('uc.reboot'), rb.scheduled ? t('rb.scheduled') : t('uc.rebootNo'));
             }
+            ucWaitForTurn();
+        }
+
+        // Il lavoro sui pacchetti in corso (reperto 206). Il committente, rifiutato due volte mentre girava una ricerca degli
+        // aggiornamenti: «non fa vedere cosa sta facendo né niente». Adesso la scheda chiede
+        // al server chi tiene il turno, all'apertura e ogni 15 secondi (ogni 3 mentre gira): lo dice in cima, con quello
+        // che sta facendo, e intanto i pulsanti dei passi e «Cerca aggiornamenti» aspettano. Quando finisce, la scheda si
+        // rilegge e dice il passo dopo. Vale per ogni lavoro del pannello, avviato da qui, da un'altra pagina o scheda.
+        let ucTurnTimer = null;
+        async function ucTurn() {
+            clearTimeout(ucTurnTimer);
+            let r = null;
+            try { r = await updApi('package_turn'); } catch (e) { r = null; }
+            const was = !!(uc.turn && uc.turn.running);
+            uc.turn = r && r.success ? r : null;
+            const now = !!(uc.turn && uc.turn.running);
+            await ucRunningShow();
+            ucWaitForTurn();
+            if (was && !now) ucLoad(true);
+            ucTurnTimer = setTimeout(ucTurn, now ? 3000 : 15000);
+        }
+
+        async function ucRunningShow() {
+            const box = document.getElementById('ucRunning');
+            if (!box) return;
+            const turn = uc.turn;
+            if (!turn || !turn.running) { box.hidden = true; return; }
+            document.getElementById('ucRunningText').textContent = t('uc.running', { who: turn.who || '' });
+            box.hidden = false;
+            const logBox = document.getElementById('ucRunningLogBox');
+            if (!turn.jobId) { logBox.hidden = true; return; }
+            const s = await updApi('job_status', { jobId: turn.jobId });
+            if (!(s && s.success && s.job)) return;
+            const pre = document.getElementById('ucRunningLog');
+            pre.textContent = s.job.consoleLog || '';
+            pre.scrollTop = pre.scrollHeight;
+            logBox.hidden = false;
+        }
+
+        // I pulsanti dei passi e «Cerca aggiornamenti» aspettano il lavoro in corso, e lo dicono.
+        function ucWaitForTurn() {
+            const busy = !!(uc.turn && uc.turn.running);
+            const buttons = [...document.querySelectorAll('#ucList .uc-head button')];
+            const search = document.getElementById('ucSearchButton');
+            if (search) buttons.push(search);
+            buttons.forEach(b => {
+                b.disabled = busy;
+                if (busy) { b.title = t('uc.runningWait'); b.setAttribute('aria-describedby', 'ucRunningText'); }
+                else { b.removeAttribute('title'); b.removeAttribute('aria-describedby'); }
+            });
         }
 
         // Cerca: scarica cataloghi, vulnerabilita' e patch (non installa niente), poi rilegge tutto.
@@ -277,6 +327,7 @@
             osLogBox('uc-log-box', true);
             pre.textContent = '';
             const r = await updApi('updates_search', { confirm: 'SEARCH' });
+            ucTurn();
             if (!r.success) { state.textContent = r.error || t('common.errorShort'); return; }
             ucFollow(r.jobId, () => { ucLoad(true); });
         }
@@ -342,6 +393,7 @@
             if (!yes) return;
             updUnprotectedSignature = r.signature;
             const a = await updApi('updates_apply', { confirm: 'UPDATE', signature: r.signature });
+            ucTurn();
             if (!a.success) { say('alert-danger', a.error || t('common.errorShort')); return; }
             gdFollow('packages', 'pk-run', 'pk-log-box', 'pk-log', a.jobId, t('up.upgradingKeepOpen'));
         }
@@ -383,6 +435,7 @@
             if (!yes) return;
             const a = await updApi('guided_update_all', { confirm: 'UPDATE',
                 steps: go.map(g => ({ package: g.step.head.name, signature: g.pf.signature })) });
+            ucTurn();
             if (!a.success) { say('alert-danger', a.error || t('common.errorShort')); return; }
             gdFollow('packages', 'pk-run', 'pk-log-box', 'pk-log', a.jobId, t('uc.allRunning'));
         }
@@ -393,4 +446,4 @@
             if (title) { title.focus({ preventScroll: true }); title.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
         }
 
-        document.addEventListener('DOMContentLoaded', () => { ucLoad(); });
+        document.addEventListener('DOMContentLoaded', () => { ucLoad(); if (document.getElementById('ucList')) ucTurn(); });
