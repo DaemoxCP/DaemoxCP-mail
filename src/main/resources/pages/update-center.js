@@ -132,7 +132,8 @@
 
             // 0. «Aggiorna tutto», in cima (reperto 207): l'elenco di cio' che fara', nell'ordine, e un pulsante solo. Se un
             //    pacchetto del server di posta non e' protetto, prima si protegge: il piano degli altri lo cambierebbe.
-            if (!uc.os || !uc.pk) reading('all', t('uc.everythingTitle'));
+            if (uc.turn && uc.turn.java) ucHead('all', 'todo', t('uc.everythingTitle'), t('uc.everythingJavaRunning'));
+            else if (!uc.os || !uc.pk) reading('all', t('uc.everythingTitle'));
             else {
                 const planned = ucPlanned();
                 const unlocked = ((uc.pk || {}).summary || {}).stackUnlocked || 0;
@@ -200,12 +201,15 @@
             // Quello che l'elenco di «Aggiorna tutto» mostra gia' qui non si ripete (reperto 207: due volte gli stessi conti).
             const listed = uc.os && uc.pk && !(sum.stackUnlocked > 0) ? ucPlanned() : [];
             const plainListed = listed.some(p => p.kind === 'plain'), stackListed = listed.some(p => p.kind === 'package');
+            // La Java e Roundcube sono pacchetti anche loro: con un loro passo in elenco (o la Java che si sta aggiornando) la
+            // riga non dice «tutto aggiornato».
+            const anyListed = listed.some(p => p.kind !== 'os') || !!(uc.turn && uc.turn.java);
             if (!uc.pk) reading('packages', t('uc.packages'));
             else if (!pk.success) ucHead('packages', 'error', t('uc.packages'), pk.error || t('common.errorShort'));
             else if (pk.catalogError) ucHead('packages', 'error', t('uc.packages'), t('pkgs.catalogError', { error: pk.catalogError }));
             else {
                 const words = [];
-                if (plainListed || stackListed) words.push(t('uc.pkInAll'));
+                if (anyListed) words.push(t('uc.pkInAll'));
                 if (plain > 0 && !plainListed) words.push(tn('uc.pkPlain', plain));
                 // Piu' pacchetti in un passo solo (una famiglia) non sono «in 1 passi»: hanno la loro frase.
                 if (stack.length && !stackListed) words.push((steps.length === 1 && stack.length > 1 ? t('uc.pkStackFamily', { n: stack.length })
@@ -272,10 +276,14 @@
             clearTimeout(ucTurnTimer);
             let r = null;
             try { r = await updApi('package_turn'); } catch (e) { r = null; }
-            const was = !!(uc.turn && uc.turn.running);
+            const was = !!(uc.turn && uc.turn.running), wasJava = !!(uc.turn && uc.turn.java);
             uc.turn = r && r.success ? r : null;
-            const now = !!(uc.turn && uc.turn.running);
+            const now = !!(uc.turn && uc.turn.running), nowJava = !!(uc.turn && uc.turn.java);
             await ucRunningShow();
+            // La Java del pannello che si aggiorna (reperto 210): la riga di «Aggiorna tutto» lo dice, e la pagina aspetta
+            // che il pannello torni per ricaricarsi, anche se e' stata ricaricata a meta'.
+            if (wasJava !== nowJava) ucRender();
+            if (nowJava) ucAwaitPanel();
             ucWaitForTurn();
             if (was && !now) ucLoad(true);
             ucTurnTimer = setTimeout(ucTurn, now ? 3000 : 15000);
@@ -286,16 +294,45 @@
             if (!box) return;
             const turn = uc.turn;
             if (!turn || !turn.running) { box.hidden = true; return; }
-            document.getElementById('ucRunningText').textContent = t('uc.running', { who: turn.who || '' });
+            document.getElementById('ucRunningText').textContent = turn.java ? t('uc.runningJava') : t('uc.running', { who: turn.who || '' });
             box.hidden = false;
             const logBox = document.getElementById('ucRunningLogBox');
-            if (!turn.jobId) { logBox.hidden = true; return; }
+            // Lo script della Java non e' un lavoro del pannello: il suo registro arriva col turno.
+            if (turn.java) {
+                ucRunningLogShow(turn.log || '');
+                logBox.hidden = false;
+                return;
+            }
+            if (!turn.jobId) { logBox.hidden = true; ucRunningNow(''); return; }
             const s = await updApi('job_status', { jobId: turn.jobId });
             if (!(s && s.success && s.job)) return;
-            const pre = document.getElementById('ucRunningLog');
-            pre.textContent = s.job.consoleLog || '';
-            pre.scrollTop = pre.scrollHeight;
+            ucRunningLogShow(s.job.consoleLog || '');
             logBox.hidden = false;
+        }
+
+        // Il registro sotto la riga «In corso», e sopra il passo di adesso (reperto 210: «non capisco a che punto sia»).
+        function ucRunningLogShow(text) {
+            const pre = document.getElementById('ucRunningLog');
+            pre.textContent = text;
+            pre.scrollTop = pre.scrollHeight;
+            ucRunningNow(text);
+        }
+
+        // Il passo di adesso, dal registro: il passo della catena di «Aggiorna tutto» («=== Step 2 of 3: ... ===») e dentro
+        // il suo l'ultimo «[n/m] ...». Senza l'ora davanti, che il registro del pannello mette a ogni riga.
+        function ucRunningNow(text) {
+            const el = document.getElementById('ucRunningNow');
+            if (!el) return;
+            const lines = String(text).split('\n').map(l => l.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '').replace(/^\d{4}-\d{2}-\d{2}T[\d:]+Z\s*/, '').trim());
+            let chain = '', step = '';
+            lines.forEach(l => {
+                const c = l.match(/^=== (.+ \d+ .+ \d+: .+) ===$/);
+                if (c && /\d+/.test(c[1]) && !/^(end|job)\b/.test(c[1])) { chain = c[1]; step = ''; }
+                if (/^\[\d+\/\d+\] /.test(l)) step = l;
+            });
+            const now = [chain, step].filter(Boolean).join(' — ');
+            el.textContent = now ? t('uc.runningNow', { step: now }) : '';
+            el.hidden = !now;
         }
 
         // I pulsanti dei passi e «Cerca aggiornamenti» aspettano il lavoro in corso, e lo dicono.
@@ -372,7 +409,7 @@
             const rc = rows.find(p => p.name === proc.roundcubePackage);
             if (proc.roundcube && rc) out.push({ kind: 'roundcube', label: t('uc.allRoundcube', { from: rc.installed, to: rc.available }) });
             const jvm = rows.find(p => p.javaFlow);
-            if (proc.java && jvm) out.push({ kind: 'java', label: t('uc.allJava', { from: jvm.installed, to: jvm.available }) });
+            if (proc.java && jvm && !(uc.turn && uc.turn.java)) out.push({ kind: 'java', label: t('uc.allJava', { from: jvm.installed, to: jvm.available }) });
             return out;
         }
 
@@ -473,6 +510,8 @@
         // Con la Java del pannello per ultima, il pannello si ferma e si riaccende: si aspetta che risponda di nuovo e si
         // ricarica la pagina. Solo se e' davvero sparito per un po' (lo script parte alla fine del lavoro).
         function ucAwaitPanel() {
+            if (uc.awaitingPanel) return;
+            uc.awaitingPanel = true;
             let wasDown = false, rounds = 0;
             const tick = async () => {
                 rounds++;

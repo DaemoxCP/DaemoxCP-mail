@@ -124,7 +124,10 @@ function replies(o, st) {
         update_everything: { success: true, jobId: 'all-1' },
         updates_search: { success: true, jobId: 'srch-1' },
         // The job in progress (reperto 206): with o.turn a search holds the turn for the first two reads, then ends.
-        package_turn: o.turn && st.turnCalls <= 2 ? { success: true, running: true, who: 'check for updates, just started', jobId: 'srch-9' }
+        // The update of the panel's Java, outside the panel (reperto 210): the turn says it, with the script's log.
+        package_turn: o.javaTurn ? { success: true, running: true, java: true, who: "the update of the panel's Java",
+                log: '[1/7] Packing the current JVM as a way back...\n[2/7] Downloading the new packages, with the panel still answering...' }
+            : o.turn && st.turnCalls <= 2 ? { success: true, running: true, who: 'check for updates, just started', jobId: 'srch-9' }
             : { success: true, running: false },
         os_patch_install: { success: true, jobId: 'osp-1' },
         job_status: { success: true, job: { status: 'completed', consoleLog: 'done', elapsedSeconds: 3,
@@ -182,6 +185,7 @@ async function open(ctx, name, lang, o = {}) {
         if (p === '/api/aliases' && req.method() === 'POST' && o.scheduled && !st.cancelled)
             return route.fulfill({ status: 409, contentType: 'application/json', headers: { 'X-Panel-Restart': 'scheduled' },
                 body: JSON.stringify({ success: false, restart_scheduled: true, error: 'A server restart is scheduled.' }) });
+        if (p === '/api/panel_info') st.panelInfo = (st.panelInfo || 0) + 1;
         if (p.startsWith('/api/')) return route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":false,"error":"mock"}' });
         const f = path.join(pages, name + (lang === 'it' ? '' : '.' + lang) + '.html');
         const html = fs.readFileSync(f, 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-test').replace(/\{\{THEME\}\}/g, 'light')
@@ -549,6 +553,27 @@ const allErrors = [], allDialogs = [];
         && db.calls.filter(c => c.action === 'updates_search').length === searchesBefore + 1
         && /Lists updated/.test(await db.page.innerText('#ucOutcome')));
     await db.page.close();
+
+    console.log("\n== 13. The panel's Java being updated, the page reloaded meanwhile (reperto 210) ==");
+    // On the real server the page was reloaded while the Java script worked: it said "1 step to do: the Java" and a
+    // warning about a job "that did not finish", and nothing of what was happening.
+    const jv = await open(ctx, 'updates', 'en', { javaTurn: true });
+    allErrors.push(jv.errors); allDialogs.push(jv.dialogs);
+    await centerReady(jv.page);
+    await jv.page.waitForSelector('#ucRunning:not([hidden])', { timeout: 10000 }).catch(() => {});
+    const running = await jv.page.innerText('#ucRunning').catch(() => '');
+    check('the card says the Java is being updated, and what the script is doing', /In progress: the update of the panel's Java/.test(running)
+        && /reloads on the sign-in page/.test(running) && /\[2\/7\] Downloading the new packages/.test(await jv.page.textContent('#ucRunningLog')));
+    check('  where it is, without opening the log: "Now: [2/7] Downloading the new packages..."',
+        (await jv.page.innerText('#ucRunningNow').catch(() => '')).trim() === 'Now: [2/7] Downloading the new packages, with the panel still answering...');
+    await jv.page.waitForFunction(() => /being updated now/.test(document.querySelector('#uc-all .uc-head').innerText), null, { timeout: 10000 }).catch(() => {});
+    const javaTop = await jv.page.innerText('#uc-all .uc-head');
+    check('  Update everything says it too, with nothing to press, and does not offer the Java again', /The panel's Java is being updated now: nothing to press/.test(javaTop)
+        && await jv.page.$('#uc-all .uc-head button[data-on-click="ucEverything()"]') === null && !/25\.0\.4 → 25\.0\.5/.test(javaTop));
+    await jv.page.waitForTimeout(6000);
+    check('  and the page waits for the panel to come back, to reload itself (it asks /api/panel_info)', (jv.st.panelInfo || 0) > 0);
+    if (shots) await jv.page.locator('#update-center').screenshot({ path: path.join(shots, 'update-center-java-running.png') });
+    await jv.page.close();
 
     console.log('\n== 7. At 375 px ==');
     const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, locale: 'en-GB' });

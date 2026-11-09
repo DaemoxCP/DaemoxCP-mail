@@ -130,6 +130,9 @@ public final class PackageQueue {
         }
         if (notWithOpenList && statePresent()) {
             release(id);
+            // L'elenco dell'aggiornamento della Java c'e' per disegno finche' lo script lavora: non e' un lavoro che non
+            // e' finito, e riavviare il pannello sarebbe il consiglio sbagliato (reperto 210).
+            if (jobRecord().optBoolean("expectsRestart")) return I18n.tr("server.turn.javaRunning");
             return I18n.tr("server.turn.openList", java.util.Map.of("file", String.valueOf(list)));
         }
         // Un lavoro vero (non il ripristino delle protezioni) lascia la sua traccia finche' tiene il turno.

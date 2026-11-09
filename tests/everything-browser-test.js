@@ -8,6 +8,8 @@
 //  - with the Java: the Java report says it succeeded, the service sees the panel again (its pidfile is the root
 //    part), the web part runs as mailpanel and holds the port, Java is the new one and protected again.
 // It takes the place of java-update-browser-test.js: the Java row and its "Prepare" are gone, the Java is the last step.
+// With the Java, the page is reloaded while its script works (reperto 210): it must say the Java is being updated, with
+// the script's log, offer nothing, and still reload by itself when the panel comes back.
 //
 // It needs updates waiting on the VM, and it changes it (packages, a boot environment, the panel's restart). The way
 // back is the boot environment the job makes before the first step (packages-before-...-update-everything): activate it
@@ -69,8 +71,8 @@ async function topRow(page) {
         const java = steps.some(s => /The panel's Java/.test(s));
         check('the panel\'s Java, if there, is the last step', !java || /The panel's Java/.test(steps[steps.length - 1]));
         const packagesRow = await page.innerText('#uc-packages .uc-head');
-        check('the Packages row does not count the same updates again', /Their updates are steps of «Update everything», above/.test(packagesRow)
-            && !/packages to update, all together in one plan/.test(packagesRow));
+        check('the Packages row does not count the same updates again, nor says "all up to date"', /Their updates are steps of «Update everything», above/.test(packagesRow)
+            && !/packages to update, all together in one plan/.test(packagesRow) && !/All up to date/.test(packagesRow));
         check('no row of its own for Roundcube or the Java, no button on the FreeBSD row', await page.locator('#uc-roundcube').isHidden()
             && await page.locator('#uc-java').isHidden() && await page.$$eval('#uc-os .uc-head button[data-on-click]', b => b.every(x => /panelRebootOpen|ucRelease/.test(x.dataset.onClick))));
         if (OUT) await page.locator('#update-center').screenshot({ path: OUT + '/everything-1-before.png' });
@@ -116,7 +118,22 @@ async function topRow(page) {
             && /=== end: completed/.test(last) && confirmed > 0 && Number(vm('grep -c "=== Step " /var/db/mailpanel/jobs/' + log)) === confirmed);
 
         if (java) {
-            // The Java script copies the JDK, stops the panel, updates it and starts it again (two or three minutes on the VM).
+            // The Java script copies the JDK, stops the panel, updates it and starts it again (two or three minutes on the
+            // VM, four on the real server). The owner reloaded the page meanwhile and saw "1 step to do: the Java" and a
+            // warning about a job "that did not finish" (reperto 210): reloaded, the page must say what is happening.
+            await page.reload();
+            await page.waitForSelector('#ucRunning:not([hidden])', { timeout: 60000 }).catch(() => {});
+            const during = await page.innerText('#ucRunning').catch(() => '');
+            const allDuring = await page.innerText('#uc-all .uc-head').catch(() => '');
+            console.log('    reloaded during the Java: ' + during.replace(/\s+/g, ' ').slice(0, 300));
+            check('reloaded while the Java script works: "In progress: the update of the panel\'s Java", with what the script is doing',
+                /In progress: the update of the panel's Java/.test(during) && /\[[1-7]\/7\]/.test(await page.textContent('#ucRunningLog').catch(() => '')));
+            check('  and where it is, without opening the log ("Now: [n/7] ...")', /Now: \[[1-7]\/7\] /.test(await page.innerText('#ucRunningNow').catch(() => '')));
+            check('  Update everything says it, offers nothing, and no warning about a job that did not finish',
+                /The panel's Java is being updated now/.test(allDuring) && await page.$('#uc-all .uc-head button[data-on-click="ucEverything()"]') === null
+                && !/did not finish|restart the panel/.test(await page.innerText('#update-center')));
+            if (OUT) await page.locator('#update-center').screenshot({ path: OUT + '/everything-2b-java-running.png' });
+            await page.evaluate(() => { window.__sameLoad = true; });
             const tj = Date.now();
             let state = '';
             for (let i = 0; i < 180 && state !== 'reloaded'; i++) {

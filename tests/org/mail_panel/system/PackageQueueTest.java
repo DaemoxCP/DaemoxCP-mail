@@ -106,6 +106,16 @@ public class PackageQueueTest {
         real("list closed: the update starts", PackageQueue.take("upd", "update") == null);
         PackageQueue.release("upd");
 
+        // The update of the panel's Java (reperto 210): its list is there by design while its script works outside the
+        // panel. On the real server a job asked meanwhile said "a job that did not finish ... restart the panel".
+        real("the Java's list is written", PackageQueue.writeStateForRestart(List.of("openjdk25")) == null);
+        String e3 = PackageQueue.take("all", "update of everything");
+        real("while the Java's script works: another job does not start, and it says to wait for the Java ("
+                + e3 + ")", e3 != null && e3.contains("Java is being updated") && !e3.contains("did not finish") && !e3.contains("restart the panel"));
+        real("  and the turn does not stay taken", PackageQueue.holder() == null);
+        PackageQueue.deleteState();
+        Files.deleteIfExists(PackageQueue.running());
+
         // The file of the lock between processes stays (the lock is what counts, not the file): it is
         // the test folder's, not the one in /var/db/mailpanel.
         real("the turn's lock is the test folder's, not the one in /var/db",
