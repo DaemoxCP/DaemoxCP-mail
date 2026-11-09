@@ -306,52 +306,20 @@ public class SieveGenerator {
     }
 
     /**
-     * Get the path to sievec binary
-     */
-    private String getSievecPath() {
-        String[] paths = {
-            "/usr/local/bin/sievec",
-            "/usr/bin/sievec",
-            "/usr/local/libexec/dovecot/sievec"
-        };
-        for (String path : paths) {
-            if (new java.io.File(path).exists()) {
-                return path;
-            }
-        }
-        return null; // sievec not found
-    }
-
-    /**
-     * Compile a Sieve script using sievec (optional - Dovecot compiles on first use anyway)
+     * Compila lo script e mette il compilato accanto, perche' Dovecot non ricompili a ogni consegna (la cartella e' di
+     * root, e Dovecot non ce lo puo' salvare). sievec gira con l'utente sievec, mai da root (SieveCompiler, reperto
+     * 218). Falso solo se sievec rifiuta lo script; se non si e' potuto compilare (sievec mancante, utente che non si
+     * puo' avere) e' vero, con un avviso: Dovecot compila a ogni consegna, come faceva senza.
      */
     public boolean compileScript(String scriptPath) {
-        String sievecPath = getSievecPath();
-        if (sievecPath == null) {
-            // sievec not found, but that's OK - Dovecot will compile on first use
-            System.out.println("sievec not found, skipping pre-compilation (Dovecot will compile on first use)");
-            return true;
+        org.mail_panel.system.SieveCompiler.Outcome o = org.mail_panel.system.SieveCompiler.compile(Path.of(scriptPath));
+        switch (o.status()) {
+            case COMPILED -> { if (!o.message().isEmpty()) System.err.println("sievec: " + scriptPath + ": " + o.message()); }
+            case REFUSED -> System.err.println("sievec refuses " + scriptPath + ": " + o.message());
+            case NOT_COMPILED -> System.err.println("sievec: " + scriptPath + " not precompiled, Dovecot compiles it at each delivery: "
+                    + o.message());
         }
-
-        try {
-            // TODO: migrate to Shell.run when touched
-            ProcessBuilder pb = new ProcessBuilder(sievecPath, scriptPath);
-            org.mail_panel.util.Shell.applyPath(pb);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-
-            // Read output to prevent blocking
-            String output = new String(p.getInputStream().readAllBytes());
-            int exitCode = p.waitFor();
-
-            if (exitCode != 0) {
-                System.err.println("sievec compilation warning: " + output);
-            }
-            return exitCode == 0;
-        } catch (Exception e) {
-            System.err.println("sievec error (non-fatal): " + e.getMessage());
-            return true; // Return true anyway - Dovecot will compile on first use
-        }
+        return !o.refused();
     }
 
     /**
@@ -368,50 +336,27 @@ public class SieveGenerator {
         }
     }
 
+    /**
+     * Controlla un testo Sieve con sievec, che gira con l'utente sievec e non da root (SieveCompiler, reperto 218): il
+     * testo viene da chi scrive i filtri. Oggi nessuno la chiama. Se sievec manca o non si puo' far girare, il testo
+     * passa: lo controllera' Dovecot alla consegna, come prima.
+     */
     public ValidationResult validateScript(String script) {
-        String sievecPath = getSievecPath();
-        if (sievecPath == null) {
-            // Can't validate without sievec, assume valid
-            return new ValidationResult(true, null);
-        }
-
-        try {
-            // Write to temp file
-            Path tempFile = Files.createTempFile("sieve_validate_", ".sieve");
-            Files.writeString(tempFile, script);
-
-            // Run sievec to validate
-            // TODO: migrate to Shell.run when touched
-            ProcessBuilder pb = new ProcessBuilder(sievecPath, "-d", tempFile.toString());
-            org.mail_panel.util.Shell.applyPath(pb);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-
-            String output = new String(p.getInputStream().readAllBytes());
-            int exitCode = p.waitFor();
-
-            Files.delete(tempFile);
-
-            if (exitCode == 0) {
-                return new ValidationResult(true, null);
-            } else {
-                // Parse error line
-                ValidationResult result = new ValidationResult(false, output.trim());
-                // Try to extract line number from error
-                if (output.contains("line ")) {
-                    try {
-                        int idx = output.indexOf("line ") + 5;
-                        int end = output.indexOf(":", idx);
-                        if (end > idx) {
-                            result.errorLine = Integer.parseInt(output.substring(idx, end));
-                        }
-                    } catch (NumberFormatException ignored) {}
+        org.mail_panel.system.SieveCompiler.Outcome o = org.mail_panel.system.SieveCompiler.validate(script);
+        if (!o.refused()) return new ValidationResult(true, null);
+        String output = o.message();
+        ValidationResult result = new ValidationResult(false, output);
+        // La riga dell'errore: «script: line 2: error: ...»
+        if (output.contains("line ")) {
+            try {
+                int idx = output.indexOf("line ") + 5;
+                int end = output.indexOf(":", idx);
+                if (end > idx) {
+                    result.errorLine = Integer.parseInt(output.substring(idx, end));
                 }
-                return result;
-            }
-        } catch (Exception e) {
-            return new ValidationResult(false, "Validation error: " + e.getMessage());
+            } catch (NumberFormatException ignored) {}
         }
+        return result;
     }
 
     /**
