@@ -296,8 +296,7 @@ const VISITS = [
     // new release (reperto 196), the plan of the packages; and the whole package list. The checks that only read are on
     // Diagnostics.
     { path: '/updates', prepare: async page => {
-        await page.waitForSelector('#uc-branch button[data-on-click="ucBranch()"]');
-        await page.click('#uc-branch button[data-on-click="ucBranch()"]');
+        // The branch has its own card (reperto 205): it reads itself.
         await page.waitForSelector('#branch-body table');
         await page.click('#uc-os button[data-on-click="ucRelease()"]');
         await page.waitForSelector('#os-steps pre');

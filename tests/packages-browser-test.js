@@ -32,8 +32,8 @@ const requests = [];
 let rounds = 0, readings = 0;
 // Locking clamav (or all) protects the only mail server package without protection.
 let clamavLocked = false;
-// nginx updated from its window: the row's next step is the PHP family (reperto 203).
-let nginxDone = false;
+// nginx updated from its window, the PHP family with "Update all" (reperto 205); allJob: the job is the update-all one.
+let nginxDone = false, phpDone = false, allJob = false;
 
 const VULN_NGINX = { verdict: 'fixed-by-upgrade', installedVersion: '1.30.4,3', catalog: '1.30.5_1,3', firstFixed: '1.30.5,3',
     explanation: 'Yes: upgrading to 1.30.5_1,3, which your catalog offers, fixes the problem.',
@@ -45,7 +45,7 @@ const VULN_EXPAT = { verdict: 'upgrade-not-enough', installedVersion: '2.8.1', c
 
 function overview() {
     return { success: true,
-        summary: { updates: nginxDone ? 9 : 10, stackUpdates: nginxDone ? 6 : 7, vulnerable: 2, fixable: 1, locked: clamavLocked ? 7 : 6, stackUnlocked: clamavLocked ? 0 : 1, panelRestart: false },
+        summary: { updates: 10 - (nginxDone ? 1 : 0) - (phpDone ? 3 : 0), stackUpdates: 7 - (nginxDone ? 1 : 0) - (phpDone ? 3 : 0), vulnerable: 2, fixable: 1, locked: clamavLocked ? 7 : 6, stackUnlocked: clamavLocked ? 0 : 1, panelRestart: false },
         packages: [
             { name: 'nginx', installed: nginxDone ? '1.30.5_1,3' : '1.30.4,3', available: nginxDone ? '' : '1.30.5_1,3', update: !nginxDone, locked: true, stack: true, role: 'Webmail web server',
               majorJump: false, canUpdate: true, whyNot: '', vuln: VULN_NGINX },
@@ -58,7 +58,7 @@ function overview() {
             { name: 'clamav', installed: '1.5.4_1,1', available: '', update: false, locked: clamavLocked, stack: true, role: 'Antivirus', canUpdate: false, whyNot: '' },
             { name: 'expat', installed: '2.8.1', available: '2.8.4', update: true, locked: false, stack: false, role: '', canUpdate: true, whyNot: '', vuln: VULN_EXPAT },
             // A family (reperto 203): php84 and its extensions go together, so they are ONE step of the row.
-            ...['php84', 'php84-ctype', 'php84-curl'].map(n => ({ name: n, installed: '8.4.26', available: '8.4.27_2', update: true, locked: true, stack: true,
+            ...['php84', 'php84-ctype', 'php84-curl'].map(n => ({ name: n, installed: phpDone ? '8.4.27_2' : '8.4.26', available: phpDone ? '' : '8.4.27_2', update: !phpDone, locked: true, stack: true,
               role: n === 'php84' ? 'PHP' : 'PHP extension', canUpdate: true, whyNot: '', family: '^php[0-9]+(-.+)?$',
               familyReason: 'PHP and its extensions share the version number' })),
         ],
@@ -91,7 +91,13 @@ async function served(route) {
         case 'packages_lock':
             if (bodyText.lock && (bodyText.package === 'clamav' || bodyText.package === '')) clamavLocked = true;
             return json(route, { success: true, changed: 1, output: '  ' + bodyText.package + ': ' + (bodyText.lock ? 'locked' : 'unlocked') + '\n' });
-        case 'package_preflight': return json(route, { success: true, name: bodyText.package, current: '1.30.4,3', available: '1.30.5_1,3',
+        // The PHP family's checks, for "Update all": its own plan and signature, php-fpm to restart.
+        case 'package_preflight': if (bodyText.package === 'php84') return json(route, { success: true, name: 'php84', current: '8.4.26',
+            available: '8.4.27_2', signature: '1111222233334444', blocked: false, canProceed: true, services: [{ name: 'php_fpm', running: true }],
+            family: ['php84', 'php84-ctype', 'php84-curl'], checks: [{ level: 'ok', label: 'Package installed', detail: 'php84 8.4.26' }],
+            plan: { measured: true, unlockedPackages: ['php84', 'php84-ctype', 'php84-curl'], command: 'pkg upgrade -n -U php84 php84-ctype php84-curl',
+                    changes: [{ type: 'upgrade', name: 'php84', from: '8.4.26', to: '8.4.27_2' }], blockers: [] } });
+            return json(route, { success: true, name: bodyText.package, current: '1.30.4,3', available: '1.30.5_1,3',
             signature: '0123456789abcdef', blocked: false, canProceed: true, cve: ['CVE-2026-90439'],
             services: [{ name: 'nginx', running: true }],
             checks: [{ level: 'ok', label: 'Package installed', detail: 'nginx 1.30.4,3' },
@@ -99,12 +105,17 @@ async function served(route) {
             plan: { measured: true, unlockedPackages: ['nginx'], command: 'pkg upgrade -n -U nginx', onBackup: true,
                      changes: [{ type: 'upgrade', name: 'nginx', from: '1.30.4,3', to: '1.30.5_1,3', reason: '', repo: 'FreeBSD-ports' }], blockers: [] } });
         case 'package_update':
-            rounds = 0;
+            rounds = 0; allJob = false;
             if (bodyText.package === 'nginx') nginxDone = true;
             return json(route, { success: true, jobId: 'guid-1', async: true });
+        case 'guided_update_all':
+            rounds = 0; allJob = true; nginxDone = true; phpDone = true;
+            return json(route, { success: true, jobId: 'guid-all-1', async: true });
         case 'job_status':
             rounds++;
             if (rounds < 2) return json(route, { success: true, job: { status: 'running', percent: 50, consoleLog: '[3/6] Upgrading...\n' } });
+            if (allJob) return json(route, { success: true, job: { status: 'completed', percent: 100, elapsedSeconds: 40, errorMessage: '',
+                result: 'All 2 steps done: nginx, php84.', consoleLog: '=== Step 1 of 2: nginx ===\n=== Step 2 of 2: php84 ===\n=== All 2 steps done: nginx, php84. ===\n' } });
             return json(route, { success: true, job: { status: 'completed', percent: 100, elapsedSeconds: 12, errorMessage: '',
                 consoleLog: '[3/6] Upgrading...\n[6/6] Locking again...\n=== nginx 1.30.5_1,3 in service ===\n' } });
         // The plan of the other packages would remove lmdb: it does not run from here (reperto 36), and the step after
@@ -200,17 +211,53 @@ async function served(route) {
     await page.waitForSelector('#upd-status li');
     real('the plan would remove a package: it does not start, and it says why', (await page.innerText('#pk-run')).includes('would remove or downgrade')
         && !requests.some(r => r.body && r.body.action === 'updates_apply'));
-    await page.waitForSelector('#uc-packages .uc-head button[data-pkg="nginx"]', { timeout: 5000 }).catch(() => {});
+    await page.waitForSelector('#uc-packages .uc-head button[data-on-click="ucUpdateAll()"]', { timeout: 5000 }).catch(() => {});
     row = await page.innerText('#uc-packages .uc-head');
-    real('  the step after is the next mail server package, by name: nginx (1 of 2: nginx, then the PHP family)', row.includes('Update nginx (1 of 2)')
-        && await page.$$eval('#uc-packages .uc-head button', b => b.length === 1));
+    real('  the step after is ONE button for the mail server steps: Update all (2 steps: nginx, the PHP family) (reperto 205)',
+        row.includes('Update all (2 steps)') && await page.$$eval('#uc-packages .uc-head button', b => b.length === 1));
 
     console.log('\n== Vulnerabilities: the header says the verdict ==');
     const lis = await page.$$eval('#upd-status li', l => l.map(x => x.textContent));
     real('expat: "not enough" in the header, not "fixes it"', lis[0].includes('the update is not enough') && !lis[0].includes('the update fixes it'));
     real('locked nginx: "fixes it", the lock apart', lis[1].includes('the update fixes it') && lis[1].includes('locked'));
 
-    console.log('\n== Updating a mail server package: the window ==');
+    console.log('\n== Update all: one confirmation, one job (reperto 205) ==');
+    beforeValue = requests.length;
+    await page.click('#uc-packages .uc-head button[data-on-click="ucUpdateAll()"]');
+    await page.waitForSelector('#panelAskModal.show', { timeout: 15000 });
+    const ask = await page.innerText('#panelAskModal .modal-content');
+    console.log('    ' + ask.replace(/\s+/g, ' ').slice(0, 400));
+    const checked = requests.slice(beforeValue).filter(r => r.body && r.body.action === 'package_preflight').map(r => r.body.package);
+    real('the checks of every step first, as its window does: ' + checked.join(', '), checked.join(',') === 'nginx,php84');
+    real('one confirmation with every step, its versions and the services that restart',
+        ask.includes('nginx: 1.30.4,3 → 1.30.5_1,3 — restarts nginx') && ask.includes('php84 and 2 more of its family: 8.4.26 → 8.4.27_2 — restarts php_fpm'));
+    real('  what happens: one after the other, it stops at the first that does not go well', ask.includes('stops at the first step that does not go well')
+        && ask.includes('Update all 2 steps'));
+    await page.click('#panelAskModal .modal-footer [data-bs-dismiss="modal"]');
+    await page.waitForSelector('#panelAskModal', { state: 'hidden' });
+    real('cancelled: nothing starts', !requests.slice(beforeValue).some(r => r.body && r.body.action === 'guided_update_all'));
+    if (photos) await page.locator('#uc-packages').screenshot({ path: path.join(photos, 'packages-update-all.png') });
+    await page.click('#uc-packages .uc-head button[data-on-click="ucUpdateAll()"]');
+    await page.waitForSelector('#panelAskModal.show', { timeout: 15000 });
+    beforeValue = requests.length;
+    await page.click('#panelAskGo');
+    await page.waitForFunction(() => /All 2 steps done/.test(document.getElementById('pk-run').innerText), null, { timeout: 15000 }).catch(() => {});
+    const all = requests.slice(beforeValue).find(r => r.body && r.body.action === 'guided_update_all');
+    real('ONE request for the job: the keyword, every step with the signature of the plan shown, the CSRF token', all && all.body.confirm === 'UPDATE'
+        && JSON.stringify(all.body.steps) === JSON.stringify([{ package: 'nginx', signature: '0123456789abcdef' }, { package: 'php84', signature: '1111222233334444' }])
+        && all.body.csrf_token === 'csrf-test');
+    real('  no window per package', !requests.slice(beforeValue).some(r => r.body && r.body.action === 'package_update'));
+    real('the outcome under the row: all the steps done', (await page.innerText('#pk-run')).includes('All 2 steps done: nginx, php84.'));
+
+    console.log('\n== One step left: its own window ==');
+    // A new page where only nginx is left (the PHP family done): one step, so its own button and window.
+    nginxDone = false; phpDone = true; allJob = false;
+    await page.goto(BASE + '/updates');
+    await page.waitForSelector('#uc-packages .uc-head button[data-on-click="ucPackages()"]');
+    await page.click('#uc-packages .uc-head button[data-on-click="ucPackages()"]');
+    await page.waitForSelector('#uc-packages .uc-head button[data-pkg="nginx"]', { timeout: 5000 }).catch(() => {});
+    real('one step left: no "Update all", the step by name: nginx (1 of 1)', (await page.innerText('#uc-packages .uc-head')).includes('Update nginx (1 of 1)')
+        && await page.$('#uc-packages .uc-head button[data-on-click="ucUpdateAll()"]') === null);
     await page.click('#uc-packages .uc-head button[data-pkg="nginx"]');
     await page.waitForSelector('#pkUpdConfirm:not([hidden])');
     const finalText = await page.textContent('#pkUpdModal .modal-content');
@@ -234,11 +281,10 @@ async function served(route) {
     if (photos) await page.locator('#pkUpdModal .modal-content').screenshot({ path: path.join(photos, 'packages-window.png') });
     await page.click('#pkUpdModal .btn-close');
     await page.waitForSelector('#pkUpdModal', { state: 'hidden' });
-    await page.waitForSelector('#uc-packages .uc-head button[data-pkg="php84"]', { timeout: 10000 }).catch(() => {});
+    await page.waitForFunction(() => /None can be updated from here/.test(document.querySelector('#uc-packages .uc-head').innerText), null, { timeout: 10000 }).catch(() => {});
     row = await page.innerText('#uc-packages .uc-head');
-    real('after nginx, the step after is the whole PHP family, one window: php84 and 2 more (1 of 1) (reperto 203)',
-        row.includes('Update php84 and 2 more (1 of 1)') && row.includes('4 mail server packages have an update, in 2 steps')
-        && await page.$$eval('#uc-packages .uc-head button', b => b.length === 1 && b[0].dataset.pkg === 'php84'));
+    real('after nginx only dovecot is left, held with its reason, and no button for it', row.includes('None can be updated from here')
+        && row.includes('Dovecot 2.4 rewrites') && await page.$('#uc-packages .uc-head button[data-pkg]') === null);
     // Only one family left: not "in 1 steps", its own sentence. The row drawn again from an overview with PHP alone.
     row = await page.evaluate(() => {
         const php = ['php84', 'php84-ctype', 'php84-curl'].map(n => ({ name: n, installed: '8.4.26', available: '8.4.27_2', update: true,

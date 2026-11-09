@@ -8151,6 +8151,25 @@ public class SSLMailServer {
                     response = UpdateManager.startGuidedUpdate(pk, req.optString("signature", ""));
                     logAudit("GUIDED_UPDATE_STARTED", ip, pk + " -> " + response.optString("jobId", ""));
                 }
+                case "guided_update_all" -> {
+                    // «Aggiorna tutti» (reperto 205): i passi del server di posta, ognuno col nome del suo pacchetto
+                    // principale e l'impronta del piano che la conferma ha mostrato. La conferma e' quella della
+                    // finestra del pannello, che elenca tutti i passi; la parola la manda la pagina, come per il piano
+                    // degli altri pacchetti.
+                    if (!"UPDATE".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
+                        break;
+                    }
+                    java.util.List<String> names = new java.util.ArrayList<>(), signatures = new java.util.ArrayList<>();
+                    JSONArray steps = req.optJSONArray("steps");
+                    for (int i = 0; steps != null && i < steps.length(); i++) {
+                        JSONObject st = steps.optJSONObject(i);
+                        names.add(st == null ? "" : st.optString("package", ""));
+                        signatures.add(st == null ? "" : st.optString("signature", ""));
+                    }
+                    response = UpdateManager.startGuidedUpdateAll(names, signatures);
+                    logAudit("GUIDED_UPDATE_ALL_STARTED", ip, String.join(", ", names) + " -> " + response.optString("jobId", ""));
+                }
                 case "packages_lock" -> {
                     boolean lock = req.optBoolean("lock", true);
                     String only = req.optString("package", "");

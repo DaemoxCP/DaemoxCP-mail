@@ -83,7 +83,9 @@ public final class UpdateManager {
      * e trattini, quindi la regola dev'essere precisa senza essere permissiva.
      */
     public static boolean isValidName(String n) {
-        return n != null && n.matches("[A-Za-z0-9._+-]{1,64}");
+        // Il primo carattere lettera o cifra: il nome finisce nei comandi di pkg e di service, e uno che comincia col
+        // trattino ne diventerebbe un'opzione. Nessun pacchetto ne' servizio di FreeBSD comincia cosi' (reperto 205).
+        return n != null && n.matches("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
     }
 
     /**
@@ -7634,6 +7636,76 @@ public final class UpdateManager {
     }
 
     /**
+     * «Aggiorna tutti»: i passi del server di posta (un pacchetto, o una famiglia col suo principale) in un lavoro solo,
+     * uno dopo l'altro. Il committente, 09/11/2026, davanti a «Update nginx (1 of 4)»: «non è possibile fare un aggiorna
+     * tutto e basta?» (reperto 205). Ogni passo e' l'aggiornamento guidato di sempre, col suo piano firmato (la firma
+     * letta nella conferma, una per passo: se il piano e' cambiato, quel passo si ferma), i suoi controlli e il
+     * riavvio dei suoi servizi. Un turno e una via di ritorno per tutti; al primo passo che non va il lavoro si ferma e
+     * dice quale, e i passi dopo non partono.
+     *
+     * @param names      i pacchetti principali dei passi, nell'ordine
+     * @param signatures l'impronta del piano di ogni passo, come la conferma l'ha mostrata
+     */
+    public static JSONObject startGuidedUpdateAll(java.util.List<String> names, java.util.List<String> signatures) {
+        String bad = updateAllProblem(names, signatures);
+        if (bad != null) return new JSONObject().put("success", false).put("error", bad);
+        String id = "guid-all-" + System.currentTimeMillis();
+        Job j = new Job(id, "guided_update_all");
+        java.util.List<String> n = new ArrayList<>(names), sig = new ArrayList<>(signatures);
+        return startOnTurn(id, j, I18n.tr("server.um.updateAll.job", java.util.Map.of("n", String.valueOf(n.size()))),
+                "guided-update-all", () -> runGuidedUpdateAll(j, n, sig));
+    }
+
+    /** Null se i passi si possono eseguire; altrimenti il perche'. Da 1 a 20, nomi e firme validi, una famiglia sola volta. */
+    static String updateAllProblem(java.util.List<String> names, java.util.List<String> signatures) {
+        if (names == null || signatures == null || names.isEmpty() || names.size() > 20 || names.size() != signatures.size())
+            return I18n.tr("server.um.updateAll.bad");
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (int i = 0; i < names.size(); i++) {
+            String n = names.get(i);
+            if (!isValidName(n) || !validSignature(signatures.get(i))) return I18n.tr("server.um.updateAll.bad");
+            String family = familyOf(n);
+            if (!seen.add(family == null ? n : family)) return I18n.tr("server.um.updateAll.bad");
+        }
+        return null;
+    }
+
+    private static void runGuidedUpdateAll(Job job, java.util.List<String> names, java.util.List<String> signatures) {
+        int total = names.size();
+        try {
+            for (int i = 0; i < total; i++) {
+                String name = names.get(i);
+                job.status = "running";
+                job.errorMessage = "";
+                job.write("");
+                job.write("=== " + I18n.tr("server.um.updateAll.step", java.util.Map.of(
+                        "i", String.valueOf(i + 1), "n", String.valueOf(total), "name", name)) + " ===");
+                guidedUpdateSteps(job, name, signatures.get(i));
+                if (!"completed".equals(job.status)) {
+                    String rest = String.join(", ", names.subList(i + 1, total));
+                    String why = job.errorMessage == null ? "" : job.errorMessage;
+                    job.status = "error";
+                    job.errorMessage = I18n.tr(rest.isEmpty() ? "server.um.updateAll.stoppedLast" : "server.um.updateAll.stopped",
+                            java.util.Map.of("i", String.valueOf(i + 1), "n", String.valueOf(total), "name", name,
+                                    "why", why, "rest", rest));
+                    job.write("");
+                    job.write("=== " + job.errorMessage + " ===");
+                    return;
+                }
+            }
+            job.status = "completed";
+            job.outcome = I18n.tr("server.um.updateAll.done", java.util.Map.of("n", String.valueOf(total), "list", String.join(", ", names)));
+            job.write("");
+            job.write("=== " + job.outcome + " ===");
+        } catch (Exception e) {
+            job.status = "error";
+            job.errorMessage = String.valueOf(e.getMessage());
+        } finally {
+            job.finish();
+        }
+    }
+
+    /**
      * Aggiorna UN pacchetto protetto e rimette in servizio cio' che ne dipende.
      *
      * L'ordine e' quello che ieri, sull'altro server, abbiamo imparato a nostre spese:
@@ -7643,6 +7715,19 @@ public final class UpdateManager {
      * risulta chiusa: il modo peggiore di stare fermi.
      */
     private static void runGuidedUpdate(Job job, String name, String approvedSignature) {
+        try {
+            guidedUpdateSteps(job, name, approvedSignature);
+        } finally {
+            job.finish();
+        }
+    }
+
+    /**
+     * I passi dell'aggiornamento guidato di UN pacchetto (con la sua famiglia), senza chiudere il lavoro: li usa il
+     * lavoro di un pacchetto e quello di «Aggiorna tutti», che ne fa piu' d'uno uno dopo l'altro nello stesso registro
+     * (reperto 205). Alla fine job.status dice com'e' andata: "completed" o "error" col motivo in errorMessage.
+     */
+    private static void guidedUpdateSteps(Job job, String name, String approvedSignature) {
         job.status = "running";
         final int TOT = 6;
         boolean planNotFollowed = false;
@@ -8002,7 +8087,6 @@ public final class UpdateManager {
                     }
                 }
             }
-            job.finish();
         }
     }
 

@@ -100,10 +100,10 @@ async function served(route) {
 
     console.log('\n== The card reads itself ==');
     await page.goto(BASE + '/updates');
-    // The branch is a row of "Update the server" (reperto 193): its panel opens in place, under the row.
-    await page.waitForSelector('#uc-branch button[data-on-click="ucBranch()"]');
-    await page.click('#uc-branch button[data-on-click="ucBranch()"]');
+    // The branch has a card of its own under "Update the server" (reperto 205): it reads itself, nothing to open.
     await page.waitForSelector('#branch-body table');
+    real('the branch is a card of its own, not a row of "Update the server"', await page.$('section#branch.card') !== null
+        && await page.$('#uc-branch') === null && await page.$('#update-center #branch-body') === null);
     const textValue = await page.textContent('#branch-body');
     real('quarterly branch, with the explanation', textValue.includes('Packages come from the quarterly branch') && textValue.includes('Quarterly branch'));
     const lineItems = await page.$$eval('#branch-body tbody tr', tr => tr.map(r => r.cells[0].textContent));
@@ -112,7 +112,7 @@ async function served(route) {
         && await page.evaluate(() => window.injectedRan) === undefined);
     real('out of the box: "no panel file"', textValue.includes('No panel file'));
     real('the button to switch to latest', await page.locator('#branch-body button', { hasText: 'Switch to the latest branch' }).count() === 1);
-    if (photos) await page.locator('#uc-branch').screenshot({ path: path.join(photos, 'branch-card.png') });
+    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-card.png') });
 
     console.log('\n== Preview and confirmation ==');
     await page.click('#branch-body button:has-text("Switch to the latest branch")');
@@ -126,7 +126,7 @@ async function served(route) {
     real('typed differently (Latest): it stays off', await page.isDisabled('#branch-go'));
     await page.fill('#branch-confirm', 'latest');
     real('typed right: it turns on', await page.isEnabled('#branch-go'));
-    if (photos) await page.locator('#uc-branch').screenshot({ path: path.join(photos, 'branch-preview-shot.png') });
+    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-preview-shot.png') });
 
     console.log('\n== The change, followed to its outcome ==');
     await page.click('#branch-go');
@@ -139,7 +139,7 @@ async function served(route) {
     await page.waitForFunction(() => document.getElementById('branch-body').textContent.includes('the latest branch'));
     real('the card reads itself again: now latest, with the panel\'s file', readings === 2
         && (await page.textContent('#branch-body')).includes('The branch is decided by the panel\'s file'));
-    if (photos) await page.locator('#uc-branch').screenshot({ path: path.join(photos, 'branch-after.png') });
+    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-after.png') });
 
     console.log('\n== A change that does not start ==');
     changeSucceeds = false;
@@ -154,13 +154,13 @@ async function served(route) {
     console.log('\n== Dark theme and phone ==');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     await page.waitForTimeout(600);   // the theme change has a transition
-    if (photos) await page.locator('#uc-branch').screenshot({ path: path.join(photos, 'branch-dark.png') });
+    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-dark.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
     await page.waitForTimeout(300);
     const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     real('on the phone the page does not scroll sideways: ' + pageWidth + 'px', pageWidth <= 390);
-    if (photos) await page.locator('#uc-branch').screenshot({ path: path.join(photos, 'branch-phone.png') });
+    if (photos) await page.locator('#branch').screenshot({ path: path.join(photos, 'branch-phone.png') });
 
     real('no error in the page' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
     await browser.close();

@@ -4,7 +4,7 @@
         // pulsanti), che si ridisegna quando arrivano i dati, e il suo pannello sotto, che resta dov'e': il pulsante lo
         // apre sul posto, senza mandare a un'altra scheda. Le righe di Java, Roundcube, MySQL e Python compaiono solo
         // quando il server dice che servono (packages_overview, «procedures»). I lavori sono quelli di sempre.
-        const uc = { os: null, pk: null, branch: null, reboot: null, targets: null, jump: null, plainBlocked: false };
+        const uc = { os: null, pk: null, reboot: null, targets: null, jump: null, plainBlocked: false };
 
         function ucEl(tag, cls, text) {
             const e = document.createElement(tag);
@@ -69,12 +69,6 @@
             detail.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
 
-        function ucToggle(key) {
-            const detail = document.getElementById('uc-' + key + '-detail');
-            if (!detail) return;
-            if (detail.hidden) ucOpen(key); else detail.hidden = true;
-        }
-
         // Le azioni delle righe: aprono il pannello sotto la riga e partono da li'.
         function ucOsInstall() { ucOpen('os'); osShow('patch'); osInstall(); }
         // Aperto il pannello di una riga, il suo pulsante sta li' dentro: la testata si ridisegna senza (reperto 197).
@@ -88,7 +82,6 @@
         function ucMysql() { ucOpen('mysql'); ucRender(); my84Pre(); }
         function ucPython() { ucOpen('python'); ucRender(); pyPre(); }
         function ucPythonLeftovers() { ucOpen('python'); pyLeftovers(); }
-        function ucBranch() { ucToggle('branch'); }
 
         // Legge lo stato di FreeBSD; i pacchetti, il ramo e il riavvio arrivano dalle loro letture (eventi qui sotto):
         // rileggerli qui raddoppiava la lettura piu' pesante della pagina. «Rileggi» le rifa' tutte.
@@ -112,12 +105,31 @@
         }
 
         document.addEventListener('upd:packages', e => { uc.pk = e.detail; ucRender(); });
-        document.addEventListener('upd:branch', e => { uc.branch = e.detail; ucRender(); });
         document.addEventListener('panel:reboot', e => { uc.reboot = e.detail; ucRender(); });
+
+        // I passi dei pacchetti del server di posta. Quelli della stessa famiglia (php84 e le sue estensioni, server e
+        // client di MySQL, Dovecot e i suoi componenti) si aggiornano INSIEME: il server li sblocca e li aggiorna insieme
+        // comunque (UpdateManager, FAMILIES). Sono quindi UN passo, col nome del pacchetto principale. Sul server vero la
+        // riga diceva «1 di 30», e 27 erano PHP (reperto 203). Un passo e' pronto solo se lo sono tutti i suoi pacchetti.
+        function ucSteps(stack) {
+            const steps = [];
+            stack.forEach(p => {
+                const key = p.family || p.name;
+                let s = steps.find(x => x.key === key);
+                if (!s) steps.push(s = { key: key, members: [] });
+                s.members.push(p);
+            });
+            steps.forEach(s => {
+                s.members.sort((a, b) => a.name.length - b.name.length || a.name.localeCompare(b.name));
+                s.head = s.members[0];
+                s.held = s.members.filter(p => !p.canUpdate);
+            });
+            return steps;
+        }
 
         function ucRender() {
             if (!document.getElementById('ucList')) return;
-            const os = uc.os || {}, pk = uc.pk || {}, br = uc.branch || {}, rb = uc.reboot || {};
+            const os = uc.os || {}, pk = uc.pk || {}, rb = uc.reboot || {};
             const proc = pk.procedures || {};
             const rows = pk.packages || [];
             const reading = (key, title) => ucHead(key, 'info', title, t('uc.reading'));
@@ -166,22 +178,7 @@
             const sum = pk.summary || {};
             const stack = rows.filter(p => p.update && p.locked && !own(p));
             const plain = (sum.updates || 0) - rows.filter(p => p.update && p.locked).length;
-            // I pacchetti della stessa famiglia (php84 e le sue estensioni, server e client di MySQL, Dovecot e i suoi
-            // componenti) si aggiornano INSIEME: il server li sblocca e li aggiorna insieme comunque (UpdateManager,
-            // FAMILIES). Sono quindi UN passo, col nome del pacchetto principale. Sul server vero la riga diceva
-            // «1 di 30», e 27 erano PHP (reperto 203). Un passo e' pronto solo se lo sono tutti i suoi pacchetti.
-            const steps = [];
-            stack.forEach(p => {
-                const key = p.family || p.name;
-                let s = steps.find(x => x.key === key);
-                if (!s) steps.push(s = { key: key, members: [] });
-                s.members.push(p);
-            });
-            steps.forEach(s => {
-                s.members.sort((a, b) => a.name.length - b.name.length || a.name.localeCompare(b.name));
-                s.head = s.members[0];
-                s.held = s.members.filter(p => !p.canUpdate);
-            });
+            const steps = ucSteps(stack);
             const ready = steps.filter(s => !s.held.length);
             if (!uc.pk) reading('packages', t('uc.packages'));
             else if (!pk.success) ucHead('packages', 'error', t('uc.packages'), pk.error || t('common.errorShort'));
@@ -217,6 +214,9 @@
                     buttons.push(ucButton('btn-primary', 'fa-lock', t('pkgs.bulk.lockAll'), 'updLockAll(true)'));
                 } else if (!ucOpened('packages') && plain > 0 && !uc.plainBlocked) {
                     buttons.push(ucButton('btn-primary', 'fa-arrow-up', t('uc.packagesGo'), 'ucPackages()'));
+                } else if (ready.length > 1 && (plain <= 0 || uc.plainBlocked)) {
+                    // Due passi o piu': uno solo, «Aggiorna tutti», che li fa uno dopo l'altro (reperto 205).
+                    buttons.push(ucButton('btn-primary', 'fa-arrow-up', tn('uc.updateAll', ready.length), 'ucUpdateAll()'));
                 } else if (ready.length && (plain <= 0 || uc.plainBlocked)) {
                     const s = ready[0], more = s.members.length - 1;
                     const label = more ? t('uc.stackNextFamily', { name: s.head.name, more: more, n: 1, total: ready.length })
@@ -254,14 +254,9 @@
                     [ucButton('btn-outline-primary', 'fa-broom', t('up.leftovers'), 'ucPythonLeftovers()')]);
             } else ucHide('python');
 
-            // 4. Il ramo: la scelta si apre qui sotto
-            if (!uc.branch) reading('branch', t('uc.branch'));
-            else if (br.success) {
-                ucHead('branch', 'info', t('uc.branch'), t('uc.branchNow', { branch: br.branch || '?' }),
-                    [ucButton('btn-outline-secondary', 'fa-code-branch', t('uc.branchGo'), 'ucBranch()')]);
-            } else ucHead('branch', 'error', t('uc.branch'), br.error || t('up.branchUnreadable'));
+            // Il ramo dei pacchetti ha la sua scheda, qui sotto (reperto 205).
 
-            // 5. Il riavvio: la finestra del pannello, la stessa di ogni pagina
+            // 4. Il riavvio: la finestra del pannello, la stessa di ogni pagina
             if (!uc.reboot) reading('reboot', t('uc.reboot'));
             else if (rb.success && rb.state === 'needed' && os.restartNeeded) ucHide('reboot');
             else if (rb.success) {
@@ -349,6 +344,47 @@
             const a = await updApi('updates_apply', { confirm: 'UPDATE', signature: r.signature });
             if (!a.success) { say('alert-danger', a.error || t('common.errorShort')); return; }
             gdFollow('packages', 'pk-run', 'pk-log-box', 'pk-log', a.jobId, t('up.upgradingKeepOpen'));
+        }
+
+        // «Aggiorna tutti» (reperto 205): il committente, davanti a «Update nginx (1 of 4)», «non è possibile fare un
+        // aggiorna tutto e basta?». Prima i controlli di ogni passo, gli stessi della sua finestra; poi UNA conferma che
+        // li mostra tutti, coi servizi che ripartono; poi un lavoro che li fa uno dopo l'altro, ognuno col suo piano
+        // firmato, e si ferma al primo che non va. Un passo che i controlli fermano resta fuori, e la conferma lo dice.
+        async function ucUpdateAll() {
+            ucOpen('packages');
+            ucRender();
+            const box = document.getElementById('pk-run');
+            const say = (cls, text) => { box.innerHTML = '<div class="alert ' + cls + ' py-2 mb-0">' + escHtml(text) + '</div>'; };
+            const pk = uc.pk || {}, proc = pk.procedures || {};
+            const own = p => p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);
+            const ready = ucSteps((pk.packages || []).filter(p => p.update && p.locked && !own(p))).filter(s => !s.held.length);
+            const go = [], out = [];
+            for (let i = 0; i < ready.length; i++) {
+                const h = ready[i].head;
+                box.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
+                    + escHtml(t('uc.allChecking', { n: i + 1, total: ready.length, name: h.name }));
+                const r = await updApi('package_preflight', { package: h.name });
+                if (r.success && r.canProceed && r.signature) { go.push({ step: ready[i], pf: r }); continue; }
+                const stop = (r.checks || []).find(c => c.level === 'block');
+                out.push(h.name + ': ' + (stop ? stop.label + ' — ' + stop.detail : (r.error || t('common.errorShort'))));
+            }
+            box.innerHTML = '';
+            if (!go.length) { say('alert-warning', t('uc.allNone') + ' ' + out.join('; ')); return; }
+            const lines = go.map(g => {
+                const s = g.step, more = s.members.length - 1;
+                const what = more ? t('uc.pkFamilyLine', { name: s.head.name, more: more, from: s.head.installed, to: s.head.available })
+                                  : s.head.name + ': ' + s.head.installed + ' → ' + s.head.available;
+                const services = (g.pf.services || []).map(x => x.name);
+                return what + (services.length ? ' — ' + t('uc.allRestarts', { list: services.join(', ') }) : '');
+            });
+            const yes = await panelAsk({ title: tn('uc.allAskTitle', go.length),
+                text: t('uc.allAskText') + '\n' + lines.join('\n') + (out.length ? '\n' + t('uc.allLeftOut') + ' ' + out.join('; ') : ''),
+                confirm: tn('uc.allAskGo', go.length) });
+            if (!yes) return;
+            const a = await updApi('guided_update_all', { confirm: 'UPDATE',
+                steps: go.map(g => ({ package: g.step.head.name, signature: g.pf.signature })) });
+            if (!a.success) { say('alert-danger', a.error || t('common.errorShort')); return; }
+            gdFollow('packages', 'pk-run', 'pk-log-box', 'pk-log', a.jobId, t('uc.allRunning'));
         }
 
         // Dopo il cambio di ramo: si torna in cima a questa scheda, a vedere cosa c'e' da aggiornare adesso.

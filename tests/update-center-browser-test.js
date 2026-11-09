@@ -4,7 +4,7 @@
 //     on the Italian page the text is the one of it.json.
 //  2. "Update the server": one row each for FreeBSD, the packages (ONE row for all of them, reperto 202: how many go in
 //     one plan, how many of the mail server one at a time, and one button for the step after), the dedicated procedures
-//     only when they apply (here the panel's Java), branch and restart, in words and not only by color, with the
+//     only when they apply (here the panel's Java) and restart (the branch has its own card, reperto 205), in words and not only by color, with the
 //     buttons for what there is to do (reperto 193: every row acts in place). No separate Packages card.
 //  3. No browser dialog (prompt, confirm): confirmations are the panel's own window, which shows the
 //     exact plan; the job starts with the plan's signature and the right keyword.
@@ -165,7 +165,7 @@ async function open(ctx, name, lang, o = {}) {
 }
 
 // Ready when every row has its data: the card fills in as the other cards' reads arrive.
-const centerReady = page => page.waitForFunction(() => document.querySelectorAll('#ucList > li:not([hidden])').length >= 5
+const centerReady = page => page.waitForFunction(() => document.querySelectorAll('#ucList > li:not([hidden])').length >= 4
     && document.getElementById('ucState').textContent === '' && !document.getElementById('ucList').textContent.includes(t('uc.reading')),
     null, { timeout: 20000 });
 const allErrors = [], allDialogs = [];
@@ -200,7 +200,9 @@ const allErrors = [], allDialogs = [];
     await centerReady(page);
     const rows = await page.$$eval('#ucList > li:not([hidden])', lis => lis.map(li => li.querySelector('.uc-head').innerText.replace(/\s+/g, ' ').trim()));
     console.log('    ' + rows.join('\n    '));
-    check('five rows: FreeBSD, the packages, the panel\'s Java (it has an update), branch, restart', rows.length === 5);
+    check('four rows: FreeBSD, the packages, the panel\'s Java (it has an update), restart', rows.length === 4);
+    check('  the branch in a card of its own under the card, not a row (reperto 205)', await page.$('#uc-branch') === null
+        && await page.$('section#branch.card #branch-body') !== null && /quarterly/.test(await page.innerText('#branch-body')));
     // One row for all the packages (reperto 202): no row of its own for the mail server ones, no separate Packages card.
     check('  one row for the packages: no mail server row, no Packages card, the list closed under the row',
         await page.$('#uc-stack') === null && await page.$('#packages') === null
@@ -214,14 +216,15 @@ const allErrors = [], allDialogs = [];
     check('  one button, the step after: the plan first, dovecot not yet', /Update the packages/.test(rows[1])
         && await page.$('#uc-packages .uc-head button[data-pkg="dovecot-mysql"]') === null);
     check('the panel\'s Java: its row, with the versions and Prepare', /openjdk25: 25\.0\.4/.test(rows[2]) && /Prepare/.test(rows[2]));
-    check('branch and restart', /quarterly branch/.test(rows[3]) && /needs a restart/.test(rows[4]));
+    check('restart', /needs a restart/.test(rows[3]));
     check('no newer release: nothing about moving to one, no button for it (reperto 196)', !/available|Move to/.test(rows[0])
         && await page.$('[data-on-click="ucRelease()"]') === null);
     check('one read each of packages and branch when the page opens (the card reuses the cards\' reads)',
         calls.filter(c => c.action === 'packages_overview').length === 1 && calls.filter(c => c.action === 'branch_status').length === 1);
     check('one button at most in every row (reperto 197)', await page.$$eval('#ucList > li:not([hidden]) .uc-head', hs => hs.every(h => h.querySelectorAll('button').length <= 1)));
-    check('the state in words too, not only by color', await page.$$eval('#ucList .visually-hidden', s => s.map(x => x.textContent).join(' '))
-        .then(x => /to do/.test(x) && /information/.test(x)));
+    // Every row here has something to do; the branch, the one row "information", has its own card now (reperto 205).
+    check('the state in words too, not only by color', await page.$$eval('#ucList > li:not([hidden])', l => l.every(li =>
+        /\((to do|up to date|information|error)\)/.test(li.querySelector('.uc-head .visually-hidden') ? li.querySelector('.uc-head .visually-hidden').textContent : ''))));
     if (shots) await page.locator('#update-center').screenshot({ path: path.join(shots, 'update-center.png') });
 
     console.log('\n== 3. Packages, with the panel\'s confirmation ==');

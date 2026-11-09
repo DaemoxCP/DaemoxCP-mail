@@ -69,7 +69,8 @@ final class RootGate {
     private static final Pattern SERVICE = Pattern.compile("[a-z0-9_-]{1,40}");
     private static final Pattern COUNTRY = Pattern.compile("[A-Za-z]{2}");
     private static final Pattern LOG_ID = Pattern.compile("[A-Za-z0-9_.-]{1,64}");
-    private static final Pattern PACKAGE = Pattern.compile("[A-Za-z0-9._+-]{1,64}");
+    /** Come UpdateManager.isValidName: il primo carattere lettera o cifra, o il nome diventerebbe un'opzione di pkg. */
+    private static final Pattern PACKAGE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
     /**
      * Le impronte che il pannello stesso calcola e la pagina gli rimanda: lo stato del ramo dei pacchetti (16 cifre
      * esadecimali, PkgBranch) e quello di un indirizzo prima di trasformarlo in casella (64, AddressTransform). Lo
