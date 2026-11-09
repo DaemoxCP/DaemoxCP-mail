@@ -70,6 +70,14 @@ final class RootGate {
     private static final Pattern COUNTRY = Pattern.compile("[A-Za-z]{2}");
     private static final Pattern LOG_ID = Pattern.compile("[A-Za-z0-9_.-]{1,64}");
     private static final Pattern PACKAGE = Pattern.compile("[A-Za-z0-9._+-]{1,64}");
+    /**
+     * Le impronte che il pannello stesso calcola e la pagina gli rimanda: lo stato del ramo dei pacchetti (16 cifre
+     * esadecimali, PkgBranch) e quello di un indirizzo prima di trasformarlo in casella (64, AddressTransform). Lo
+     * stesso nome, «fingerprint», lo usa l'impronta di una chiave SSH (SHA256:...): con quella forma sola il cambio di
+     * ramo e «Trasforma in casella» venivano rifiutati con «la richiesta non ha la forma che il pannello si aspetta»
+     * (reperto 204, sul server vero il 09/11/2026). Solo cifre esadecimali minuscole: niente spazi, niente trattini.
+     */
+    private static final Pattern PANEL_FINGERPRINT = Pattern.compile("[0-9a-f]{16}|[0-9a-f]{64}");
     private static final Pattern PEM_LINE = Pattern.compile("[A-Za-z0-9+/=]{0,128}");
     private static final Pattern PEM_MARKER = Pattern.compile(
             "-----(BEGIN|END) (CERTIFICATE|PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY)-----");
@@ -127,7 +135,8 @@ final class RootGate {
             Map.entry("country", s -> s.isEmpty() || COUNTRY.matcher(s).matches()),
             Map.entry("log", s -> s.isEmpty() || LOG_ID.matcher(s).matches()),
             Map.entry("log_id", s -> s.isEmpty() || LOG_ID.matcher(s).matches()),
-            Map.entry("fingerprint", s -> s.isEmpty() || org.mail_panel.system.RootSshKeys.FINGERPRINT.matcher(s).matches()),
+            Map.entry("fingerprint", s -> s.isEmpty() || org.mail_panel.system.RootSshKeys.FINGERPRINT.matcher(s).matches()
+                    || PANEL_FINGERPRINT.matcher(s).matches()),
             Map.entry("certificate", RootGate::pem), Map.entry("private_key", RootGate::pem),
             Map.entry("ssl_cert", RootGate::pem), Map.entry("ssl_key", RootGate::pem), Map.entry("ssl_chain", RootGate::pem));
 

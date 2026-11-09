@@ -655,6 +655,12 @@ one row of "Update the server" with at most one button, no separate card and no 
 under the row is closed, and opened shows the packages with version and lock in words and no update button; at 375 px
 no horizontal scrolling with the list open and every visible button 44 px; no request that changes anything.
 
+**fingerprint-routes-browser-test.js** — on the real panel of the test VM (reperto 204): the two features that send the
+root part a fingerprint the panel computed itself go through the root's closed list. The package branch to latest and
+back to quarterly (16 hex digits, each job followed to the end; the VM put back on quarterly in any case), and "Turn
+into mailbox" on a test alias (64 hex digits), with the mailbox deleted after; no forwarded request refused in the
+root's log while it ran.
+
 **address-conversion-browser-test.js** — the "Turn into mailbox" (Aliases page) and "Turn into
 alias" (Mailboxes page) windows: the preview, the password proposed by the generator, the mandatory
 choice about the earlier mail, the address typed to confirm, the fingerprint and the CSRF token in
