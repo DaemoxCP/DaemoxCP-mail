@@ -1,10 +1,11 @@
-            <div class="card mb-4" id="branch">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-code-branch me-2" aria-hidden="true"></i><strong>{{t:up.branch}}</strong>
-                        <span class="small text-muted ms-2">{{t:up.branchSub}}</span></span>
-                    <span>
-                        <button type="button" class="btn btn-sm btn-outline-primary" data-on-click="branchStatus()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:up.reread}}</button>
-                    </span>
+            <!-- Il ramo dei pacchetti in una scheda sua, sotto «Aggiorna il server» (reperto 205): il committente, «separa il
+                 campo cambio di branch e fallo in un box separato». Si legge da sola all'apertura (pkg -vv non va in rete);
+                 cambiare ramo e' un lavoro col suo registro, qui sotto. -->
+            <section class="card mb-4" id="branch" aria-labelledby="branchTitle">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h3 class="h5 mb-0" id="branchTitle"><i class="fas fa-code-branch me-2" aria-hidden="true"></i>{{t:up.branch}}
+                        <span class="small text-muted fw-normal ms-2">{{t:up.branchSub}}</span></h3>
+                    <button type="button" class="btn btn-sm btn-outline-secondary touch-target" data-on-click="branchStatus()"><i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:up.reread}}</button>
                 </div>
                 <div class="card-body">
                     <div id="branch-body" role="status"><span class="text-muted">{{t:up.readingPkg}}</span></div>
@@ -12,5 +13,4 @@
                     <div id="branch-outcome" class="mt-2" role="status"></div>
                     <pre id="branch-log" class="upd-log mt-2" data-style="display:none"></pre>
                 </div>
-            </div>
-
+            </section>

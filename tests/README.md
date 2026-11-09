@@ -64,6 +64,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LockTraceTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallSideEffectsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallScriptDriftTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.UpdateAllTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.ResetDatabaseTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/monitoring/*.java
@@ -642,7 +643,9 @@ the fix available and the vulnerability the update does not fix yet, and has one
 protecting the mail server packages that are not locked, then the plan of the others, then the mail server ones one at
 a time; a plan that cannot run (it would remove a package) does not start and hands the step to the mail server
 packages. A family (php84 and its extensions, reperto 203) is ONE step and one line, "php84 and 2 more of its family",
-with the button on php84; a family alone has its own sentence instead of "in 1 steps". Under the row, closed, the list one by one: the summary, the warning about the unlocked ones with the button
+with the button on php84; a family alone has its own sentence instead of "in 1 steps". With two steps ready or more, ONE button, "Update
+all" (reperto 205): the checks of every step first, one confirmation listing them with the services that restart,
+cancelling starts nothing, confirming sends ONE request with every step's signature; with one step left, its window. Under the row, closed, the list one by one: the summary, the warning about the unlocked ones with the button
 to lock them, for every package installed and catalog version, verdict on the vulnerability (text, never HTML), lock,
 "held" where the advisory says to wait, the JDK saying it has its own procedure, no update button (the row has the
 step); Lock with name and CSRF token, after which the row's step moves on. The update window of a mail server

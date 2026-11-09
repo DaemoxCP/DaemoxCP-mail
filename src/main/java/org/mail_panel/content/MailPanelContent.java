@@ -12109,7 +12109,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <h2><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i>{{t:up.title}}</h2>
             <p class="text-muted">{{t:up.intro.html}}</p>
             <div id="upd-interrupted" aria-live="polite"></div>
-""" + resource("pages/update-center-card.html") + """
+""" + resource("pages/update-center-card.html") + resource("pages/branch-card.html") + """
 
             <div class="modal fade" id="pkUpdModal" tabindex="-1" aria-labelledby="pkUpdTitle" aria-hidden="true">
                 <div class="modal-dialog modal-lg modal-dialog-scrollable">

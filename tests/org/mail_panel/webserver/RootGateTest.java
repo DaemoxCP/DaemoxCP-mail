@@ -79,6 +79,8 @@ public class RootGateTest {
         check("a jail with a space is refused", !passes("/api/fail2ban", "POST", null, "{\"jail\":\"a b\"}"));
         check("a port out of range is refused", !passes("/api/roundcube-domain", "POST", null, "{\"port\":\"99999\"}")
                 && passes("/api/roundcube-domain", "POST", null, "{\"port\":\"8443\"}"));
+        check("a package that starts with a dash is refused: it would be an option of pkg (reperto 205)",
+                !passes("/api/updates", "POST", null, "{\"action\":\"package_preflight\",\"package\":\"-r\"}"));
         check("a package with a slash or a space is refused", !passes("/api/updates", "POST", null, "{\"action\":\"x\",\"package\":\"../x\"}")
                 && !passes("/api/updates", "POST", null, "{\"package\":\"a b\"}") && passes("/api/updates", "POST", null, "{\"package\":\"postfix-mysql\"}"));
         check("a service with a capital or a slash is refused", !passes("/api/service", "POST", null, "{\"service\":\"/bin/sh\"}"));
