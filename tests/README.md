@@ -67,6 +67,8 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.EverythingTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PostfixInetProtocolsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.CloudflareCommentsTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMoveTest
+    cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.database.ResetDatabaseTest
@@ -176,6 +178,14 @@ again (its pidfile is the root part), the web part as mailpanel holding the port
 Afterwards: nothing left to update, Update everything completed in the operation logs, every service up, the
 protected packages protected again, postfix's `inet_protocols` written and postfix listening as before. It needs
 updates waiting on the VM; the way back is the boot environment the job makes before the first step.
+
+`dovecot24-move-browser-test.js` does the move to Dovecot 2.4 on the test VM from the page (reperto 213): Diagnostics
+before (Dovecot to look at, pointing to Updates), the row "Dovecot 2.4" with Prepare, the checks with the exact plan
+(2.3 removed first, 2.4 installed, no second MySQL client), the tests and the mailbox they run on, one confirmation,
+the job to its end with its eight steps and the same mail tests passing on 2.3 before and on 2.4 after (IMAP login,
+LMTP delivery, the password process not root, Dovecot's own MySQL user), no way back taken; Diagnostics after, with
+the compatibility card saying 2.4 is installed. It needs Dovecot 2.3 on the VM and it changes it; the way back is the
+boot environment the job makes, or the one made before.
 
 `database-restart-browser-test.js` stops MySQL on the test VM for about 25 seconds with the panel open (reperto 209):
 a read asked meanwhile waits with the strip that says the database is restarting and gets its answer when it is back;
@@ -386,6 +396,21 @@ requests change something (`Access.changes`: a GET never; a POST unless its acti
 views; the DKIM reads), what stays possible (cancelling, restarting now, the state, nothing else), the time of the
 restart from ps ("+N" minutes and "now"; any other form unknown), the time the panel records and that cancelling
 removes it. Pure, on the VM.
+
+**Dovecot24MoveE2ETest** — the move to Dovecot 2.4 going back by itself (reperto 213), on the VM with Dovecot 2.3, as
+root with `-De2e.vm=yes`: the job runs for real (packages replaced, 2.4 configuration written, tests on 2.4), then a
+problem the test adds makes it put 2.3 back. Afterwards the job is in error saying 2.3 is back and passes the tests of
+before; the packages, their versions and protections are those of before; the configuration is the one of before file
+by file, the refused 2.4 one kept in the copy (0700); Dovecot runs and listens where it did; the tests again on 2.3
+all pass; no list of unlocked packages left.
+
+**DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
+configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what
+replaces them (MySQL flavor only); the protected dependencies used as they are; a second MySQL client in the plan
+named; where Postfix delivers with LMTP; before against after (a failed test, a port lost or new, a Sieve extension
+gone, a test not run, the password process back to root); the probes against servers on this machine: IMAP on TLS
+only with the pinned certificate, EXAMINE and never SELECT, the password quoted; LMTP never reaching DATA; ManageSieve;
+the authentication socket that greets, the silent one and the missing one. On the VM.
 
 **JobJournalTest** — the jobs' log on disk (`JobJournal`, reperto 196): one file per job in
 `/var/db/mailpanel/jobs` (here a temporary folder), that survives a restart of the panel or of the server and is
@@ -1092,7 +1117,8 @@ saying so. **As root, on the VM.**
 
 **ServiceUsersTest** — the check of who runs every service (ServiceUsers.examine) on the VM's `ps`
 output before and after, with a planted fault for every warning and the cases that must NOT warn
-(Postfix's `local`, Dovecot's `auth`). It calls nothing.
+(Postfix's `local`, Dovecot's `auth`). Dovecot's `anvil` as root warns on 2.3 and not on 2.4, which needs it to reach
+every session's process (measured on the VM, reperto 213); `auth-worker` as root warns on both. It calls nothing.
 
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeUserTest

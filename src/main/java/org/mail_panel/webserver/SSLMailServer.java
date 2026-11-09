@@ -213,7 +213,7 @@ public class SSLMailServer {
     /** /api/updates: le azioni che leggono (anteprime, stati, diagnosi). Tutte le altre cambiano il sistema. */
     static final Map<String, String> UPDATES_ACTIONS = Access.actions(SYSTEM_VIEW,
         "packages_status", "packages_overview", "updates_status", "compatibility", "dovecot_config_dump", "maintenance_preview", "plan",
-        "mysql84_preflight", "broken_libs", "mysql_client_diag", "defaults_check", "branch_status", "branch_preview",
+        "mysql84_preflight", "dovecot24_preflight", "broken_libs", "mysql_client_diag", "defaults_check", "branch_status", "branch_preview",
         "system_report", "os_status", "reboot_preview", "reboot_state", "rc_state", "system_summary", "cf_intervals",
         "rc_remove_preview", "rc_preview", "os_upgrade_targets", "os_upgrade_preflight", "os_upgrade_instructions",
         "os_upgrade_verify", "jump_state", "be_list", "ssl_usage", "removal_candidates", "panel_uses", "deep_scan",
@@ -3461,8 +3461,9 @@ public class SSLMailServer {
 
         // Dovecot: check for dovecot-mysql (required for SQL auth) or base dovecot
         // On FreeBSD, dovecot-mysql REPLACES dovecot package
-        boolean dovecotInstalled = checkPackageInstalled("dovecot");
-        boolean dovecotMysqlInstalled = checkPackageInstalled("dovecot-mysql");
+        // Dopo il passaggio guidato alla 2.4 (reperto 213) il sapore MySQL e' dovecot24-mysql.
+        boolean dovecotInstalled = checkPackageInstalled("dovecot") || checkPackageInstalled("dovecot24");
+        boolean dovecotMysqlInstalled = checkPackageInstalled("dovecot-mysql") || checkPackageInstalled("dovecot24-mysql");
         boolean dovecotMarked = Main.mailDatabase.isComponentInstalled("dovecot");
 
         // dovecot-mysql is preferred as it includes SQL authentication support
@@ -7860,6 +7861,7 @@ public class SSLMailServer {
                 }
                 case "plan" -> response = UpdateManager.maintenancePlan();
                 case "mysql84_preflight" -> response = UpdateManager.mysql84Preflight();
+                case "dovecot24_preflight" -> response = UpdateManager.dovecot24Preflight();
                 case "broken_libs" -> response = UpdateManager.packagesWithMissingLibraries();
                 case "mysql_client_diag" -> response = UpdateManager.mysqlClientDiagnostics();
                 case "defaults_check" -> response = UpdateManager.defaultsConsistency();
@@ -8178,6 +8180,14 @@ public class SSLMailServer {
                     }
                     response = UpdateManager.startMysql84Migration(req.optString("signature", ""));
                     logAudit("MYSQL84_MIGRATION_STARTED", ip, response.optString("jobId", ""));
+                }
+                case "dovecot24_move" -> {
+                    if (!"MOVE TO DOVECOT 2.4".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
+                        break;
+                    }
+                    response = UpdateManager.startDovecot24Move(req.optString("signature", ""));
+                    logAudit("DOVECOT24_MOVE_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "package_preflight" -> {
                     String now = org.mail_panel.system.PackageQueue.planNotNow();

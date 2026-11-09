@@ -152,6 +152,19 @@ public final class ServiceUsers {
      */
     static Findings examine(List<Proc> procs, Map<Path, String> poolFiles, String rootCrontab,
                             boolean acmeAsRoot, Map<Path, String> rotations) {
+        return examine(procs, poolFiles, rootCrontab, acmeAsRoot, rotations, false);
+    }
+
+    /**
+     * Lo stesso, sapendo se c'e' Dovecot 2.4. Li' anvil gira da root per come e' fatta la 2.4 (nei valori
+     * predefiniti user e' vuoto): si collega al socket di ogni processo di sessione, che gira come vmail o dovenull,
+     * per contare e chiudere le connessioni. Misurato sulla VM il 09/11/2026 (reperto 213): con l'utente interno di
+     * Dovecot, doveadm kick fa crollare anvil («net_connect_unix(/var/run/dovecot/srv.imap/...) failed: Permission
+     * denied», poi Panic) e auth non raggiunge piu' anvil-auth-penalty. Sulla 2.3 anvil gira come dovecot: li' root
+     * resta un avviso.
+     */
+    static Findings examine(List<Proc> procs, Map<Path, String> poolFiles, String rootCrontab,
+                            boolean acmeAsRoot, Map<Path, String> rotations, boolean dovecot24) {
         Map<String, Service> services = new LinkedHashMap<>();
         List<Problem> problems = new ArrayList<>();
         Map<Integer, Proc> byPid = new LinkedHashMap<>();
@@ -168,6 +181,7 @@ public final class ServiceUsers {
                 rootNeeded = r.rootNeeded();
                 break;
             }
+            if (dovecot24 && "dovecot".equals(name) && p.command().matches("dovecot/anvil( .*|$)")) rootNeeded = true;
             // I figli del master di Postfix sono Postfix, qualunque nome abbiano.
             Proc parent = byPid.get(p.ppid());
             if (name == null && parent != null && parent.command().matches(".*/libexec/postfix/master( .*|$)")) {
@@ -246,7 +260,8 @@ public final class ServiceUsers {
         Shell.Result c = Shell.run(d, "crontab", "-l", "-u", "root");
         String crontab = c.success() ? c.output() : "";
         AcmeUser.Layout l = AcmeUser.layout();
-        return examine(procs, pools, crontab, l != null && !l.asAcme(), rotations);
+        boolean dovecot24 = !Shell.run(d, "pkg", "query", "-e", "%o = \"mail/dovecot24\"", "%n").outputTrim().isEmpty();
+        return examine(procs, pools, crontab, l != null && !l.asAcme(), rotations, dovecot24);
     }
 
     private static Map<Path, String> readAll(Path dir, String suffix) {

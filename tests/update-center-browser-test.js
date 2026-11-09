@@ -22,6 +22,8 @@
 //  10. A restart scheduled (reperto 200): the strip says the time and that the panel only reads; a button of the page
 //      does nothing and says why (once); a change the server refuses (409) makes the strip read again; cancelling
 //      unlocks the page. With a job running, the restart window says which and has no restart button.
+//  14. The move to Dovecot 2.4 (reperto 213): a row only when the separate package is offered, Prepare shows the checks,
+//      the exact plan and the tests; one confirmation; the job gets the word and the signature; the outcome stays.
 //  11. A job in progress started elsewhere (reperto 206): the card says what and since when, with its log closed below;
 //      the buttons of the steps and "Check for updates" wait, saying why; when it ends the line goes, the buttons come back
 //      and the card reads itself again.
@@ -95,7 +97,8 @@ function replies(o, st) {
         packages_overview: st.allDone ? { success: true, procedures: { java: false, roundcube: false, roundcubePackage: 'roundcube-php84', mysql84: false, python: false },
             summary: { updates: 0, stackUpdates: 0, vulnerable: 1, fixable: 0, locked: 39 }, others: [],
             packages: [{ name: 'postfix-mysql', role: 'SMTP', installed: '3.11.7', available: '', update: false, locked: true, stack: true }] }
-        : { success: true, procedures: { java: true, roundcube: !!o.roundcube && !st.rcDone, roundcubePackage: 'roundcube-php84', mysql84: false, python: false },
+        : { success: true, procedures: { java: true, roundcube: !!o.roundcube && !st.rcDone, roundcubePackage: 'roundcube-php84', mysql84: false, python: false,
+                dovecot24: !!o.dovecot24 && !st.dc24Done },
             summary: { updates: st.plainDone ? 2 : 4, stackUpdates: 2, vulnerable: 3, fixable: 2, locked: 39 },
             packages: [
                 ...(o.roundcube ? [{ name: 'roundcube-php84', role: 'Webmail', installed: '1.6.11', available: '1.7.0', update: true, locked: true, stack: true, canUpdate: false }] : []),
@@ -122,6 +125,19 @@ function replies(o, st) {
         java_preflight: { success: true, canProceed: true, signature: 'aaaabbbbccccdddd',
             plan: { measured: true, changes: [{ type: 'upgrade', name: 'openjdk25', from: '25.0.4', to: '25.0.5' }] } },
         update_everything: { success: true, jobId: 'all-1' },
+        // The move to Dovecot 2.4 (reperto 213): the checks, the exact plan, the tests that will run, the job.
+        dovecot24_preflight: { success: true, canProceed: true, blocked: false, signature: '2424242424242424', testMailbox: 'info@example.test',
+            remove: ['dovecot-mysql', 'dovecot-pigeonhole-mysql'], install: ['dovecot24-mysql', 'dovecot24-pigeonhole-mysql'],
+            checks: [{ label: 'Dovecot installed', level: 'ok', detail: 'Installed: dovecot-mysql 2.3.21.1_3, dovecot-pigeonhole-mysql 0.5.21.1_1 (Dovecot 2.3).' },
+                { label: 'Mail tests', level: 'review', detail: 'Before and after, without changing anything: an IMAP login on 993 into info@example.test.' },
+                { label: 'Services involved', level: 'review', detail: 'Dovecot stops for about a minute.' }],
+            plan: { measured: true, command: 'pkg install -n -U dovecot24-mysql dovecot24-pigeonhole-mysql', changes: [
+                { type: 'remove', name: 'dovecot-mysql', from: '2.3.21.1_3', to: '', intended: true },
+                { type: 'remove', name: 'dovecot-pigeonhole-mysql', from: '0.5.21.1_1', to: '', intended: true },
+                { type: 'install', name: 'dovecot24-mysql', from: '', to: '2.4.5_2' },
+                { type: 'install', name: 'dovecot24-pigeonhole-mysql', from: '', to: '2.4.5' },
+                { type: 'install', name: 'xapian-core', from: '', to: '2.1.0,1' }] } },
+        dovecot24_move: { success: true, jobId: 'dc24-1' },
         updates_search: { success: true, jobId: 'srch-1' },
         // The job in progress (reperto 206): with o.turn a search holds the turn for the first two reads, then ends.
         // The update of the panel's Java, outside the panel (reperto 210): the turn says it, with the script's log.
@@ -131,7 +147,8 @@ function replies(o, st) {
             : { success: true, running: false },
         os_patch_install: { success: true, jobId: 'osp-1' },
         job_status: { success: true, job: { status: 'completed', consoleLog: 'done', elapsedSeconds: 3,
-            result: st.allDone ? 'All 4 steps done: the panel now stops to finish updating its Java, and starts again in a couple of minutes. Then you sign in again.'
+            result: st.dc24Done ? 'Dovecot 2.4.5_2 installed: the mail passes the same tests as before.'
+                : st.allDone ? 'All 4 steps done: the panel now stops to finish updating its Java, and starts again in a couple of minutes. Then you sign in again.'
                 + ' Installed: FreeBSD 15.1-RELEASE-p6. The new kernel (15.1-RELEASE-p6) takes effect with a restart: the panel says so at the top of every page, and you can restart from there.'
                 : st.rcDone ? 'Roundcube 1.7.0 is in place and answers.' : 'Lists updated.' } },
         service_users: { success: true, problems: [], pools: [], services: [
@@ -178,6 +195,7 @@ async function open(ctx, name, lang, o = {}) {
             if (body.action === 'roundcube_update') st.rcDone = true;
             if (body.action === 'updates_apply') st.plainDone = true;
             if (body.action === 'update_everything') st.allDone = true;
+            if (body.action === 'dovecot24_move') st.dc24Done = true;
             if (body.action === 'reboot_cancel') st.cancelled = true;
             return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(r) });
         }
@@ -471,7 +489,7 @@ const allErrors = [], allDialogs = [];
     check('  only Postfix behind: to look at, the card\'s verdict inside the sentence', cmp[1][0] === 'warn' && cmp[1][1] === 'Postfix: the level is behind.');
     check('  all in order: fine', cmp[2][0] === 'ok');
     check('  Dovecot not ready for 2.4, which is only a separate package: to look at, not a problem, and it says mail keeps working',
-        cmp[3][0] === 'warn' && /^Dovecot: the configuration is not ready for 2\.4 yet; 2\.4 is a separate package \(dovecot24\) that nothing installs by itself, so mail keeps working on 2\.3\.$/.test(cmp[3][1]));
+        cmp[3][0] === 'warn' && /^Dovecot: the configuration is not ready for 2\.4 yet; 2\.4 is a separate package \(dovecot24\) that nothing installs by itself, so mail keeps working on 2\.3\. The move is guided in Updates \(Dovecot 2\.4\)\.$/.test(cmp[3][1]));
     // The operation logs (reperto 212): an error that a later job of the same kind redid well is not to look at.
     const jr = await dg.page.evaluate(() => {
         const v = DIAG_CHECKS.find(c => c.key === 'journal').verdict;
@@ -590,6 +608,48 @@ const allErrors = [], allDialogs = [];
     check('  and the page waits for the panel to come back, to reload itself (it asks /api/panel_info)', (jv.st.panelInfo || 0) > 0);
     if (shots) await jv.page.locator('#update-center').screenshot({ path: path.join(shots, 'update-center-java-running.png') });
     await jv.page.close();
+
+    console.log('\n== 14. The move to Dovecot 2.4, guided (reperto 213) ==');
+    // 2.4 is a separate package in the latest branch: nothing moves to it by itself. The row says so and prepares the move.
+    const dc = await open(ctx, 'updates', 'en', { dovecot24: true, noPatches: true, reboot: 'none' });
+    allErrors.push(dc.errors); allDialogs.push(dc.dialogs);
+    await centerReady(dc.page);
+    await dc.page.waitForSelector('#uc-dovecot:not([hidden])', { timeout: 10000 }).catch(() => {});
+    const dcRow = await dc.page.innerText('#uc-dovecot .uc-head').catch(() => '');
+    check('a row "Dovecot 2.4", to do, with what the move does and one button: Prepare', /Dovecot 2\.4/.test(dcRow)
+        && /rewrites the configuration and replaces the packages, with the mail tested before and after, and puts 2\.3 back if a test fails/.test(dcRow)
+        && await dc.page.$$eval('#uc-dovecot .uc-head button', b => b.length === 1 && b[0].getAttribute('data-on-click') === 'ucDovecot()'));
+    check('  no row without the separate package in the repository', await (async () => {
+        const none = await open(ctx, 'updates', 'en', { noPatches: true, reboot: 'none' });
+        await centerReady(none.page);
+        const hidden = await none.page.$eval('#uc-dovecot', li => li.hidden);
+        allErrors.push(none.errors); allDialogs.push(none.dialogs);
+        await none.page.close();
+        return hidden;
+    })());
+    await dc.page.click('#uc-dovecot .uc-head button[data-on-click="ucDovecot()"]');
+    await dc.page.waitForFunction(() => /Move to Dovecot 2\.4/.test(document.getElementById('dc24-pre').innerText), null, { timeout: 10000 }).catch(() => {});
+    const pre = await dc.page.innerText('#uc-dovecot-detail');
+    check('Prepare: the checks, the exact plan (2.3 removed first, 2.4 installed), the tests, and the button to move',
+        dc.calls.some(c => c.action === 'dovecot24_preflight') && /separate package/.test(pre) && /does not read the configuration of 2\.3/.test(pre)
+        && /dovecot-mysql/.test(pre) && /dovecot24-mysql/.test(pre) && /2\.4\.5_2/.test(pre) && /IMAP login on 993/.test(pre)
+        && await dc.page.$$eval('#dc24-pre button[data-on-click="dc24Run()"]', b => b.length === 1));
+    await dc.page.click('#dc24-pre button[data-on-click="dc24Run()"]');
+    await dc.page.waitForSelector('#panelAskModal.show', { timeout: 10000 });
+    const dcAsk = await dc.page.innerText('#panelAskModal .modal-content');
+    check('one confirmation, in the panel\'s window: what happens and every change of the plan', /Move to Dovecot 2\.4\?/.test(dcAsk)
+        && /If one fails, 2\.3 goes back in place by itself/.test(dcAsk) && /dovecot24-mysql: - → 2\.4\.5_2/.test(dcAsk) && /dovecot-mysql: 2\.3\.21\.1_3 → -/.test(dcAsk));
+    await dc.page.click('#panelAskGo');
+    await dc.page.waitForFunction(() => /Dovecot 2\.4\.5_2 installed/.test(document.getElementById('dc24-pre').innerText), null, { timeout: 15000 }).catch(() => {});
+    const mv24 = dc.calls.find(c => c.action === 'dovecot24_move');
+    check('the job: the word and the signature of the plan that was read', mv24 && mv24.confirm === 'MOVE TO DOVECOT 2.4' && mv24.signature === '2424242424242424');
+    check('  the outcome under the row, the log closed below', /Dovecot 2\.4\.5_2 installed: the mail passes the same tests as before/.test(await dc.page.innerText('#dc24-pre'))
+        && await dc.page.$eval('#dc24-log-box', d => !d.hidden && !d.open));
+    await dc.page.waitForFunction(() => !document.querySelector('#uc-dovecot .uc-head button'), null, { timeout: 10000 }).catch(() => {});
+    check('  the card reads itself again: the row says it is done, nothing left to press', /Dovecot 2\.4\.5_2 installed/.test(await dc.page.innerText('#uc-dovecot .uc-head'))
+        && await dc.page.$('#uc-dovecot .uc-head button') === null);
+    if (shots) await dc.page.locator('#update-center').screenshot({ path: path.join(shots, 'update-center-dovecot24.png') });
+    await dc.page.close();
 
     console.log('\n== 7. At 375 px ==');
     const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, locale: 'en-GB' });
