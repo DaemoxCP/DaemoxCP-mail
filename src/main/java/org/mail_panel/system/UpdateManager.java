@@ -756,6 +756,10 @@ public final class UpdateManager {
             JSONObject row = new JSONObject().put("name", n).put("installed", iv[0]).put("available", available)
                     .put("update", !available.isEmpty()).put("locked", locked).put("stack", role != null)
                     .put("role", role == null ? "" : role);
+            // La famiglia (FAMILIES): i suoi pacchetti si aggiornano insieme, quindi la pagina ne fa UN passo. Sul
+            // server vero la riga diceva «1 di 30», 27 dei quali erano php84 e le sue estensioni (reperto 203).
+            String fam = familyOf(n);
+            if (fam != null) row.put("family", fam).put("familyReason", familyReason(n));
             if (locked) lockedPackages++;
             if (role != null && !locked) unlockedStack++;
             String why = "";

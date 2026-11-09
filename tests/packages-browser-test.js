@@ -32,6 +32,8 @@ const requests = [];
 let rounds = 0, readings = 0;
 // Locking clamav (or all) protects the only mail server package without protection.
 let clamavLocked = false;
+// nginx updated from its window: the row's next step is the PHP family (reperto 203).
+let nginxDone = false;
 
 const VULN_NGINX = { verdict: 'fixed-by-upgrade', installedVersion: '1.30.4,3', catalog: '1.30.5_1,3', firstFixed: '1.30.5,3',
     explanation: 'Yes: upgrading to 1.30.5_1,3, which your catalog offers, fixes the problem.',
@@ -43,9 +45,9 @@ const VULN_EXPAT = { verdict: 'upgrade-not-enough', installedVersion: '2.8.1', c
 
 function overview() {
     return { success: true,
-        summary: { updates: 7, stackUpdates: 4, vulnerable: 2, fixable: 1, locked: clamavLocked ? 4 : 3, stackUnlocked: clamavLocked ? 0 : 1, panelRestart: false },
+        summary: { updates: nginxDone ? 9 : 10, stackUpdates: nginxDone ? 6 : 7, vulnerable: 2, fixable: 1, locked: clamavLocked ? 7 : 6, stackUnlocked: clamavLocked ? 0 : 1, panelRestart: false },
         packages: [
-            { name: 'nginx', installed: '1.30.4,3', available: '1.30.5_1,3', update: true, locked: true, stack: true, role: 'Webmail web server',
+            { name: 'nginx', installed: nginxDone ? '1.30.5_1,3' : '1.30.4,3', available: nginxDone ? '' : '1.30.5_1,3', update: !nginxDone, locked: true, stack: true, role: 'Webmail web server',
               majorJump: false, canUpdate: true, whyNot: '', vuln: VULN_NGINX },
             { name: 'dovecot-mysql', installed: '2.3.21.1_3', available: '2.4.2', update: true, locked: true, stack: true, role: 'Dovecot component',
               majorJump: true, canUpdate: false, whyNot: 'Dovecot 2.4 rewrites the configuration: wait for the dedicated procedure.',
@@ -55,6 +57,10 @@ function overview() {
               whyNot: 'The panel runs on this Java: it is updated with its own procedure.' },
             { name: 'clamav', installed: '1.5.4_1,1', available: '', update: false, locked: clamavLocked, stack: true, role: 'Antivirus', canUpdate: false, whyNot: '' },
             { name: 'expat', installed: '2.8.1', available: '2.8.4', update: true, locked: false, stack: false, role: '', canUpdate: true, whyNot: '', vuln: VULN_EXPAT },
+            // A family (reperto 203): php84 and its extensions go together, so they are ONE step of the row.
+            ...['php84', 'php84-ctype', 'php84-curl'].map(n => ({ name: n, installed: '8.4.26', available: '8.4.27_2', update: true, locked: true, stack: true,
+              role: n === 'php84' ? 'PHP' : 'PHP extension', canUpdate: true, whyNot: '', family: '^php[0-9]+(-.+)?$',
+              familyReason: 'PHP and its extensions share the version number' })),
         ],
         others: [{ name: 'curl', installed: '8.20.0', available: '8.22.0' }, { name: 'pcre2', installed: '10.47_1', available: '10.49' }] };
 }
@@ -94,6 +100,7 @@ async function served(route) {
                      changes: [{ type: 'upgrade', name: 'nginx', from: '1.30.4,3', to: '1.30.5_1,3', reason: '', repo: 'FreeBSD-ports' }], blockers: [] } });
         case 'package_update':
             rounds = 0;
+            if (bodyText.package === 'nginx') nginxDone = true;
             return json(route, { success: true, jobId: 'guid-1', async: true });
         case 'job_status':
             rounds++;
@@ -131,11 +138,13 @@ async function served(route) {
     let row = await page.innerText('#uc-packages .uc-head');
     console.log('    ' + row.replace(/\s+/g, ' '));
     real('how many in one plan, how many of the mail server one at a time', row.includes('4 packages to update, all together in one plan')
-        && row.includes('2 mail server packages have an update: they are protected, and they are updated one at a time'));
+        && row.includes('5 mail server packages have an update, in 3 steps: they are protected, and each step has its check'));
     real('  the fix available and the vulnerability the update does not fix yet', row.includes('1 security fix available')
         && row.includes('1 package has a known vulnerability that the update does not fix yet'));
     real('  the mail server ones by name, the held one with its reason, not the JDK (its own procedure)',
         row.includes('nginx: 1.30.4,3 → 1.30.5_1,3') && row.includes('dovecot-mysql: 2.3.21.1_3 → 2.4.2 (Dovecot 2.4 rewrites') && !row.includes('openjdk25'));
+    real('  the PHP family is one line, not three: php84 and 2 more of its family', row.includes('php84 and 2 more of its family: 8.4.26 → 8.4.27_2')
+        && !row.includes('php84-ctype') && !row.includes('php84-curl'));
     real('a mail server package without protection: said, and protecting them is the step, before the plan',
         row.includes('1 mail stack package is not locked')
         && await page.$$eval('#uc-packages .uc-head button', b => b.length === 1 && b[0].getAttribute('data-on-click') === 'updLockAll(true)'));
@@ -146,12 +155,12 @@ async function served(route) {
     await page.click('#pk-list summary');
     await page.waitForSelector('#pk-body table');
     const head = await page.textContent('#pk-body');
-    real('summary: updates, vulnerable, fixable, locked', head.includes('7 updates available') && head.includes('2 vulnerable packages')
-        && head.includes('1 can be fixed now') && head.includes('3 locked'));
+    real('summary: updates, vulnerable, fixable, locked', head.includes('10 updates available') && head.includes('2 vulnerable packages')
+        && head.includes('1 can be fixed now') && head.includes('6 locked'));
     real('warning about the mail stack package that is not locked, with the button to lock them', head.includes('1 mail stack package is not locked')
         && await page.locator('#pk-body .alert button', { hasText: 'Lock all mail stack packages' }).count() === 1);
     const lineItems = await page.$$eval('#pk-body tbody tr:not([hidden])', tr => tr.map(r => r.cells[0].querySelector('code').textContent));
-    real('one row per package: ' + lineItems.join(', '), lineItems.join(',') === 'nginx,dovecot-mysql,openjdk25,clamav,expat');
+    real('one row per package: ' + lineItems.join(', '), lineItems.join(',') === 'nginx,dovecot-mysql,openjdk25,clamav,expat,php84,php84-ctype,php84-curl');
     const nginx = await page.textContent('#pk-body tbody tr:nth-child(1)');
     real('nginx: versions, "the update fixes it", locked', nginx.includes('1.30.4,3') && nginx.includes('1.30.5_1,3')
         && nginx.includes('vulnerable · the update fixes it') && nginx.includes('locked'));
@@ -193,7 +202,7 @@ async function served(route) {
         && !requests.some(r => r.body && r.body.action === 'updates_apply'));
     await page.waitForSelector('#uc-packages .uc-head button[data-pkg="nginx"]', { timeout: 5000 }).catch(() => {});
     row = await page.innerText('#uc-packages .uc-head');
-    real('  the step after is the next mail server package, by name: nginx (1 of 1)', row.includes('Update nginx (1 of 1)')
+    real('  the step after is the next mail server package, by name: nginx (1 of 2: nginx, then the PHP family)', row.includes('Update nginx (1 of 2)')
         && await page.$$eval('#uc-packages .uc-head button', b => b.length === 1));
 
     console.log('\n== Vulnerabilities: the header says the verdict ==');
@@ -225,6 +234,24 @@ async function served(route) {
     if (photos) await page.locator('#pkUpdModal .modal-content').screenshot({ path: path.join(photos, 'packages-window.png') });
     await page.click('#pkUpdModal .btn-close');
     await page.waitForSelector('#pkUpdModal', { state: 'hidden' });
+    await page.waitForSelector('#uc-packages .uc-head button[data-pkg="php84"]', { timeout: 10000 }).catch(() => {});
+    row = await page.innerText('#uc-packages .uc-head');
+    real('after nginx, the step after is the whole PHP family, one window: php84 and 2 more (1 of 1) (reperto 203)',
+        row.includes('Update php84 and 2 more (1 of 1)') && row.includes('4 mail server packages have an update, in 2 steps')
+        && await page.$$eval('#uc-packages .uc-head button', b => b.length === 1 && b[0].dataset.pkg === 'php84'));
+    // Only one family left: not "in 1 steps", its own sentence. The row drawn again from an overview with PHP alone.
+    row = await page.evaluate(() => {
+        const php = ['php84', 'php84-ctype', 'php84-curl'].map(n => ({ name: n, installed: '8.4.26', available: '8.4.27_2', update: true,
+            locked: true, stack: true, canUpdate: true, whyNot: '', family: '^php[0-9]+(-.+)?$' }));
+        uc.pk = { success: true, summary: { updates: 3, stackUpdates: 3, vulnerable: 0, fixable: 0, locked: 3, stackUnlocked: 0 },
+            packages: php, others: [], procedures: {} };
+        uc.plainBlocked = false;
+        ucRender();
+        return document.querySelector('#uc-packages .uc-head').innerText;
+    });
+    real('  a family alone: "3 mail server packages of one family ... in one step", the button for the family',
+        row.includes('3 mail server packages of one family have an update: they are protected, and they go together in one step')
+        && !row.includes('steps') && row.includes('Update php84 and 2 more (1 of 1)'));
 
     real('no error in the page' + (errorList.length ? ': ' + errorList.join(' | ') : ''), errorList.length === 0);
     await browser.close();

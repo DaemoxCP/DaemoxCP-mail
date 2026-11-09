@@ -317,6 +317,14 @@ public class InstallPackagesTest {
         String family = UpdateManager.familyOf("dovecot-mysql");
         check("dovecot-mysql and dovecot-pigeonhole-mysql move together (same family)",
                 family != null && family.equals(UpdateManager.familyOf("dovecot-pigeonhole-mysql")));
+        // Reperto 203: the overview hands the family to the page, which makes it ONE step of the Packages row. On the
+        // real server 27 of the 30 mail server updates were php84 and its extensions.
+        String php = UpdateManager.familyOf("php84");
+        check("php84 and its extensions are one family (php84-ctype, php84-pdo_mysql)", php != null
+                && php.equals(UpdateManager.familyOf("php84-ctype")) && php.equals(UpdateManager.familyOf("php84-pdo_mysql")));
+        check("  with the reason the page can say", !UpdateManager.familyReason("php84-ctype").isEmpty());
+        check("  but Roundcube for PHP 8.4 is not in it, nor is a package alone", UpdateManager.familyOf("roundcube-php84") == null
+                && UpdateManager.familyOf("nginx") == null && UpdateManager.familyOf("redis") == null);
     }
 
     // ------------------------------------------------------------------ tools

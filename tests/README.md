@@ -641,7 +641,8 @@ one plan and how many of the mail server one at a time (by name, the held one wi
 the fix available and the vulnerability the update does not fix yet, and has one button, the step after: first
 protecting the mail server packages that are not locked, then the plan of the others, then the mail server ones one at
 a time; a plan that cannot run (it would remove a package) does not start and hands the step to the mail server
-packages. Under the row, closed, the list one by one: the summary, the warning about the unlocked ones with the button
+packages. A family (php84 and its extensions, reperto 203) is ONE step and one line, "php84 and 2 more of its family",
+with the button on php84; a family alone has its own sentence instead of "in 1 steps". Under the row, closed, the list one by one: the summary, the warning about the unlocked ones with the button
 to lock them, for every package installed and catalog version, verdict on the vulnerability (text, never HTML), lock,
 "held" where the advisory says to wait, the JDK saying it has its own procedure, no update button (the row has the
 step); Lock with name and CSRF token, after which the row's step moves on. The update window of a mail server
