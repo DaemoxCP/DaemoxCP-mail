@@ -166,22 +166,46 @@
             const sum = pk.summary || {};
             const stack = rows.filter(p => p.update && p.locked && !own(p));
             const plain = (sum.updates || 0) - rows.filter(p => p.update && p.locked).length;
-            const ready = stack.filter(p => p.canUpdate);
+            // I pacchetti della stessa famiglia (php84 e le sue estensioni, server e client di MySQL, Dovecot e i suoi
+            // componenti) si aggiornano INSIEME: il server li sblocca e li aggiorna insieme comunque (UpdateManager,
+            // FAMILIES). Sono quindi UN passo, col nome del pacchetto principale. Sul server vero la riga diceva
+            // «1 di 30», e 27 erano PHP (reperto 203). Un passo e' pronto solo se lo sono tutti i suoi pacchetti.
+            const steps = [];
+            stack.forEach(p => {
+                const key = p.family || p.name;
+                let s = steps.find(x => x.key === key);
+                if (!s) steps.push(s = { key: key, members: [] });
+                s.members.push(p);
+            });
+            steps.forEach(s => {
+                s.members.sort((a, b) => a.name.length - b.name.length || a.name.localeCompare(b.name));
+                s.head = s.members[0];
+                s.held = s.members.filter(p => !p.canUpdate);
+            });
+            const ready = steps.filter(s => !s.held.length);
             if (!uc.pk) reading('packages', t('uc.packages'));
             else if (!pk.success) ucHead('packages', 'error', t('uc.packages'), pk.error || t('common.errorShort'));
             else if (pk.catalogError) ucHead('packages', 'error', t('uc.packages'), t('pkgs.catalogError', { error: pk.catalogError }));
             else {
                 const words = [];
                 if (plain > 0) words.push(tn('uc.pkPlain', plain));
-                if (stack.length) words.push(tn('uc.pkStack', stack.length) + (ready.length ? '' : ' ' + t('uc.stackHeld')));
+                // Piu' pacchetti in un passo solo (una famiglia) non sono «in 1 passi»: hanno la loro frase.
+                if (stack.length) words.push((steps.length === 1 && stack.length > 1 ? t('uc.pkStackFamily', { n: stack.length })
+                    : tn('uc.pkStack', stack.length, { steps: steps.length })) + (ready.length ? '' : ' ' + t('uc.stackHeld')));
                 if (sum.fixable) words.push(tn('uc.packagesFix', sum.fixable));
                 const open = (sum.vulnerable || 0) - (sum.fixable || 0);
                 if (open > 0) words.push(tn('uc.pkVulnOpen', open));
                 const extra = ucEl('div');
                 if (stack.length) {
+                    // Una riga per passo: un pacchetto da solo col suo nome, una famiglia col principale e quanti altri.
                     const items = ucEl('ul', 'list-unstyled small mb-0 mt-1');
-                    stack.forEach(p => items.append(ucEl('li', '', p.name + ': ' + p.installed + ' → ' + p.available
-                        + (p.canUpdate ? '' : ' (' + (p.whyNot || t('pkgs.heldBack')) + ')'))));
+                    steps.forEach(s => {
+                        const h = s.head;
+                        const text = s.members.length === 1 ? h.name + ': ' + h.installed + ' → ' + h.available
+                            : t('uc.pkFamilyLine', { name: h.name, more: s.members.length - 1, from: h.installed, to: h.available });
+                        const why = s.held.map(p => (s.members.length > 1 ? p.name + ': ' : '') + (p.whyNot || t('pkgs.heldBack')));
+                        items.append(ucEl('li', '', text + (why.length ? ' (' + why.join('; ') + ')' : '')));
+                    });
                     extra.append(items);
                 }
                 // Un pacchetto della posta senza protezione: il piano degli altri (pkg upgrade) lo cambierebbe senza i suoi
@@ -194,8 +218,11 @@
                 } else if (!ucOpened('packages') && plain > 0 && !uc.plainBlocked) {
                     buttons.push(ucButton('btn-primary', 'fa-arrow-up', t('uc.packagesGo'), 'ucPackages()'));
                 } else if (ready.length && (plain <= 0 || uc.plainBlocked)) {
-                    const b = ucButton('btn-primary', 'fa-arrow-up', t('uc.stackNext', { name: ready[0].name, n: 1, total: ready.length }), 'pkUpdOpen(this.dataset.pkg)');
-                    b.dataset.pkg = ready[0].name;
+                    const s = ready[0], more = s.members.length - 1;
+                    const label = more ? t('uc.stackNextFamily', { name: s.head.name, more: more, n: 1, total: ready.length })
+                                       : t('uc.stackNext', { name: s.head.name, n: 1, total: ready.length });
+                    const b = ucButton('btn-primary', 'fa-arrow-up', label, 'pkUpdOpen(this.dataset.pkg)');
+                    b.dataset.pkg = s.head.name;
                     buttons.push(b);
                 }
                 if (words.length || sum.stackUnlocked > 0) ucHead('packages', 'todo', t('uc.packages'), words.join(' '), buttons, extra);
