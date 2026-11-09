@@ -17,7 +17,12 @@
             const d = r.dovecot || {}, pf = r.postfix || {}, rs = r.rspamd || {}, m = r.mysql || {}, w = r.webmail || {};
             // Il verdetto della scheda e' un titolo in maiuscolo: qui sta dentro una frase.
             const verdict = v => String(typeof updVerdict === 'function' ? updVerdict(v) : v).toLocaleLowerCase();
-            if (d.scanned && !d.compatible24) bad.push(t('diag.c.dovecot24'));
+            // Rosso solo se il pacchetto installato salterebbe alla 2.4; la 2.4 come pacchetto a parte (dovecot24), che
+            // niente installa da solo, e' da guardare, non un guasto (reperto 212).
+            if (d.scanned && !d.compatible24) {
+                if (d.breakingUpgradeAvailable) bad.push(t('diag.c.dovecot24'));
+                else warn.push(t('diag.c.dovecot24Later'));
+            }
             if (r.dovecot && d.doveconfAvailable !== false && !d.doveconfOk) warn.push(t('diag.c.doveconf'));
             if (pf.verdict && pf.verdict !== 'ALIGNED') warn.push(t('diag.c.postfix', { verdict: verdict(pf.verdict) }));
             if (rs.present && rs.verdict !== 'NOTHING_TO_REPORT' && rs.verdict !== 'BEHAVIOR_DIFFS') bad.push(t('diag.c.rspamd', { verdict: verdict(rs.verdict) }));
@@ -40,8 +45,10 @@
                 return ['ok', t('diag.v.osOk', { now: r.userland })];
             } },
             { key: 'journal', title: 'jr.title', api: 'journal_list', verdict: r => {
-                const bad = (r.journals || []).slice(0, 20).filter(j => j.status === 'error' || j.status === 'unfinished');
-                if (!bad.length) return ['ok', t('diag.v.jobsOk')];
+                // Un errore a cui e' seguito un lavoro dello stesso tipo finito bene non e' da guardare (reperto 212).
+                const ended = (r.journals || []).slice(0, 20).filter(j => j.status === 'error' || j.status === 'unfinished');
+                const bad = ended.filter(j => !j.settled);
+                if (!bad.length) return ['ok', ended.length ? tn('diag.v.jobsSettled', ended.length) : t('diag.v.jobsOk')];
                 return ['warn', tn('diag.v.jobsBad', bad.length), { label: t('diag.all.showLog'), action: "diagShowJournal('" + bad[0].name + "')" }];
             } },
             { key: 'svc', title: 'up.svcUsers', api: 'service_users', verdict: r => (r.problems || []).length
