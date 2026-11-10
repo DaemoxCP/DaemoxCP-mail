@@ -814,7 +814,10 @@ public class SSLMailServer {
             // regole Sieve del pannello per metterne un'altra al suo posto. Prima di SieveForcedKeep: root scrive le
             // regole solo se nessun altro puo' cambiare il percorso (RootOnlyPath). E i processi delle caselle di Dovecot
             // senza il gruppo mail, che serviva solo alle INBOX mbox (reperto 221; tutti e due verificano e tornano
-            // indietro).
+            // indietro). Prima ancora la cartella delle regole di nuovo di root, dove l'installazione di prima l'aveva data a
+            // vmail: altrimenti RootOnlyPath non ci scrive e MailSpoolSticky la segnala (reperto 225; non tocca niente se
+            // trova collegamenti o file di altri, e se non torna rimette com'era).
+            org.mail_panel.system.SieveRulesOwner.ensureAtBoot();
             org.mail_panel.system.MailSpoolSticky.ensureAtBoot();
             org.mail_panel.system.DovecotPrivilegedGroup.ensureAtBoot();
             // Gli script Sieve dell'utente (ManageSieve, i Filtri della webmail) nella sua cartella di posta, e le regole
