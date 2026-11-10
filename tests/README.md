@@ -1000,6 +1000,15 @@ the forward deleted each show `server.sieve.notWritten` on top of the dialog, th
 rules file does not change. At the end `rm -r /var/mail/sieve/sieve-dialog-fields.test` and `/var/mail` back as it was.
 Measured on 10/11/2026: both phases all OK; with the page as before 10 fail (the filter refused as text, the forward "not
 found"), with the server as before 8 (the filter does not open, the forward's deletion rewrites no mailbox and says so).
+It also runs on the REAL panel of the VM (separated, with RootGate between its parts), signing in with a console code:
+`REMOTE=https://127.0.0.1:2096 VM_LOGIN="ssh ... root@192.168.1.20" DOMAIN=rehearsal.test FORWARD=bob@rehearsal.test`
+and `RULES` on alice's file there; alice must have no filters and that one forward. All OK on 10/11/2026, after the
+upgrade of the whole Sieve chain (reperti 212-224) with `tools/upgrade/upgrade-panel.sh`.
+
+SieveDialogsE2EServer, SieveRulesE2EServer and HomePanelE2EServer keep the panel's secrets and the vault's old key in
+their working folder unless `-Dmailpanel.secrets.dir` / `-Dmailpanel.vault.key` say otherwise. Before 10/11/2026 they
+wrote their test MySQL password and TLS key into `/usr/local/etc/mail-panel`, the RUNNING panel's: the VM's panel went
+on until its next start, then could not reach MySQL and stopped separating.
 
 **PanelInfoTest** — what the card reads (PanelInfo): the entries Maven writes into the jar and those
 it did not replace, the machine's boot from `kern.boottime`, the JVM's start, the process details,

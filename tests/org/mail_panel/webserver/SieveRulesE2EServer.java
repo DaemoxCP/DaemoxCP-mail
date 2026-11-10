@@ -42,6 +42,14 @@ public class SieveRulesE2EServer {
     public static void main(String[] args) throws Exception {
         int port = Integer.parseInt(args[0]);
         Path dir = Path.of("").toAbsolutePath();
+        // The panel's secrets and the vault's old key in this test folder, unless given: by default PanelSecrets and
+        // PasswordVault use /usr/local/etc/mail-panel, and update_mysql_config and update_panel_config below would
+        // overwrite the RUNNING panel's MySQL password and TLS key on the test machine. Measured on 10/11/2026: the
+        // VM's panel kept working until its next start, then could not reach MySQL and stopped separating.
+        if (System.getProperty("mailpanel.secrets.dir") == null)
+            System.setProperty("mailpanel.secrets.dir", Files.createDirectories(dir.resolve("secrets")).toString());
+        if (System.getProperty("mailpanel.vault.key") == null)
+            System.setProperty("mailpanel.vault.key", dir.resolve("secrets").resolve("master.key").toString());
         Path jarDir = Path.of(SSLMailServer.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParent();
         if (!Files.isRegularFile(jarDir.resolve("install_scripts"), LinkOption.NOFOLLOW_LINKS))
             throw new IllegalStateException(jarDir.resolve("install_scripts") + " must be a plain file: otherwise the"
