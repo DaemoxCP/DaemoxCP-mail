@@ -78,6 +78,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveFolderOwnerTest   (VM, as root, real deliveries)
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveGroupMailTest   (VM, as root, real deliveries)
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
+    su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -524,6 +525,22 @@ the alias part is skipped, saying so (otherwise folders in `/var/vmail` and Post
 test gives the vault a public key of its own in its temporary secrets folder, as root writes it for the web part.
 Measured on 10/11/2026 on the VM: 36 OK; with SSLMailServer as before 8 fail, one for each place that saves rules.
 
+**SieveDialogFieldsTest** — the Sieve dialogs of the Mailboxes page and their routes speak the same language
+(reperto 224). The Filters dialog sent conditions and actions as JSON text, which `/api/sieve` reads with optJSONArray
+(null for a text): creating a filter ended in a NullPointerException whose English text reached the page. Editing asked
+`GET /api/sieve?id=`, which the route did not know, and sent `id` where it reads `filter_id`; deleting a forward sent
+`id` where `/api/forwarding` reads `rule_id`, and no `mailbox_id`. And the routes rewrote the rules of the mailbox named
+by the request, not of the row they changed. On the real server over HTTPS, with the test MySQL and a SieveGenerator that
+writes nothing and remembers the address it was asked for, the requests as the fixed page sends them: a filter created
+(enabled or not, as the dialog says), read back by `?id=` with conditions and actions as arrays, changed by `filter_id`
+alone, deleted; a forward deleted by `rule_id` alone; each time the rules written are those of the row's mailbox, also
+when the request names another one. Conditions or actions as text, empty, or not objects: refused with
+`server.filter.badRules` (English and Italian), nothing changed; a number that is not a row: `server.filter.notFound` /
+`server.forward.notFound`; `mailbox_id=abc` gives no exception text. Reperto 223 still holds (success false, saved,
+`server.sieve.notWritten`). It uses only what MailDatabase had before, so it runs against the jar of before too. Run it
+as nobody, as SieveRulesNotWrittenTest. Measured on 10/11/2026 on the VM: 43 OK; with SSLMailServer, MailDatabase and
+SqlCatalog as before 25 fail (among them the NullPointerException text and `For input string: "abc"` in the answer).
+
 **DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what
 replaces them (MySQL flavor only); the protected dependencies used as they are; a second MySQL client in the plan
@@ -967,6 +984,22 @@ apply. `PHASE=written`, with `/var/mail` at 1775: a second forward with no notic
 forwards and the auto-reply saved while refused. At the end `rm -r /var/mail/sieve/sieve-rules-shown.test` and
 `/var/mail` back as it was. Measured on 10/11/2026: all OK; with SSLMailServer as before 8 fail, with the page as before
 5 (the forward missing from the list, the dialog of bob still open).
+
+**sieve-dialogs-browser-test.js** — the Filters and Forwarding dialogs of the Mailboxes page work from the browser
+(reperto 224), only against the real server: **SieveDialogsE2EServer** on the VM (as root, the test MySQL, the REAL
+SieveGenerator; it seeds `sieve-dialog-fields.test` with alice, no filters and one forward put straight in the database,
+`seeded@elsewhere.example`). Each phase on a freshly started server. The port through an SSH tunnel,
+`REMOTE=https://panel.localhost:PORT MAP=127.0.0.1 SESSION=...`, and `RULES` the command that prints alice's rules file
+(`ssh ... root@192.168.1.20 cat /var/mail/sieve/sieve-dialog-fields.test/alice/.dovecot.sieve`). `PHASE=written` (the
+default), with `/var/mail` at 1775: a filter created in the dialog (no notice, in the list as a button, in the rules file
+with the seeded forward); opened again from the keyboard (Tab, Enter) with its name, condition and action back in the
+dialog, changed, and the rules file follows; deleted with «Elimina filtro», confirmed, gone from list and file; the seeded
+forward deleted, gone from list and file. Each part starts from the page loaded again, and a step that times out is a
+failed check, not the end of the test. `PHASE=refused`, with `/var/mail` at 0775: a filter created, the filter deleted and
+the forward deleted each show `server.sieve.notWritten` on top of the dialog, the list shows the panel as it is, the
+rules file does not change. At the end `rm -r /var/mail/sieve/sieve-dialog-fields.test` and `/var/mail` back as it was.
+Measured on 10/11/2026: both phases all OK; with the page as before 10 fail (the filter refused as text, the forward "not
+found"), with the server as before 8 (the filter does not open, the forward's deletion rewrites no mailbox and says so).
 
 **PanelInfoTest** — what the card reads (PanelInfo): the entries Maven writes into the jar and those
 it did not replace, the machine's boot from `kern.boottime`, the JVM's start, the process details,
