@@ -653,8 +653,16 @@ public final class SqlCatalog {
             + "WHERE sf.mailbox_id = ?\n"
             + "ORDER BY sf.priority, sf.id\n";
 
+    /**
+     * MailDatabase.getSieveFilter: un filtro solo, per la finestra che lo modifica e per sapere di quale casella
+     * riscrivere le regole (quella della riga, non quella che dice la richiesta: reperto 224).
+     */
+    public static final String MAIL_GET_SIEVE_FILTER = "SELECT sf.*, m.email FROM sieve_filters sf\n"
+            + "JOIN mailboxes m ON sf.mailbox_id = m.id\n"
+            + "WHERE sf.id = ?\n";
+
     /** MailDatabase.createSieveFilter */
-    public static final String MAIL_CREATE_SIEVE_FILTER = "INSERT INTO sieve_filters (mailbox_id, name, priority, conditions, actions) VALUES (?, ?, ?, ?, ?)";
+    public static final String MAIL_CREATE_SIEVE_FILTER = "INSERT INTO sieve_filters (mailbox_id, name, priority, enabled, conditions, actions) VALUES (?, ?, ?, ?, ?, ?)";
 
     /** MailDatabase.updateSieveFilter */
     public static final String MAIL_UPDATE_SIEVE_FILTER = "UPDATE sieve_filters SET name = ?, priority = ?, enabled = ?, conditions = ?, actions = ? WHERE id = ?";
@@ -666,6 +674,11 @@ public final class SqlCatalog {
     public static final String MAIL_GET_FORWARDING_RULES = "SELECT fr.*, m.email FROM forwarding_rules fr\n"
             + "JOIN mailboxes m ON fr.mailbox_id = m.id\n"
             + "WHERE fr.mailbox_id = ?\n";
+
+    /** MailDatabase.getForwardingRule: un inoltro solo, per sapere di quale casella riscrivere le regole (reperto 224). */
+    public static final String MAIL_GET_FORWARDING_RULE = "SELECT fr.*, m.email FROM forwarding_rules fr\n"
+            + "JOIN mailboxes m ON fr.mailbox_id = m.id\n"
+            + "WHERE fr.id = ?\n";
 
     /** MailDatabase.createForwardingRule */
     public static final String MAIL_CREATE_FORWARDING_RULE = "INSERT INTO forwarding_rules (mailbox_id, destination, keep_copy) VALUES (?, ?, ?)";

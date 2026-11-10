@@ -2299,13 +2299,37 @@ public class MailDatabase {
         return filters;
     }
 
-    public boolean createSieveFilter(int mailboxId, String name, int priority, String conditions, String actions) {
+    /** Un filtro solo, con la sua casella; null se non c'e' (o il database non risponde). */
+    public SieveFilter getSieveFilter(int filterId) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_SIEVE_FILTER)) {
+            stmt.setInt(1, filterId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                SieveFilter f = new SieveFilter();
+                f.id = rs.getInt("id");
+                f.mailboxId = rs.getInt("mailbox_id");
+                f.email = rs.getString("email");
+                f.name = rs.getString("name");
+                f.priority = rs.getInt("priority");
+                f.enabled = rs.getBoolean("enabled");
+                f.conditions = rs.getString("conditions");
+                f.actions = rs.getString("actions");
+                return f;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public boolean createSieveFilter(int mailboxId, String name, int priority, boolean enabled, String conditions, String actions) {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_CREATE_SIEVE_FILTER)) {
             stmt.setInt(1, mailboxId);
             stmt.setString(2, name);
             stmt.setInt(3, priority);
-            stmt.setString(4, conditions);
-            stmt.setString(5, actions);
+            stmt.setBoolean(4, enabled);
+            stmt.setString(5, conditions);
+            stmt.setString(6, actions);
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
             e.printStackTrace();
@@ -2368,6 +2392,27 @@ public class MailDatabase {
             e.printStackTrace();
         }
         return rules;
+    }
+
+    /** Un inoltro solo, con la sua casella; null se non c'e' (o il database non risponde). */
+    public ForwardingRule getForwardingRule(int ruleId) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_FORWARDING_RULE)) {
+            stmt.setInt(1, ruleId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                ForwardingRule r = new ForwardingRule();
+                r.id = rs.getInt("id");
+                r.mailboxId = rs.getInt("mailbox_id");
+                r.email = rs.getString("email");
+                r.destination = rs.getString("destination");
+                r.keepCopy = rs.getBoolean("keep_copy");
+                r.enabled = rs.getBoolean("enabled");
+                return r;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     public boolean createForwardingRule(int mailboxId, String destination, boolean keepCopy) {
