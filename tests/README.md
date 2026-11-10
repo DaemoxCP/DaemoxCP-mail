@@ -237,7 +237,10 @@ without it, they say which checks they skipped and why.
 ## The full installation
 
 `InstallPackagesTest` is the test of reperto 52 (the installer put in a Dovecot without MySQL and
-declared itself successful). Parts A, B and D run anywhere: the script's text, its real install
+declared itself successful). Since reperto 215 the script picks Dovecot 2.4 or 2.3 itself
+(`install_packages $DOVECOT_PACKAGES`): part 0 reads the two choices from the script, A and B run on
+the script as it runs with each, C on the one this machine's catalog would pick. Parts 0, A, B and D
+run anywhere: the script's text, its real install
 lines run against a fake pkg that drops a requested package and exits with 0 (the script must stop
 there), and the updater's labels. Part C asks pkg's REAL solver for the plan of every line as on a
 freshly installed machine: a copy of pkg's database with only pkg installed, the packages
