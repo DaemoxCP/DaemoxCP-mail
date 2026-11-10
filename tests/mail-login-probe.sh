@@ -18,7 +18,9 @@
 #    SETACTIVE), a rule of the panel written as the panel writes it (root, /var/mail/sieve, sievec),
 #    then a real delivery through Postfix: the panel's rule must run first and the mailbox's own
 #    script after it, each filing a copy into its folder; `doveadm sieve list` must open the
-#    mailbox's scripts, and no "dovecot.sieve" may show up among the mail folders;
+#    mailbox's scripts, and no "dovecot.sieve" may show up among the mail folders; then (reperto 216)
+#    a panel's rule that moves, with no keep at the end as the panel writes it now: the message only
+#    in the panel's folder, not in INBOX, and the mailbox's own script does not run on it;
 #  - it shows the lines of /var/log/maillog written meanwhile;
 #  - at the end it removes mailbox, domain, the mail folder created by the login and the rule.
 #
@@ -168,6 +170,33 @@ if tr -d '\r' < "$WORK/sieve.out" | grep -q '^"probe" ACTIVE' \
     && [ "$(doveadm search -u "$MAILBOX" mailbox SieveProbePanel subject sieve-probe 2>/dev/null | wc -l | tr -d ' ')" -eq 1 ] \
     && [ "$(doveadm search -u "$MAILBOX" mailbox SieveProbeOwn subject sieve-probe 2>/dev/null | wc -l | tr -d ' ')" -eq 1 ] \
     && printf '%s' "$LISTED" | grep -q '^probe ACTIVE' && ! printf '%s' "$FOLDERS" | grep -q 'dovecot'; then
+    echo "  RESULT: OK"
+else
+    echo "  RESULT: FAILED"; failed=1
+fi
+
+echo ""
+echo "== Sieve: a panel's rule that moves, as the panel writes it (no keep at the end) =="
+# Reperto 216: a move in the panel's rule must take the message out of INBOX, and then the mailbox's own script does
+# not run on it (Pigeonhole runs the next script only while a keep is in effect). The own script above would file it
+# too: its subject contains "sieve-probe".
+printf 'require ["fileinto"];\nif header :contains "subject" "sieve-move" { fileinto "SieveProbePanel"; }\n' \
+    > "/var/mail/sieve/$DOMAIN/$USERDIR/.dovecot.sieve"
+sievec "/var/mail/sieve/$DOMAIN/$USERDIR/.dovecot.sieve" >/dev/null 2>&1
+MOVE_LOG=$(wc -l < /var/log/maillog 2>/dev/null | tr -d ' ')
+printf 'From: root@%s\nTo: %s\nSubject: sieve-probe sieve-move %s\n\nSieve probe\n' "$DOMAIN" "$MAILBOX" "$(date +%s)" > "$WORK/move.eml"
+sendmail -f "root@$DOMAIN" "$MAILBOX" < "$WORK/move.eml"
+for i in $(seq 1 30); do
+    [ "$(tail -n +"$((MOVE_LOG + 1))" /var/log/maillog | grep -c "lmtp($MAILBOX).*stored mail into mailbox")" -ge 1 ] && break
+    sleep 1
+done
+sleep 1
+tail -n +"$((MOVE_LOG + 1))" /var/log/maillog | grep "lmtp($MAILBOX)" | sed 's/^.*: sieve: /  sieve: /; s/^.*lmtp(/  lmtp(/'
+MOVED=$(doveadm search -u "$MAILBOX" mailbox SieveProbePanel subject sieve-move 2>/dev/null | wc -l | tr -d ' ')
+OWN=$(doveadm search -u "$MAILBOX" mailbox SieveProbeOwn subject sieve-move 2>/dev/null | wc -l | tr -d ' ')
+INBOX=$(doveadm search -u "$MAILBOX" mailbox INBOX subject sieve-move 2>/dev/null | wc -l | tr -d ' ')
+echo "  in the panel's folder: $MOVED, in the own script's folder: $OWN, in INBOX: $INBOX"
+if [ "$MOVED" -eq 1 ] && [ "$OWN" -eq 0 ] && [ "$INBOX" -eq 0 ]; then
     echo "  RESULT: OK"
 else
     echo "  RESULT: FAILED"; failed=1
