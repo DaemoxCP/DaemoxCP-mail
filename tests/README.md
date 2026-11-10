@@ -79,6 +79,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveGroupMailTest   (VM, as root, real deliveries)
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesOwnerTest   (VM, as root)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -524,6 +525,21 @@ it cannot write: the conversion runs the panel's mail configuration script, whic
 the alias part is skipped, saying so (otherwise folders in `/var/vmail` and Postfix and Dovecot reloaded). As nobody the
 test gives the vault a public key of its own in its temporary secrets folder, as root writes it for the web part.
 Measured on 10/11/2026 on the VM: 36 OK; with SSLMailServer as before 8 fail, one for each place that saves rules.
+
+**SieveRulesOwnerTest** — the panel's Sieve rules folder given back to root at start (reperto 225). On the real server
+`/var/mail/sieve` belonged to vmail (the installation of 11/10/2026): since reperto 221 root does not write rules where
+somebody else can change the path, so the first start of the new panel stopped (MailSpoolSticky warned, SieveForcedKeep
+left the rules as they were) and every save for those mailboxes would have answered "not written". In a test folder
+under /var/tmp, as root, with real owners (vmail, nobody): the real server's layout copied (owners, groups, modes):
+folders and rule files root's after (0755, 0644), readable by vmail and no longer writable by it, root:vmail files,
+Dovecot's log and every content as they were, RootOnlyPath accepting the mailbox folders, a second run with nothing to
+do; a link, a hard link to a root-only file of the same disk, a file of nobody, a FIFO, a spool that is not root's:
+nothing changed at all and the reason given; a root folder others can write loses only that write; a rule file with
+the system immutable flag half way: every entry back as it was. Measured on 10/11/2026 on the VM: 34 OK; with the
+checks taken out 9 fail, with the rollback taken out 1. And the upgrade with `upgrade-panel.sh` from main's jar of
+before on a clone with the real server's owners: with the jar of main 92931d1 it stops at the first start (the same
+three warnings), with this one six migrations and SieveRulesOwner say DONE, the second start is quiet, and
+mail-login-probe.sh, SieveActionsE2ETest and sieve-dialogs-browser-test.js on the real panel pass.
 
 **SieveDialogFieldsTest** — the Sieve dialogs of the Mailboxes page and their routes speak the same language
 (reperto 224). The Filters dialog sent conditions and actions as JSON text, which `/api/sieve` reads with optJSONArray
