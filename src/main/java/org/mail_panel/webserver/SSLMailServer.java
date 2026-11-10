@@ -3274,13 +3274,18 @@ public class SSLMailServer {
         logAudit("ALIAS_TO_MAILBOX", ip, address + (keep ? " (forwards kept, copy in the mailbox)" : " (aliases removed)")
                 + (archive ? ", old mail set aside" : s.mail().present() ? ", old mail found again" : ""));
         regenerateMailConfigs();
-        // I filtri compilati di una casella di prima non devono valere per questa: si riscrivono, vuoti.
-        if (!archive && s.mail().filters() && sieveGenerator != null)
-            sieveGenerator.saveSieveScript(address, sieveGenerator.generateSieveScript(id, Main.mailDatabase));
+        // I filtri compilati di una casella di prima non devono valere per questa: si riscrivono, vuoti. Se non si
+        // possono scrivere la casella c'e' lo stesso, ma quei filtri valgono ancora e la pagina lo deve dire, non
+        // rispondere che e' fatto (reperto 223).
+        boolean oldFiltersKept = !archive && s.mail().filters() && !regenerateSieveScript(id);
         StringBuilder msg = new StringBuilder(I18n.tr("server.convert.nowMailbox", Map.of("address", address)));
         if (keep) msg.append(' ').append(I18n.tr("server.convert.forwardsKept"));
         if (!moved.isEmpty()) msg.append(' ').append(I18n.tr("server.convert.oldMailIn", Map.of("path", String.valueOf(moved.get(0)[1]))));
         else if (s.mail().present()) msg.append(' ').append(I18n.tr("server.convert.oldMailFound"));
+        if (oldFiltersKept) {
+            msg.append(' ').append(I18n.tr("server.convert.oldFiltersKept"));
+            return r.put("success", false).put("saved", true).put("id", id).put("error", msg.toString());
+        }
         return r.put("success", true).put("id", id).put("message", msg.toString());
     }
 
@@ -10991,13 +10996,7 @@ public class SSLMailServer {
                         java.sql.Date endDate = endDateStr.isEmpty() ? null : java.sql.Date.valueOf(endDateStr);
 
                         if (Main.mailDatabase.saveAutoResponder(mailboxId, enabled, subject, bodyText, startDate, endDate, intervalHours)) {
-                            // Regenerate Sieve script
-                            MailDatabase.Mailbox mailbox = Main.mailDatabase.getMailboxById(mailboxId);
-                            if (mailbox != null && sieveGenerator != null) {
-                                String sieveScript = sieveGenerator.generateSieveScript(mailboxId, Main.mailDatabase);
-                                sieveGenerator.saveSieveScript(mailbox.email, sieveScript);
-                            }
-                            response.put("success", true);
+                            putRulesOutcome(response, regenerateSieveScript(mailboxId));
                         } else {
                             response.put("success", false);
                             response.put("error", I18n.tr("server.autoresponder.saveFailed"));
@@ -11070,8 +11069,7 @@ public class SSLMailServer {
                             String actions = req.optJSONArray("actions").toString();
 
                             if (Main.mailDatabase.createSieveFilter(mailboxId, name, priority, conditions, actions)) {
-                                regenerateSieveScript(mailboxId);
-                                response.put("success", true);
+                                putRulesOutcome(response, regenerateSieveScript(mailboxId));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.filter.createFailed"));
@@ -11087,8 +11085,7 @@ public class SSLMailServer {
                             String actions = req.optJSONArray("actions").toString();
 
                             if (Main.mailDatabase.updateSieveFilter(filterId, name, priority, enabled, conditions, actions)) {
-                                regenerateSieveScript(mailboxId);
-                                response.put("success", true);
+                                putRulesOutcome(response, regenerateSieveScript(mailboxId));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.filter.updateFailed"));
@@ -11099,8 +11096,7 @@ public class SSLMailServer {
                             int mailboxId = req.optInt("mailbox_id", 0);
 
                             if (Main.mailDatabase.deleteSieveFilter(filterId)) {
-                                regenerateSieveScript(mailboxId);
-                                response.put("success", true);
+                                putRulesOutcome(response, regenerateSieveScript(mailboxId));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.filter.deleteFailed"));
@@ -11125,14 +11121,39 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
-    private void regenerateSieveScript(int mailboxId) {
-        if (sieveGenerator != null) {
-            MailDatabase.Mailbox mailbox = Main.mailDatabase.getMailboxById(mailboxId);
-            if (mailbox != null) {
-                String sieveScript = sieveGenerator.generateSieveScript(mailboxId, Main.mailDatabase);
-                sieveGenerator.saveSieveScript(mailbox.email, sieveScript);
-            }
+    /**
+     * Riscrive dal database le regole Sieve della casella: risposta automatica, inoltri e filtri, tutte insieme. Falso
+     * se non sono state scritte: la casella non c'e', o SieveGenerator rifiuta (l'indirizzo, oppure una cartella da / a
+     * quella della casella che altri possono cambiare, RootOnlyPath del reperto 221), col motivo nel log del pannello.
+     * Allora Dovecot continua con le regole di prima.
+     */
+    private boolean regenerateSieveScript(int mailboxId) {
+        if (sieveGenerator == null) {
+            LOGGER.warning("Sieve rules of mailbox " + mailboxId + " not written: no Sieve generator (MySQL was not there at start)");
+            return false;
         }
+        MailDatabase.Mailbox mailbox = Main.mailDatabase.getMailboxById(mailboxId);
+        if (mailbox == null) {
+            LOGGER.warning("Sieve rules of mailbox " + mailboxId + " not written: no such mailbox");
+            return false;
+        }
+        return sieveGenerator.saveSieveScript(mailbox.email, sieveGenerator.generateSieveScript(mailboxId, Main.mailDatabase));
+    }
+
+    /**
+     * La risposta di un salvataggio che ha gia' cambiato il database e poi ha riscritto le regole Sieve. Prima l'esito
+     * della scrittura si perdeva e la pagina diceva che era fatto, mentre Dovecot continuava con le regole di prima
+     * (reperto 223). Il database resta com'e' e la risposta lo dice ("saved"): la pagina mostra la riga salvata, e chi
+     * riprova non la crea due volte. Le regole si riscrivono intere al prossimo salvataggio della casella che riesce.
+     */
+    private static void putRulesOutcome(JSONObject response, boolean written) {
+        if (written) {
+            response.put("success", true);
+            return;
+        }
+        response.put("success", false);
+        response.put("saved", true);
+        response.put("error", I18n.tr("server.sieve.notWritten"));
     }
 
     // ============== FORWARDING API ==============
@@ -11185,8 +11206,7 @@ public class SSLMailServer {
                             boolean keepCopy = req.optBoolean("keep_copy", true);
 
                             if (Main.mailDatabase.createForwardingRule(mailboxId, destination, keepCopy)) {
-                                regenerateSieveScript(mailboxId);
-                                response.put("success", true);
+                                putRulesOutcome(response, regenerateSieveScript(mailboxId));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.forward.createFailed"));
@@ -11199,8 +11219,7 @@ public class SSLMailServer {
                             boolean enabled = req.optBoolean("enabled", true);
 
                             if (Main.mailDatabase.updateForwardingRule(ruleId, destination, keepCopy, enabled)) {
-                                regenerateSieveScript(mailboxId);
-                                response.put("success", true);
+                                putRulesOutcome(response, regenerateSieveScript(mailboxId));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.forward.updateFailed"));
@@ -11210,8 +11229,7 @@ public class SSLMailServer {
                             int ruleId = req.optInt("rule_id", 0);
 
                             if (Main.mailDatabase.deleteForwardingRule(ruleId)) {
-                                regenerateSieveScript(mailboxId);
-                                response.put("success", true);
+                                putRulesOutcome(response, regenerateSieveScript(mailboxId));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.forward.deleteFailed"));

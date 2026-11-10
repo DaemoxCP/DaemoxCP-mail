@@ -77,6 +77,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveCompilerE2ETest   (VM, as root, real deliveries)
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveFolderOwnerTest   (VM, as root, real deliveries)
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveGroupMailTest   (VM, as root, real deliveries)
+    su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -509,6 +510,20 @@ Since this reperto root writes rules only under a sticky `/var/mail`, as the pan
 SieveCompilerE2ETest and SieveFolderOwnerTest give `/var/mail` that state in their setUp (MailSpoolSticky) and put its
 mode back at the end.
 
+**SieveRulesNotWrittenTest** — the page is told when the panel's Sieve rules were not written (reperto 223).
+`saveSieveScript` returns false when it writes nothing (since reperto 221 also while a folder from / to
+`/var/mail/sieve` can be changed by others, `/var/mail` without the sticky bit for one), and its callers dropped it: the
+page said "done" while Dovecot kept the earlier rules. On the real server over HTTPS, with the test MySQL and a
+SieveGenerator that refuses or accepts on request: forwarding (create, update, delete), filters (create, update,
+delete), auto-reply and alias to mailbox of an address that left filters behind. Refused: success false, saved true,
+`server.sieve.notWritten` (English, and Italian once; for the alias `server.convert.oldFiltersKept` after the usual
+message), the change still in the database; accepted: success true and nothing else; the generator gets the address and
+the rules of the database as it is now. Run it as an unprivileged user (`nobody`), with the jar and the tests in a folder
+it cannot write: the conversion runs the panel's mail configuration script, which then cannot even be written; as root
+the alias part is skipped, saying so (otherwise folders in `/var/vmail` and Postfix and Dovecot reloaded). As nobody the
+test gives the vault a public key of its own in its temporary secrets folder, as root writes it for the web part.
+Measured on 10/11/2026 on the VM: 36 OK; with SSLMailServer as before 8 fail, one for each place that saves rules.
+
 **DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what
 replaces them (MySQL flavor only); the protected dependencies used as they are; a second MySQL client in the plan
@@ -939,6 +954,19 @@ without a recorded build or with changes outside the commit says so; in English,
 horizontal scrolling and with 44 px touch buttons. With `REMOTE` it runs on the real server
 (**HomePanelE2EServer**, on the VM) and compares the card with the machine's data: the jar's
 fingerprint, commit, FreeBSD, port.
+
+**sieve-rules-browser-test.js** — the page when the mail server did not get the rules (reperto 223), only against the
+real server: **SieveRulesE2EServer** on the VM (as root, the test MySQL, the REAL SieveGenerator; it seeds
+`sieve-rules-shown.test` with alice, the alias bob and bob's filters left on the disk, and starts only with a plain file
+`install_scripts` next to the jar, so the alias conversion cannot run the mail configuration script). The port through
+an SSH tunnel (`ssh -N -L PORT:127.0.0.1:PORT`), `REMOTE=https://panel.localhost:PORT MAP=127.0.0.1 SESSION=...`.
+`PHASE=refused`, with `/var/mail` at FreeBSD's 0775: a forward of alice and her auto-reply, each with the red notice of
+it.json on top of the dialog, still there after 10 s; the forward in the list and the field empty; the auto-reply
+dialog open; bob turned into a mailbox, the dialog closed and the alias page saying in red that his old filters still
+apply. `PHASE=written`, with `/var/mail` at 1775: a second forward with no notice, and alice's rules file then holds both
+forwards and the auto-reply saved while refused. At the end `rm -r /var/mail/sieve/sieve-rules-shown.test` and
+`/var/mail` back as it was. Measured on 10/11/2026: all OK; with SSLMailServer as before 8 fail, with the page as before
+5 (the forward missing from the list, the dialog of bob still open).
 
 **PanelInfoTest** — what the card reads (PanelInfo): the entries Maven writes into the jar and those
 it did not replace, the machine's boot from `kern.boottime`, the JVM's start, the process details,
