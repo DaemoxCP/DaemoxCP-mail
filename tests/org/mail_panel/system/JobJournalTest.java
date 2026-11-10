@@ -118,6 +118,26 @@ public class JobJournalTest {
                 if (after.getJSONObject(i).getString("type").equals("update_everything")) listed = after.getJSONObject(i).getString("status").equals("completed");
             check("listed as completed, not as unfinished", listed);
 
+            System.out.println("\n== logs of before, and errors redone well (reperto 212) ==");
+            // Before build 554 the way back's cleanup wrote a line AFTER the end: that log ended, and must read so.
+            Path old = dir.resolve("20261109-070942-pkg_branch__branch-1.log");
+            Files.writeString(old, "=== job branch-1 (pkg_branch) started 2026-11-09T07:09:42Z ===\n2026-11-09T07:09:56Z === end: completed after 14 s ===\n"
+                    + "2026-11-09T07:09:56Z Way back: no package changed, so packages-before-x is not needed: removed.\n");
+            check("a log of before with a line after its end: completed, not \"without an end\"", "completed".equals(JobJournal.endLine(old).contains("=== end: completed") ? "completed" : "x"));
+            JSONArray settled = new JSONArray()
+                    .put(new JSONObject().put("type", "update_everything").put("status", "completed"))
+                    .put(new JSONObject().put("type", "update_everything").put("status", "error"))
+                    .put(new JSONObject().put("type", "update").put("status", "error"))
+                    .put(new JSONObject().put("type", "os-patch").put("status", "error"))
+                    .put(new JSONObject().put("type", "pkg_branch").put("status", "unfinished"));
+            JobJournal.settle(settled);
+            check("an error of a package job followed by a package job that ended well: settled (also of another type of the family)",
+                    settled.getJSONObject(1).getBoolean("settled") && settled.getJSONObject(2).getBoolean("settled"));
+            check("  one of another family (the base system), or with nothing after it: not settled",
+                    !settled.getJSONObject(3).getBoolean("settled") && !settled.getJSONObject(4).getBoolean("settled"));
+            check("  a job that ended well is never settled", !settled.getJSONObject(0).getBoolean("settled"));
+            Files.delete(old);
+
             System.out.println("\n== only the newest stay ==");
             JobJournal.keep = 4;
             for (int i = 0; i < 6; i++) {

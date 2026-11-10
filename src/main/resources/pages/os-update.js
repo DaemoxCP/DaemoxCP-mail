@@ -208,7 +208,9 @@
                 const when = new Date(j.startedUtc);
                 h += '<tr class="upd-cell"><td class="small">' + escHtml(isNaN(when) ? j.startedUtc : when.toLocaleString()) + '</td>'
                    + '<td>' + escHtml(kind[j.type] || j.type) + '</td>'
-                   + '<td><span class="badge ' + (badge[j.status] || 'upd-badge-info') + '">' + escHtml(outcome[j.status] || j.status) + '</span></td>'
+                   // Finita male ma rifatta bene da una dopo dello stesso tipo (reperto 212): lo si dice, senza il colore d'allarme.
+                   + '<td><span class="badge ' + (j.settled ? 'upd-badge-info' : (badge[j.status] || 'upd-badge-info')) + '">' + escHtml(outcome[j.status] || j.status) + '</span>'
+                   + (j.settled ? '<div class="small text-muted mt-1">' + escHtml(t('jr.settled')) + '</div>' : '') + '</td>'
                    + '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-secondary touch-target" data-name="' + escHtml(j.name) + '" data-on-click="jrShow(this.dataset.name)">'
                    + escHtml(t('jr.view')) + '</button></td></tr>';
             });

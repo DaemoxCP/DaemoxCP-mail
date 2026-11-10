@@ -455,17 +455,33 @@ const allErrors = [], allDialogs = [];
         && /7 checks are fine/.test(await dg.page.textContent('#diagAllOkTitle')));
     if (shots) await dg.page.locator('#diag-all').screenshot({ path: path.join(shots, 'diagnostics-check-all.png') });
     const cmp = await dg.page.evaluate(() => [
-        diagCompat({ dovecot: { scanned: true, compatible24: false, doveconfOk: true }, postfix: { verdict: 'LEVEL_BEHIND' },
+        diagCompat({ dovecot: { scanned: true, compatible24: false, doveconfOk: true, breakingUpgradeAvailable: true }, postfix: { verdict: 'LEVEL_BEHIND' },
             rspamd: { present: false }, mysql: { present: true, eol: true, issues: [] }, webmail: { consistent: false } }),
         diagCompat({ dovecot: { scanned: true, compatible24: true, doveconfOk: true }, postfix: { verdict: 'LEVEL_BEHIND' },
             rspamd: { present: true, verdict: 'BEHAVIOR_DIFFS' }, mysql: { present: false }, webmail: { consistent: true } }),
         diagCompat({ dovecot: { scanned: true, compatible24: true, doveconfOk: true }, postfix: { verdict: 'ALIGNED' },
+            rspamd: { present: true, verdict: 'NOTHING_TO_REPORT' }, mysql: { present: true, issues: [] }, webmail: { consistent: true } }),
+        // The real server on 09/11/2026: the installed dovecot is the last 2.3, and 2.4 is the separate dovecot24 (reperto 212).
+        diagCompat({ dovecot: { scanned: true, compatible24: false, doveconfOk: true, breakingUpgradeAvailable: false,
+            repoPackages: [{ name: 'dovecot', version: '2.3.21.1_3' }, { name: 'dovecot24', version: '2.4.5_2' }] }, postfix: { verdict: 'ALIGNED' },
             rspamd: { present: true, verdict: 'NOTHING_TO_REPORT' }, mysql: { present: true, issues: [] }, webmail: { consistent: true } })]);
     console.log('    ' + cmp.map(c => c[0] + ': ' + c[1]).join('\n    '));
     check('compatibility says what and whose: Dovecot first (red), then Postfix, MySQL, webmail (yellow)', cmp[0][0] === 'problem'
         && /^Dovecot: the configuration is not ready for 2\.4; Postfix: .+; MySQL: this version is at the end of its support; Webmail: PHP and Roundcube do not match\.$/.test(cmp[0][1]));
     check('  only Postfix behind: to look at, the card\'s verdict inside the sentence', cmp[1][0] === 'warn' && cmp[1][1] === 'Postfix: the level is behind.');
     check('  all in order: fine', cmp[2][0] === 'ok');
+    check('  Dovecot not ready for 2.4, which is only a separate package: to look at, not a problem, and it says mail keeps working',
+        cmp[3][0] === 'warn' && /^Dovecot: the configuration is not ready for 2\.4 yet; 2\.4 is a separate package \(dovecot24\) that nothing installs by itself, so mail keeps working on 2\.3\.$/.test(cmp[3][1]));
+    // The operation logs (reperto 212): an error that a later job of the same kind redid well is not to look at.
+    const jr = await dg.page.evaluate(() => {
+        const v = DIAG_CHECKS.find(c => c.key === 'journal').verdict;
+        return [v({ journals: [{ name: 'b', type: 'update_everything', status: 'completed', settled: false },
+                               { name: 'a', type: 'update_everything', status: 'error', settled: true }] }),
+                v({ journals: [{ name: 'c', type: 'update_everything', status: 'error', settled: false }] })];
+    });
+    check('  an error redone well later: fine, and it says so', jr[0][0] === 'ok'
+        && jr[0][1] === 'No recent operation left to look at: 1 ended with an error, and a later one of the same kind ended well.');
+    check('  an error not redone: to look at, with its log', jr[1][0] === 'warn' && /1 recent operation ended with an error/.test(jr[1][1]));
     await dg.page.click('#diagAllList li[data-diag="journal"] button');
     await dg.page.waitForFunction(() => /=== end: error ===/.test(document.getElementById('jr-text').textContent), null, { timeout: 10000 });
     check('the failed job: its log, from the operation logs', dg.calls.some(c => c.action === 'journal_read' && c.name === '20261109-000000-os-patch__osp-1.log'));

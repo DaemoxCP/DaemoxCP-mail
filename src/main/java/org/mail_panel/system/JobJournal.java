@@ -99,13 +99,14 @@ public final class JobJournal {
             String type = rest.contains("__") ? rest.substring(0, rest.indexOf("__")) : rest;
             String start = name.substring(0, 4) + "-" + name.substring(4, 6) + "-" + name.substring(6, 8) + "T"
                     + name.substring(9, 11) + ":" + name.substring(11, 13) + ":" + name.substring(13, 15) + "Z";
-            String end = lastLine(f);
+            String end = endLine(f);
             String status = end.contains("=== end: completed") ? "completed" : end.contains("=== end: error") ? "error"
                     : end.contains("=== end: ") ? "ended" : "unfinished";
             long size;
             try { size = Files.size(f); } catch (IOException e) { size = -1; }
             out.put(new JSONObject().put("name", name).put("type", type).put("startedUtc", start).put("status", status).put("bytes", size));
         }
+        settle(out);
         return new JSONObject().put("success", true).put("dir", dir.toString()).put("journals", out);
     }
 
@@ -146,19 +147,56 @@ public final class JobJournal {
         }
     }
 
-    private static String lastLine(Path f) {
+    /**
+     * Un lavoro finito male a cui ne e' seguito uno della stessa famiglia finito bene: «settled». La Diagnostica li
+     * contava per sempre fra quelli da guardare: sul server vero, il 09/11/2026, tre errori gia' rifatti con successo
+     * (reperto 212). L'elenco, dal piu' recente: chi incontra un lavoro riuscito ricorda la sua famiglia.
+     */
+    static void settle(JSONArray journals) {
+        java.util.Set<String> doneLater = new java.util.HashSet<>();
+        for (int i = 0; i < journals.length(); i++) {
+            JSONObject j = journals.getJSONObject(i);
+            String fam = family(j.optString("type"));
+            String st = j.optString("status");
+            if ("completed".equals(st)) doneLater.add(fam);
+            j.put("settled", ("error".equals(st) || "unfinished".equals(st)) && doneLater.contains(fam));
+        }
+    }
+
+    /** La famiglia di un lavoro: i pacchetti (quelli che li cambiano), il sistema di base, o il tipo stesso. */
+    static String family(String type) {
+        return switch (type) {
+            case "update", "guided_update", "guided_update_all", "update_everything", "roundcube", "maintenance",
+                 "mysql84_migration", "python" -> "packages";
+            case "os-patch", "os-fetch", "jump", "system" -> "os";
+            default -> type;
+        };
+    }
+
+    /**
+     * La riga della fine: l'ultima «=== end:» fra le ultime righe, se c'e', altrimenti l'ultima riga. Prima della
+     * build 554 la pulizia della via di ritorno scriveva una riga DOPO la fine, e quei registri risultavano «senza una
+     * fine» pur essendo finiti (reperto 207): restano su disco, e si leggono giusti.
+     */
+    static String endLine(Path f) {
+        String tail = lastLines(f);
+        String[] lines = tail.split("\n");
+        for (int i = lines.length - 1; i >= Math.max(0, lines.length - 6); i--)
+            if (lines[i].contains("=== end: ")) return lines[i];
+        return lines.length == 0 ? "" : lines[lines.length - 1];
+    }
+
+    private static String lastLines(Path f) {
         try {
             long size = Files.size(f);
             byte[] tail;
             try (var ch = Files.newByteChannel(f)) {
-                ch.position(Math.max(0, size - 2000));
-                java.nio.ByteBuffer b = java.nio.ByteBuffer.allocate((int) Math.min(2000, size));
+                ch.position(Math.max(0, size - 4000));
+                java.nio.ByteBuffer b = java.nio.ByteBuffer.allocate((int) Math.min(4000, size));
                 ch.read(b);
                 tail = b.array();
             }
-            String t = new String(tail, StandardCharsets.UTF_8).trim();
-            int nl = t.lastIndexOf('\n');
-            return nl < 0 ? t : t.substring(nl + 1);
+            return new String(tail, StandardCharsets.UTF_8).trim();
         } catch (IOException e) {
             return "";
         }

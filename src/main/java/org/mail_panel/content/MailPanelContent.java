@@ -12800,9 +12800,17 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-success py-2 small"><i class="fas fa-check me-1" aria-hidden="true"></i>'
                    + escHtml(t('up.dvCompatOk')) + '</div>';
             } else {
-                h += '<div class="alert alert-danger py-2 small mb-2">' + t('up.dvBreak.html') + ' '
-                   + escHtml(d.breakingUpgradeAvailable ? t('up.dvBreakNow') : t('up.dvBreakLater'))
-                   + '</div>';
+                // La 2.4 come pacchetto a parte (dovecot24 nel ramo latest): niente ci passa da solo, e il pacchetto
+                // installato resta sulla 2.3. E' da preparare, non un guasto: giallo, e lo si dice (reperto 212).
+                const sep = (d.repoPackages || []).find(p => /^dovecot2[4-9]$/.test(p.name));
+                if (!d.breakingUpgradeAvailable && sep) {
+                    h += '<div class="alert alert-warning py-2 small mb-2">' + t('up.dvNotReady.html') + ' '
+                       + escHtml(t('up.dvBreakSeparate', { name: sep.name, version: sep.version })) + '</div>';
+                } else {
+                    h += '<div class="alert alert-danger py-2 small mb-2">' + t('up.dvBreak.html') + ' '
+                       + escHtml(d.breakingUpgradeAvailable ? t('up.dvBreakNow') : t('up.dvBreakLater'))
+                       + '</div>';
+                }
                 h += '<div class="table-responsive"><table class="table table-sm"><thead><tr>'
                    + '<th scope="col" data-style="width:30%">' + escHtml(t('up.colConstruct')) + '</th><th scope="col">' + escHtml(t('up.colWants24')) + '</th><th scope="col" data-style="width:30%">' + escHtml(t('up.colWhere')) + '</th></tr></thead><tbody>';
                 (d.issues || []).forEach(i => {
