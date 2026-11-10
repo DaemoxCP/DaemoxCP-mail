@@ -97,17 +97,20 @@ public class SieveForcedKeepTest {
             System.out.println("\n== 3. The real sievec ==");
             Path sievec = Path.of("/usr/local/bin/sievec");
             if ("yes".equals(System.getProperty("e2e.vm")) && Files.isExecutable(sievec)) {
-                // A folder of its own: frank, above, was put back with the tail on purpose.
+                // A folder of its own: frank, above, was put back with the tail on purpose. Open to everyone like
+                // /var/mail/sieve: sievec runs as its own user (reperto 218) and must reach the script.
+                Files.setPosixFilePermissions(root, PosixFilePermissions.fromString("rwxr-xr-x"));
                 Path real3 = Files.createDirectories(root.resolve("sieve-real"));
                 Path gina = write(real3.resolve("example.test/gina/.dovecot.sieve"), moveBefore);
                 check("the old script compiles", generator.compileScript(gina.toString()));
                 Path binary = gina.resolveSibling(".dovecot.svbin");
+                check("  and its binary is beside it", Files.isRegularFile(binary));
                 Thread.sleep(1100);
                 SieveForcedKeep.Outcome real = SieveForcedKeep.repair(real3, p -> generator.compileScript(p.toString()));
                 check("fixed with the real sievec", real.fixed() == 1 && real.putBack().isEmpty()
                         && Files.readString(gina).equals(moveNow));
-                check("  the compiled binary is newer than the script, so Dovecot uses it",
-                        Files.getLastModifiedTime(binary).compareTo(Files.getLastModifiedTime(gina)) >= 0);
+                check("  the compiled binary is newer than the script, so Dovecot uses it", Files.isRegularFile(binary)
+                        && Files.getLastModifiedTime(binary).compareTo(Files.getLastModifiedTime(gina)) > 0);
             } else {
                 System.out.println("  (skipped: needs sievec, turned on with -De2e.vm=yes on the VM)");
             }

@@ -46,7 +46,10 @@ import java.util.regex.Pattern;
  *       righe di versione che la 2.4 pretende, prese da dovecot.conf; per la 2.3 e' vuota. Le estensioni restano
  *       quelle predefinite di Pigeonhole, che sono anche quelle della configurazione del pannello (nella 2.3 la sua
  *       riga sieve_extensions aggiunge con + solo estensioni gia' predefinite, nella 2.4 non c'e'). Misurato sulla
- *       VM: il compilato e' identico byte per byte a quello di root con la configurazione vera;</li>
+ *       VM: il compilato e' identico byte per byte a quello di root con la configurazione vera, sulla 2.3.21 e sulla
+ *       2.4.5 (questa in un clone del boot environment, con la configurazione 2.4 del pannello). Nella 2.4 -c /dev/null
+ *       e le righe date con -o non bastano («dovecot_storage_version setting must be set»): servono nel file; e
+ *       doveconf, da un utente qualunque, scrive un suo file temporaneo in /tmp;</li>
  *   <li>non vmail: chi consegna potrebbe allora mettere le mani sul compilato che root installa, e riscrivere cosi'
  *       le regole del pannello, proprio quello che il reperto 214 gli toglie;</li>
  *   <li>sievec compila lo script al suo percorso vero, perche' il compilato lo porta scritto dentro («location», e la
@@ -75,6 +78,11 @@ public final class SieveCompiler {
     static final String FIND = "/usr/bin/find";
     static final List<String> SIEVEC_PLACES = List.of("/usr/local/bin/sievec", "/usr/bin/sievec", "/usr/local/libexec/dovecot/sievec");
     static final Path DOVECOT_CONF = Path.of("/usr/local/etc/dovecot/dovecot.conf");
+    /**
+     * Dove nasce la cartella di lavoro: /tmp, non java.io.tmpdir. sievec deve poterci passare, e una java.io.tmpdir
+     * spostata con mailpanel_opts in una cartella chiusa fermerebbe ogni compilazione senza dire perche'.
+     */
+    static final Path WORK_BASE = Path.of("/tmp");
 
     /** Nella cartella di lavoro: la configurazione minima, lo script da validare, la cartella di sievec e il suo compilato. */
     static final String CONF = "dovecot.conf";
@@ -247,7 +255,7 @@ public final class SieveCompiler {
      * minima di root 0644 e la cartella out di sievec, 0700, dove lui salva il compilato.
      */
     static Path workDir() throws IOException {
-        Path work = Files.createTempDirectory("sievec-");
+        Path work = Files.createTempDirectory(WORK_BASE, "sievec-");
         boolean ready = false;
         try {
             Files.setPosixFilePermissions(work, PosixFilePermissions.fromString("rwx--x--x"));
