@@ -17,6 +17,34 @@ public class DovecotScript {
     private static final String SCRIPT_PATH = "./install_scripts/install_dovecot.sh";
     private final String data;
 
+    /**
+     * La cartella delle regole Sieve del pannello (risposta automatica, inoltro, filtri:
+     * /var/mail/sieve/dominio/nome/.dovecot.sieve) e quella degli script globali di sieve_global_dir: di root, e
+     * nessuno oltre root ci scrive (reperto 220).
+     *
+     * <p>Prima questo script dava tutto a vmail (chown -R vmail:vmail /var/mail/sieve). Dal reperto 214 le regole del
+     * pannello sono di root apposta: vmail, che consegna, le legge e le esegue ma non le deve poter riscrivere. Con la
+     * cartella di vmail pero' bastava rinominare quella di un dominio (di root) e farne una propria accanto, con regole
+     * proprie: misurato sulla VM il 10/11/2026, «mv» e «mkdir» da vmail riusciti. La documentazione di Pigeonhole 2.3
+     * (Sieve Usage) dice lo stesso degli script globali: non devono essere scrivibili dall'utente, e li precompila
+     * l'amministratore con sievec (dal reperto 218 l'utente sievec, poi root li mette a posto).
+     *
+     * <p>root:mail come le crea il pannello: /var/mail e' root:mail, e su FreeBSD una cartella nuova prende il gruppo
+     * di quella che la contiene. -R senza -H non segue i collegamenti (quelli di ManageSieve restano com'erano), e
+     * go-w toglie solo la scrittura: lo script resta 0644, le cartelle 0755, e vmail li legge come prima.
+     *
+     * <p>Lo script di questa classe oggi non lo lancia nessuno: la rotta /api/install non c'e' dal primo commit
+     * (30/12/2025), e install_dovecot.sh e' fra gli script messi da parte (InstallScripts.RETIRED). Il chown a vmail e'
+     * arrivato il 31/12/2025: nessun server l'ha mai eseguito, quindi nessuna migrazione all'avvio.
+     */
+    static final String PANEL_SIEVE_FOLDER = """
+            # The panel's Sieve rules: root's, and only root writes there (vmail reads and runs them)
+            mkdir -p /var/mail/sieve/global
+            chown -R root:mail /var/mail/sieve
+            chmod -R go-w /var/mail/sieve
+            chmod 755 /var/mail/sieve /var/mail/sieve/global
+            """;
+
     public DovecotScript() {
         this.data = """
             #!/bin/sh
@@ -128,10 +156,7 @@ MASTER_EOF
             mkdir -p /var/run/dovecot
             chown root:dovecot /var/run/dovecot
 
-            # Create Sieve directory for auto-responders and filters
-            mkdir -p /var/mail/sieve/global
-            chown -R vmail:vmail /var/mail/sieve
-            chmod -R 755 /var/mail/sieve
+            """ + PANEL_SIEVE_FOLDER + """
 
             # Create Postfix spool directory for SASL socket
             mkdir -p /var/spool/postfix/private

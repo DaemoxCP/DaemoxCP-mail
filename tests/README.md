@@ -75,6 +75,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveActionsE2ETest   (VM, as root, real deliveries)
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveCompilerTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveCompilerE2ETest   (VM, as root, real deliveries)
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveFolderOwnerTest   (VM, as root, real deliveries)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -471,6 +472,21 @@ no Sieve error in the maillog, while a delivery with the binary taken away logs 
 neither the script nor the binary nor add a file beside them; `lastcomm` says every sievec ran as `sievec`. Measured on
 10/11/2026 on Dovecot 2.3.21: all pass; with SieveGenerator put back as it was (sievec as root) 2 fail: "sievec ran 5
 times, as [root]".
+
+**SieveFolderOwnerTest** — the folder of the panel's Sieve rules, `/var/mail/sieve`, stays root's (reperto 220). Until
+10/11/2026 the Dovecot component's script (DovecotScript) gave it to vmail with `chown -R vmail:vmail`: vmail could then
+rename a domain's folder of root's and make its own in its place, with rules of its own. Without a system: every command
+of the script that touches `/var/mail/sieve` gives it to root and no write to group or others (and the checks can
+fail). With `-De2e.vm=yes`, as root: the script's own commands run for real on a bench folder under a parent made like
+`/var/mail` (root:mail 0775), never on the real one; on no folder they make it and `global` root:mail 0755 and vmail
+creates nothing; on a folder the old script gave to vmail (first vmail renames a domain's folder: the probe works) they
+leave everything root:mail with no write for group or others, follow no link vmail made, and vmail can rename, rewrite
+or add nothing while it still reads the rules. Then the real `/var/mail/sieve` with `sieve-owner.test` (created and
+removed): a rule saved by the panel moves a message, vmail can rename neither the domain's folder nor the mailbox's nor
+the rule or its binary, nor rewrite them or add a folder, and the next delivery still follows the rule. Measured on
+10/11/2026 on Dovecot 2.3.21: all pass; with DovecotScript put back as it was 12 fail (parts 1 and 2; part 3 measures
+the real folder, which the panel makes root's, and passes on both). The script itself runs on no path today: the route
+`/api/install` is gone since the first commit and `install_dovecot.sh` is retired (InstallScripts.RETIRED).
 
 **DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what
