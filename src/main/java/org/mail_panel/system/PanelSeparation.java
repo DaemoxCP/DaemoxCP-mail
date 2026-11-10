@@ -59,8 +59,8 @@ public final class PanelSeparation {
     public static final String GROUP = "mailpanel";
     /** Il commento con cui il pannello crea l'utente: un utente mailpanel con un altro non e' suo. */
     static final String GECOS = "Mail panel web part";
-    static final String HOME = "/nonexistent";
-    static final String SHELL = "/usr/sbin/nologin";
+    static final String HOME = PanelUser.HOME;
+    static final String SHELL = PanelUser.SHELL;
 
     /** La cartella del socket e dei pid; le prove la spostano con -Dmailpanel.run.dir. */
     static Path runDir = Path.of(System.getProperty("mailpanel.run.dir", "/var/run/mailpanel"));
@@ -169,46 +169,21 @@ public final class PanelSeparation {
         }
     }
 
-    /**
-     * L'utente mailpanel, creato se manca. Null se c'e' ed e' quello del pannello; altrimenti il motivo.
-     * Il formato di pw usershow e' quello di master.passwd: nome:password:uid:gid:classe:cambio:scadenza:
-     * commento:cartella:shell (pw(8)); quello di pw groupshow e' nome:password:gid:membri.
-     */
+    /** L'utente della web come lo crea il pannello: i controlli stanno in PanelUser, uguali per ogni utente suo. */
+    static final PanelUser WEB_USER = new PanelUser(USER, GECOS);
+
+    /** L'utente mailpanel, creato se manca. Null se c'e' ed e' quello del pannello; altrimenti il motivo. */
     static String ensureUser() {
-        Duration t = Duration.ofSeconds(15);
-        boolean created = false;
-        if (!Shell.run(t, "pw", "groupshow", GROUP).success()) {
-            if (!Shell.run(t, "pw", "groupadd", GROUP).success()) return "the group " + GROUP + " could not be created";
-            created = true;
-        }
-        if (!Shell.run(t, "pw", "usershow", USER).success()) {
-            if (!Shell.run(t, "pw", "useradd", USER, "-g", GROUP, "-d", HOME, "-s", SHELL, "-c", GECOS, "-w", "no").success())
-                return "the user " + USER + " could not be created";
-            created = true;
-        }
-        String problem = userProblem(Shell.run(t, "pw", "usershow", USER).outputTrim(),
-                Shell.run(t, "pw", "groupshow", GROUP).outputTrim());
-        if (problem != null) return problem;
-        if (created) LOGGER.info("[PanelSeparation] DONE: user and group " + USER + " created (no password, no shell,"
+        PanelUser.Ensured e = WEB_USER.ensure();
+        if (e.problem() != null) return e.problem();
+        if (e.created()) LOGGER.info("[PanelSeparation] DONE: user and group " + USER + " created (no password, no shell,"
                 + " home " + HOME + "): the panel's web part runs with it");
         return null;
     }
 
     /** Null se le righe di pw sono quelle dell'utente creato dal pannello; altrimenti cosa non torna. Pura. */
     static String userProblem(String userLine, String groupLine) {
-        String[] u = userLine.split(":", -1);
-        String[] g = groupLine.split(":", -1);
-        if (u.length < 10 || g.length < 4) return "the user " + USER + " or its group cannot be read";
-        String other = "the user " + USER + " exists and is not the panel's: ";
-        if (!USER.equals(u[0])) return other + "name " + u[0];
-        if ("0".equals(u[2])) return other + "uid 0";
-        if (!GECOS.equals(u[7])) return other + "comment '" + u[7] + "'";
-        if (!HOME.equals(u[8])) return other + "home " + u[8];
-        if (!SHELL.equals(u[9])) return other + "shell " + u[9];
-        if (!"*".equals(u[1]) && !u[1].startsWith("*LOCKED*")) return other + "it has a password";
-        if (!GROUP.equals(g[0]) || !g[2].equals(u[3])) return other + "its group is not " + GROUP;
-        if (!g[3].isEmpty()) return "the group " + GROUP + " has other members (" + g[3] + "): they would read the panel's files";
-        return null;
+        return WEB_USER.problem(userLine, groupLine);
     }
 
     static String jarPath() {

@@ -21,7 +21,8 @@ import java.util.stream.Stream;
  * sempre nella INBOX: «Sposta» lo lasciava nella cartella E nella INBOX, «Inoltra» senza copia ne teneva una, «Elimina»
  * non eliminava niente. Adesso SieveGenerator non lo scrive piu'; qui si toglie dagli script che aveva gia' scritto, in
  * /var/mail/sieve/dominio/nome/.dovecot.sieve, e si ricompilano con sievec (la cartella e' di root: Dovecot, che consegna
- * come vmail, non potrebbe salvare il compilato da solo).
+ * come vmail, non potrebbe salvare il compilato da solo). sievec gira con l'utente sievec, non da root, e root installa
+ * solo il compilato (SieveCompiler, reperto 218).
  *
  * Si tocca solo uno script del pannello: un file vero (un collegamento lo fa ManageSieve, non il pannello), che comincia
  * con una delle due righe require che il pannello ha scritto (prima e dopo l'aggiunta di "date") e finisce con quella coda

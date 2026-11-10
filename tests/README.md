@@ -73,6 +73,8 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.integration.SieveGeneratorTest
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveForcedKeepTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveActionsE2ETest   (VM, as root, real deliveries)
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveCompilerTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveCompilerE2ETest   (VM, as root, real deliveries)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -446,6 +448,29 @@ saved through ManageSieve runs when the panel's rules keep the message and does 
 before is fixed by SieveForcedKeep.repair and then the move moves. Measured on 09/11/2026 on Dovecot 2.3.21: 25 checks
 pass; with the forced keep put back in the jar 7 fail (move, forward without a copy, delete and reject keep INBOX, the
 own script runs after a move, and in the last part the faulty generator writes the keep again).
+
+**SieveCompilerTest** — Pigeonhole's sievec run as the user `sievec`, never as root (reperto 218, SieveCompiler). Without a
+system: the binary's name beside the script; the minimal configuration passed with `-c` (empty for Dovecot 2.3, the two
+version lines of the panel's own 2.4 dovecot.conf, nothing that is not a version number); sievec's output read as a
+refusal only when it names a line of the script (an unreadable or missing script exits 89 like a syntax error, and is
+not one); the command through chroot as `sievec` with only its group; an environment with nothing of root's; the user
+accepted only as the panel creates it. With `-De2e.vm=yes`, as root: a panel script compiles, its binary is installed
+beside it with the script's owner, group and mode, strictly newer, byte for byte what root's sievec makes with Dovecot's
+real configuration; a script with an error is refused and the binary of before stays; an unreadable script, a folder
+others can write and a link are not compiled and nothing is installed; validate() agrees with root's sievec on three
+texts; no working folder is left in /tmp. It tests SieveCompiler itself, so it passes with or without the change in
+SieveGenerator.
+
+**SieveCompilerE2ETest** — the same through the panel's own entry points (SieveGenerator.saveSieveScript, compileScript,
+validateScript), with real deliveries and the kernel's process accounting on (on the VM as root with `-De2e.vm=yes`; it
+creates `sieve-compile.test` with two mailboxes, removes it, and turns accounting on into a file of its own only if it was
+off). The binary has the script's owner, group and mode and is newer; a delivery lands where the rule says; with the
+script changed and its time put before the binary's the delivery follows the binary, so Dovecot runs the precompiled one;
+no Sieve error in the maillog, while a delivery with the binary taken away logs "save: failed to create temporary file
+... Permission denied (euid=5000(vmail)" (the check can fail); validateScript refuses at the right line; vmail can touch
+neither the script nor the binary nor add a file beside them; `lastcomm` says every sievec ran as `sievec`. Measured on
+10/11/2026 on Dovecot 2.3.21: all pass; with SieveGenerator put back as it was (sievec as root) 2 fail: "sievec ran 5
+times, as [root]".
 
 **DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what
