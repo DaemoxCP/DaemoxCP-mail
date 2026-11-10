@@ -810,6 +810,13 @@ public class SSLMailServer {
             // erano solo bersagli (Pop3 verifica e torna indietro).
             org.mail_panel.system.Pop3.ensureAtBoot();
 
+            // /var/mail col bit sticky: chi ha il gruppo mail (postfix, clamav, dma) non rinomina piu' la cartella delle
+            // regole Sieve del pannello per metterne un'altra al suo posto. Prima di SieveForcedKeep: root scrive le
+            // regole solo se nessun altro puo' cambiare il percorso (RootOnlyPath). E i processi delle caselle di Dovecot
+            // senza il gruppo mail, che serviva solo alle INBOX mbox (reperto 221; tutti e due verificano e tornano
+            // indietro).
+            org.mail_panel.system.MailSpoolSticky.ensureAtBoot();
+            org.mail_panel.system.DovecotPrivilegedGroup.ensureAtBoot();
             // Gli script Sieve dell'utente (ManageSieve, i Filtri della webmail) nella sua cartella di posta, e le regole
             // del pannello prima di loro: prima non si salvava niente, la cartella era di root (SieveStorage verifica e
             // torna indietro).

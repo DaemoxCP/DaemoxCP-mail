@@ -8,19 +8,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFileAttributes;
-import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipalLookupService;
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -58,7 +54,8 @@ import java.util.regex.Pattern;
  *   <li>root il compilato non lo apre: lo legge sievec stesso con cat, cosi' un collegamento a un file che sievec non
  *       puo' leggere non diventa un compilato leggibile da tutti. Root lo scrive accanto allo script con proprietario,
  *       gruppo e permessi dello script, come li dava sievec di root salvando accanto allo script, e lo mette al suo
- *       posto con un rename. Il compilato nasce dopo lo script, quindi e' piu' nuovo, come Pigeonhole vuole (confronta
+ *       posto con un rename, senza seguire collegamenti e solo se nessun altro puo' cambiare le cartelle da / allo
+ *       script (RootOnlyPath, reperto 221). Il compilato nasce dopo lo script, quindi e' piu' nuovo, come Pigeonhole vuole (confronta
  *       i tempi al nanosecondo, e se sono uguali ricompila);</li>
  *   <li>se l'utente non si puo' avere, se sievec non legge lo script, o se dice 0 ma il compilato non c'e' (sievec
  *       esce 0 anche quando non riesce a salvarlo: misurato), il compilato non si installa: Dovecot ricompila a ogni
@@ -94,8 +91,6 @@ public final class SieveCompiler {
     /** Un compilato piu' grande non e' delle regole del pannello (Pigeonhole rifiuta script oltre 1 MB). */
     static final int MAX_BINARY = 16 << 20;
     static final int MAX_TEXT = 64 << 10;
-
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     private SieveCompiler() {}
 
@@ -136,7 +131,7 @@ public final class SieveCompiler {
             return notCompiled("cannot read " + s + ": " + e.getMessage());
         }
         if (!like.isRegularFile()) return notCompiled(s + " is not a regular file");
-        String folder = rootOnly(s.getParent());
+        String folder = org.mail_panel.security.RootOnlyPath.problem(s.getParent());
         if (folder != null) return notCompiled(folder);
         String user = ensureUser();
         if (user != null) return notCompiled(user);
@@ -202,25 +197,6 @@ public final class SieveCompiler {
         return script.resolveSibling(n.substring(0, n.length() - ".sieve".length()) + ".svbin");
     }
 
-    /**
-     * Null se la cartella dello script e' solo di root (proprietario root, nessuno scrive col gruppo o come altri): li'
-     * root scrive il compilato, e nessun altro deve poterci mettere le mani. Altrimenti il motivo: se un altro ci
-     * scrive, quello che ci scrive root non e' piu' solo di root (e se e' vmail, Dovecot il compilato se lo salva da se').
-     */
-    static String rootOnly(Path folder) {
-        try {
-            PosixFileAttributes a = Files.readAttributes(folder, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-            if (!a.isDirectory()) return folder + " is not a folder";
-            if (!"root".equals(a.owner().getName())) return folder + " belongs to " + a.owner().getName() + ", not to root";
-            Set<PosixFilePermission> p = a.permissions();
-            if (p.contains(PosixFilePermission.GROUP_WRITE) || p.contains(PosixFilePermission.OTHERS_WRITE))
-                return folder + " can be written by others (" + PosixFilePermissions.toString(p) + ")";
-            return null;
-        } catch (IOException e) {
-            return "cannot read " + folder + ": " + e.getMessage();
-        }
-    }
-
     /** L'utente sievec, creato se manca; null se c'e' ed e' quello del pannello, altrimenti il motivo. */
     static String ensureUser() {
         PanelUser.Ensured e = COMPILER_USER.ensure();
@@ -281,23 +257,13 @@ public final class SieveCompiler {
     }
 
     /**
-     * Il compilato accanto allo script: un file nuovo (CREATE_NEW: un nome gia' presente, anche un collegamento, non si
-     * apre), proprietario, gruppo e permessi dello script, poi rename sul nome vero, che chi consegna vede tutto o niente.
+     * Il compilato accanto allo script, con proprietario, gruppo e permessi dello script: un file nuovo e poi rename sul
+     * nome vero, che chi consegna vede tutto o niente, senza mai seguire un collegamento e solo se nessun altro puo'
+     * cambiare le cartelle da / fin li' (RootOnlyPath, reperto 221; prima si guardava solo la cartella dello script).
      */
     static void install(Path binary, byte[] bytes, PosixFileAttributes like) throws IOException {
-        Path tmp = binary.resolveSibling(binary.getFileName() + ".panel-" + Long.toHexString(RANDOM.nextLong() & Long.MAX_VALUE));
-        Files.createFile(tmp, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-        try {
-            Files.write(tmp, bytes, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING, LinkOption.NOFOLLOW_LINKS);
-            PosixFileAttributeView v = Files.getFileAttributeView(tmp, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
-            v.setOwner(like.owner());
-            v.setGroup(like.group());
-            v.setPermissions(like.permissions());
-            Files.move(tmp, binary, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
-            Files.deleteIfExists(tmp);
-            throw e;
-        }
+        org.mail_panel.security.RootOnlyPath.replace(binary.getParent(), binary.getFileName().toString(), bytes,
+                like.owner(), like.group(), like.permissions());
     }
 
     /**

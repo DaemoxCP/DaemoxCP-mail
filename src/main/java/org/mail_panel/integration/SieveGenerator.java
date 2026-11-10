@@ -5,8 +5,11 @@ import org.json.JSONObject;
 import org.mail_panel.database.MailDatabase;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Sieve Script Generator
@@ -14,7 +17,11 @@ import java.util.List;
  */
 public class SieveGenerator {
 
+    private static final Logger LOGGER = Logger.getLogger(SieveGenerator.class.getName());
+
     private static final String SIEVE_DIR = "/var/mail/sieve";
+    /** Il file delle regole del pannello in ogni cartella dominio/nome: lo esegue Dovecot prima di quelli della casella. */
+    private static final String SCRIPT = ".dovecot.sieve";
     private static final String GLOBAL_SIEVE = "/usr/local/etc/dovecot/sieve/global.sieve";
 
     /** La prima riga di ogni script del pannello (date serve a currentdate, nella risposta automatica). */
@@ -276,6 +283,11 @@ public class SieveGenerator {
 
     /**
      * Save Sieve script for a mailbox
+     *
+     * Da root, senza seguire collegamenti e solo in cartelle che nessun altro puo' cambiare (RootOnlyPath, reperto 221):
+     * prima Files.writeString seguiva un .dovecot.sieve che era un collegamento, e root riscriveva il file a cui puntava
+     * (misurato sulla VM con un file di nobody, 0600). Lo script e' di root, rw-r--r--: Dovecot, che consegna come vmail,
+     * lo legge e non lo puo' cambiare. Falso, col motivo nel registro, se una cartella da / alla casella non passa.
      */
     public boolean saveSieveScript(String email, String script) {
         try {
@@ -289,18 +301,18 @@ public class SieveGenerator {
             String user = parts[0];
             String domain = parts[1];
 
-            Path userDir = org.mail_panel.security.SafeNames.under(Path.of(SIEVE_DIR), domain, user);
-            Files.createDirectories(userDir);
-
-            Path sieveFile = userDir.resolve(".dovecot.sieve");
-            Files.writeString(sieveFile, script);
+            Path rules = Path.of(SIEVE_DIR);
+            org.mail_panel.security.SafeNames.under(rules, domain, user);
+            Path userDir = org.mail_panel.security.RootOnlyPath.folders(rules.getParent(), rules.getFileName().toString(), domain, user);
+            org.mail_panel.security.RootOnlyPath.replace(userDir, SCRIPT, script.getBytes(StandardCharsets.UTF_8), null, null,
+                    PosixFilePermissions.fromString("rw-r--r--"));
 
             // Compile the script
-            compileScript(sieveFile.toString());
+            compileScript(userDir.resolve(SCRIPT).toString());
 
             return true;
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (IOException | IllegalArgumentException e) {
+            LOGGER.warning("[SieveGenerator] Sieve rules of " + email + " not saved: " + e.getMessage());
             return false;
         }
     }
@@ -367,12 +379,13 @@ public class SieveGenerator {
             if (!org.mail_panel.security.SafeNames.address(email)) return null;
             String[] parts = email.split("@");
 
-            Path sieveFile = org.mail_panel.security.SafeNames.under(Path.of(SIEVE_DIR), parts[1], parts[0], ".dovecot.sieve");
-            if (Files.exists(sieveFile)) {
-                return Files.readString(sieveFile);
+            Path sieveFile = org.mail_panel.security.SafeNames.under(Path.of(SIEVE_DIR), parts[1], parts[0], SCRIPT);
+            if (Files.exists(sieveFile, LinkOption.NOFOLLOW_LINKS)) {
+                // Root non segue un collegamento: mostrerebbe a chi chiama il file a cui punta (reperto 221).
+                return new String(org.mail_panel.security.RootOnlyPath.read(sieveFile, 1 << 20), StandardCharsets.UTF_8);
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.warning("[SieveGenerator] Sieve rules of " + email + " not read: " + e.getMessage());
         }
         return null;
     }

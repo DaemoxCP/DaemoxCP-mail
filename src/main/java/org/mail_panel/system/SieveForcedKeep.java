@@ -1,13 +1,14 @@
 package org.mail_panel.system;
 
 import org.mail_panel.integration.SieveGenerator;
+import org.mail_panel.security.RootOnlyPath;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
@@ -28,7 +29,8 @@ import java.util.stream.Stream;
  * con una delle due righe require che il pannello ha scritto (prima e dopo l'aggiunta di "date") e finisce con quella coda
  * esatta. Si toglie solo la coda: il resto resta byte per byte, e il risultato e' quello che SieveGenerator scrive adesso
  * per le stesse regole. Il file nuovo ha proprietario e permessi del vecchio; se sievec lo rifiuta, torna com'era. Al
- * secondo avvio non trova niente da fare.
+ * secondo avvio non trova niente da fare. Root legge e scrive senza seguire collegamenti e solo dove nessun altro puo'
+ * cambiare il percorso (RootOnlyPath, reperto 221).
  */
 public final class SieveForcedKeep {
 
@@ -62,38 +64,53 @@ public final class SieveForcedKeep {
         return out;
     }
 
-    /** Il risultato di un giro: quanti script sistemati, e quelli rimasti com'erano perche' sievec non li accettava. */
-    record Outcome(int fixed, List<Path> putBack) {}
+    /**
+     * Il risultato di un giro: quanti script sistemati, quelli rimasti com'erano perche' sievec non li accettava, e
+     * quelli non toccati perche' una cartella da / allo script la puo' cambiare un altro (RootOnlyPath, reperto 221).
+     */
+    record Outcome(int fixed, List<Path> putBack, List<String> unsafe) {}
+
+    /** Uno script del pannello e' piccolo: Pigeonhole ne rifiuta oltre 1 MB. */
+    static final int MAX_SCRIPT = 1 << 20;
 
     /**
      * Toglie la coda da ogni script del pannello sotto root e lo ricompila con compile (vero se sievec l'ha accettato).
-     * Se compile dice di no, lo script torna com'era e si ricompila quello.
+     * Se compile dice di no, lo script torna com'era e si ricompila quello. Root legge e scrive senza seguire
+     * collegamenti, e solo dove nessun altro puo' cambiare il percorso.
      */
     static Outcome repair(Path root, Predicate<Path> compile) throws IOException {
         int done = 0;
         List<Path> putBack = new ArrayList<>();
+        List<String> unsafe = new ArrayList<>();
         for (Path script : panelScripts(root)) {
-            String before = Files.readString(script, StandardCharsets.UTF_8);
+            String why = RootOnlyPath.problem(script.getParent());
+            if (why != null) {
+                unsafe.add(script + ": " + why);
+                continue;
+            }
+            PosixFileAttributes like = Files.readAttributes(script, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            String before = new String(RootOnlyPath.read(script, MAX_SCRIPT), StandardCharsets.UTF_8);
             String after = fixed(before);
             if (after == null) continue;
-            replace(script, after);
+            replace(script, after, like);
             if (compile.test(script)) {
                 done++;
             } else {
-                replace(script, before);
+                replace(script, before, like);
                 compile.test(script);
                 putBack.add(script);
             }
         }
-        return new Outcome(done, putBack);
+        return new Outcome(done, putBack, unsafe);
     }
 
-    /** Riscrive il file in un colpo solo (copia accanto con gli stessi attributi, poi rename): chi consegna non lo vede a meta'. */
-    private static void replace(Path script, String content) throws IOException {
-        Path tmp = script.resolveSibling(SCRIPT + ".forced-keep");
-        Files.copy(script, tmp, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-        Files.writeString(tmp, content, StandardCharsets.UTF_8);
-        Files.move(tmp, script, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+    /**
+     * Riscrive il file in un colpo solo (file nuovo accanto con proprietario, gruppo e permessi di prima, poi rename): chi
+     * consegna non lo vede a meta', e un collegamento al suo posto non si segue.
+     */
+    private static void replace(Path script, String content, PosixFileAttributes like) throws IOException {
+        RootOnlyPath.replace(script.getParent(), SCRIPT, content.getBytes(StandardCharsets.UTF_8), like.owner(), like.group(),
+                like.permissions());
     }
 
     /** All'avvio della parte root. */
@@ -106,6 +123,8 @@ public final class SieveForcedKeep {
                         + " the end, recompiled: move, forward without a copy and delete now do what they say");
             for (Path p : o.putBack())
                 LOGGER.warning("[SieveForcedKeep] LEFT AS IT WAS: sievec refuses " + p + " without the forced keep");
+            for (String u : o.unsafe())
+                LOGGER.warning("[SieveForcedKeep] LEFT AS IT WAS, root does not write where others can change the path: " + u);
         } catch (Throwable t) {
             LOGGER.warning("[SieveForcedKeep] failed: " + t);
         }
