@@ -68,6 +68,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PostfixInetProtocolsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.CloudflareCommentsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMoveTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveStorageTest
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -237,8 +238,12 @@ touch the real database; it is turned on with `-De2e.vm=yes`, as root, on FreeBS
 After an installation from scratch (`InstallFromScratch`), `mail-login-probe.sh` does a real login:
 it creates a test mailbox in `login-probe.test`, tries `doveadm auth test`, an IMAP LOGIN on 993 and
 an AUTH PLAIN on 587, shows the maillog lines and removes mailbox and domain. On 24/10/2026, with
-the installer of before, the services were all running and it failed on all three entrances. As
-root, in the panel folder:
+the installer of before, the services were all running and it failed on all three entrances. Since
+reperto 214 it also tries Sieve: a script of the mailbox's own through ManageSieve on 4190
+(PUTSCRIPT, SETACTIVE) and a rule of the panel written as the panel writes it, then a real delivery
+through Postfix: the panel's rule must run first and the mailbox's own script after it, `doveadm
+sieve list` must open the scripts, and no "dovecot.sieve" may show among the folders. With the Sieve
+layout of before it fails there (ManageSieve: "BYE Internal error"). As root, in the panel folder:
 
     sh tests/mail-login-probe.sh
 
@@ -403,6 +408,13 @@ problem the test adds makes it put 2.3 back. Afterwards the job is in error sayi
 before; the packages, their versions and protections are those of before; the configuration is the one of before file
 by file, the refused 2.4 one kept in the copy (0700); Dovecot runs and listens where it did; the tests again on 2.3
 all pass; no list of unlocked packages left.
+
+**SieveStorageTest** — users' Sieve scripts in their mail folder, the panel's rules before them (reperto 214): what
+the panel writes on 2.3 and 2.4 (`sieve_before` / a `before` script from /var/mail/sieve, the users' storage in
+`~/sieve`, the active script `~/dovecot.sieve` without a dot, which Maildir++ would take for a mail folder); the
+migration of servers installed before (the exact block the panel wrote becomes the new one, the rest untouched; done,
+hand-written or twice: nothing); a ManageSieve link made by hand under /var/mail/sieve is seen and left; the mailbox to
+try `doveadm sieve list` on. On the VM.
 
 **DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what

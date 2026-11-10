@@ -14,8 +14,13 @@
 #  - it tries `doveadm auth test`, an IMAP LOGIN on 993 and an AUTH PLAIN on 587 after STARTTLS,
 #    that is the two ways into the mailboxes (587 goes through Dovecot's authentication:
 #    smtpd_sasl_type = dovecot);
+#  - Sieve (reperto 214): a script of the mailbox's own through ManageSieve on 4190 (PUTSCRIPT,
+#    SETACTIVE), a rule of the panel written as the panel writes it (root, /var/mail/sieve, sievec),
+#    then a real delivery through Postfix: the panel's rule must run first and the mailbox's own
+#    script after it, each filing a copy into its folder; `doveadm sieve list` must open the
+#    mailbox's scripts, and no "dovecot.sieve" may show up among the mail folders;
 #  - it shows the lines of /var/log/maillog written meanwhile;
-#  - at the end it removes mailbox, domain and the mail folder created by the login.
+#  - at the end it removes mailbox, domain, the mail folder created by the login and the rule.
 #
 # The test password goes on the command line of doveadm and openssl: it is a throwaway credential
 # the probe creates and deletes, on a test machine. Do not use it on a server with real users.
@@ -24,7 +29,7 @@
 #   sh tests/mail-login-probe.sh [database]          (default: mailserver)
 # The MySQL root password is taken from ./installed-mysql-root-password (InstallFromScratch writes
 # it) or, if it is not there, from the panel's secrets file.
-# Exit code: 0 if all three get in, 1 otherwise.
+# Exit code: 0 if all three get in and Sieve works, 1 otherwise.
 
 DB="${1:-mailserver}"
 DOMAIN="login-probe.test"
@@ -44,7 +49,7 @@ cleanup() {
             "DELETE FROM mailboxes WHERE email='$MAILBOX'; DELETE FROM domains WHERE domain='$DOMAIN';" \
             >/dev/null 2>&1
     fi
-    rm -rf "/var/vmail/$DOMAIN"
+    rm -rf "/var/vmail/$DOMAIN" "/var/mail/sieve/$DOMAIN"
     rm -rf "$WORK"
 }
 trap cleanup EXIT HUP INT TERM
@@ -132,13 +137,50 @@ else
 fi
 
 echo ""
+echo "== Sieve: the mailbox's own script through ManageSieve, the panel's rule before it =="
+USERDIR=$(printf '%s' "$MAILBOX" | cut -d@ -f1)
+printf 'require ["fileinto","mailbox"];\r\nif header :contains "subject" "sieve-probe" { fileinto :create "SieveProbeOwn"; }\r\n' > "$WORK/own.sieve"
+LEN=$(wc -c < "$WORK/own.sieve" | tr -d ' ')
+{ sleep 2; printf 'AUTHENTICATE "PLAIN" "%s"\r\n' "$B64"; sleep 2
+  printf 'PUTSCRIPT "probe" {%s+}\r\n' "$LEN"; cat "$WORK/own.sieve"; printf '\r\n'; sleep 2
+  printf 'SETACTIVE "probe"\r\n'; sleep 1; printf 'LISTSCRIPTS\r\n'; sleep 1; printf 'LOGOUT\r\n'; sleep 1; } \
+    | timeout 40 nc 127.0.0.1 4190 > "$WORK/sieve.out" 2>&1
+tr -d '\r' < "$WORK/sieve.out" | grep -v '^"' | sed 's/^/  /'
+tr -d '\r' < "$WORK/sieve.out" | grep '^"probe"' | sed 's/^/  /'
+# The panel's rule, as SieveGenerator writes it: root, under /var/mail/sieve, compiled with sievec.
+mkdir -p "/var/mail/sieve/$DOMAIN/$USERDIR"
+printf 'require ["fileinto","copy","mailbox"];\nif header :contains "subject" "sieve-probe" { fileinto :copy :create "SieveProbePanel"; }\n' \
+    > "/var/mail/sieve/$DOMAIN/$USERDIR/.dovecot.sieve"
+sievec "/var/mail/sieve/$DOMAIN/$USERDIR/.dovecot.sieve" >/dev/null 2>&1
+SIEVE_LOG=$(wc -l < /var/log/maillog 2>/dev/null | tr -d ' ')
+printf 'From: root@%s\nTo: %s\nSubject: sieve-probe %s\n\nSieve probe\n' "$DOMAIN" "$MAILBOX" "$(date +%s)" > "$WORK/msg.eml"
+sendmail -f "root@$DOMAIN" "$MAILBOX" < "$WORK/msg.eml"
+for i in $(seq 1 30); do
+    [ "$(tail -n +"$((SIEVE_LOG + 1))" /var/log/maillog | grep -c "lmtp($MAILBOX).*stored mail into mailbox")" -ge 2 ] && break
+    sleep 1
+done
+tail -n +"$((SIEVE_LOG + 1))" /var/log/maillog | grep "lmtp($MAILBOX)" | sed 's/^.*: sieve: /  sieve: /; s/^.*lmtp(/  lmtp(/'
+LISTED=$(doveadm sieve list -u "$MAILBOX" 2>&1)
+FOLDERS=$(doveadm mailbox list -u "$MAILBOX" 2>&1 | tr '\n' ' ')
+echo "  doveadm sieve list: $LISTED"
+echo "  folders: $FOLDERS"
+if tr -d '\r' < "$WORK/sieve.out" | grep -q '^"probe" ACTIVE' \
+    && [ "$(doveadm search -u "$MAILBOX" mailbox SieveProbePanel subject sieve-probe 2>/dev/null | wc -l | tr -d ' ')" -eq 1 ] \
+    && [ "$(doveadm search -u "$MAILBOX" mailbox SieveProbeOwn subject sieve-probe 2>/dev/null | wc -l | tr -d ' ')" -eq 1 ] \
+    && printf '%s' "$LISTED" | grep -q '^probe ACTIVE' && ! printf '%s' "$FOLDERS" | grep -q 'dovecot'; then
+    echo "  RESULT: OK"
+else
+    echo "  RESULT: FAILED"; failed=1
+fi
+
+echo ""
 echo "== /var/log/maillog, the lines written meanwhile =="
 tail -n +"$((LOG_BEFORE + 1))" /var/log/maillog 2>/dev/null | grep -E 'auth|imap|submission|sasl|Fatal|Error' | sed 's/^/  /'
 
 echo ""
 if [ "$failed" -eq 0 ]; then
-    echo "== all three logins succeeded =="
+    echo "== all three logins succeeded, and Sieve works =="
 else
-    echo "== AT LEAST ONE LOGIN FAILED =="
+    echo "== AT LEAST ONE CHECK FAILED =="
 fi
 exit "$failed"

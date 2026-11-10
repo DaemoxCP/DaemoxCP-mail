@@ -326,8 +326,7 @@ public final class DovecotConfig {
             }
 
             plugin {
-              sieve = /var/mail/sieve/%d/%n/.dovecot.sieve
-              sieve_dir = /var/mail/sieve/%d/%n/
+            __SIEVE23__
               sieve_global_dir = /var/mail/sieve/global/
               sieve_extensions = +fileinto +reject +envelope +vacation +copy +imap4flags +regex +relational +comparator-i;ascii-numeric +date +variables
             }
@@ -363,8 +362,50 @@ public final class DovecotConfig {
             default_pass_scheme = BLF-CRYPT
             password_query = SELECT email as user, password FROM mailboxes WHERE email='%u' AND active=1
             DOVECOT_SQL
-            """.replace("__AUTH_WORKER__", AUTH_WORKER_FILE);
+            """.replace("__AUTH_WORKER__", AUTH_WORKER_FILE).replace("__SIEVE23__", SIEVE23.stripTrailing());
     }
+
+    /**
+     * Sieve nella 2.3 (dentro plugin {}): le regole del pannello girano prima e restano del pannello, gli script
+     * dell'utente stanno nella sua cartella di posta (reperto 214).
+     *
+     * Le regole del pannello (risposta automatica, inoltro, filtri: SieveGenerator) le scrive root in
+     * /var/mail/sieve/dominio/nome/.dovecot.sieve: Dovecot le esegue prima di quelle dell'utente, e l'utente non le vede
+     * ne' le cambia. Gli script dell'utente (ManageSieve, i Filtri della webmail) stanno nella sua cartella di posta, che
+     * e' gia' di vmail: nessun permesso si allarga. Prima tutti e due erano lo stesso file sotto /var/mail, di root:
+     * ManageSieve e la webmail non potevano salvare niente («mkdir_parents_chgrp(/var/mail/sieve/...) failed: Permission
+     * denied»), e aprire quella cartella a vmail avrebbe fatto sovrascrivere a uno le regole dell'altro.
+     *
+     * Lo script attivo e' ~/dovecot.sieve, senza punto: la posta sta nella radice della casella, e Maildir++ prendeva
+     * ~/.dovecot.sieve per una cartella di posta («dovecot.sieve» fra le cartelle, e le consegne con fileinto fallivano).
+     * Misurato sulla VM il 09/11/2026. Se una regola del pannello toglie il messaggio dalla INBOX (fileinto, redirect
+     * senza copia), gli script dell'utente su quel messaggio non girano: e' la regola di Pigeonhole, e qui ha senso.
+     */
+    public static final String SIEVE23 = """
+              # Le regole del pannello (risposta automatica, inoltro, filtri) prima, e restano del pannello.
+              sieve_before = /var/mail/sieve/%d/%n/.dovecot.sieve
+              # Gli script dell'utente (ManageSieve, i Filtri della webmail) nella sua cartella di posta.
+              sieve = file:~/sieve;active=~/dovecot.sieve
+            """;
+
+    /** Lo stesso nella 2.4: due blocchi sieve_script, quello del pannello di tipo before. */
+    public static final String SIEVE24 = """
+            # Le regole del pannello (risposta automatica, inoltro, filtri) prima, e restano del pannello.
+            sieve_script panel {
+              type = before
+              driver = file
+              path = /var/mail/sieve/%{user | domain}/%{user | username}/.dovecot.sieve
+            }
+
+            # Gli script dell'utente (ManageSieve, i Filtri della webmail) nella sua cartella di posta; lo script attivo
+            # senza punto, o Maildir++ lo prenderebbe per una cartella di posta.
+            sieve_script personal {
+              type = personal
+              driver = file
+              path = ~/sieve
+              active_path = ~/dovecot.sieve
+            }
+            """;
 
     /**
      * conf.d/10-auth-worker.conf, lo stesso file che la riparazione all'avvio scrive sui server
@@ -552,12 +593,7 @@ public final class DovecotConfig {
             }
 
             # I percorsi Sieve non sono piu' impostazioni singole ma blocchi di archivio.
-            sieve_script personal {
-              type = personal
-              driver = file
-              path = /var/mail/sieve/%{user | domain}/%{user | username}
-              active_path = /var/mail/sieve/%{user | domain}/%{user | username}/.dovecot.sieve
-            }
+            __SIEVE24__
 
             sieve_script global {
               type = global
@@ -572,7 +608,7 @@ public final class DovecotConfig {
             # +imap4flags +regex +relational +date +variables) e' interamente compreso in
             # quel predefinito: riscriverlo aggiungerebbe solo occasioni di sbagliare un
             # nome, e un nome sbagliato impedisce l'avvio.
-            """, false));
+            """.replace("__SIEVE24__\n", SIEVE24), false));
 
         f.add(new FileConf("conf.d/10-auth-worker.conf", AUTH_WORKER_FILE + "\n", false));
 
