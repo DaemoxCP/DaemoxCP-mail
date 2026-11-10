@@ -2303,9 +2303,10 @@ public class MailPanelContent {
                 })
             }).then(r => r.json()).then(d => {
                 btn.disabled = false;
-                if (d.success) {
+                // saved: la casella c'e', ma i filtri di quando era una casella valgono ancora (reperto 223).
+                if (d.success || d.saved) {
                     bootstrap.Modal.getInstance(document.getElementById('aMailboxModal')).hide();
-                    aliasMsg(d.message, 'success');
+                    aliasMsg(d.success ? d.message : d.error, d.success ? 'success' : 'danger');
                     loadAliases();
                 } else {
                     err.textContent = d.error || t('conv.failed');
@@ -3734,6 +3735,9 @@ public class MailPanelContent {
                     bootstrap.Modal.getInstance(document.getElementById('autoResponderModal')).hide();
                     loadMailboxes();
                 } else {
+                    // Salvata nel pannello ma non scritta sul server di posta (reperto 223): l'elenco mostra il
+                    // pannello, la finestra resta aperta per riprovare.
+                    if (data.saved) loadMailboxes();
                     panelSay('danger', data.error || t('common.errorShort'));
                 }
             });
@@ -3810,13 +3814,14 @@ public class MailPanelContent {
                     keep_copy: document.getElementById('fwKeepCopy').checked
                 })
             }).then(r => r.json()).then(data => {
-                if (data.success) {
+                // saved: la regola e' nel pannello anche se il server di posta non l'ha ricevuta (reperto 223).
+                // Si mostra, se no chi riprova la crea due volte.
+                if (data.success || data.saved) {
                     document.getElementById('fwDestination').value = '';
                     loadForwardingRules(document.getElementById('fwMailboxId').value);
                     loadMailboxes();
-                } else {
-                    panelSay('danger', data.error || t('common.errorShort'));
                 }
+                if (!data.success) panelSay('danger', data.error || t('common.errorShort'));
             });
         }
 
@@ -3827,10 +3832,11 @@ public class MailPanelContent {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'delete', id: id })
             }).then(r => r.json()).then(data => {
-                if (data.success) {
+                if (data.success || data.saved) {
                     loadForwardingRules(document.getElementById('fwMailboxId').value);
                     loadMailboxes();
                 }
+                if (!data.success) panelSay('danger', data.error || t('common.errorShort'));
             });
         }
 
@@ -4002,14 +4008,14 @@ public class MailPanelContent {
                     enabled: document.getElementById('svEnabled').checked
                 })
             }).then(r => r.json()).then(data => {
-                if (data.success) {
+                // saved: il filtro e' nel pannello anche se il server di posta non l'ha ricevuto (reperto 223).
+                if (data.success || data.saved) {
                     loadSieveFilters(document.getElementById('svMailboxId').value);
                     loadMailboxes();
                     document.getElementById('sieveEditor').style.display = 'none';
                     document.getElementById('sieveHelp').style.display = 'block';
-                } else {
-                    panelSay('danger', data.error || t('common.errorShort'));
                 }
+                if (!data.success) panelSay('danger', data.error || t('common.errorShort'));
             });
         }
 
