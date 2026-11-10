@@ -281,6 +281,26 @@ public class SieveActionsE2ETest {
     // ---------------------------------------------------------------- setting up and taking down
 
     private static String password;
+    private static int spoolMode = -1;
+
+    /**
+     * /var/mail as the panel leaves it at boot (MailSpoolSticky, reperto 221): sticky, or root writes no rule under it.
+     * Its mode before, to put back at the end: the VM is shared.
+     */
+    static int spoolAsAtBoot() throws Exception {
+        Path spool = Path.of("/var/mail");
+        int before = (Integer) Files.getAttribute(spool, "unix:mode", java.nio.file.LinkOption.NOFOLLOW_LINKS);
+        MailSpoolSticky.ensureAtBoot();
+        return before;
+    }
+
+    /** /var/mail back to the mode spoolAsAtBoot() found. */
+    static void spoolBack(int mode) throws Exception {
+        if (mode < 0) return;
+        Path spool = Path.of("/var/mail");
+        if (((Integer) Files.getAttribute(spool, "unix:mode", java.nio.file.LinkOption.NOFOLLOW_LINKS) & 07777) != (mode & 07777))
+            Files.setAttribute(spool, "unix:mode", mode & 07777, java.nio.file.LinkOption.NOFOLLOW_LINKS);
+    }
 
     static void setUp() throws Exception {
         String rootPw = null;
@@ -306,6 +326,7 @@ public class SieveActionsE2ETest {
             sql.append("INSERT INTO mailboxes (domain_id, email, password, name, active) SELECT id, '").append(m).append("', '")
                .append(hash).append("', 'sieve test', 1 FROM domains WHERE domain='" + DOMAIN + "';\n");
         if (mysql(sql.toString()) == null) throw new IllegalStateException("cannot create the test mailboxes in " + db);
+        spoolMode = spoolAsAtBoot();
         logStart = Files.size(MAILLOG);
         for (String folder : new String[]{"SieveMove", "SieveCopy"})
             run(20, "doveadm", "mailbox", "create", "-u", ALICE, folder);
@@ -323,6 +344,7 @@ public class SieveActionsE2ETest {
             if (Files.exists(work.resolve("root.cnf"))) mysql(cleanupSql());
         } finally {
             new ProcessBuilder("rm", "-rf", "/var/vmail/" + DOMAIN, "/var/mail/sieve/" + DOMAIN, work.toString()).start().waitFor();
+            spoolBack(spoolMode);
         }
     }
 

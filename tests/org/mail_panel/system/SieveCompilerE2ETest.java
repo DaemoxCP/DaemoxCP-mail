@@ -223,6 +223,9 @@ public class SieveCompilerE2ETest {
 
     // ---------------------------------------------------------------- setting up and taking down
 
+    /** The mode of /var/mail before setUp gave it the panel's boot state (reperto 221): put back at the end. */
+    private static int spoolMode = -1;
+
     static void setUp() throws Exception {
         String rootPw = null;
         for (String f : new String[]{"/usr/local/etc/mail-panel/root-secrets.properties", "/usr/local/etc/mail-panel/panel-secrets.properties"}) {
@@ -246,6 +249,7 @@ public class SieveCompilerE2ETest {
             sql.append("INSERT INTO mailboxes (domain_id, email, password, name, active) SELECT id, '").append(m).append("', '")
                .append(hash.trim()).append("', 'sievec test', 1 FROM domains WHERE domain='" + DOMAIN + "';\n");
         if (mysql(sql.toString()) == null) throw new IllegalStateException("cannot create the test mailboxes in " + db);
+        spoolMode = SieveActionsE2ETest.spoolAsAtBoot();
         logStart = Files.size(MAILLOG);
         for (String folder : new String[]{"SieveOne", "SieveTwo"})
             run(20, "doveadm", "mailbox", "create", "-u", ALICE, folder);
@@ -273,6 +277,7 @@ public class SieveCompilerE2ETest {
             if (Files.exists(work.resolve("root.cnf"))) mysql(cleanupSql());
         } finally {
             new ProcessBuilder("rm", "-rf", "/var/vmail/" + DOMAIN, "/var/mail/sieve/" + DOMAIN, work.toString()).start().waitFor();
+            SieveActionsE2ETest.spoolBack(spoolMode);
         }
     }
 

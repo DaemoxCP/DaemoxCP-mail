@@ -76,6 +76,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveCompilerTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveCompilerE2ETest   (VM, as root, real deliveries)
     java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveFolderOwnerTest   (VM, as root, real deliveries)
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveGroupMailTest   (VM, as root, real deliveries)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -487,6 +488,26 @@ the rule or its binary, nor rewrite them or add a folder, and the next delivery 
 10/11/2026 on Dovecot 2.3.21: all pass; with DovecotScript put back as it was 12 fail (parts 1 and 2; part 3 measures
 the real folder, which the panel makes root's, and passes on both). The script itself runs on no path today: the route
 `/api/install` is gone since the first commit and `install_dovecot.sh` is retired (InstallScripts.RETIRED).
+
+**SieveGroupMailTest** — the panel's Sieve rules out of reach of the group `mail` (reperto 221). `/var/mail` is
+root:mail 0775: a process with the group `mail` (postfix, clamav, dma which is setgid mail, Dovecot's mail processes
+through `mail_privileged_group`) could rename `/var/mail/sieve` and put its own in its place, and `saveSieveScript`
+wrote as root following links. Without a system: the sticky mode; the line `mail_privileged_group = mail` taken out of
+dovecot.conf only when it is exactly the panel's, the result being what the installer writes now (2.3 and 2.4); mbox,
+/etc/group and `procstat -s` read right. With `-De2e.vm=yes`, as root: on bench folders RootOnlyPath refuses links,
+folders of others and folders others can write (above the last one only with the sticky bit), and a write over a
+planted link leaves the file it points to alone; in a spool made like `/var/mail` a process with the group mail renames
+root's rules folder (the probe works) and after MailSpoolSticky it cannot, while it still makes and removes a lock file
+of its own. Then the real system with `sieve-group-mail.test` (created and removed): MailSpoolSticky on the real
+`/var/mail` (the probe renames a root folder of its own there, never `/var/mail/sieve`); DovecotPrivilegedGroup on the
+real dovecot.conf, an imap of the mailbox (`doveadm exec imap -u`) with SVGID 6 before and 5000 after; a rule saved by
+the panel moves a real delivery; a link planted at the rule's and at the binary's place: saving again leaves both files
+(nobody's, 0600) as they were, the rule is root's again, the next delivery still follows it. At the end dovecot.conf
+and the mode of `/var/mail` go back as they were. Measured on 10/11/2026 on Dovecot 2.3.21: all pass; with the three
+fixes taken out (saveSieveScript as before, no sticky, the line kept in DovecotConfig and dovecot.conf) 20 fail.
+Since this reperto root writes rules only under a sticky `/var/mail`, as the panel leaves it at boot: SieveActionsE2ETest,
+SieveCompilerE2ETest and SieveFolderOwnerTest give `/var/mail` that state in their setUp (MailSpoolSticky) and put its
+mode back at the end.
 
 **DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what

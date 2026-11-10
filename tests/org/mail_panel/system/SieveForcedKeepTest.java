@@ -74,7 +74,9 @@ public class SieveForcedKeepTest {
             check("  same mode and owner as before", PosixFilePermissions.toString(Files.getPosixFilePermissions(alice)).equals("rw-r-----")
                     && Files.getOwner(alice).getName().equals(aliceOwner));
             check("  compiled once, that one only", compiled.equals(List.of(alice)));
-            check("  no temporary file left beside it", !Files.exists(alice.resolveSibling(".dovecot.sieve.forced-keep")));
+            try (var left = Files.list(alice.getParent())) {
+                check("  no temporary file left beside it", left.map(p -> p.getFileName().toString()).toList().equals(List.of(".dovecot.sieve")));
+            }
             check("already fixed: untouched", Files.readString(bob).equals(forwardNow));
             check("a ManageSieve link and what it points to: untouched", Files.isSymbolicLink(carol)
                     && Files.readString(carolScript).equals(moveBefore));
