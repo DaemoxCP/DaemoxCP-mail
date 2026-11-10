@@ -12798,7 +12798,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-secondary py-2 small">' + updEsc(d.note || t('up.configNotFound')) + '</div>';
             } else if (d.compatible24) {
                 h += '<div class="alert alert-success py-2 small"><i class="fas fa-check me-1" aria-hidden="true"></i>'
-                   + escHtml(t('up.dvCompatOk')) + '</div>';
+                   + escHtml(t(d.on24 ? 'up.dvOn24' : 'up.dvCompatOk')) + '</div>';
             } else {
                 // La 2.4 come pacchetto a parte (dovecot24 nel ramo latest): niente ci passa da solo, e il pacchetto
                 // installato resta sulla 2.3. E' da preparare, non un guasto: giallo, e lo si dice (reperto 212).
@@ -13542,7 +13542,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
             doubtful.forEach(x => {
                 h += '<tr class="upd-cell"><td><span class="badge ' + (x.state === 'criterion' ? 'upd-badge-info' : 'upd-badge-warn')
-                   + '">' + escHtml(({ criterion: t('up.sCriterion'), unconfirmed: t('up.sToCheck') })[x.state] || x.state) + '</span></td>'
+                   + '">' + escHtml(({ criterion: t('up.sCriterion') })[x.state] || x.state) + '</span></td>'
                    + '<td><code class="small">' + updEsc(x.setting) + '</code><br>'
                    + '<span class="small text-muted">' + updEsc(x.note) + '</span></td></tr>';
             });
@@ -14112,6 +14112,29 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('mysql84_migrate', { confirm: 'MIGRATE TO 8.4', signature: my84Signature });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
             gdFollow('mysql', 'my84-pre', 'my84-log-box', 'my84-log', r.jobId, t('up.migrating'));
+        }
+
+        // ---------- passaggio a Dovecot 2.4 (reperto 213) ----------
+        let dc24Signature = '', dc24Plan = null;
+
+        async function dc24Pre() {
+            const el = document.getElementById('dc24-pre');
+            el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.dc24Checks'));
+            const r = await updApi('dovecot24_preflight');
+            dc24Signature = '';
+            dc24Plan = r;
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
+            dc24Signature = r.signature || '';
+            el.innerHTML = gdReady(r, { already: r.alreadyDone, alreadyText: t('up.dc24Already'),
+                note: t('up.dc24Note'), go: { label: t('up.dc24Run'), action: 'dc24Run()' } });
+        }
+
+        async function dc24Run() {
+            if (!await panelAsk({ title: t('gd.dcAskTitle'), text: t('up.dc24Note') + '\\n' + gdPlanLines(dc24Plan), confirm: t('up.dc24Run') })) return;
+            const el = document.getElementById('dc24-pre');
+            const r = await updApi('dovecot24_move', { confirm: 'MOVE TO DOVECOT 2.4', signature: dc24Signature });
+            if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
+            gdFollow('dovecot', 'dc24-pre', 'dc24-log-box', 'dc24-log', r.jobId, t('up.dc24Running'));
         }
 
         // ---------- aggiornamento guidato ----------

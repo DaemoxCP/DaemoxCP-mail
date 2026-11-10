@@ -821,6 +821,10 @@ public final class UpdateManager {
             if (mp.find() && !mp.group(1).equals(python)) olderPython = true;
         }
         procedures.put("python", olderPython);
+        // Dovecot 2.4, pacchetto a parte nel ramo latest: la riga c'e' finche' e' installata la 2.3 col sapore MySQL e il
+        // catalogo offre la 2.4 (reperto 213). Il passaggio non e' obbligatorio: la 2.3 riceve ancora le correzioni critiche.
+        procedures.put("dovecot24", inst.containsKey("dovecot-mysql") && !inst.containsKey("dovecot24-mysql")
+                && !sh("pkg rquery -U %v dovecot24-mysql 2>/dev/null", 30).isBlank());
         r.put("procedures", procedures);
         return r.put("success", true).put("packages", rows).put("others", others)
                 .put("summary", new JSONObject().put("updates", updatable + others.length()).put("stackUpdates", updatable)
@@ -1274,7 +1278,7 @@ public final class UpdateManager {
         {"imap[-_]zlib", "server.um.dovecot24.imapZlib",
          "server.um.maintenancePreview.10"},
         {"old[-_]stats", "server.um.dovecot24.oldStats", "server.um.dovecot24.removed"},
-        {"^[[:space:]]*(director|replicator)[[:space:]]*\\{|director_servers", "director / replicator",
+        {"^[[:space:]]*((director|replicator)[[:space:]]*\\{|director_servers)", "director / replicator",
          "server.um.maintenancePreview.11"},
         {"driver[[:space:]]*=[[:space:]]*checkpassword", "passdb checkpassword", "server.um.maintenancePreview.12"},
     };
@@ -1371,13 +1375,17 @@ public final class UpdateManager {
         // natura diversa, e la scheda mostra un aggiornamento disponibile che non esiste.
         // L'interrogazione per ORIGINE funziona anche con i sapori, dove il nome "dovecot" non
         // e' installato affatto: e' quella la ragione per cui il binario era diventato il primo.
-        String installed = sh("pkg query -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 20);
+        // Dopo il passaggio guidato (reperto 213) il pacchetto e' della 2.4, un port a parte (mail/dovecot24): versione
+        // installata e disponibile si chiedono alla sua origine, o la scheda direbbe «installata 2.4.5, disponibile 2.3».
+        String origin = sh("pkg query -e '%o = \"mail/dovecot24\"' %o 2>/dev/null | head -1", 20).trim();
+        if (!"mail/dovecot24".equals(origin)) origin = "mail/dovecot";
+        String installed = sh("pkg query -e '%o = \"" + origin + "\"' %v 2>/dev/null | head -1", 20);
         if (installed.isEmpty()) {
             installed = sh("dovecot --version 2>/dev/null | awk '{print $1}'", 20);
         }
-        String available = sh("pkg rquery -U -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 30);
-        if (available.isEmpty()) available = sh("pkg rquery -U %v dovecot 2>/dev/null", 30);
-        r.put("installed", installed).put("available", available);
+        String available = sh("pkg rquery -U -e '%o = \"" + origin + "\"' %v 2>/dev/null | head -1", 30);
+        if (available.isEmpty() && "mail/dovecot".equals(origin)) available = sh("pkg rquery -U %v dovecot 2>/dev/null", 30);
+        r.put("installed", installed).put("available", available).put("origin", origin);
 
         // Quali pacchetti Dovecot offre il repository. Non e' curiosita': se la 2.4 fosse un
         // PACCHETTO DIVERSO (come mysql80 e mysql84) allora nessun pkg upgrade potrebbe mai
@@ -1409,6 +1417,7 @@ public final class UpdateManager {
         // confrontare solo la cifra maggiore lo lascerebbe passare per innocuo.
         boolean jumpTo24 = majorAvailable > majorInstalled || (majorAvailable == majorInstalled && minorAvailable > minInst);
         r.put("breakingUpgradeAvailable", jumpTo24 && !installed.isEmpty() && !available.isEmpty());
+        r.put("on24", majorInstalled > 2 || (majorInstalled == 2 && minInst >= 4));
 
         List<String> file = fileDovecot();
         r.put("configFilesScanned", file.size());
@@ -1420,7 +1429,7 @@ public final class UpdateManager {
             r.put("scanned", true);
             String list = String.join(" ", file);
             for (String[] rot : DOVECOT_24_BREAKS) {
-                String found = sh("grep -lE \"" + rot[0] + "\" " + list + " 2>/dev/null", 20);
+                String found = sh("grep -lE \"" + outsideComments(rot[0]) + "\" " + list + " 2>/dev/null", 20);
                 if (found.isEmpty()) continue;
                 List<String> where = new ArrayList<>();
                 for (String f : found.split("\n")) if (!f.trim().isEmpty()) where.add(f.trim());
@@ -1429,7 +1438,7 @@ public final class UpdateManager {
             }
             // Variabili a lettera singola: %u %d %n %h e le forme con modificatori (%2.256Nu).
             // La sintassi nuova e' %{...}, che non combacia con questa espressione.
-            String var = sh("grep -lE '%[0-9.]*[A-Za-z]([^{A-Za-z]|$)' " + list + " 2>/dev/null", 20);
+            String var = sh("grep -lE '" + SINGLE_LETTER_VARS + "' " + list + " 2>/dev/null", 20);
             if (!var.isEmpty()) {
                 List<String> where = new ArrayList<>();
                 for (String f : var.split("\n")) if (!f.trim().isEmpty()) where.add(f.trim());
@@ -1458,6 +1467,18 @@ public final class UpdateManager {
         r.put("source", I18n.tr("server.um.dovecotCompatibility.9"));
         r.put("success", true);
         return r;
+    }
+
+    /**
+     * Le variabili a lettera singola della 2.3 (%u, %d, %n, %2.256Nu) fuori dai commenti. Prima si cercavano in tutta la
+     * riga, e la configurazione 2.4 del pannello, che in un commento spiega «%d -> %{user | domain}», risultava non pronta
+     * per la 2.4 su una 2.4 che funzionava (reperto 213). La sintassi nuova, %{...}, non combacia.
+     */
+    static final String SINGLE_LETTER_VARS = "^[^#]*%[0-9.]*[A-Za-z]([^{A-Za-z]|$)";
+
+    /** Un costrutto cercato solo fuori dai commenti: quelli gia' ancorati a inizio riga lo sono di loro. */
+    static String outsideComments(String re) {
+        return re.startsWith("^") ? re : "^[^#]*(" + re + ")";
     }
 
     private static int majorVersion(String v) {
@@ -2785,12 +2806,8 @@ public final class UpdateManager {
             // La password passa dall'AMBIENTE: non nel testo dello script (che finisce su
             // disco) ne' sulla riga di comando (visibile nell'elenco dei processi).
             Map<String, String> environment = new LinkedHashMap<>();
-            try (java.sql.ResultSet rs = org.mail_panel.Main.dbManager.get_data_config()) {
-                if (rs.next()) {
-                    String pw = org.mail_panel.Main.dbManager.mysqlPassword();
-                    if (pw != null && !pw.isEmpty()) environment.put("DB_PASS", pw);
-                }
-            } catch (Exception ignored) {}
+            String pw = panelDbPassword();
+            if (!pw.isEmpty()) environment.put("DB_PASS", pw);
             job.write("    " + (environment.containsKey("DB_PASS")
                     ? I18n.tr("server.um.x.dbPassFromPanel")
                     : I18n.tr("server.um.x.dbPassScript")));
@@ -3349,9 +3366,22 @@ public final class UpdateManager {
             }
             java.util.List<String> extra = new ArrayList<>(jsonArrayToList(plan.getJSONArray("unlockedPackages")));
             extra.removeAll(family);
+            // Quelle che pkg cambia, e quelle che usa cosi' come sono ma solo senza protezione (mysql84-client per la 2.4
+            // di Dovecot, reperto 213): dire che pkg le «cambia» era falso.
+            java.util.List<String> asTheyAre = new ArrayList<>();
+            for (String n : extra) {
+                boolean changed = false;
+                for (int i = 0; i < changes.length(); i++) if (n.equals(changes.getJSONObject(i).optString("name"))) changed = true;
+                if (!changed) asTheyAre.add(n);
+            }
+            extra.removeAll(asTheyAre);
             if (!extra.isEmpty()) {
                 addCheck(checks, "plan-dependencies", I18n.tr("server.um.packagePreflight.23"), "review",
                         I18n.tr("server.um.x.depsProtected", java.util.Map.of("list", String.valueOf(String.join(", ", extra)))));
+            }
+            if (!asTheyAre.isEmpty()) {
+                addCheck(checks, "plan-dependencies-kept", I18n.tr("server.um.packagePreflight.23"), "review",
+                        I18n.tr("server.um.x.depsAsTheyAre", java.util.Map.of("list", String.join(", ", asTheyAre))));
             }
             if (!block && !blockedBefore) {
                 addCheck(checks, "plan", I18n.tr("server.um.packagePreflight.15"), "ok",
@@ -4274,6 +4304,658 @@ public final class UpdateManager {
                 }
             }
             job.finish();
+        }
+    }
+
+    // ===================== passaggio a Dovecot 2.4 (reperto 213) =====================
+
+    /**
+     * Dove il passaggio tiene la configurazione e i pacchetti della 2.3 com'erano: la strada per tornare indietro, una
+     * cartella per passaggio, solo per root.
+     */
+    private static final String DOVECOT24_BACKUP = "/var/db/mailpanel/dovecot24";
+
+    /** I pacchetti di Dovecot installati, per origine (server e Pigeonhole, della 2.3 e della 2.4): {nome, versione}. */
+    static Map<String, String[]> dovecotPackages() {
+        return dovecotPackages(sh("pkg query '%o %n %v' 2>/dev/null", 30));
+    }
+
+    /** Lo stesso dalle righe di «pkg query '%o %n %v'»: si prova senza pkg. */
+    static Map<String, String[]> dovecotPackages(String pkgQuery) {
+        Map<String, String[]> m = new LinkedHashMap<>();
+        for (String line : pkgQuery.split("\n")) {
+            String[] c = line.trim().split(" ");
+            if (c.length == 3 && c[0].matches("mail/dovecot(24)?(-pigeonhole)?") && isValidName(c[1]))
+                m.put(c[0], new String[]{c[1], c[2]});
+        }
+        return m;
+    }
+
+    /**
+     * I pacchetti della 2.4 al posto di quelli della 2.3: lo stesso sapore, Pigeonhole solo se c'era. Il pannello scrive
+     * nella configurazione la connessione a MySQL, quindi il sapore e' MySQL o niente: null per tutto il resto.
+     */
+    static java.util.List<String> dovecot24Targets(String server23, String sieve23) {
+        if (!"dovecot-mysql".equals(server23)) return null;
+        java.util.List<String> t = new ArrayList<>(java.util.List.of("dovecot24-mysql"));
+        if (sieve23 != null && !sieve23.isEmpty()) {
+            if (!"dovecot-pigeonhole-mysql".equals(sieve23)) return null;
+            t.add("dovecot24-pigeonhole-mysql");
+        }
+        return t;
+    }
+
+    /** La password MySQL del pannello, dalla sua configurazione: "" se non si legge. */
+    private static String panelDbPassword() {
+        try (java.sql.ResultSet rs = org.mail_panel.Main.dbManager.get_data_config()) {
+            if (rs.next()) {
+                String pw = org.mail_panel.Main.dbManager.mysqlPassword();
+                return pw == null ? "" : pw;
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    /** La password dell'utente principale di Dovecot (quello di Roundcube), o null se non c'e'. */
+    private static String dovecotMasterPassword() {
+        try {
+            Path p = Paths.get(org.mail_panel.integration.RoundcubeSsoManager.MASTER_PASSWORD_FILE);
+            if (!Files.isRegularFile(p)) return null;
+            String pw = Files.readString(p, StandardCharsets.UTF_8).trim();
+            return pw.isEmpty() ? null : pw;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Il file del certificato che Dovecot presenta (ssl_server_cert_file nella 2.4, ssl_cert nella 2.3), o null. */
+    private static Path dovecotCertificatePath() {
+        for (String key : new String[]{"ssl_server_cert_file", "ssl_cert"}) {
+            String v = sh("doveconf -h " + key + " 2>/dev/null", 20).trim();
+            if (v.startsWith("<")) v = v.substring(1).trim();
+            if (v.matches("/[A-Za-z0-9._/-]{1,255}") && Files.isRegularFile(Paths.get(v))) return Paths.get(v);
+        }
+        return null;
+    }
+
+    /** L'utente MySQL con cui Dovecot legge le caselle, dalla sua configurazione (2.4 o 2.3); "" se non si legge. */
+    static String dovecotDbUser() {
+        try {
+            Path auth = Paths.get(DOVECOT_DIR, "conf.d", "auth-sql.conf.ext"), sql = Paths.get(DOVECOT_DIR, "dovecot-sql.conf");
+            if (Files.isRegularFile(auth)) {
+                MailDbUsers.Login l = MailDbUsers.dovecot24Login(Files.readString(auth, StandardCharsets.UTF_8));
+                if (l != null) return l.user();
+            }
+            if (Files.isRegularFile(sql)) {
+                MailDbUsers.Login l = MailDbUsers.dovecot23Login(Files.readString(sql, StandardCharsets.UTF_8));
+                if (l != null) return l.user();
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    /**
+     * Dove Postfix consegna con LMTP, dal suo virtual_transport: {host, porta}. Null se non e' un indirizzo TCP (un
+     * socket, o un altro trasporto): allora la prova LMTP non si fa, e il registro lo dice.
+     */
+    static String[] lmtpTarget(String transport) {
+        Matcher m = Pattern.compile("^lmtp:(?:inet:)?(127\\.0\\.0\\.1|localhost|\\[::1\\]|::1):([0-9]{1,5})$")
+                .matcher(transport == null ? "" : transport.trim());
+        if (!m.find()) return null;
+        String host = m.group(1).replace("[", "").replace("]", "");
+        return new String[]{"localhost".equals(host) ? "127.0.0.1" : host, m.group(2)};
+    }
+
+    /** Il socket di autenticazione di Dovecot che Postfix usa per l'invio; null se Postfix non chiede a Dovecot. */
+    private static Path postfixAuthSocket() {
+        if (!"dovecot".equals(sh("postconf -h smtpd_sasl_type 2>/dev/null", 20).trim())) return null;
+        String p = sh("postconf -h smtpd_sasl_path 2>/dev/null", 20).trim();
+        String q = sh("postconf -h queue_directory 2>/dev/null", 20).trim();
+        if (!p.matches("[A-Za-z0-9._/-]{1,200}") || !q.matches("/[A-Za-z0-9._/-]{1,200}")) return null;
+        return Paths.get(p.startsWith("/") ? p : q + "/" + p);
+    }
+
+    /**
+     * Cio' che le prove della posta hanno visto: per ogni prova null se e' passata, altrimenti il perche'; gli
+     * indirizzi su cui Dovecot ascolta; le estensioni Sieve annunciate (null senza ManageSieve); l'utente con cui gira
+     * il processo che cerca le password (auth-worker, "" se root: DovecotAuthWorker).
+     */
+    record MailState(LinkedHashMap<String, String> results, Set<String> listeners, Set<String> sieve, String workerUser) {
+        java.util.List<String> failed() {
+            java.util.List<String> f = new ArrayList<>();
+            for (Map.Entry<String, String> e : results.entrySet()) if (e.getValue() != null) f.add(e.getKey() + ": " + e.getValue());
+            return f;
+        }
+    }
+
+    /**
+     * Le prove vere della posta, le stesse prima (sulla 2.3) e dopo (sulla 2.4), scritte nel registro una per riga:
+     * la configurazione secondo Dovecot, il socket con cui Postfix fa entrare chi spedisce, la casella secondo doveadm,
+     * la consegna LMTP fermata prima del messaggio, l'accesso IMAP su 993 con l'utente principale (come Roundcube) e il
+     * saluto di ManageSieve. Nessuna cambia niente (MailProbes).
+     */
+    private static MailState mailTests(Job job, String mailbox, String masterPassword, boolean sieve) {
+        LinkedHashMap<String, String> res = new LinkedHashMap<>();
+        Shell.Result dc = Shell.runShell(Duration.ofSeconds(30), "doveconf -n 2>&1 >/dev/null");
+        res.put("doveconf -n", dc.success() && dc.outputTrim().isEmpty() ? null : firstLineOf(dc.outputTrim()));
+        Set<String> listeners = MailProbes.dovecotListeners(sh("sockstat -46lq -P tcp 2>/dev/null", 20));
+        Path auth = postfixAuthSocket();
+        if (auth != null) res.put(I18n.tr("server.um.dv24move.tAuth"), MailProbes.authSocket(auth, 10_000));
+        if (mailbox != null) {
+            String du = sh("doveadm user '" + mailbox + "' 2>&1 | head -5", 60);
+            res.put("doveadm user " + mailbox, du.contains("uid") && du.contains("home") ? null : firstLineOf(du));
+            String[] lmtp = lmtpTarget(sh("postconf -h virtual_transport 2>/dev/null", 20));
+            if (lmtp != null) res.put(I18n.tr("server.um.dv24move.tLmtp", Map.of("mailbox", mailbox)),
+                    MailProbes.lmtpRecipient(lmtp[0], Integer.parseInt(lmtp[1]), mailbox, 15_000));
+            else job.write("    " + I18n.tr("server.um.dv24move.noLmtp"));
+            Path cert = dovecotCertificatePath();
+            if (masterPassword != null && cert != null && listeners.stream().anyMatch(l -> l.endsWith(":993"))) {
+                String imap;
+                try {
+                    imap = MailProbes.imapLogin("127.0.0.1", 993, MailProbes.leafCertificate(cert),
+                            mailbox + "*" + org.mail_panel.integration.RoundcubeSsoManager.MASTER_USER, masterPassword, 15_000);
+                } catch (Exception e) {
+                    imap = cert + ": " + e.getMessage();
+                }
+                res.put(I18n.tr("server.um.dv24move.tImap", Map.of("mailbox", mailbox)), imap);
+            } else job.write("    " + I18n.tr("server.um.dv24move.noImap"));
+        }
+        // Gli utenti dei processi di Dovecot (ServiceUsers): sulla 2.4 un privilegio in piu' non e' un guasto che
+        // si vede, ma il passaggio non lo deve portare.
+        java.util.List<String> su = new ArrayList<>();
+        for (ServiceUsers.Problem p : ServiceUsers.now().problems()) if (p.service().contains("dovecot")) su.add(p.logText());
+        res.put(I18n.tr("server.um.dv24move.tUsers"), su.isEmpty() ? null : String.join("; ", su));
+        // POP3, se e' acceso: la porta aperta non basta (sulla 2.4 pop3-login puo' morire a ogni connessione, Pop3).
+        if (listeners.stream().anyMatch(l -> l.endsWith(":110")))
+            res.put("POP3 110", MailProbes.pop3Greeting("127.0.0.1", 110, 10_000));
+        Set<String> ext = null;
+        if (sieve) {
+            ext = MailProbes.sieveExtensions("127.0.0.1", 4190, 10_000);
+            res.put("ManageSieve 4190", ext == null ? I18n.tr("server.um.dv24move.noSieve") : null);
+        }
+        for (Map.Entry<String, String> e : res.entrySet())
+            job.write("    " + (e.getValue() == null ? "ok  " : "NO  ") + e.getKey() + (e.getValue() == null ? "" : ": " + e.getValue()));
+        job.write("    " + I18n.tr("server.um.dv24move.listening", Map.of("list", String.join(", ", listeners))));
+        if (ext != null) job.write("    " + I18n.tr("server.um.dv24move.sieveExt", Map.of("n", String.valueOf(ext.size()))));
+        String worker = sh("doveconf -h service/auth-worker/user 2>/dev/null", 20).trim();
+        job.write("    " + I18n.tr("server.um.dv24move.worker", Map.of("user", worker.isEmpty() ? "root" : worker)));
+        return new MailState(res, listeners, ext, worker);
+    }
+
+    private static String firstLineOf(String s) {
+        String t = s == null ? "" : s.trim();
+        int i = t.indexOf('\n');
+        t = i < 0 ? t : t.substring(0, i);
+        return t.isEmpty() ? "?" : (t.length() > 300 ? t.substring(0, 300) : t);
+    }
+
+    /**
+     * Cio' che ferma il passaggio, confrontando le prove dopo con quelle di prima: una prova fallita, un indirizzo in
+     * ascolto perso o comparso, un'estensione Sieve sparita (le regole degli utenti la usano). Vuoto se e' tutto come
+     * prima o meglio.
+     */
+    static java.util.List<String> mailStateProblems(MailState before, MailState after) {
+        java.util.List<String> p = new ArrayList<>(after.failed());
+        for (String k : before.results().keySet())
+            if (!after.results().containsKey(k)) p.add(I18n.tr("server.um.dv24move.notRun", Map.of("test", k)));
+        Set<String> lost = new TreeSet<>(before.listeners()), added = new TreeSet<>(after.listeners());
+        lost.removeAll(after.listeners());
+        added.removeAll(before.listeners());
+        if (!lost.isEmpty()) p.add(I18n.tr("server.um.dv24move.portsLost", Map.of("list", String.join(", ", lost))));
+        if (!added.isEmpty()) p.add(I18n.tr("server.um.dv24move.portsAdded", Map.of("list", String.join(", ", added))));
+        if (before.sieve() != null && after.sieve() != null) {
+            Set<String> gone = new TreeSet<>(before.sieve());
+            gone.removeAll(after.sieve());
+            if (!gone.isEmpty()) p.add(I18n.tr("server.um.dv24move.sieveLost", Map.of("list", String.join(" ", gone))));
+        }
+        // Il processo che cerca le password non torna root: chi girava da utente interno resta cosi'.
+        String wb = before.workerUser() == null ? "" : before.workerUser(), wa = after.workerUser() == null ? "" : after.workerUser();
+        if (!wb.isEmpty() && !"root".equals(wb) && !wb.equals(wa))
+            p.add(I18n.tr("server.um.dv24move.workerChanged", Map.of("before", wb, "after", wa.isEmpty() ? "root" : wa)));
+        return p;
+    }
+
+    /**
+     * Prima del passaggio a Dovecot 2.4: che cosa c'e', che cosa lo sostituirebbe, se la configurazione e' del pannello,
+     * se le prove si possono fare, e il piano esatto di pkg da approvare. Non cambia niente.
+     *
+     * La 2.4 e' un pacchetto a parte (dovecot24-mysql nel ramo latest): niente ci passa da solo. Non legge le
+     * configurazioni della 2.3, quindi il passaggio cambia insieme pacchetti e configurazione, a posta ferma, e prova la
+     * posta prima e dopo; come la migrazione a MySQL 8.4.
+     */
+    public static JSONObject dovecot24Preflight() {
+        JSONObject r = new JSONObject();
+        JSONArray checks = new JSONArray();
+        boolean block = false;
+        Map<String, String[]> pk = dovecotPackages();
+        String[] s23 = pk.get("mail/dovecot"), p23 = pk.get("mail/dovecot-pigeonhole"), s24 = pk.get("mail/dovecot24");
+        java.util.List<String> remove = new ArrayList<>();
+        java.util.List<String> install = null;
+        String label = I18n.tr("server.um.dv24move.cInstalled");
+        if (s24 != null) {
+            r.put("alreadyDone", true);
+            addCheck(checks, "pkg", label, "ok", I18n.tr("server.um.dv24move.already", Map.of("name", s24[0], "v", s24[1])));
+        } else if (s23 == null) {
+            block = true;
+            addCheck(checks, "pkg", label, "block", I18n.tr("server.um.dv24move.none"));
+        } else {
+            remove.add(s23[0]);
+            if (p23 != null) remove.add(p23[0]);
+            install = dovecot24Targets(s23[0], p23 == null ? "" : p23[0]);
+            java.util.List<String> now = new ArrayList<>();
+            now.add(s23[0] + " " + s23[1]);
+            if (p23 != null) now.add(p23[0] + " " + p23[1]);
+            if (install == null) {
+                block = true;
+                addCheck(checks, "pkg", label, "block", I18n.tr("server.um.dv24move.flavor", Map.of("list", String.join(", ", now))));
+            } else addCheck(checks, "pkg", label, "ok", I18n.tr("server.um.dv24move.now", Map.of("list", String.join(", ", now))));
+        }
+        r.put("remove", new JSONArray(remove)).put("install", new JSONArray(install == null ? java.util.List.of() : install));
+        if (install == null) return r.put("success", true).put("checks", checks).put("canProceed", false).put("blocked", block);
+
+        // La 2.4 nel catalogo: nel ramo quarterly non c'e' ancora.
+        java.util.List<String> offered = new ArrayList<>(), missing = new ArrayList<>();
+        for (String n : install) {
+            String v = sh("pkg rquery -U %v " + n + " 2>/dev/null", 30).trim();
+            if (v.isEmpty()) missing.add(n); else offered.add(n + " " + v);
+        }
+        if (!missing.isEmpty()) {
+            block = true;
+            addCheck(checks, "target", I18n.tr("server.um.dv24move.cTarget"), "block",
+                    I18n.tr("server.um.dv24move.notOffered", Map.of("list", String.join(", ", missing))));
+        } else addCheck(checks, "target", I18n.tr("server.um.dv24move.cTarget"), "ok",
+                I18n.tr("server.um.dv24move.offered", Map.of("list", String.join(", ", offered))));
+
+        // La configurazione si riscrive da capo: una scritta a mano andrebbe persa.
+        boolean ours = ok("grep -qF" + dovecotSignatureOptions() + " " + DOVECOT_DIR + "/dovecot.conf", 15);
+        if (!ours) block = true;
+        addCheck(checks, "config", I18n.tr("server.um.dv24move.cConfig"), ours ? "ok" : "block",
+                I18n.tr(ours ? "server.um.dv24move.configOurs" : "server.um.dv24move.configNotOurs"));
+
+        // Chi altro usa i pacchetti della 2.3: il passaggio li toglie con -f, e resterebbe senza.
+        java.util.List<String> users = new ArrayList<>();
+        for (String n : remove)
+            for (String d : sh("pkg query %rn " + n + " 2>/dev/null", 20).split("\n"))
+                if (!d.isBlank() && !remove.contains(d.trim()) && !users.contains(d.trim())) users.add(d.trim());
+        if (!users.isEmpty()) block = true;
+        addCheck(checks, "dependents", I18n.tr("server.um.dv24move.cDependents"), users.isEmpty() ? "ok" : "block",
+                users.isEmpty() ? I18n.tr("server.um.dv24move.noDependents")
+                                : I18n.tr("server.um.dv24move.dependents", Map.of("list", String.join(", ", users))));
+
+        boolean running = ok("service dovecot status", 20);
+        if (!running) block = true;
+        addCheck(checks, "running", I18n.tr("server.um.dv24move.cRunning"), running ? "ok" : "block",
+                I18n.tr(running ? "server.um.dv24move.running" : "server.um.dv24move.notRunning"));
+
+        boolean pw = !panelDbPassword().isEmpty();
+        if (!pw) block = true;
+        addCheck(checks, "dbpass", I18n.tr("server.um.dv24move.cDbPass"), pw ? "ok" : "block",
+                I18n.tr(pw ? "server.um.dv24move.dbPass" : "server.um.dv24move.noDbPass"));
+
+        // Le prove: che cosa si potra' provare prima e dopo.
+        String mailbox = mysqlOut(org.mail_panel.database.SqlCatalog.UM_FIRST_ACTIVE_MAILBOX).trim();
+        if (!MailProbes.MAILBOX.matcher(mailbox).matches()) mailbox = "";
+        boolean master = dovecotMasterPassword() != null, cert = dovecotCertificatePath() != null;
+        r.put("testMailbox", mailbox);
+        String tests = mailbox.isEmpty() ? I18n.tr("server.um.dv24move.testsNoMailbox")
+                : I18n.tr("server.um.dv24move.tests", Map.of("mailbox", mailbox))
+                  + (master && cert ? "" : " " + I18n.tr("server.um.dv24move.testsNoImap"));
+        // Sempre fra le cose da sapere prima di partire: le prove entrano in una casella vera (in sola lettura).
+        addCheck(checks, "tests", I18n.tr("server.um.dv24move.cTests"), "review", tests);
+
+        addCheck(checks, "services", I18n.tr("server.um.x.servicesInvolved"), "review", I18n.tr("server.um.dv24move.downtime"));
+
+        JSONObject plan = dovecot24Plan(remove, install);
+        java.util.List<String> family = new ArrayList<>(remove);
+        family.addAll(install);
+        if (addPlanChecks(checks, plan, install, family, block)) block = true;
+        java.util.List<String> otherMysql = otherMysqlInPlan(plan, PackagePlan.installed().keySet());
+        if (!otherMysql.isEmpty()) {
+            block = true;
+            addCheck(checks, "mysql", I18n.tr("server.um.dv24move.cMysql"), "block",
+                    I18n.tr("server.um.dv24move.otherMysql", Map.of("list", String.join(", ", otherMysql))));
+        }
+        r.put("plan", planForCard(plan)).put("signature", plan.optString("signature", ""));
+        return r.put("success", true).put("checks", checks).put("canProceed", !block).put("blocked", block);
+    }
+
+    /**
+     * Il piano esatto: togliere i pacchetti della 2.3, poi installare quelli della 2.4, con cio' che si portano dietro. Le
+     * dipendenze gia' installate e protette alla versione che la 2.4 chiede si sbloccano per pkg, che altrimenti ne
+     * cercherebbe altre (PackagePlan.planRemoveThenInstall); restano come sono e si riproteggono alla fine.
+     */
+    private static JSONObject dovecot24Plan(java.util.List<String> remove, java.util.List<String> install) {
+        Set<String> locked = lockedNames();
+        StringBuilder deps = new StringBuilder();
+        for (String n : install) deps.append(sh("pkg rquery -U '%dn %dv' " + n + " 2>/dev/null", 30)).append('\n');
+        java.util.List<String> asTheyAre = dependenciesAsTheyAre(deps.toString(), locked, PackagePlan.versionsOnly(PackagePlan.installed()));
+        return judged(PackagePlan.planRemoveThenInstall(remove, install, asTheyAre, locked, UpdateManager::reasonNotToUnlock));
+    }
+
+    /**
+     * Fra le dipendenze («pkg rquery '%dn %dv'», una per riga) quelle installate, protette, e proprio alla versione
+     * chiesta: pkg le userebbe cosi' come sono, se non fossero protette. Funzione pura.
+     */
+    static java.util.List<String> dependenciesAsTheyAre(String rquery, Set<String> locked, Map<String, String> installed) {
+        java.util.List<String> out = new ArrayList<>();
+        for (String line : rquery.split("\n")) {
+            String[] c = line.trim().split(" ");
+            if (c.length == 2 && isValidName(c[0]) && locked.contains(c[0]) && c[1].equals(installed.get(c[0])) && !out.contains(c[0]))
+                out.add(c[0]);
+        }
+        return out;
+    }
+
+    /**
+     * I MySQL che il piano installerebbe accanto a quello che c'e' («mysql267-client 26.7.0»): due client MySQL, e
+     * Postfix e Dovecot che potrebbero caricare quello sbagliato. Vuoto se non ce ne sono, o se non c'e' un MySQL.
+     */
+    static java.util.List<String> otherMysqlInPlan(JSONObject plan, Set<String> installedNames) {
+        java.util.List<String> out = new ArrayList<>();
+        boolean anyMysql = installedNames.stream().anyMatch(n -> n.matches("mysql[0-9]+-(client|server)"));
+        JSONArray c = plan == null ? null : plan.optJSONArray("changes");
+        for (int i = 0; anyMysql && c != null && i < c.length(); i++) {
+            JSONObject x = c.getJSONObject(i);
+            String n = x.optString("name");
+            if ("install".equals(x.optString("type")) && n.matches("mysql[0-9]+-(client|server)") && !installedNames.contains(n))
+                out.add(n + " " + x.optString("to"));
+        }
+        return out;
+    }
+
+    /**
+     * Solo per le prove (Dovecot24MoveE2ETest): problemi in piu' dopo le prove sulla 2.4, per far tornare indietro il
+     * passaggio sulla VM con un guasto vero. Lo imposta solo chi ha il processo in mano: nel pannello in servizio e'
+     * sempre null.
+     */
+    static volatile java.util.function.Supplier<java.util.List<String>> dovecot24ProblemsForTest;
+
+    /**
+     * @param approvedSignature l'impronta del piano che chi preme ha letto: il lavoro ricalcola il piano e parte solo se
+     *                          e' lo stesso
+     */
+    public static JSONObject startDovecot24Move(String approvedSignature) {
+        if (!validSignature(approvedSignature))
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.um.plan.signatureMissing"));
+        String id = "dc24-" + System.currentTimeMillis();
+        Job j = new Job(id, "dovecot24_move");
+        return startOnTurn(id, j, I18n.tr("server.um.dv24move.job"), "dovecot24-move", () -> runDovecot24Move(j, approvedSignature));
+    }
+
+    /**
+     * Il passaggio a Dovecot 2.4, guidato e provato.
+     *
+     * Le prove della posta girano prima, sulla 2.3: se una non passa gia' adesso il lavoro si ferma senza toccare
+     * niente, perche' dopo non potrebbe dimostrare nulla. Poi la copia (configurazione e pacchetti della 2.3, rifatti da
+     * quelli installati con pkg create), Dovecot fermo, i pacchetti cambiati secondo il piano firmato, la configurazione
+     * 2.4 scritta e approvata da doveconf, Dovecot acceso, l'utente MySQL di Dovecot rimesso (MailDbUsers), e le stesse
+     * prove. Se una sola non passa, o una porta cambia, o un'estensione Sieve sparisce, la 2.3 torna al suo posto dalla
+     * copia, e si riprova anche lei. Intanto Postfix resta acceso e tiene la posta in coda; alla fine la consegna.
+     */
+    private static void runDovecot24Move(Job job, String approvedSignature) {
+        job.status = "running";
+        final int TOT = 8;
+        java.util.List<String> listed = new ArrayList<>();
+        InstallSideEffects.Watch sideEffects = new InstallSideEffects.Watch();
+        PlanOutcome outcome = null;
+        Map<String, Boolean> servicesBefore = servicesState();
+        String backupDir = "";
+        java.util.List<String> remove = new ArrayList<>(), install = new ArrayList<>(), pkgFiles = new ArrayList<>();
+        boolean dovecotStopped = false, replaced = false;
+        String mailbox = null, masterPassword = null, dbUserBefore = "";
+        boolean sieve = false;
+        MailState before = null;
+        JSONObject plan = null;
+        Path script = null;
+        try {
+            job.advance(1, TOT);
+            job.write("=== " + I18n.tr("server.um.dv24move.title") + " ===");
+            job.write("");
+            job.write("[1/" + TOT + "] " + I18n.tr("server.um.dv24move.s1"));
+            JSONObject pf = dovecot24Preflight();
+            if (!pf.optBoolean("canProceed", false)) {
+                job.status = "error";
+                job.errorMessage = I18n.tr(pf.optBoolean("alreadyDone", false) ? "server.um.dv24move.alreadyStop" : "server.um.dv24move.blockedStop");
+                JSONArray ck = pf.optJSONArray("checks");
+                for (int i = 0; ck != null && i < ck.length(); i++) {
+                    JSONObject c = ck.getJSONObject(i);
+                    if (!"ok".equals(c.optString("level")))
+                        job.write("  [" + c.optString("level").toUpperCase() + "] " + c.optString("label") + ": " + c.optString("detail"));
+                }
+                return;
+            }
+            remove = jsonArrayToList(pf.optJSONArray("remove"));
+            install = jsonArrayToList(pf.optJSONArray("install"));
+            job.write("  " + String.join(" + ", remove) + " -> " + String.join(" + ", install));
+            plan = pf.optJSONObject("plan");
+            String mismatch = approvedPlanMismatch(job, plan, pf.optString("signature", null), approvedSignature);
+            if (mismatch != null) {
+                job.status = "error";
+                job.errorMessage = mismatch;
+                return;
+            }
+            final java.util.List<String> rm0 = java.util.List.copyOf(remove), in0 = java.util.List.copyOf(install);
+            java.util.List<String> downloads = planDownloads(plan);
+            if (!downloads.isEmpty()) {
+                Recheck grown = fetchAndRecheck(job, "pkg fetch -y -U " + String.join(" ", downloads) + " 2>&1", plan,
+                        () -> dovecot24Plan(rm0, in0));
+                if (grown.stop() != null) {
+                    job.status = "error";
+                    job.errorMessage = grown.stop();
+                    return;
+                }
+                plan = grown.plan();
+            }
+            PlanWatch watch = PlanWatch.take(sideEffects);
+            String mb = pf.optString("testMailbox", "");
+            mailbox = MailProbes.MAILBOX.matcher(mb).matches() ? mb : null;
+            masterPassword = dovecotMasterPassword();
+            sieve = install.contains("dovecot24-pigeonhole-mysql");
+            dbUserBefore = dovecotDbUser();
+            job.write("");
+            job.write("  " + I18n.tr("server.um.dv24move.before"));
+            before = mailTests(job, mailbox, masterPassword, sieve);
+            if (!before.failed().isEmpty()) {
+                job.status = "error";
+                job.errorMessage = I18n.tr("server.um.dv24move.beforeFailed", Map.of("list", String.join("; ", before.failed())));
+                return;
+            }
+
+            job.advance(2, TOT);
+            job.write("");
+            job.write("[2/" + TOT + "] " + I18n.tr("server.um.dv24move.s2"));
+            String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
+            if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date for the copy");
+            backupDir = DOVECOT24_BACKUP + "/" + ts;
+            if (!ok("mkdir -p -m 700 " + DOVECOT24_BACKUP + " && chmod 700 " + DOVECOT24_BACKUP + " && mkdir -m 700 " + backupDir
+                    + " && mkdir -m 700 " + backupDir + "/pkg", 30))
+                throw new IllegalStateException("cannot create " + backupDir);
+            if (!ok("cp -Rp " + DOVECOT_DIR + " " + backupDir + "/etc", 120) || !ok("test -f " + backupDir + "/etc/dovecot.conf", 15))
+                throw new IllegalStateException("the copy of " + DOVECOT_DIR + " did not succeed");
+            for (String n : remove) {
+                String nv = sh("pkg query %n-%v " + n + " 2>/dev/null", 20).trim();
+                String file = backupDir + "/pkg/" + nv + ".pkg";
+                if (!nv.matches("[A-Za-z0-9._+-]{1,120}") || runLogged(job, "pkg create -o " + backupDir + "/pkg " + n + " 2>&1", 300) != 0
+                        || !ok("test -s " + file, 15))
+                    throw new IllegalStateException("pkg create " + n + " did not produce " + file);
+                pkgFiles.add(file);
+            }
+            job.write("    " + I18n.tr("server.um.dv24move.copied", Map.of("dir", backupDir, "n", String.valueOf(pkgFiles.size()))));
+
+            job.advance(3, TOT);
+            job.write("");
+            job.write("[3/" + TOT + "] " + I18n.tr("server.um.dv24move.s3"));
+            ok("service dovecot stop", 60);
+            dovecotStopped = true;
+            boolean down = false;
+            for (int i = 0; i < 30 && !down; i++) {
+                down = !ok("service dovecot status", 10);
+                if (!down) try { Thread.sleep(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
+            if (!down) throw new IllegalStateException("Dovecot did not stop");
+            job.write("    " + I18n.tr("server.um.dv24move.stopped"));
+
+            job.advance(4, TOT);
+            job.write("");
+            job.write("[4/" + TOT + "] " + I18n.tr("server.um.x.replacingPkgs"));
+            listed = unlockForPlan(job, plan, install);
+            int delCode = runLogged(job, "pkg delete -f -y " + String.join(" ", remove) + " 2>&1", 300);
+            replaced = true;
+            int insCode = delCode != 0 ? -1 : runLogged(job, "pkg install -y -U " + String.join(" ", install) + " 2>&1", 900);
+            if (insCode == 4) {
+                job.write(I18n.tr("server.um.runGuidedUpdate.10"));
+                insCode = runLogged(job, "pkg install -y -U " + String.join(" ", install) + " 2>&1", 900);
+            }
+            outcome = checkPlanOutcome(job, watch, plan, "Dovecot 2.4 move", true);
+            if (delCode != 0) throw new IllegalStateException("pkg delete exited with code " + delCode);
+            for (String n : install)
+                if (insCode != 0 || !ok("pkg info -e " + n, 20)) throw new IllegalStateException(I18n.tr("server.um.dv24move.notInstalled", Map.of("n", n)));
+            if (outcome.mapsProblem() != null) throw new IllegalStateException(outcome.mapsProblem());
+
+            job.advance(5, TOT);
+            job.write("");
+            job.write("[5/" + TOT + "] " + I18n.tr("server.um.dv24move.s5"));
+            script = Files.createTempFile("dovecot24-config-", ".sh");
+            Files.setPosixFilePermissions(script, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+            Files.writeString(script, "#!/bin/sh\nset -e\n" + org.mail_panel.scripts.DovecotConfig.fromPanelConfig().scriptFragment() + "\n");
+            // La password dall'AMBIENTE, come nella rigenerazione: non nel testo dello script ne' sulla riga di comando.
+            Map<String, String> env = new LinkedHashMap<>();
+            env.put("DB_PASS", panelDbPassword());
+            if (runLogged(job, "sh " + script, 300, null, env) != 0)
+                throw new IllegalStateException(I18n.tr("server.um.dv24move.configRefused"));
+
+            job.advance(6, TOT);
+            job.write("");
+            job.write("[6/" + TOT + "] " + I18n.tr("server.um.dv24move.s6"));
+            if (!startDovecot(job)) throw new IllegalStateException(I18n.tr("server.um.dv24move.notStarted"));
+            dovecotStopped = false;
+            // La configurazione scritta legge con l'utente del pannello: si torna a quello di Dovecot, come dopo la
+            // rigenerazione (MailDbUsers), prima delle prove, cosi' si prova cio' che resta.
+            MailDbUsers.ensureAtBoot();
+            // POP3 come l'ha scelto l'amministratore: la configurazione scritta ha solo IMAP (Pop3).
+            Pop3.ensureAtBoot();
+            String dbUserAfter = dovecotDbUser();
+            job.write("    " + I18n.tr("server.um.dv24move.dbUser", Map.of("before", dbUserBefore.isEmpty() ? "?" : dbUserBefore,
+                    "after", dbUserAfter.isEmpty() ? "?" : dbUserAfter)));
+
+            job.advance(7, TOT);
+            job.write("");
+            job.write("[7/" + TOT + "] " + I18n.tr("server.um.dv24move.s7"));
+            MailState after = mailTests(job, mailbox, masterPassword, sieve);
+            java.util.List<String> problems = mailStateProblems(before, after);
+            if (!dbUserBefore.isEmpty() && !dbUserBefore.equals(dbUserAfter))
+                problems.add(I18n.tr("server.um.dv24move.dbUserChanged", Map.of("before", dbUserBefore, "after", dbUserAfter)));
+            sideEffects.checkListening(job);
+            problems.addAll(sideEffects.problems());
+            problems.addAll(planProblems(outcome));
+            java.util.function.Supplier<java.util.List<String>> forTest = dovecot24ProblemsForTest;
+            if (forTest != null) problems.addAll(forTest.get());
+            if (!problems.isEmpty()) throw new IllegalStateException(String.join(" ", problems));
+            // La password del database in un file che nessuno legge piu': la copia del passaggio basta per tornare indietro.
+            ok("rm -f " + DOVECOT_DIR + "/dovecot-sql.conf.pre-2.4", 15);
+            ok("postqueue -f", 60);
+            job.write("    " + I18n.tr("server.um.dv24move.queueFlushed"));
+
+            job.advance(8, TOT);
+            job.write("");
+            job.write("[8/" + TOT + "] " + I18n.tr("server.um.dv24move.s8"));
+            boolean fallen = fallenServices(job, servicesBefore);
+            String version = sh("pkg query %v " + install.get(0) + " 2>/dev/null", 20).trim();
+            if (fallen) {
+                job.status = "error";
+                job.errorMessage = I18n.tr("server.um.dv24move.fallen", Map.of("dir", backupDir));
+            } else {
+                job.status = "completed";
+                job.outcome = I18n.tr("server.um.dv24move.done", Map.of("v", version));
+                job.write("");
+                job.write(job.outcome);
+                job.write(I18n.tr("server.um.dv24move.copyKept", Map.of("dir", backupDir)));
+            }
+        } catch (Exception e) {
+            job.status = "error";
+            String why = String.valueOf(e.getMessage());
+            job.write("");
+            job.write(I18n.tr("server.um.startMtaStsActivation.1", Map.of("message", why)));
+            if (replaced) {
+                boolean back = dovecot23Back(job, backupDir, pkgFiles, install, plan, mailbox, masterPassword, sieve, before);
+                job.errorMessage = I18n.tr(back ? "server.um.dv24move.rolledBack" : "server.um.dv24move.notRolledBack",
+                        Map.of("why", why, "dir", backupDir.isEmpty() ? "-" : backupDir));
+            } else {
+                job.errorMessage = why;
+                if (dovecotStopped) {
+                    job.write(I18n.tr("server.um.dv24move.restart23"));
+                    job.write("    dovecot: " + (startDovecot(job) ? I18n.tr("server.um.x.running") : I18n.tr("server.um.runMigration84.26")));
+                }
+            }
+            if (outcome != null && !outcome.outsidePlan().isEmpty()) job.errorMessage += " " + divergenceMessage(outcome.outsidePlan());
+        } finally {
+            if (script != null) try { Files.deleteIfExists(script); } catch (Exception ignored) {}
+            // Si protegge ogni pacchetto dell'elenco installato adesso: la 2.4 se e' rimasta, la 2.3 se e' tornata.
+            if (!listed.isEmpty() && !relockListed(job, listed).isEmpty() && "completed".equals(job.status)) {
+                job.status = "error";
+                job.errorMessage = I18n.tr("server.um.runGuidedUpdate.42");
+            }
+            job.finish();
+        }
+    }
+
+    /** Accende Dovecot e aspetta che risponda, fino a 30 secondi. */
+    private static boolean startDovecot(Job job) {
+        ok("service dovecot start", 120);
+        for (int i = 0; i < 30; i++) {
+            if (ok("service dovecot status", 10)) {
+                job.write("    dovecot: " + I18n.tr("server.um.x.running"));
+                return true;
+            }
+            try { Thread.sleep(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+        return false;
+    }
+
+    /**
+     * Rimette la 2.3 com'era, dalla copia del passaggio: via i pacchetti della 2.4 e cio' che il piano ha portato solo
+     * per loro, dentro quelli della 2.3 rifatti da pkg create, la configurazione di prima, Dovecot acceso, e di nuovo le
+     * prove di prima. La configurazione della 2.4 resta nella copia (etc-2.4-refused), da leggere.
+     *
+     * @return vero se la 2.3 e' tornata e passa le prove di prima
+     */
+    private static boolean dovecot23Back(Job job, String backupDir, java.util.List<String> pkgFiles, java.util.List<String> install,
+                                         JSONObject plan, String mailbox, String masterPassword, boolean sieve, MailState before) {
+        job.write("");
+        job.write(I18n.tr("server.um.dv24move.backTitle", Map.of("dir", backupDir.isEmpty() ? "-" : backupDir)));
+        if (backupDir.isEmpty() || pkgFiles.isEmpty()) {
+            job.write("    " + I18n.tr("server.um.dv24move.noCopy"));
+            return false;
+        }
+        try {
+            ok("service dovecot stop", 60);
+            java.util.List<String> present = new ArrayList<>();
+            for (String n : install) if (ok("pkg info -e " + n, 15)) present.add(n);
+            if (!present.isEmpty() && runLogged(job, "pkg delete -f -y " + String.join(" ", present) + " 2>&1", 300) != 0)
+                return false;
+            // Le dipendenze che il piano ha installato per la 2.4 e che nessuno usa piu'.
+            JSONArray changes = plan == null ? null : plan.optJSONArray("changes");
+            for (int i = 0; changes != null && i < changes.length(); i++) {
+                JSONObject c = changes.getJSONObject(i);
+                String n = c.optString("name");
+                if (!"install".equals(c.optString("type")) || install.contains(n) || !isValidName(n) || !ok("pkg info -e " + n, 15)) continue;
+                if (sh("pkg query %rn " + n + " 2>/dev/null", 20).isBlank()) runLogged(job, "pkg delete -y " + n + " 2>&1", 300);
+            }
+            for (String f : pkgFiles)
+                if (runLogged(job, "pkg add " + f + " 2>&1", 300) != 0) return false;
+            if (!ok("rm -rf " + backupDir + "/etc-2.4-refused && mv " + DOVECOT_DIR + " " + backupDir + "/etc-2.4-refused && cp -Rp "
+                    + backupDir + "/etc " + DOVECOT_DIR, 120)) return false;
+            job.write("    " + I18n.tr("server.um.dv24move.configBack"));
+            if (!startDovecot(job)) return false;
+            job.write("    " + I18n.tr("server.um.dv24move.testsAgain"));
+            MailState again = mailTests(job, mailbox, masterPassword, sieve);
+            ok("postqueue -f", 60);
+            java.util.List<String> p = before == null ? again.failed() : mailStateProblems(before, again);
+            if (!p.isEmpty()) job.write("    " + String.join(" ", p));
+            return p.isEmpty();
+        } catch (Exception e) {
+            job.write("    " + e.getMessage());
+            return false;
         }
     }
 
@@ -8941,9 +9623,8 @@ public final class UpdateManager {
         JSONObject r = new JSONObject().put("success", true);
         try {
             org.mail_panel.scripts.DovecotConfig c = org.mail_panel.scripts.DovecotConfig.fromPanelConfig();
-            boolean pigeonhole = ok("pkg info -e dovecot-pigeonhole", 15)
-                    || ok("pkg info -e dovecot-pigeonhole-mysql", 15)
-                    || ok("pkg info -e dovecot-pigeonhole-pgsql", 15);
+            // Ogni sapore, della 2.3 e della 2.4: come lo script (DovecotConfig).
+            boolean pigeonhole = !sh("pkg query -g %n 'dovecot-pigeonhole*' 'dovecot24-pigeonhole*' 2>/dev/null", 15).isBlank();
             JSONArray file = new JSONArray();
             for (var f : org.mail_panel.scripts.DovecotConfig.file24()) {
                 String text = f.content()
@@ -8960,7 +9641,7 @@ public final class UpdateManager {
             return r.put("file", file).put("checks", ver)
                     .put("dbName", c.getDbName()).put("dbUser", c.getDbUser())
                     .put("pigeonhole", pigeonhole)
-                    .put("installedVersion", sh("pkg query -e '%o = \"mail/dovecot\"' %v 2>/dev/null | head -1", 20))
+                    .put("installedVersion", sh("pkg query -e '%o = \"mail/dovecot\" || %o = \"mail/dovecot24\"' %v 2>/dev/null | head -1", 20))
                     .put("caveat", I18n.tr("server.um.dovecot24Preview.1"));
         } catch (Exception e) {
             return new JSONObject().put("success", false)
@@ -9655,7 +10336,7 @@ public final class UpdateManager {
         r.put("mysqlPackages", client);
 
         JSONArray dependents = new JSONArray();
-        for (String pk : new String[]{"postfix-mysql", "dovecot-mysql"}) {
+        for (String pk : new String[]{"postfix-mysql", "dovecot-mysql", "dovecot24-mysql"}) {
             if (!ok("pkg info -e " + pk, 20)) continue;
             dependents.put(new JSONObject().put("name", pk)
                     .put("version", sh("pkg query %v " + pk, 20))

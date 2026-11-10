@@ -142,14 +142,28 @@ public final class Pop3 {
         return null;
     }
 
-    /** Ricarica, poi 110 e 995 come richiesto e 993 aperta; un restart se il reload non basta. */
+    /**
+     * Ricarica, poi 110 e 995 come richiesto e 993 aperta, e acceso il saluto vero di POP3 sulla 110; un restart se il
+     * reload non basta. Sulla 2.4 il reload che accende POP3 non basta mai: le porte si aprono, ma pop3-login muore a
+     * ogni connessione perche' manca la cartella del servizio nuovo (/var/run/dovecot/srv.pop3-login), che Dovecot crea
+     * solo all'avvio (reperto 213). Prima si guardavano solo le porte, e la scheda diceva «aperte» su un POP3 rotto.
+     */
     private static boolean reloadAndCheck(boolean on) throws InterruptedException {
         for (String how : new String[]{"reload", "restart"}) {
             if (!Shell.run(Duration.ofSeconds(60), "service", "dovecot", how).success()) continue;
-            for (int i = 0; i < 20; i++) {
+            boolean ports = false;
+            for (int i = 0; i < 20 && !ports; i++) {
                 Thread.sleep(500);
                 String s = Shell.run(Duration.ofSeconds(15), "sockstat", "-46l", "-P", "tcp").output();
-                if (listens(s, 110) == on && listens(s, 995) == on && listens(s, 993)) return true;
+                ports = listens(s, 110) == on && listens(s, 995) == on && listens(s, 993);
+            }
+            if (!ports) continue;
+            if (!on) return true;
+            // Poche prove brevi: un pop3-login che muore non si riprende da solo, e il restart e' il passo dopo. Con
+            // venti prove da cinque secondi la scheda restava su «Applying» per quasi due minuti.
+            for (int i = 0; i < 3; i++) {
+                if (MailProbes.pop3Greeting("127.0.0.1", 110, 2000) == null) return true;
+                Thread.sleep(1000);
             }
         }
         return false;

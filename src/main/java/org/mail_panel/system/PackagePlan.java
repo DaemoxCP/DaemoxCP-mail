@@ -414,11 +414,24 @@ public final class PackagePlan {
      */
     public static JSONObject planRemoveThenInstall(List<String> remove, List<String> install, Set<String> protectedNames,
                                                    Function<JSONObject, String> reasonNotToUnlock) {
+        return planRemoveThenInstall(remove, install, List.of(), protectedNames, reasonNotToUnlock);
+    }
+
+    /**
+     * Lo stesso, con delle protezioni tolte fin dall'inizio ('unlockFirst', solo fra quelle che ci sono): le dipendenze gia'
+     * installate che il pacchetto nuovo vuole cosi' come sono. Un pacchetto protetto pkg non lo usa per una dipendenza e
+     * ne cerca un altro che dia la stessa libreria: sulla VM, il 09/11/2026, dovecot24-mysql chiedeva mysql84-client
+     * 8.4.13, quello installato, e col blocco il piano installava mysql267-client accanto (reperto 213).
+     */
+    public static JSONObject planRemoveThenInstall(List<String> remove, List<String> install, java.util.Collection<String> unlockFirst,
+                                                   Set<String> protectedNames, Function<JSONObject, String> reasonNotToUnlock) {
         Map<String, String> installedNow = versionsOnly(installed());
         for (String n : remove)
             if (!isValidName(n) || !installedNow.containsKey(n))
                 return failed(I18n.tr("server.plan.notInstalledToRemove", java.util.Map.of("n", String.valueOf(n))));
-        JSONObject plan = planWith(new Command("install", install, remove), new LinkedHashSet<>(), protectedNames,
+        LinkedHashSet<String> seed = new LinkedHashSet<>();
+        for (String n : unlockFirst) if (isValidName(n) && protectedNames.contains(n)) seed.add(n);
+        JSONObject plan = planWith(new Command("install", install, remove), seed, protectedNames,
                 reasonNotToUnlock, n -> null, true);
         if (!plan.optBoolean("measured")) return plan;
         JSONArray changes = new JSONArray();

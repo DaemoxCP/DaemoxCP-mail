@@ -133,7 +133,8 @@ public final class DovecotConfig {
             # Prima il pacchetto per ORIGINE (funziona con qualunque sapore: dovecot-mysql,
             # dovecot-pgsql...), poi il binario come ripiego. L'ordine conta perche' i due
             # numeri non sono la stessa cosa: pkg include la revisione del port, il binario no.
-            DOVECOT_VER=$(pkg query -e '%o = "mail/dovecot"' %v 2>/dev/null | head -1)
+            # La 2.4 e' un port a parte (mail/dovecot24, pacchetti dovecot24-*): si chiede anche quello.
+            DOVECOT_VER=$(pkg query -e '%o = "mail/dovecot" || %o = "mail/dovecot24"' %v 2>/dev/null | head -1)
             [ -z "$DOVECOT_VER" ] && DOVECOT_VER=$(dovecot --version 2>/dev/null | awk '{print $1}')
             # Solo cifre: se la versione non fosse riconoscibile, un confronto numerico su una
             # stringa qualsiasi fallirebbe in modo imprevedibile (e con "set -e" fermerebbe lo
@@ -147,9 +148,9 @@ public final class DovecotConfig {
             # --- Pigeonhole: decide se ManageSieve puo' essere attivato ---
             # "sieve" fra i protocolli SENZA Pigeonhole installato impedisce a Dovecot di
             # avviarsi. Per questo non e' una costante: e' una domanda al sistema.
-            if pkg info -e dovecot-pigeonhole >/dev/null 2>&1 || \\
-               pkg info -e dovecot-pigeonhole-mysql >/dev/null 2>&1 || \\
-               pkg info -e dovecot-pigeonhole-pgsql >/dev/null 2>&1; then
+            # Ogni sapore, della 2.3 (dovecot-pigeonhole*) e della 2.4 (dovecot24-pigeonhole*): chiedere solo i nomi della
+            # 2.3 toglieva ManageSieve a un Dovecot 2.4 che Pigeonhole ce l'ha (reperto 213).
+            if pkg query -g %n 'dovecot-pigeonhole*' 'dovecot24-pigeonhole*' 2>/dev/null | grep -q .; then
                 SIEVE_PROTO=" sieve"
                 echo "[CONFIG] Pigeonhole installed: ManageSieve will be enabled on port 4190"
             else
@@ -377,12 +378,12 @@ public final class DovecotConfig {
      * ufficiali di Dovecot 2.4 (una per una: mail_location, databases/sql,
      * databases/static, master_users, plugins/sieve, e la guida di migrazione 2.3->2.4).
      *
-     * ATTENZIONE, ed e' importante saperlo: nel repository FreeBSD la 2.4 NON esiste
-     * ancora, quindi questo blocco non e' mai stato eseguito su un Dovecot 2.4 vero.
-     * Per questo il frammento chiamante lo sottopone SEMPRE a `doveconf -n` prima di
-     * metterlo in servizio, e in caso di rifiuto ripristina la configurazione precedente
-     * senza riavviare: se qualcosa qui e' sbagliato, il risultato e' un messaggio di
-     * errore, non un server di posta fermo.
+     * Provata su un Dovecot 2.4.5 vero il 09/11/2026, sulla VM, quando il ramo latest l'ha offerta come pacchetto a
+     * parte (dovecot24-mysql, reperto 213). Fino ad allora non era mai girata, e due righe la 2.4 le rifiutava:
+     * ssl_server_prefer_ciphers = yes («Invalid value», i valori sono client e server) e address = 127.0.0.1 nel
+     * listener LMTP («Unknown setting», si chiama listen). Corrette, la 2.4 la accetta, e su di lei girano login IMAP
+     * su TLS, AUTH da Postfix sulla 587, consegna LMTP, ManageSieve con le stesse estensioni della 2.3 e l'utente master.
+     * Il frammento chiamante la sottopone comunque SEMPRE a `doveconf -n` prima di metterla in servizio.
      */
     // =====================================================================
     // Dovecot 2.4 — contenuto dei file, sorgente unica
@@ -488,7 +489,8 @@ public final class DovecotConfig {
             ssl_server_cert_file = /usr/local/etc/ssl/mail/fullchain.pem
             ssl_server_key_file = /usr/local/etc/ssl/mail/privkey.pem
             ssl_min_protocol = TLSv1.2
-            ssl_server_prefer_ciphers = yes
+            # I valori sono client e server, non yes: «yes» la 2.4.5 lo rifiuta (provato il 09/11/2026).
+            ssl_server_prefer_ciphers = server
             # Non e' fra le rimosse: si tiene l'elenco della 2.3 invece di affidarsi ai
             # predefiniti, cosi' il comportamento non cambia insieme alla sintassi.
             ssl_cipher_list = ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
@@ -511,8 +513,9 @@ public final class DovecotConfig {
                 user = vmail
                 group = vmail
               }
+              # address non esiste piu' nei listener: si chiama listen (provato sulla 2.4.5 il 09/11/2026).
               inet_listener lmtp {
-                address = 127.0.0.1
+                listen = 127.0.0.1
                 port = 24
               }
             }
@@ -636,9 +639,11 @@ public final class DovecotConfig {
             {"confirmed", I18n.tr("server.dv24.14.setting"), I18n.tr("server.dv24.14.note")},
             {"confirmed", "auth_master_user_separator = *", I18n.tr("server.dv24.15.note")},
             {"confirmed", "first_valid_uid / first_valid_gid / mail_privileged_group / ssl_cipher_list", I18n.tr("server.dv24.16.note")},
-            {"unconfirmed", "sieve_script { type = ... }", I18n.tr("server.dv24.17.note")},
-            {"unconfirmed", "mail_uid / mail_gid", I18n.tr("server.dv24.18.note")},
-            {"unconfirmed", "ssl = required, ssl_min_protocol, sendmail_path, !include", I18n.tr("server.dv24.19.note")},
+            {"confirmed", "sieve_script { type = ... }", I18n.tr("server.dv24.17.note")},
+            {"confirmed", "mail_uid / mail_gid", I18n.tr("server.dv24.18.note")},
+            {"confirmed", "ssl = required, ssl_min_protocol, sendmail_path, !include", I18n.tr("server.dv24.19.note")},
+            {"confirmed", "ssl_server_prefer_ciphers = server", I18n.tr("server.dv24.21.note")},
+            {"confirmed", "inet_listener { listen = ... }", I18n.tr("server.dv24.22.note")},
             {"criterion", I18n.tr("server.dv24.20.setting"), I18n.tr("server.dv24.20.note")},
         };
     }
@@ -647,8 +652,7 @@ public final class DovecotConfig {
         StringBuilder sb = new StringBuilder();
         sb.append("""
             echo "[CONFIG] Writing the configuration in Dovecot 2.4 format"
-            echo "[CONFIG] Template checked against the official documentation on 2026-08-31,"
-            echo "[CONFIG] but never run on a real 2.4: doveconf decides, and if it refuses"
+            echo "[CONFIG] Checked on a real Dovecot 2.4.5; doveconf decides all the same, and if it refuses"
             echo "[CONFIG] the previous configuration goes back in place without restarts."
             """);
         for (FileConf f : file24()) {

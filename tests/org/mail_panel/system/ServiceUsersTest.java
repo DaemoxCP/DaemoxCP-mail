@@ -100,6 +100,15 @@ public class ServiceUsersTest {
         check("Dovecot's auth-worker as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER + "root    65001 59971 dovecot/auth\n", POOL_AFTER, "", false);
         check("Dovecot's auth as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
+        // Dovecot 2.4 runs anvil as root by design (measured on 09/11/2026, reperto 213): there it is needed, on 2.3 not.
+        String anvilRoot = AFTER.replace("dovecot 61342 59971 dovecot/anvil", "root    61342 59971 dovecot/anvil");
+        f = ex(anvilRoot, POOL_AFTER, "", false);
+        check("Dovecot 2.3's anvil as root: warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
+        f = ServiceUsers.examine(ServiceUsers.processes(anvilRoot), POOL_AFTER, "", false, Map.of(), true);
+        check("Dovecot 2.4's anvil as root: needed, no warning (" + codes(f) + ")", f.problems().isEmpty() && f.services().get("dovecot").neededRoot);
+        f = ServiceUsers.examine(ServiceUsers.processes(AFTER + "dovecot 65001 59971 dovecot/auth\nroot    65002 59971 dovecot/auth -w\n"),
+                POOL_AFTER, "", false, Map.of(), true);
+        check("  on 2.4 too, auth-worker as root is still a warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER.replace("rspamd  56502     1 rspamd: main process", "root    56502     1 rspamd: main process"), POOL_AFTER, "", false);
         check("rspamd's main process as root: warning (" + codes(f) + ")", codes(f).equals("root:rspamd"));
         OUT.println("\n== Why root, said on the page");

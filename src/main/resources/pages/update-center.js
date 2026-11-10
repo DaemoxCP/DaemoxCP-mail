@@ -77,6 +77,7 @@
         }
         function ucMysql() { ucOpen('mysql'); ucRender(); my84Pre(); }
         function ucPython() { ucOpen('python'); ucRender(); pyPre(); }
+        function ucDovecot() { ucOpen('dovecot'); ucRender(); dc24Pre(); }
         function ucPythonLeftovers() { ucOpen('python'); pyLeftovers(); }
 
         // Legge lo stato di FreeBSD; i pacchetti, il ramo e il riavvio arrivano dalle loro letture (eventi qui sotto):
@@ -242,6 +243,11 @@
                 ucHead('mysql', 'todo', t('uc.mysql'), t('uc.mysqlTodo'),
                     ucOpened('mysql') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucMysql()')]);
             } else doneRow('mysql', t('uc.mysql'));
+            // Dovecot 2.4 (reperto 213): pacchetto a parte, niente ci passa da solo; la riga dice che c'e' e guida il passaggio.
+            if (proc.dovecot24) {
+                ucHead('dovecot', 'todo', t('uc.dovecot'), t('uc.dovecotTodo'),
+                    ucOpened('dovecot') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucDovecot()')]);
+            } else doneRow('dovecot', t('uc.dovecot'));
             if (proc.python) {
                 ucHead('python', 'todo', t('uc.python'), t('uc.pythonTodo'),
                     ucOpened('python') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucPython()')]);
