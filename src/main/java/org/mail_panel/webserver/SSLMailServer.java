@@ -11018,6 +11018,15 @@ public class SSLMailServer {
 
     // ============== SIEVE FILTERS API ==============
 
+    /**
+     * I filtri Sieve di una casella. Fino al reperto 224 la finestra dei filtri non riusciva a fare niente: mandava
+     * condizioni e azioni come testo JSON, che optJSONArray legge come null (NullPointerException, col suo messaggio
+     * inglese nella pagina); per modificare chiedeva ?id=, che la GET non conosceva, e mandava id al posto di
+     * filter_id. Ora condizioni e azioni sono array di oggetti, e quello che non lo e' si rifiuta con un messaggio,
+     * prima di toccare il database. Modifica ed eliminazione riscrivono le regole della casella della RIGA, letta dal
+     * database: la casella che dice la richiesta non conta (con un numero sbagliato si riscriveva un'altra casella, e
+     * quella del filtro restava con le regole di prima).
+     */
     private void handleApiSieve(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
             sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
@@ -11030,19 +11039,23 @@ public class SSLMailServer {
         try {
             switch (method) {
                 case "GET" -> {
-                    String mailboxIdStr = extractParamFromQuery(exchange.getRequestURI().getQuery(), "mailbox_id");
-                    if (mailboxIdStr != null) {
-                        int mailboxId = Integer.parseInt(mailboxIdStr);
+                    String query = exchange.getRequestURI().getQuery();
+                    String filterIdStr = extractParamFromQuery(query, "id");
+                    String mailboxIdStr = extractParamFromQuery(query, "mailbox_id");
+                    if (filterIdStr != null) {
+                        // Un filtro solo: quello che la finestra apre per modificarlo.
+                        MailDatabase.SieveFilter f = Main.mailDatabase.getSieveFilter(positiveId(filterIdStr));
+                        if (f != null) {
+                            response.put("success", true);
+                            response.put("filter", sieveFilterJson(f));
+                        } else {
+                            response.put("success", false);
+                            response.put("error", I18n.tr("server.filter.notFound"));
+                        }
+                    } else if (mailboxIdStr != null) {
                         JSONArray filters = new JSONArray();
-                        for (MailDatabase.SieveFilter f : Main.mailDatabase.getSieveFilters(mailboxId)) {
-                            JSONObject filter = new JSONObject();
-                            filter.put("id", f.id);
-                            filter.put("name", f.name);
-                            filter.put("priority", f.priority);
-                            filter.put("enabled", f.enabled);
-                            filter.put("conditions", new JSONArray(f.conditions));
-                            filter.put("actions", new JSONArray(f.actions));
-                            filters.put(filter);
+                        for (MailDatabase.SieveFilter f : Main.mailDatabase.getSieveFilters(positiveId(mailboxIdStr))) {
+                            filters.put(sieveFilterJson(f));
                         }
                         response.put("success", true);
                         response.put("filters", filters);
@@ -11065,10 +11078,16 @@ public class SSLMailServer {
                             int mailboxId = req.optInt("mailbox_id", 0);
                             String name = req.optString("name", "");
                             int priority = req.optInt("priority", 0);
-                            String conditions = req.optJSONArray("conditions").toString();
-                            String actions = req.optJSONArray("actions").toString();
+                            boolean enabled = req.optBoolean("enabled", true);
+                            JSONArray conditions = sieveRules(req.optJSONArray("conditions"));
+                            JSONArray actions = sieveRules(req.optJSONArray("actions"));
 
-                            if (Main.mailDatabase.createSieveFilter(mailboxId, name, priority, conditions, actions)) {
+                            if (conditions == null || actions == null) {
+                                response.put("success", false);
+                                response.put("error", I18n.tr("server.filter.badRules"));
+                            } else if (Main.mailDatabase.createSieveFilter(mailboxId, name, priority, enabled,
+                                    conditions.toString(), actions.toString())) {
+                                // La casella della riga appena creata: quella che c'e' (il vincolo della tabella).
                                 putRulesOutcome(response, regenerateSieveScript(mailboxId));
                             } else {
                                 response.put("success", false);
@@ -11077,15 +11096,22 @@ public class SSLMailServer {
                         }
                         case "update" -> {
                             int filterId = req.optInt("filter_id", 0);
-                            int mailboxId = req.optInt("mailbox_id", 0);
                             String name = req.optString("name", "");
                             int priority = req.optInt("priority", 0);
                             boolean enabled = req.optBoolean("enabled", true);
-                            String conditions = req.optJSONArray("conditions").toString();
-                            String actions = req.optJSONArray("actions").toString();
+                            JSONArray conditions = sieveRules(req.optJSONArray("conditions"));
+                            JSONArray actions = sieveRules(req.optJSONArray("actions"));
+                            MailDatabase.SieveFilter row = Main.mailDatabase.getSieveFilter(filterId);
 
-                            if (Main.mailDatabase.updateSieveFilter(filterId, name, priority, enabled, conditions, actions)) {
-                                putRulesOutcome(response, regenerateSieveScript(mailboxId));
+                            if (row == null) {
+                                response.put("success", false);
+                                response.put("error", I18n.tr("server.filter.notFound"));
+                            } else if (conditions == null || actions == null) {
+                                response.put("success", false);
+                                response.put("error", I18n.tr("server.filter.badRules"));
+                            } else if (Main.mailDatabase.updateSieveFilter(filterId, name, priority, enabled,
+                                    conditions.toString(), actions.toString())) {
+                                putRulesOutcome(response, regenerateSieveScript(row.mailboxId));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.filter.updateFailed"));
@@ -11093,10 +11119,14 @@ public class SSLMailServer {
                         }
                         case "delete" -> {
                             int filterId = req.optInt("filter_id", 0);
-                            int mailboxId = req.optInt("mailbox_id", 0);
+                            // Letta prima di eliminarla: dopo non si saprebbe piu' di quale casella era.
+                            MailDatabase.SieveFilter row = Main.mailDatabase.getSieveFilter(filterId);
 
-                            if (Main.mailDatabase.deleteSieveFilter(filterId)) {
-                                putRulesOutcome(response, regenerateSieveScript(mailboxId));
+                            if (row == null) {
+                                response.put("success", false);
+                                response.put("error", I18n.tr("server.filter.notFound"));
+                            } else if (Main.mailDatabase.deleteSieveFilter(filterId)) {
+                                putRulesOutcome(response, regenerateSieveScript(row.mailboxId));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.filter.deleteFailed"));
@@ -11114,11 +11144,52 @@ public class SSLMailServer {
                 }
             }
         } catch (Exception e) {
+            // Il messaggio dell'eccezione e' inglese e parla del codice: nel log, non nella pagina.
+            LOGGER.log(Level.WARNING, "Sieve filters request failed", e);
+            response = new JSONObject();
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", I18n.tr("server.internalError"));
         }
 
         sendJsonResponse(exchange, response);
+    }
+
+    /** Un filtro come lo legge la finestra: condizioni e azioni come array, non come il testo della colonna. */
+    private static JSONObject sieveFilterJson(MailDatabase.SieveFilter f) {
+        JSONObject filter = new JSONObject();
+        filter.put("id", f.id);
+        filter.put("mailbox_id", f.mailboxId);
+        filter.put("name", f.name);
+        filter.put("priority", f.priority);
+        filter.put("enabled", f.enabled);
+        filter.put("conditions", new JSONArray(f.conditions));
+        filter.put("actions", new JSONArray(f.actions));
+        return filter;
+    }
+
+    /**
+     * Le condizioni o le azioni di un filtro come le manda la pagina: un array non vuoto di oggetti. Null per tutto il
+     * resto, compreso lo stesso array scritto come testo (quello che mandava la pagina prima del reperto 224, e che
+     * optJSONArray da' come null): un filtro
+     * senza condizioni o senza azioni SieveGenerator non lo scrive, e il pannello direbbe salvato un filtro che non fa
+     * niente.
+     */
+    static JSONArray sieveRules(JSONArray rules) {
+        if (rules == null || rules.isEmpty()) return null;
+        for (int i = 0; i < rules.length(); i++) {
+            if (!(rules.opt(i) instanceof JSONObject)) return null;
+        }
+        return rules;
+    }
+
+    /** Il numero di una riga dalla query: 0 (nessuna riga) se non e' un intero positivo, invece di un'eccezione. */
+    private static int positiveId(String value) {
+        try {
+            int id = Integer.parseInt(value.trim());
+            return id > 0 ? id : 0;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     /**
@@ -11172,7 +11243,7 @@ public class SSLMailServer {
                 case "GET" -> {
                     String mailboxIdStr = extractParamFromQuery(exchange.getRequestURI().getQuery(), "mailbox_id");
                     if (mailboxIdStr != null) {
-                        int mailboxId = Integer.parseInt(mailboxIdStr);
+                        int mailboxId = positiveId(mailboxIdStr);
                         JSONArray rules = new JSONArray();
                         for (MailDatabase.ForwardingRule r : Main.mailDatabase.getForwardingRules(mailboxId)) {
                             JSONObject rule = new JSONObject();
@@ -11198,10 +11269,11 @@ public class SSLMailServer {
                     JSONObject req = new JSONObject(body);
                     String action = req.optString("action", "create");
 
-                    int mailboxId = req.optInt("mailbox_id", 0);
-
+                    // Modifica ed eliminazione riscrivono le regole della casella della RIGA, letta dal database, non
+                    // di quella che dice la richiesta (reperto 224: la pagina, eliminando, non la mandava nemmeno).
                     switch (action) {
                         case "create" -> {
+                            int mailboxId = req.optInt("mailbox_id", 0);
                             String destination = req.optString("destination", "");
                             boolean keepCopy = req.optBoolean("keep_copy", true);
 
@@ -11217,9 +11289,13 @@ public class SSLMailServer {
                             String destination = req.optString("destination", "");
                             boolean keepCopy = req.optBoolean("keep_copy", true);
                             boolean enabled = req.optBoolean("enabled", true);
+                            MailDatabase.ForwardingRule row = Main.mailDatabase.getForwardingRule(ruleId);
 
-                            if (Main.mailDatabase.updateForwardingRule(ruleId, destination, keepCopy, enabled)) {
-                                putRulesOutcome(response, regenerateSieveScript(mailboxId));
+                            if (row == null) {
+                                response.put("success", false);
+                                response.put("error", I18n.tr("server.forward.notFound"));
+                            } else if (Main.mailDatabase.updateForwardingRule(ruleId, destination, keepCopy, enabled)) {
+                                putRulesOutcome(response, regenerateSieveScript(row.mailboxId));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.forward.updateFailed"));
@@ -11227,9 +11303,14 @@ public class SSLMailServer {
                         }
                         case "delete" -> {
                             int ruleId = req.optInt("rule_id", 0);
+                            // Letta prima di eliminarla: dopo non si saprebbe piu' di quale casella era.
+                            MailDatabase.ForwardingRule row = Main.mailDatabase.getForwardingRule(ruleId);
 
-                            if (Main.mailDatabase.deleteForwardingRule(ruleId)) {
-                                putRulesOutcome(response, regenerateSieveScript(mailboxId));
+                            if (row == null) {
+                                response.put("success", false);
+                                response.put("error", I18n.tr("server.forward.notFound"));
+                            } else if (Main.mailDatabase.deleteForwardingRule(ruleId)) {
+                                putRulesOutcome(response, regenerateSieveScript(row.mailboxId));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.forward.deleteFailed"));
@@ -11247,8 +11328,11 @@ public class SSLMailServer {
                 }
             }
         } catch (Exception e) {
+            // Il messaggio dell'eccezione e' inglese e parla del codice: nel log, non nella pagina.
+            LOGGER.log(Level.WARNING, "Forwarding request failed", e);
+            response = new JSONObject();
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", I18n.tr("server.internalError"));
         }
 
         sendJsonResponse(exchange, response);

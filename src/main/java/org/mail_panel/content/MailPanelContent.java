@@ -2974,7 +2974,7 @@ public class MailPanelContent {
         .btn-webmail { background-color: #3498db; border-color: #3498db; }
         .feature-badge { font-size: 0.7rem; padding: 2px 6px; margin-left: 4px; }
         .action-dropdown .dropdown-menu { min-width: 200px; }
-        .filter-rule { background: #f8f9fa; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 3px solid #0d6efd; }
+        .filter-rule { display: block; width: 100%; text-align: start; color: inherit; background: #f8f9fa; padding: 10px; margin-bottom: 10px; border: 0; border-radius: 5px; border-left: 3px solid #0d6efd; }
         [data-theme="dark"] .filter-rule { background: #343a40; }
         .condition-row, .action-row { background: #fff; padding: 8px; margin: 5px 0; border-radius: 4px; border: 1px solid #dee2e6; }
         [data-theme="dark"] .condition-row, [data-theme="dark"] .action-row { background: #3d4249; border-color: #495057; }
@@ -3275,8 +3275,11 @@ public class MailPanelContent {
                                     <input class="form-check-input" type="checkbox" id="svEnabled" checked>
                                     <label class="form-check-label" for="svEnabled">{{t:mbx.svEnabled}}</label>
                                 </div>
-                                <button class="btn btn-success" data-on-click="saveSieveFilter()">
+                                <button type="button" class="btn btn-success" data-on-click="saveSieveFilter()">
                                     <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:mbx.svSave}}
+                                </button>
+                                <button type="button" id="svDelete" class="btn btn-outline-danger ms-2" data-style="display:none;" data-on-click="deleteSieveFilter()">
+                                    <i class="fas fa-trash me-1" aria-hidden="true"></i>{{t:mbx.svDelete}}
                                 </button>
                             </div>
                             <div id="sieveHelp">
@@ -3830,7 +3833,7 @@ public class MailPanelContent {
             fetch('/api/forwarding', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'delete', id: id })
+                body: JSON.stringify({ action: 'delete', rule_id: id })
             }).then(r => r.json()).then(data => {
                 if (data.success || data.saved) {
                     loadForwardingRules(document.getElementById('fwMailboxId').value);
@@ -3874,12 +3877,12 @@ public class MailPanelContent {
                         return;
                     }
                     container.innerHTML = filters.map(f => `
-                        <div class="filter-rule ${!f.enabled ? 'opacity-50' : ''}" data-on-click="editSieveFilter(${f.id})">
-                            <div class="d-flex justify-content-between">
+                        <button type="button" class="filter-rule ${!f.enabled ? 'opacity-50' : ''}" data-on-click="editSieveFilter(${Number(f.id)})">
+                            <span class="d-flex justify-content-between">
                                 <strong>${escSieve(f.name)}</strong>
                                 ${f.enabled ? '<span class="badge bg-success">' + escMbx(t('mbx.on')) + '</span>' : '<span class="badge bg-secondary">' + escMbx(t('mbx.off')) + '</span>'}
-                            </div>
-                        </div>
+                            </span>
+                        </button>
                     `).join('');
                 });
         }
@@ -3892,25 +3895,33 @@ public class MailPanelContent {
             sieveActions = [];
             renderSieveConditions();
             renderSieveActions();
+            document.getElementById('svDelete').style.display = 'none';
             document.getElementById('sieveEditor').style.display = 'block';
             document.getElementById('sieveHelp').style.display = 'none';
         }
 
+        // Il filtro da modificare, chiesto per il suo numero (/api/sieve?id=). Condizioni e azioni arrivano come
+        // array (reperto 224): prima la pagina le rileggeva come testo JSON, e la GET non conosceva id.
         function editSieveFilter(id) {
-            fetch('/api/sieve?id=' + id)
+            fetch('/api/sieve?id=' + encodeURIComponent(id))
                 .then(r => r.json())
                 .then(data => {
+                    if (!data.success || !data.filter) {
+                        panelSay('danger', data.error || t('common.errorShort'));
+                        return;
+                    }
                     const f = data.filter;
                     document.getElementById('svFilterId').value = f.id;
                     document.getElementById('svName').value = f.name;
                     document.getElementById('svEnabled').checked = f.enabled;
-                    sieveConditions = JSON.parse(f.conditions || '[]');
-                    sieveActions = JSON.parse(f.actions || '[]');
+                    sieveConditions = Array.isArray(f.conditions) ? f.conditions : [];
+                    sieveActions = Array.isArray(f.actions) ? f.actions : [];
                     renderSieveConditions();
                     renderSieveActions();
+                    document.getElementById('svDelete').style.display = '';
                     document.getElementById('sieveEditor').style.display = 'block';
                     document.getElementById('sieveHelp').style.display = 'none';
-                });
+                }).catch(() => panelSay('danger', t('common.errorShort')));
         }
 
         function addSieveCondition() {
@@ -3961,7 +3972,7 @@ public class MailPanelContent {
                         <option value="not_contains" ${c.operator==='not_contains'?'selected':''}>${escHtml(t('mbx.svNotContains'))}</option>
                     </select>
                     <input type="text" class="form-control form-control-sm" value="${escMbx(c.value)}" aria-label="${escMbx(t('mbx.svValue'))}" data-on-change="sieveSetCondition(${i}, 'value', this.value)">
-                    <button class="btn btn-sm btn-outline-danger" data-on-click="sieveRemoveCondition(${i})">
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-on-click="sieveRemoveCondition(${i})" aria-label="${escMbx(t('common.delete'))}">
                         <i class="fas fa-times" aria-hidden="true"></i>
                     </button>
                 </div>
@@ -3981,7 +3992,7 @@ public class MailPanelContent {
                     </select>
                     ${['move','copy','forward','reject'].includes(a.type) ?
                         `<input type="text" class="form-control form-control-sm" value="${escMbx(a.value||'')}" placeholder="${a.type==='forward'?'email@...':escMbx(t('mbx.svFolder'))}" data-on-change="sieveSetActionValue(${i}, this.value)">` : ''}
-                    <button class="btn btn-sm btn-outline-danger" data-on-click="sieveRemoveAction(${i})">
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-on-click="sieveRemoveAction(${i})" aria-label="${escMbx(t('common.delete'))}">
                         <i class="fas fa-times" aria-hidden="true"></i>
                     </button>
                 </div>
@@ -3994,29 +4005,48 @@ public class MailPanelContent {
             if (sieveConditions.length === 0) { panelSay('warning', t('mbx.svNeedCond')); return; }
             if (sieveActions.length === 0) { panelSay('warning', t('mbx.svNeedAct')); return; }
 
+            // Condizioni e azioni come array, i nomi che il server legge (reperto 224): prima erano testo JSON,
+            // che il server legge come niente, e nessun filtro si creava; la modifica mandava id e non filter_id.
+            // Una richiesta per azione, scritta per intero: check_api.py confronta i suoi nomi con quelli del server.
             const filterId = document.getElementById('svFilterId').value;
+            const enabled = document.getElementById('svEnabled').checked;
+            const request = filterId
+                ? fetch('/api/sieve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'update', filter_id: parseInt(filterId), name: name, enabled: enabled,
+                                           conditions: sieveConditions, actions: sieveActions })
+                })
+                : fetch('/api/sieve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'create', mailbox_id: parseInt(document.getElementById('svMailboxId').value),
+                                           name: name, enabled: enabled, conditions: sieveConditions, actions: sieveActions })
+                });
+            request.then(r => r.json()).then(sieveSaved).catch(() => panelSay('danger', t('common.errorShort')));
+        }
+
+        // La risposta di un salvataggio o di un'eliminazione. saved: il filtro e' cambiato nel pannello anche se il
+        // server di posta non ha ricevuto le regole (reperto 223): l'elenco lo mostra, il messaggio lo dice.
+        function sieveSaved(data) {
+            if (data.success || data.saved) {
+                loadSieveFilters(document.getElementById('svMailboxId').value);
+                loadMailboxes();
+                document.getElementById('sieveEditor').style.display = 'none';
+                document.getElementById('sieveHelp').style.display = 'block';
+            }
+            if (!data.success) panelSay('danger', data.error || t('common.errorShort'));
+        }
+
+        async function deleteSieveFilter() {
+            const filterId = document.getElementById('svFilterId').value;
+            if (!filterId) return;
+            if (!await panelConfirmDanger(t('mbx.confirmSvDelete'))) return;
             fetch('/api/sieve', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: filterId ? 'update' : 'create',
-                    id: filterId ? parseInt(filterId) : undefined,
-                    mailbox_id: parseInt(document.getElementById('svMailboxId').value),
-                    name: name,
-                    conditions: JSON.stringify(sieveConditions),
-                    actions: JSON.stringify(sieveActions),
-                    enabled: document.getElementById('svEnabled').checked
-                })
-            }).then(r => r.json()).then(data => {
-                // saved: il filtro e' nel pannello anche se il server di posta non l'ha ricevuto (reperto 223).
-                if (data.success || data.saved) {
-                    loadSieveFilters(document.getElementById('svMailboxId').value);
-                    loadMailboxes();
-                    document.getElementById('sieveEditor').style.display = 'none';
-                    document.getElementById('sieveHelp').style.display = 'block';
-                }
-                if (!data.success) panelSay('danger', data.error || t('common.errorShort'));
-            });
+                body: JSON.stringify({ action: 'delete', filter_id: parseInt(filterId) })
+            }).then(r => r.json()).then(sieveSaved).catch(() => panelSay('danger', t('common.errorShort')));
         }
 
 """ + resource("pages/apple-profile.js") + """
