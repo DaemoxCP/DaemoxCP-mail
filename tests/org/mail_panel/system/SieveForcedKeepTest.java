@@ -26,12 +26,22 @@ public class SieveForcedKeepTest {
 
     private static int failures = 0;
 
+    /** What the generator wrote before reperto 229: the require line without "mailbox", fileinto without :create. */
+    static String before229(String script) {
+        return script.replace(SieveGenerator.REQUIRE, SieveGenerator.REQUIRE_BEFORE_MAILBOX)
+                .replace("fileinto :copy :create ", "fileinto :copy ").replace("fileinto :create ", "fileinto ");
+    }
+
     public static void main(String[] args) throws Exception {
         SieveGenerator generator = new SieveGenerator();
-        String moveNow = generator.generateSieveScript(1, new SieveGeneratorTest.Rules().filter("spam", "move", "Junk"));
-        String forwardNow = generator.generateSieveScript(1, new SieveGeneratorTest.Rules().forward("bob@example.test", false)
-                .away("Away", "Back on Monday"));
-        String noneNow = generator.generateSieveScript(1, new SieveGeneratorTest.Rules());
+        // The scripts this repair meets were written before reperto 229 (no "mailbox", no :create): "now" here is what
+        // the generator wrote then, without the forced keep. SieveRulesRefresh brings them to today's text afterwards.
+        String moveNow = before229(generator.generateSieveScript(1, new SieveGeneratorTest.Rules().filter("spam", "move", "Junk")));
+        String forwardNow = before229(generator.generateSieveScript(1, new SieveGeneratorTest.Rules().forward("bob@example.test", false)
+                .away("Away", "Back on Monday")));
+        String noneNow = before229(generator.generateSieveScript(1, new SieveGeneratorTest.Rules()));
+        check("the generator's text before reperto 229 starts with the require line of then",
+                moveNow.startsWith(SieveGenerator.REQUIRE_BEFORE_MAILBOX) && !moveNow.contains(":create"));
         String moveBefore = moveNow + SieveGenerator.OLD_FORCED_KEEP;
 
         System.out.println("== 1. fixed() ==");
@@ -40,10 +50,10 @@ public class SieveForcedKeepTest {
                 forwardNow.equals(SieveForcedKeep.fixed(forwardNow + SieveGenerator.OLD_FORCED_KEEP)));
         check("a script without rules written before: just the require line",
                 noneNow.equals(SieveForcedKeep.fixed(noneNow + SieveGenerator.OLD_FORCED_KEEP)));
-        String olderRequire = moveBefore.replace(SieveGenerator.REQUIRE, SieveForcedKeep.REQUIRE_WITHOUT_DATE);
+        String olderRequire = moveBefore.replace(SieveGenerator.REQUIRE_BEFORE_MAILBOX, SieveForcedKeep.REQUIRE_WITHOUT_DATE);
         check("the require line of before \"date\": the tail goes, the rest stays",
                 !olderRequire.equals(moveBefore) && SieveForcedKeep.fixed(olderRequire) != null
-                && SieveForcedKeep.fixed(olderRequire).equals(moveNow.replace(SieveGenerator.REQUIRE, SieveForcedKeep.REQUIRE_WITHOUT_DATE)));
+                && SieveForcedKeep.fixed(olderRequire).equals(moveNow.replace(SieveGenerator.REQUIRE_BEFORE_MAILBOX, SieveForcedKeep.REQUIRE_WITHOUT_DATE)));
         check("already fixed: nothing", SieveForcedKeep.fixed(moveNow) == null && SieveForcedKeep.fixed(noneNow) == null);
         check("written by hand, ending with keep: nothing", SieveForcedKeep.fixed("require \"fileinto\";\nfileinto \"X\";\n"
                 + "\n# Default action\nkeep;\n") == null);
