@@ -2507,6 +2507,7 @@
   "server.dbPassword.oldKept": "MySQL non conosce la password nuova (l'installazione si è fermata prima di configurare MySQL): il pannello tiene quella di prima, che MySQL accetta. La nuova è scartata.",
   "server.dbPassword.reused": "Una password nuova di un'installazione interrotta è ancora in attesa, e MySQL non sa dire se la conosce: questa installazione dà di nuovo quella a MySQL.",
   "server.dbPassword.settleFailed": "Non riesco a decidere quale password MySQL usa il pannello ({err}): il pannello tiene quella di prima, e lo richiede a MySQL al prossimo avvio.",
+  "server.dbPassword.rotationTurn": "cambio, una volta, della password MySQL del pannello",
   "server.dbPassword.turn": "decisione sulla password MySQL del pannello",
   "server.dbPassword.undecided": "MySQL non risponde, quindi non sa dire quale password conosce: il pannello tiene quella di prima e la nuova resta in attesa. Il pannello lo richiede a MySQL al prossimo avvio e alla prossima installazione.",
   "server.dkim.alreadyConfigured": "DKIM è già configurato per questo dominio (selector: {selector}). Per una chiave nuova usa la rotazione (\"Avvia rotazione chiave\"): rispetta i 7 giorni di transizione ed evita che la posta in viaggio fallisca il controllo DKIM. \"generate\" serve solo alla prima configurazione.",

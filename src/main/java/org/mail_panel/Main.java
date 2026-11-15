@@ -996,6 +996,8 @@ public class Main {
             if (decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.NEW_ADOPTED) {
                 // Il resto della configurazione MySQL (host, porta, utente, database) in SQLite.
                 dbManager.update_mysql_config(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
+                // Una password nuova che la webmail non ha mai avuto: niente da cambiare all'avvio (reperto 232).
+                org.mail_panel.system.PanelDbPassword.markFreshFromInstallation();
             }
             boolean good = decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.NEW_ADOPTED
                     || decided.outcome() == org.mail_panel.system.PendingDbPassword.Outcome.OLD_KEPT
