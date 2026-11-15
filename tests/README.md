@@ -533,7 +533,7 @@ users of clamav, redis, mysql and rspamd: with www went its group, the one nginx
 crontab, and nothing created them again (nginx locked by the panel, or the later pkg install failing), so nginx said
 getpwnam("www") failed. The test reads the script's text (every user and group removed is created again by phase 2 and
 none is of the base system, with the line recogniser tried first on a known text) and runs the cleanup's pw lines with
-pw -R on a copy of the stock users plus the packages' and vmail: www, its group and the packages' users stay, exactly
+pw -R on a copy of the stock users plus the users of the packages and vmail: www, its group and the users of the packages stay, exactly
 what the lines name goes away, the machine's own files unchanged. As root on the VM.
 
 **SieveRulesOwnerTest** — the panel's Sieve rules folder given back to root at start (reperto 225). On the real server
