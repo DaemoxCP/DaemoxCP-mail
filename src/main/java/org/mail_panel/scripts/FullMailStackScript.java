@@ -532,24 +532,10 @@ MASTERCONF
 
             # Generate master user password for SSO
             echo "Configuring master user for SSO..."
-            MASTER_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)
-            mkdir -p /var/db/mailpanel
-            echo "$MASTER_PASSWORD" > /var/db/mailpanel/dovecot_master.key
-            chmod 600 /var/db/mailpanel/dovecot_master.key
-
-            # Create master-users file with hashed password
-            if command -v doveadm >/dev/null 2>&1; then
-                MASTER_PASSWORD_HASH=$(doveadm pw -s BLF-CRYPT -p "$MASTER_PASSWORD" 2>/dev/null)
-            else
-                MASTER_PASSWORD_HASH='{PLAIN}'$MASTER_PASSWORD
-            fi
-
-            cat > /usr/local/etc/dovecot/master-users << MASTER_EOF
-admin:$MASTER_PASSWORD_HASH
-MASTER_EOF
-
-            chmod 640 /usr/local/etc/dovecot/master-users
-            chown root:wheel /usr/local/etc/dovecot/master-users
+            """
+            // Lo stesso pezzo di FullMailServerScript e DovecotScript. Qui il file era di
+            // root:wheel, e Dovecot, che lo legge come dovecot, non poteva aprirlo.
+            + org.mail_panel.system.DovecotMasterUser.shell() + """
 
             # Generate self-signed SSL cert
             openssl req -x509 -nodes -days 365 -newkey rsa:2048 \\

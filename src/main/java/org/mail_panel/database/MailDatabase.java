@@ -1389,8 +1389,11 @@ public class MailDatabase {
         }
     }
 
-    /** Un hash bcrypt come lo scrivono il pannello ($2a$) e doveadm pw ($2y$, $2b$, anche con {BLF-CRYPT} davanti). */
-    static String bcryptPart(String stored) {
+    /**
+     * Un hash bcrypt come lo scrivono il pannello ($2a$) e doveadm pw ($2y$, $2b$, anche con {BLF-CRYPT} davanti).
+     * Pubblico perche' serve anche a DovecotMasterUser, per l'hash dell'utente master in master-users.
+     */
+    public static String bcryptPart(String stored) {
         if (stored == null) return null;
         String s = stored;
         if (s.startsWith("{BLF-CRYPT}")) s = s.substring("{BLF-CRYPT}".length());

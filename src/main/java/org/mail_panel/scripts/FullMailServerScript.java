@@ -976,24 +976,10 @@ echo "${YELLOW}[PHASE 7/10] Configuring Dovecot...${NC}"
 
 # La configurazione Dovecot viene scritta piu' avanti, in un blocco solo.
 
-# Generate master password
-MASTER_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)
-mkdir -p /var/db/mailpanel
-echo "$MASTER_PASSWORD" > /var/db/mailpanel/dovecot_master.key
-chmod 600 /var/db/mailpanel/dovecot_master.key
-
-if command -v doveadm >/dev/null 2>&1; then
-    MASTER_PASSWORD_HASH=$(doveadm pw -s BLF-CRYPT -p "$MASTER_PASSWORD" 2>/dev/null)
-else
-    MASTER_PASSWORD_HASH='{PLAIN}'$MASTER_PASSWORD
-fi
-
-cat > /usr/local/etc/dovecot/master-users << MASTER_EOF
-admin:$MASTER_PASSWORD_HASH
-MASTER_EOF
-
-chmod 640 /usr/local/etc/dovecot/master-users
-chown root:dovecot /usr/local/etc/dovecot/master-users
+"""
+            // L'utente master di Dovecot per «Apri webmail»: lo stesso pezzo e' in FullMailStackScript
+            // e DovecotScript. Passa di qui prima di dovecot.conf, e per questo usa "doveadm -O".
+            + org.mail_panel.system.DovecotMasterUser.shell() + """
 
 # SQL config
 """
