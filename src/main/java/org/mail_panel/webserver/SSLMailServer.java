@@ -10953,8 +10953,8 @@ public class SSLMailServer {
                     if ("reset_tracking".equals(action)) {
                         // Azzera la memoria delle risposte automatiche: solo .dovecot.lda-dupes nella home della casella.
                         // Non piu' il compilato delle regole (Dovecot non lo puo' risalvare nella cartella di root, e
-                        // ricompilava a ogni consegna con un errore nel maillog) ne' il riavvio di Dovecot (chiudeva le
-                        // connessioni IMAP di tutti, e la memoria si rilegge a ogni consegna): VacationTracking, reperto 219.
+                        // ricompilava a ogni consegna con un errore nel maillog) ne' il riavvio di tutto Dovecot (la memoria
+                        // si rilegge a ogni consegna): VacationTracking, reperto 219.
                         int mailboxId = req.optInt("mailbox_id", 0);
                         MailDatabase.Mailbox mailbox = Main.mailDatabase.getMailboxById(mailboxId);
                         if (mailbox != null) {

@@ -28,8 +28,9 @@ import java.util.logging.Logger;
  *       file ... Permission denied (euid=5000(vmail))», finche' il pannello non risalvava le regole (misurato sulla VM il
  *       10/11/2026). Le regole non cambiano: ricompilarle non serve;</li>
  *   <li>Dovecot non tiene la memoria in memoria: LMTP la rilegge dal file a ogni consegna. Il reset faceva {@code
- *       service dovecot restart}, che chiude le connessioni IMAP di tutte le caselle, e non serviva (misurato: subito
- *       dopo il reset, senza riavvio, la consegna seguente riceve di nuovo la risposta);</li>
+ *       service dovecot restart}, che ferma e riavvia tutto Dovecot (processo principale, autenticazione, LMTP, l'ascolto
+ *       di IMAP), e non serviva: subito dopo il reset, senza riavvio, la consegna seguente riceve di nuovo la risposta
+ *       (misurato). Una sessione IMAP gia' entrata al riavvio sopravviveva (Dovecot 2.3.21, misurato);</li>
  *   <li>.dovecot.sieve.db, che il reset toglieva in /var/mail/sieve, non lo scrive e non lo legge nessuno: nessuna
  *       libreria di Dovecot 2.3.21 e Pigeonhole 0.5.21 contiene quel nome (misurato), .dovecot.lda-dupes si'.</li>
  * </ul>
