@@ -47,7 +47,7 @@ public class VacationTrackingE2ETest {
     static final String ALICE = "alice@" + DOMAIN, CAROL = "carol@" + DOMAIN;
     static final Path SCRIPT = Path.of("/var/mail/sieve", DOMAIN, "alice", ".dovecot.sieve");
     static final Path BINARY = SCRIPT.resolveSibling(".dovecot.svbin");
-    static final Path DUPLICATES = Path.of("/var/vmail", DOMAIN, "alice", ".dovecot.lda-dupes");
+    static final Path DUPLICATES = Path.of("/var/vmail", DOMAIN, "alice", "home", ".dovecot.lda-dupes");
     static final Path MAILLOG = Path.of("/var/log/maillog");
     static final Path MASTER_PID = Path.of("/var/run/dovecot/master.pid");
 

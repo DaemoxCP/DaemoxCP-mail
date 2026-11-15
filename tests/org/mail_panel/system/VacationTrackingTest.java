@@ -13,7 +13,8 @@ import java.util.List;
  * Until 10/11/2026 the panel's "reset tracking" also deleted the compiled binary beside the panel's Sieve rules and ran
  * `service dovecot restart`. Pigeonhole keeps the senders already answered in .dovecot.lda-dupes in the mailbox's home,
  * and nowhere else. Without a system:
- *  1. duplicatesOf(): the file is home/domain/user/.dovecot.lda-dupes, and an address that is not one gives nothing
+ *  1. duplicatesOf(): the file is vmail/domain/user/home/.dovecot.lda-dupes (Dovecot's home, reperto 217), and an
+ *     address that is not one gives nothing
  *     (it comes from MySQL, and root makes a path of it);
  *  2. reset() on a folder like /var/vmail: only that file goes; the mail, the lock folder beside it and the other
  *     mailboxes stay; twice is fine; an address that would leave the folder touches nothing;
@@ -44,8 +45,8 @@ public class VacationTrackingTest {
         Path homes = Files.createDirectories(base.resolve("vmail"));
 
         System.out.println("== 1. duplicatesOf() ==");
-        check("alice@example.test: vmail/example.test/alice/.dovecot.lda-dupes",
-                homes.resolve("example.test/alice/.dovecot.lda-dupes").equals(VacationTracking.duplicatesOf(homes, "alice@example.test")));
+        check("alice@example.test: vmail/example.test/alice/home/.dovecot.lda-dupes",
+                homes.resolve("example.test/alice/home/.dovecot.lda-dupes").equals(VacationTracking.duplicatesOf(homes, "alice@example.test")));
         check("the name of the file is Dovecot's duplicate database", VacationTracking.DUPLICATES.equals(".dovecot.lda-dupes"));
         for (String bad : new String[]{"../../outside@example.test", "alice@..", "a/b@example.test", "alice@example.test@x.test",
                 "alice", "", "@example.test", "alice@", ".alice@example.test", "al..ice@example.test"})
@@ -54,13 +55,16 @@ public class VacationTrackingTest {
 
         System.out.println("\n== 2. reset() on a folder like /var/vmail ==");
         Path alice = Files.createDirectories(homes.resolve("example.test/alice"));
-        Path dupes = write(alice.resolve(".dovecot.lda-dupes"), "tracking");
-        Path locks = Files.createDirectories(alice.resolve(".dovecot.lda-dupes.locks"));
+        Path aliceHome = Files.createDirectories(alice.resolve("home"));
+        Path dupes = write(aliceHome.resolve(".dovecot.lda-dupes"), "tracking");
+        Path oldDupes = write(alice.resolve(".dovecot.lda-dupes"), "tracking of before reperto 217");
+        Path locks = Files.createDirectories(aliceHome.resolve(".dovecot.lda-dupes.locks"));
         Path mail = write(Files.createDirectories(alice.resolve("cur")).resolve("1.mail:2,S"), "a message");
-        Path bobDupes = write(Files.createDirectories(homes.resolve("example.test/bob")).resolve(".dovecot.lda-dupes"), "bob's");
+        Path bobDupes = write(Files.createDirectories(homes.resolve("example.test/bob/home")).resolve(".dovecot.lda-dupes"), "bob's");
         Path outside = write(Files.createDirectories(base.resolve("outside")).resolve(".dovecot.lda-dupes"), "not a mailbox");
         check("reset(alice@example.test) says yes", VacationTracking.reset(homes, "alice@example.test"));
         check("  her .dovecot.lda-dupes is gone", !Files.exists(dupes));
+        check("  and the one of before, in the mailbox's root, too", !Files.exists(oldDupes));
         check("  her mail stays", Files.isRegularFile(mail));
         check("  the lock folder beside it stays (Dovecot's own)", Files.isDirectory(locks));
         check("  bob's memory stays", Files.isRegularFile(bobDupes));

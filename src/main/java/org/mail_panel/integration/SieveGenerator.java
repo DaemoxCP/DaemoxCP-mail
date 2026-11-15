@@ -324,6 +324,10 @@ public class SieveGenerator {
             // Compile the script
             compileScript(userDir.resolve(SCRIPT).toString());
 
+            // La home di Dovecot della casella, dove la risposta automatica e l'inoltro ricordano a chi hanno gia'
+            // risposto: c'e' prima della prima consegna, e Dovecot non scrive un errore nel registro (reperto 217).
+            org.mail_panel.system.DovecotHome.ensureHome(domain, user);
+
             return true;
         } catch (IOException | IllegalArgumentException e) {
             LOGGER.warning("[SieveGenerator] Sieve rules of " + email + " not saved: " + e.getMessage());
