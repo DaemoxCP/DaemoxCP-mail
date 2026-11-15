@@ -146,7 +146,7 @@ public class SieveCompilerTest {
             byte[] kept = Files.readAllBytes(binary);
             var keptTime = Files.getLastModifiedTime(binary);
             Thread.sleep(20);
-            Files.writeString(alice, rules.replace("fileinto \"Junk\";", "fileinto \"Junk\""));
+            Files.writeString(alice, rules.replace("\"Junk\";", "\"Junk\""));
             SieveCompiler.Outcome refused = SieveCompiler.compile(alice);
             check("a script with an error: refused, with its line (" + firstLine(refused.message()) + ")",
                     refused.refused() && refused.message().contains(": line "));

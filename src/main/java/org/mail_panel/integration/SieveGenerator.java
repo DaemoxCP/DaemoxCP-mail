@@ -24,8 +24,18 @@ public class SieveGenerator {
     private static final String SCRIPT = ".dovecot.sieve";
     private static final String GLOBAL_SIEVE = "/usr/local/etc/dovecot/sieve/global.sieve";
 
-    /** La prima riga di ogni script del pannello (date serve a currentdate, nella risposta automatica). */
-    public static final String REQUIRE = "require [\"fileinto\", \"reject\", \"vacation\", \"copy\", \"imap4flags\", \"regex\", \"relational\", \"comparator-i;ascii-numeric\", \"date\"];\n\n";
+    /**
+     * La prima riga di ogni script del pannello (date serve a currentdate, nella risposta automatica; mailbox a
+     * fileinto :create, reperto 229). Pigeonhole ha mailbox fra le estensioni attive per impostazione predefinita, sulla
+     * 2.3 (sieve_extensions aggiunge con +) come sulla 2.4.
+     */
+    public static final String REQUIRE = "require [\"fileinto\", \"reject\", \"vacation\", \"copy\", \"imap4flags\", \"regex\", \"relational\", \"comparator-i;ascii-numeric\", \"date\", \"mailbox\"];\n\n";
+
+    /**
+     * La riga require che il pannello scriveva prima di aggiungere mailbox (fino al reperto 229): la riconoscono
+     * SieveForcedKeep e SieveRulesRefresh, per sapere che uno script e' del pannello.
+     */
+    public static final String REQUIRE_BEFORE_MAILBOX = REQUIRE.replace(", \"mailbox\"];", "];");
 
     /**
      * La coda che il pannello metteva in fondo a ogni script fino al 09/11/2026: un keep esplicito. SieveForcedKeep la
@@ -254,8 +264,12 @@ public class SieveGenerator {
         String value = action.optString("value", "");
 
         return switch (type.toLowerCase()) {
-            case "move", "fileinto" -> "fileinto \"" + escapeString(value) + "\";";
-            case "copy" -> "fileinto :copy \"" + escapeString(value) + "\";";
+            // :create (RFC 5490, estensione mailbox): la cartella che non c'e' si crea. Senza, un filtro «Sposta» verso
+            // una cartella nuova non spostava niente: Dovecot rispondeva «Mailbox doesn't exist» e il messaggio restava
+            // nella INBOX (misurato sulla VM e visto sul server vero, reperto 229). Anche la cartella proposta dalla
+            // finestra dei filtri, INBOX.Filtered, all'inizio non c'e'.
+            case "move", "fileinto" -> "fileinto :create \"" + escapeString(value) + "\";";
+            case "copy" -> "fileinto :copy :create \"" + escapeString(value) + "\";";
             case "delete", "discard" -> "discard;";
             case "reject" -> "reject \"" + escapeString(value) + "\";";
             case "forward", "redirect" -> "redirect \"" + escapeString(value) + "\";";
@@ -309,6 +323,10 @@ public class SieveGenerator {
 
             // Compile the script
             compileScript(userDir.resolve(SCRIPT).toString());
+
+            // La home di Dovecot della casella, dove la risposta automatica e l'inoltro ricordano a chi hanno gia'
+            // risposto: c'e' prima della prima consegna, e Dovecot non scrive un errore nel registro (reperto 217).
+            org.mail_panel.system.DovecotHome.ensureHome(domain, user);
 
             return true;
         } catch (IOException | IllegalArgumentException e) {

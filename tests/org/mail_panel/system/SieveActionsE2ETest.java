@@ -131,9 +131,35 @@ public class SieveActionsE2ETest {
                 && countAll(ALICE, s) == 1);
         check("ManageSieve: the own script deactivated", manageSieve(ALICE, "own", null));
 
+        System.out.println("\n== 9. a move to a folder that is not there yet (reperto 229) ==");
+        Rules fresh = new Rules().filter("new-" + RUN, "move", "SieveNew");
+        String today = GENERATOR.generateSieveScript(0, fresh);
+        check("written as the panel wrote it before reperto 229 (fileinto without :create)",
+                GENERATOR.saveSieveScript(ALICE, SieveForcedKeepTest.before229(today)));
+        s = deliver(CAROL, ALICE, "new-" + RUN + "-before");
+        check("before: no folder made, the message stays in INBOX (the fault this fixes)",
+                count(ALICE, "INBOX", s) == 1 && !folderExists(ALICE, "SieveNew"));
+        SieveRulesRefresh.Rules aliceOnly = new SieveRulesRefresh.Rules() {
+            @Override public List<SieveRulesRefresh.Box> mailboxes() { return List.of(new SieveRulesRefresh.Box(0, ALICE)); }
+            @Override public String generate(SieveRulesRefresh.Box b) { return today; }
+            @Override public String current(SieveRulesRefresh.Box b) { return GENERATOR.getSieveScript(ALICE); }
+            @Override public boolean write(SieveRulesRefresh.Box b, String script) { return GENERATOR.saveSieveScript(ALICE, script); }
+        };
+        SieveRulesRefresh.Outcome refreshed = SieveRulesRefresh.refresh(aliceOnly);
+        check("the refresh at start writes it again, compiled by sievec", refreshed.written() == 1 && refreshed.notWritten().isEmpty()
+                && today.equals(GENERATOR.getSieveScript(ALICE)));
+        s = deliver(CAROL, ALICE, "new-" + RUN + "-after");
+        check("after: the folder is made and the message is only there", count(ALICE, "SieveNew", s) == 1 && count(ALICE, "INBOX", s) == 0);
+        check("a second refresh writes nothing", SieveRulesRefresh.refresh(aliceOnly).written() == 0);
+        panelRules(new Rules().filter("newcopy-" + RUN, "copy", "SieveNewCopy"));
+        s = deliver(CAROL, ALICE, "newcopy-" + RUN);
+        check("a copy to a folder that is not there: made, and the message in INBOX too",
+                count(ALICE, "SieveNewCopy", s) == 1 && count(ALICE, "INBOX", s) == 1);
+
         System.out.println("\n== 8. a script written before, fixed as at boot ==");
         Path root = Path.of("/var/mail/sieve");
-        String now = GENERATOR.generateSieveScript(0, new Rules().filter("old-" + RUN, "move", "SieveMove"));
+        // As the panel wrote it before the forced keep went (reperto 216) and before mailbox (reperto 229).
+        String now = SieveForcedKeepTest.before229(GENERATOR.generateSieveScript(0, new Rules().filter("old-" + RUN, "move", "SieveMove")));
         check("written as the panel wrote it before (the forced keep at the end)",
                 GENERATOR.saveSieveScript(ALICE, now + SieveGenerator.OLD_FORCED_KEEP));
         Path script = root.resolve(DOMAIN + "/alice/.dovecot.sieve");
@@ -355,6 +381,12 @@ public class SieveActionsE2ETest {
     }
 
     /** The output of a command, or null if it fails or does not finish in time. */
+    /** The mailbox's folder exists (doveadm mailbox list), without creating it. */
+    static boolean folderExists(String user, String folder) throws Exception {
+        String list = run(20, "doveadm", "mailbox", "list", "-u", user);
+        return list != null && list.lines().anyMatch(l -> l.trim().equals(folder));
+    }
+
     static String run(int seconds, String... cmd) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
         pb.environment().put("PATH", "/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin");

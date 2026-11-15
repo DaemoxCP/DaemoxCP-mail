@@ -18,9 +18,11 @@
 #    SETACTIVE), a rule of the panel written as the panel writes it (root, /var/mail/sieve, sievec),
 #    then a real delivery through Postfix: the panel's rule must run first and the mailbox's own
 #    script after it, each filing a copy into its folder; `doveadm sieve list` must open the
-#    mailbox's scripts, and no "dovecot.sieve" may show up among the mail folders; then (reperto 216)
-#    a panel's rule that moves, with no keep at the end as the panel writes it now: the message only
-#    in the panel's folder, not in INBOX, and the mailbox's own script does not run on it;
+#    mailbox's scripts, and no "dovecot.sieve" may show up among the mail folders; the script's
+#    "duplicate" test writes Dovecot's duplicate database (.dovecot.lda-dupes, as autoreplies and
+#    forwards do), and with the home in the mail root that showed up as folders too (reperto 217);
+#    then (reperto 216) a panel's rule that moves, with no keep at the end as the panel writes it now:
+#    the message only in the panel's folder, not in INBOX, and the mailbox's own script does not run on it;
 #  - it shows the lines of /var/log/maillog written meanwhile;
 #  - at the end it removes mailbox, domain, the mail folder created by the login and the rule.
 #
@@ -141,7 +143,8 @@ fi
 echo ""
 echo "== Sieve: the mailbox's own script through ManageSieve, the panel's rule before it =="
 USERDIR=$(printf '%s' "$MAILBOX" | cut -d@ -f1)
-printf 'require ["fileinto","mailbox"];\r\nif header :contains "subject" "sieve-probe" { fileinto :create "SieveProbeOwn"; }\r\n' > "$WORK/own.sieve"
+# "duplicate" writes Dovecot's duplicate database in the home, as autoreplies and forwards do (reperto 217).
+printf 'require ["fileinto","mailbox","duplicate"];\r\nif header :contains "subject" "sieve-probe" { if not duplicate { fileinto :create "SieveProbeOwn"; } }\r\n' > "$WORK/own.sieve"
 LEN=$(wc -c < "$WORK/own.sieve" | tr -d ' ')
 { sleep 2; printf 'AUTHENTICATE "PLAIN" "%s"\r\n' "$B64"; sleep 2
   printf 'PUTSCRIPT "probe" {%s+}\r\n' "$LEN"; cat "$WORK/own.sieve"; printf '\r\n'; sleep 2
@@ -180,7 +183,7 @@ echo "== Sieve: a panel's rule that moves, as the panel writes it (no keep at th
 # Reperto 216: a move in the panel's rule must take the message out of INBOX, and then the mailbox's own script does
 # not run on it (Pigeonhole runs the next script only while a keep is in effect). The own script above would file it
 # too: its subject contains "sieve-probe".
-printf 'require ["fileinto"];\nif header :contains "subject" "sieve-move" { fileinto "SieveProbePanel"; }\n' \
+printf 'require ["fileinto","mailbox"];\nif header :contains "subject" "sieve-move" { fileinto :create "SieveProbePanel"; }\n' \
     > "/var/mail/sieve/$DOMAIN/$USERDIR/.dovecot.sieve"
 sievec "/var/mail/sieve/$DOMAIN/$USERDIR/.dovecot.sieve" >/dev/null 2>&1
 MOVE_LOG=$(wc -l < /var/log/maillog 2>/dev/null | tr -d ' ')

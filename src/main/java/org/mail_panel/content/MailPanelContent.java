@@ -79,7 +79,11 @@ public class MailPanelContent {
             page(adminDir, "firewall.html", getFirewallHtml(), false);
             page(adminDir, "cloudflare.html", getCloudflareHtml(), false);
             page(adminDir, "paths.html", getPathsHtml(), false);
-            page(adminDir, "install.html", getInstallHtml(), false);
+            // La pagina Installa non c'e' piu' (reperto 230): veniva scritta ma nessuna rotta la serviva (/install finisce
+            // su /home), e i suoi pulsanti chiamavano /api/install, che non esiste (l'installazione si fa dal menu del
+            // terminale). Il file lasciato dalle versioni di prima si toglie, perche' nella cartella delle pagine resta
+            // solo quello che il pannello serve.
+            Files.deleteIfExists(adminPath.resolve("install.html"));
             page(adminDir, "settings.html", getSettingsHtml(), false);
             page(adminDir, "account.html", getAccountHtml(), false);
             page(adminDir, "statistics.html", getStatisticsHtml(), false);
@@ -3395,14 +3399,12 @@ public class MailPanelContent {
                 return;
             }
             if (!pwCheck('mbPass')) return;
-            const domainId = document.getElementById('mbDomain').value;
             const domainName = document.getElementById('mbDomain').selectedOptions[0].dataset.domain;
             const user = document.getElementById('mbUser').value;
             fetch('/api/mailboxes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    domain_id: parseInt(domainId),
                     email: user + '@' + domainName,
                     password: document.getElementById('mbPass').value,
                     name: document.getElementById('mbName').value,
@@ -7462,7 +7464,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 body: JSON.stringify({
                     action: 'verify_dns_and_issue',
                     hostname: currentDnsChallenge.hostname,
-                    challenge_token: currentDnsChallenge.challenge_token,
                     csrf_token: document.getElementById('csrf_token').value
                 })
             }).then(r => r.json()).then(data => {
@@ -7971,99 +7972,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     }
 
     // ============== INSTALL.HTML ==============
-    public static String getInstallHtml() {
-        String extraStyles = """
-        .install-progress { max-height: 400px; overflow-y: auto; background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.85rem; }
-        .component-card { border: 2px solid #dee2e6; border-radius: 8px; padding: 20px; margin-bottom: 15px; transition: all 0.2s; }
-        .component-card:hover { border-color: #e94560; }
-        .component-card.installed { background: #d4edda; border-color: #198754; }
-        [data-theme="dark"] .component-card.installed { background: rgba(25, 135, 84, .18); }
-        """;
-        return getHead("nav.install", "install", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
-        <div class="content-container">
-            <h2><i class="fas fa-download me-2" aria-hidden="true"></i>{{t:ins.title}}</h2>
-            <p class="text-muted">{{t:ins.intro}}</p>
-
-            <div class="alert alert-warning">
-                <i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>
-                {{t:ins.warning.html}}
-            </div>
-
-            <div class="row" id="componentsGrid">
-                <div class="col-md-6"><div class="component-card" data-component="timezone">
-                    <h5><i class="fas fa-clock me-2" aria-hidden="true"></i>{{t:ins.tzDns}}</h5>
-                    <p class="text-muted small">{{t:ins.tzDnsDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('timezone')">{{t:ins.configure}}</button>
-                </div></div>
-                <div class="col-md-6"><div class="component-card" data-component="postfix">
-                    <h5><i class="fas fa-paper-plane me-2" aria-hidden="true"></i>Postfix</h5>
-                    <p class="text-muted small">{{t:ins.postfixDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('postfix')">{{t:ins.install}}</button>
-                </div></div>
-                <div class="col-md-6"><div class="component-card" data-component="dovecot">
-                    <h5><i class="fas fa-inbox me-2" aria-hidden="true"></i>Dovecot</h5>
-                    <p class="text-muted small">{{t:ins.dovecotDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('dovecot')">{{t:ins.install}}</button>
-                </div></div>
-                <div class="col-md-6"><div class="component-card" data-component="rspamd">
-                    <h5><i class="fas fa-shield-alt me-2" aria-hidden="true"></i>Rspamd</h5>
-                    <p class="text-muted small">{{t:ins.rspamdDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('rspamd')">{{t:ins.install}}</button>
-                </div></div>
-                <div class="col-md-6"><div class="component-card" data-component="clamav">
-                    <h5><i class="fas fa-bug me-2" aria-hidden="true"></i>ClamAV</h5>
-                    <p class="text-muted small">{{t:ins.clamavDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('clamav')">{{t:ins.install}}</button>
-                </div></div>
-                <div class="col-md-6"><div class="component-card" data-component="roundcube">
-                    <h5><i class="fas fa-envelope-open-text me-2" aria-hidden="true"></i>Roundcube</h5>
-                    <p class="text-muted small">{{t:ins.roundcubeDesc}}</p>
-                    <button class="btn btn-sm btn-outline-primary" data-on-click="installComponent('roundcube')">{{t:ins.install}}</button>
-                </div></div>
-            </div>
-
-            <hr>
-            <div class="text-center">
-                <button class="btn btn-lg btn-danger" data-on-click="installComponent('all')">
-                    <i class="fas fa-magic me-2" aria-hidden="true"></i>{{t:ins.all}}
-                </button>
-            </div>
-
-            <div id="installOutput" class="mt-4 d-none">
-                <h5>{{t:ins.output}}</h5>
-                <pre class="bg-dark text-light p-3" data-style="max-height:400px;overflow-y:auto" id="outputText"></pre>
-            </div>
-        </div>
-    </div>
-""" + getFooterSection() + """
-    <script>
-        let csrfToken = document.getElementById('csrf_token').value;
-
-        async function installComponent(component) {
-            if (!await panelConfirm(t('ins.confirm', { component: component }))) return;
-
-            document.getElementById('installOutput').classList.remove('d-none');
-            document.getElementById('outputText').textContent = t('ins.running');
-
-            fetch('/api/install', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ component: component, csrf_token: csrfToken })
-            }).then(r => r.json()).then(data => {
-                document.getElementById('outputText').textContent = data.output || data.error || t('common.done');
-                if (data.success) {
-                    panelSay('success', t('ins.done'));
-                }
-            });
-        }
-""" + """
-    </script>
-</body>
-</html>
-""";
-    }
-
     // ============== SETTINGS.HTML ==============
     /**
      * Il JavaScript della scheda "Rapporto periodico". Sta in un metodo suo per due
@@ -10280,7 +10188,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
         let admList = [];
         function loadAdmins() {
-            fetch('/api/admins?action=list')
+            fetch('/api/admins')
                 .then(r => r.json())
                 .then(data => {
                     const tbody = document.getElementById('adminsBody');

@@ -255,6 +255,10 @@ public final class DovecotConfig {
      * Senza mail_privileged_group (reperto 221), qui e nella 2.4: dava a ogni processo delle caselle il gruppo mail, che
      * scrive in /var/mail dove stanno le regole Sieve del pannello, e serve solo alle INBOX mbox in /var/mail; la posta
      * qui e' Maildir in /var/vmail. Sui server installati prima la toglie DovecotPrivilegedGroup all'avvio.
+     *
+     * La home di ogni casella e' la sua cartella home/, non la radice della posta (reperto 217): con la
+     * home uguale alla cartella Maildir i file di Dovecot (.dovecot.lda-dupes delle risposte automatiche e
+     * degli inoltri) comparivano fra le cartelle di posta. Il perche' e la migrazione: DovecotHome.
      */
     private static String config23() {
         return """
@@ -376,7 +380,7 @@ public final class DovecotConfig {
             }
             userdb {
               driver = static
-              args = uid=vmail gid=vmail home=/var/vmail/%d/%n
+              args = uid=vmail gid=vmail home=/var/vmail/%d/%n/home
             }
             DOVECOT_AUTH_SQL
 
@@ -402,7 +406,9 @@ public final class DovecotConfig {
      *
      * Lo script attivo e' ~/dovecot.sieve, senza punto: la posta sta nella radice della casella, e Maildir++ prendeva
      * ~/.dovecot.sieve per una cartella di posta («dovecot.sieve» fra le cartelle, e le consegne con fileinto fallivano).
-     * Misurato sulla VM il 09/11/2026. Se una regola del pannello toglie il messaggio dalla INBOX (fileinto, redirect
+     * Misurato sulla VM il 09/11/2026. Dal reperto 217 la home (~) non e' piu' la radice della posta ma la sua cartella
+     * home/ (DovecotHome): ~/sieve e ~/dovecot.sieve stanno li', e il punto non darebbe piu' fastidio; il nome resta.
+     * Se una regola del pannello toglie il messaggio dalla INBOX (fileinto, redirect
      * senza copia), gli script dell'utente su quel messaggio non girano: e' la regola di Pigeonhole, e qui ha senso.
      */
     public static final String SIEVE23 = """
@@ -669,7 +675,7 @@ public final class DovecotConfig {
               fields {
                 uid = vmail
                 gid = vmail
-                home = /var/vmail/%{user | domain}/%{user | username}
+                home = /var/vmail/%{user | domain}/%{user | username}/home
               }
             }
             """, true));

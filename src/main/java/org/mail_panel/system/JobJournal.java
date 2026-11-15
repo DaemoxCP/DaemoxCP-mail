@@ -1,5 +1,6 @@
 package org.mail_panel.system;
 
+import org.mail_panel.util.ErrorText;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -123,7 +124,7 @@ public final class JobJournal {
             return new JSONObject().put("success", true).put("name", name).put("truncated", from > 0)
                     .put("text", new String(all, from, all.length - from, StandardCharsets.UTF_8));
         } catch (IOException e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("read", e));
         }
     }
 

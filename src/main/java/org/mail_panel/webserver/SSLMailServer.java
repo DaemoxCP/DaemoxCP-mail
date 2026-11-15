@@ -1,5 +1,6 @@
 package org.mail_panel.webserver;
 
+import org.mail_panel.util.ErrorText;
 import org.mail_panel.database.SqlCatalog;
 
 import com.sun.net.httpserver.*;
@@ -820,6 +821,11 @@ public class SSLMailServer {
             org.mail_panel.system.SieveRulesOwner.ensureAtBoot();
             org.mail_panel.system.MailSpoolSticky.ensureAtBoot();
             org.mail_panel.system.DovecotPrivilegedGroup.ensureAtBoot();
+
+            // La home di Dovecot di ogni casella nella sua cartella home/, non nella radice della posta: i file di Dovecot
+            // (la memoria delle risposte automatiche e degli inoltri) comparivano fra le cartelle della webmail (DovecotHome
+            // li porta nella home come vmail, verifica con doveadm user, e se non va torna com'era).
+            org.mail_panel.system.DovecotHome.ensureAtBoot();
             // Gli script Sieve dell'utente (ManageSieve, i Filtri della webmail) nella sua cartella di posta, e le regole
             // del pannello prima di loro: prima non si salvava niente, la cartella era di root (SieveStorage verifica e
             // torna indietro).
@@ -827,6 +833,12 @@ public class SSLMailServer {
             // Le regole Sieve del pannello gia' scritte senza il keep forzato in fondo: con quello «Sposta» lasciava anche
             // la INBOX e «Inoltra» senza copia ne teneva una (SieveForcedKeep ricompila, e se sievec non accetta torna com'era).
             org.mail_panel.system.SieveForcedKeep.ensureAtBoot();
+            // Le regole del pannello riscritte dal database come le scrive adesso, dove sono diverse: «Sposta» e «Copia»
+            // creano la cartella che non c'e' (reperto 229). Solo i file del pannello; al secondo avvio non scrive niente.
+            org.mail_panel.system.SieveRulesRefresh.ensureAtBoot(this.sieveGenerator);
+            // Il compilato delle regole del pannello che il reset delle risposte automatiche toglieva: senza, Dovecot le
+            // ricompila a ogni consegna e scrive un errore nel maillog (VacationTracking ricompila solo quelle cosi').
+            org.mail_panel.system.VacationTracking.ensureAtBoot();
 
             // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.
@@ -866,6 +878,11 @@ public class SSLMailServer {
             // con cui gira la webmail.
             org.mail_panel.system.RoundcubeUser.ensureAtBoot();
 
+            // L'utente master di Dovecot con cui «Apri webmail» entra: gli script d'installazione lo
+            // lasciavano senza hash (o in un file che Dovecot non poteva leggere). Prima del plugin SSO
+            // e di chi, dopo, prova un accesso vero con lui.
+            org.mail_panel.system.DovecotMasterUser.ensureAtBoot();
+
             // Start auto-renewal for certificates (prima, nello stesso thread, acme.sh passa da root
             // all'utente acme: AcmeUser.ensureAtBoot)
             acmeManager.startAutoRenewal();
@@ -887,6 +904,11 @@ public class SSLMailServer {
             // non piu' con quello del pannello: sui server installati prima. Dopo il plugin SSO,
             // perche' la verifica fa un accesso vero come il pulsante «Apri webmail».
             org.mail_panel.system.RoundcubeDbUser.ensureAtBoot(ssoManager);
+
+            // La password dell'utente MySQL del pannello cambiata una volta: sui server installati prima e' stata per anni
+            // in config.inc.php della webmail (reperto 232). Dopo RoundcubeDbUser e MailDbUsers: nessun altro la usa piu'.
+            // Con la doppia password di MySQL non si ferma niente; se qualcosa non torna, MySQL torna com'era.
+            org.mail_panel.system.PanelDbPassword.ensureAtBoot();
 
             // Dopo: la webmail non scrive piu' password in chiaro, quelle rimaste si sistemano
             repairPlaintextMailboxPasswords();
@@ -2258,7 +2280,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiDomains", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -2431,7 +2453,7 @@ public class SSLMailServer {
                                 }
                             } catch (Exception ex) {
                                 r.put("success", false);
-                                r.put("error", ex.getMessage());
+                                r.put("error", ErrorText.forPage("handleApiMailboxes", ex));
                                 failed++;
                             }
                             results.put(r);
@@ -2596,7 +2618,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiMailboxes", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -2698,7 +2720,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiMailConfig", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -2956,7 +2978,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiAliases", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -2989,7 +3011,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiWebmail", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -3067,7 +3089,7 @@ public class SSLMailServer {
         } catch (Exception e) {
             System.err.println("[SERVICE] Exception: " + e.getMessage());
             e.printStackTrace();
-            sendJsonError(exchange, 500, I18n.tr("server.internalErrorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            sendJsonError(exchange, 500, I18n.tr("server.internalErrorWith", Map.of("error", ErrorText.detail("handleApiService", e))));
         }
     }
 
@@ -3142,68 +3164,6 @@ public class SSLMailServer {
         finally { org.mail_panel.system.PackageQueue.release(id); }
     }
 
-    private void handleApiInstall(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
-            return;
-        }
-
-        if (!"POST".equals(exchange.getRequestMethod())) {
-            sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
-            return;
-        }
-
-        String body = readRequestBodyWithLimit(exchange);
-        if (body == null) {
-            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
-            return;
-        }
-        JSONObject req = new JSONObject(body);
-        String component = req.optString("component", "");
-
-        String scriptContent = switch (component) {
-            // System configuration (run first)
-            case "timezone" -> new SetTimeOnSystem().getScriptContent();
-            // Mail components
-            case "postfix" -> new PostfixScript().getScriptContent();
-            case "dovecot" -> new DovecotScript().getScriptContent();
-            case "roundcube" -> new RoundcubeScript().getScriptContent();
-            case "rspamd" -> new RspamdScript().getScriptContent();
-            case "clamav" -> new ClamAVScript().getScriptContent();
-            case "redis" -> new RedisScript().getScriptContent();
-            case "all" -> new FullMailStackScript().getScriptContent();
-            default -> null;
-        };
-
-        JSONObject response = new JSONObject();
-        if (scriptContent == null) {
-            response.put("success", false);
-            response.put("error", I18n.tr("server.install.unknownComponent"));
-        } else {
-            // Gli script dei componenti tolgono e rimettono pacchetti: aspettano il turno dei
-            // lavori sui pacchetti. Il fuso orario no.
-            final String script = scriptContent;
-            java.util.function.Supplier<JSONObject> install = () -> {
-                JSONObject r = new JSONObject();
-                try {
-                    String output = executeScript(script, component, scriptEnvironment(component));
-                    Main.mailDatabase.markComponentInstalled(component, "latest");
-                    // La configurazione appena scritta dallo script non ha ancora il plugin SSO ne'
-                    // il cambio password tramite il pannello: si aggiungono subito, non al prossimo avvio
-                    if ("roundcube".equals(component) || "all".equals(component)) autoInstallSsoPlugin();
-                    r.put("success", true).put("output", output);
-                } catch (Exception e) {
-                    r.put("success", false).put("error", e.getMessage());
-                }
-                return r;
-            };
-            response = "timezone".equals(component) ? install.get()
-                     : onPackageTurn(I18n.tr("server.install.jobName", Map.of("component", component)), install);
-        }
-
-        sendJsonResponse(exchange, response);
-    }
-
     // ============== HELPER METHODS ==============
 
     /** Un parametro della query (grezza), decodificato; null se non c'e'. */
@@ -3263,7 +3223,7 @@ public class SSLMailServer {
             try {
                 moved = org.mail_panel.system.AddressTransform.archive(address, System.currentTimeMillis());
             } catch (IOException e) {
-                return r.put("success", false).put("error", I18n.tr("server.convert.archiveFailed", Map.of("error", String.valueOf(e.getMessage()))));
+                return r.put("success", false).put("error", I18n.tr("server.convert.archiveFailed", Map.of("error", ErrorText.detail("aliasToMailbox", e))));
             }
         }
         int id;
@@ -3272,7 +3232,7 @@ public class SSLMailServer {
         } catch (java.sql.SQLException e) {
             org.mail_panel.system.AddressTransform.restore(moved);
             LOGGER.log(Level.WARNING, "Alias -> mailbox failed for " + address, e);
-            return r.put("success", false).put("error", I18n.tr("server.convert.failed", Map.of("error", String.valueOf(e.getMessage()))));
+            return r.put("success", false).put("error", I18n.tr("server.convert.failed", Map.of("error", ErrorText.detail("aliasToMailbox", e))));
         }
         logAudit("ALIAS_TO_MAILBOX", ip, address + (keep ? " (forwards kept, copy in the mailbox)" : " (aliases removed)")
                 + (archive ? ", old mail set aside" : s.mail().present() ? ", old mail found again" : ""));
@@ -3314,13 +3274,13 @@ public class SSLMailServer {
             destinations = org.mail_panel.system.AddressTransform.destinations(s, req.optJSONArray("destinations"),
                     org.mail_panel.system.AddressTransform.network(Main.mailDatabase));
         } catch (IllegalArgumentException e) {
-            return r.put("success", false).put("error", e.getMessage());
+            return r.put("success", false).put("error", ErrorText.forPage("mailboxToAlias", e));
         }
         try {
             Main.mailDatabase.transformMailboxToAlias(m.id, m.domainId, address, destinations);
         } catch (java.sql.SQLException e) {
             LOGGER.log(Level.WARNING, "Mailbox -> alias failed for " + address, e);
-            return r.put("success", false).put("error", I18n.tr("server.convert.failed", Map.of("error", String.valueOf(e.getMessage()))));
+            return r.put("success", false).put("error", I18n.tr("server.convert.failed", Map.of("error", ErrorText.detail("mailboxToAlias", e))));
         }
         logAudit("MAILBOX_TO_ALIAS", ip, address + " -> " + String.join(", ", destinations));
         regenerateMailConfigs();
@@ -3575,26 +3535,6 @@ public class SSLMailServer {
 
     private String executeScript(String scriptContent, String scriptName) throws Exception {
         return executeScript(scriptContent, scriptName, Map.of());
-    }
-
-    /**
-     * L'ambiente degli script dei componenti. A quelli che installano la webmail ("roundcube",
-     * "all") servono la password del suo utente MySQL, dal file dei segreti, e quella di root se il
-     * pannello l'ha impostata. Nell'ambiente e non fra gli argomenti, come per l'installazione
-     * completa: un argomento lo legge chiunque con "ps".
-     */
-    static Map<String, String> scriptEnvironment(String component) {
-        if (!"roundcube".equals(component) && !"all".equals(component)) return Map.of();
-        Map<String, String> env = new HashMap<>();
-        env.put("ROUNDCUBE_DB_PASSWORD", org.mail_panel.security.PanelSecrets.ensureRoundcubeDbPassword());
-        // "all" installa MySQL: la password di root c'e' sempre, e lo script la imposta su un MySQL
-        // nuovo invece di lasciarlo senza (prima entrava chiunque). Alla webmail da sola basta
-        // quella che c'e', se il pannello l'ha impostata.
-        String root = "all".equals(component)
-                ? org.mail_panel.security.PanelSecrets.ensureMysqlRootPassword()
-                : org.mail_panel.security.PanelSecrets.text(org.mail_panel.security.PanelSecrets.MYSQL_ROOT_PASSWORD);
-        if (!root.isEmpty()) env.put("MYSQL_ROOT_PASSWORD", root);
-        return env;
     }
 
     private String executeScript(String scriptContent, String scriptName, Map<String, String> env) throws Exception {
@@ -4445,7 +4385,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiDkim", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -4572,7 +4512,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiDns", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -4815,7 +4755,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiCloudflare", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -4906,11 +4846,11 @@ public class SSLMailServer {
                     } catch (Exception ex) {
                         log.append("✗ ").append(I18n.tr("server.tz.sessionFailed", Map.of("error", String.valueOf(ex.getMessage())))).append("\n");
                         ok = false;
-                        errMsg = ex.getMessage();
+                        errMsg = ErrorText.forPage("handleApiTimezoneDiag", ex);
                     }
                 } catch (Exception e) {
                     ok = false;
-                    errMsg = e.getMessage();
+                    errMsg = ErrorText.forPage("handleApiTimezoneDiag", e);
                 }
 
                 response.put("success", ok);
@@ -4926,7 +4866,7 @@ public class SSLMailServer {
             response.put("error", I18n.tr("server.badAction"));
             sendJsonResponse(exchange, response);
         } catch (Exception e) {
-            sendJsonError(exchange, 500, I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            sendJsonError(exchange, 500, I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("handleApiTimezoneDiag", e))));
         }
     }
 
@@ -4977,7 +4917,7 @@ public class SSLMailServer {
                 response.put("alignment", Math.abs(skewMs) < 60_000 ? "OK" : "MISMATCH");
             }
         } catch (Exception e) {
-            response.put("mysql_error", e.getMessage());
+            response.put("mysql_error", ErrorText.forPage("fillTimezoneDiagnostics", e));
         }
     }
 
@@ -5047,7 +4987,7 @@ public class SSLMailServer {
             sendJsonResponse(exchange, response);
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiPostfixAliases", e));
             sendJsonResponse(exchange, response);
         }
     }
@@ -5267,7 +5207,7 @@ public class SSLMailServer {
                             }
                         } catch (Exception e) {
                             response.put("success", false);
-                            response.put("error", e.getMessage());
+                            response.put("error", ErrorText.forPage("handleApiSsl", e));
                         }
                     }
 
@@ -5283,7 +5223,7 @@ public class SSLMailServer {
                                 "enabled=" + enabled + " threshold=" + thresholdDays);
                         } catch (Exception e) {
                             response.put("success", false);
-                            response.put("error", e.getMessage());
+                            response.put("error", ErrorText.forPage("handleApiSsl", e));
                         }
                     }
 
@@ -5296,7 +5236,7 @@ public class SSLMailServer {
                                 "success=" + res.success + " msg=" + res.message);
                         } catch (Exception e) {
                             response.put("success", false);
-                            response.put("error", e.getMessage());
+                            response.put("error", ErrorText.forPage("handleApiSsl", e));
                         }
                     }
 
@@ -5419,7 +5359,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiSsl", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -5545,7 +5485,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiLogs", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -5615,7 +5555,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiStats", e));
         }
 
         // Cache aggiornato
@@ -5877,7 +5817,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiSso", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -5922,7 +5862,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiWebmailOpen", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -6338,7 +6278,7 @@ public class SSLMailServer {
                             try { fail2banManager.unbanIpFromAll(ip); } catch (Exception ignored) {}
                         } catch (Exception e) {
                             response.put("success", false);
-                            response.put("message", e.getMessage());
+                            response.put("message", ErrorText.forPage("handleApiFail2ban", e));
                         }
                     }
                     case "permaban_remove" -> {
@@ -6357,7 +6297,7 @@ public class SSLMailServer {
                                 getClientIp(exchange), "target_ip=" + ip);
                         } catch (Exception e) {
                             response.put("success", false);
-                            response.put("message", e.getMessage());
+                            response.put("message", ErrorText.forPage("handleApiFail2ban", e));
                         }
                     }
                     case "permaban_list" -> {
@@ -6463,7 +6403,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiFail2ban", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -6679,7 +6619,7 @@ public class SSLMailServer {
             }
             sendJsonResponse(exchange, response);
         } catch (Exception e) {
-            sendJsonError(exchange, 500, I18n.tr("server.internalErrorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            sendJsonError(exchange, 500, I18n.tr("server.internalErrorWith", Map.of("error", ErrorText.detail("handleApiFirewall", e))));
         }
     }
 
@@ -6843,7 +6783,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiUnboundHealth", e));
         }
         sendJsonResponse(exchange, response);
     }
@@ -7199,7 +7139,7 @@ public class SSLMailServer {
             r.put("output", out.length() > 4000 ? out.substring(out.length() - 4000) : out);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("runInstallUnbound", e))));
         }
         return r;
     }
@@ -7240,7 +7180,7 @@ public class SSLMailServer {
             r.put("message", I18n.tr("server.unbound.configWritten", Map.of("path", UNBOUND_CONF_PATH)));
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("writeUnboundConfig", e))));
         }
         return r;
     }
@@ -7300,7 +7240,7 @@ public class SSLMailServer {
                 // Rollback su exception
                 try { java.nio.file.Files.copy(java.nio.file.Paths.get(bakPath), resolvPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING); } catch (Exception ignored) {}
                 r.put("success", false);
-                r.put("message", I18n.tr("server.unbound.postflightError", Map.of("error", String.valueOf(e.getMessage()))));
+                r.put("message", I18n.tr("server.unbound.postflightError", Map.of("error", ErrorText.detail("switchResolvConfToUnbound", e))));
                 return r;
             }
 
@@ -7308,7 +7248,7 @@ public class SSLMailServer {
             r.put("message", I18n.tr("server.unbound.resolvUpdated", Map.of("backup", bakPath)));
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("switchResolvConfToUnbound", e))));
         }
         return r;
     }
@@ -7543,7 +7483,7 @@ public class SSLMailServer {
             r.put("output", log.toString());
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("disableUnboundForwarder", e))));
             r.put("output", log.toString());
         }
         return r;
@@ -7575,7 +7515,7 @@ public class SSLMailServer {
             r.put("message", I18n.tr("server.unbound.restoredFrom", Map.of("file", String.valueOf(latest))));
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("rollbackResolvConf", e))));
         }
         return r;
     }
@@ -7616,7 +7556,7 @@ public class SSLMailServer {
             r.put("dnsbl_ok", dnsblOk);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("testUnboundQuery", e))));
         }
         return r;
     }
@@ -7802,7 +7742,7 @@ public class SSLMailServer {
             response.put("reports", reports);
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiBlacklistCheck", e));
         }
         sendJsonResponse(exchange, response);
     }
@@ -8389,7 +8329,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiClamavHealth", e));
         }
         sendJsonResponse(exchange, response);
     }
@@ -8677,7 +8617,7 @@ public class SSLMailServer {
             r.put("output", out);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("sysrcSet", e))));
         }
         return r;
     }
@@ -8698,7 +8638,7 @@ public class SSLMailServer {
             r.put("output", out);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("serviceCommand", e))));
         }
         return r;
     }
@@ -8723,7 +8663,7 @@ public class SSLMailServer {
             r.put("output", out.length() > 4000 ? out.substring(out.length() - 4000) : out);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("runInstallClamav", e))));
         }
         return r;
     }
@@ -8744,7 +8684,7 @@ public class SSLMailServer {
             r.put("output", out.length() > 4000 ? out.substring(out.length() - 4000) : out);
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("runFreshclam", e))));
         }
         return r;
     }
@@ -8808,7 +8748,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("runEicarTest", e))));
         } finally {
             if (tmp != null) {
                 try { java.nio.file.Files.deleteIfExists(tmp); } catch (Exception ignored) {}
@@ -8854,7 +8794,7 @@ public class SSLMailServer {
             r.put("message", I18n.tr("server.clamav.confWritten"));
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("ensureRspamdAntivirusConfig", e))));
         }
         return r;
     }
@@ -9088,7 +9028,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiFail2banHealth", e));
         }
         sendJsonResponse(exchange, response);
     }
@@ -9247,7 +9187,7 @@ public class SSLMailServer {
 
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiSystemPaths", e));
         }
         sendJsonResponse(exchange, response);
     }
@@ -9281,7 +9221,7 @@ public class SSLMailServer {
             }
         } catch (Exception ex) {
             e.put("exists", false);
-            e.put("error", ex.getMessage());
+            e.put("error", ErrorText.forPage("pathEntry", ex));
         }
         return e;
     }
@@ -9429,7 +9369,7 @@ public class SSLMailServer {
         String reviewError = null;
         try {
             if (f2bRunning) review = fail2banManager.reviewWatchedLogs();
-        } catch (Exception e) { reviewError = e.getMessage(); }
+        } catch (Exception e) { reviewError = ErrorText.detail("buildFail2banHealthReport", e); }
 
         boolean logOk;
         StringBuilder logDetail = new StringBuilder();
@@ -9583,7 +9523,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             appliedBans = false;
-            appliedBansDetail = I18n.tr("server.f2b.pf.compareFailed", Map.of("error", String.valueOf(e.getMessage())));
+            appliedBansDetail = I18n.tr("server.f2b.pf.compareFailed", Map.of("error", ErrorText.detail("buildFail2banHealthReport", e)));
         }
         if (appliedBansUnmeasured) {
             // Nessun rimedio da proporre: rigenerare le jail della posta non tocca una jail che non si e' letta.
@@ -9895,7 +9835,7 @@ public class SSLMailServer {
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("runInstallFail2ban", e))));
             return r;
         }
     }
@@ -9916,7 +9856,7 @@ public class SSLMailServer {
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("enableFail2banAtBoot", e))));
             return r;
         }
     }
@@ -9976,7 +9916,7 @@ public class SSLMailServer {
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("loadPfModule", e))));
             return r;
         }
     }
@@ -10046,7 +9986,7 @@ public class SSLMailServer {
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("startPfService", e))));
             return r;
         }
     }
@@ -10067,7 +10007,7 @@ public class SSLMailServer {
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("enablePfAtBoot", e))));
             return r;
         }
     }
@@ -10122,7 +10062,7 @@ public class SSLMailServer {
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("createPfConfMinimal", e))));
             return r;
         }
     }
@@ -10230,7 +10170,7 @@ public class SSLMailServer {
                     I18n.tr("server.f2bfix.mailJailsOk")));
             }
         } catch (Exception e) {
-            steps.put(buildErrorStep("install_mail_jails", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage())))));
+            steps.put(buildErrorStep("install_mail_jails", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("runFixAll", e)))));
             anyFailed = true;
         }
 
@@ -10253,7 +10193,7 @@ public class SSLMailServer {
                     I18n.tr("server.f2bfix.banActionOk")));
             }
         } catch (Exception e) {
-            steps.put(buildErrorStep("repair_ban_action", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage())))));
+            steps.put(buildErrorStep("repair_ban_action", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("runFixAll", e)))));
             anyFailed = true;
         }
 
@@ -10453,7 +10393,7 @@ public class SSLMailServer {
             return r;
         } catch (Exception e) {
             r.put("success", false);
-            r.put("message", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+            r.put("message", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("addPfAnchorF2b", e))));
             return r;
         }
     }
@@ -10948,34 +10888,25 @@ public class SSLMailServer {
                     String action = req.optString("action", "save");
 
                     if ("reset_tracking".equals(action)) {
-                        // Reset vacation tracking files
+                        // Azzera la memoria delle risposte automatiche: solo .dovecot.lda-dupes nella home della casella.
+                        // Non piu' il compilato delle regole (Dovecot non lo puo' risalvare nella cartella di root, e
+                        // ricompilava a ogni consegna con un errore nel maillog) ne' il riavvio di tutto Dovecot (la memoria
+                        // si rilegge a ogni consegna): VacationTracking, reperto 219.
                         int mailboxId = req.optInt("mailbox_id", 0);
                         MailDatabase.Mailbox mailbox = Main.mailDatabase.getMailboxById(mailboxId);
                         if (mailbox != null) {
                             String[] parts = mailbox.email.split("@");
                             if (parts.length == 2) {
-                                String user = parts[0];
-                                String domain = parts[1];
-                                // Delete vacation tracking files
                                 try {
-                                    java.nio.file.Path vmailDupes = java.nio.file.Path.of("/var/vmail", domain, user, ".dovecot.lda-dupes");
-                                    java.nio.file.Path sieveDb = java.nio.file.Path.of("/var/mail/sieve", domain, user, ".dovecot.sieve.db");
-                                    java.nio.file.Files.deleteIfExists(vmailDupes);
-                                    java.nio.file.Files.deleteIfExists(sieveDb);
-                                    // Also delete any .svbin compiled file to force recompile
-                                    java.nio.file.Path svbin = java.nio.file.Path.of("/var/mail/sieve", domain, user, ".dovecot.svbin");
-                                    java.nio.file.Files.deleteIfExists(svbin);
-                                    // Restart Dovecot to clear in-memory vacation cache
-                                    // TODO: migrate to Shell.run when touched
-                                    ProcessBuilder pb = new ProcessBuilder("service", "dovecot", "restart");
-                                    org.mail_panel.util.Shell.applyPath(pb);
-                                    pb.redirectErrorStream(true);
-                                    Process p = pb.start();
-                                    p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
-                                    response.put("success", true);
+                                    if (org.mail_panel.system.VacationTracking.reset(mailbox.email)) {
+                                        response.put("success", true);
+                                    } else {
+                                        response.put("success", false);
+                                        response.put("error", I18n.tr("server.badEmail"));
+                                    }
                                 } catch (Exception e) {
                                     response.put("success", false);
-                                    response.put("error", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage()))));
+                                    response.put("error", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("handleApiAutoResponder", e))));
                                 }
                             } else {
                                 response.put("success", false);
@@ -11013,7 +10944,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiAutoResponder", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -11623,7 +11554,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiRspamd", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -11767,7 +11698,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiTheme", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -12230,7 +12161,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiHostname", e));
         }
 
         sendJsonResponse(exchange, response);
@@ -12508,7 +12439,7 @@ public class SSLMailServer {
                             steps.put(new JSONObject()
                                     .put("step", I18n.tr("server.rcdomain.stepSaving"))
                                     .put("success", false)
-                                    .put("detail", I18n.tr("server.errorWith", Map.of("error", String.valueOf(e.getMessage())))));
+                                    .put("detail", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("handleApiRoundcubeDomain", e)))));
                             response.put("success", false);
                             response.put("steps", steps);
                             sendJsonResponse(exchange, response);
@@ -12602,7 +12533,7 @@ public class SSLMailServer {
             }
         } catch (Exception e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", ErrorText.forPage("handleApiRoundcubeDomain", e));
         }
 
         sendJsonResponse(exchange, response);
