@@ -165,7 +165,7 @@ public class AcmeManager {
 
     private String acme(String args, Map<String, String> env) throws Exception {
         AcmeUser.Layout l = layout();
-        if (l == null) throw new IOException(I18n.tr("server.acme.notInstalled"));
+        if (l == null) throw new IllegalStateException(I18n.tr("server.acme.notInstalled"));
         return AcmeUser.run(l, args, env);
     }
 
@@ -177,7 +177,7 @@ public class AcmeManager {
      */
     private String acmeWithHttpChallenge(String args, String webroot) throws Exception {
         AcmeUser.Layout l = layout();
-        if (l == null) throw new IOException(I18n.tr("server.acme.notInstalled"));
+        if (l == null) throw new IllegalStateException(I18n.tr("server.acme.notInstalled"));
         boolean own = webroot == null || webroot.isEmpty() || AcmeUser.WEBROOT.equals(webroot);
         if (!l.asAcme())
             return AcmeUser.run(l, args + (own ? " --standalone" : " -w " + webroot), null);

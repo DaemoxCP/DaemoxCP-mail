@@ -48,7 +48,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
         const t0 = Date.now();
         console.log('    ' + vm('service mysql-server status 2>&1 | head -1'));
         // A read of the card while the database is down: "Reread" asks again for every row.
-        await page.click('#ucReread, button[data-on-click="ucLoad(true)"]').catch(() => page.evaluate(() => ucLoad(true)));
+        await page.click('button[data-on-click="ucLoad(true)"]').catch(() => page.evaluate(() => ucLoad(true)));
         await page.waitForSelector('#panelDbWait', { timeout: 20000 }).catch(() => {});
         const strip = await page.$('#panelDbWait') ? await page.innerText('#panelDbWait') : '';
         console.log('    strip: ' + strip);
