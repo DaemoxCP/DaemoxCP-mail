@@ -869,6 +869,11 @@ public class SSLMailServer {
             // con cui gira la webmail.
             org.mail_panel.system.RoundcubeUser.ensureAtBoot();
 
+            // L'utente master di Dovecot con cui «Apri webmail» entra: gli script d'installazione lo
+            // lasciavano senza hash (o in un file che Dovecot non poteva leggere). Prima del plugin SSO
+            // e di chi, dopo, prova un accesso vero con lui.
+            org.mail_panel.system.DovecotMasterUser.ensureAtBoot();
+
             // Start auto-renewal for certificates (prima, nello stesso thread, acme.sh passa da root
             // all'utente acme: AcmeUser.ensureAtBoot)
             acmeManager.startAutoRenewal();
