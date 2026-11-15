@@ -597,6 +597,27 @@ when the request names another one. Conditions or actions as text, empty, or not
 as nobody, as SieveRulesNotWrittenTest. Measured on 10/11/2026 on the VM: 43 OK; with SSLMailServer, MailDatabase and
 SqlCatalog as before 25 fail (among them the NullPointerException text and `For input string: "abc"` in the answer).
 
+**VacationTrackingTest** — "reset tracking" of the autoresponder and the boot repair of what it left (reperto 219,
+VacationTracking). Until 10/11/2026 the reset also deleted the binary beside the panel's rules and restarted Dovecot;
+Pigeonhole keeps the senders already answered only in `.dovecot.lda-dupes` in the mailbox's home. Without a system:
+the file is home/domain/user/.dovecot.lda-dupes, and an address that is not one (`../../x@...`, `a/b@...`, `al..ice@...`)
+gives nothing; on a folder like /var/vmail only that file goes (mail, the `.locks` folder and other mailboxes stay,
+twice is fine, nothing outside the folder is touched); a binary missing, older, as old as the script or a link is stale;
+on a folder like /var/mail/sieve the boot repair compiles only the panel's scripts without a newer binary, once, leaves a
+ManageSieve link and other depths, reports a compiler that fails or installs nothing, and finds nothing the second
+time. On the VM, as any user. Measured on 10/11/2026: all pass; with the old reset and no boot repair in the jar 11 fail.
+
+**VacationTrackingE2ETest** — the same with real deliveries (on the VM as root with `-De2e.vm=yes`; it creates
+`vacation-reset.test` with two mailboxes and removes it): the autoresponder answers a sender once, the reset removes the
+memory and nothing else (the binary untouched and newer than the script, Dovecot's master process the same), the sender
+gets the reply again and then not again, with no Sieve error in the maillog; with the binary taken away a delivery logs
+"save: failed to create temporary file ... Permission denied (euid=5000(vmail)" (the check can fail), ensureAtBoot
+compiles it again with the script's owner, group and mode, and the next delivery is quiet. An IMAP session is no proof
+of the restart: on Dovecot 2.3.21 one logged in before outlived `service dovecot restart`. Measured on 10/11/2026: all
+pass; with the old reset and no boot repair in the jar 9 fail: the binary gone, Dovecot's master process another one,
+"Error: sieve: binary ... save: failed" and "The LDA Sieve plugin does not have permission to save global Sieve script
+binaries" on the deliveries after the reset, and no repair at boot.
+
 **AddressTransformLinksTest** — setting aside the old mail of an address without following vmail's links (reperto
 222). When an alias becomes a mailbox and the old mail is set aside, `AddressTransform.archive` moved it as root inside
 `/var/vmail`, which with everything under it is vmail's: vmail could plant a link at `.panel-archive` or at the

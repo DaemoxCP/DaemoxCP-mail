@@ -831,6 +831,9 @@ public class SSLMailServer {
             // Le regole del pannello riscritte dal database come le scrive adesso, dove sono diverse: «Sposta» e «Copia»
             // creano la cartella che non c'e' (reperto 229). Solo i file del pannello; al secondo avvio non scrive niente.
             org.mail_panel.system.SieveRulesRefresh.ensureAtBoot(this.sieveGenerator);
+            // Il compilato delle regole del pannello che il reset delle risposte automatiche toglieva: senza, Dovecot le
+            // ricompila a ogni consegna e scrive un errore nel maillog (VacationTracking ricompila solo quelle cosi').
+            org.mail_panel.system.VacationTracking.ensureAtBoot();
 
             // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.
@@ -10875,31 +10878,22 @@ public class SSLMailServer {
                     String action = req.optString("action", "save");
 
                     if ("reset_tracking".equals(action)) {
-                        // Reset vacation tracking files
+                        // Azzera la memoria delle risposte automatiche: solo .dovecot.lda-dupes nella home della casella.
+                        // Non piu' il compilato delle regole (Dovecot non lo puo' risalvare nella cartella di root, e
+                        // ricompilava a ogni consegna con un errore nel maillog) ne' il riavvio di tutto Dovecot (la memoria
+                        // si rilegge a ogni consegna): VacationTracking, reperto 219.
                         int mailboxId = req.optInt("mailbox_id", 0);
                         MailDatabase.Mailbox mailbox = Main.mailDatabase.getMailboxById(mailboxId);
                         if (mailbox != null) {
                             String[] parts = mailbox.email.split("@");
                             if (parts.length == 2) {
-                                String user = parts[0];
-                                String domain = parts[1];
-                                // Delete vacation tracking files
                                 try {
-                                    java.nio.file.Path vmailDupes = java.nio.file.Path.of("/var/vmail", domain, user, ".dovecot.lda-dupes");
-                                    java.nio.file.Path sieveDb = java.nio.file.Path.of("/var/mail/sieve", domain, user, ".dovecot.sieve.db");
-                                    java.nio.file.Files.deleteIfExists(vmailDupes);
-                                    java.nio.file.Files.deleteIfExists(sieveDb);
-                                    // Also delete any .svbin compiled file to force recompile
-                                    java.nio.file.Path svbin = java.nio.file.Path.of("/var/mail/sieve", domain, user, ".dovecot.svbin");
-                                    java.nio.file.Files.deleteIfExists(svbin);
-                                    // Restart Dovecot to clear in-memory vacation cache
-                                    // TODO: migrate to Shell.run when touched
-                                    ProcessBuilder pb = new ProcessBuilder("service", "dovecot", "restart");
-                                    org.mail_panel.util.Shell.applyPath(pb);
-                                    pb.redirectErrorStream(true);
-                                    Process p = pb.start();
-                                    p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
-                                    response.put("success", true);
+                                    if (org.mail_panel.system.VacationTracking.reset(mailbox.email)) {
+                                        response.put("success", true);
+                                    } else {
+                                        response.put("success", false);
+                                        response.put("error", I18n.tr("server.badEmail"));
+                                    }
                                 } catch (Exception e) {
                                     response.put("success", false);
                                     response.put("error", I18n.tr("server.errorWith", Map.of("error", ErrorText.detail("handleApiAutoResponder", e))));
