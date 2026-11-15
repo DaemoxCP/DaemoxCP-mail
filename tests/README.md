@@ -80,6 +80,8 @@ is always zero. A test that does not start at all, read that way, looks passed.
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesOwnerTest   (VM, as root)
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.AddressTransformLinksTest   (VM, as root, real /var/vmail)
+
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesRefreshTest
 
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMasterUserTest   (VM, as root, real doveadm)
@@ -594,6 +596,23 @@ when the request names another one. Conditions or actions as text, empty, or not
 `server.sieve.notWritten`). It uses only what MailDatabase had before, so it runs against the jar of before too. Run it
 as nobody, as SieveRulesNotWrittenTest. Measured on 10/11/2026 on the VM: 43 OK; with SSLMailServer, MailDatabase and
 SqlCatalog as before 25 fail (among them the NullPointerException text and `For input string: "abc"` in the answer).
+
+**AddressTransformLinksTest** — setting aside the old mail of an address without following vmail's links (reperto
+222). When an alias becomes a mailbox and the old mail is set aside, `AddressTransform.archive` moved it as root inside
+`/var/vmail`, which with everything under it is vmail's: vmail could plant a link at `.panel-archive` or at the
+domain's folder, and root's mkdir and rename followed it. Now vmail moves its mail (chroot -u vmail, only the group
+vmail) and the panel's rules stay in root's tree (`/var/mail/sieve/.panel-archive`, RootOnlyPath). With `-De2e.vm=yes`,
+as root, on bench folders made like `/var/vmail` (vmail:vmail 0770) and `/var/mail/sieve`: the control (set aside and
+put back, the mail vmail's, nothing of root's in vmail's tree); `.panel-archive` as vmail's link to a root folder (root
+makes nothing there, the mail stays); the domain's folder as vmail's link to a root folder holding `alice` (root's
+`alice` stays); after a setting aside, the archive's domain folder as vmail's link (putting back leaves root's folder
+alone). Every probe first shows it can plant its link, and that vmail alone cannot do what root did for it. Then the
+real system with `address-transform.test` (created and removed, mail written by `doveadm save`): a mailbox with mail
+and panel rules set aside and put back, Dovecot reads and writes it again; and a link `/var/vmail/address-transform-link.test`
+to a root folder in `/var` (the same file system as `/var/vmail`). `/var/mail` is made sticky for the duration if it
+is not, and put back. Measured on 10/11/2026: all pass; with the jar before the fix 11 fail, among them the real
+setting aside of a mailbox with rules: `/var/mail` and `/var/vmail` are two ZFS datasets on the VM, and Java does not
+move a full folder from one to the other (DirectoryNotEmptyException), so that choice always failed there.
 
 **DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what
