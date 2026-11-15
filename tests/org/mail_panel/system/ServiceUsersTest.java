@@ -135,6 +135,69 @@ public class ServiceUsersTest {
         f = ex(AFTER, POOL_AFTER, "# 25 0 * * * acme.sh --cron\n", false);
         check("a comment in the cron is not a warning", f.problems().isEmpty());
 
+        OUT.println("\n== What every user of a service does (reperto 228)");
+        // A separated panel, Dovecot with its four users, Postfix's daemons: as on the VM after the upgrades.
+        String full = AFTER.replace("root    70001     1 /usr/local/openjdk25/bin/java -jar /home/panel/freebsd-mail-panel-1.0.jar --web",
+                        "root    70001     1 /usr/local/openjdk25/bin/java -jar /home/panel/freebsd-mail-panel-1.0.jar --web\n"
+                        + "mailpanel 70002 70001 /usr/local/openjdk25/bin/java -jar /home/panel/freebsd-mail-panel-1.0.jar --web-part")
+                + "dovecot 65001 59971 dovecot/auth\ndovecot 65002 59971 dovecot/auth -w\n"
+                + "dovenull 65010 59971 dovecot/imap-login\nvmail 65011 59971 dovecot/imap\nroot    65012 59971 dovecot/lmtp\n"
+                + "postfix 65020 64913 smtpd -n smtp -t inet -u -o stress=\nroot    65021 64913 local -t unix\n";
+        f = ex(full, POOL_AFTER, "", false);
+        check("still no warning (" + codes(f) + ")", f.problems().isEmpty());
+        Map<String, java.util.Set<String>> dovecot = f.services().get("dovecot").roles;
+        check("Dovecot: root runs master, log, config, lmtp (" + dovecot.get("root") + ")",
+                dovecot.get("root").equals(new java.util.LinkedHashSet<>(List.of("master", "log", "config", "lmtp"))));
+        check("Dovecot: dovecot runs anvil, auth, auth-worker (" + dovecot.get("dovecot") + ")",
+                dovecot.get("dovecot").equals(new java.util.LinkedHashSet<>(List.of("anvil", "auth", "auth-worker"))));
+        check("Dovecot: dovenull runs imap-login, vmail runs imap", dovecot.get("dovenull").equals(java.util.Set.of("imap-login"))
+                && dovecot.get("vmail").equals(java.util.Set.of("imap")));
+        Map<String, java.util.Set<String>> postfix = f.services().get("postfix").roles;
+        check("Postfix: root runs master and local, postfix pickup, qmgr, smtpd (" + postfix + ")",
+                postfix.get("root").equals(java.util.Set.of("master", "local"))
+                        && postfix.get("postfix").equals(java.util.Set.of("pickup", "qmgr", "smtpd")));
+        Map<String, java.util.Set<String>> panel = f.services().get("mail-panel").roles;
+        check("the panel: root part as root, web part as mailpanel (" + panel + ")", panel.get("root").equals(java.util.Set.of("root part"))
+                && panel.get("mailpanel").equals(java.util.Set.of("web part")));
+        check("mysql: mysqld and mysqld_safe, not sh (" + f.services().get("mysql").roles + ")",
+                f.services().get("mysql").roles.get("mysql").equals(java.util.Set.of("mysqld", "mysqld_safe")));
+        check("fail2ban: fail2ban-server, not python3.12; redis: redis-server; unbound: local-unbound",
+                f.services().get("fail2ban").roles.get("root").equals(java.util.Set.of("fail2ban-server"))
+                        && f.services().get("redis").roles.get("redis").equals(java.util.Set.of("redis-server"))
+                        && f.services().get("unbound").roles.get("unbound").equals(java.util.Set.of("local-unbound")));
+        check("nginx: master and worker; rspamd: main and rspamd_proxy; php-fpm: master; the pool: pool",
+                f.services().get("nginx").roles.get("root").equals(java.util.Set.of("master"))
+                        && f.services().get("nginx").roles.get("www").equals(java.util.Set.of("worker"))
+                        && f.services().get("rspamd").roles.get("rspamd").equals(java.util.Set.of("main", "rspamd_proxy"))
+                        && f.services().get("php-fpm").roles.get("root").equals(java.util.Set.of("master"))
+                        && f.services().get("php-fpm pool roundcube").roles.get("roundcube").equals(java.util.Set.of("pool")));
+        org.json.JSONArray roles = ServiceUsers.roles(f.services().get("dovecot"));
+        check("on the page root comes first, then the others as ps listed them (" + roles + ")",
+                roles.length() == 4 && "root".equals(roles.getJSONObject(0).getString("user"))
+                        && "dovecot".equals(roles.getJSONObject(1).getString("user")));
+        ServiceUsers.addOnDemand(f, true);
+        check("sievec is listed although no process of it runs (it compiles the rules when they are saved)",
+                f.services().get("sievec") != null && f.services().get("sievec").roles.get("sievec").equals(java.util.Set.of("sievec")));
+        ServiceUsers.Findings none = ex(full, POOL_AFTER, "", false);
+        ServiceUsers.addOnDemand(none, false);
+        check("without the user sievec, no line for it", none.services().get("sievec") == null);
+        // Every user the panel installs has a sentence on what it is for, in both languages.
+        for (ServiceUsers.Service sv : f.services().values())
+            for (String user : sv.roles.keySet()) {
+                String key = ServiceUsers.purposeKey(sv.name, user);
+                check("  " + sv.name + " / " + user + ": " + key + " in both languages", !org.mail_panel.i18n.I18n.t("it", key).equals(key)
+                        && !org.mail_panel.i18n.I18n.t("en", key).equals(key)
+                        && !org.mail_panel.i18n.I18n.t("it", key).equals(org.mail_panel.i18n.I18n.t("en", key)));
+            }
+        check("the keys of the acme user and of the pools", ServiceUsers.purposeKey("acme.sh", "acme").equals("server.su.purpose.acme.acme")
+                && ServiceUsers.purposeKey("php-fpm pool www", "www").equals("server.su.purpose.pool.www.www")
+                && ServiceUsers.purposeKey("mail-panel", "mailpanel").equals("server.su.purpose.mailPanel.mailpanel"));
+        check("a user the panel does not know gets no sentence, only its processes",
+                ServiceUsers.roles(ex(AFTER.replace("clamav  43258", "nobody  43258"), POOL_AFTER, "", false).services().get("clamav"))
+                        .toString().contains("\"user\":\"nobody\"")
+                        && !ServiceUsers.roles(ex(AFTER.replace("clamav  43258", "nobody  43258"), POOL_AFTER, "", false).services().get("clamav"))
+                        .getJSONObject(0).has("purpose"));
+
         OUT.println("\n== The ps output");
         check("one line per process, with the fields", ServiceUsers.processes(BEFORE).size() == BEFORE.strip().split("\n").length
                 && ServiceUsers.processes("www 1 2 php-fpm: pool www (php-fpm)").get(0).ppid() == 2);

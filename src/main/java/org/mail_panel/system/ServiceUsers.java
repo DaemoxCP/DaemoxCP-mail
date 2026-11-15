@@ -37,6 +37,12 @@ import java.util.stream.Stream;
  * <p>Si guarda cosa gira davvero (ps), non solo cosa dicono le configurazioni; dei pool di php-fpm
  * si guardano anche i file, perche' un pool sbagliato che oggi non ha processi li avra' domani.
  * Sola lettura: non cambia niente.
+ *
+ * <p>Per ogni servizio anche cosa fa ogni suo utente (reperto 228, chiesto dal committente il 15/11/2026: il pannello
+ * dice sempre sotto che utente gira ogni pacchetto, e se ne usa piu' d'uno a che cosa serve ciascuno): i processi di
+ * quell'utente con un nome corto (master, imap-login, qmgr, la parte web...) e una frase dai file di lingua
+ * (server.su.purpose.servizio.utente) dove l'utente e' quello che il pannello installa. Anche gli utenti che girano
+ * solo quando servono: acme.sh e sievec.
  */
 public final class ServiceUsers {
 
@@ -92,6 +98,63 @@ public final class ServiceUsers {
     /** I processi di Postfix che consegnano per conto di utenti diversi: root per come e' fatto. */
     private static final Set<String> POSTFIX_PRIVILEGED = Set.of("local", "virtual", "pipe", "spawn");
 
+    /** Gli interpreti: di "/bin/sh /usr/local/bin/mysqld_safe ..." conta il programma che eseguono. */
+    private static final Set<String> INTERPRETERS = Set.of("sh", "bash", "perl", "python", "python3");
+
+    /**
+     * Il nome corto di un processo, per dire cosa fa: "master", "worker", "imap-login", "qmgr", "auth-worker", la parte
+     * web o root del pannello; altrimenti il programma senza percorso. Puro.
+     */
+    static String processName(String service, String command) {
+        String c = command == null ? "" : command.trim();
+        if ("mail-panel".equals(service)) return c.matches(".*--web-part( .*|$)") ? "web part" : "root part";
+        if (c.startsWith("nginx: ")) return c.replaceFirst("^nginx: (\\S+).*$", "$1");
+        if (c.startsWith("php-fpm: master")) return "master";
+        if (c.startsWith("php-fpm: pool ")) return "pool";
+        if (c.startsWith("rspamd: ")) return c.replaceFirst("^rspamd: (\\S+).*$", "$1");
+        if (c.matches(".*/libexec/postfix/master( .*|$)")) return "master";
+        if (c.matches("^/usr/local/sbin/dovecot( .*|$)")) return "master";
+        if (c.matches("^dovecot/auth -w( .*|$)")) return "auth-worker";
+        if (c.startsWith("dovecot/")) return c.replaceFirst("^dovecot/(\\S+).*$", "$1");
+        String[] t = c.split("\\s+");
+        String first = base(t[0]);
+        if (t.length > 1 && (INTERPRETERS.contains(first) || first.matches("python3\\.\\d+"))) first = base(t[1]);
+        return first.endsWith(":") ? first.substring(0, first.length() - 1) : first;
+    }
+
+    private static String base(String path) {
+        return path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    /**
+     * La chiave dei file di lingua per cosa fa un utente di un servizio: server.su.purpose.SERVIZIO.UTENTE, col nome del
+     * servizio come lo vogliono le chiavi (mail-panel -> mailPanel, php-fpm -> phpFpm, "php-fpm pool X" -> pool.X,
+     * acme.sh -> acme). Pura.
+     */
+    static String purposeKey(String service, String user) {
+        String s = switch (service) {
+            case "mail-panel" -> "mailPanel";
+            case "php-fpm" -> "phpFpm";
+            case "acme.sh" -> "acme";
+            default -> service.startsWith("php-fpm pool ") ? "pool." + service.substring("php-fpm pool ".length()) : service;
+        };
+        return "server.su.purpose." + s + "." + user;
+    }
+
+    /**
+     * Gli utenti che non tengono processi accesi ma girano quando servono: acme.sh (gia' in examine, dal suo script e
+     * dal cron) e sievec, che compila le regole Sieve del pannello quando si salvano (SieveCompiler, reperto 218). Puro:
+     * {@code sievecUser} dice se l'utente c'e'.
+     */
+    static void addOnDemand(Findings f, boolean sievecUser) {
+        if (sievecUser && !f.services().containsKey(SieveCompiler.USER)) {
+            Service s = new Service(SieveCompiler.USER);
+            s.users.add(SieveCompiler.USER);
+            s.roles.computeIfAbsent(SieveCompiler.USER, k -> new LinkedHashSet<>()).add("sievec");
+            f.services().put(s.name, s);
+        }
+    }
+
     /** ps -axww -o user= -o pid= -o ppid= -o command=: su FreeBSD "-o a=,b=" fa di ",b=" l'intestazione di a. */
     static List<Proc> processes(String ps) {
         List<Proc> out = new ArrayList<>();
@@ -119,6 +182,8 @@ public final class ServiceUsers {
     static final class Service {
         final String name;
         final Set<String> users = new LinkedHashSet<>();
+        /** Utente -> i nomi corti dei suoi processi: cosa fa ciascun utente del servizio. */
+        final Map<String, Set<String>> roles = new LinkedHashMap<>();
         final Set<String> needlessRoot = new LinkedHashSet<>();
         /** Un suo processo gira da root e gli serve: la pagina dice perche'. */
         boolean neededRoot;
@@ -191,6 +256,7 @@ public final class ServiceUsers {
             if (name == null) continue;
             Service s = services.computeIfAbsent(name, Service::new);
             s.users.add(p.user());
+            s.roles.computeIfAbsent(p.user(), k -> new LinkedHashSet<>()).add(processName(name, p.command()));
             s.processes++;
             if ("root".equals(p.user()) && !rootNeeded) s.needlessRoot.add(p.command().split("\\s+")[0]);
             if ("root".equals(p.user()) && rootNeeded) s.neededRoot = true;
@@ -228,14 +294,17 @@ public final class ServiceUsers {
         Service acme = new Service("acme.sh");
         if (acmeAsRoot) {
             acme.users.add("root");
+            acme.roles.computeIfAbsent("root", k -> new LinkedHashSet<>()).add("acme.sh");
             problems.add(new Problem("acmeRoot", "acme.sh", "root", AcmeUser.OLD_HOME));
         } else if (Files.isRegularFile(Path.of(AcmeUser.SCRIPT))) {
             acme.users.add(AcmeUser.USER);
+            acme.roles.computeIfAbsent(AcmeUser.USER, k -> new LinkedHashSet<>()).add("acme.sh");
         }
         if (rootCrontab != null)
             for (String l : rootCrontab.split("\n"))
                 if (!l.trim().startsWith("#") && l.contains("acme.sh")) {
                     acme.users.add("root");
+                    acme.roles.computeIfAbsent("root", k -> new LinkedHashSet<>()).add("acme.sh");
                     problems.add(new Problem("acmeRoot", "acme.sh", "root", "root's crontab: " + l.trim()));
                 }
         if (!acme.users.isEmpty()) services.put(acme.name, acme);
@@ -261,7 +330,9 @@ public final class ServiceUsers {
         String crontab = c.success() ? c.output() : "";
         AcmeUser.Layout l = AcmeUser.layout();
         boolean dovecot24 = !Shell.run(d, "pkg", "query", "-e", "%o = \"mail/dovecot24\"", "%n").outputTrim().isEmpty();
-        return examine(procs, pools, crontab, l != null && !l.asAcme(), rotations, dovecot24);
+        Findings f = examine(procs, pools, crontab, l != null && !l.asAcme(), rotations, dovecot24);
+        addOnDemand(f, Shell.run(d, "pw", "usershow", SieveCompiler.USER).success());
+        return f;
     }
 
     private static Map<Path, String> readAll(Path dir, String suffix) {
@@ -285,6 +356,24 @@ public final class ServiceUsers {
         }
     }
 
+    /**
+     * Cosa fa ogni utente di un servizio, per la pagina: root per primo, poi gli altri come li ha visti ps; per ognuno i
+     * nomi dei suoi processi e, dove i file di lingua lo sanno, a che cosa serve.
+     */
+    static JSONArray roles(Service s) {
+        List<String> order = new ArrayList<>(s.roles.keySet());
+        order.sort((a, b) -> Boolean.compare(!"root".equals(a), !"root".equals(b)));
+        JSONArray out = new JSONArray();
+        for (String user : order) {
+            JSONObject r = new JSONObject().put("user", user).put("processes", new JSONArray(s.roles.get(user)));
+            String key = purposeKey(s.name, user);
+            String text = I18n.tr(key);
+            if (!key.equals(text)) r.put("purpose", text);
+            out.put(r);
+        }
+        return out;
+    }
+
     /** Per la pagina: i servizi, i loro utenti, gli avvisi. */
     public static JSONObject state() {
         Findings f = now();
@@ -299,7 +388,7 @@ public final class ServiceUsers {
             for (Problem p : f.problems())
                 if (java.util.Arrays.asList(p.service().split(", ")).contains(s.name)) warned = true;
             JSONObject o = new JSONObject().put("service", s.name).put("users", new JSONArray(s.users))
-                    .put("processes", s.processes).put("ok", !warned);
+                    .put("processes", s.processes).put("ok", !warned).put("roles", roles(s));
             String why = ROOT_WHY.get(s.name);
             if (s.neededRoot && !warned && why != null) o.put("rootWhy", I18n.tr("server.su.rootWhy." + why));
             services.put(o);
