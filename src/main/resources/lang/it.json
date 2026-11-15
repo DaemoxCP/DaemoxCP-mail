@@ -3228,6 +3228,8 @@
   "server.replace.notReplaced": "nessun pacchetto del piano prende il suo posto: pkg lo toglierebbe e basta",
   "server.replace.replacedBy": "lo sostituisce {by}, che installa anche {file}",
   "server.requestFailed": "Richiesta non riuscita: i dettagli sono nel log del pannello.",
+  "server.alreadyExists": "Esiste già: c'è già un elemento con lo stesso valore.",
+  "server.detailsInLog": "i dettagli sono nel log del pannello",
   "server.requestTooLarge": "Richiesta troppo grande.",
   "server.rl.atLeastOne": "I limiti orario e giornaliero devono essere almeno 1. Zero non vuol dire \"nessun limite\": vorrebbe dire che non parte più niente.",
   "server.rl.chooseMailbox": "Scegli una casella.",

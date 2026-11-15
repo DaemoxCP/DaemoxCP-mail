@@ -3228,6 +3228,8 @@
   "server.replace.notReplaced": "no package in the plan takes its place: pkg would just remove it",
   "server.replace.replacedBy": "replaced by {by}, which also installs {file}",
   "server.requestFailed": "The request failed: the details are in the panel log.",
+  "server.alreadyExists": "It already exists: there is already one with the same value.",
+  "server.detailsInLog": "the details are in the panel log",
   "server.requestTooLarge": "Request too large.",
   "server.rl.atLeastOne": "The hourly and daily limits must be at least 1. Zero does not mean \"no limit\": it would mean that nothing leaves any more.",
   "server.rl.chooseMailbox": "Choose a mailbox.",

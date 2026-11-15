@@ -1315,6 +1315,17 @@ every session's process (measured on the VM, reperto 213); `auth-worker` as root
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ServiceUsersTest
 
+**ErrorTextTest** — what an exception says to the page (ErrorText, reperto 231). The routes used to put
+`e.getMessage()` of any exception in the answer: a MySQL duplicate showed the table and the key, a missing file its
+path. Now the messages of IllegalArgumentException and IllegalStateException (the ones the panel writes for the page)
+pass, and PasskeyException's key is translated; an IOException with a path, an SQLException naming a table,
+InvalidPathException, NumberFormatException, a NullPointerException or no message give the generic text, with one
+WARNING line in the log carrying the route's method and the exception; a MySQL duplicate (1062, also wrapped) says "it
+already exists" without the key. Then in the sources: no route answer of SSLMailServer and no "success" answer of
+UpdateManager puts `getMessage()` by itself. It calls nothing; run from the project root (it reads `src/`).
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.util.ErrorTextTest
+
 ## The panel's emails
 
 `PanelMailTest` tests the envelope (sender, subject in RFC 2047, quoted-printable, headers) and the
