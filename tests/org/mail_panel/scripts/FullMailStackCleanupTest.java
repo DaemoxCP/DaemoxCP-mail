@@ -34,8 +34,8 @@ import java.util.stream.Stream;
  *  - the text: every user and every group phase 1 removes, phase 2 creates again with pw useradd or pw groupadd, and
  *    none belongs to the base system (the stock master.passwd and group, the ones etcupdate keeps). The line
  *    recogniser is tried first on a known text, because one that sees nothing would make everything green;
- *  - the cleanup's pw lines run for real, with pw -R on a copy of the stock users plus the packages' users and vmail:
- *    www, its group and the packages' users stay, and exactly what the lines name goes away. The machine's own users
+ *  - the cleanup's pw lines run for real, with pw -R on a copy of the stock users plus the users of the packages and vmail:
+ *    www, its group and the users of the packages stay, and exactly what the lines name goes away. The machine's own users
  *    are not touched, and the test checks it.
  *
  * As root on the VM (pw -R writes the files and calls pwd_mkdb):
@@ -56,7 +56,7 @@ public class FullMailStackCleanupTest {
     static final Path BASE_PASSWD = Path.of("/var/db/etcupdate/current/etc/master.passwd");
     static final Path BASE_GROUP = Path.of("/var/db/etcupdate/current/etc/group");
 
-    /** The packages' users the cleanup used to remove, with their uid on the VM. */
+    /** The users of the packages the cleanup used to remove, with their uid on the VM. */
     static final Map<String, String> PACKAGE_USERS = Map.of("clamav", "106", "redis", "535", "mysql", "88", "rspamd", "236");
 
     static final String NAME = "([A-Za-z_][A-Za-z0-9_-]*)";
@@ -187,7 +187,7 @@ public class FullMailStackCleanupTest {
                     added &= run(Map.of(), "pw", "-R", root.toString(), "useradd", e.getKey(), "-u", e.getValue(), "-g", e.getValue(),
                             "-d", "/nonexistent", "-s", "/usr/sbin/nologin").code() == 0;
                 }
-                check("the copy has the packages' users and vmail", added);
+                check("the copy has the users of the packages and vmail", added);
                 Map<String, String> usersBefore = entries(etc.resolve("master.passwd")), groupsBefore = entries(etc.resolve("group"));
 
                 Path sh = root.resolve("cleanup-users.sh");
