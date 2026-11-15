@@ -59,13 +59,13 @@ public final class ErrorText {
      * Il campo d'errore di una risposta: il messaggio se e' del pannello, «esiste gia'» per un duplicato, altrimenti
      * una riga nel log e «Richiesta non riuscita: i dettagli sono nel log del pannello».
      *
-     * @param where il metodo che risponde, per ritrovare la riga nel log
+     * @param caller il metodo che risponde, per ritrovare la riga nel log
      */
-    public static String forPage(String where, Throwable e) {
+    public static String forPage(String caller, Throwable e) {
         String text = shown(e);
         if (text != null) return text;
         if (duplicate(e)) return I18n.tr("server.alreadyExists");
-        log(where, e);
+        log(caller, e);
         return I18n.tr("server.requestFailed");
     }
 
@@ -73,15 +73,15 @@ public final class ErrorText {
      * Il pezzo da mettere nel posto {error} di un testo che lo incornicia («Conversione non riuscita: {error}»): il
      * messaggio se e' del pannello, altrimenti una riga nel log e «i dettagli sono nel log del pannello».
      */
-    public static String detail(String where, Throwable e) {
+    public static String detail(String caller, Throwable e) {
         String text = shown(e);
         if (text != null) return text;
         if (duplicate(e)) return I18n.tr("server.alreadyExists");
-        log(where, e);
+        log(caller, e);
         return I18n.tr("server.detailsInLog");
     }
 
-    private static void log(String where, Throwable e) {
-        LOGGER.log(Level.WARNING, "[" + where + "] request failed: " + (e == null ? "no exception" : e.getClass().getName()), e);
+    private static void log(String caller, Throwable e) {
+        LOGGER.log(Level.WARNING, "[" + caller + "] request failed: " + (e == null ? "no exception" : e.getClass().getName()), e);
     }
 }

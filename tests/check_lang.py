@@ -132,7 +132,7 @@ for word, key_list in sorted(english.items()):
 # Looking at the whole file, the net reported them: two false positives, seen and removed.
 import glob
 LITERAL = re.compile(r"""'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*\"""" + '"' + r"""|`(?:[^`\\]|\\.)*`""")
-# Only the camelCase names (lockedPackages, hasConflicts): they are never text, in either language. A real English word
+# Only the camelCase names of the list: they are never text, in either language. A real English word
 # of the list ("measured", "runnable") is the right text in the many tests that run the pages in English
 # (english-pages-browser-test.js expects "not measured" in a reply of fail2ban), and that it is not in the Italian text
 # is check 4's job: with it.json clean, a test expecting it in Italian turns red, it does not stay green.
