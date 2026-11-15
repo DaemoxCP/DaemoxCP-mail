@@ -189,6 +189,19 @@ public class ServiceUsersTest {
                         && !org.mail_panel.i18n.I18n.t("en", key).equals(key)
                         && !org.mail_panel.i18n.I18n.t("it", key).equals(org.mail_panel.i18n.I18n.t("en", key)));
             }
+        // And the page gets it: in roles() every user of every service carries its sentence, the one of the language files.
+        // Without this the keys above could all exist while the answer to the page had none (measured: with the line that
+        // puts "purpose" taken out, every check of this test was still green).
+        StringBuilder withoutSentence = new StringBuilder();
+        for (ServiceUsers.Service sv : f.services().values()) {
+            org.json.JSONArray rs = ServiceUsers.roles(sv);
+            for (int i = 0; i < rs.length(); i++) {
+                org.json.JSONObject r = rs.getJSONObject(i);
+                String expected = org.mail_panel.i18n.I18n.tr(ServiceUsers.purposeKey(sv.name, r.getString("user")));
+                if (!expected.equals(r.optString("purpose", null))) withoutSentence.append(sv.name).append('/').append(r.getString("user")).append(' ');
+            }
+        }
+        check("the page gets the sentence of every user in roles() (" + withoutSentence.toString().trim() + ")", withoutSentence.length() == 0);
         check("the keys of the acme user and of the pools", ServiceUsers.purposeKey("acme.sh", "acme").equals("server.su.purpose.acme.acme")
                 && ServiceUsers.purposeKey("php-fpm pool www", "www").equals("server.su.purpose.pool.www.www")
                 && ServiceUsers.purposeKey("mail-panel", "mailpanel").equals("server.su.purpose.mailPanel.mailpanel"));
