@@ -128,6 +128,15 @@ public final class Shell {
     }
 
     /**
+     * Come {@link #run(Duration, String...)}, ma con un testo sullo standard input del comando, poi
+     * EOF. Per i segreti che un comando sa leggere da li' (doveadm pw, doveadm auth test): fra gli
+     * argomenti li vedrebbe chiunque con ps, e un timeout li scriverebbe nel log col comando.
+     */
+    public static Result runWithInput(Duration timeout, String input, String... cmd) {
+        return runInternal(timeout, Arrays.asList(cmd), input == null ? "" : input);
+    }
+
+    /**
      * Esegue una stringa di comando via {@code sh -c}.
      * USA SOLO con comandi statici o input gia' sanitizzato — rischio shell injection.
      *
@@ -237,6 +246,11 @@ public final class Shell {
     private static final java.io.File NO_STDIN = new java.io.File("/dev/null");
 
     private static Result runInternal(Duration timeout, List<String> cmd) {
+        return runInternal(timeout, cmd, null);
+    }
+
+    /** input null: lo standard input e' /dev/null (vedi NO_STDIN); altrimenti quel testo, poi EOF. */
+    private static Result runInternal(Duration timeout, List<String> cmd, String input) {
         // applyPath e non solo il PATH nell'ambiente: Java cerca il programma da lanciare col PATH
         // del pannello, non con quello del figlio. Avviato da rc.d senza /usr/local, il pannello
         // non trovava nginx, doveadm, postmap... anche se il PATH del figlio li aveva. Sul server
@@ -244,11 +258,20 @@ public final class Shell {
         // program nginx» (reperto 181).
         ProcessBuilder pb = new ProcessBuilder(new java.util.ArrayList<>(cmd));
         applyPath(pb);
-        pb.redirectInput(ProcessBuilder.Redirect.from(NO_STDIN));
+        pb.redirectInput(input == null ? ProcessBuilder.Redirect.from(NO_STDIN) : ProcessBuilder.Redirect.PIPE);
         pb.redirectErrorStream(true);
         Process p = null;
         try {
             p = pb.start();
+            if (input != null) {
+                // Pochi byte: entrano nel buffer della pipe e la scrittura non aspetta il figlio.
+                // Un figlio che esce senza leggere chiude la pipe: non e' un errore di chi scrive.
+                try (java.io.OutputStream in = p.getOutputStream()) {
+                    in.write(input.getBytes(StandardCharsets.UTF_8));
+                } catch (IOException closedByChild) {
+                    // l'esito lo dice il codice di uscita
+                }
+            }
             // FIX critico: il pipe buffer del kernel e' tipicamente 64KB.
             // Se NON leggiamo lo stdout in parallelo, processi che producono >64KB
             // di output (es. pfctl -T show su 100k+ entries) si bloccano e waitFor()

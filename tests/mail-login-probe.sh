@@ -180,7 +180,7 @@ echo "== Sieve: a panel's rule that moves, as the panel writes it (no keep at th
 # Reperto 216: a move in the panel's rule must take the message out of INBOX, and then the mailbox's own script does
 # not run on it (Pigeonhole runs the next script only while a keep is in effect). The own script above would file it
 # too: its subject contains "sieve-probe".
-printf 'require ["fileinto"];\nif header :contains "subject" "sieve-move" { fileinto "SieveProbePanel"; }\n' \
+printf 'require ["fileinto","mailbox"];\nif header :contains "subject" "sieve-move" { fileinto :create "SieveProbePanel"; }\n' \
     > "/var/mail/sieve/$DOMAIN/$USERDIR/.dovecot.sieve"
 sievec "/var/mail/sieve/$DOMAIN/$USERDIR/.dovecot.sieve" >/dev/null 2>&1
 MOVE_LOG=$(wc -l < /var/log/maillog 2>/dev/null | tr -d ' ')

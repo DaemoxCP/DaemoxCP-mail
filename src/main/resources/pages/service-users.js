@@ -1,4 +1,18 @@
         // ---------- Con quale utente gira ogni servizio ----------
+        // Ogni utente del servizio su una riga sua: il nome, i suoi processi e a che cosa serve (reperto 228). Un
+        // server di prima, che non manda roles, mostra gli utenti in fila come allora.
+        function svcUsersRoles(s) {
+            const roles = s.roles || [];
+            if (!roles.length) return '<code>' + updEsc((s.users || []).join(', ')) + '</code>';
+            let h = '<ul class="list-unstyled mb-0">';
+            roles.forEach(r => {
+                h += '<li class="mb-1"><code>' + updEsc(r.user) + '</code>'
+                   + ((r.processes || []).length ? ' <span class="text-body-secondary">(' + updEsc(r.processes.join(', ')) + ')</span>' : '')
+                   + (r.purpose ? ': ' + updEsc(r.purpose) : '') + '</li>';
+            });
+            return h + '</ul>';
+        }
+
         async function svcUsersLoad() {
             const el = document.getElementById('upd-svc-users');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('su.reading'));
@@ -24,7 +38,7 @@
                + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
             (r.services || []).forEach(s => {
                 h += '<tr class="upd-cell"><td class="small"><code>' + updEsc(s.service) + '</code></td>'
-                   + '<td class="small"><code>' + updEsc((s.users || []).join(', ')) + '</code>'
+                   + '<td class="small">' + svcUsersRoles(s)
                    + (s.rootWhy ? '<div class="text-body-secondary mt-1"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>'
                        + '<span class="visually-hidden">' + escHtml(t('su.rootWhyLabel')) + ' </span>' + updEsc(s.rootWhy) + '</div>' : '')
                    + '</td>'
@@ -48,3 +62,9 @@
             }
             el.innerHTML = h;
         }
+
+        // Si legge da solo quando la pagina che ha la scheda si apre: e' una sola lettura (ps, i file dei pool, il cron).
+        // Dopo che la pagina e' tutta letta: le funzioni che usa (updApi, t) possono stare in script piu' avanti.
+        function svcUsersAuto() { if (document.getElementById('upd-svc-users')) svcUsersLoad(); }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', svcUsersAuto);
+        else svcUsersAuto();

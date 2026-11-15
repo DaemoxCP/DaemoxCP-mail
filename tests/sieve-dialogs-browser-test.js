@@ -196,7 +196,7 @@ function unlisted(page, selector, text) {
         check('no notice: ' + JSON.stringify(n.map(x => x.text)), n.length === 0);
         check('the editor closed', !(await page.isVisible('#sieveEditor')));
         let r = rules();
-        check('alice\'s rules file has the filter', r.includes('"fattura-224"') && r.includes('fileinto "INBOX.Fatture"'));
+        check('alice\'s rules file has the filter', r.includes('"fattura-224"') && r.includes('fileinto :create "INBOX.Fatture"'));
         check('and the forward that was in the panel already', r.includes(FORWARD));
         await photo(page, 'created');
       });

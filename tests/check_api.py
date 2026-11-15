@@ -19,6 +19,10 @@ Reported:
   2. an action the page calls and no route handles.
   3. (warning) a key read in another action: not necessarily a fault — some routes read the
      parameters in shared methods — but worth a look.
+Only the keys at the top of the object sent are compared (reperto 230): the keys of the objects
+nested in it are read by whoever the route hands them to, often another class. Before, every
+"key:" inside the braces counted, and update_everything was reported for "kind" and "to" of its
+steps and approved packages, which UpdateManager does read.
 
 The second part does the same for the plain calls, route by route (reperto 224):
   - from the page:   fetch('/api/route?key=' + ..., { body: JSON.stringify({ action: 'x', key: ... }) })
@@ -57,69 +61,7 @@ for _f in sorted(_glob.glob(os.path.join(root, "src/main/resources/pages/*.js"))
 routes = open(ROUTES, encoding="utf-8", errors="replace").read()
 
 
-def object_after(text, i):
-    """The { ... } starting at i, balancing the braces. '' if it does not start with a brace."""
-    while i < len(text) and text[i] in " \t\r\n":
-        i += 1
-    if i >= len(text) or text[i] != "{":
-        return ""
-    depth, j = 0, i
-    while j < len(text):
-        if text[j] == "{":
-            depth += 1
-        elif text[j] == "}":
-            depth -= 1
-            if depth == 0:
-                return text[i:j + 1]
-        j += 1
-    return ""
-
-
-# --- the page: action -> keys sent ---
-CALL = re.compile(r"\b[a-zA-Z]+Api\(\s*'([a-z0-9_]+)'\s*(,)?")
-KEY = re.compile(r"[{,]\s*([A-Za-z_][A-Za-z0-9_]*)\s*:")
-sent = {}
-for m in CALL.finditer(page):
-    action = m.group(1)
-    keys = sent.setdefault(action, set())
-    if not m.group(2):
-        continue
-    obj = object_after(page, m.end())
-    for k in KEY.findall(obj):
-        keys.add(k)
-# The calls with a computed action name cannot be attributed: they are counted and reported.
-non_literal = len(re.findall(r"\b[a-zA-Z]+Api\(\s*[^'\s)]", page))
-
-# --- the routes: action -> keys read, plus all the keys read in the file ---
-CASE = re.compile(r'case\s+"([a-z0-9_]+)"\s*->')
-READING = re.compile(r'(?:req|json|body|request)\.(?:opt|get)[A-Za-z]*\(\s*"([A-Za-z_][A-Za-z0-9_]*)"')
-cases = [(m.group(1), m.start()) for m in CASE.finditer(routes)]
-reads = {}
-for n, (action, start) in enumerate(cases):
-    end = cases[n + 1][1] if n + 1 < len(cases) else len(routes)
-    reads.setdefault(action, set()).update(READING.findall(routes[start:end]))
-reads_anywhere = set(READING.findall(routes))
-
-print(f"  updApi calls with a literal action: {len(sent)} distinct actions"
-      f"   (with a computed name, not attributable: {non_literal})")
-print(f"  case \"...\" routes: {len(reads)} distinct actions")
-
-failures, warnings = [], []
-
-for action in sorted(sent):
-    if action not in reads:
-        failures.append(f'the page calls "{action}" and no route handles it')
-        continue
-    for k in sorted(sent[action]):
-        if k in reads[action]:
-            continue
-        if k in reads_anywhere:
-            warnings.append(f'"{action}" sends "{k}", which the server reads but in another action')
-        else:
-            failures.append(f'"{action}" sends "{k}" and the server does NOT read it anywhere')
-
-
-# ---------- second part: the plain fetch calls, route by route ----------
+# ---------- reading JavaScript and Java: brackets, strings, comments, object literals ----------
 
 def skip_java_literal(text, i):
     """i is on a quote, a text block or a comment of Java: the index just after it (else i)."""
@@ -254,6 +196,63 @@ def sent_as_text(value):
         return True
     return value[:1] in "'\"`" and skip_js_literal(value, 0) == len(value)
 
+
+# --- the page: action -> keys sent ---
+CALL = re.compile(r"\b[a-zA-Z]+Api\(\s*'([a-z0-9_]+)'\s*(,)?")
+sent, spread = {}, 0
+for m in CALL.finditer(page):
+    action = m.group(1)
+    keys = sent.setdefault(action, set())
+    if not m.group(2):
+        continue
+    # Only the keys at the top of the object: those are what the route reads from req. The keys of the objects
+    # nested in it (update_everything: steps[].kind, approved[].to) are read by whoever the route hands the array
+    # to, often another class, and before they were reported as dead although they were read (reperto 230).
+    j = m.end()
+    while j < len(page) and page[j] in " \t\r\n":
+        j += 1
+    if j >= len(page) or page[j] != "{":
+        continue
+    for part in js_split(page[j + 1:js_close(page, j)]):
+        if part.startswith("..."):
+            spread += 1
+            continue
+        k = re.match(r"""(?:([A-Za-z_$][\w$]*)|'([^']*)'|"([^"]*)")\s*(?::|$)""", part)
+        if k:
+            keys.add(k.group(1) or k.group(2) or k.group(3))
+# The calls with a computed action name cannot be attributed: they are counted and reported.
+non_literal = len(re.findall(r"\b[a-zA-Z]+Api\(\s*[^'\s)]", page))
+
+# --- the routes: action -> keys read, plus all the keys read in the file ---
+CASE = re.compile(r'case\s+"([a-z0-9_]+)"\s*->')
+READING = re.compile(r'(?:req|json|body|request)\.(?:opt|get)[A-Za-z]*\(\s*"([A-Za-z_][A-Za-z0-9_]*)"')
+cases = [(m.group(1), m.start()) for m in CASE.finditer(routes)]
+reads = {}
+for n, (action, start) in enumerate(cases):
+    end = cases[n + 1][1] if n + 1 < len(cases) else len(routes)
+    reads.setdefault(action, set()).update(READING.findall(routes[start:end]))
+reads_anywhere = set(READING.findall(routes))
+
+print(f"  updApi calls with a literal action: {len(sent)} distinct actions"
+      f"   (with a computed name, not attributable: {non_literal}; ...spread inside the object: {spread})")
+print(f"  case \"...\" routes: {len(reads)} distinct actions")
+
+failures, warnings = [], []
+
+for action in sorted(sent):
+    if action not in reads:
+        failures.append(f'the page calls "{action}" and no route handles it')
+        continue
+    for k in sorted(sent[action]):
+        if k in reads[action]:
+            continue
+        if k in reads_anywhere:
+            warnings.append(f'"{action}" sends "{k}", which the server reads but in another action')
+        else:
+            failures.append(f'"{action}" sends "{k}" and the server does NOT read it anywhere')
+
+
+# ---------- second part: the plain fetch calls, route by route ----------
 
 # The page's calls.
 calls, unattributed = [], 0
