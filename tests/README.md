@@ -80,6 +80,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesOwnerTest   (VM, as root)
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMasterUserTest   (VM, as root, real doveadm)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -525,6 +526,19 @@ it cannot write: the conversion runs the panel's mail configuration script, whic
 the alias part is skipped, saying so (otherwise folders in `/var/vmail` and Postfix and Dovecot reloaded). As nobody the
 test gives the vault a public key of its own in its temporary secrets folder, as root writes it for the web part.
 Measured on 10/11/2026 on the VM: 36 OK; with SSLMailServer as before 8 fail, one for each place that saves rules.
+
+**DovecotMasterUserTest** — Dovecot's master user, the one «Open webmail» logs in with, gets a real hash (reperto 227).
+FullMailServerScript asked `doveadm pw` for the hash before dovecot.conf existed: doveadm exited with 75 and
+master-users stayed "admin:" without a hash, so the single sign-on never got in on a fresh installation;
+FullMailStackScript wrote the hash in a root:wheel file that Dovecot's auth process (user dovecot) cannot read. The
+three scripts now share one piece (`DovecotMasterUser.shell`: `doveadm -O pw` with the password on standard input,
+the hash checked with `doveadm pw -t` against the key, the file root:dovecot 640), and `DovecotMasterUser.ensureAtBoot`
+repairs servers installed before: only the two shapes those scripts left, with the key next to them, checked with a
+real `doveadm auth test mailbox*admin` (or `doveadm pw -t` when there is no mailbox), and put back as it was otherwise.
+The repair on real files with real owners and a fake Dovecot that reads like the real one, a planted fault for every
+step (nothing changes, or the file goes back byte for byte with owner and mode); files that are not the scripts' left
+alone (a hand-written {PLAIN}, two users, a comment, a link, another key's hash); the shell piece run with the real
+doveadm, also without a configuration, where main's piece of before leaves "admin:" without a hash. As root on the VM.
 
 **SieveRulesOwnerTest** — the panel's Sieve rules folder given back to root at start (reperto 225). On the real server
 `/var/mail/sieve` belonged to vmail (the installation of 11/10/2026): since reperto 221 root does not write rules where
