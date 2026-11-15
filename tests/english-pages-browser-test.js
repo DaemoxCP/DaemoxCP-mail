@@ -290,7 +290,6 @@ const VISITS = [
         await page.click('.card-header button[data-on-click="repLoad()"]');
         await page.waitForSelector('#repFreq');
     } },
-    { path: '/install' },
     { path: '/setup' },
     // "Update the server" with every row opened in place (reperto 193): the branch, FreeBSD with the guided move to a
     // new release (reperto 196), the plan of the packages; and the whole package list. The checks that only read are on

@@ -75,7 +75,6 @@ public final class Layout {
 
     /** Le pagine fuori dal menu che hanno comunque un nome nella barra in alto. */
     private static final List<Item> OTHER_PAGES = List.of(
-        new Item("install", "/install", "fas fa-download", "nav.install", null, null),
         new Item("account", "/account", "fas fa-user-gear", "nav.account", "account.self", null),
         new Item("forbidden", "/home", "fas fa-ban", "access.title", null, null));
 

@@ -82,6 +82,14 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesOwnerTest   (VM, as root)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotHomeTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotHomeE2ETest   (VM, Dovecot 2.3, home of before)
+
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.AddressTransformLinksTest   (VM, as root, real /var/vmail)
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesRefreshTest
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMasterUserTest   (VM, as root, real doveadm)
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.FullMailStackCleanupTest   (VM, as root, pw -R on a copy)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -532,6 +540,39 @@ the alias part is skipped, saying so (otherwise folders in `/var/vmail` and Post
 test gives the vault a public key of its own in its temporary secrets folder, as root writes it for the web part.
 Measured on 10/11/2026 on the VM: 36 OK; with SSLMailServer as before 8 fail, one for each place that saves rules.
 
+**SieveRulesRefreshTest** — a Sieve filter that moves or copies to a folder that is not there yet creates it (reperto
+229), and the panel's rules already written are written again from the database at start, where they differ from what
+the panel writes now. Before, «Move» to a new folder (also the dialog's own suggestion, INBOX.Filtered) moved nothing:
+Dovecot answered «Mailbox doesn't exist» and the message stayed in INBOX (seen on the real server and on the VM). The
+generator writes `fileinto :create` (require "mailbox"); SieveForcedKeep still recognises the require line of before.
+With a fake store of rule files and the real generator: a file of before written again once and the second run writes
+nothing; today's text, a script written by hand and a mailbox without rules or file untouched; a missing file with
+rules in the database written; a refused write counted by the mailbox's number. On the VM SieveActionsE2ETest case 9
+does it with real deliveries: the text of before leaves the message in INBOX and makes no folder, the refresh writes
+it again (compiled by sievec), then the folder is made and the message is only there; a copy too.
+
+**DovecotMasterUserTest** — Dovecot's master user, the one «Open webmail» logs in with, gets a real hash (reperto 227).
+FullMailServerScript asked `doveadm pw` for the hash before dovecot.conf existed: doveadm exited with 75 and
+master-users stayed "admin:" without a hash, so the single sign-on never got in on a fresh installation;
+FullMailStackScript wrote the hash in a root:wheel file that Dovecot's auth process (user dovecot) cannot read. The
+three scripts now share one piece (`DovecotMasterUser.shell`: `doveadm -O pw` with the password on standard input,
+the hash checked with `doveadm pw -t` against the key, the file root:dovecot 640), and `DovecotMasterUser.ensureAtBoot`
+repairs servers installed before: only the two shapes those scripts left, with the key next to them, checked with a
+real `doveadm auth test mailbox*admin` (or `doveadm pw -t` when there is no mailbox), and put back as it was otherwise.
+The repair on real files with real owners and a fake Dovecot that reads like the real one, a planted fault for every
+step (nothing changes, or the file goes back byte for byte with owner and mode); files that are not the scripts' left
+alone (a hand-written {PLAIN}, two users, a comment, a link, another key's hash); the shell piece run with the real
+doveadm, also without a configuration, where main's piece of before leaves "admin:" without a hash. As root on the VM.
+
+**FullMailStackCleanupTest** — the cleanup of the «all» installation (FullMailStackScript, phase 1) removes only the
+users phase 2 creates again (reperto 226). It used to run pw userdel on www, a base system user (uid 80), and on the
+users of clamav, redis, mysql and rspamd: with www went its group, the one nginx opens Roundcube's socket with, and its
+crontab, and nothing created them again (nginx locked by the panel, or the later pkg install failing), so nginx said
+getpwnam("www") failed. The test reads the script's text (every user and group removed is created again by phase 2 and
+none is of the base system, with the line recogniser tried first on a known text) and runs the cleanup's pw lines with
+pw -R on a copy of the stock users plus the users of the packages and vmail: www, its group and the users of the packages stay, exactly
+what the lines name goes away, the machine's own files unchanged. As root on the VM.
+
 **SieveRulesOwnerTest** — the panel's Sieve rules folder given back to root at start (reperto 225). On the real server
 `/var/mail/sieve` belonged to vmail (the installation of 11/10/2026): since reperto 221 root does not write rules where
 somebody else can change the path, so the first start of the new panel stopped (MailSpoolSticky warned, SieveForcedKeep
@@ -606,6 +647,23 @@ script still runs; the false folder with a message stays. A mailbox whose rules 
 before the first delivery, and no "duplicate db" error. The second run changes nothing. At the end the configuration
 goes back, the VM's other mailboxes get their files back in the root, and the test domain is removed. Measured
 10/11/2026 on Dovecot 2.3.21: all OK; with the fix taken out 8 checks fail.
+
+**AddressTransformLinksTest** — setting aside the old mail of an address without following vmail's links (reperto
+222). When an alias becomes a mailbox and the old mail is set aside, `AddressTransform.archive` moved it as root inside
+`/var/vmail`, which with everything under it is vmail's: vmail could plant a link at `.panel-archive` or at the
+domain's folder, and root's mkdir and rename followed it. Now vmail moves its mail (chroot -u vmail, only the group
+vmail) and the panel's rules stay in root's tree (`/var/mail/sieve/.panel-archive`, RootOnlyPath). With `-De2e.vm=yes`,
+as root, on bench folders made like `/var/vmail` (vmail:vmail 0770) and `/var/mail/sieve`: the control (set aside and
+put back, the mail vmail's, nothing of root's in vmail's tree); `.panel-archive` as vmail's link to a root folder (root
+makes nothing there, the mail stays); the domain's folder as vmail's link to a root folder holding `alice` (root's
+`alice` stays); after a setting aside, the archive's domain folder as vmail's link (putting back leaves root's folder
+alone). Every probe first shows it can plant its link, and that vmail alone cannot do what root did for it. Then the
+real system with `address-transform.test` (created and removed, mail written by `doveadm save`): a mailbox with mail
+and panel rules set aside and put back, Dovecot reads and writes it again; and a link `/var/vmail/address-transform-link.test`
+to a root folder in `/var` (the same file system as `/var/vmail`). `/var/mail` is made sticky for the duration if it
+is not, and put back. Measured on 10/11/2026: all pass; with the jar before the fix 11 fail, among them the real
+setting aside of a mailbox with rules: `/var/mail` and `/var/vmail` are two ZFS datasets on the VM, and Java does not
+move a full folder from one to the other (DirectoryNotEmptyException), so that choice always failed there.
 
 **DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what
@@ -1359,11 +1417,27 @@ saying so. **As root, on the VM.**
 **ServiceUsersTest** — the check of who runs every service (ServiceUsers.examine) on the VM's `ps`
 output before and after, with a planted fault for every warning and the cases that must NOT warn
 (Postfix's `local`, Dovecot's `auth`). Dovecot's `anvil` as root warns on 2.3 and not on 2.4, which needs it to reach
-every session's process (measured on the VM, reperto 213); `auth-worker` as root warns on both. It calls nothing.
+every session's process (measured on the VM, reperto 213); `auth-worker` as root warns on both. And what every user of
+a service does (reperto 228, the owner asked for it on 15/11/2026): the processes of each user by a short name (Dovecot:
+root master/log/config/lmtp, dovecot anvil/auth/auth-worker, dovenull imap-login, vmail imap; Postfix: root master and
+local, postfix the rest; the panel's root part and web part; mysqld and mysqld_safe, not sh), root first on the page,
+sievec listed although it runs only when rules are saved, and a sentence in both languages for every user the panel
+installs (none for a user it does not know). It calls nothing.
 
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ServiceUsersTest
+
+**ErrorTextTest** — what an exception says to the page (ErrorText, reperto 231). The routes used to put
+`e.getMessage()` of any exception in the answer: a MySQL duplicate showed the table and the key, a missing file its
+path. Now the messages of IllegalArgumentException and IllegalStateException (the ones the panel writes for the page)
+pass, and PasskeyException's key is translated; an IOException with a path, an SQLException naming a table,
+InvalidPathException, NumberFormatException, a NullPointerException or no message give the generic text, with one
+WARNING line in the log carrying the route's method and the exception; a MySQL duplicate (1062, also wrapped) says "it
+already exists" without the key. Then in the sources: no route answer of SSLMailServer and no "success" answer of
+UpdateManager puts `getMessage()` by itself. It calls nothing; run from the project root (it reads `src/`).
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.util.ErrorTextTest
 
 ## The panel's emails
 

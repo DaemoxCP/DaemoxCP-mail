@@ -4,16 +4,20 @@ import org.json.JSONArray;
 import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
 import org.mail_panel.database.MailDatabase;
+import org.mail_panel.security.RootOnlyPath;
+import org.mail_panel.util.Shell;
 import org.mail_panel.webserver.SecurityUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -27,6 +31,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 /**
@@ -61,11 +66,56 @@ public final class AddressTransform {
 
     private AddressTransform() {}
 
+    private static final Logger LOGGER = Logger.getLogger(AddressTransform.class.getName());
+
     /** Dove Dovecot tiene la posta e i filtri. Le prove li spostano in una cartella temporanea. */
     static Path vmail = Path.of("/var/vmail");
     static Path sieve = Path.of("/var/mail/sieve");
     /** La posta messa da parte: sotto /var/vmail (stesso disco, lo spostamento e' istantaneo), con un nome che nessun dominio puo' avere. */
     static Path archive() { return vmail.resolve(".panel-archive"); }
+    /**
+     * Le regole del pannello messe da parte: nell'albero di root, accanto a quelle vive (stesso disco), con un nome che
+     * nessun dominio puo' avere. Mai sotto /var/vmail: e' di vmail (reperto 222).
+     */
+    static Path rulesArchive() { return sieve.resolve(".panel-archive"); }
+
+    /**
+     * Come si diventa vmail per spostare la posta: chroot(8) con radice /, senza shell ne' PAM, e solo il gruppo vmail
+     * (senza -G il comando terrebbe i gruppi aggiuntivi di root). Le prove senza root lo svuotano: allora lo spostamento
+     * lo fa l'utente che le lancia, nelle sue cartelle.
+     */
+    static List<String> asVmail = List.of("/usr/sbin/chroot", "-u", "vmail", "-g", "vmail", "-G", "vmail", "/");
+
+    /**
+     * Lo spostamento della posta, eseguito come vmail: $1 la fase, poi i percorsi, sempre assoluti (mai un argomento che
+     * cominci con un trattino). Scrive una riga sola: MOVED e dove e' finita, oppure NOTHING se non c'era una cartella.
+     *  archive: $2 la casella, $3 la cartella dell'archivio del dominio (creata se manca), $4 il nome voluto; se e' preso,
+     *           -2, -3...;
+     *  back:    $2 da dove, $3 dove; se dove c'e' gia' qualcosa non si sposta niente.
+     * Seguire un collegamento qui da' a vmail solo cio' che vmail ha gia'.
+     */
+    static final String MOVE_SCRIPT = """
+            PATH=/bin:/usr/bin; export PATH
+            cd / || exit 1
+            umask 077
+            case "$1" in
+            archive)
+              src=$2; base=$3; dest=$4
+              if [ ! -d "$src" ] || [ -L "$src" ]; then echo NOTHING; exit 0; fi
+              mkdir -p "$base" || exit 1
+              try=$dest; k=2
+              while [ -e "$try" ] || [ -L "$try" ]; do try=$dest-$k; k=$((k + 1)); done
+              mv "$src" "$try" || exit 1
+              echo "MOVED $try" ;;
+            back)
+              from=$2; to=$3
+              if [ -e "$to" ] || [ -L "$to" ]; then echo "taken: $to"; exit 1; fi
+              mv "$from" "$to" || exit 1
+              echo "MOVED $to" ;;
+            *)
+              exit 2 ;;
+            esac
+            """;
 
     static final int MAX_DESTINATIONS = 20;
     /** Oltre, il conto dei messaggi si ferma e si dice "almeno". */
@@ -200,32 +250,48 @@ public final class AddressTransform {
     }
 
     /**
-     * Mette da parte posta e filtri dell'indirizzo, in /var/vmail/.panel-archive/dominio/nome-DATA.
-     * Restituisce le coppie {da, a} spostate, per rimetterle a posto se il resto non riesce.
+     * Mette da parte la posta dell'indirizzo in /var/vmail/.panel-archive/dominio/nome-DATA, e le regole del pannello in
+     * /var/mail/sieve/.panel-archive/dominio/nome-DATA-filters. Restituisce le coppie {da, a} spostate, la posta per
+     * prima, per rimetterle a posto se il resto non riesce.
+     *
+     * Nessuno dei due passi attraversa una cartella di un altro utente (reperto 222). Prima li faceva root, tutti e due
+     * sotto /var/vmail, che con tutto quello che contiene e' di vmail (l'utente con cui Dovecot consegna): vmail poteva
+     * mettere un collegamento al posto di .panel-archive o della cartella del dominio, e root lo seguiva. Misurato sulla
+     * VM: root creava cartelle sue dove vmail non puo' scrivere, rinominava una cartella di root di fuori dentro
+     * l'archivio di vmail, e nel rimettere a posto spostava una cartella di root al posto della casella. In piu' le
+     * regole, di root, finivano nell'albero di vmail; e dove /var/mail e /var/vmail stanno su due dataset (sulla VM, come
+     * li fa l'installatore di FreeBSD) lo spostamento delle regole non riusciva affatto (DirectoryNotEmptyException:
+     * Java non sposta una cartella piena da un disco all'altro), e con lui l'intera trasformazione.
+     * Adesso:
+     * <ul>
+     *   <li>la posta la sposta vmail (MOVE_SCRIPT): e' sua, come l'archivio; un collegamento che lui mette gli da' solo
+     *       cio' che ha gia';</li>
+     *   <li>le regole restano a root, nel suo albero: ogni cartella da / e' controllata (RootOnlyPath), quelle
+     *       dell'archivio nascono cosi', e il rename non esce da /var/mail/sieve.</li>
+     * </ul>
      */
     public static List<Path[]> archive(String address, long nowMs) throws IOException {
         List<Path[]> done = new ArrayList<>();
         String when = ARCHIVE_NAME.format(Instant.ofEpochMilli(nowMs).atOffset(ZoneOffset.UTC));
         String name = address.substring(0, address.lastIndexOf('@'));
-        Path base = archive().resolve(domain(address));
+        String dom = domain(address);
         try {
             Path mail = folder(vmail, address);
-            if (mail != null && Files.isDirectory(mail)) {
-                Files.createDirectories(base);
-                Path dest = free(base.resolve(name + "-" + when));
-                Files.move(mail, dest, StandardCopyOption.ATOMIC_MOVE);
-                done.add(new Path[] { mail, dest });
+            if (mail != null) {
+                Path base = archive().resolve(dom);
+                Path dest = moveAsVmail("archive", mail, base, base.resolve(name + "-" + when));
+                if (dest != null) {
+                    if (!dest.startsWith(base)) throw new IOException("vmail moved " + mail + " outside " + base + ": " + dest);
+                    done.add(new Path[] { mail, dest });
+                }
             }
             Path filters = folder(sieve, address);
-            if (filters != null && Files.isDirectory(filters)) {
-                Files.createDirectories(base);
+            if (filters != null && Files.exists(filters, LinkOption.NOFOLLOW_LINKS)) {
+                String why = RootOnlyPath.problem(filters);
+                if (why != null) throw new IOException(why);
+                Path base = RootOnlyPath.folders(sieve, rulesArchive().getFileName().toString(), dom);
                 Path dest = free(base.resolve(name + "-" + when + "-filters"));
-                // Su un altro disco ATOMIC_MOVE non si puo': allora si copia e si toglie, come fa mv.
-                try {
-                    Files.move(filters, dest, StandardCopyOption.ATOMIC_MOVE);
-                } catch (java.nio.file.AtomicMoveNotSupportedException e) {
-                    Files.move(filters, dest);
-                }
+                Files.move(filters, dest, StandardCopyOption.ATOMIC_MOVE);
                 done.add(new Path[] { filters, dest });
             }
             return done;
@@ -235,18 +301,54 @@ public final class AddressTransform {
         }
     }
 
+    /** Il primo nome libero fra p, p-2, p-3...: solo in una cartella di root (le regole), quindi senza seguire collegamenti. */
     private static Path free(Path p) {
         Path q = p;
-        for (int k = 2; Files.exists(q); k++) q = p.resolveSibling(p.getFileName() + "-" + k);
+        for (int k = 2; Files.exists(q, LinkOption.NOFOLLOW_LINKS); k++) q = p.resolveSibling(p.getFileName() + "-" + k);
         return q;
     }
 
-    /** Rimette dov'erano le cartelle spostate da archive(), dall'ultima. */
+    /**
+     * Uno spostamento della posta fatto da vmail (MOVE_SCRIPT, con {@link #asVmail} e l'ambiente vuoto): dove e' finita,
+     * o null se non c'era una cartella da spostare.
+     *
+     * @throws IOException con quello che hanno scritto mkdir o mv, se vmail non ci riesce
+     */
+    static Path moveAsVmail(String phase, Path... paths) throws IOException {
+        List<String> cmd = new ArrayList<>(asVmail);
+        cmd.addAll(List.of("/usr/bin/env", "-i", "/bin/sh", "-c", MOVE_SCRIPT, "sh", phase));
+        for (Path p : paths) cmd.add(p.toAbsolutePath().normalize().toString());
+        Shell.Result r = Shell.run(Duration.ofSeconds(120), cmd.toArray(new String[0]));
+        String out = r.outputTrim();
+        String last = out.substring(out.lastIndexOf('\n') + 1);
+        if (r.success() && last.equals("NOTHING")) return null;
+        if (r.success() && last.startsWith("MOVED /")) return Path.of(last.substring("MOVED ".length()));
+        throw new IOException("vmail could not move " + paths[0] + ": "
+                + (out.isEmpty() ? (r.timedOut() ? "timed out" : "exit " + r.exitCode()) : out.replace('\n', ' ')));
+    }
+
+    /**
+     * Rimette dov'erano le cartelle spostate da archive(), dall'ultima: la posta la rimette vmail, le regole root, solo
+     * se le cartelle di partenza e di arrivo passano RootOnlyPath. Quello che non torna resta in archivio (meglio li' che
+     * perso), e il registro lo dice.
+     */
     public static void restore(List<Path[]> moved) {
         for (int k = moved.size() - 1; k >= 0; k--) {
+            Path to = moved.get(k)[0], from = moved.get(k)[1];
             try {
-                Files.move(moved.get(k)[1], moved.get(k)[0]);
-            } catch (IOException ignored) { /* resta in archivio: meglio li' che perso */ }
+                if (to.startsWith(vmail)) {
+                    moveAsVmail("back", from, to);
+                } else {
+                    String why = RootOnlyPath.problem(from.getParent());
+                    if (why == null) why = RootOnlyPath.problem(to.getParent());
+                    if (why != null) throw new IOException(why);
+                    // rename(2) sostituirebbe una cartella vuota rinata nel frattempo: qui si lascia stare.
+                    if (Files.exists(to, LinkOption.NOFOLLOW_LINKS)) throw new IOException("taken: " + to);
+                    Files.move(from, to, StandardCopyOption.ATOMIC_MOVE);
+                }
+            } catch (IOException e) {
+                LOGGER.warning("[AddressTransform] " + from + " not put back in " + to + ", it stays there: " + e.getMessage());
+            }
         }
     }
 

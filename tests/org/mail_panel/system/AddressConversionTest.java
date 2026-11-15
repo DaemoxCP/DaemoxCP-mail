@@ -101,6 +101,9 @@ public class AddressConversionTest {
         try {
             AddressTransform.vmail = root.resolve("vmail");
             AddressTransform.sieve = root.resolve("sieve");
+            // The folders are the runner's own: the mail is moved by the runner, not by vmail (AddressTransformLinksTest
+            // tests the move as vmail on the VM).
+            AddressTransform.asVmail = List.of();
             rules();
             destinations();
             disk(root);
@@ -210,8 +213,11 @@ public class AddressConversionTest {
         real("\"..@domain-d.test\" does not become a path", AddressTransform.folder(AddressTransform.vmail, "..@domain-d.test") == null
                 && AddressTransform.folder(AddressTransform.vmail, ".to@domain-d.test") == null);
         List<Path[]> moved = AddressTransform.archive("dmarc@domain-d.test", 1_790_000_000_000L);
-        real("set aside: mail and filters in .panel-archive, with the date", moved.size() == 2 && !Files.exists(dir)
-                && moved.get(0)[1].toString().contains(".panel-archive/domain-d.test/dmarc-20260921T")
+        real("set aside: the mail in vmail's .panel-archive, the filters in the rules' one, with the date", moved.size() == 2
+                && !Files.exists(dir) && !Files.exists(filters.getParent())
+                && moved.get(0)[1].startsWith(AddressTransform.vmail.resolve(".panel-archive/domain-d.test"))
+                && moved.get(0)[1].getFileName().toString().startsWith("dmarc-20260921T")
+                && moved.get(1)[1].startsWith(AddressTransform.sieve.resolve(".panel-archive/domain-d.test"))
                 && moved.get(1)[1].getFileName().toString().endsWith("-filters")
                 && Files.exists(moved.get(0)[1].resolve("cur/1.M1")) && Files.exists(moved.get(1)[1].resolve(".dovecot.sieve")));
         AddressTransform.restore(moved);
@@ -222,7 +228,9 @@ public class AddressConversionTest {
         List<Path[]> second = AddressTransform.archive("dmarc@domain-d.test", 1_790_000_000_000L);
         real("two archivings in the same second do not overwrite each other: " + second.get(0)[1].getFileName(),
                 !first.get(0)[1].equals(second.get(0)[1]) && Files.exists(first.get(0)[1].resolve("cur/1.M1"))
-                && Files.exists(second.get(0)[1].resolve("cur/6.M6")));
+                && Files.exists(second.get(0)[1].resolve("cur/6.M6"))
+                && second.get(0)[1].getFileName().toString().equals(first.get(0)[1].getFileName() + "-2"));
+        real("an address without mail nor filters: nothing to set aside", AddressTransform.archive("nobody@domain-d.test", 1_790_000_000_000L).isEmpty());
     }
 
     // ===================== On MySQL =====================
@@ -301,7 +309,7 @@ public class AddressConversionTest {
 
         System.out.println("\n== Mailbox -> alias, on MySQL ==");
         db.createForwardingRule(id, "owner@example.net", true);
-        db.createSieveFilter(id, "Spam", 1, "[]", "[]");
+        db.createSieveFilter(id, "Spam", 1, true, "[]", "[]");
         db.saveAutoResponder(id, true, "Away", "Back on Monday", null, null, 24);
         try (PreparedStatement p = c.prepareStatement("INSERT INTO rate_limits (target_type, target_id) VALUES ('mailbox', ?)")) {
             p.setInt(1, id);
