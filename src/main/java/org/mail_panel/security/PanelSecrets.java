@@ -47,6 +47,11 @@ public final class PanelSecrets {
      * conosce (org.mail_panel.system.PendingDbPassword). Di solito non c'e'.
      */
     public static final String MYSQL_PASSWORD_PENDING = "mysql_password_pending";
+    /**
+     * Lo stato del cambio, una volta, della password dell'utente MySQL del pannello (org.mail_panel.system.PanelDbPassword,
+     * reperto 232): "retained:" e l'impronta della vecchia a meta', "done " e la data a cose fatte. Solo di root.
+     */
+    public static final String MYSQL_PASSWORD_ROTATION = "mysql_password_rotation";
     /** La password di root di MySQL: prima non esisteva, e root entrava senza nulla. */
     public static final String MYSQL_ROOT_PASSWORD = "mysql_root_password";
     /**
@@ -84,7 +89,7 @@ public final class PanelSecrets {
      * tutto il database. Stanno in un file a parte, 0600 di root, nella stessa cartella.
      */
     public static final Set<String> ROOT_ONLY = Set.of(MYSQL_ROOT_PASSWORD, ROUNDCUBE_DB_PASSWORD, VAULT_PRIVATE_KEY,
-            VAULT_PREVIOUS_PRIVATE_KEY, POSTFIX_DB_PASSWORD, DOVECOT_DB_PASSWORD);
+            VAULT_PREVIOUS_PRIVATE_KEY, POSTFIX_DB_PASSWORD, DOVECOT_DB_PASSWORD, MYSQL_PASSWORD_ROTATION);
 
     /**
      * I segreti che passano nel file di root quando la parte web ha il suo utente MySQL ({@link #MYSQL_WEB_PASSWORD}

@@ -2489,6 +2489,7 @@
   "server.dbPassword.oldKept": "MySQL does not know the new password (the installation stopped before configuring MySQL): the panel keeps the previous one, which MySQL accepts. The new one is discarded.",
   "server.dbPassword.reused": "A new password from an interrupted installation is still waiting, and MySQL cannot say whether it knows it: this installation gives MySQL that one again.",
   "server.dbPassword.settleFailed": "Cannot decide which MySQL password the panel uses ({err}): the panel keeps the previous one, and asks MySQL again at its next start.",
+  "server.dbPassword.rotationTurn": "changing the panel's MySQL password, once",
   "server.dbPassword.turn": "deciding the panel's MySQL password",
   "server.dbPassword.undecided": "MySQL does not answer, so it cannot say which password it knows: the panel keeps the previous one and the new one stays aside. The panel asks MySQL again at its next start and at the next installation.",
   "server.dkim.alreadyConfigured": "DKIM is already configured for this domain (selector: {selector}). For a new key use the rotation (\"Start key rotation\"): it keeps the 7-day overlap and avoids DKIM failures for mail in transit. \"generate\" is only for the first setup.",

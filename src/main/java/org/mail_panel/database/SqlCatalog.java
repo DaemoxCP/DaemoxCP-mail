@@ -1449,6 +1449,21 @@ public final class SqlCatalog {
     /** RoundcubeDbUser: gli host dell'utente del pannello */
     public static final String RC_PANEL_HOSTS = "SELECT host FROM mysql.user WHERE user = ? ORDER BY host";
 
+    // PanelDbPassword (reperto 232): la password dell'utente del pannello cambiata una volta, con la doppia password di
+    // MySQL (8.0.14 e successivi). Utente e host come parametri, nell'ordine di ALTER USER ?@?.
+
+    /** PanelDbPassword: gli account dell'utente del pannello, e se hanno gia' una seconda password */
+    public static final String PDP_ACCOUNTS = "SELECT host, JSON_EXTRACT(User_attributes, '$.additional_password') IS NOT NULL FROM mysql.user WHERE user = ? ORDER BY host";
+
+    /** PanelDbPassword: la password nuova; quella di adesso resta valida accanto */
+    public static final String PDP_RETAIN = "ALTER USER ?@? IDENTIFIED BY ? RETAIN CURRENT PASSWORD";
+
+    /** PanelDbPassword: per tornare indietro, la password di prima di nuovo principale (la seconda resta) */
+    public static final String PDP_SET = "ALTER USER ?@? IDENTIFIED BY ?";
+
+    /** PanelDbPassword: la seconda password tolta */
+    public static final String PDP_DISCARD = "ALTER USER ?@? DISCARD OLD PASSWORD";
+
     /** RoundcubeDbUser */
     public static final String RC_CREATE_USER = "CREATE USER IF NOT EXISTS 'roundcube'@? IDENTIFIED BY ?";
 

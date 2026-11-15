@@ -1313,6 +1313,26 @@ with only part of the database, are left alone. A way back that forgets the pane
 
     java -Dmysql.port=33062 -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeDbUserMysqlTest
 
+**PanelDbPasswordTest** — the password of the panel's MySQL user changed once (reperto 232): on old servers it sat for
+years in Roundcube's config.inc.php. Against a fake MySQL with a primary and a secondary password per account (RETAIN
+CURRENT PASSWORD, DISCARD OLD PASSWORD, 127.0.0.1 landing on localhost) and the real PendingDbPassword.settle: the
+change (both local accounts, the old password refused, another host's account untouched, the copies rewritten, the
+state "done" without any password in it, nothing the second time); what does not start and changes nothing (done
+already, no password, an installation's password waiting, MySQL not answering, the password still in a service's file,
+a second password not ours, a short new password); RETAIN refused or MySQL not taking both: back to the old password
+alone, then done; DISCARD refused: finished at the next run; killed before any RETAIN, after the first, before the
+panel adopts: the next start always ends with one password, the panel's, not the old one; putting MySQL back failing;
+the file helpers (a service file blocks, a backup name, a link and the copies do not; a copy gets the new password with
+its mode minus others); MySQL errors reduced to their code. Any user, no system.
+
+**PanelDbPasswordMysqlTest** — the same against the test MySQL as its root, with the real catalog statements and logins:
+a test user `pdptest` with two local accounts; the change (the new password gets in, the old one gets 1045, no second
+password in mysql.user, nothing the second time), RETAIN refused on localhost (back as it was), and killed before the
+panel adopts (settle adopts the new one, the run finishes it). It refuses port 3306 and drops `pdptest` at the end.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelDbPasswordTest
+    java -Dmailpanel.mysql.port=33062 -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PanelDbPasswordMysqlTest
+
 **RootDistrustsDataTest** — the root part does not trust the names it reads from MySQL, which the
 web part can write. Names planted straight into MySQL, as a
 broken-into web part would: SafeNames' shapes; DKIM key paths with ".." or a quote refused; Sieve with

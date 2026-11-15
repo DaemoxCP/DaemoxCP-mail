@@ -905,6 +905,11 @@ public class SSLMailServer {
             // perche' la verifica fa un accesso vero come il pulsante «Apri webmail».
             org.mail_panel.system.RoundcubeDbUser.ensureAtBoot(ssoManager);
 
+            // La password dell'utente MySQL del pannello cambiata una volta: sui server installati prima e' stata per anni
+            // in config.inc.php della webmail (reperto 232). Dopo RoundcubeDbUser e MailDbUsers: nessun altro la usa piu'.
+            // Con la doppia password di MySQL non si ferma niente; se qualcosa non torna, MySQL torna com'era.
+            org.mail_panel.system.PanelDbPassword.ensureAtBoot();
+
             // Dopo: la webmail non scrive piu' password in chiaro, quelle rimaste si sistemano
             repairPlaintextMailboxPasswords();
 
