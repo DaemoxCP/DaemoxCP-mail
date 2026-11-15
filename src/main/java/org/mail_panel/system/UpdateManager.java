@@ -1,5 +1,6 @@
 package org.mail_panel.system;
 
+import org.mail_panel.util.ErrorText;
 import org.json.JSONArray;
 import org.mail_panel.i18n.I18n;
 import org.json.JSONObject;
@@ -5750,7 +5751,7 @@ public final class UpdateManager {
             }
             return r;
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("repairNginxPathInfo", e));
         }
     }
 
@@ -5890,7 +5891,7 @@ public final class UpdateManager {
             }
             return r.put("success", true).put("entries", entries);
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("roundcubeDiagnostics", e));
         }
     }
 
@@ -6446,7 +6447,7 @@ public final class UpdateManager {
              .put("blocked", lock).put("canProceed", !lock);
             return r;
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("javaPreflight", e));
         }
     }
 
@@ -6559,7 +6560,7 @@ public final class UpdateManager {
             return new JSONObject().put("success", true).put("log", log)
                     .put("note", st.getString("note"));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("startJavaUpdateNow", e));
         }
     }
 
@@ -6601,7 +6602,7 @@ public final class UpdateManager {
                     .put("file", last).put("text", shown).put("finished", finished)
                     .put("succeeded", succeeded);
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("javaUpdateStatus", e));
         }
     }
 
@@ -7023,7 +7024,7 @@ public final class UpdateManager {
              .put("blocked", lock).put("canProceed", !lock && !newOnes.isEmpty());
             return r;
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("pythonPreflight", e));
         }
     }
 
@@ -7225,7 +7226,7 @@ public final class UpdateManager {
             r.put("stillPresent", still);
             return r.put("success", true);
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("pythonLeftoversNow", e));
         }
     }
 
@@ -9445,7 +9446,7 @@ public final class UpdateManager {
         try { wb = PackageWayBack.before(l -> wayBack.append(l).append('\n'), "remove-" + name); }
         catch (IllegalStateException e) {
             PackageQueue.release(id);
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("removePackage", e));
         }
         JSONObject r = null;
         try { return r = removePackageNow(name); }
@@ -9645,7 +9646,7 @@ public final class UpdateManager {
                     .put("caveat", I18n.tr("server.um.dovecot24Preview.1"));
         } catch (Exception e) {
             return new JSONObject().put("success", false)
-                    .put("error", I18n.tr("server.um.dovecot24Preview.2", java.util.Map.of("message", String.valueOf(e.getMessage()))));
+                    .put("error", I18n.tr("server.um.dovecot24Preview.2", java.util.Map.of("message", ErrorText.detail("dovecot24Preview", e))));
         }
     }
 
@@ -10512,7 +10513,7 @@ public final class UpdateManager {
             }
             return r.put("success", true);
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("operatingSystem", e));
         }
     }
 
@@ -10842,7 +10843,7 @@ public final class UpdateManager {
                         ? I18n.tr("server.um.startSystemUpdateSearch.9")
                         : I18n.tr("server.um.findSystemUpdates.2"));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("findSystemUpdates", e));
         }
     }
 
@@ -10940,7 +10941,7 @@ public final class UpdateManager {
                         : I18n.tr("server.um.cancelReboot.3", java.util.Map.of("still", String.valueOf(still), "still2", String.valueOf(still))))
                     .put("error", via ? "" : I18n.tr("server.um.cancelReboot.4"));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("cancelReboot", e));
         }
     }
 
@@ -11037,7 +11038,7 @@ public final class UpdateManager {
                         : I18n.tr("server.um.x.restartIn.other", java.util.Map.of("n", String.valueOf(minutes))))
                     .put("cancel", I18n.tr("server.um.restartServer.6"));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("restartServer", e));
         }
     }
 
@@ -11130,7 +11131,7 @@ public final class UpdateManager {
             return r;
         } catch (Exception e) {
             return r.put("success", false).put("verified", false)
-                    .put("error", I18n.tr("server.um.cloudflareRanges.5", java.util.Map.of("message", String.valueOf(e.getMessage()))));
+                    .put("error", I18n.tr("server.um.cloudflareRanges.5", java.util.Map.of("message", ErrorText.detail("cloudflareRanges", e))));
         }
     }
 
@@ -11247,7 +11248,7 @@ public final class UpdateManager {
 
             return r.put("success", true);
         } catch (Exception e) {
-            return r.put("success", false).put("error", e.getMessage());
+            return r.put("success", false).put("error", ErrorText.forPage("systemSummary", e));
         }
     }
 
@@ -11288,7 +11289,7 @@ public final class UpdateManager {
         } catch (Exception e) {
             // "Non ho potuto controllare" non e' "va bene": chi legge deve vederlo.
             return r.put("success", false).put("active", false)
-                    .put("reason", I18n.tr("server.um.autoStart.3", java.util.Map.of("message", String.valueOf(e.getMessage()))));
+                    .put("reason", I18n.tr("server.um.autoStart.3", java.util.Map.of("message", ErrorText.detail("autoStart", e))));
         }
     }
 
@@ -11376,7 +11377,7 @@ public final class UpdateManager {
             return r.put("success", true).put("executed", true)
                     .put("note", joinNotes(I18n.tr("server.um.removePanelRcScript.4", java.util.Map.of("copy", String.valueOf(copy))), locksWarning));
         } catch (Exception e) {
-            return r.put("success", false).put("error", I18n.tr("server.um.removePanelRcScript.5", java.util.Map.of("message", String.valueOf(e.getMessage()))));
+            return r.put("success", false).put("error", I18n.tr("server.um.removePanelRcScript.5", java.util.Map.of("message", ErrorText.detail("removePanelRcScript", e))));
         }
     }
 
@@ -11498,7 +11499,7 @@ public final class UpdateManager {
                     .put("loaded", loaded).put("rcvar", test)
                     .put("note", I18n.tr("server.um.panelRcScript.4"));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("panelRcScript", e));
         }
     }
 
@@ -11557,7 +11558,7 @@ public final class UpdateManager {
                         ? I18n.tr("server.um.targetVersions.2", java.util.Map.of("series", String.valueOf(series)))
                         : I18n.tr("server.um.targetVersions.3", java.util.Map.of("majorNow", String.valueOf(majorExpected), "p", String.valueOf((majorExpected + 1)))));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("targetVersions", e));
         }
     }
 
@@ -11699,7 +11700,7 @@ public final class UpdateManager {
              .put("blocked", lock).put("canProceed", !lock);
             return r;
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("systemUpgradePreflight", e));
         }
     }
 
@@ -11926,7 +11927,7 @@ public final class UpdateManager {
                     : I18n.tr("server.um.systemUpgradeInstructions.21", java.util.Map.of("be", String.valueOf(be))))
                 .put("source", I18n.tr("server.um.systemUpgradeInstructions.22"));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("systemUpgradeInstructions", e));
         }
     }
 
@@ -12088,7 +12089,7 @@ public final class UpdateManager {
         try {
             Files.deleteIfExists(Paths.get(VERSION_JUMP_STATE));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("cancelVersionJump", e));
         }
         return new JSONObject().put("success", true)
                 .put("note", I18n.tr("server.um.jumpCancel.done", java.util.Map.of("be", st.optString("bootEnvironment", "?"))));
@@ -12317,7 +12318,7 @@ public final class UpdateManager {
                     .put("howToGoBack", I18n.tr("server.um.bootEnvironments.17"))
                     .put("whenToDelete", I18n.tr("server.um.bootEnvironments.18"));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("bootEnvironments", e));
         }
     }
 
@@ -12358,7 +12359,7 @@ public final class UpdateManager {
                         : I18n.tr("server.um.deleteBootEnvironment.3"))
                     .put("error", via ? "" : I18n.tr("server.um.deleteBootEnvironment.4", java.util.Map.of("output", String.valueOf(output))));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("deleteBootEnvironment", e));
         }
     }
 
@@ -12449,7 +12450,7 @@ public final class UpdateManager {
                 if ("block".equals(checks.getJSONObject(i).getString("level"))) fault = true;
             return r.put("success", true).put("checks", checks).put("allGood", !fault);
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage());
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("verifyAfterUpdate", e));
         }
     }
 
@@ -12578,7 +12579,7 @@ public final class UpdateManager {
             t.append("\n=== ").append(I18n.tr("server.um.x.repEnd")).append(" ===\n");
             return new JSONObject().put("success", true).put("text", t.toString());
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", e.getMessage())
+            return new JSONObject().put("success", false).put("error", ErrorText.forPage("systemReport", e))
                     .put("partial", t.toString());
         }
     }

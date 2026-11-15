@@ -69,6 +69,46 @@ created |= set(re.findall(r"\.id\s*=\s*\\{0,2}['\"]([A-Za-z0-9_$-]+)", A))
 # passwordField("X") -> X, XErr, XShow, XCopy
 for m in re.finditer(r'passwordField\(\s*"([A-Za-z0-9_-]+)"', A):
     b = m.group(1); created |= {b, b+"Err", b+"Show", b+"Copy"}
+# A function that gives its element the id it receives: function panelInfoCode(text, id, title) { ... code.id = id; }.
+# The literal passed in that place is an id created (panelInfoCommit): before, the tests looking for it were reported
+# as dead although the Home page makes it (reperto 230).
+def call_args(text, i):
+    """The arguments of the call whose '(' is at i, split at the outer commas (strings skipped)."""
+    depth, j, start, out = 0, i, i + 1, []
+    while j < len(text):
+        c = text[j]
+        if c in "'\"`":
+            k = j + 1
+            while k < len(text) and text[k] != c:
+                k += 2 if text[k] == "\\" else 1
+            j = k + 1
+            continue
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                out.append(text[start:j].strip())
+                return out
+        elif c == "," and depth == 1:
+            out.append(text[start:j].strip())
+            start = j + 1
+        j += 1
+    return out
+for m in re.finditer(r"function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{", A):
+    params = [p.strip() for p in m.group(2).split(",")]
+    body = A[m.end():m.end() + 600]
+    nxt = body.find("function ")
+    body = body if nxt < 0 else body[:nxt]
+    for n, p in enumerate(params):
+        if not re.fullmatch(r"[A-Za-z_$][\w$]*", p) or not re.search(r"\.id\s*=\s*" + re.escape(p) + r"\s*;", body):
+            continue
+        for c in re.finditer(r"(?<![\w$.])" + re.escape(m.group(1)) + r"\(", A):
+            args = call_args(A, c.end() - 1)
+            if n < len(args):
+                lit = re.fullmatch(r"""['"]([A-Za-z0-9_$-]+)['"]""", args[n])
+                if lit:
+                    created.add(lit.group(1))
 # built prefixes: 'ver-' + k, 'pk-det-' + i
 prefixes = set(re.findall(r"""['"]([A-Za-z0-9_-]*-)['"]\s*\+""", A))
 # ids written with a String.format placeholder: id="%s-status", id="%1$s"
@@ -93,15 +133,22 @@ missing = [i for i in sought if not resolved(i)]
 
 # ---- ids/selectors the tests look for (consumers) ----
 NEG = re.compile(r"\.count\(\)\s*===\s*0")
+# page.$('#packages') === null: that one selector is asserted absent (the other selectors of the line are not).
+NULL_AFTER = re.compile(r"""['"`]\s*\)\s*===\s*null""")
 SEL = re.compile(r"""getElementById\(['"]([A-Za-z0-9_-]+)['"]\)|['"`]#([A-Za-z0-9_-]+)""")
 from_tests, negatives = {}, set()
 for f, s in test_sources:
+    # The ids the test makes itself, in the HTML of a page it serves (<a id="go">): they are not the application's.
+    own = set(re.findall(r"""\bid\s*=\s*\\?["']([A-Za-z0-9_-]+)""", s))
     for line in s.splitlines():
         neg = bool(NEG.search(line))
         for m in SEL.finditer(line):
             i = m.group(1) or m.group(2)
-            if line[m.end():m.end()+6].lstrip().startswith("+"): continue  # a prefix, not an id
-            if neg: negatives.add(i)
+            after = line[m.end():m.end()+6]
+            if after.lstrip().startswith("+"): continue  # a prefix, not an id
+            if after.lstrip().startswith("<"): continue  # "#include <unistd.h>" in a C source, not a selector
+            if i in own: continue
+            if neg or NULL_AFTER.match(line, m.end()): negatives.add(i)
             else: from_tests.setdefault(i, set()).add(os.path.basename(f))
 dead = {i: v for i, v in from_tests.items() if not resolved(i)}
 

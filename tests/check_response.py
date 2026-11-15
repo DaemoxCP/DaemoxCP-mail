@@ -120,7 +120,13 @@ for n, (fn_name, start) in enumerate(starts):
     body = page[start:end]
     for m in re.finditer(r"(?:const|let|var)?\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*await\s+[a-zA-Z]+Api\(\s*'([a-z0-9_]+)'", body):
         var, action = m.group(1), m.group(2)
-        fields = set(re.findall(r"\b" + re.escape(var) + r"\.([A-Za-z_][A-Za-z0-9_]*)", body))
+        # The reads of this binding: up to the next binding of the same name (const r = ..., r = ..., an arrow r => ...).
+        # Before, the whole function counted, and «Aggiorna tutto» was reported for r.checks and r.services: in the
+        # same function a second "const r" takes the answer of package_preflight / java_preflight (an action computed
+        # here, so not seen), which does put them (reperto 230).
+        again = re.compile(r"(?<![.\w$])" + re.escape(var) + r"\s*=(?!=)").search(body, m.end())
+        segment = body[m.end():again.start() if again else len(body)]
+        fields = set(re.findall(r"(?<![.\w$])" + re.escape(var) + r"\.([A-Za-z_][A-Za-z0-9_]*)", segment))
         read_fields.setdefault(action, set()).update(fields)
 
 print(f"  actions with a response read by the page: {len(read_fields)}")
