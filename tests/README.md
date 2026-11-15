@@ -1334,7 +1334,12 @@ saying so. **As root, on the VM.**
 **ServiceUsersTest** — the check of who runs every service (ServiceUsers.examine) on the VM's `ps`
 output before and after, with a planted fault for every warning and the cases that must NOT warn
 (Postfix's `local`, Dovecot's `auth`). Dovecot's `anvil` as root warns on 2.3 and not on 2.4, which needs it to reach
-every session's process (measured on the VM, reperto 213); `auth-worker` as root warns on both. It calls nothing.
+every session's process (measured on the VM, reperto 213); `auth-worker` as root warns on both. And what every user of
+a service does (reperto 228, the owner asked for it on 15/11/2026): the processes of each user by a short name (Dovecot:
+root master/log/config/lmtp, dovecot anvil/auth/auth-worker, dovenull imap-login, vmail imap; Postfix: root master and
+local, postfix the rest; the panel's root part and web part; mysqld and mysqld_safe, not sh), root first on the page,
+sievec listed although it runs only when rules are saved, and a sentence in both languages for every user the panel
+installs (none for a user it does not know). It calls nothing.
 
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeUserTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeUserTest
