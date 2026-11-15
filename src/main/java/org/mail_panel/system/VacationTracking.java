@@ -45,7 +45,10 @@ public final class VacationTracking {
 
     private static final Logger LOGGER = Logger.getLogger(VacationTracking.class.getName());
 
-    /** La home di Dovecot delle caselle: home=/var/vmail/%d/%n nella configurazione del pannello (DovecotConfig). */
+    /**
+     * La radice delle caselle. La home di Dovecot di ognuna e' la sua cartella home/ (home=/var/vmail/%d/%n/home,
+     * reperto 217, DovecotHome); prima era la radice stessa.
+     */
     static final Path HOMES = Path.of("/var/vmail");
     /** Il database dei duplicati di Dovecot, dove Pigeonhole ricorda le risposte automatiche date. */
     public static final String DUPLICATES = ".dovecot.lda-dupes";
@@ -68,14 +71,17 @@ public final class VacationTracking {
         Path duplicates = duplicatesOf(homes, email);
         if (duplicates == null) return false;
         Files.deleteIfExists(duplicates);
+        // Prima del reperto 217 la memoria stava nella radice della casella: se DovecotHome non l'ha ancora portata nella
+        // home (o Dovecot l'ha riscritta li' prima della migrazione), si toglie anche quella.
+        Files.deleteIfExists(duplicates.getParent().resolveSibling(DUPLICATES));
         return true;
     }
 
-    /** homes/dominio/nome/.dovecot.lda-dupes, o null se l'indirizzo non e' un indirizzo. Pura. */
+    /** homes/dominio/nome/home/.dovecot.lda-dupes, o null se l'indirizzo non e' un indirizzo. Pura. */
     static Path duplicatesOf(Path homes, String email) {
         if (!SafeNames.address(email)) return null;
         int at = email.indexOf('@');
-        return SafeNames.under(homes, email.substring(at + 1), email.substring(0, at), DUPLICATES);
+        return SafeNames.under(homes, email.substring(at + 1), email.substring(0, at), DovecotHome.DIR, DUPLICATES);
     }
 
     // ===================== All'avvio: il compilato che il reset di prima toglieva =====================

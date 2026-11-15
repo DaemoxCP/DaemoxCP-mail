@@ -820,6 +820,11 @@ public class SSLMailServer {
             org.mail_panel.system.SieveRulesOwner.ensureAtBoot();
             org.mail_panel.system.MailSpoolSticky.ensureAtBoot();
             org.mail_panel.system.DovecotPrivilegedGroup.ensureAtBoot();
+
+            // La home di Dovecot di ogni casella nella sua cartella home/, non nella radice della posta: i file di Dovecot
+            // (la memoria delle risposte automatiche e degli inoltri) comparivano fra le cartelle della webmail (DovecotHome
+            // li porta nella home come vmail, verifica con doveadm user, e se non va torna com'era).
+            org.mail_panel.system.DovecotHome.ensureAtBoot();
             // Gli script Sieve dell'utente (ManageSieve, i Filtri della webmail) nella sua cartella di posta, e le regole
             // del pannello prima di loro: prima non si salvava niente, la cartella era di root (SieveStorage verifica e
             // torna indietro).

@@ -80,6 +80,8 @@ is always zero. A test that does not start at all, read that way, looks passed.
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesOwnerTest   (VM, as root)
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotHomeTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotHomeE2ETest   (VM, Dovecot 2.3, home of before)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -257,7 +259,11 @@ sieve list` must open the scripts, and no "dovecot.sieve" may show among the fol
 layout of before it fails there (ManageSieve: "BYE Internal error"). Since reperto 216 a second delivery
 with a panel's rule that moves, written with no keep at the end as the panel writes it now: the message
 only in the panel's folder, not in INBOX, and the mailbox's own script does not run on it (with a `keep;`
-put back at the end, measured, the own script runs too and it fails). As root, in the panel folder:
+put back at the end, measured, the own script runs too and it fails). Since reperto 217 the mailbox's
+script uses the Sieve "duplicate" test, which writes Dovecot's duplicate database in the home as
+autoreplies and forwards do: with the home of before (the mail root) "dovecot", "dovecot.lda-dupes"
+and "dovecot.lda-dupes.locks" show among the folders and it fails (measured on the VM). As root, in
+the panel folder:
 
     sh tests/mail-login-probe.sh
 
@@ -560,8 +566,9 @@ SqlCatalog as before 25 fail (among them the NullPointerException text and `For 
 **VacationTrackingTest** — "reset tracking" of the autoresponder and the boot repair of what it left (reperto 219,
 VacationTracking). Until 10/11/2026 the reset also deleted the binary beside the panel's rules and restarted Dovecot;
 Pigeonhole keeps the senders already answered only in `.dovecot.lda-dupes` in the mailbox's home. Without a system:
-the file is home/domain/user/.dovecot.lda-dupes, and an address that is not one (`../../x@...`, `a/b@...`, `al..ice@...`)
-gives nothing; on a folder like /var/vmail only that file goes (mail, the `.locks` folder and other mailboxes stay,
+the file is vmail/domain/user/home/.dovecot.lda-dupes (Dovecot's home since reperto 217), and an address that is not one
+(`../../x@...`, `a/b@...`, `al..ice@...`) gives nothing; on a folder like /var/vmail only that file goes, with the one of
+before in the mailbox's root (mail, the `.locks` folder and other mailboxes stay,
 twice is fine, nothing outside the folder is touched); a binary missing, older, as old as the script or a link is stale;
 on a folder like /var/mail/sieve the boot repair compiles only the panel's scripts without a newer binary, once, leaves a
 ManageSieve link and other depths, reports a compiler that fails or installs nothing, and finds nothing the second
@@ -577,6 +584,28 @@ of the restart: on Dovecot 2.3.21 one logged in before outlived `service dovecot
 pass; with the old reset and no boot repair in the jar 9 fail: the binary gone, Dovecot's master process another one,
 "Error: sieve: binary ... save: failed" and "The LDA Sieve plugin does not have permission to save global Sieve script
 binaries" on the deliveries after the reset, and no repair at boot.
+
+**DovecotHomeTest** — every mailbox's Dovecot home in its own folder, `home/`, not the mail root (reperto 217): with
+home = the Maildir root, the files Dovecot keeps in the home showed up as mail folders ("dovecot", "dovecot.lda-dupes",
+"dovecot.lda-dupes.locks" after one autoreply, measured on the VM; Dovecot's documentation says the home should not be
+the Maildir, and lists "home under mail" among its layouts). What the panel writes on 2.3 and 2.4 (the home in `home/`,
+the mail where it was); the migration of the configuration (the home the panel wrote gets `/home`, the rest untouched;
+done, hand-written or twice: nothing); the script vmail runs on the files, on a folder like /var/vmail: prepare copies,
+undo takes the copies away, finish moves what is left in the root and removes the false folder unless it holds mail,
+never chooses between two different user scripts, never goes through a link, a second run does nothing. On the VM;
+with the fix taken out it fails.
+
+**DovecotHomeE2ETest** — the same with real deliveries and the VM's real configuration (it must start with the home of
+before), as root with `-De2e.vm=yes`. Before: an autoreply written by the panel and a script of the mailbox's own
+(ManageSieve), one delivery, and the false folders are in IMAP LIST; a second mailbox gets a message moved into its
+false folder. A fault planted (Dovecot gives another home than the expected one): the configuration goes back exactly
+as it was and the copies are taken away. Then DovecotHome as at boot: the new home in the configuration and from
+`doveadm user`, IMAP LIST without false folders, Dovecot's files only in the home (vmail, 0700), the autoreply still
+remembers whom it answered (no second reply, "discarded duplicate vacation response" in the maillog), the mailbox's own
+script still runs; the false folder with a message stays. A mailbox whose rules the panel writes now has its home
+before the first delivery, and no "duplicate db" error. The second run changes nothing. At the end the configuration
+goes back, the VM's other mailboxes get their files back in the root, and the test domain is removed. Measured
+10/11/2026 on Dovecot 2.3.21: all OK; with the fix taken out 8 checks fail.
 
 **DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what
