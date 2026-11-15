@@ -157,8 +157,12 @@ public class ServiceUsersTest {
                 postfix.get("root").equals(java.util.Set.of("master", "local"))
                         && postfix.get("postfix").equals(java.util.Set.of("pickup", "qmgr", "smtpd")));
         Map<String, java.util.Set<String>> panel = f.services().get("mail-panel").roles;
-        check("the panel: root part as root, web part as mailpanel (" + panel + ")", panel.get("root").equals(java.util.Set.of("root part"))
-                && panel.get("mailpanel").equals(java.util.Set.of("web part")));
+        // Technical names, as ps shows them (the option each java runs with), not words: words belong to the language
+        // files, and "root part" in English was shown on the Italian page.
+        check("the panel: --web as root, --web-part as mailpanel (" + panel + ")", panel.get("root").equals(java.util.Set.of("--web"))
+                && panel.get("mailpanel").equals(java.util.Set.of("--web-part")));
+        check("  the panel from the menu, without --web: java", ServiceUsers.processName("mail-panel",
+                "/usr/local/openjdk25/bin/java -jar /home/panel/freebsd-mail-panel-1.0.jar").equals("java"));
         check("mysql: mysqld and mysqld_safe, not sh (" + f.services().get("mysql").roles + ")",
                 f.services().get("mysql").roles.get("mysql").equals(java.util.Set.of("mysqld", "mysqld_safe")));
         check("fail2ban: fail2ban-server, not python3.12; redis: redis-server; unbound: local-unbound",

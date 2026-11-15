@@ -102,12 +102,15 @@ public final class ServiceUsers {
     private static final Set<String> INTERPRETERS = Set.of("sh", "bash", "perl", "python", "python3");
 
     /**
-     * Il nome corto di un processo, per dire cosa fa: "master", "worker", "imap-login", "qmgr", "auth-worker", la parte
-     * web o root del pannello; altrimenti il programma senza percorso. Puro.
+     * Il nome corto di un processo, per dire cosa fa: "master", "worker", "imap-login", "qmgr", "auth-worker"; del
+     * pannello l'opzione con cui gira (--web la parte root, --web-part la parte web: sono due java, e il nome tecnico
+     * resta tale in ogni lingua, come "master"; cosa fanno lo dicono le frasi dei file di lingua); altrimenti il
+     * programma senza percorso. Puro.
      */
     static String processName(String service, String command) {
         String c = command == null ? "" : command.trim();
-        if ("mail-panel".equals(service)) return c.matches(".*--web-part( .*|$)") ? "web part" : "root part";
+        if ("mail-panel".equals(service))
+            return c.matches(".*--web-part( .*|$)") ? "--web-part" : c.matches(".*--web( .*|$)") ? "--web" : "java";
         if (c.startsWith("nginx: ")) return c.replaceFirst("^nginx: (\\S+).*$", "$1");
         if (c.startsWith("php-fpm: master")) return "master";
         if (c.startsWith("php-fpm: pool ")) return "pool";
