@@ -36,18 +36,18 @@ public class RehearsalCurrentSetup {
         db.ensureCloudflareAccountsSchema();
         db.ensureDkimRotationHistoryTable();
         int id;
-        try (java.sql.PreparedStatement q = db.getConnection().prepareStatement("SELECT id FROM domains WHERE domain = ?")) {
+        try (java.sql.PreparedStatement q = db.getConnection().prepareStatement(org.mail_panel.database.SqlCatalog.MAIL_GET_DOMAIN_BY_NAME)) {
             q.setString(1, domain);
-            try (java.sql.ResultSet rs = q.executeQuery()) { id = rs.next() ? rs.getInt(1) : db.addDomain(domain, "rehearsal"); }
+            try (java.sql.ResultSet rs = q.executeQuery()) { id = rs.next() ? rs.getInt("id") : db.addDomain(domain, "rehearsal"); }
         }
         // Le credenziali di prova stanno solo qui e in /root/rehearsal/mailboxes, leggibile da root.
         String[][] boxes = {{"alice@" + domain, "Rehearsal-Alice-2026x", "Alice"}, {"bob@" + domain, "Rehearsal-Bob-2026x", "Bob"}};
         StringBuilder list = new StringBuilder();
         for (String[] b : boxes) {
-            try (java.sql.PreparedStatement q = db.getConnection().prepareStatement("SELECT id FROM mailboxes WHERE email = ?")) {
+            try (java.sql.PreparedStatement q = db.getConnection().prepareStatement(org.mail_panel.database.SqlCatalog.UM_ACTIVE_MAILBOX_COUNT)) {
                 q.setString(1, b[0]);
                 try (java.sql.ResultSet rs = q.executeQuery()) {
-                    System.out.println("casella " + b[0] + ": " + (rs.next() ? "c'era gia'" : db.addMailbox(id, b[0], b[1], b[2], 1024)));
+                    System.out.println("casella " + b[0] + ": " + (rs.next() && rs.getInt(1) > 0 ? "c'era gia'" : db.addMailbox(id, b[0], b[1], b[2], 1024)));
                 }
             }
             list.append(b[0]).append(' ').append(b[1]).append('\n');

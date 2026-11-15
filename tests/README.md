@@ -81,6 +81,8 @@ is always zero. A test that does not start at all, read that way, looks passed.
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesOwnerTest   (VM, as root)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMasterUserTest   (VM, as root, real doveadm)
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.FullMailStackCleanupTest   (VM, as root, pw -R on a copy)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.mail_panel.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RunningJobTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RestartServicesTest
@@ -539,6 +541,15 @@ The repair on real files with real owners and a fake Dovecot that reads like the
 step (nothing changes, or the file goes back byte for byte with owner and mode); files that are not the scripts' left
 alone (a hand-written {PLAIN}, two users, a comment, a link, another key's hash); the shell piece run with the real
 doveadm, also without a configuration, where main's piece of before leaves "admin:" without a hash. As root on the VM.
+
+**FullMailStackCleanupTest** — the cleanup of the «all» installation (FullMailStackScript, phase 1) removes only the
+users phase 2 creates again (reperto 226). It used to run pw userdel on www, a base system user (uid 80), and on the
+users of clamav, redis, mysql and rspamd: with www went its group, the one nginx opens Roundcube's socket with, and its
+crontab, and nothing created them again (nginx locked by the panel, or the later pkg install failing), so nginx said
+getpwnam("www") failed. The test reads the script's text (every user and group removed is created again by phase 2 and
+none is of the base system, with the line recogniser tried first on a known text) and runs the cleanup's pw lines with
+pw -R on a copy of the stock users plus the users of the packages and vmail: www, its group and the users of the packages stay, exactly
+what the lines name goes away, the machine's own files unchanged. As root on the VM.
 
 **SieveRulesOwnerTest** — the panel's Sieve rules folder given back to root at start (reperto 225). On the real server
 `/var/mail/sieve` belonged to vmail (the installation of 11/10/2026): since reperto 221 root does not write rules where

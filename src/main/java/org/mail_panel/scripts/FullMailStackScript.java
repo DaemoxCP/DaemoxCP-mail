@@ -135,22 +135,19 @@ public class FullMailStackScript {
             rm -f /var/log/dovecot.log 2>/dev/null || true
             rm -f /var/log/maillog 2>/dev/null || true
 
-            echo "[CLEANUP] Removing system users..."
+            echo "[CLEANUP] Removing the vmail user (packages keep their own users)..."
 
-            # Remove users (but keep vmail for later recreation)
-            pw userdel clamav 2>/dev/null || true
-            pw userdel redis 2>/dev/null || true
-            pw userdel mysql 2>/dev/null || true
+            # Si toglie solo vmail, l'utente del pannello: la fase 2 lo ricrea subito, con uid 5000.
+            # Gli utenti dei pacchetti restano, come li lascia pkg delete, e il pre-install di ogni
+            # pacchetto riusa quello che trova. Misurato sulla VM FreeBSD 15.1 il 01/11/2026:
+            #  - www e' del sistema base (uid 80), e pw userdel si porta via anche il gruppo www,
+            #    quello con cui nginx apre il socket di Roundcube, e la crontab di www;
+            #  - col pannello acceso i pacchetti dello stack sono bloccati: pkg delete li rifiuta,
+            #    restano installati senza il loro utente e non partono piu' (nginx: getpwnam("www")
+            #    failed), e il pkg install piu' avanti non li ricrea;
+            #  - mysql e' di mysql84-server, che questa pulizia non toglie.
             pw userdel vmail 2>/dev/null || true
-            pw userdel rspamd 2>/dev/null || true
-            pw userdel www 2>/dev/null || true
-
-            # Remove groups
-            pw groupdel clamav 2>/dev/null || true
-            pw groupdel redis 2>/dev/null || true
-            pw groupdel mysql 2>/dev/null || true
             pw groupdel vmail 2>/dev/null || true
-            pw groupdel rspamd 2>/dev/null || true
 
             # Clean rc.conf entries
             sysrc -x mysql_enable 2>/dev/null || true
