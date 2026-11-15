@@ -80,6 +80,8 @@ is always zero. A test that does not start at all, read that way, looks passed.
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesOwnerTest   (VM, as root)
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesRefreshTest
+
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMasterUserTest   (VM, as root, real doveadm)
 
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.scripts.FullMailStackCleanupTest   (VM, as root, pw -R on a copy)
@@ -528,6 +530,17 @@ it cannot write: the conversion runs the panel's mail configuration script, whic
 the alias part is skipped, saying so (otherwise folders in `/var/vmail` and Postfix and Dovecot reloaded). As nobody the
 test gives the vault a public key of its own in its temporary secrets folder, as root writes it for the web part.
 Measured on 10/11/2026 on the VM: 36 OK; with SSLMailServer as before 8 fail, one for each place that saves rules.
+
+**SieveRulesRefreshTest** — a Sieve filter that moves or copies to a folder that is not there yet creates it (reperto
+229), and the panel's rules already written are written again from the database at start, where they differ from what
+the panel writes now. Before, «Move» to a new folder (also the dialog's own suggestion, INBOX.Filtered) moved nothing:
+Dovecot answered «Mailbox doesn't exist» and the message stayed in INBOX (seen on the real server and on the VM). The
+generator writes `fileinto :create` (require "mailbox"); SieveForcedKeep still recognises the require line of before.
+With a fake store of rule files and the real generator: a file of before written again once and the second run writes
+nothing; today's text, a script written by hand and a mailbox without rules or file untouched; a missing file with
+rules in the database written; a refused write counted by the mailbox's number. On the VM SieveActionsE2ETest case 9
+does it with real deliveries: the text of before leaves the message in INBOX and makes no folder, the refresh writes
+it again (compiled by sievec), then the folder is made and the message is only there; a copy too.
 
 **DovecotMasterUserTest** — Dovecot's master user, the one «Open webmail» logs in with, gets a real hash (reperto 227).
 FullMailServerScript asked `doveadm pw` for the hash before dovecot.conf existed: doveadm exited with 75 and

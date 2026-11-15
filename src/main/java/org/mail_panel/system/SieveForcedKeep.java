@@ -40,14 +40,16 @@ public final class SieveForcedKeep {
     static final String SCRIPT = ".dovecot.sieve";
 
     /** La riga require che il pannello scriveva prima di aggiungere "date" (stessa coda, stesso resto). */
-    static final String REQUIRE_WITHOUT_DATE = SieveGenerator.REQUIRE.replace(", \"date\"];", "];");
+    static final String REQUIRE_WITHOUT_DATE = SieveGenerator.REQUIRE_BEFORE_MAILBOX.replace(", \"date\"];", "];");
 
     private SieveForcedKeep() {}
 
     /** Lo script senza il keep forzato, o null se non e' uno script del pannello con quella coda. Funzione pura. */
     static String fixed(String script) {
         if (script == null || !script.endsWith(SieveGenerator.OLD_FORCED_KEEP)) return null;
-        if (!script.startsWith(SieveGenerator.REQUIRE) && !script.startsWith(REQUIRE_WITHOUT_DATE)) return null;
+        // Le righe require che il pannello ha scritto col keep forzato: senza date e con date. Quella di adesso (con
+        // mailbox, reperto 229) non ha mai avuto il keep forzato.
+        if (!script.startsWith(SieveGenerator.REQUIRE_BEFORE_MAILBOX) && !script.startsWith(REQUIRE_WITHOUT_DATE)) return null;
         return script.substring(0, script.length() - SieveGenerator.OLD_FORCED_KEEP.length());
     }
 

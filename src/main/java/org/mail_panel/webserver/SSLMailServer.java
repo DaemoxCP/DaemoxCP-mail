@@ -827,6 +827,9 @@ public class SSLMailServer {
             // Le regole Sieve del pannello gia' scritte senza il keep forzato in fondo: con quello «Sposta» lasciava anche
             // la INBOX e «Inoltra» senza copia ne teneva una (SieveForcedKeep ricompila, e se sievec non accetta torna com'era).
             org.mail_panel.system.SieveForcedKeep.ensureAtBoot();
+            // Le regole del pannello riscritte dal database come le scrive adesso, dove sono diverse: «Sposta» e «Copia»
+            // creano la cartella che non c'e' (reperto 229). Solo i file del pannello; al secondo avvio non scrive niente.
+            org.mail_panel.system.SieveRulesRefresh.ensureAtBoot(this.sieveGenerator);
 
             // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.
