@@ -46,6 +46,11 @@ import java.util.Set;
  * Plus a part D on the updater's labels, because the installation now puts dovecot-mysql and
  * dovecot-pigeonhole-mysql instead of the packages without flavour.
  *
+ * Since reperto 215 the Dovecot line is "install_packages $DOVECOT_PACKAGES": the script itself picks
+ * 2.4 (dovecot24-mysql) where the catalog offers it, else 2.3 (DovecotConfig.packagesShell). Part 0
+ * reads the two choices from the script; A and B then run on the script as it runs with each of them,
+ * C on the one this machine's catalog would pick.
+ *
  * Usage, on the VM:
  *   java -cp "tests:freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallPackagesTest
  *   java -De2e.vm=yes -cp "tests:freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallPackagesTest
@@ -59,14 +64,27 @@ public class InstallPackagesTest {
         if (!ok) failures++;
     }
 
+    static final String DOVECOT_LINE = "install_packages $DOVECOT_PACKAGES";
+
     public static void main(String[] args) throws Exception {
         String script = new FullMailServerScript().getScriptContent();
-        List<List<String>> lines = installLines(script);
+        List<String> choices = dovecotChoices(script);
+        dovecotChoice(script, choices);
+        String with24 = choices.size() == 2 ? asRun(script, choices.get(0)) : script;
+        String with23 = choices.size() == 2 ? asRun(script, choices.get(1)) : script;
+        List<List<String>> lines = installLines(with23);
 
-        scriptText(script, lines);
-        functionBehaviour(script);
+        scriptText(with23, lines);
+        functionBehaviour(with23, "dovecot-mysql", "Dovecot 2.3");
+        functionBehaviour(with24, "dovecot24-mysql", "Dovecot 2.4");
         if ("yes".equals(System.getProperty("e2e.vm"))) {
-            if (onFreeBsdAsRoot()) realSolver(lines);
+            if (onFreeBsdAsRoot()) {
+                // The same question the script asks: the plan of the Dovecot this machine would install.
+                boolean offered24 = !sh("pkg rquery %v dovecot24-mysql 2>/dev/null", 60).trim().isEmpty();
+                System.out.println("\n  the catalog " + (offered24 ? "offers" : "does not offer") + " dovecot24-mysql: part C with Dovecot "
+                        + (offered24 ? "2.4" : "2.3"));
+                realSolver(installLines(offered24 ? with24 : with23));
+            }
             else { skipped++; System.out.println("\n  SKIPPED  part C: it needs FreeBSD and root"); }
         } else {
             skipped++;
@@ -77,6 +95,36 @@ public class InstallPackagesTest {
         System.out.println(failures == 0 ? "\nALL OK" + (skipped > 0 ? " (" + skipped + " parts skipped, said above)" : "")
                                          : "\n" + failures + " CHECKS FAILED");
         if (failures > 0) System.exit(1);
+    }
+
+    // ------------------------------------------------------------------ 0
+
+    /** The values the script can give DOVECOT_PACKAGES, in the order they are written. */
+    static List<String> dovecotChoices(String script) {
+        List<String> out = new ArrayList<>();
+        for (String l : script.split("\n")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("^\\s*DOVECOT_PACKAGES=\"([^\"]*)\"\\s*$").matcher(l);
+            if (m.matches()) out.add(m.group(1));
+        }
+        return out;
+    }
+
+    /** The script as it runs with DOVECOT_PACKAGES set to that value: the Dovecot line with the names written out. */
+    static String asRun(String script, String value) {
+        return script.replace("\n" + DOVECOT_LINE + "\n", "\ninstall_packages " + value + "\n");
+    }
+
+    static void dovecotChoice(String script, List<String> choices) {
+        System.out.println("\n== 0. The Dovecot the script picks ==");
+        System.out.println("  choices: " + choices);
+        check("two choices, 2.4 where the catalog offers it, else 2.3",
+                choices.equals(List.of("dovecot24-mysql dovecot24-pigeonhole-mysql", "dovecot-mysql dovecot-pigeonhole-mysql")));
+        check("  each one the MySQL flavor and the Pigeonhole built for it, in one variable (one line, one check)",
+                choices.stream().allMatch(c -> c.matches("(dovecot|dovecot24)-mysql \\1-pigeonhole-mysql")));
+        int lines = script.split("\n" + java.util.regex.Pattern.quote(DOVECOT_LINE) + "\n", -1).length - 1;
+        check("Dovecot is installed by exactly one line, " + DOVECOT_LINE + " (found " + lines + ")", lines == 1);
+        int lastChoice = script.lastIndexOf("DOVECOT_PACKAGES=\"");
+        check("  after the choice is made", lastChoice >= 0 && script.indexOf("\n" + DOVECOT_LINE + "\n") > lastChoice);
     }
 
     // ------------------------------------------------------------------ A
@@ -126,8 +174,8 @@ public class InstallPackagesTest {
     // ------------------------------------------------------------------ B
 
     /** The script's real lines against a fake pkg that removes a package and exits with 0. */
-    static void functionBehaviour(String script) throws Exception {
-        System.out.println("\n== B. The function, with a pkg that silently removes a package ==");
+    static void functionBehaviour(String script, String dovecotName, String label) throws Exception {
+        System.out.println("\n== B. The function, with a pkg that silently removes a package (" + label + ") ==");
         Path dir = Files.createTempDirectory("install-packages-test");
         try {
             Files.createDirectories(dir.resolve("bin"));
@@ -180,8 +228,8 @@ public class InstallPackagesTest {
 
             // Each package of the Dovecot line as it is in the script is removed, one at a time: the
             // real solver removed now one, now the other.
-            List<String> dovecotLine = lines.stream().filter(l -> l.contains("dovecot-mysql")).findFirst().orElse(List.of());
-            check("the script has a line with dovecot-mysql " + dovecotLine, !dovecotLine.isEmpty());
+            List<String> dovecotLine = lines.stream().filter(l -> l.contains(dovecotName)).findFirst().orElse(List.of());
+            check("the script has a line with " + dovecotName + " " + dovecotLine, !dovecotLine.isEmpty());
             for (String drop : dovecotLine) {
                 Run r = run(dir, drop, "0");
                 check("pkg removes " + drop + " and exits with 0: the script does NOT reach the end",
@@ -317,6 +365,15 @@ public class InstallPackagesTest {
         String family = UpdateManager.familyOf("dovecot-mysql");
         check("dovecot-mysql and dovecot-pigeonhole-mysql move together (same family)",
                 family != null && family.equals(UpdateManager.familyOf("dovecot-pigeonhole-mysql")));
+        // Reperto 215: where the catalog offers 2.4, an installation from scratch puts in these two.
+        check("dovecot24-pigeonhole-mysql has the role of Sieve too",
+                sieve != null && sieve.equals(role.invoke(null, "dovecot24-pigeonhole-mysql")));
+        check("updating dovecot24-mysql or dovecot24-pigeonhole-mysql restarts dovecot",
+                List.of("dovecot").equals(services.invoke(null, "dovecot24-mysql"))
+                && List.of("dovecot").equals(services.invoke(null, "dovecot24-pigeonhole-mysql")));
+        String family24 = UpdateManager.familyOf("dovecot24-mysql");
+        check("dovecot24-mysql and dovecot24-pigeonhole-mysql move together (same family)",
+                family24 != null && family24.equals(UpdateManager.familyOf("dovecot24-pigeonhole-mysql")));
         // Reperto 203: the overview hands the family to the page, which makes it ONE step of the Packages row. On the
         // real server 27 of the 30 mail server updates were php84 and its extensions.
         String php = UpdateManager.familyOf("php84");

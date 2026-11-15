@@ -293,7 +293,10 @@ install_packages postfix-mysql
 # 24/10/2026, pkg ha risolto il conflitto togliendo in silenzio dovecot-mysql, e il server
 # installato rispondeva «auth: Fatal: Support not compiled in for passdb driver 'sql'» a
 # ogni login IMAP e chiudeva la 587 («no SASL authentication mechanisms»).
-install_packages dovecot-mysql dovecot-pigeonhole-mysql
+# Dove il catalogo offre la 2.4 (ramo latest) si installa quella (DovecotConfig.packagesShell, reperto 215).
+"""
+            + DovecotConfig.packagesShell() + """
+install_packages $DOVECOT_PACKAGES
 
 # Anti-spam and antivirus
 install_packages rspamd redis clamav

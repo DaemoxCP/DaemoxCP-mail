@@ -80,6 +80,8 @@ is always zero. A test that does not start at all, read that way, looks passed.
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
     su -m nobody -c 'java $P -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveRulesOwnerTest   (VM, as root)
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.FreshInstallDovecotTest
+
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotHomeTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotHomeE2ETest   (VM, Dovecot 2.3, home of before)
 
@@ -246,7 +248,10 @@ without it, they say which checks they skipped and why.
 ## The full installation
 
 `InstallPackagesTest` is the test of reperto 52 (the installer put in a Dovecot without MySQL and
-declared itself successful). Parts A, B and D run anywhere: the script's text, its real install
+declared itself successful). Since reperto 215 the script picks Dovecot 2.4 or 2.3 itself
+(`install_packages $DOVECOT_PACKAGES`): part 0 reads the two choices from the script, A and B run on
+the script as it runs with each, C on the one this machine's catalog would pick. Parts 0, A, B and D
+run anywhere: the script's text, its real install
 lines run against a fake pkg that drops a requested package and exits with 0 (the script must stop
 there), and the updater's labels. Part C asks pkg's REAL solver for the plan of every line as on a
 freshly installed machine: a copy of pkg's database with only pkg installed, the packages
@@ -436,6 +441,11 @@ problem the test adds makes it put 2.3 back. Afterwards the job is in error sayi
 before; the packages, their versions and protections are those of before; the configuration is the one of before file
 by file, the refused 2.4 one kept in the copy (0700); Dovecot runs and listens where it did; the tests again on 2.3
 all pass; no list of unlocked packages left.
+
+**FreshInstallDovecotTest** — an installation from scratch puts in Dovecot 2.4 where the catalog offers it (reperto
+215): the three installers use the one choice (`DovecotConfig.packagesShell`) and install `$DOVECOT_PACKAGES`, never the
+2.3 names written out, and still parse with `sh -n`; the choice with a fake pkg: 2.4 offered -> 2.4, not offered ->
+2.3, 2.4 already installed -> stays 2.4, always the MySQL flavor and its Pigeonhole. On the VM.
 
 **SieveStorageTest** — users' Sieve scripts in their mail folder, the panel's rules before them (reperto 214): what
 the panel writes on 2.3 and 2.4 (`sieve_before` / a `before` script from /var/mail/sieve, the users' storage in
