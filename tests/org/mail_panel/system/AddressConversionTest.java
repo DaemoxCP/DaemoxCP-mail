@@ -301,7 +301,7 @@ public class AddressConversionTest {
 
         System.out.println("\n== Mailbox -> alias, on MySQL ==");
         db.createForwardingRule(id, "owner@example.net", true);
-        db.createSieveFilter(id, "Spam", 1, "[]", "[]");
+        db.createSieveFilter(id, "Spam", 1, true, "[]", "[]");
         db.saveAutoResponder(id, true, "Away", "Back on Monday", null, null, 24);
         try (PreparedStatement p = c.prepareStatement("INSERT INTO rate_limits (target_type, target_id) VALUES ('mailbox', ?)")) {
             p.setInt(1, id);
