@@ -132,11 +132,17 @@ for word, key_list in sorted(english.items()):
 # Looking at the whole file, the net reported them: two false positives, seen and removed.
 import glob
 LITERAL = re.compile(r"""'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*\"""" + '"' + r"""|`(?:[^`\\]|\\.)*`""")
+# Only the camelCase names (lockedPackages, hasConflicts): they are never text, in either language. A real English word
+# of the list ("measured", "runnable") is the right text in the many tests that run the pages in English
+# (english-pages-browser-test.js expects "not measured" in a reply of fail2ban), and that it is not in the Italian text
+# is check 4's job: with it.json clean, a test expecting it in Italian turns red, it does not stay green.
 test_sources = {}
 for f in sorted(glob.glob(os.path.join(root, "tests/*.js"))):
     content = open(f, encoding="utf-8", errors="replace").read()
     strings = " ".join(LITERAL.findall(content))
     for word in ENGLISH_BANNED_IN_ITALIAN:
+        if not CAMEL.fullmatch(word):
+            continue
         if re.search(r"\b" + re.escape(word) + r"\b", strings):
             test_sources.setdefault(word, []).append(os.path.basename(f))
 print(f"  code words expected by the browser tests: {len(test_sources)}")
@@ -158,7 +164,12 @@ for word, files in sorted(test_sources.items()):
 # reported here is passed from nowhere.
 import glob
 
-sites = {}
+# A text that a generated shell script prints goes through echo() of UpdateManager, which turns every {NAME} in
+# capitals into the shell variable "$NAME" (server.um.jvs.wrongUser: {USER_NOW}, {LISTENER_USER}, read by sockstat while
+# the script runs). Those are filled by the script, not by the Map: they are passed only if EVERY call of the key
+# is inside echo( ... ).
+SHELL_VARIABLE = re.compile(r"[A-Z_]{1,20}")
+sites, shell_only = {}, {}
 for f in glob.glob(os.path.join(root, "src/main/java/**/*.java"), recursive=True):
     t = open(f, encoding="utf-8", errors="replace").read()
     for m in re.finditer(r'I18n\.tr\(\s*"([A-Za-z0-9_.]+)"\s*,', t):
@@ -167,13 +178,15 @@ for f in glob.glob(os.path.join(root, "src/main/java/**/*.java"), recursive=True
         if stop > 0:
             tail = tail[:stop]
         sites.setdefault(m.group(1), set()).update(re.findall(r'"([A-Za-z_][A-Za-z0-9_]*)"\s*,', tail))
+        in_echo = re.search(r"\becho\(\s*$", t[max(0, m.start() - 20):m.start()]) is not None
+        shell_only[m.group(1)] = shell_only.get(m.group(1), True) and in_echo
 
 without = 0
 for key, passed in sorted(sites.items()):
     if key not in it:
         continue
     expected = set(PLACEHOLDER.findall(it[key])) | set(PLACEHOLDER.findall(en.get(key, "")))
-    missing = sorted(expected - passed)
+    missing = sorted(x for x in expected - passed if not (shell_only.get(key) and SHELL_VARIABLE.fullmatch(x)))
     if missing:
         without += 1
         failures.append(f'the text of {key} asks for {missing} and the code does not pass them '

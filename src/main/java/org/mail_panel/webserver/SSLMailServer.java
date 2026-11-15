@@ -3142,68 +3142,6 @@ public class SSLMailServer {
         finally { org.mail_panel.system.PackageQueue.release(id); }
     }
 
-    private void handleApiInstall(HttpExchange exchange) throws IOException {
-        if (!isAuthenticated(exchange)) {
-            sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
-            return;
-        }
-
-        if (!"POST".equals(exchange.getRequestMethod())) {
-            sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
-            return;
-        }
-
-        String body = readRequestBodyWithLimit(exchange);
-        if (body == null) {
-            sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
-            return;
-        }
-        JSONObject req = new JSONObject(body);
-        String component = req.optString("component", "");
-
-        String scriptContent = switch (component) {
-            // System configuration (run first)
-            case "timezone" -> new SetTimeOnSystem().getScriptContent();
-            // Mail components
-            case "postfix" -> new PostfixScript().getScriptContent();
-            case "dovecot" -> new DovecotScript().getScriptContent();
-            case "roundcube" -> new RoundcubeScript().getScriptContent();
-            case "rspamd" -> new RspamdScript().getScriptContent();
-            case "clamav" -> new ClamAVScript().getScriptContent();
-            case "redis" -> new RedisScript().getScriptContent();
-            case "all" -> new FullMailStackScript().getScriptContent();
-            default -> null;
-        };
-
-        JSONObject response = new JSONObject();
-        if (scriptContent == null) {
-            response.put("success", false);
-            response.put("error", I18n.tr("server.install.unknownComponent"));
-        } else {
-            // Gli script dei componenti tolgono e rimettono pacchetti: aspettano il turno dei
-            // lavori sui pacchetti. Il fuso orario no.
-            final String script = scriptContent;
-            java.util.function.Supplier<JSONObject> install = () -> {
-                JSONObject r = new JSONObject();
-                try {
-                    String output = executeScript(script, component, scriptEnvironment(component));
-                    Main.mailDatabase.markComponentInstalled(component, "latest");
-                    // La configurazione appena scritta dallo script non ha ancora il plugin SSO ne'
-                    // il cambio password tramite il pannello: si aggiungono subito, non al prossimo avvio
-                    if ("roundcube".equals(component) || "all".equals(component)) autoInstallSsoPlugin();
-                    r.put("success", true).put("output", output);
-                } catch (Exception e) {
-                    r.put("success", false).put("error", e.getMessage());
-                }
-                return r;
-            };
-            response = "timezone".equals(component) ? install.get()
-                     : onPackageTurn(I18n.tr("server.install.jobName", Map.of("component", component)), install);
-        }
-
-        sendJsonResponse(exchange, response);
-    }
-
     // ============== HELPER METHODS ==============
 
     /** Un parametro della query (grezza), decodificato; null se non c'e'. */
@@ -3575,26 +3513,6 @@ public class SSLMailServer {
 
     private String executeScript(String scriptContent, String scriptName) throws Exception {
         return executeScript(scriptContent, scriptName, Map.of());
-    }
-
-    /**
-     * L'ambiente degli script dei componenti. A quelli che installano la webmail ("roundcube",
-     * "all") servono la password del suo utente MySQL, dal file dei segreti, e quella di root se il
-     * pannello l'ha impostata. Nell'ambiente e non fra gli argomenti, come per l'installazione
-     * completa: un argomento lo legge chiunque con "ps".
-     */
-    static Map<String, String> scriptEnvironment(String component) {
-        if (!"roundcube".equals(component) && !"all".equals(component)) return Map.of();
-        Map<String, String> env = new HashMap<>();
-        env.put("ROUNDCUBE_DB_PASSWORD", org.mail_panel.security.PanelSecrets.ensureRoundcubeDbPassword());
-        // "all" installa MySQL: la password di root c'e' sempre, e lo script la imposta su un MySQL
-        // nuovo invece di lasciarlo senza (prima entrava chiunque). Alla webmail da sola basta
-        // quella che c'e', se il pannello l'ha impostata.
-        String root = "all".equals(component)
-                ? org.mail_panel.security.PanelSecrets.ensureMysqlRootPassword()
-                : org.mail_panel.security.PanelSecrets.text(org.mail_panel.security.PanelSecrets.MYSQL_ROOT_PASSWORD);
-        if (!root.isEmpty()) env.put("MYSQL_ROOT_PASSWORD", root);
-        return env;
     }
 
     private String executeScript(String scriptContent, String scriptName, Map<String, String> env) throws Exception {
