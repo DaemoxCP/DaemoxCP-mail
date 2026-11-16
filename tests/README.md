@@ -565,6 +565,17 @@ rules in the database written; a refused write counted by the mailbox's number. 
 does it with real deliveries: the text of before leaves the message in INBOX and makes no folder, the refresh writes
 it again (compiled by sievec), then the folder is made and the message is only there; a copy too.
 
+**SieveBinariesTest** — the panel's Sieve rules compiled by the Pigeonhole installed now (reperto 241). After the move
+to Dovecot 2.4 the binaries next to the panel's rules were still 2.3's (header version 02 against 03): Dovecot compiled
+the rules again at every message and logged two errors each time («binary ... save: failed to create temporary file»,
+«The LDA Sieve plugin does not have permission to save global Sieve script binaries»), and neither the move nor the
+panel's start noticed, because the text of the rules had not changed. With a fake compiler: every rule compiled, the
+binary replaced only where it differs and kept where it is the same, so the second start writes nothing; a rule that
+does not compile counted by its status, never by its path; rules that cannot be listed: nothing compiled. On a folder
+made by the test: only domain/name/.dovecot.sieve starting with the panel's require lines, never through a link to a
+folder or a file, never a file too big. On the VM the move to Dovecot 2.4 from the page and upgrade-panel.sh do it with
+real deliveries: no Sieve error in the maillog after the move, and the binaries compiled again once.
+
 **DovecotMasterUserTest** — Dovecot's master user, the one «Open webmail» logs in with, gets a real hash (reperto 227).
 FullMailServerScript asked `doveadm pw` for the hash before dovecot.conf existed: doveadm exited with 75 and
 master-users stayed "admin:" without a hash, so the single sign-on never got in on a fresh installation;
