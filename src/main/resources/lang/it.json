@@ -2002,7 +2002,8 @@
   "server.acme.expiredRenew": "Scaduto, rinnovo:",
   "server.acme.filesNotFound": "File certificato non trovati in {d}",
   "server.acme.installFailed": "Installazione fallita",
-  "server.acme.installed": "acme.sh installato con successo",
+  "server.acme.installed": "acme.sh è installato e l'account Let's Encrypt è creato: adesso si può emettere il certificato.",
+  "server.acme.noAccount": "acme.sh è installato, ma Let's Encrypt non ha creato l'account ({why}). Scrivi un indirizzo che Let's Encrypt accetta e premi di nuovo il pulsante.",
   "server.acme.issueFailed": "Emissione certificato fallita",
   "server.acme.issueFailedShort": "Emissione fallita",
   "server.acme.issueOkDeployFailed": "Emissione riuscita ma deploy fallito: {m}",
@@ -7065,5 +7066,14 @@
   "so.title": "Posta in uscita (porta 25)",
   "so.v.open": "La porta 25 verso gli altri server di posta è aperta: questo server può consegnare la posta.",
   "so.v.blocked": "La porta 25 verso gli altri server di posta è chiusa, probabilmente dal tuo provider: la posta in uscita resta in coda. Su Hetzner Cloud le porte 25 e 465 sono chiuse sugli account nuovi: chiedi al supporto di aprirle (si può dopo la prima fattura pagata).",
-  "so.v.unknown": "Non si è potuto controllare: i nomi dei grandi server di posta non si risolvono (DNS)."
+  "so.v.unknown": "Non si è potuto controllare: i nomi dei grandi server di posta non si risolvono (DNS).",
+  "acm.title": "Let's Encrypt non è pronto: manca acme.sh o il suo account",
+  "acm.intro.html": "Il certificato del server di posta (<code>mail.example.com</code>, e i nomi di MTA-STS e autoconfig) viene da Let's Encrypt attraverso <code>acme.sh</code>, il pacchetto FreeBSD <code>security/acme.sh</code>, che gira col suo utente <code>acme</code>. Su un server installato da zero non c'è ancora: installalo qui, una volta. Fino ad allora questa pagina e «Configura tutto» nella pagina DNS non possono emettere certificati.",
+  "acm.emailLabel": "Email per l'account Let's Encrypt",
+  "acm.emailHelp": "Let's Encrypt scrive qui solo per l'account (per esempio un certificato in scadenza che non è stato rinnovato). Usa un indirizzo che leggi.",
+  "acm.go": "Installa acme.sh",
+  "acm.badEmail": "Scrivi un indirizzo email valido, come admin@example.com.",
+  "acm.installing": "Installo acme.sh e creo l'account Let's Encrypt...",
+  "acm.done": "acme.sh è installato e l'account Let's Encrypt è creato: adesso si può emettere il certificato.",
+  "acm.failed": "Non si è potuto installare acme.sh."
 }

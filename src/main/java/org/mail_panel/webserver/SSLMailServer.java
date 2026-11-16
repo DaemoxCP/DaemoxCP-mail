@@ -4968,6 +4968,7 @@ public class SSLMailServer {
                 // Get certificate status
                 response.put("success", true);
                 response.put("acme_installed", acmeManager.isAcmeInstalled());
+                response.put("acme_account", acmeManager.hasAccount());
 
                 AcmeManager.CertificateInfo certInfo = acmeManager.getCertificateInfo();
                 if (certInfo != null && certInfo.installed) {

@@ -2002,7 +2002,8 @@
   "server.acme.expiredRenew": "Expired, renewal:",
   "server.acme.filesNotFound": "Certificate files not found in {d}",
   "server.acme.installFailed": "Installation failed",
-  "server.acme.installed": "acme.sh installed successfully",
+  "server.acme.installed": "acme.sh is installed and the Let's Encrypt account is created: now the certificate can be issued.",
+  "server.acme.noAccount": "acme.sh is installed, but Let's Encrypt did not create the account ({why}). Write an address Let's Encrypt accepts and press the button again.",
   "server.acme.issueFailed": "Certificate issuance failed",
   "server.acme.issueFailedShort": "Issuance failed",
   "server.acme.issueOkDeployFailed": "Issuance succeeded but deploy failed: {m}",
@@ -7065,5 +7066,14 @@
   "so.title": "Outgoing mail (port 25)",
   "so.v.open": "Port 25 is open towards the other mail servers: this server can deliver mail.",
   "so.v.blocked": "Port 25 towards the other mail servers is closed, probably by your provider: outgoing mail stays in the queue. On Hetzner Cloud ports 25 and 465 are closed on new accounts: ask support to open them (possible after the first paid invoice).",
-  "so.v.unknown": "Could not check: the names of the big mail servers did not resolve (DNS)."
+  "so.v.unknown": "Could not check: the names of the big mail servers did not resolve (DNS).",
+  "acm.title": "Let's Encrypt is not ready: acme.sh or its account is missing",
+  "acm.intro.html": "The mail server's certificate (<code>mail.example.com</code>, and the MTA-STS and autoconfig names) comes from Let's Encrypt through <code>acme.sh</code>, the FreeBSD package <code>security/acme.sh</code>, which runs as its own user <code>acme</code>. On a server installed from scratch it is not there yet: install it here, once. Until then this page and \"Set up everything\" on the DNS page cannot issue certificates.",
+  "acm.emailLabel": "Email for the Let's Encrypt account",
+  "acm.emailHelp": "Let's Encrypt writes here only about the account (for example a certificate about to expire that was not renewed). Use an address you read.",
+  "acm.go": "Install acme.sh",
+  "acm.badEmail": "Write a valid email address, like admin@example.com.",
+  "acm.installing": "Installing acme.sh and creating the Let's Encrypt account...",
+  "acm.done": "acme.sh is installed and the Let's Encrypt account is created: now the certificate can be issued.",
+  "acm.failed": "acme.sh could not be installed."
 }

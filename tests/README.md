@@ -343,6 +343,13 @@ the panel folder: option 1 refuses a made-up time zone in a dialog; option 2 ref
 that does not cover the panel name, and shows the right one in the confirmation (its key, the self-signed warning);
 Cancel saves nothing. The header says how to prepare the copy and how to read the log.
 
+`acme-install-browser-test.js` (Playwright, VM, reperto 247): on a server installed from scratch acme.sh is not
+there, and nothing in the pages installed it. The SSL page shows the card "Let's Encrypt is not ready" while acme.sh or
+its Let's Encrypt account is missing; a malformed address is refused in the page; "Install acme.sh" installs the
+package (user acme) and asks for the account. With a test address Let's Encrypt refuses the account, and the panel
+says so with Let's Encrypt's reason (never "account created"), and the card stays. Measured on the VM: the first run
+installed the package from scratch; creating the account for real needs a real address.
+
 `provider-firewall-browser-test.js` (Playwright, VM): the Firewall page's card "Your provider's firewall" with the
 three rules from the server's real ports, Cloudflare's official list ready to paste, "not confirmed yet"; the
 confirmation in the panel's window, then "current list", the state file 0600; Diagnostics "Check everything" with the

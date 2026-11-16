@@ -6846,6 +6846,7 @@ public class MailPanelContent {
                 <p class="mb-0">{{t:ssl.selfSignedFix}}</p>
             </div>
 
+""" + resource("pages/acme-card.html") + """
             <!-- Current Certificate Status -->
             <div class="card mb-4">
                 <div class="card-header"><i class="fas fa-certificate me-2" aria-hidden="true"></i>{{t:ssl.current}}</div>
@@ -7217,9 +7218,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """ + getFooterSection() + """
     <script>
         let currentDnsChallenge = null;
+""" + resource("pages/acme.js") + """
 
         function loadSslStatus() {
             fetch('/api/ssl').then(r => r.json()).then(data => {
+                acmeShow(data.acme_installed && data.acme_account);
                 const certDiv = document.getElementById('certInfo');
                 const warningDiv = document.getElementById('selfSignedWarning');
 
