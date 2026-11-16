@@ -261,6 +261,15 @@ touch the real database; it is turned on with `-De2e.vm=yes`, as root, on FreeBS
 
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.InstallPackagesTest
 
+`PostfixLevelTest` (reperto 251), as root on the VM (part 3 needs Postfix): the three scripts that write main.cf write
+the 3.6 floor and decide every parameter a reviewed level above it changes (smtp_tls_security_level; TLS-RPT is off,
+so its change does not apply); the level piece runs once, after main.cf and before Postfix starts; every default that
+the real `postconf -d` shows as depending on the level is listed in PostfixLevels at that level, and the level this
+Postfix asks for is reviewed; the piece with a fake postfix and postconf raises only to a reviewed, higher level (not
+reviewed, no request, lower, the same, a strange answer: unchanged). Falsified with planted copies: 6 FAILED.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PostfixLevelTest
+
 After an installation from scratch (`InstallFromScratch`), `mail-login-probe.sh` does a real login:
 it creates a test mailbox in `login-probe.test`, tries `doveadm auth test`, an IMAP LOGIN on 993 and
 an AUTH PLAIN on 587, shows the maillog lines and removes mailbox and domain. On 24/10/2026, with

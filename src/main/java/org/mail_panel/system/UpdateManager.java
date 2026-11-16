@@ -1621,23 +1621,7 @@ public final class UpdateManager {
      *
      * Fonte: https://www.postfix.org/COMPATIBILITY_README.html e postconf(5).
      */
-    /**
-     * Cosa cambia salendo di livello di compatibilita'. Non e' un elenco decorativo: e'
-     * l'unica cosa che permette di decidere se alzarlo. Dire "sei indietro, alzalo" senza
-     * dire cosa cambia significa far premere un pulsante alla cieca.
-     *
-     * Fonte: COMPATIBILITY_README di Postfix (postfix.org), letto il 01/09/2026.
-     */
-    private static final String[][] POSTFIX_LEVELS = {
-        {"1", "server.um.maskCredentials.1",
-         "append_dot_mydomain smtpd_relay_restrictions smtputf8_enable"},
-        {"2", "server.um.maskCredentials.2",
-         "mynetworks_style relay_domains"},
-        {"3.6", "server.um.maskCredentials.3",
-         "smtpd_tls_fingerprint_digest smtp_tls_fingerprint_digest lmtp_tls_fingerprint_digest respectful_logging"},
-        {"3.11", "server.um.maskCredentials.4",
-         "smtp_tlsrpt_skip_reused_handshakes@smtp_tlsrpt_enable=yes smtp_tls_security_level"},
-    };
+    // Cosa cambia a ogni livello di compatibilita' di Postfix: in PostfixLevels, che legge anche l'installazione.
 
     /**
      * Postfix non ha una rottura annunciata come Dovecot 2.4: ha un meccanismo diverso, e
@@ -1689,7 +1673,7 @@ public final class UpdateManager {
             String written = sh("postconf -n 2>/dev/null | sed -E 's/[[:space:]]*=.*//'", 30);
             java.util.Set<String> decided = new java.util.HashSet<>();
             for (String x : written.split("\n")) if (!x.isBlank()) decided.add(x.trim());
-            for (String[] l : POSTFIX_LEVELS) {
+            for (String[] l : PostfixLevels.ALL) {
                 double n = levelNumber(l[0]);
                 if (!(n > from && n <= to)) continue;
                 JSONArray pieces = new JSONArray();

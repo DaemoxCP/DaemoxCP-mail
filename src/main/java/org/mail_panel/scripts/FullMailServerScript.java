@@ -967,7 +967,10 @@ sysrc postfix_enable="YES"
 """
             // Postfix come MTA locale: senza, la posta di sistema esce da dma. Lo stesso pezzo
             // e' in PostfixScript e FullMailStackScript.
-            + LocalMtaScript.SHELL + """
+            + LocalMtaScript.SHELL
+            // Il livello di compatibilita' che chiede il Postfix installato, se esaminato (reperto 251). Lo stesso pezzo
+            // e' in PostfixScript e FullMailStackScript, dopo main.cf.
+            + PostfixLevelScript.shell() + """
 
 echo "${GREEN}  Postfix configured${NC}"
 
