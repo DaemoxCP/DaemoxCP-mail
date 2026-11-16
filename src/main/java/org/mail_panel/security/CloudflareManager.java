@@ -622,10 +622,20 @@ public class CloudflareManager {
         JSONArray errors = body.optJSONArray("errors");
         if (errors != null && errors.length() > 0) {
             JSONObject e = errors.getJSONObject(0);
-            return e.optString("message", I18n.tr("server.cfm.unknown")) + " (code " + e.optInt("code", 0) + ")";
+            String raw = e.optString("message", I18n.tr("server.cfm.unknown")) + " (code " + e.optInt("code", 0) + ")";
+            // Il token che Cloudflare non riconosce: la sua frase da sola («Invalid request headers (code 6003)») non dice
+            // a chi installa cosa fare (reperto 250, provato sulla VM con un token finto)
+            return TOKEN_REFUSED.contains(e.optInt("code", 0)) ? I18n.tr("server.cfm.tokenRefused", java.util.Map.of("m", raw)) : raw;
         }
         return I18n.tr("server.cfm.unknown");
     }
+
+    /**
+     * I codici con cui Cloudflare rifiuta il token stesso, non l'operazione: 6003 e 6111 (intestazione non valida: token
+     * incompleto, con spazi o caratteri in piu'), 1000 (token non valido), 9109 (token non valido o senza accesso),
+     * 10000 (autenticazione).
+     */
+    private static final java.util.Set<Integer> TOKEN_REFUSED = java.util.Set.of(6003, 6111, 1000, 9109, 10000);
 
     /** Maschera un token mostrando solo gli ultimi 4 caratteri. */
     public static String maskToken(String token) {

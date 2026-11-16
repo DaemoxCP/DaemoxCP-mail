@@ -2761,6 +2761,11 @@ public final class UpdateManager {
                 j.status = outcome.optBoolean("success", false) ? "completed" : "error";
                 if (!outcome.optBoolean("success", false))
                     j.errorMessage = outcome.optString("error", I18n.tr("server.um.x.confInterrupted"));
+                // Arrivato in fondo con dei passi non in ordine: la pagina lo dice, non «Setup completed» in verde con un
+                // passo su dieci (reperto 250).
+                else if (outcome.optInt("succeeded", 0) < outcome.optInt("total", 0))
+                    j.outcome = I18n.tr("server.cfgdom.partial", java.util.Map.of("ok", String.valueOf(outcome.optInt("succeeded", 0)),
+                            "tot", String.valueOf(outcome.optInt("total", 0))));
             } catch (Exception e) {
                 j.status = "error";
                 j.errorMessage = String.valueOf(e.getMessage());

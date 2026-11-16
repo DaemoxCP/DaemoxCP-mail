@@ -422,7 +422,8 @@ public class MtaStsSetup {
         if (inclusion == null || !inclusion.optBoolean("ok", false)) {
             JSONObject e = WebProtection.addInclude();
             doneOnes.put(outcome("include", I18n.tr("server.sts.includeTitle"), e));
-            if (job != null) job.write("[1/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.includeOk") : I18n.tr("server.sts.includeFail")));
+            if (job != null) job.write("[1/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.includeOk")
+                    : I18n.tr("server.sts.includeFail") + " \u2014 " + e.optString("error", "")));
             if (!e.optBoolean("success", false)) return stopped(r, doneOnes,
                     I18n.tr("server.sts.noIncludeStop"));
         } else doneOnes.put(already("include", I18n.tr("server.sts.includeTitle")));
@@ -431,7 +432,8 @@ public class MtaStsSetup {
         if (!WebProtection.state().optBoolean("installed", false)) {
             JSONObject e = WebProtection.install("", "");
             doneOnes.put(outcome("config443", I18n.tr("server.sts.config443Title"), e));
-            if (job != null) job.write("[2/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.c443Ok") : I18n.tr("server.sts.c443Fail")));
+            if (job != null) job.write("[2/8] " + (e.optBoolean("success", false) ? I18n.tr("server.sts.c443Ok")
+                    : I18n.tr("server.sts.c443Fail") + " \u2014 " + e.optString("error", "")));
             if (!e.optBoolean("success", false)) return stopped(r, doneOnes,
                     I18n.tr("server.sts.no443Stop"));
         } else doneOnes.put(already("config443", I18n.tr("server.sts.config443Title")));

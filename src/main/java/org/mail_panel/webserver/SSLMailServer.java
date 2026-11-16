@@ -790,6 +790,10 @@ public class SSLMailServer {
             // niente. Dopo Fail2banAutoSetup, che ricarica fail2ban per conto suo.
             org.mail_panel.system.PublicSurfaceRename.ensureAtBoot();
 
+            // La politica MTA-STS leggibile da nginx sui server dove era nata coi permessi del servizio (0700 e 0600):
+            // nginx rispondeva 403, e MTA-STS non si attivava (reperto 250). Solo permessi, mai attraverso collegamenti.
+            org.mail_panel.system.PublicPolicyAccess.ensureAtBoot();
+
             // Le firme dei file del pannello in inglese sui server installati prima: solo righe di
             // commento, quindi niente reload. Dopo la rinomina, che porta i file ai nomi di adesso.
             org.mail_panel.system.PanelMarker.ensureAtBoot();
@@ -10507,6 +10511,17 @@ public class SSLMailServer {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
+                // Prima di toccare qualunque cosa: un account Cloudflare che veda la zona, assegnato al dominio se e'
+                // l'unico che la vede (reperto 250).
+                org.mail_panel.system.DomainSetup.CloudflareChoice cfc = org.mail_panel.system.DomainSetup.cloudflareFor(domainId);
+                if (!cfc.ready()) {
+                    response = new JSONObject().put("success", false).put("error", cfc.error());
+                    logAudit("DOMAIN_CONFIGURE", ip, "domain " + domainId + " - NOT started: no Cloudflare account that sees its zone");
+                    break;
+                }
+                if (cfc.assigned() != null)
+                    logAudit("CLOUDFLARE_ASSIGN", ip, "domain " + domainId + " to Cloudflare account " + cfc.assigned().id
+                            + " (the only one whose token sees the zone)");
                 response = UpdateManager.startDomainSetup(domainId);
                 logAudit("DOMAIN_CONFIGURE", ip, "domain " + domainId
                         + " - started as job " + response.optString("jobId", ""));

@@ -33,7 +33,16 @@
                 + '<span>' + adEsc(a) + '</span></div>').join('') + '</div>';
         }
 
+        // La lettura della scheda in corso: parte da sola alla scelta del dominio, e «Set up everything» premuto
+        // mentre e' in corso la aspetta, o la scheda ridisegnata cancellerebbe l'esito appena scritto (reperto 250)
+        let adLoading = null;
         async function autoDnsLoad() {
+            const run = autoDnsRead();
+            adLoading = run;
+            try { await run; } finally { if (adLoading === run) adLoading = null; }
+        }
+
+        async function autoDnsRead() {
             const el = document.getElementById('autoDnsBody');
             if (!el) return;
             if (!currentDomainId) { el.innerHTML = '<span class="text-muted small">' + escHtml(t('dns.chooseDomainFirst')) + '</span>'; return; }
@@ -41,7 +50,8 @@
             const r = await autoDnsApi('status');
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + adEsc(r.error) + '</div>'; return; }
             if (!r.cloudflare || !r.zone) {
-                el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + adEsc(r.note) + '</div>';
+                el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + adEsc(r.note) + '</div>'
+                             + '<div id="autoDnsOutcome" class="mt-2" aria-live="polite"></div>';
                 return;
             }
             let h = '<div class="small text-muted mb-2">' + escHtml(t('ad.accountZone', { account: r.account, zone: r.domain })) + '</div>'
@@ -100,7 +110,7 @@
                 if (x.warnings && x.warnings.length)
                     h += '<tr><td colspan="4" class="pt-0">' + adWarnings(x.warnings) + '</td></tr>';
             });
-            h += '</tbody></table></div><div id="autoDnsOutcome"></div>';
+            h += '</tbody></table></div><div id="autoDnsOutcome" aria-live="polite"></div>';
 
             h += adReports(r.reports);
             h += adOptional(r.optionalItems);
@@ -391,8 +401,18 @@
         async function autoDnsConfigureAll() {
             if (!currentDomainId) return;
             if (!await adConfirm(t('ad.confirmAll'), t('ad.wordConfigure'))) return;
+            if (adLoading) await adLoading;
 
-            const el = document.getElementById('autoDnsOutcome');
+            let el = document.getElementById('autoDnsOutcome');
+            if (!el) {
+                // La scheda non e' ancora stata letta, o Cloudflare ha risposto con un errore: il posto per il lavoro
+                // si crea qui, o il pulsante, dopo la conferma, non farebbe niente (reperto 249)
+                el = document.createElement('div');
+                el.id = 'autoDnsOutcome';
+                el.className = 'mt-2';
+                el.setAttribute('aria-live', 'polite');
+                document.getElementById('autoDnsBody').appendChild(el);
+            }
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.starting'));
             const r = await autoDnsApi('configure_all', { confirm: 'CONFIGURE' });
             if (!r.success || !r.jobId) {
@@ -430,8 +450,12 @@
                     //
                     // Il registro sta dentro il contenitore che si ridisegna, quindi lo si tiene
                     // da parte e lo si rimette nella scheda nuova.
-                    const line = (s.job.status === 'completed'
+                    // Arrivato in fondo con dei passi non in ordine: avviso, non verde (reperto 250)
+                    const allDone = s.job.status === 'completed' && !s.job.result;
+                    const line = (allDone
                             ? '<i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('ad.done', { s: s.job.elapsedSeconds }))
+                            : s.job.status === 'completed'
+                            ? '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + escHtml(s.job.result)
                             : '<i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>' + escHtml(t('ad.stopped', { message: s.job.errorMessage })));
                     const logLines = pre ? pre.textContent : '';
                     await autoDnsLoad();
@@ -443,7 +467,7 @@
                         p.style.overflow = 'auto';
                         p.textContent = logLines;
                         freshRead.innerHTML = '<div class="alert alert-'
-                            + (s.job.status === 'completed' ? 'success' : 'warning')
+                            + (allDone ? 'success' : 'warning')
                             + ' py-2 small mb-2">' + line + '</div>';
                         freshRead.appendChild(p);
                     }
