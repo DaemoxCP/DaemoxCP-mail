@@ -23,7 +23,11 @@ import org.mail_panel.util.Shell;
  *      same ones protected;
  *   3. the configuration is the one of before, file by file; the refused 2.4 configuration is in the copy;
  *   4. Dovecot runs and listens where it did; the log has the tests again on 2.3, all passing;
- *   5. no list of unlocked packages left.
+ *   5. no list of unlocked packages left;
+ *   6. the panel's Sieve rules compiled by Pigeonhole on each side: once on 2.4, once more on 2.3 (reperto 241).
+ * The job runs connected to MySQL, as in the panel's root part: without it MailDbUsers leaves Dovecot on the panel's
+ * MySQL user and that is a second problem the test did not add (seen on 16/11/2026): the error must name only the
+ * test's problem.
  *
  * It touches the system. Only on the test VM with Dovecot 2.3, as root, with -De2e.vm=yes, from the panel's folder:
  *   cd /home/panel && java -De2e.vm=yes -cp "<tests>:<panel jar>" org.mail_panel.system.Dovecot24MoveE2ETest
@@ -41,6 +45,10 @@ public class Dovecot24MoveE2ETest {
         if (!sh("id -u").trim().equals("0")) { System.out.println("Root is needed."); System.exit(2); }
         I18n.setCurrent("en");
         org.mail_panel.Main.dbManager = org.mail_panel.sqli.dataBaseManager.readOnly();
+        java.lang.reflect.Method connect = org.mail_panel.Main.class.getDeclaredMethod("connectFromConfig");
+        connect.setAccessible(true);
+        String noMysql = (String) connect.invoke(null);
+        if (noMysql != null) { System.out.println("MySQL: " + noMysql); System.exit(2); }
         if (!ok("pkg info -e dovecot-mysql")) { System.out.println("Dovecot 2.3 (dovecot-mysql) is needed."); System.exit(2); }
 
         System.out.println("== The checks and the plan ==");
@@ -72,6 +80,8 @@ public class Dovecot24MoveE2ETest {
         check("1   saying 2.3 is back and passes the tests of before, naming the problem",
                 error.contains("The panel put 2.3 back from the copy, and the mail passes the tests of before")
                 && error.contains("Problem added by Dovecot24MoveE2ETest."));
+        check("1   the only problem is the one the test added",
+                error.startsWith("Dovecot 2.4 did not pass: Problem added by Dovecot24MoveE2ETest. The panel put 2.3 back"));
         check("1   it really got to 2.4 first (packages replaced, configuration written, tests on 2.4)",
                 log.contains("[5/8]") && log.contains("[7/8]") && log.contains("doveconf accepts the configuration"));
         check("2 the packages of before, at the same versions", inventory().equals(packagesBefore));
@@ -86,6 +96,8 @@ public class Dovecot24MoveE2ETest {
         check("4 the tests again on 2.3, all passing", again.contains("ok  IMAP login on 993") && again.contains("ok  doveconf -n")
                 && !again.contains("  NO  "));
         check("5 no list of unlocked packages left", !PackageQueue.statePresent());
+        int compiledLines = log.split("Sieve rules of the panel compiled by the Pigeonhole installed now", -1).length - 1;
+        check("6 the panel's Sieve rules compiled on 2.4 and again on 2.3 (" + compiledLines + " lines)", compiledLines == 2);
         end();
     }
 

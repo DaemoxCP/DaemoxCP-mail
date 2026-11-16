@@ -4859,6 +4859,11 @@ public final class UpdateManager {
             // E Postfix sul socket LMTP della configurazione scritta (reperto 234), prima delle prove.
             String lmtp = LmtpSocket.alignPostfix();
             if (!lmtp.isEmpty()) job.write("    " + lmtp);
+            // Le regole Sieve del pannello compilate dal Pigeonhole della 2.4: il compilato della 2.3 non vale piu', e
+            // Dovecot le ricompilerebbe a ogni messaggio con due errori nel maillog (reperto 241).
+            SieveBinaries.Result sieveBinaries = SieveBinaries.refreshNow();
+            job.write("    " + I18n.tr("server.um.dv24move.sieveBinaries", Map.of("done", String.valueOf(sieveBinaries.recompiled()),
+                    "same", String.valueOf(sieveBinaries.unchanged()))));
             String dbUserAfter = dovecotDbUser();
             job.write("    " + I18n.tr("server.um.dv24move.dbUser", Map.of("before", dbUserBefore.isEmpty() ? "?" : dbUserBefore,
                     "after", dbUserAfter.isEmpty() ? "?" : dbUserAfter)));
@@ -4870,6 +4875,8 @@ public final class UpdateManager {
             java.util.List<String> problems = mailStateProblems(before, after);
             if (!dbUserBefore.isEmpty() && !dbUserBefore.equals(dbUserAfter))
                 problems.add(I18n.tr("server.um.dv24move.dbUserChanged", Map.of("before", dbUserBefore, "after", dbUserAfter)));
+            if (!sieveBinaries.failed().isEmpty())
+                problems.add(I18n.tr("server.um.dv24move.sieveBinariesFailed", Map.of("n", String.valueOf(sieveBinaries.failed().size()))));
             sideEffects.checkListening(job);
             problems.addAll(sideEffects.problems());
             problems.addAll(planProblems(outcome));
@@ -4972,6 +4979,10 @@ public final class UpdateManager {
                     + backupDir + "/etc " + DOVECOT_DIR, 120)) return false;
             job.write("    " + I18n.tr("server.um.dv24move.configBack"));
             if (!startDovecot(job)) return false;
+            // Le regole del pannello di nuovo compilate dalla 2.3, se la 2.4 le aveva gia' ricompilate (reperto 241).
+            SieveBinaries.Result sieveBinaries = SieveBinaries.refreshNow();
+            job.write("    " + I18n.tr("server.um.dv24move.sieveBinaries", Map.of("done", String.valueOf(sieveBinaries.recompiled()),
+                    "same", String.valueOf(sieveBinaries.unchanged()))));
             job.write("    " + I18n.tr("server.um.dv24move.testsAgain"));
             MailState again = mailTests(job, mailbox, masterPassword, sieve);
             ok("postqueue -f", 60);

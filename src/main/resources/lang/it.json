@@ -6979,6 +6979,8 @@
   "server.um.dv24move.notStarted": "Dovecot 2.4 non si è avviato",
   "server.um.dv24move.dbUser": "Utente MySQL di Dovecot: prima {before}, adesso {after}.",
   "server.um.dv24move.dbUserChanged": "Dovecot leggeva le caselle come {before} e adesso come {after}: deve restare col suo utente.",
+  "server.um.dv24move.sieveBinaries": "Regole Sieve del pannello compilate dal Pigeonhole installato adesso: {done} ricompilate, {same} già giuste.",
+  "server.um.dv24move.sieveBinariesFailed": "{n} file di regole Sieve del pannello non si compilano con Dovecot 2.4.",
   "server.um.dv24move.s7": "Le stesse prove della posta, sulla 2.4",
   "server.um.dv24move.queueFlushed": "Postfix consegna la posta che ha tenuto intanto (postqueue -f).",
   "server.um.dv24move.s8": "Fine",

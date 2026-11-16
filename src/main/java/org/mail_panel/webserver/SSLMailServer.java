@@ -843,6 +843,10 @@ public class SSLMailServer {
             // Il compilato delle regole del pannello che il reset delle risposte automatiche toglieva: senza, Dovecot le
             // ricompila a ogni consegna e scrive un errore nel maillog (VacationTracking ricompila solo quelle cosi').
             org.mail_panel.system.VacationTracking.ensureAtBoot();
+            // Il compilato delle regole del pannello fatto da un altro Pigeonhole (la 2.3 prima del passaggio alla 2.4):
+            // Dovecot le ricompilava a ogni consegna con due errori nel maillog. Si sostituisce solo dove e' diverso
+            // da quello che fa il sievec installato (reperto 241); al secondo avvio non scrive niente.
+            org.mail_panel.system.SieveBinaries.ensureAtBoot();
 
             // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.

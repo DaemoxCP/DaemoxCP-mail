@@ -36,6 +36,12 @@ import java.util.logging.Logger;
  * Un errore nei primi due tempi rimette tutto com'era; nel terzo resta lo stato di mezzo, che funziona (Dovecot ascolta
  * dalle due parti), e il prossimo avvio riprende da li'. Si cambia solo il blocco che il pannello stesso aveva scritto,
  * uguale riga per riga, e solo se Postfix consegna dove il pannello lo aveva messo.
+ *
+ * <p>Dopo ogni reload si aspetta che Dovecot abbia davvero cambiato i suoi listener, fino a {@link #SETTLE_SECONDS}
+ * secondi: nel terzo tempo che la porta 24 sia chiusa, in entrambi che la consegna di prova risponda. Il reload di
+ * Dovecot ritorna prima che il master abbia rifatto i listener, e nel terzo tempo il socket di Postfix c'e' gia' dal
+ * primo, coi suoi permessi: un'unica prova subito dopo cadeva nel mezzo del cambio («Connection reset») e la migrazione
+ * finiva INCOMPLETE con tutto gia' a posto (reperto 240, sulla VM installata dalla 587 e passata alla 632).
  */
 public final class LmtpSocket {
 
@@ -143,6 +149,37 @@ public final class LmtpSocket {
         /** Il socket di Dovecot in /var/run/dovecot e' solo di root. */
         boolean baseSocketRootOnly();
         void flushQueue();
+        /** Un secondo d'attesa, mentre Dovecot rifa' i suoi listener dopo un reload. */
+        default void pause() {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /** Quanto si aspetta dopo un reload che Dovecot ascolti come dice la configurazione scritta (reperto 240). */
+    static final int SETTLE_SECONDS = 20;
+
+    /**
+     * La consegna di prova quando Dovecot ha finito il reload: se closing, prima si aspetta la porta 24 chiusa; poi la
+     * prova, ripetuta finche' risponde. Null se risponde; altrimenti l'ultima risposta sbagliata. In tutto al piu'
+     * {@link #SETTLE_SECONDS} secondi; la porta 24 ancora aperta la dice chi chiama.
+     */
+    static String settledProbe(Services sv, boolean closing) {
+        int waited = 0;
+        while (closing && waited < SETTLE_SECONDS && sv.port24Listening()) {
+            sv.pause();
+            waited++;
+        }
+        String p = sv.probe();
+        while (p != null && waited < SETTLE_SECONDS) {
+            sv.pause();
+            waited++;
+            p = sv.probe();
+        }
+        return p;
     }
 
     public enum Outcome { NOTHING, DONE, LEFT, ROLLED_BACK, INCOMPLETE }
@@ -183,7 +220,7 @@ public final class LmtpSocket {
                 if (dNew != null && !dNew.equals(d)) sv.write(main, dNew);
                 if (!sv.dovecotAccepts()) return back(sv, master, m, main, d, transport, "doveconf refuses the configuration with the socket");
                 if (!sv.dovecotReload(true)) return back(sv, master, m, main, d, transport, "after the reload Dovecot has no socket " + SOCKET + " of postfix, 0600");
-                String p = sv.probe();
+                String p = settledProbe(sv, false);
                 if (p != null) return back(sv, master, m, main, d, transport, "the socket does not deliver: " + p);
             }
             // 2. Postfix sul socket.
@@ -209,7 +246,7 @@ public final class LmtpSocket {
             return new Result(Outcome.INCOMPLETE, "Postfix delivers through the socket; closing port 24 was refused by Dovecot,"
                     + " so it stays open until the next start");
         }
-        String p = sv.probe();
+        String p = settledProbe(sv, true);
         boolean closed = !sv.port24Listening();
         boolean rootOnly = sv.baseSocketRootOnly();
         sv.flushQueue();

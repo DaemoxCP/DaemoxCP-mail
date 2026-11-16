@@ -95,7 +95,8 @@ public final class SieveCompiler {
     private SieveCompiler() {}
 
     /** COMPILED: fatto. REFUSED: lo script ha errori (sievec li dice riga per riga). NOT_COMPILED: non si e' potuto. */
-    public enum Status { COMPILED, REFUSED, NOT_COMPILED }
+    /** UNCHANGED: compilato, ed era gia' uguale a quello accanto allo script (SieveBinaries, reperto 241). */
+    public enum Status { COMPILED, UNCHANGED, REFUSED, NOT_COMPILED }
 
     /** L'esito, col testo di sievec o il motivo. */
     public record Outcome(Status status, String message) {
@@ -119,6 +120,18 @@ public final class SieveCompiler {
      * sievec di root, ma con sievec che gira come {@link #USER}.
      */
     public static Outcome compile(Path script) {
+        return compile(script, false);
+    }
+
+    /**
+     * Come {@link #compile(Path)}, ma il compilato accanto allo script si sostituisce solo se e' diverso da quello che il
+     * sievec installato fa adesso: UNCHANGED se era gia' quello (reperto 241). Il compilato e' deterministico.
+     */
+    public static Outcome refresh(Path script) {
+        return compile(script, true);
+    }
+
+    private static Outcome compile(Path script, boolean onlyIfDifferent) {
         String sievec = sievec();
         if (sievec == null) return notCompiled("sievec is not installed");
         Path s = script.toAbsolutePath().normalize();
@@ -146,6 +159,10 @@ public final class SieveCompiler {
             Run cat = run(asCompiler(CAT, compiled.toString()), MAX_BINARY, false);
             if (cat.exit() != 0 || cat.out().length == 0)
                 return notCompiled("sievec saved no binary" + (c.text().isBlank() ? "" : ": " + c.text().strip()));
+            // La cartella e' solo di root (RootOnlyPath, sopra): il compilato che c'e' lo legge root senza seguire collegamenti.
+            if (onlyIfDifferent && Files.isRegularFile(binary, LinkOption.NOFOLLOW_LINKS)
+                    && Files.size(binary) == cat.out().length && java.util.Arrays.equals(Files.readAllBytes(binary), cat.out()))
+                return new Outcome(Status.UNCHANGED, "");
             install(binary, cat.out(), like);
             return new Outcome(Status.COMPILED, c.text().strip());
         } catch (IOException e) {
