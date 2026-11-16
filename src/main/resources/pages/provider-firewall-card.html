@@ -1,0 +1,34 @@
+            <!-- Il firewall del provider davanti al server, con la lista di Cloudflare per pannello e webmail (reperto 245) -->
+            <div class="card mb-4" id="provider-firewall" tabindex="-1">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span><i class="fas fa-shield-halved me-2" aria-hidden="true"></i><strong>{{t:pfw.title}}</strong>
+                        <span class="small text-muted ms-2">{{t:pfw.sub}}</span></span>
+                    <button type="button" class="btn btn-sm btn-outline-primary touch-target" data-on-click="pfwLoad()">
+                        <i class="fas fa-rotate me-1" aria-hidden="true"></i>{{t:pfw.reload}}</button>
+                </div>
+                <div class="card-body">
+                    <p class="small mb-2">{{t:pfw.intro.html}}</p>
+                    <div id="pfw-state" role="status" aria-live="polite"><span class="text-muted small">{{t:pfw.loading}}</span></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-2">
+                            <caption class="small">{{t:pfw.rulesCaption}}</caption>
+                            <thead><tr><th scope="col">{{t:pfw.colWhat}}</th><th scope="col">{{t:pfw.colPorts}}</th>
+                                <th scope="col">{{t:pfw.colSources}}</th></tr></thead>
+                            <tbody id="pfw-rules"></tbody>
+                        </table>
+                    </div>
+                    <p class="small text-muted mb-2">{{t:pfw.nothingElse.html}}</p>
+                    <label for="pfw-list" class="form-label small fw-bold mb-1">{{t:pfw.listLabel}}</label>
+                    <textarea id="pfw-list" class="form-control form-control-sm font-monospace mb-2" rows="4" readonly
+                              aria-describedby="pfw-list-help"></textarea>
+                    <div id="pfw-list-help" class="small text-muted mb-2">{{t:pfw.listHelp.html}}</div>
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary touch-target" data-on-click="pfwCopy()">
+                            <i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:pfw.copy}}</button>
+                        <button type="button" class="btn btn-sm btn-primary touch-target" id="pfw-ack" data-on-click="pfwAck()" disabled>
+                            <i class="fas fa-check me-1" aria-hidden="true"></i>{{t:pfw.ack}}</button>
+                    </div>
+                    <div id="pfw-outcome" role="status" aria-live="polite"></div>
+                    <p class="small text-muted mb-0 mt-2">{{t:pfw.why.html}}</p>
+                </div>
+            </div>

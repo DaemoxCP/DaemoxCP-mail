@@ -11180,7 +11180,7 @@ public final class UpdateManager {
      *             controllo di forma da solo non distingue un CIDR IPv6 da uno IPv4, e una
      *             lista arrivata sul file sbagliato falserebbe il confronto.
      */
-    private static java.util.List<String> downloadIntervals(String url, boolean ipv4) {
+    public static java.util.List<String> downloadIntervals(String url, boolean ipv4) {
         java.util.List<String> out = new java.util.ArrayList<>();
         try {
             var http = java.net.http.HttpClient.newBuilder()

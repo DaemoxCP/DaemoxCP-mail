@@ -10657,6 +10657,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
         </div>
 
+""" + resource("pages/provider-firewall-card.html") + """
         <!-- Stato -->
         <div class="card mb-3 border-primary">
             <div class="card-header bg-primary text-white py-2">
@@ -10883,7 +10884,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     </div>
 """ + getFooterSection() + """
     <script>
-""" + getFirewallJs() + resource("pages/upd-api.js") + resource("pages/web443.js") + """
+""" + getFirewallJs() + resource("pages/upd-api.js") + resource("pages/web443.js") + resource("pages/provider-firewall.js") + """
 """ + """
     </script>
 </body>

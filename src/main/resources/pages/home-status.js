@@ -49,7 +49,7 @@
             el.innerHTML = '<div class="alert alert-' + (ok ? 'success' : 'warning') + ' py-2 small mb-0">'
                 + '<i class="fas fa-' + (ok ? 'check-circle' : 'triangle-exclamation') + ' me-1" aria-hidden="true"></i>'
                 + '<strong>' + homeEsc(r.reason || (ok ? t('hs.restarts') : t('hs.noRestart'))) + '</strong>'
-                + (ok ? '' : ' <a href="/updates" class="alert-link">' + homeEsc(t('hs.goOs')) + '</a>')
+                + (ok ? '' : ' <a href="/diagnostics#diag-os" class="alert-link">' + homeEsc(t('hs.goOs')) + '</a>')
                 + '</div>';
         }
 
@@ -70,7 +70,7 @@
             const cls = missingOnes.length ? 'danger' : (extraOnes.length ? 'warning' : 'success');
             el.innerHTML = '<div class="alert alert-' + cls + ' py-2 small mb-0">'
                 + '<i class="fas fa-' + (cls === 'success' ? 'check-circle' : 'triangle-exclamation') + ' me-1" aria-hidden="true"></i>'
-                + homeEsc(r.note) + ' <a href="/updates" class="alert-link">' + homeEsc(t('hs.seeList')) + '</a></div>';
+                + homeEsc(r.note) + ' <a href="/diagnostics#cf-body" class="alert-link">' + homeEsc(t('hs.seeList')) + '</a></div>';
         }
 
         document.addEventListener('DOMContentLoaded', () => {

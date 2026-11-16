@@ -1,0 +1,63 @@
+#!/usr/bin/expect -f
+# The terminal menu on the VM, driven by keys from the Mac through ssh -tt, on a copy of the panel folder
+# (/var/tmp/menu-test: the jar, a copy of database/ made with sqlite3 .backup, and certs/ with other.crt/.key for
+# other.example.net and panel.crt/.key for panel.rehearsal.test, self-signed) so the service keeps its SQLite (reperti 242, 243):
+#  A. option 1: a made-up time zone is refused in a dialog, the script never runs;
+#  B. option 2: a certificate given as a file path that does not cover the panel name is refused (validation
+#     error); the right one is shown in the confirmation (what it covers, self-signed warning); then Cancel and Exit,
+#     nothing saved.
+# Every screen is read after each key (drain) and checked afterwards on the cleaned log:
+#   expect tests/menu-guided-install.exp menu.log
+#   perl -pe "s/\\e\\[[0-9;?]*[A-Za-z]/ /g" menu.log | grep -E "not a known|does not cover|belongs to the certificate|self-signed"
+set timeout 40
+log_file -noappend [lindex $argv 0]
+spawn ssh -tt -i $env(HOME)/.ssh/freebsd_test_vm -o IdentitiesOnly=yes root@192.168.1.20 "stty rows 50 cols 170; cd /var/tmp/menu-test && TERM=xterm /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar"
+proc drain {secs} { set timeout $secs; expect { -re ".+" { exp_continue } timeout {} eof {} } }
+proc mark {m} { send_log "\n<<<$m>>>\n" }
+proc keys {k} { send -- $k; drain 1 }
+set TAB "\t"; set STAB "\033\[Z"; set END "\033\[F"; set DOWN "\033\[B"; set BS "\177"
+
+expect "Welcome"; drain 2; send "\r"; drain 4
+
+mark "A-OPTION-1"
+send "\r"; drain 3; send $TAB; drain 1; send "\r"; drain 3
+mark "A-TZ-DIALOG"
+send $END; for {set i 0} {$i < 30} {incr i} { send $BS }; drain 1
+send "Mars/Olympus"; drain 1; send $TAB; drain 1; send $TAB; drain 1; send "\r"; drain 3
+mark "A-AFTER-OK"
+send "\r"; drain 3
+mark "A-BACK"
+
+mark "B-OPTION-2"
+send $DOWN; drain 1; send "\r"; drain 3; send $TAB; drain 1; send "\r"; drain 4
+mark "B-FORM"
+# host
+send $TAB; drain 1; send $TAB; drain 1; send $END; for {set i 0} {$i < 30} {incr i} { send $BS }; drain 1
+send "panel.rehearsal.test"; drain 1
+# certificate: Clear, then the path of a certificate for another name
+send $TAB; drain 1; send $TAB; drain 1; send $TAB; drain 1; send "\r"; drain 1; send $STAB; drain 1
+send "/var/tmp/menu-test/certs/other.crt"; drain 1
+# key: Clear, then its path
+send $TAB; drain 1; send $TAB; drain 1; send $TAB; drain 1; send "\r"; drain 1; send $STAB; drain 1
+send "/var/tmp/menu-test/certs/other.key"; drain 1
+# chain: Clear
+send $TAB; drain 1; send $TAB; drain 1; send $TAB; drain 1; send "\r"; drain 1
+# prefix, its Clear, Submit
+send $TAB; drain 1; send $TAB; drain 1; send $TAB; drain 1
+mark "B-SUBMIT-WRONG"
+send "\r"; drain 4
+mark "B-AFTER-WRONG"
+send "\r"; drain 2
+# back from Submit to the key's Clear (5 back), clear it, type the right key, then the certificate the same way
+for {set i 0} {$i < 5} {incr i} { send $STAB; drain 1 }
+send "\r"; drain 1; send $STAB; drain 1; send "/var/tmp/menu-test/certs/panel.key"; drain 1
+send $STAB; drain 1; send "\r"; drain 1; send $STAB; drain 1; send "/var/tmp/menu-test/certs/panel.crt"; drain 1
+for {set i 0} {$i < 8} {incr i} { send $TAB; drain 1 }
+mark "B-SUBMIT-RIGHT"
+send "\r"; drain 4
+mark "B-CONFIRM-SHOWN"
+# Cancel is the default: nothing saved
+send "\r"; drain 2
+send $TAB; drain 1; send "\r"; drain 2; send $TAB; drain 1; send "\r"; drain 3
+mark "B-END"
+send "\003"; drain 2

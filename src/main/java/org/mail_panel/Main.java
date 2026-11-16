@@ -575,20 +575,33 @@ public class Main {
                         System.exit(0);
                         break;
 
-                    case 1:
-                        // Set TimeZone and CloudFlare DNS
+                    case 1: {
+                        // Fuso orario, NTP e DNS. Il fuso lo sceglie chi installa (reperto 242): prima era sempre
+                        // Europe/Rome. Si propone quello che il sistema ha gia', e un nome sbagliato non parte.
+                        String zone = showTextInputDialogWithDefault(gui, "Time zone",
+                                "The server's time zone (IANA name, e.g. Europe/Rome, Europe/London, UTC):",
+                                org.mail_panel.system.SystemTimeZone.current());
+                        if (zone == null) break;
+                        zone = zone.trim();
+                        String zoneProblem = org.mail_panel.system.SystemTimeZone.problem(zone);
+                        if (zoneProblem != null) {
+                            new com.googlecode.lanterna.gui2.dialogs.MessageDialogBuilder().setTitle("Time zone").setText(zoneProblem)
+                                    .addButton(MessageDialogButton.OK).build().showDialog(gui);
+                            break;
+                        }
                         try {
                             screen.stopScreen();
                         } catch (IOException e) {
                             throw new RuntimeException(e);
                         }
-                        executeScript("./install_scripts/setup_timezone_and_dns.sh", "Timezone & DNS Configuration");
+                        executeScript("./install_scripts/setup_timezone_and_dns.sh", "Time zone, clock (NTP) and DNS resolver", zone);
                         try {
                             screen.startScreen();
                         } catch (IOException e) {
                             throw new RuntimeException(e);
                         }
                         break;
+                    }
 
                     case 2:
                         // Edit Panel Configuration
@@ -726,6 +739,19 @@ public class Main {
     /** L'esito dell'ultimo ritorno chiesto dal menu (le prove lo leggono). */
     static final class JSONObjectHolder { static volatile org.json.JSONObject last; }
 
+    /** Il nome del pannello salvato con la voce 2, "" se non c'e'. */
+    private static String savedPanelHost() {
+        try (ResultSet r = dbManager.get_data_config()) {
+            if (r.next()) {
+                String h = r.getString("mail_panel_host");
+                return h == null ? "" : h.trim();
+            }
+        } catch (Exception ignored) {
+            // nessuna configurazione: nessun nome
+        }
+        return "";
+    }
+
     /**
      * Install/Reinstall the complete mail server
      */
@@ -742,6 +768,23 @@ public class Main {
             Welcome cancelled = new Welcome("Cancelled", "Installation cancelled - no hostname provided");
             cancelled.show(gui);
             return;
+        }
+
+        // I tre nomi prima di partire (reperto 244): la webmail non piu' quella di esempio, posta e web su nomi
+        // diversi (la posta resta fuori dal proxy di Cloudflare). Gli avvisi lasciano scegliere.
+        org.mail_panel.system.InstallNames.Result names = org.mail_panel.system.InstallNames.check(
+                mailHostname.trim(), dbManager.getRoundcubeDomain(), savedPanelHost());
+        if (!names.problems().isEmpty()) {
+            new com.googlecode.lanterna.gui2.dialogs.MessageDialogBuilder().setTitle("Before installing")
+                    .setText("The installation does not start:\n\n- " + String.join("\n- ", names.problems()))
+                    .addButton(MessageDialogButton.OK).build().showDialog(gui);
+            return;
+        }
+        if (!names.warnings().isEmpty()) {
+            MessageDialogButton go = new com.googlecode.lanterna.gui2.dialogs.MessageDialogBuilder().setTitle("Before installing")
+                    .setText("- " + String.join("\n- ", names.warnings()) + "\n\nInstall anyway?")
+                    .addButton(MessageDialogButton.Cancel).addButton(MessageDialogButton.OK).build().showDialog(gui);
+            if (go != MessageDialogButton.OK) return;
         }
 
         try {
@@ -1050,7 +1093,16 @@ public class Main {
                     }
                 }
 
-                // Only load self-signed if no certificate is configured
+                // Only load self-signed if no certificate is configured. Il nome, la porta e il prefisso scritti con la
+                // voce 2 restano (reperto 244): prima diventavano sempre 0.0.0.0, 2096 e mailpanel-.
+                String keptHost = "", keptPort = "", keptPrefix = "";
+                try (ResultSet configResult = dbManager.get_data_config()) {
+                    if (configResult.next()) {
+                        keptHost = String.valueOf(configResult.getString("mail_panel_host")).trim();
+                        keptPort = String.valueOf(configResult.getString("mail_panel_port")).trim();
+                        keptPrefix = String.valueOf(configResult.getString("mail_panel_sessions_prefix")).trim();
+                    }
+                }
                 if (!hasCertConfigured) {
                     String certPath = "/usr/local/etc/ssl/mail/fullchain.pem";
                     String keyPath = "/usr/local/etc/ssl/mail/privkey.pem";
@@ -1063,16 +1115,18 @@ public class Main {
                         String keyContent = new String(java.nio.file.Files.readAllBytes(keyFile.toPath()));
 
                         // Update panel config with the self-signed cert so web panel can start
-                        // Use 0.0.0.0 only for first-time setup
                         dbManager.update_panel_config(
-                            "0.0.0.0",  // host - listen on all interfaces
-                            "2096",      // port
+                            org.mail_panel.security.PemTls.dnsName(keptHost) ? keptHost : "0.0.0.0",
+                            keptPort.matches("[0-9]{1,5}") ? keptPort : "2096",
                             certContent,
                             keyContent,
                             "",          // chain (empty for self-signed)
-                            "mailpanel-" // session prefix
+                            keptPrefix.matches("[a-zA-Z0-9_-]{1,20}") ? keptPrefix : "mailpanel-"
                         );
                         System.out.println(ANSI_GREEN + "[AUTO] Self-signed certificate loaded into panel configuration" + ANSI_RESET);
+                        System.out.println(ANSI_YELLOW + "The panel uses the mail server's self-signed certificate for now:"
+                                + " set the panel's own certificate (for example the Cloudflare Origin Certificate) with"
+                                + " menu option 2." + ANSI_RESET);
                     }
                 }
             } catch (Exception e) {
@@ -1080,7 +1134,6 @@ public class Main {
             }
 
             System.out.println(ANSI_GREEN + "Mail server installed successfully!" + ANSI_RESET);
-            System.out.println(ANSI_YELLOW + "Remember to configure a real SSL certificate from the web panel!" + ANSI_RESET);
             System.out.flush();
         }
         return success;

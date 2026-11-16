@@ -1,5 +1,7 @@
 package org.mail_panel.gui;
 
+import org.mail_panel.security.PemTls;
+
 import com.googlecode.lanterna.TerminalSize;
 import com.googlecode.lanterna.gui2.*;
 import com.googlecode.lanterna.gui2.dialogs.MessageDialog;
@@ -33,7 +35,8 @@ public class ModifyData {
 
     // Hints
     private static final String PORT_HINT = "[0-9] (1-65535)";
-    private static final String HOST_HINT = "[a-z A-Z 0-9 . -] (es: 127.0.0.1, 0.0.0.0)";
+    private static final String HOST_HINT = "the panel's name, e.g. panel.example.com";
+    private static final String PEM_HINT = "paste the PEM, or the path of a file, e.g. /root/panel-cert.pem";
     private static final String PREFIX_HINT = "[a-z A-Z 0-9 _ -] (1-20 chars)";
 
     public ModifyData(dataBaseManager dbmanager) {
@@ -148,6 +151,9 @@ public class ModifyData {
         hintsPanel.addComponent(new Label("PREFIX:"));
         hintsPanel.addComponent(new Label(PREFIX_HINT));
 
+        hintsPanel.addComponent(new Label("CERT/KEY:"));
+        hintsPanel.addComponent(new Label(PEM_HINT));
+
         return hintsPanel;
     }
 
@@ -204,7 +210,33 @@ public class ModifyData {
             errors.append("- SSL Certificate is required when SSL Key is provided\n");
         }
 
+        // Certificato, chiave e catena: il PEM incollato, o letto dal file di cui si e' scritto il percorso; poi il
+        // controllo prima di salvare (reperto 243): leggibile, valido adesso, copre il nome, chiave sua.
+        resolvedCert = resolve(sslCert, "SSL Certificate", errors);
+        resolvedKey = resolve(sslKey, "SSL Private Key", errors);
+        resolvedChain = resolve(mail_panel_ssl_chain.getText().trim(), "SSL CA Chain", errors);
+        certCheck = null;
+        if (errors.length() == 0 && !resolvedCert.isEmpty() && !resolvedKey.isEmpty()) {
+            certCheck = PemTls.check(host, resolvedCert, resolvedKey, java.time.Instant.now());
+            for (String e : certCheck.errors()) errors.append("- ").append(e).append("\n");
+        }
+
         return errors.length() > 0 ? errors.toString() : null;
+    }
+
+    private String resolvedCert = "", resolvedKey = "", resolvedChain = "";
+    private PemTls.Check certCheck;
+
+    /** Il PEM del campo: com'e', o letto dal file se il campo e' un percorso. "" se vuoto; un errore se il file non va. */
+    private static String resolve(String text, String what, StringBuilder errors) {
+        if (text.isEmpty()) return "";
+        if (!PemTls.isPath(text)) return text;
+        try {
+            return PemTls.readFile(java.nio.file.Path.of(text));
+        } catch (java.io.IOException e) {
+            errors.append("- ").append(what).append(": ").append(e.getMessage()).append("\n");
+            return "";
+        }
     }
 
     private void onSubmit() {
@@ -223,8 +255,10 @@ public class ModifyData {
         message.append("Panel Port: ").append(mail_panel_port.getText()).append("\n");
         message.append("Panel Host: ").append(mail_panel_host.getText()).append("\n");
         message.append("Session Prefix: ").append(mail_panel_session_prefix.getText()).append("\n");
-        if (!mail_panel_ssl_cert.getText().trim().isEmpty()) {
-            message.append("SSL Certificate: (configured)\n");
+        if (certCheck != null) {
+            message.append("\n");
+            for (String line : certCheck.info()) message.append(line).append("\n");
+            for (String w : certCheck.warnings()) message.append("WARNING: ").append(w).append("\n");
         }
 
         // Cancel is first = pre-selected (safety)
@@ -276,9 +310,9 @@ public class ModifyData {
             return database_manager.update_panel_config(
                     mail_panel_host.getText().trim(),
                     mail_panel_port.getText().trim(),
-                    mail_panel_ssl_cert.getText().trim(),
-                    mail_panel_ssl_cert_key.getText().trim(),
-                    mail_panel_ssl_chain.getText().trim(),
+                    resolvedCert.trim(),
+                    resolvedKey.trim(),
+                    resolvedChain.trim(),
                     mail_panel_session_prefix.getText().trim()
             );
         } catch (Exception e) {
