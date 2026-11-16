@@ -648,7 +648,9 @@ now (2.3 and 2.4, no TCP listener, last_valid_uid/gid 5000, the installers' tran
 before in three steps (socket opened beside port 24, Postfix moved, port 24 closed), DONE then nothing; a block that is
 not the panel's or Postfix delivering elsewhere: left alone; a fault in the first two steps: everything back, mail
 flowing on port 24; a fault in the last: the middle state, which works both ways, finished by the next run; killed
-after each step: the next run finishes. No system.
+after each step: the next run finishes. A reload that takes effect a few seconds late, as Dovecot's does (reperto
+240): the run waits for port 24 to close and for the probe to answer, and ends DONE instead of INCOMPLETE; listeners
+that never come within the wait still put everything back. No system.
 
 **LmtpSocketE2ETest** — the same on the VM's real Dovecot and Postfix (as root, `-De2e.vm=yes`, from the block of
 before): `nobody` is greeted on /var/run/dovecot/lmtp before (the fault) and on neither socket after; the socket is

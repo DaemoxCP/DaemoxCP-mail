@@ -20,7 +20,10 @@ import java.util.Map;
  *     Postfix refuses the transport): everything back as it was, port 24 still the way, Postfix on it;
  *  5. a fault in the last step (Dovecot refuses closing port 24): INCOMPLETE, the middle state works (both ways),
  *     and the next run finishes;
- *  6. the process killed after step 1 and after step 2: the next run finishes, mail always had a way.
+ *  6. the process killed after step 1 and after step 2: the next run finishes, mail always had a way;
+ *  7. a reload that takes effect a few seconds late, as Dovecot's does (reperto 240): the run waits for the listeners
+ *     and ends DONE, instead of probing in the middle of the change; listeners that never come within the wait still
+ *     put everything back.
  *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LmtpSocketTest
  */
 public class LmtpSocketTest {
@@ -47,6 +50,10 @@ public class LmtpSocketTest {
         String refuse;      // step to fail: "doveconf", "reload", "probe", "transport", "close"
         String kill;        // step to die at: "after-step1", "after-step2"
         int writes = 0, flushed = 0;
+        // A reload takes effect only after this many pauses: until then the listeners of before, and a probe on the
+        // socket is reset in the middle of the change (reperto 240). 0: at once.
+        int settle = 0, pending = 0, pauses = 0;
+        boolean nextPort24, nextPostfixSocket, nextBaseOpen;
 
         Machine(String master, String main) { files.put(MASTER, master); files.put(MAIN, main); }
 
@@ -75,12 +82,25 @@ public class LmtpSocketTest {
         @Override public boolean dovecotReload(boolean expectSocket) {
             String m = files.get(MASTER);
             if ("reload".equals(refuse) && m.contains("dovecot-lmtp")) { postfixSocket = false; return false; }
-            port24 = m.contains("port = 24");
-            postfixSocket = m.contains("unix_listener /var/spool/postfix/private/dovecot-lmtp");
-            baseOpen = m.contains("mode = 0666");
-            return !expectSocket || postfixSocket;
+            nextPort24 = m.contains("port = 24");
+            nextPostfixSocket = m.contains("unix_listener /var/spool/postfix/private/dovecot-lmtp");
+            nextBaseOpen = m.contains("mode = 0666");
+            if (settle == 0) listen(); else pending = settle;
+            // The socket file is there with its owner and mode at once (from step 1 it already was): only the
+            // listeners behind it come later.
+            return !expectSocket || nextPostfixSocket;
+        }
+        private void listen() {
+            port24 = nextPort24;
+            postfixSocket = nextPostfixSocket;
+            baseOpen = nextBaseOpen;
+        }
+        @Override public void pause() {
+            pauses++;
+            if (pending > 0 && --pending == 0) listen();
         }
         @Override public String probe() {
+            if (pending > 0) return "Connection reset";
             if ("probe".equals(refuse)) return "LMTP RCPT TO: 550 no such user";
             return postfixSocket ? null : "no socket";
         }
@@ -195,6 +215,24 @@ public class LmtpSocketTest {
             r = run(k);
             check("  the next run: DONE (" + r.detail() + ")", r.outcome() == LmtpSocket.Outcome.DONE && k.moved() && k.mailFlows());
         }
+
+        System.out.println("\n== 7. A reload that takes effect late (reperto 240)");
+        for (String v : new String[]{"2.3", "2.4"}) {
+            Machine s = "2.4".equals(v) ? new Machine(String.format(AROUND, LmtpSocket.OLD24), MAIN24)
+                    : new Machine(String.format(AROUND, LmtpSocket.OLD23), MAIN23);
+            s.settle = 3;
+            r = run(s);
+            check(v + ": DONE (" + r.detail() + ")", r.outcome() == LmtpSocket.Outcome.DONE);
+            check("  Postfix on the socket, port 24 closed, the base socket root only, mail flows", s.moved() && s.mailFlows());
+            check("  it waited for the listeners after both reloads (" + s.pauses + " pauses)", s.pauses == 6);
+        }
+        String masterNever = String.format(AROUND, LmtpSocket.OLD23);
+        Machine never = new Machine(masterNever, MAIN23);
+        never.settle = LmtpSocket.SETTLE_SECONDS * 3;
+        r = run(never);
+        check("listeners that never come within the wait: ROLLED_BACK (" + r.detail() + ")", r.outcome() == LmtpSocket.Outcome.ROLLED_BACK
+                && never.pauses <= LmtpSocket.SETTLE_SECONDS);
+        check("  files and transport as before, port 24 still the way", never.asBefore(masterNever, MAIN23) && never.mailFlows());
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " FAILED");
         System.exit(failed == 0 ? 0 : 1);
