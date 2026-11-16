@@ -275,8 +275,12 @@ only in the panel's folder, not in INBOX, and the mailbox's own script does not 
 put back at the end, measured, the own script runs too and it fails). Since reperto 217 the mailbox's
 script uses the Sieve "duplicate" test, which writes Dovecot's duplicate database in the home as
 autoreplies and forwards do: with the home of before (the mail root) "dovecot", "dovecot.lda-dupes"
-and "dovecot.lda-dupes.locks" show among the folders and it fails (measured on the VM). As root, in
-the panel folder:
+and "dovecot.lda-dupes.locks" show among the folders and it fails (measured on the VM). Since reperto 239 a real
+Roundcube login on the webmail's nginx site, then the mailbox page: it must carry the folder list, which comes from
+IMAP, so Roundcube decrypted the IMAP password from its session (des_key, cipher_method). "task mail" and the logout
+link are not enough: with IMAP refused Roundcube still draws the mail page, with an error and no folders (measured on
+the VM by changing des_key between the login and the page: with the folder list it fails, without it it passed).
+Roundcube's row for the probe mailbox is removed at the end. As root, in the panel folder:
 
     sh tests/mail-login-probe.sh
 
@@ -697,6 +701,31 @@ left alone. Measured on 16/11/2026 (redis 8.10.3, ClamAV 1.5.4, rspamd 4.1.0).
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ClamdSocketTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RspamdControllerTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RspamdBackendsE2ETest   (VM, as root)
+
+**PhpHardeningTest** — php.ini written when it is missing, and `security.limit_extensions = .php` in the panel's
+Roundcube pool (reperto 238). The real server had no php.ini (installed before the installer wrote one): PHP ran on its
+built-in defaults, `expose_php` On and "X-Powered-By: PHP/8.4" in every webmail answer, errors to the output, sessions
+in /tmp. The text is PhpHardening.INI, the installer's own, plus `session.upload_progress.enabled = Off`. Against a fake
+php-fpm that sends X-Powered-By until it has read a php.ini: DONE (the file, the sessions folder, the log and its
+rotation, the pool), then nothing; a php.ini already there or a pool the panel did not write: untouched; no webmail
+site or the webmail down: nothing written; php-fpm -t refusing, the webmail down after the reload, php-fpm not reading
+the file, a file not writable: everything back. No system.
+
+**RoundcubeCipherTest** — Roundcube encrypts the IMAP password in its session with AES-256-CBC and a 32-character key,
+no longer DES-EDE3-CBC ("for backward compatibility", says defaults.inc.php, which calls AES-256-CBC "a better choice")
+(reperto 239). Only the installer's des_key line is replaced, only if cipher_method is not set; before and after, the
+webmail answers, PHP encrypts and decrypts with the file's method and key, and a real login through the panel's SSO
+(RoundcubeDbUser.realLogin, which now also wants the folder list) opens the mailbox. No system.
+
+**PhpRoundcubeE2ETest** — the two on the VM's real PHP 8.4, php-fpm, nginx and Roundcube 1.7.5 (as root,
+`-De2e.vm=yes`, `-De2e.probe=` the path of mail-login-probe.sh): php.ini taken away as on the real server, X-Powered-By
+appears; PhpHardening: DONE, X-Powered-By gone, the pool with the limit and still running as roundcube; php-fpm -t
+refusing: ROLLED_BACK and X-Powered-By again. Roundcube: the probe's real webmail login before (DES), RoundcubeCipher
+DONE, the real login after (AES-256-CBC, folders from IMAP); PHP refusing the cipher: config.inc.php byte for byte.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PhpHardeningTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RoundcubeCipherTest
+    java -De2e.vm=yes -De2e.probe=tests/mail-login-probe.sh -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PhpRoundcubeE2ETest   (VM, as root)
 
 **DovecotHomeTest** — every mailbox's Dovecot home in its own folder, `home/`, not the mail root (reperto 217): with
 home = the Maildir root, the files Dovecot keeps in the home showed up as mail folders ("dovecot", "dovecot.lda-dupes",

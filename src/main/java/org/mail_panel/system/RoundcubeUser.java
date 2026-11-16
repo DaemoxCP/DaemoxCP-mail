@@ -114,6 +114,7 @@ public final class RoundcubeUser {
              + "listen.owner = " + USER + "\n"
              + "listen.group = " + WEB_GROUP + "\n"
              + "listen.mode = 0660\n"
+             + PhpHardening.LIMIT_COMMENT + PhpHardening.LIMIT
              + rest;
     }
 

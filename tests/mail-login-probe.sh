@@ -14,6 +14,8 @@
 #  - it tries `doveadm auth test`, an IMAP LOGIN on 993 and an AUTH PLAIN on 587 after STARTTLS,
 #    that is the two ways into the mailboxes (587 goes through Dovecot's authentication:
 #    smtpd_sasl_type = dovecot);
+#  - a real Roundcube login on the webmail's nginx site, then the mailbox page, which opens only if Roundcube
+#    decrypts the IMAP password from its session (reperto 239), then the logout;
 #  - Sieve (reperto 214): a script of the mailbox's own through ManageSieve on 4190 (PUTSCRIPT,
 #    SETACTIVE), a rule of the panel written as the panel writes it (root, /var/mail/sieve, sievec),
 #    then a real delivery through Postfix: the panel's rule must run first and the mailbox's own
@@ -33,7 +35,7 @@
 #   sh tests/mail-login-probe.sh [database]          (default: mailserver)
 # The MySQL root password is taken from ./installed-mysql-root-password (InstallFromScratch writes
 # it) or, if it is not there, from the panel's secrets file.
-# Exit code: 0 if all three get in and Sieve works, 1 otherwise.
+# Exit code: 0 if all four get in (doveadm, IMAP, SMTP, the webmail) and Sieve works, 1 otherwise.
 
 DB="${1:-mailserver}"
 DOMAIN="login-probe.test"
@@ -51,6 +53,9 @@ cleanup() {
     if [ -f "$WORK/root.cnf" ]; then
         mysql --defaults-extra-file="$WORK/root.cnf" "$DB" -e \
             "DELETE FROM mailboxes WHERE email='$MAILBOX'; DELETE FROM domains WHERE domain='$DOMAIN';" \
+            >/dev/null 2>&1
+        # The webmail login leaves Roundcube's row for the mailbox (its identities go with it).
+        mysql --defaults-extra-file="$WORK/root.cnf" roundcubemail -e "DELETE FROM users WHERE username='$MAILBOX';" \
             >/dev/null 2>&1
     fi
     rm -rf "/var/vmail/$DOMAIN" "/var/mail/sieve/$DOMAIN"
@@ -141,6 +146,44 @@ else
 fi
 
 echo ""
+echo "== Webmail: a real Roundcube login, then the mailbox =="
+# Roundcube keeps the IMAP password in its session, encrypted with des_key and cipher_method (reperto 239): the
+# mailbox page opens only if Roundcube decrypts it and logs into IMAP with it on that request. The site is the nginx
+# server whose root is Roundcube's; the password goes in a file, not on curl's command line.
+WM=$(nginx -T 2>/dev/null | awk '
+    /^[ \t]*server[ \t]*\{/ { name = ""; port = ""; rc = 0 }
+    /^[ \t]*listen[ \t]/ && port == "" { p = $2; sub(/;$/, "", p); n = split(p, a, ":"); port = a[n] }
+    /^[ \t]*server_name[ \t]/ && name == "" { name = $2; sub(/;$/, "", name) }
+    /^[ \t]*root[ \t]+\/usr\/local\/www\/roundcube(\/public_html)?\/?;/ { rc = 1 }
+    rc && name != "" && port != "" { print name ":" port; exit }')
+if [ -z "$WM" ]; then
+    echo "  no nginx server serves Roundcube"
+    echo "  RESULT: FAILED"; failed=1
+else
+    WM_HOST=${WM%:*}; WM_PORT=${WM##*:}
+    WM_URL="https://$WM_HOST:$WM_PORT/"
+    wm() { curl -sk -m 30 --resolve "$WM_HOST:$WM_PORT:127.0.0.1" -c "$WORK/wm.cookies" -b "$WORK/wm.cookies" "$@"; }
+    wm -o "$WORK/wm1.html" "$WM_URL"
+    WM_TOKEN=$(sed -n 's/.*name="_token" value="\([A-Za-z0-9]*\)".*/\1/p' "$WORK/wm1.html" | head -1)
+    printf '_token=%s&_task=login&_action=login&_timezone=UTC&_url=&_user=%s&_pass=%s' \
+        "$WM_TOKEN" "$(printf '%s' "$MAILBOX" | sed 's/@/%40/')" "$PW" > "$WORK/wm.post"
+    WM_CODE=$(wm -o "$WORK/wm2.html" -w '%{http_code}' --data-binary @"$WORK/wm.post" "${WM_URL}?_task=login")
+    wm -L -o "$WORK/wm3.html" "${WM_URL}?_task=mail&_mbox=INBOX"
+    echo "  $WM_HOST:$WM_PORT, login page token: $([ -n "$WM_TOKEN" ] && echo yes || echo no), login answered $WM_CODE"
+    # The folder list comes from IMAP: with IMAP refused Roundcube still draws the mail page, with an error and no
+    # folders (measured on the VM with des_key changed after the login: "task":"mail" and the logout link were there).
+    if grep -q '"mailboxes":{"INBOX"' "$WORK/wm3.html" && ! grep -q 'rcmloginuser' "$WORK/wm3.html"; then
+        echo "  the mailbox opened, with its folders from IMAP"
+        echo "  RESULT: OK"
+        WM_REQ=$(sed -n 's/.*"request_token":"\([A-Za-z0-9]*\)".*/\1/p' "$WORK/wm3.html" | head -1)
+        [ -n "$WM_REQ" ] && wm -o /dev/null "${WM_URL}?_task=logout&_token=$WM_REQ"
+    else
+        echo "  the mailbox did not open (login form: $(grep -c rcmloginuser "$WORK/wm3.html"), IMAP error: $(grep -c 'display_message(' "$WORK/wm3.html"))"
+        echo "  RESULT: FAILED"; failed=1
+    fi
+fi
+
+echo ""
 echo "== Sieve: the mailbox's own script through ManageSieve, the panel's rule before it =="
 USERDIR=$(printf '%s' "$MAILBOX" | cut -d@ -f1)
 # "duplicate" writes Dovecot's duplicate database in the home, as autoreplies and forwards do (reperto 217).
@@ -211,7 +254,7 @@ tail -n +"$((LOG_BEFORE + 1))" /var/log/maillog 2>/dev/null | grep -E 'auth|imap
 
 echo ""
 if [ "$failed" -eq 0 ]; then
-    echo "== all three logins succeeded, and Sieve works =="
+    echo "== all four logins succeeded, and Sieve works =="
 else
     echo "== AT LEAST ONE CHECK FAILED =="
 fi
