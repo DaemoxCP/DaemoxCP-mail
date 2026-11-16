@@ -1058,6 +1058,23 @@ public class Main {
         // Gli script scrivono nelle mappe di Postfix e nella connessione di Dovecot l'utente del pannello: si passa
         // subito ai loro utenti (MailDbUsers), che leggono solo le colonne che usano. Se qualcosa non torna i file
         // restano come li ha scritti lo script, e ci riprova il prossimo avvio del pannello.
+        // Prima le tabelle del pannello complete (reperto 248): l'installazione crea solo quelle della posta, e le
+        // altre (accesso, passkey, colonne aggiunte dopo come mailboxes.receive_enabled) arrivavano solo al primo
+        // avvio del server web o con --create-admin. Senza, MailDbUsers qui sotto non trovava receive_enabled e
+        // lasciava Postfix e Dovecot sull'utente del pannello fino all'avvio, e la voce 5 del menu si fermava.
+        if (success) {
+            String notConnected = connectFromConfig();
+            if (notConnected != null) {
+                System.out.println(ANSI_YELLOW + "[PANEL] the panel's tables are completed at the first start: " + notConnected + ANSI_RESET);
+            } else {
+                try {
+                    mailDatabase.createSchema();
+                    mailDatabase.ensureColumnUpgrades();
+                } catch (Exception e) {
+                    System.out.println(ANSI_YELLOW + "[PANEL] the panel's tables are completed at the first start: " + e.getMessage() + ANSI_RESET);
+                }
+            }
+        }
         if (success) org.mail_panel.system.MailDbUsers.ensureAfterInstall(mysqlHost, mysqlPort, mysqlUser, mysqlDatabase);
 
         if (success) {
@@ -1727,6 +1744,9 @@ public class Main {
      */
     static ConsoleResult accessCode(String username) {
         try {
+            // Lo schema prima, come --create-admin (reperto 248): su un server appena installato le tabelle
+            // dell'accesso non ci sono ancora.
+            mailDatabase.createSchema();
             org.mail_panel.security.AuthStore.migrate();
         } catch (Exception e) {
             return new ConsoleResult(false, "Cannot prepare the login tables: " + e.getMessage());
@@ -1760,6 +1780,7 @@ public class Main {
             return;
         }
         try {
+            mailDatabase.createSchema();   // reperto 248, come --create-admin
             org.mail_panel.security.AuthStore.migrate();
         } catch (Exception e) {
             message(gui, title, "Cannot prepare the login tables: " + e.getMessage());
