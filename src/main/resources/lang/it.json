@@ -2075,7 +2075,7 @@
   "server.adns.multiDmarc": "Ci sono {n} record DMARC sullo stesso nome: RFC 9989 li scarta TUTTI. La politica non è \"la prima delle due\": non c'è.",
   "server.adns.multiSpf": "Ci sono {n} record SPF sullo stesso nome: RFC 7208 §4.5 dice che il risultato è \"permerror\", cioè SPF non funziona affatto. Vanno uniti in uno solo.",
   "server.adns.needDest": "Serve la casella a cui recapitare i rapporti.",
-  "server.adns.noAccount": "Nessun account Cloudflare assegnato a {d}: senza, il pannello non può scrivere record. Assegnane uno nella scheda Account Cloudflare.",
+  "server.adns.noAccount": "Nessun account Cloudflare è ancora collegato a {d}, e senza il pannello non può scrivere record. \"Configura tutto\" lo collega da solo quando un solo account del pannello vede la zona; altrimenti sceglilo in questa pagina, in Account Cloudflare, Assegnazione domini → account.",
   "server.adns.noAccountFor": "nessun account Cloudflare assegnato a {d}",
   "server.adns.noAnswer": "nessuna risposta",
   "server.adns.noDmarcToEdit": "Su {name} non c'è nessun record DMARC da modificare: va prima creato.",
@@ -7075,5 +7075,11 @@
   "acm.badEmail": "Scrivi un indirizzo email valido, come admin@example.com.",
   "acm.installing": "Installo acme.sh e creo l'account Let's Encrypt...",
   "acm.done": "acme.sh è installato e l'account Let's Encrypt è creato: adesso si può emettere il certificato.",
-  "acm.failed": "Non si è potuto installare acme.sh."
+  "acm.failed": "Non si è potuto installare acme.sh.",
+  "server.cfgdom.cfZoneNotSeen": "L'account Cloudflare \"{a}\" assegnato a {d} non vede la sua zona: {e}. Su Cloudflare controlla che {d} sia in quell'account e che il token abbia Zone > DNS > Edit e Zone > Zone > Read su di essa, oppure assegna un altro account nella pagina DNS (Account Cloudflare, Assegnazione domini → account). Non è stato cambiato niente.",
+  "server.cfgdom.cfNone": "Nel pannello non c'è nessun account Cloudflare, e senza non si può pubblicare niente di {d}. Nella pagina Cloudflare aggiungi l'account col suo token API (Zone > DNS > Edit e Zone > Zone > Read), poi premi di nuovo. Non è stato cambiato niente.",
+  "server.cfgdom.cfNoneSees": "Nessuno degli account Cloudflare del pannello ({list}) vede la zona di {d}. Su Cloudflare controlla che {d} sia in uno di quegli account e che il suo token abbia Zone > DNS > Edit e Zone > Zone > Read su di essa. Non è stato cambiato niente.",
+  "server.cfgdom.cfSeveral": "Più di un account Cloudflare vede la zona di {d} ({list}): scegli quale nella pagina DNS (Account Cloudflare, Assegnazione domini → account), poi premi di nuovo. Non è stato cambiato niente.",
+  "server.cfgdom.partial": "Configurazione finita, ma solo {ok} passi su {tot} sono in ordine: le righe con FALLITA nel registro qui sotto dicono cosa serve a ognuno.",
+  "server.cfm.tokenRefused": "Cloudflare non accetta questo token ({m}). Copialo di nuovo da Cloudflare, My Profile, API Tokens: tutto, senza spazi prima o dopo."
 }

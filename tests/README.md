@@ -322,7 +322,7 @@ leaves), LoginSecurityTest drops them and creates them again as an old installat
 passwords, and ResetDatabaseTest empties it completely, tables that are not the panel's included.
 SoftwareVersionsTest instead only reads (SELECT VERSION()).
 
-### The guided installation (reperti 242-246)
+### The guided installation (reperti 242-250)
 
 **GuidedInstallTest** — no system: the time zone of menu option 1 (an IANA name known to Java and present as a
 plain file in zoneinfo, never a path, a link or a made-up name; the current one from /var/db/zoneinfo, UTC when
@@ -337,6 +337,14 @@ accepted; a panel without a domain name and a self-signed certificate warned; PK
 links and files without PEM); then the provider firewall's list (the fingerprint independent of the order; never,
 current, changed, unknown; the rules from the ports, POP3 included; a confirmation of a list that changed meanwhile
 refused, a good one written 0600; a short list from cloudflare.com not believed).
+
+**SetUpEverythingTest** — as root on the VM, with the service's umask (`sh -c 'umask 077; java ...'`): "Set up
+everything" on a server installed from scratch (reperto 250). The MTA-STS policy written readable by nginx (folder
+0755, file 0644, also over 0700 and 0600), through a file beside it renamed in place, a link planted there removed
+and its target untouched, a link in place of the folder refused; the boot repair (DONE, then nothing to do; links in
+place of the folder or the policy left as they are); the Cloudflare account checked before touching anything (the
+domain's own that sees the zone; the only one of the panel that sees it, assigned; none in the panel, none that sees
+it, several, no answer: refused with what to do). Falsified with planted copies of the old behaviour: 13 FAILED.
 
 `menu-guided-install.exp` drives the real terminal menu on the VM from the Mac (expect through `ssh -tt`) on a copy of
 the panel folder: option 1 refuses a made-up time zone in a dialog; option 2 refuses a certificate given as a path

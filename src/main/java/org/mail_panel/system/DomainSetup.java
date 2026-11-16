@@ -56,32 +56,42 @@ public class DomainSetup {
 
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
 
+            // Ogni passo anche come riga del registro, col suo motivo: prima stavano solo nel JSON in fondo, e il
+            // registro di un lavoro andato a meta' diceva soltanto quanti passi erano in ordine (reperto 250).
+            final UpdateManager.Job log = job;
+            java.util.function.Consumer<JSONObject> put = e -> {
+                steps.put(e);
+                if (log != null) log.write(e.optString("title") + ": "
+                        + (e.optBoolean("ok", false) ? I18n.tr("server.cfgdom.done") : I18n.tr("server.um.x.failedF"))
+                        + " \u2014 " + e.optString("messageText"));
+            };
+
             // 1. DKIM: la chiave e il suo record.
-            steps.put(dkim(d));
+            put.accept(dkim(d));
 
             // 2. SPF.
-            steps.put(reduce("SPF", auto.create(domainId, "spf", "")));
+            put.accept(reduce("SPF", auto.create(domainId, "spf", "")));
 
             // 3. La cassetta dei rapporti, con la destinazione copiata da un altro dominio.
             String target = existingReportDestination();
             JSONObject deliveryState = auto.reportDelivery(d);
             if (deliveryState.optBoolean("exists", false))
-                steps.put(entry(I18n.tr("server.cfgdom.reportBox"), true, I18n.tr("server.cfgdom.boxPresent", java.util.Map.of("kind", String.valueOf(deliveryState.optString("type"))))));
+                put.accept(entry(I18n.tr("server.cfgdom.reportBox"), true, I18n.tr("server.cfgdom.boxPresent", java.util.Map.of("kind", String.valueOf(deliveryState.optString("type"))))));
             else if (target == null)
-                steps.put(entry(I18n.tr("server.cfgdom.reportBox"), false,
+                put.accept(entry(I18n.tr("server.cfgdom.reportBox"), false,
                         I18n.tr("server.cfgdom.boxNoSource")));
             else
-                steps.put(reduce(I18n.tr("server.cfgdom.reportBox"), auto.createReportAlias(domainId, target)));
+                put.accept(reduce(I18n.tr("server.cfgdom.reportBox"), auto.createReportAlias(domainId, target)));
 
             // 4. DMARC, sempre in osservazione: si stringe dopo aver letto i rapporti.
-            steps.put(reduce("DMARC (p=none)", auto.create(domainId, "dmarc", "none")));
+            put.accept(reduce("DMARC (p=none)", auto.create(domainId, "dmarc", "none")));
 
             // 5. I record che aiutano i client.
             for (String[] o : new String[][] {
                     {"autoconfig", "Autoconfig (Thunderbird)"},
                     {"srv_imaps", "server.cfgdom.srvIn"},
                     {"srv_submission", "server.cfgdom.srvOut"} })
-                steps.put(reduce(I18n.tr(o[1]), auto.createOptional(domainId, o[0])));
+                put.accept(reduce(I18n.tr(o[1]), auto.createOptional(domainId, o[0])));
 
             // 6. MTA-STS: tutta la catena, per questo dominio, dall'include di nginx al
             //    record TXT.
@@ -116,6 +126,67 @@ public class DomainSetup {
         } catch (Exception e) {
             return r.put("success", false).put("steps", steps)
                     .put("error", I18n.tr("server.cfgdom.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+        }
+    }
+
+    /* ===================================================================
+     * Prima di cominciare: l'account Cloudflare del dominio
+     * =================================================================== */
+
+    /**
+     * Pronto, o perche' no; e l'account assegnato qui, se il dominio non ne aveva uno.
+     *
+     * Senza un account Cloudflare che veda la zona del dominio «Set up everything» non pubblica niente: prima partiva
+     * lo stesso, generava la chiave DKIM, cambiava nginx, si fermava a meta' e finiva in verde, «Setup completed» con un
+     * passo su dieci (reperto 250, sulla VM pulita seguendo la guida). Ora si controlla prima di toccare qualunque cosa.
+     * E il collegamento fra dominio e account, che la guida non nominava, si fa da solo quando un solo account del
+     * pannello vede la zona: e' il caso di chi segue la guida, un account e i suoi domini.
+     */
+    public record CloudflareChoice(boolean ready, String error, MailDatabase.CloudflareAccount assigned) {
+        static CloudflareChoice no(String error) { return new CloudflareChoice(false, error, null); }
+    }
+
+    /** La zona che il token di un account vede per il dominio (CloudflareManager.findZone, o una prova). */
+    interface ZoneCheck { CloudflareManager.ZoneLookup find(MailDatabase.CloudflareAccount a); }
+
+    static CloudflareChoice choose(String domain, MailDatabase.CloudflareAccount current,
+                                   List<MailDatabase.CloudflareAccount> accounts, ZoneCheck zones) {
+        if (current != null) {
+            CloudflareManager.ZoneLookup zl = zones.find(current);
+            if (zl != null && zl.found) return new CloudflareChoice(true, null, null);
+            return CloudflareChoice.no(I18n.tr("server.cfgdom.cfZoneNotSeen", java.util.Map.of("a", String.valueOf(current.label),
+                    "d", domain, "e", String.valueOf(zl == null ? I18n.tr("server.cfgdom.noAnswer") : zl.error))));
+        }
+        if (accounts == null || accounts.isEmpty())
+            return CloudflareChoice.no(I18n.tr("server.cfgdom.cfNone", java.util.Map.of("d", domain)));
+        List<MailDatabase.CloudflareAccount> seeing = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        for (MailDatabase.CloudflareAccount a : accounts) {
+            labels.add(String.valueOf(a.label));
+            CloudflareManager.ZoneLookup zl = zones.find(a);
+            if (zl != null && zl.found) seeing.add(a);
+        }
+        if (seeing.size() == 1) return new CloudflareChoice(true, null, seeing.get(0));
+        if (seeing.isEmpty())
+            return CloudflareChoice.no(I18n.tr("server.cfgdom.cfNoneSees", java.util.Map.of("d", domain, "list", String.join(", ", labels))));
+        List<String> which = new ArrayList<>();
+        for (MailDatabase.CloudflareAccount a : seeing) which.add(String.valueOf(a.label));
+        return CloudflareChoice.no(I18n.tr("server.cfgdom.cfSeveral", java.util.Map.of("d", domain, "list", String.join(", ", which))));
+    }
+
+    /** Il controllo vero: account del dominio, account del pannello, e la zona chiesta a Cloudflare col token di ognuno. */
+    public static CloudflareChoice cloudflareFor(int domainId) {
+        try {
+            MailDatabase.Domain d = find(domainId);
+            if (d == null) return CloudflareChoice.no(I18n.tr("server.cfgdom.notFound"));
+            CloudflareManager cf = new CloudflareManager(Main.mailDatabase);
+            CloudflareChoice c = choose(d.domain, cf.getAccountForDomain(d.id), cf.listAccounts(),
+                    a -> cf.findZone(a.apiToken, d.domain));
+            if (c.assigned() != null && !cf.assignDomain(d.id, c.assigned().id))
+                return CloudflareChoice.no(I18n.tr("server.operationFailed"));
+            return c;
+        } catch (Exception e) {
+            return CloudflareChoice.no(I18n.tr("server.cfgdom.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
 
