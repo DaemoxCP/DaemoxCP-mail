@@ -259,6 +259,9 @@ public final class PhpHardening {
                 }
                 if (!Files.exists(log, LinkOption.NOFOLLOW_LINKS)) {
                     Files.createFile(log, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-r-----")));
+                    // I permessi chiesti a createFile passano dall'umask del pannello (077 quando lo avvia
+                    // upgrade-panel.sh): sul server vero il registro nasceva 0600, e RoundcubeUser lo rimetteva.
+                    Shell.run(Duration.ofSeconds(10), "chmod", "640", log.toString());
                     Shell.run(Duration.ofSeconds(10), "chown", owner, log.toString());
                 }
             }
