@@ -46,7 +46,7 @@ FreeBSD Mail Panel is a complete mail server solution that installs and manages:
 │          │                  │                  │                │
 │          ▼                  ▼                  ▼                │
 │   ┌─────────────────────────────────────────────────┐          │
-│   │                   MySQL 8.0                      │          │
+│   │                   MySQL 8.4                      │          │
 │   │       domains, mailboxes, aliases, panel_admin   │          │
 │   └─────────────────────────────────────────────────┘          │
 │                                                                 │
@@ -82,20 +82,21 @@ MySQL lookup tables:
 - `/usr/local/etc/postfix/mysql-virtual-mailboxes.cf`
 - `/usr/local/etc/postfix/mysql-virtual-aliases.cf`
 
-Postfix delivers mail to Dovecot via LMTP on port 24.
+Postfix delivers mail to Dovecot via LMTP on the socket `/var/spool/postfix/private/dovecot-lmtp`
+(0600, postfix): no TCP port.
 
 ### IMAP/POP3 Server: Dovecot
 
 | Property | Value |
 |----------|-------|
-| **Package** | `dovecot-mysql`, `dovecot-pigeonhole` |
+| **Package** | `dovecot24-mysql` and `dovecot24-pigeonhole-mysql` (Dovecot 2.4) on new installations; `dovecot-mysql` and `dovecot-pigeonhole-mysql` (2.3) on older ones, which move to 2.4 from *Updates* |
 | **Service** | `dovecot` |
 | **Config** | `/usr/local/etc/dovecot/` |
 | **Port 143** | IMAP (STARTTLS) |
 | **Port 993** | IMAPS (implicit SSL) |
-| **Port 110** | POP3 (STARTTLS) |
-| **Port 995** | POP3S (implicit SSL) |
-| **LMTP Port** | 24 (localhost only) |
+| **Port 110** | POP3 (STARTTLS), only if POP3 is on (*Settings*) |
+| **Port 995** | POP3S (implicit SSL), only if POP3 is on |
+| **LMTP** | socket `/var/spool/postfix/private/dovecot-lmtp`, for Postfix only |
 | **Mailboxes** | `/var/vmail/{domain}/{user}` |
 
 ### Anti-Spam: Rspamd
@@ -131,11 +132,11 @@ Integrated with Rspamd for email scanning.
 
 Used by Rspamd for caching. Only rspamd (in the `redis` group) and root can reach it.
 
-### Database: MySQL 8.0
+### Database: MySQL 8.4
 
 | Property | Value |
 |----------|-------|
-| **Package** | `mysql80-server`, `mysql80-client` |
+| **Package** | `mysql84-server`, `mysql84-client` |
 | **Service** | `mysql-server` |
 | **Port** | 3306 |
 | **Database** | `mailserver` (configurable) |
@@ -153,11 +154,13 @@ Used by Rspamd for caching. Only rspamd (in the `redis` group) and root can reac
 
 ## System Requirements
 
-- **OS**: FreeBSD 15.0 or later
-- **RAM**: 2GB minimum, 4GB recommended
-- **Disk**: 20GB minimum
-- **Java**: JDK 24 (for panel)
-- **Root access**: Required for installation
+- **OS**: FreeBSD 15.x, amd64 or arm64
+- **RAM**: 4 GB. Measured on a running server: ClamAV 1-1.3 GB, the panel's two Java processes about
+  0.5 GB, MySQL 0.1-0.5 GB, all processes together 2.5-3 GB
+- **Disk**: 20 GB at least, plus the space of the mail
+- **Java**: OpenJDK 25 (`pkg install openjdk25`, with procfs on `/proc`)
+- **Root access** over SSH
+- **Cloudflare** for the panel's and the webmail's names (see [Installation](#installation))
 
 ---
 
@@ -179,11 +182,10 @@ Used by Rspamd for caching. Only rspamd (in the `redis` group) and root can reac
 ### FreeBSD Packages (installed automatically)
 
 ```
-postfix-mysql dovecot-mysql dovecot-pigeonhole
-rspamd redis clamav
-mysql80-server mysql80-client
+postfix-mysql dovecot24-mysql dovecot24-pigeonhole-mysql
+rspamd redis clamav security/py-fail2ban dns/bind-tools
+mysql84-server mysql84-client
 nginx php84 php84-extensions roundcube-php84
-openssl
 ```
 
 ---
@@ -223,7 +225,7 @@ openssl
 │       └── auth                # Dovecot SASL socket
 ├── run/
 │   ├── dovecot/
-│   │   └── lmtp                # LMTP socket
+│   │   └── lmtp                # Dovecot's own LMTP socket (root only)
 │   ├── clamav/
 │   │   └── clamd.sock          # ClamAV socket
 │   └── rspamd/
@@ -236,7 +238,7 @@ openssl
     └── rspamd/
 
 ./database/                     # Panel SQLite database
-    └── mailpanel.db
+    └── mail_panel.db
 
 ./install_scripts/              # Generated install scripts
     ├── install_mail_server.sh
@@ -263,7 +265,7 @@ mynetworks = 127.0.0.0/8 [::1]/128
 virtual_mailbox_domains = mysql:/usr/local/etc/postfix/mysql-virtual-domains.cf
 virtual_mailbox_maps = mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf
 virtual_alias_maps = mysql:/usr/local/etc/postfix/mysql-virtual-aliases.cf
-virtual_transport = lmtp:inet:127.0.0.1:24
+virtual_transport = lmtp:unix:private/dovecot-lmtp
 
 # TLS settings
 smtpd_tls_cert_file = /usr/local/etc/ssl/mail/fullchain.pem
@@ -298,7 +300,7 @@ password_query = SELECT email as user, password FROM mailboxes WHERE email='%u' 
 
 ### SQLite (Panel Configuration)
 
-File: `./database/mailpanel.db`
+File: `./database/mail_panel.db`
 
 ```sql
 CREATE TABLE config (
@@ -482,24 +484,30 @@ CREATE TABLE audit_log (
 
 ## Ports Reference
 
-| Service | Port | Protocol | Description |
-|---------|------|----------|-------------|
-| Postfix | 25 | TCP | SMTP (incoming mail) |
-| Postfix | 587 | TCP | Submission (STARTTLS) |
-| Postfix | 465 | TCP | SMTPS (implicit SSL) |
-| Dovecot | 143 | TCP | IMAP (STARTTLS) |
-| Dovecot | 993 | TCP | IMAPS (implicit SSL) |
-| Dovecot | 110 | TCP | POP3 (STARTTLS) |
-| Dovecot | 995 | TCP | POP3S (implicit SSL) |
-| Dovecot | 24 | TCP | LMTP (localhost only) |
-| Rspamd | 11332 | TCP | Milter interface |
-| Rspamd | 11333 | TCP | Normal worker |
-| Rspamd | 11334 | TCP | Web UI/Controller |
-| MySQL | 3306 | TCP | Database |
-| Roundcube | 8443 | TCP | Webmail (HTTPS) |
-| **Web Panel** | **2096** | TCP | HTTPS admin panel |
+What listens, and from where it should be reached. The panel's own firewall on the server (pf) blocks everything
+else and lets in, from any address, the ports that are not "this server" (POP3 only when it is on). The narrower
+sources, "your IP only" and "Cloudflare only", are set in your provider's firewall (see
+[Step 1](#step-1-at-your-provider-example-hetzner-cloud)).
 
----
+| Service | Port | Open to | Description |
+|---------|------|---------|-------------|
+| sshd | 22 | your IP only | SSH; the panel never changes it |
+| Postfix | 25 | everyone | SMTP, incoming mail |
+| the panel | 80 | everyone | Let's Encrypt's HTTP challenge: opened by the panel only while it runs |
+| Dovecot | 143 | everyone | IMAP with STARTTLS |
+| nginx | 443 | everyone | MTA-STS policy and autoconfig |
+| Postfix | 465 | everyone | submission with implicit TLS |
+| Postfix | 587 | everyone | submission with STARTTLS |
+| Dovecot | 993 | everyone | IMAP with implicit TLS |
+| Dovecot | 110, 995 | everyone, only if POP3 is on | POP3 (off by default; *Settings*) |
+| **Web panel** | **2096** | **Cloudflare only** | this panel, HTTPS |
+| nginx (Roundcube) | 8443 | Cloudflare only | the webmail, HTTPS |
+| Dovecot | 4190 | this server | ManageSieve, for the webmail |
+| MySQL | 3306 | this server (127.0.0.1) | the mail database; X protocol off |
+| Rspamd | 11332, 11333, 11334 | this server | milter, worker, controller (with a password) |
+| Dovecot LMTP | socket | this server | `/var/spool/postfix/private/dovecot-lmtp`, Postfix only; no port 24 |
+| Redis | socket | this server | `/var/run/redis/redis.sock`, rspamd only; no port 6379 |
+| ClamAV | socket | this server | `/var/run/clamav/clamd.sock`, rspamd only |
 
 ## Package Locks
 
@@ -699,78 +707,317 @@ sysrc php_fpm_enable="YES"
 
 ## Installation
 
-### 1. Build the Panel
+This is the whole installation, from a FreeBSD server that has just been created to a mail server
+whose panel comes back by itself after a reboot. Do the steps in this order: each one relies on the
+ones before. The examples use `example.com`, `203.0.113.10` and `2001:db8::10`: put your own names
+and addresses in their place.
+
+### What you need before you start
+
+- **A server** with FreeBSD 15.x (amd64 or arm64), a public IPv4 address (an IPv6 address is a
+  plus), **4 GB of RAM** and at least 20 GB of disk. Measured on a running server: ClamAV takes
+  1-1.3 GB, the panel's two Java processes about 0.5 GB, MySQL 0.1-0.5 GB; everything together
+  2.5-3 GB.
+- **Root access over SSH with a key.** The panel never changes the SSH configuration.
+- **Your domains on Cloudflare** (their DNS is managed by Cloudflare).
+- **Three host names**, each with a precise role:
+
+  | Name (example) | What it is | In Cloudflare |
+  |---|---|---|
+  | `mail.example.com` | the mail server: MX, SMTP, IMAP, the server's reverse DNS | **DNS only** (grey cloud) |
+  | `webmail.example.com` | the webmail (Roundcube), on port **8443** | **Proxied** (orange cloud) |
+  | `panel.example.com` | this panel, on port **2096** | **Proxied** (orange cloud) |
+
+  The webmail and the panel are two different names because each has its own certificate, its own
+  configuration in the menu (options 3 and 2) and its own port. They can be in the same domain or in
+  two different domains, as long as both domains are on Cloudflare. The mail name must be different
+  from both: mail (ports 25, 465, 587, 993) does not go through Cloudflare's proxy, the two web names
+  do. Cloudflare proxies HTTPS on 443, 2053, 2083, 2087, **2096** and **8443**: that is why the panel
+  and the webmail use those two ports.
+
+### Step 1: at your provider (example: Hetzner Cloud)
+
+1. **Reverse DNS.** Set the reverse DNS (PTR) of the server's IPv4 address, and of the IPv6 one if
+   you use it, to the mail name (`mail.example.com`). On Hetzner Cloud: the server, *Networking*,
+   the edit button next to the address. Big mail providers refuse or mark as spam mail from an
+   address whose reverse DNS does not match.
+2. **Outgoing ports 25 and 465.** Many providers close them on new accounts. Hetzner Cloud closes
+   both, and opens them on request once the first invoice is paid, deciding case by case: open a
+   support request saying that the server is a mail server. Incoming mail works without this,
+   outgoing mail stays in the queue. The panel checks it for you: *Diagnostics*, *Check everything*,
+   "Outgoing mail (port 25)".
+3. **The provider's firewall.** Create a firewall with these **inbound** rules and attach it to the
+   server. Leave outbound traffic as it is.
+
+   | Rule | Protocol | Ports | Sources |
+   |---|---|---|---|
+   | SSH | TCP | 22 (or the port your sshd uses) | **only your own IP address**: your IPv4 as `/32` and, if you have one, your IPv6 as `/128` |
+   | Mail | TCP | 25, 80, 143, 443, 465, 587, 993 | any IPv4, any IPv6 |
+   | POP3, only if you turn it on later in *Settings* | TCP | 110, 995 | any IPv4, any IPv6 |
+   | Panel and webmail | TCP | 2096, 8443 | **only Cloudflare's addresses** |
+
+   Cloudflare's addresses are published at <https://www.cloudflare.com/ips-v4> and
+   <https://www.cloudflare.com/ips-v6>. Once the panel is running, its *Firewall* page has the card
+   "Your provider's firewall" with the list ready to paste (on Hetzner Cloud: into the *Sources*
+   field of the rule, comma separated) and the same rules computed from the server's real ports.
+
+   No other inbound rule is needed: in particular **no rule for 53 (DNS) and none for 123 (NTP)**.
+   The Hetzner Cloud firewall is stateful, so the answers to the queries the server makes come back
+   on their own, and an open 123 would only expose the clock service to the internet.
+
+   **Cloudflare's list changes from time to time, and you update it by hand.** Hetzner Cloud does
+   have an API for firewalls, but its tokens are "Read" or "Read & Write" on the whole project: a
+   token that can change the firewall can also delete the server, and it does not belong on the
+   mail server. So the panel does the next best thing: when you have put the list in the firewall,
+   press "I have put this list in my provider's firewall"; the panel remembers it and, when Cloudflare
+   changes its list, the card and *Diagnostics* tell you to update the rule.
+
+   Other providers: the same rules, in their firewall. Hetzner's dedicated servers (Robot) have a
+   different firewall, which is **not** stateful: there you also need Hetzner's rule that lets in the
+   answers to the server's own connections (TCP, ports 32768-65535, with the ACK flag).
+
+### Step 2: at Cloudflare
+
+1. **DNS records** (in each zone):
+
+   | Type | Name | Content | Proxy status |
+   |---|---|---|---|
+   | A | `mail` | `203.0.113.10` (the server's IPv4) | **DNS only** |
+   | AAAA | `mail` | `2001:db8::10`, if the server has IPv6 | **DNS only** |
+   | MX | `@` | `mail.example.com`, priority 10 | - |
+   | A | `webmail` | `203.0.113.10` | **Proxied** |
+   | A | `panel` | `203.0.113.10` | **Proxied** |
+
+   Repeat the MX record in every domain whose mail this server receives (all pointing to the same
+   `mail.example.com`). SPF, DKIM, DMARC, MTA-STS, autoconfig and the SRV records are written later
+   by the panel itself ("Set up everything", step 7): you do not type them.
+2. **SSL/TLS encryption mode: Full (strict).** Cloudflare then talks to the server over HTTPS and
+   checks its certificate.
+3. **Origin certificates.** *SSL/TLS*, *Origin Server*, *Create Certificate*: key type RSA (2048),
+   the host names (for example `panel.example.com` and `webmail.example.com`, or `*.example.com`
+   and `example.com`), validity up to 15 years. Cloudflare shows the certificate and the private key
+   once: save them as two files, for example `panel-origin.pem` and `panel-origin.key`. An origin
+   certificate covers names of one zone only: if the panel and the webmail are in two different
+   domains, create one in each. These certificates are trusted by Cloudflare only, which is exactly
+   what is needed behind the proxy; a browser that reaches the server directly would warn.
+4. **An API token for the panel.** *My Profile*, *API Tokens*, *Create Token*, template *Edit zone
+   DNS*, with the permissions **Zone > DNS > Edit** and **Zone > Zone > Read**, and *Zone Resources*
+   *Include > Specific zone* for each mail domain. Never the Global API Key. You enter it in the panel
+   in step 7.
+
+### Step 3: the base system
+
+Log in as root and bring the system and the package catalog up to date:
 
 ```bash
-# Requires Java 25 and Maven
-tools/build-jar.sh
+freebsd-update fetch install
+pkg update
+pkg upgrade
 ```
 
-`tools/build-jar.sh` runs `mvn package` with the build number and the commit written into the jar
-(the dashboard shows them behind the eye button) and prints the jar's SHA-256. Extra options go to
-Maven, for example `-o` to build offline. A plain `mvn clean package` works too: the dashboard then
-says the build was not recorded.
+The first time `pkg` runs it offers to install itself: answer yes. Before installing,
+`freebsd-update` keeps the system as it was in a boot environment (`bectl list` shows it), and it may
+restart `sshd`: the SSH session you are in stays open. If it installed a new kernel, reboot
+(`shutdown -r now`) before going on.
 
-### 2. Run the Panel
+### Step 4: Java
+
+The panel is a Java 25 program. Install OpenJDK 25 from the packages:
 
 ```bash
-java -jar target/freebsd-mail-panel-1.0.jar
+pkg install openjdk25
 ```
 
-Al primo avvio il pannello scrive accanto al jar un `run.sh` che rispecchia esattamente
-il comando con cui e' partito. Non e' un file da distribuire e non serve al funzionamento:
-e' solo una scorciatoia. Se esiste gia', il pannello non lo tocca.
+OpenJDK on FreeBSD wants `procfs` mounted on `/proc`. Add it to `/etc/fstab`, so that it is there
+after every reboot too, and mount it now:
 
-Due modi di avviarlo:
+```bash
+grep -q '^proc' /etc/fstab || echo 'proc /proc procfs rw 0 0' >> /etc/fstab
+mount /proc
+java -version
+```
 
-| Comando | Cosa fa |
+`java -version` must say `25`.
+
+### Step 5: the panel and the certificates on the server
+
+1. **Build the panel's jar**, on any computer with Java 25 and Maven, from this repository:
+
+   ```bash
+   tools/build-jar.sh
+   ```
+
+   It writes `target/freebsd-mail-panel-1.0.jar` with the build number and the commit inside, and
+   prints the jar's SHA-256. (On the server itself: `pkg install git maven`, clone the repository,
+   then the same command.)
+2. **Put it in `/home/panel`**, not in `/root`. The panel's web part runs as its own user,
+   `mailpanel`, which must be able to read the jar; `/root` is closed to other users, and from there
+   the panel would run entirely as root.
+
+   ```bash
+   install -d -m 755 /home/panel
+   ```
+
+   Then, from your computer:
+
+   ```bash
+   scp target/freebsd-mail-panel-1.0.jar root@203.0.113.10:/home/panel/
+   ```
+3. **Copy the origin certificates.** The panel's pair can go anywhere: the panel reads it once and
+   keeps it. The webmail's pair must stay where you put it, because nginx reads it from there: use
+   `/usr/local/etc/ssl/webmail/`, never `/usr/local/etc/ssl/mail/`, which the installation empties.
+
+   ```bash
+   install -d -m 700 /root/certs /usr/local/etc/ssl/webmail
+   ```
+
+   From your computer:
+
+   ```bash
+   scp panel-origin.pem panel-origin.key root@203.0.113.10:/root/certs/
+   ```
+
+   ```bash
+   scp webmail-origin.pem webmail-origin.key root@203.0.113.10:/usr/local/etc/ssl/webmail/
+   ```
+
+   On the server, keep the private keys readable by root only:
+
+   ```bash
+   chmod 600 /root/certs/*.key /usr/local/etc/ssl/webmail/*.key
+   ```
+
+### Step 6: the terminal menu
+
+Open the menu from the panel's folder, in a terminal of at least 120 x 40 characters (from your
+computer: `ssh -t root@203.0.113.10`):
+
+```bash
+cd /home/panel
+java -jar freebsd-mail-panel-1.0.jar
+```
+
+Use the arrows to move, Enter to choose, Tab to go from a field to the next. Every option asks for
+a confirmation first; in the confirmations *Cancel* is selected, press Tab to reach *OK*. Go through
+the options in this order:
+
+1. **1) Time zone, clock (NTP) and DNS resolver.** Write the server's time zone as an IANA name (for
+   example `Europe/Rome` or `UTC`): the panel refuses names that do not exist. It also turns on NTP.
+2. **2) Edit Panel Configuration.**
+   - *PANEL PORT*: `2096`;
+   - *PANEL HOST*: the panel's name, `panel.example.com` (not an IP address: passkeys and Cloudflare
+     need a name);
+   - *SSL CERTIFICATE* and *SSL PRIVATE KEY*: the paths of the files, `/root/certs/panel-origin.pem`
+     and `/root/certs/panel-origin.key` (pasting the PEM text works too).
+   Before saving, the panel checks that the certificate is readable, valid now, covers the panel's
+   name and that the key is its own, and shows what it covers and when it expires.
+3. **3) Edit Roundcube Configuration.**
+   - *DOMAIN*: the webmail's name, `webmail.example.com`;
+   - *PORT*: `8443`;
+   - *SSL CERT PATH* and *SSL KEY PATH*: `/usr/local/etc/ssl/webmail/webmail-origin.pem` and
+     `/usr/local/etc/ssl/webmail/webmail-origin.key`.
+   The same checks as for the panel, on the webmail's name.
+4. **4) Install/Reinstall Mail Server.** It asks for the mail name: `mail.example.com`. Before
+   starting it checks the three names (the webmail's must be set, mail and web must be different
+   names). It installs and configures MySQL, Postfix, Dovecot, Rspamd, ClamAV, Redis, nginx, PHP
+   and Roundcube, fail2ban and the firewall, and takes several minutes; it goes on even if the
+   terminal closes, and its log is in `/var/log/mailpanel/`. **It erases any existing mail
+   configuration, mailboxes and panel accounts**: on a new server there is nothing to lose.
+5. **5) Emergency access code.** There is no administrator yet: it asks for a name and an email and
+   creates the first administrator, then shows an **8-digit code**, valid for 15 minutes.
+6. **>>> Start Mail Panel WebServer <<<.** The panel starts; leave the terminal open for now.
+
+### Step 7: the first login, and the panel set up
+
+1. Open `https://panel.example.com:2096` in the browser. On the login page choose **Code from the
+   server console** and type the 8-digit code.
+2. **Passkeys.** In *Account*, register a passkey (fingerprint, face, device PIN or a hardware key),
+   better two on two different devices. There are no passwords: from now on you sign in with a
+   passkey, or with a 6-digit code sent to your email.
+3. **Start at boot.** *Diagnostics*, card *Operating system*, **Start at boot**, then **Install and
+   enable**. It writes `/usr/local/etc/rc.d/mailpanel` and turns it on, without starting a second
+   copy of the panel.
+4. Back in the terminal, press **Enter**: the panel started from the menu stops. Start it as a
+   service, the way it will run from now on:
+
+   ```bash
+   service mailpanel start
+   service mailpanel status
+   ```
+
+   From now on the panel starts by itself at every boot. Try it: `shutdown -r now`, and after a
+   minute or two the panel answers again.
+5. **Cloudflare.** On the *Cloudflare* page add the account with the token of step 2 (**Test token**
+   first: if Cloudflare does not accept it, the page says so, and the usual cause is a token copied
+   only in part or with a space), then choose it for the mail server's certificate.
+6. **Let's Encrypt.** On the *SSL certificates* page, the card "Let's Encrypt is not ready": write
+   the email for the Let's Encrypt account (an address you read: Let's Encrypt writes there only about
+   the account) and press **Install acme.sh**. It installs the FreeBSD package `security/acme.sh`,
+   which runs as its own user `acme`, and creates the account. If Let's Encrypt refuses the address,
+   the card says why and stays: correct it and press again.
+7. **Domains.** On the *Domains* page **Add domain** for each mail domain. Then on the *DNS* page
+   choose the domain (*Change domain*, at the top): the card **Create the records on Cloudflare**
+   shows what its zone already has. Press **Set up everything**: DKIM, SPF, DMARC, autoconfig, the
+   SRV records and MTA-STS, with a Let's Encrypt certificate for the mail name and the MTA-STS names.
+   It never overwrites a record that is already there.
+   - The domain needs a Cloudflare account whose token sees its zone. If only one account of the
+     panel sees it, *Set up everything* links it to the domain by itself; if more than one does,
+     choose it on the same page, card *Cloudflare accounts*, *Domains → account*. If none does, it
+     changes nothing and says what to check.
+   - Under the card, every step gets a line with its outcome. If some are not in order, the card
+     says how many, and the lines marked FAILED say what each one needs; press again after fixing it.
+8. **The provider's firewall.** *Firewall* page, card **Your provider's firewall**: check that its
+   rules are the ones you created in step 1, copy Cloudflare's list into the panel and webmail rule if
+   you have not done it yet, then press **I have put this list in my provider's firewall**.
+9. **Check everything.** *Diagnostics*, **Check everything**: what needs a look comes first, each
+   with its next step. If *Outgoing mail (port 25)* is a problem, your provider still blocks port 25
+   (step 1). Then create the mailboxes (*Mailboxes*, **Add mailbox**) and send and receive a test
+   message, for example from the webmail.
+
+### Keeping it up to date
+
+- **The system and the mail software:** the *Updates* page, which says what is new and does every
+  step with its checks.
+- **The panel itself:** build the new jar and run `tools/upgrade/upgrade-panel.sh` on the server
+  (`tools/upgrade/README.md`): it keeps a way back, starts the new panel twice and stops at the first
+  sign that something is wrong or different. When it stops it shows the difference and how to go
+  back; a difference the new version is meant to make (a page that now answers) is not a fault.
+- **Cloudflare's addresses:** when *Diagnostics* says that Cloudflare changed its list, update the
+  panel and webmail rule in your provider's firewall and confirm it on the *Firewall* page.
+
+### Starting the panel by hand
+
+| Command, from `/home/panel` | What it does |
 |---|---|
-| `java -jar target/freebsd-mail-panel-1.0.jar` | menu a schermo; il server web parte dalla voce 100 |
-| `java -jar target/freebsd-mail-panel-1.0.jar --web` | **solo** il server web: nessun menu, nessun terminale richiesto |
+| `java -jar freebsd-mail-panel-1.0.jar` | the terminal menu; the web server starts from its last entry |
+| `java -jar freebsd-mail-panel-1.0.jar --web` | **only** the web server: no menu, no terminal needed (what the service runs) |
+| `java -jar freebsd-mail-panel-1.0.jar --access-code [name]` | a one-time 8-digit sign-in code for an administrator |
+| `java -jar freebsd-mail-panel-1.0.jar --create-admin <name> <email>` | the first administrator, when there is none |
 
-La modalita' `--web` esiste perche' il pannello deve poter tornare su da solo dopo essersi
-spento per aggiornare la propria JVM, dove un terminale non c'e'. Il comando di riavvio non
-viene letto da `run.sh`: il pannello lo ricostruisce dal processo vivo, quindi riparte
-esattamente com'era partito.
+With the service running, use `service mailpanel stop|start|restart|status`. The console commands
+must be run from `/home/panel`: the panel's database is in `database/` next to the jar. At its first
+start the panel writes next to the jar a `run.sh` with the exact command it was started with: a
+shortcut, nothing depends on it.
 
-### 3. Terminal Menu
+### The terminal menu
 
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║            FreeBSD Mail Panel v1.0 - Select an option         ║
 ╠═══════════════════════════════════════════════════════════════╣
-║  1) Set TimeZone and CloudFlare DNS                           ║
+║  1) Time zone, clock (NTP) and DNS resolver                   ║
 ║  2) Edit Panel Configuration                                  ║
 ║  3) Edit Roundcube Configuration                              ║
 ║  4) Install/Reinstall Mail Server                             ║
 ║  5) Emergency access code                                     ║
+║  6) Go back to the server before the last reinstallation      ║
 ║  >>> Start Mail Panel WebServer <<<                           ║
 ║  Exit                                                         ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```
 
-### 4. Configure Roundcube First (Option 3)
-
-Before installing the mail server, configure Roundcube:
-- Domain name
-- Port (default: 8443)
-- SSL certificate paths (optional, will use panel's SSL if not set)
-
-### 5. Install Mail Server (Option 4)
-
-This will:
-1. Stop existing services
-2. Remove old configurations
-3. Install packages (Postfix, Dovecot, Rspamd, ClamAV, Redis, Roundcube)
-4. Configure MySQL database
-5. Create virtual mail user (vmail:5000)
-6. Generate self-signed SSL certificate
-7. Configure all services
-8. Start all services
-
-### 6. Start Web Panel
-
-Select "Start Mail Panel WebServer" to start the HTTPS panel on port 2096.
+Option 6 brings back the boot environment taken before the last installation (ZFS only) and
+reboots after asking.
 
 ---
 
@@ -779,8 +1026,11 @@ Select "Start Mail Panel WebServer" to start the HTTPS panel on port 2096.
 ### Access
 
 ```
-https://your-server:2096/
+https://panel.example.com:2096/
 ```
+
+The panel answers only to its own name, the one written with menu option 2 (and through Cloudflare's proxy).
+Reached with another name or with the bare IP address it answers `421 Misdirected Request`.
 
 ### First Administrator
 
@@ -794,7 +1044,7 @@ java -jar freebsd-mail-panel-1.0.jar --create-admin <name> <email>
 
 It creates a superadmin with no password and prints a one-time 8-digit code, valid for 15
 minutes: on the login page choose "Code from the server console", then register a passkey in
-Settings. It refuses when an active administrator already exists; the others are added from the
+Account. It refuses when an active administrator already exists; the others are added from the
 Administrators page.
 
 ### Signing In
@@ -849,66 +1099,58 @@ the vault get their copy the next time someone signs in to the webmail with them
 
 ## SSL Certificates
 
-### Certificate Location
+Three certificates, one per name:
 
-```
-/usr/local/etc/ssl/mail/
-├── fullchain.pem    # Certificate + chain
-└── privkey.pem      # Private key
-```
+| Name | Certificate | Where it is set | Renewal |
+|---|---|---|---|
+| the panel (`panel.example.com`, 2096) | Cloudflare Origin Certificate | menu option 2 (file path or pasted PEM); the panel keeps it | none needed (up to 15 years) |
+| the webmail (`webmail.example.com`, 8443) | Cloudflare Origin Certificate | menu option 3 (file paths: the files stay there, nginx reads them) or *Settings* | none needed |
+| the mail server (`mail.example.com`, plus `mta-sts.` and `autoconfig.` of each domain) | Let's Encrypt, through acme.sh | *SSL certificates* page and "Set up everything" on the *DNS* page | automatic, checked every day |
 
-### Self-Signed (Default)
+Menu options 2 and 3 check a certificate before saving it: readable, valid now, covering the name, and with its own key.
 
-Generated automatically during installation. **Replace with a real certificate for production!**
-
-### Let's Encrypt
-
-```bash
-# Install certbot
-pkg install -y py311-certbot
-
-# Generate certificate (requires port 80 accessible)
-certbot certonly --standalone -d mail.example.com
-
-# Copy to mail directory
-cp /usr/local/etc/letsencrypt/live/mail.example.com/fullchain.pem /usr/local/etc/ssl/mail/
-cp /usr/local/etc/letsencrypt/live/mail.example.com/privkey.pem /usr/local/etc/ssl/mail/
-
-# Restart services
-service postfix reload
-service dovecot reload
-```
-
-### Cloudflare Origin Certificate
-
-1. Generate Origin Certificate in Cloudflare dashboard
-2. Copy certificate to `/usr/local/etc/ssl/mail/fullchain.pem`
-3. Copy private key to `/usr/local/etc/ssl/mail/privkey.pem`
-4. Configure in web panel under "Edit Panel Configuration"
-
----
+The mail server's certificate is in `/usr/local/etc/ssl/mail/` (`fullchain.pem`, `privkey.pem`), used by Postfix,
+Dovecot and nginx on 443. Until Let's Encrypt issues one, the installation's self-signed certificate is there: mail
+clients warn about it. acme.sh is the FreeBSD package `security/acme.sh` and runs as its own user `acme`, with its
+files in `/var/db/acme`; it is installed from the *SSL certificates* page together with the Let's Encrypt account. The
+challenge is DNS-01 through Cloudflare (the account chosen on the *Cloudflare* page: renews by itself), or HTTP-01 on
+port 80, which the panel opens only for the time of the challenge, or DNS-01 by hand (a TXT record; it cannot renew by
+itself). A certificate obtained elsewhere can be uploaded on the same page.
 
 ## Cloudflare Integration
 
-### Proxy Support
+### The two web names behind the proxy
 
-The panel supports Cloudflare proxy with:
-- `CF-Connecting-IP` header for real client IP
-- `SameSite=Lax` cookies for compatibility
+The panel (port 2096) and the webmail (port 8443) are reached through Cloudflare's proxy, which serves HTTPS on those
+ports; the mail name is "DNS only", because mail does not go through the proxy. Cloudflare connects to the server in
+"Full (strict)" mode and checks the origin certificates. Behind the proxy the panel reads the visitor's address from
+`CF-Connecting-IP`, and only when the request really comes from one of Cloudflare's address ranges (the list the panel
+trusts is on the *Diagnostics* page, with a comparison against Cloudflare's official one). Its session cookie is
+`__Host-MailPanel`, `Secure`, `HttpOnly`, `SameSite=Strict`.
 
-### DNS Records Required
+### The API token
 
-| Type | Name | Value | Proxy |
-|------|------|-------|-------|
-| A | mail | YOUR_IP | DNS only (gray cloud) |
-| MX | @ | mail.example.com | - |
-| TXT | @ | v=spf1 mx ~all | - |
-| TXT | _dmarc | v=DMARC1; p=none | - |
-| TXT | mail._domainkey | (DKIM key from panel) | - |
+Entered on the *Cloudflare* page, with the permissions **Zone > DNS > Edit** and **Zone > Zone > Read**, limited to
+the mail domains' zones (never the Global API Key). The panel uses it for:
 
-**Important**: Mail records (A for mail, MX) should NOT be proxied through Cloudflare.
+- the records of each mail domain, written by "Set up everything" on the *DNS* page and never overwriting an existing
+  one: DKIM (`<selector>._domainkey`), SPF (`v=spf1 ip4:<server IP> mx -all`), DMARC (`v=DMARC1; p=none;
+  rua=mailto:dmarc@<domain>`, monitoring mode), the CNAMEs `autoconfig` and `mta-sts` (DNS only), the SRV records
+  `_imaps._tcp` and `_submission._tcp`, and the MTA-STS TXT `_mta-sts` once the policy answers;
+- the DNS-01 challenge of the mail server's Let's Encrypt certificate.
 
----
+It does **not** create the A, AAAA and MX records, nor the reverse DNS (at your provider), nor the panel's and the
+webmail's records: those are created by hand, once, as in [Step 2](#step-2-at-cloudflare). The *DNS* page checks them
+all (A, MX, PTR with forward confirmation, SPF, DKIM, DMARC, MTA-STS, autoconfig, SRV) and lists the values to enter
+by hand when a domain's DNS is not on Cloudflare.
+
+### Cloudflare's addresses and your provider's firewall
+
+Ports 2096 and 8443 must be open only to Cloudflare's address ranges, in your provider's firewall. The ranges change
+from time to time and the provider's firewall is updated by hand (on Hetzner Cloud an API exists, but a token able to
+change the firewall can also delete the server, so it does not belong on the mail server). The *Firewall* page, card
+"Your provider's firewall", shows the official list ready to paste and remembers the one you confirmed; *Diagnostics*
+warns when Cloudflare changes it.
 
 ## Security Features
 
@@ -984,8 +1226,9 @@ tail -f /var/log/rspamd/rspamd.log
 # Check Postfix queue
 postqueue -p
 
-# Check LMTP connection
-telnet 127.0.0.1 24
+# Postfix delivers to Dovecot through this socket (no port 24)
+postconf -h virtual_transport
+ls -l /var/spool/postfix/private/dovecot-lmtp
 
 # Check mailbox permissions
 ls -la /var/vmail/
@@ -996,14 +1239,14 @@ ls -la /var/vmail/
 1. Clear browser cookies
 2. Check if using Cloudflare proxy
 3. Verify MySQL connection in panel config
-4. Check `./database/mailpanel.db` exists
+4. Check `./database/mail_panel.db` exists (in the panel's folder, `/home/panel`)
 
 ---
 
 ## Architecture
 
 ```
-FreeBSD Mail Panel (Java 24)
+FreeBSD Mail Panel (Java 25)
 ├── Main.java                 # Entry point, terminal GUI
 ├── webserver/
 │   ├── SSLMailServer.java    # HTTPS server

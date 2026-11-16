@@ -36,7 +36,7 @@ resta fermo una decina di secondi; la posta resta sempre accesa.
    - l'accesso alla webmail con mail e password.
 
    Conviene una casella creata apposta dal pannello vecchio, per esempio
-   `upgrade-test@domain-b.test`, da togliere dopo. La password va in un file di root, `chmod 600`,
+   `upgrade-test@example.com`, da togliere dopo. La password va in un file di root, `chmod 600`,
    su una riga.
 3. **Quando.** Il passaggio ferma solo il pannello. Il primo avvio della versione nuova sposta
    però Roundcube nel suo pool e ricarica nginx, php-fpm e Postfix: per un istante la webmail può
@@ -45,7 +45,7 @@ resta fermo una decina di secondi; la posta resta sempre accesa.
 ## Il passaggio
 
 ```sh
-sh /root/panel-upgrade/upgrade-panel.sh -m upgrade-test@domain-b.test -p /root/panel-upgrade/test.pass \
+sh /root/panel-upgrade/upgrade-panel.sh -m upgrade-test@example.com -p /root/panel-upgrade/test.pass \
     /root/panel-upgrade/freebsd-mail-panel-1.0.jar IMPRONTA
 ```
 
@@ -89,7 +89,7 @@ INFO: Renamed /var/db/mailpanel/system/salto.json to /var/db/mailpanel/system/ve
 INFO: [RcScriptRepair] DONE: /usr/local/etc/rc.d/mailpanel: [/var/db/mailpanel/pannello.log] now with the current names
 INFO: [PublicSurfaceRename] DONE: moved /var/log/nginx/mailpanel-pubblico-access.log -> mailpanel-public-access.log; /var/db/mailpanel/pubblico -> public; ...
 INFO: [PanelMarker] DONE: signature updated in /usr/local/etc/dovecot/dovecot.conf
-WARNING: [LocalMta] myorigin mail.domain-b.test is not in mydestination: it becomes localhost first
+WARNING: [LocalMta] myorigin mail.example.com is not in mydestination: it becomes localhost first
 INFO: [LocalMta] Postfix is now the local MTA (/usr/local/etc/mail/mailer.conf)
 INFO: [RoundcubeUser] DONE: Roundcube runs in the pool roundcube as roundcube, nginx passes to /var/run/php-fpm-roundcube.sock (1 site), ...
 INFO: [RoundcubeDbUser] DONE: ...                 (solo se la #91 e' nel jar)
