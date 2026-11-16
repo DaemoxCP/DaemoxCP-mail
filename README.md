@@ -815,8 +815,10 @@ pkg update
 pkg upgrade
 ```
 
-The first time `pkg` runs it offers to install itself: answer yes. If `freebsd-update` installed
-a new kernel, reboot (`shutdown -r now`) before going on.
+The first time `pkg` runs it offers to install itself: answer yes. Before installing,
+`freebsd-update` keeps the system as it was in a boot environment (`bectl list` shows it), and it may
+restart `sshd`: the SSH session you are in stays open. If it installed a new kernel, reboot
+(`shutdown -r now`) before going on.
 
 ### Step 4: Java
 
@@ -945,22 +947,32 @@ the options in this order:
 
    From now on the panel starts by itself at every boot. Try it: `shutdown -r now`, and after a
    minute or two the panel answers again.
-5. **Cloudflare.** On the *Cloudflare* page add the account with the token of step 2, then choose it
-   for the mail server's certificate.
+5. **Cloudflare.** On the *Cloudflare* page add the account with the token of step 2 (**Test token**
+   first: if Cloudflare does not accept it, the page says so, and the usual cause is a token copied
+   only in part or with a space), then choose it for the mail server's certificate.
 6. **Let's Encrypt.** On the *SSL certificates* page, the card "Let's Encrypt is not ready": write
    the email for the Let's Encrypt account (an address you read: Let's Encrypt writes there only about
    the account) and press **Install acme.sh**. It installs the FreeBSD package `security/acme.sh`,
    which runs as its own user `acme`, and creates the account. If Let's Encrypt refuses the address,
    the card says why and stays: correct it and press again.
-7. **Domains.** On the *Domains* page **Add domain** for each mail domain; on the *DNS* page, for
-   each one, **Set up everything**: DKIM, SPF, DMARC, autoconfig, the SRV records and MTA-STS, with a
-   Let's Encrypt certificate for the mail name and the MTA-STS names. It never overwrites a record
-   that is already there.
+7. **Domains.** On the *Domains* page **Add domain** for each mail domain. Then on the *DNS* page
+   choose the domain (*Change domain*, at the top): the card **Create the records on Cloudflare**
+   shows what its zone already has. Press **Set up everything**: DKIM, SPF, DMARC, autoconfig, the
+   SRV records and MTA-STS, with a Let's Encrypt certificate for the mail name and the MTA-STS names.
+   It never overwrites a record that is already there.
+   - The domain needs a Cloudflare account whose token sees its zone. If only one account of the
+     panel sees it, *Set up everything* links it to the domain by itself; if more than one does,
+     choose it on the same page, card *Cloudflare accounts*, *Domains → account*. If none does, it
+     changes nothing and says what to check.
+   - Under the card, every step gets a line with its outcome. If some are not in order, the card
+     says how many, and the lines marked FAILED say what each one needs; press again after fixing it.
 8. **The provider's firewall.** *Firewall* page, card **Your provider's firewall**: check that its
    rules are the ones you created in step 1, copy Cloudflare's list into the panel and webmail rule if
    you have not done it yet, then press **I have put this list in my provider's firewall**.
 9. **Check everything.** *Diagnostics*, **Check everything**: what needs a look comes first, each
-   with its next step. Then create the mailboxes (*Mailboxes*) and send and receive a test message.
+   with its next step. If *Outgoing mail (port 25)* is a problem, your provider still blocks port 25
+   (step 1). Then create the mailboxes (*Mailboxes*, **Add mailbox**) and send and receive a test
+   message, for example from the webmail.
 
 ### Keeping it up to date
 
@@ -968,7 +980,8 @@ the options in this order:
   step with its checks.
 - **The panel itself:** build the new jar and run `tools/upgrade/upgrade-panel.sh` on the server
   (`tools/upgrade/README.md`): it keeps a way back, starts the new panel twice and stops at the first
-  sign that something is wrong.
+  sign that something is wrong or different. When it stops it shows the difference and how to go
+  back; a difference the new version is meant to make (a page that now answers) is not a fault.
 - **Cloudflare's addresses:** when *Diagnostics* says that Cloudflare changed its list, update the
   panel and webmail rule in your provider's firewall and confirm it on the *Firewall* page.
 
