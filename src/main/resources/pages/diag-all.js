@@ -69,6 +69,17 @@
             } },
             { key: 'env', title: 'up.env', api: 'panel_env', verdict: r => r.unreachable ? ['problem', r.explanation, diagOpen('env')]
                 : r.absent ? ['warn', r.explanation, diagOpen('env')] : ['ok', r.explanation] },
+            // La porta 25 in uscita (reperto 246): chiusa dal provider, la posta in uscita resta in coda.
+            { key: 'smtpout', title: 'so.title', api: 'smtp_out', verdict: r => r.state === 'open' ? ['ok', t('so.v.open')]
+                : r.state === 'blocked' ? ['problem', t('so.v.blocked')] : ['info', t('so.v.unknown')] },
+            // Il firewall del provider con la lista di Cloudflare per pannello e webmail (reperto 245).
+            { key: 'pfw', title: 'pfw.title', api: 'provider_firewall', verdict: r => {
+                const go = { label: t('pfw.open'), href: '/firewall#provider-firewall' };
+                if (r.state === 'current') return ['ok', t('pfw.v.current')];
+                if (r.state === 'changed') return ['warn', t('pfw.v.changed'), go];
+                if (r.state === 'never') return ['todo', t('pfw.v.never'), go];
+                return ['info', r.error || t('pfw.downloadFailed')];
+            } },
         ];
 
         // La scheda di un controllo, coi suoi dettagli: la si riempie col suo controllo e ci si va.

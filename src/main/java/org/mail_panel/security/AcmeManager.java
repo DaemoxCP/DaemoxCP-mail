@@ -198,6 +198,26 @@ public class AcmeManager {
         }
     }
 
+    /** L'account Let's Encrypt di acme.sh c'e' (il file che acme.sh scrive quando la registrazione riesce). */
+    public boolean hasAccount() {
+        AcmeUser.Layout l = layout();
+        return l != null && java.nio.file.Files.isRegularFile(java.nio.file.Path.of(l.home(),
+                "ca/acme-v02.api.letsencrypt.org/directory/account.json"), java.nio.file.LinkOption.NOFOLLOW_LINKS);
+    }
+
+    /** La riga d'errore di acme.sh, corta, per dirla a chi ha premuto il pulsante. */
+    static String acmeError(String output) {
+        String best = "";
+        for (String line : String.valueOf(output).split("\n")) {
+            String l = line.replaceAll("^\\[[^]]*\\]\\s*", "").trim();
+            if (l.isEmpty()) continue;
+            String low = l.toLowerCase(java.util.Locale.ROOT);
+            if (low.contains("error") || low.contains("invalid") || low.contains("failed")) best = l;
+        }
+        if (best.isEmpty()) best = "no answer";
+        return best.length() > 200 ? best.substring(0, 200) + "…" : best;
+    }
+
     /**
      * Install acme.sh: il pacchetto security/acme.sh, che crea l'utente acme e installa il
      * programma in /usr/local/sbin. Prima: "curl https://get.acme.sh | sh" da root.
@@ -218,7 +238,10 @@ public class AcmeManager {
             if (isAcmeInstalled()) {
                 // Save email to database
                 database.setSetting("acme_email", email);
-                return new InstallResult(true, I18n.tr("server.acme.installed"), output);
+                // L'account si guarda, non si deduce (reperto 247): con un indirizzo che Let's Encrypt rifiuta il
+                // pacchetto c'e' ma l'account no, e senza account nessun certificato.
+                if (hasAccount()) return new InstallResult(true, I18n.tr("server.acme.installed"), output);
+                return new InstallResult(false, I18n.tr("server.acme.noAccount", java.util.Map.of("why", acmeError(output))), output);
             } else {
                 return new InstallResult(false, I18n.tr("server.acme.installFailed"), output);
             }

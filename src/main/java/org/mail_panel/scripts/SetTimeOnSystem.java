@@ -7,7 +7,8 @@ import java.nio.file.*;
 
 /**
  * System Time and DNS Configuration Script for FreeBSD Mail Panel
- * Sets timezone to Europe/Rome, configures NTP, and sets Cloudflare DNS
+ * Sets the time zone chosen in the menu (first argument, reperto 242; before: always Europe/Rome), configures NTP,
+ * and the DNS resolver (1.1.1.1 until the installation turns on the local recursive resolver).
  */
 public class SetTimeOnSystem {
 
@@ -28,13 +29,30 @@ public class SetTimeOnSystem {
                 exit 1
             fi
 
+            # The time zone chosen in the menu (SystemTimeZone checks it too): an IANA name present in
+            # /usr/share/zoneinfo as a plain file. Never a path with "..", never a link.
+            TZ_NAME="${1:-}"
+            if [ -z "$TZ_NAME" ]; then
+                echo "Error: no time zone given (the menu passes it, for example Europe/Rome or UTC)"
+                exit 1
+            fi
+            case "$TZ_NAME" in
+                *..*|/*|*[!A-Za-z0-9_+/-]*)
+                    echo "Error: \"$TZ_NAME\" is not a time zone name"
+                    exit 1 ;;
+            esac
+            if [ ! -f "/usr/share/zoneinfo/$TZ_NAME" ] || [ -L "/usr/share/zoneinfo/$TZ_NAME" ]; then
+                echo "Error: /usr/share/zoneinfo/$TZ_NAME does not exist"
+                exit 1
+            fi
+
             echo "Current time:"
             date
 
             echo ""
-            echo "[1/5] Setting timezone to Europe/Rome..."
-            cp /usr/share/zoneinfo/Europe/Rome /etc/localtime
-            echo "Europe/Rome" > /var/db/zoneinfo
+            echo "[1/5] Setting timezone to $TZ_NAME..."
+            cp "/usr/share/zoneinfo/$TZ_NAME" /etc/localtime
+            echo "$TZ_NAME" > /var/db/zoneinfo
 
             echo "New time after timezone setting:"
             date
@@ -99,7 +117,7 @@ RESOLVCONF
             echo ""
             echo "=== Configuration Complete ==="
             echo ""
-            echo "Timezone:  Europe/Rome"
+            echo "Timezone:  $TZ_NAME"
             echo "NTP:       Enabled (syncs on boot)"
             echo "DNS:       $DNS_SUMMARY"
             echo ""

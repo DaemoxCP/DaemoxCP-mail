@@ -303,8 +303,8 @@ public class WebProtection {
         String mode = MtaSts.currentMode();
         String text = MtaSts.policy(host, mode, MtaSts.recommendedMaxAge(mode));
         try {
-            Files.createDirectories(Path.of(PUBLIC_DIR));
-            Files.writeString(Path.of(POLICY_FILE), text);
+            // Coi permessi scritti, non con l'umask del servizio: nginx (www) deve poterla leggere (reperto 250)
+            PublicPolicyAccess.write(Path.of(PUBLIC_DIR), Path.of(POLICY_FILE), text);
             return r.put("success", true).put("mode", mode).put("text", text)
                     .put("id", MtaSts.id(text));
         } catch (Exception e) {

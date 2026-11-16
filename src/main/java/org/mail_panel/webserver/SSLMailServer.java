@@ -222,7 +222,7 @@ public class SSLMailServer {
         "mtasts_plan", "watch", "watch_changes", "openssl_expiry", "port465_status",
         "python_preflight", "python_leftovers", "java_preflight", "java_status", "roundcube_preflight",
         "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status", "interruption_status",
-        "journal_list", "journal_read", "package_turn");
+        "journal_list", "journal_read", "package_turn", "provider_firewall", "smtp_out");
 
     /** Le rotte dichiarate, con il loro accesso: le prove controllano che ci siano tutte. */
     private final Map<String, Access> routes = new java.util.LinkedHashMap<>();
@@ -790,6 +790,10 @@ public class SSLMailServer {
             // niente. Dopo Fail2banAutoSetup, che ricarica fail2ban per conto suo.
             org.mail_panel.system.PublicSurfaceRename.ensureAtBoot();
 
+            // La politica MTA-STS leggibile da nginx sui server dove era nata coi permessi del servizio (0700 e 0600):
+            // nginx rispondeva 403, e MTA-STS non si attivava (reperto 250). Solo permessi, mai attraverso collegamenti.
+            org.mail_panel.system.PublicPolicyAccess.ensureAtBoot();
+
             // Le firme dei file del pannello in inglese sui server installati prima: solo righe di
             // commento, quindi niente reload. Dopo la rinomina, che porta i file ai nomi di adesso.
             org.mail_panel.system.PanelMarker.ensureAtBoot();
@@ -1204,121 +1208,15 @@ public class SSLMailServer {
      * Normalizes PEM content by fixing newlines and removing extra whitespace.
      */
     private String normalizePEM(String pem) {
-        if (pem == null) return null;
-
-        // Replace various newline formats with standard \n
-        pem = pem.replace("\r\n", "\n").replace("\r", "\n");
-
-        // Remove any leading/trailing whitespace from each line
-        String[] lines = pem.split("\n");
-        StringBuilder sb = new StringBuilder();
-        for (String line : lines) {
-            line = line.trim();
-            if (!line.isEmpty()) {
-                sb.append(line).append("\n");
-            }
-        }
-        return sb.toString();
+        return org.mail_panel.security.PemTls.normalize(pem);
     }
 
     /**
      * Load private key from PEM string
      */
     private java.security.PrivateKey loadPrivateKeyFromString(String keyContent) throws Exception {
-        if (keyContent == null || keyContent.trim().isEmpty()) {
-            throw new IllegalArgumentException("Private key content is empty");
-        }
-
-        // Detect key format
-        boolean isRSAFormat = keyContent.contains("-----BEGIN RSA PRIVATE KEY-----");
-        boolean isPKCS8Format = keyContent.contains("-----BEGIN PRIVATE KEY-----");
-        boolean isECFormat = keyContent.contains("-----BEGIN EC PRIVATE KEY-----");
-
-        System.out.println("Key format detected - RSA: " + isRSAFormat + ", PKCS8: " + isPKCS8Format + ", EC: " + isECFormat);
-
-        if (!isRSAFormat && !isPKCS8Format && !isECFormat) {
-            throw new IllegalArgumentException("Unsupported private key format. Expected PKCS#8, RSA, or EC format.");
-        }
-
-        String base64Key;
-        java.security.KeyFactory kf;
-
-        if (isPKCS8Format) {
-            // PKCS#8 format (most common, works with RSA and EC)
-            base64Key = keyContent
-                    .replace("-----BEGIN PRIVATE KEY-----", "")
-                    .replace("-----END PRIVATE KEY-----", "")
-                    .replaceAll("\\s", "");
-
-            byte[] decodedKey = java.util.Base64.getDecoder().decode(base64Key);
-            java.security.spec.PKCS8EncodedKeySpec spec = new java.security.spec.PKCS8EncodedKeySpec(decodedKey);
-
-            // Try RSA first, then EC
-            try {
-                kf = java.security.KeyFactory.getInstance("RSA");
-                return kf.generatePrivate(spec);
-            } catch (Exception e) {
-                System.out.println("Not an RSA key, trying EC...");
-                kf = java.security.KeyFactory.getInstance("EC");
-                return kf.generatePrivate(spec);
-            }
-        } else if (isRSAFormat) {
-            // RSA format (traditional OpenSSL PKCS#1)
-            base64Key = keyContent
-                    .replace("-----BEGIN RSA PRIVATE KEY-----", "")
-                    .replace("-----END RSA PRIVATE KEY-----", "")
-                    .replaceAll("\\s", "");
-
-            byte[] pkcs1Bytes = java.util.Base64.getDecoder().decode(base64Key);
-            byte[] pkcs8Bytes = convertPKCS1ToPKCS8(pkcs1Bytes);
-
-            java.security.spec.PKCS8EncodedKeySpec spec = new java.security.spec.PKCS8EncodedKeySpec(pkcs8Bytes);
-            kf = java.security.KeyFactory.getInstance("RSA");
-            return kf.generatePrivate(spec);
-        } else {
-            // EC format
-            base64Key = keyContent
-                    .replace("-----BEGIN EC PRIVATE KEY-----", "")
-                    .replace("-----END EC PRIVATE KEY-----", "")
-                    .replaceAll("\\s", "");
-
-            byte[] decodedKey = java.util.Base64.getDecoder().decode(base64Key);
-            java.security.spec.PKCS8EncodedKeySpec spec = new java.security.spec.PKCS8EncodedKeySpec(decodedKey);
-            kf = java.security.KeyFactory.getInstance("EC");
-            return kf.generatePrivate(spec);
-        }
-    }
-
-    /**
-     * Convert PKCS#1 RSA private key to PKCS#8 format
-     */
-    private byte[] convertPKCS1ToPKCS8(byte[] pkcs1Bytes) {
-        // PKCS#8 header for RSA keys
-        byte[] pkcs8Header = {
-            0x30, (byte) 0x82, 0x00, 0x00, // SEQUENCE, length placeholder
-            0x02, 0x01, 0x00,              // INTEGER 0 (version)
-            0x30, 0x0d,                    // SEQUENCE
-            0x06, 0x09, 0x2a, (byte) 0x86, 0x48, (byte) 0x86, (byte) 0xf7, 0x0d, 0x01, 0x01, 0x01, // OID rsaEncryption
-            0x05, 0x00,                    // NULL
-            0x04, (byte) 0x82, 0x00, 0x00  // OCTET STRING, length placeholder
-        };
-
-        int totalLen = pkcs8Header.length + pkcs1Bytes.length;
-        byte[] pkcs8Bytes = new byte[totalLen];
-
-        System.arraycopy(pkcs8Header, 0, pkcs8Bytes, 0, pkcs8Header.length);
-        System.arraycopy(pkcs1Bytes, 0, pkcs8Bytes, pkcs8Header.length, pkcs1Bytes.length);
-
-        // Fix lengths in header
-        int seqLen = totalLen - 4;
-        pkcs8Bytes[2] = (byte) ((seqLen >> 8) & 0xff);
-        pkcs8Bytes[3] = (byte) (seqLen & 0xff);
-
-        int octetLen = pkcs1Bytes.length;
-        pkcs8Bytes[pkcs8Header.length - 2] = (byte) ((octetLen >> 8) & 0xff);
-        pkcs8Bytes[pkcs8Header.length - 1] = (byte) (octetLen & 0xff);
-
-        return pkcs8Bytes;
+        // La stessa lettura del controllo della voce 2 del menu (PemTls, reperto 243).
+        return org.mail_panel.security.PemTls.privateKey(keyContent);
     }
 
     private void generateSelfSignedCertificate(String keystorePath, String password) {
@@ -5074,6 +4972,7 @@ public class SSLMailServer {
                 // Get certificate status
                 response.put("success", true);
                 response.put("acme_installed", acmeManager.isAcmeInstalled());
+                response.put("acme_account", acmeManager.hasAccount());
 
                 AcmeManager.CertificateInfo certInfo = acmeManager.getCertificateInfo();
                 if (certInfo != null && certInfo.installed) {
@@ -7881,6 +7780,20 @@ public class SSLMailServer {
                 case "rc_state" -> response = UpdateManager.autoStart();
                 case "system_summary" -> response = UpdateManager.systemSummary();
                 case "cf_intervals" -> response = UpdateManager.cloudflareRanges();
+                // Il firewall del provider: la lista di Cloudflare da metterci e se e' quella confermata (reperto 245).
+                case "provider_firewall" -> response = org.mail_panel.security.ProviderFirewall.state();
+                // La porta 25 in uscita (reperto 246): si legge solo il saluto di un grande server di posta.
+                case "smtp_out" -> response = org.mail_panel.system.OutboundSmtp.check();
+                case "provider_firewall_ack" -> {
+                    if (!"UPDATED".equals(req.optString("confirm", ""))) {
+                        response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
+                        break;
+                    }
+                    response = org.mail_panel.security.ProviderFirewall.acknowledge(req.optString("fingerprint", ""));
+                    logAudit("PROVIDER_FIREWALL", ip, response.optBoolean("success")
+                            ? "Cloudflare list confirmed in the provider firewall"
+                            : "NOT confirmed: " + response.optString("error", "?"));
+                }
                 case "rc_remove_preview" -> response = UpdateManager.removePanelRcScript(false);
                 case "rc_remove" -> {
                     if (!"REMOVE RC".equals(req.optString("confirm", ""))) {
@@ -10598,6 +10511,17 @@ public class SSLMailServer {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
+                // Prima di toccare qualunque cosa: un account Cloudflare che veda la zona, assegnato al dominio se e'
+                // l'unico che la vede (reperto 250).
+                org.mail_panel.system.DomainSetup.CloudflareChoice cfc = org.mail_panel.system.DomainSetup.cloudflareFor(domainId);
+                if (!cfc.ready()) {
+                    response = new JSONObject().put("success", false).put("error", cfc.error());
+                    logAudit("DOMAIN_CONFIGURE", ip, "domain " + domainId + " - NOT started: no Cloudflare account that sees its zone");
+                    break;
+                }
+                if (cfc.assigned() != null)
+                    logAudit("CLOUDFLARE_ASSIGN", ip, "domain " + domainId + " to Cloudflare account " + cfc.assigned().id
+                            + " (the only one whose token sees the zone)");
                 response = UpdateManager.startDomainSetup(domainId);
                 logAudit("DOMAIN_CONFIGURE", ip, "domain " + domainId
                         + " - started as job " + response.optString("jobId", ""));

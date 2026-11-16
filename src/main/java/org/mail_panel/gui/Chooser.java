@@ -16,7 +16,7 @@ import java.util.Arrays;
  * ┌─────────────────────────────────────────────────────────────────────────────┐
  * │  MENU OPTIONS                                                               │
  * ├─────────────────────────────────────────────────────────────────────────────┤
- * │  1) Set TimeZone and CloudFlare DNS                                         │
+ * │  1) Time zone, clock (NTP) and DNS resolver                                 │
  * │  2) Edit Panel Configuration                                                │
  * │  3) Edit Roundcube Configuration (REQUIRED before install)                  │
  * │  4) Install/Reinstall Mail Server                                           │
@@ -78,8 +78,8 @@ public class Chooser {
         ActionListBox actionListBox = new ActionListBox();
 
         // ============== SYSTEM CONFIGURATION ==============
-        actionListBox.addItem("1) Set TimeZone and CloudFlare DNS", () -> {
-            if (confirmAction("Confirm", "Configure TimeZone and CloudFlare DNS?\n\nThis will set system timezone and DNS.")) {
+        actionListBox.addItem("1) Time zone, clock (NTP) and DNS resolver", () -> {
+            if (confirmAction("Confirm", "Set the time zone, the clock (NTP) and the DNS resolver?\n\nNext you choose the time zone.")) {
                 setOptionAndClose(1);
             }
         });
