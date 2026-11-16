@@ -41,7 +41,8 @@
             const r = await autoDnsApi('status');
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + adEsc(r.error) + '</div>'; return; }
             if (!r.cloudflare || !r.zone) {
-                el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + adEsc(r.note) + '</div>';
+                el.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + adEsc(r.note) + '</div>'
+                             + '<div id="autoDnsOutcome" class="mt-2" aria-live="polite"></div>';
                 return;
             }
             let h = '<div class="small text-muted mb-2">' + escHtml(t('ad.accountZone', { account: r.account, zone: r.domain })) + '</div>'
@@ -100,7 +101,7 @@
                 if (x.warnings && x.warnings.length)
                     h += '<tr><td colspan="4" class="pt-0">' + adWarnings(x.warnings) + '</td></tr>';
             });
-            h += '</tbody></table></div><div id="autoDnsOutcome"></div>';
+            h += '</tbody></table></div><div id="autoDnsOutcome" aria-live="polite"></div>';
 
             h += adReports(r.reports);
             h += adOptional(r.optionalItems);
@@ -392,7 +393,16 @@
             if (!currentDomainId) return;
             if (!await adConfirm(t('ad.confirmAll'), t('ad.wordConfigure'))) return;
 
-            const el = document.getElementById('autoDnsOutcome');
+            let el = document.getElementById('autoDnsOutcome');
+            if (!el) {
+                // La scheda non e' ancora stata letta, o Cloudflare ha risposto con un errore: il posto per il lavoro
+                // si crea qui, o il pulsante, dopo la conferma, non farebbe niente (reperto 249)
+                el = document.createElement('div');
+                el.id = 'autoDnsOutcome';
+                el.className = 'mt-2';
+                el.setAttribute('aria-live', 'polite');
+                document.getElementById('autoDnsBody').appendChild(el);
+            }
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('ad.starting'));
             const r = await autoDnsApi('configure_all', { confirm: 'CONFIGURE' });
             if (!r.success || !r.jobId) {

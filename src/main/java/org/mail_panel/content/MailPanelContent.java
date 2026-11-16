@@ -6400,7 +6400,12 @@ public class MailPanelContent {
                     <div class="card-body" id="verificationBody">
                     </div>
                 </div>
+            </div>
 
+            <!-- Le schede del dominio scelto ("Set up everything", autoconfig, MTA-STS) si vedono appena si sceglie il
+                 dominio: stavano dentro i risultati della verifica, e senza "Verifica DNS" il passo della guida non
+                 c'era (reperto 249) -->
+            <div id="domainCards" class="d-none">
 """ + resource("pages/autodns-card.html") + resource("pages/autoconfig-card.html") + resource("pages/mtasts-card.html") + """
             </div>
 
@@ -6699,6 +6704,7 @@ public class MailPanelContent {
                 const hb = document.getElementById('dkimHistoryBody');      if (hb) hb.innerHTML = '<p class="text-muted small mb-0">' + escHtml(t('dns.historyPick')) + '</p>';
                 const rc = document.getElementById('dnsRecordsContainer');  if (rc) rc.innerHTML = '<p class="text-muted">' + escHtml(t('dns.pickToSee')) + '</p>';
                 const vr = document.getElementById('verificationResults');  if (vr) vr.classList.add('d-none');
+                const dc = document.getElementById('domainCards');          if (dc) dc.classList.add('d-none');
                 document.getElementById('generateDkimBtn').disabled = true;
                 document.getElementById('rotateDkimBtn').disabled = true;
                 document.getElementById('verifyActiveDkimBtn').disabled = true;
@@ -6710,6 +6716,16 @@ public class MailPanelContent {
             if (reloadBtn) reloadBtn.disabled = false;
             if (verifyBtn) verifyBtn.disabled = false;
             document.getElementById('generateDkimBtn').disabled = false;
+
+            // Le schede del dominio si vedono subito, e quello che mostravano era del dominio di prima: la verifica
+            // si nasconde, autoconfig e MTA-STS tornano a "Aggiorna", "Set up everything" si legge da sola (reperto 249)
+            const vr = document.getElementById('verificationResults'); if (vr) vr.classList.add('d-none');
+            const dc = document.getElementById('domainCards');         if (dc) dc.classList.remove('d-none');
+            ['acBody', 'stsBody'].forEach(id => {
+                const b = document.getElementById(id);
+                if (b) b.innerHTML = '<span class="text-muted small">' + escHtml(t('ad.pressRefresh')) + '</span>';
+            });
+            autoDnsLoad();
 
             // Carica AUTOMATICAMENTE tutto: record DNS + stato DKIM (status, timeline, history, schedule)
             loadDnsRecords();
