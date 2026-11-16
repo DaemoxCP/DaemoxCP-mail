@@ -175,7 +175,10 @@ public class RoundcubeConfig {
         hintsPanel.addComponent(new Label("8443 (recommended), 443, 8080"));
 
         hintsPanel.addComponent(new Label("SSL PATHS:"));
-        hintsPanel.addComponent(new Label("Leave empty to use Panel certificates"));
+        hintsPanel.addComponent(new Label("files that stay there (nginx reads them), e.g. /usr/local/etc/ssl/webmail/cert.pem"));
+
+        hintsPanel.addComponent(new Label(""));
+        hintsPanel.addComponent(new Label("empty: the panel's certificate if set, otherwise the mail server's"));
 
         return hintsPanel;
     }
@@ -194,6 +197,9 @@ public class RoundcubeConfig {
             errors.append("- Domain is required\n");
         } else if (!HOST_PATTERN.matcher(domain).matches()) {
             errors.append("- Domain must contain only: a-z A-Z 0-9 . -\n");
+        } else if (domain.equalsIgnoreCase(org.mail_panel.system.InstallNames.DEFAULT_WEBMAIL)) {
+            // Il nome di fabbrica non e' un nome (reperto 244): l'installazione non partirebbe.
+            errors.append("- Write your webmail name, for example webmail.yourdomain.com (the example name is not one)\n");
         }
 
         // Port is required
@@ -225,8 +231,24 @@ public class RoundcubeConfig {
             errors.append("- SSL CA Chain path contains invalid characters\n");
         }
 
+        // Il certificato della webmail come quello del pannello (reperto 243): i file ci sono, il certificato copre il
+        // nome della webmail, vale adesso e la chiave e' la sua. nginx li legge da li': devono restare dove sono.
+        certCheck = null;
+        if (errors.length() == 0 && !sslCert.isEmpty() && !sslKey.isEmpty()) {
+            try {
+                certCheck = org.mail_panel.security.PemTls.check("webmail name", domain,
+                        org.mail_panel.security.PemTls.readFile(java.nio.file.Path.of(sslCert)),
+                        org.mail_panel.security.PemTls.readFile(java.nio.file.Path.of(sslKey)), java.time.Instant.now());
+                for (String e : certCheck.errors()) errors.append("- ").append(e).append("\n");
+            } catch (java.io.IOException e) {
+                errors.append("- ").append(e.getMessage()).append("\n");
+            }
+        }
+
         return errors.length() > 0 ? errors.toString() : null;
     }
+
+    private org.mail_panel.security.PemTls.Check certCheck;
 
     private void onSubmit() {
         String validationErrors = validateInputs();
@@ -244,9 +266,13 @@ public class RoundcubeConfig {
         message.append("Domain: ").append(roundcube_domain.getText()).append("\n");
         message.append("Port: ").append(roundcube_port.getText()).append("\n");
         if (!roundcube_ssl_cert.getText().trim().isEmpty()) {
-            message.append("SSL: Custom certificates\n");
+            message.append("SSL: these files (they must stay there)\n");
+            if (certCheck != null) {
+                for (String line : certCheck.info()) message.append(line).append("\n");
+                for (String w : certCheck.warnings()) message.append("WARNING: ").append(w).append("\n");
+            }
         } else {
-            message.append("SSL: Using Panel certificates\n");
+            message.append("SSL: the panel's certificate if one is set, otherwise the mail server's\n");
         }
 
         MessageDialogButton result = MessageDialog.showMessageDialog(

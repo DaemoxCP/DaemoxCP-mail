@@ -190,6 +190,11 @@ public final class PemTls {
      * chiave e' proprio la sua (una firma fatta con la chiave si verifica con la chiave pubblica del certificato).
      */
     public static Check check(String host, String certPem, String keyPem, Instant now) {
+        return check("panel name", host, certPem, keyPem, now);
+    }
+
+    /** Lo stesso controllo per un altro nome (whose: «webmail name»), detto nei messaggi. */
+    public static Check check(String whose, String host, String certPem, String keyPem, Instant now) {
         List<String> errors = new ArrayList<>(), warnings = new ArrayList<>(), info = new ArrayList<>();
         List<X509Certificate> chain;
         try {
@@ -210,9 +215,10 @@ public final class PemTls {
             errors.add("The certificate is not valid yet.");
         if (dnsName(host)) {
             if (!covers(names, host))
-                errors.add("The certificate does not cover the panel name " + host + ": it covers " + String.join(", ", names) + ".");
+                errors.add("The certificate does not cover the " + whose + " " + host + ": it covers " + String.join(", ", names) + ".");
         } else {
-            warnings.add("The panel name " + host + " is not a domain name: passkeys and Cloudflare need one, like panel.example.com.");
+            warnings.add("The " + whose + " " + host + " is not a domain name: Cloudflare and the browsers need one, like "
+                    + ("panel name".equals(whose) ? "panel.example.com (passkeys too)." : "webmail.example.com."));
         }
         if (leaf.getIssuerX500Principal().equals(leaf.getSubjectX500Principal()))
             warnings.add("The certificate is self-signed: browsers will warn, and Cloudflare Full (strict) refuses it.");

@@ -5,7 +5,9 @@
 #  A. option 1: a made-up time zone is refused in a dialog, the script never runs;
 #  B. option 2: a certificate given as a file path that does not cover the panel name is refused (validation
 #     error); the right one is shown in the confirmation (what it covers, self-signed warning); then Cancel and Exit,
-#     nothing saved.
+#     nothing saved;
+#  C. option 3: the same for the webmail's certificate files (certs/webmail.crt/.key for webmail.rehearsal.test):
+#     another name refused naming the webmail, the right one shown, Cancel.
 # Every screen is read after each key (drain) and checked afterwards on the cleaned log:
 #   expect tests/menu-guided-install.exp menu.log
 #   perl -pe "s/\\e\\[[0-9;?]*[A-Za-z]/ /g" menu.log | grep -E "not a known|does not cover|belongs to the certificate|self-signed"
@@ -60,4 +62,34 @@ mark "B-CONFIRM-SHOWN"
 send "\r"; drain 2
 send $TAB; drain 1; send "\r"; drain 2; send $TAB; drain 1; send "\r"; drain 3
 mark "B-END"
+
+mark "C-OPTION-3"
+# the menu comes back on its first line after every option: two down to reach option 3
+send $DOWN; drain 1; send $DOWN; drain 1; send "\r"; drain 3; send $TAB; drain 1; send "\r"; drain 4
+mark "C-FORM"
+# domain, its Clear, port, its Clear, then the certificate path (empty), its Clear, the key path
+send $TAB; drain 1; send $TAB; drain 1; send $TAB; drain 1; send $TAB; drain 1
+send $END; for {set i 0} {$i < 60} {incr i} { send $BS }; drain 1
+send "/var/tmp/menu-test/certs/other.crt"; drain 1
+send $TAB; drain 1; send $TAB; drain 1
+send $END; for {set i 0} {$i < 60} {incr i} { send $BS }; drain 1
+send "/var/tmp/menu-test/certs/other.key"; drain 1
+# its Clear, the chain, its Clear, Submit
+send $TAB; drain 1; send $TAB; drain 1; send $TAB; drain 1; send $TAB; drain 1
+mark "C-SUBMIT-WRONG"
+send "\r"; drain 4
+mark "C-AFTER-WRONG"
+send "\r"; drain 2
+# back to the key path (4 back from Submit) and the certificate path (2 more)
+for {set i 0} {$i < 4} {incr i} { send $STAB; drain 1 }
+send $END; for {set i 0} {$i < 60} {incr i} { send $BS }; drain 1; send "/var/tmp/menu-test/certs/webmail.key"; drain 1
+send $STAB; drain 1; send $STAB; drain 1
+send $END; for {set i 0} {$i < 60} {incr i} { send $BS }; drain 1; send "/var/tmp/menu-test/certs/webmail.crt"; drain 1
+for {set i 0} {$i < 6} {incr i} { send $TAB; drain 1 }
+mark "C-SUBMIT-RIGHT"
+send "\r"; drain 4
+mark "C-CONFIRM-SHOWN"
+send "\r"; drain 2
+send $TAB; drain 1; send "\r"; drain 2; send $TAB; drain 1; send "\r"; drain 3
+mark "C-END"
 send "\003"; drain 2

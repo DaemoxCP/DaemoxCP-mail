@@ -84,6 +84,9 @@ public class PanelCertificateTest {
                 !PemTls.check("a.b.example.com", read("site.crt"), read("site.key"), Instant.now()).ok());
         check("another domain refused, naming what it covers",
                 PemTls.check("panel.example.net", read("site.crt"), read("site.key"), Instant.now()).errors().stream().anyMatch(e -> e.contains("does not cover")));
+        check("the webmail's certificate checked the same way, naming the webmail",
+                PemTls.check("webmail name", "webmail.example.net", read("site.crt"), read("site.key"), Instant.now()).errors()
+                        .stream().anyMatch(e -> e.contains("does not cover the webmail name webmail.example.net")));
         check("expired refused", PemTls.check("panel.example.com", read("site.crt"), read("site.key"), Instant.now().plus(60, ChronoUnit.DAYS))
                 .errors().stream().anyMatch(e -> e.contains("expired")));
         check("not valid yet refused", PemTls.check("panel.example.com", read("site.crt"), read("site.key"), Instant.now().minus(2, ChronoUnit.DAYS))
