@@ -885,6 +885,9 @@ public class SSLMailServer {
             // Roundcube col suo utente e il suo pool di php-fpm, non piu' con l'utente di nginx: sui
             // server installati prima. Prima del plugin SSO, che da' la sua configurazione al gruppo
             // con cui gira la webmail.
+            // php.ini se manca (il server vero girava sui valori compilati dentro) e security.limit_extensions nel pool
+            // di Roundcube (PhpHardening, reperto 238); prima di RoundcubeUser, che ripassa i proprietari.
+            org.mail_panel.system.PhpHardening.ensureAtBoot();
             org.mail_panel.system.RoundcubeUser.ensureAtBoot();
 
             // L'utente master di Dovecot con cui «Apri webmail» entra: gli script d'installazione lo
@@ -913,6 +916,8 @@ public class SSLMailServer {
             // non piu' con quello del pannello: sui server installati prima. Dopo il plugin SSO,
             // perche' la verifica fa un accesso vero come il pulsante «Apri webmail».
             org.mail_panel.system.RoundcubeDbUser.ensureAtBoot(ssoManager);
+            // AES-256-CBC per la password IMAP nella sessione di Roundcube, non DES-EDE3-CBC (RoundcubeCipher, reperto 239).
+            org.mail_panel.system.RoundcubeCipher.ensureAtBoot(ssoManager);
 
             // La password dell'utente MySQL del pannello cambiata una volta: sui server installati prima e' stata per anni
             // in config.inc.php della webmail (reperto 232). Dopo RoundcubeDbUser e MailDbUsers: nessun altro la usa piu'.

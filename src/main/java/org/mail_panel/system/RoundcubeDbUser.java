@@ -222,6 +222,17 @@ public final class RoundcubeDbUser {
         void pause();
     }
 
+    /**
+     * Un accesso vero alla webmail con l'SSO del pannello, sul primo sito di nginx che la serve, come quello della
+     * migrazione qui sotto: null se apre la posta, se no il perche' (RoundcubeCipher, reperto 239).
+     */
+    static String realLoginNow(RoundcubeSsoManager sso, String db) {
+        RealServices sv = new RealServices(sso);
+        List<Site> sites = sv.webmailSites();
+        if (sites == null || sites.isEmpty()) return "no nginx site serves the webmail";
+        return sv.realLogin(sites.get(0), db);
+    }
+
     public static void ensureAtBoot(RoundcubeSsoManager sso) {
         try {
             Report r = migrate(Places.real(), new RealServices(sso));
@@ -753,8 +764,11 @@ public final class RoundcubeDbUser {
                 Shell.Result in = Shell.run(SHORT, "curl", "-sk", "-L", "-m", "20", "--resolve", s.name() + ":" + s.port() + ":127.0.0.1",
                         "-c", jar.toString(), "-b", jar.toString(), "-K", url.toString());
                 String page = in.output();
-                if (!in.success() || page.contains("rcmloginuser") || !page.contains("\"task\":\"mail\"") || !page.contains("_task=logout"))
-                    return "the SSO login as " + who + " did not open the mailbox";
+                // L'elenco delle cartelle viene da IMAP: con IMAP rifiutato Roundcube disegna lo stesso la pagina della posta,
+                // con un errore e senza cartelle (misurato sulla VM il 16/11/2026, des_key cambiata dopo l'accesso).
+                if (!in.success() || page.contains("rcmloginuser") || !page.contains("\"task\":\"mail\"") || !page.contains("_task=logout")
+                        || !page.contains("\"mailboxes\":{\"INBOX\""))
+                    return "the SSO login as " + who + " did not open the mailbox with its folders";
                 Matcher m = Pattern.compile("\"request_token\":\"([A-Za-z0-9]+)\"").matcher(page);
                 if (m.find()) {
                     Files.writeString(url, "url = \"" + base + "?_task=logout&_token=" + m.group(1) + "\"\n", StandardCharsets.UTF_8);
