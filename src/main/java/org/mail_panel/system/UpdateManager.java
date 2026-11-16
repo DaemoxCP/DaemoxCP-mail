@@ -8229,7 +8229,10 @@ public final class UpdateManager {
      * controllava niente: un'avvertenza che non verifica e' solo una frase.
      */
     private static final String[][] TEST_AFTER = {
-        {"redis", "redis-cli DBSIZE 2>/dev/null", "server.um.testConfigOf.1"},
+        // Dal socket, dove c'e' (RedisSocket, reperto 235): con la porta chiusa «redis-cli DBSIZE» non stampa niente, e
+        // ogni aggiornamento di redis direbbe che e' ripartito vuoto.
+        {"redis", "if [ -S " + RedisSocket.SOCKET + " ]; then redis-cli -s " + RedisSocket.SOCKET + " DBSIZE; else redis-cli DBSIZE;"
+                + " fi 2>/dev/null", "server.um.testConfigOf.1"},
     };
 
     static String[] testAfterOf(String service) {

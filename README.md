@@ -127,9 +127,9 @@ Integrated with Rspamd for email scanning.
 |----------|-------|
 | **Package** | `redis` |
 | **Service** | `redis` |
-| **Port** | 6379 |
+| **Socket** | `/var/run/redis/redis.sock` (0770, group `redis`; no TCP port) |
 
-Used by Rspamd for caching.
+Used by Rspamd for caching. Only rspamd (in the `redis` group) and root can reach it.
 
 ### Database: MySQL 8.0
 
@@ -496,7 +496,6 @@ CREATE TABLE audit_log (
 | Rspamd | 11333 | TCP | Normal worker |
 | Rspamd | 11334 | TCP | Web UI/Controller |
 | MySQL | 3306 | TCP | Database |
-| Redis | 6379 | TCP | Cache |
 | Roundcube | 8443 | TCP | Webmail (HTTPS) |
 | **Web Panel** | **2096** | TCP | HTTPS admin panel |
 

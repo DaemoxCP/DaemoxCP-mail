@@ -135,19 +135,53 @@ public final class RspamdUser {
 
     /** Una scansione vera sul worker normale: l'azione che rspamd decide, o null. */
     static String scan() {
+        String out = symbols(PROBE);
+        if (out == null) return null;
+        for (String l : out.split("\n"))
+            if (l.trim().startsWith("Action:")) return l.trim().substring(7).trim();
+        return null;
+    }
+
+    /** Quello che rspamc dice di quel messaggio, analizzato dal worker normale; null se non si riesce a chiederlo. */
+    static String symbols(String message) {
         try {
             Path f = Files.createTempFile(Path.of("/var/tmp"), "rspamd-probe-", ".eml");
             try {
-                Files.writeString(f, PROBE);
-                Shell.Result r = Shell.runShell(Duration.ofSeconds(30), RSPAMC + " -h 127.0.0.1:11333 symbols < " + f);
-                for (String l : r.outputTrim().split("\n"))
-                    if (l.trim().startsWith("Action:")) return l.trim().substring(7).trim();
-                return null;
+                Files.writeString(f, message);
+                return Shell.runShell(Duration.ofSeconds(60), RSPAMC + " -h 127.0.0.1:11333 symbols < " + f).outputTrim();
             } finally {
                 Files.deleteIfExists(f);
             }
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * Riavvia rspamd con l'impostazione di adesso e aspetta, fino a un minuto, che analizzi un messaggio. Per chi gli
+     * cambia la configurazione o i gruppi: i gruppi di un processo si leggono solo quando parte (RedisSocket, ClamdSocket).
+     */
+    static boolean restart() throws InterruptedException {
+        Shell.run(Duration.ofSeconds(180), "service", "rspamd", "restart");
+        for (int i = 0; i < 60; i++) {
+            if (scan() != null) return true;
+            Thread.sleep(1000);
+        }
+        return false;
+    }
+
+    /** I membri di un gruppo, da /etc/group (pw groupshow); vuoto se il gruppo non c'e'. */
+    static List<String> members(String group) {
+        Shell.Result r = Shell.run(Duration.ofSeconds(10), "pw", "groupshow", group);
+        if (!r.success()) return List.of();
+        String[] f = r.outputTrim().split(":", -1);
+        if (f.length < 4 || f[3].isBlank()) return List.of();
+        return List.of(f[3].trim().split(","));
+    }
+
+    /** Mette o toglie un utente da un gruppo (pw groupmod -m/-d); vero se adesso e' come chiesto. */
+    static boolean setMember(String group, String user, boolean member) {
+        Shell.run(Duration.ofSeconds(20), "pw", "groupmod", group, member ? "-m" : "-d", user);
+        return members(group).contains(user) == member;
     }
 }

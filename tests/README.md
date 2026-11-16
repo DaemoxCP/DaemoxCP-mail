@@ -656,6 +656,48 @@ mail-login-probe.sh passes afterwards.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LmtpSocketTest
     java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LmtpSocketE2ETest   (VM, as root, real deliveries)
 
+**RedisSocketTest** — redis only on its Unix socket, `/var/run/redis/redis.sock`, 0770 of the group redis, with rspamd
+in that group (reperto 235). The package's redis.conf listens on 127.0.0.1:6379 and ::1 without a password: any process
+of the machine read and wrote rspamd's data (Bayes, greylist, limits, history). Against a fake redis that listens where
+its redis.conf says (the last line wins) and a fake rspamd that reaches it only if started in the group and pointed at
+the socket: what the installer writes (RedisSocket.FINAL, rspamd in the group before both start); the move from the
+package's file in three steps (socket beside the port, rspamd moved, port closed), DONE then nothing; another port, a
+socket already there, an include, rspamd pointed elsewhere: left alone; a fault in the first two steps (no socket, the
+group not taken, rspamd not on the socket, redis restarted empty): everything back byte for byte; a fault in the last:
+the middle state, finished by the next run. And `socketClients` on real `CLIENT LIST` lines: each line has `laddr=` too,
+and counting the text `addr=...` made the asker's own connection count twice, so the check passed with rspamd refused
+(found by RspamdBackendsE2ETest's fault on the real redis, 16/11/2026). No system.
+
+**ClamdSocketTest** — clamd's socket only for the group clamav, 0660, with rspamd in that group (reperto 237; the
+package's clamd.conf leaves it 0666, "socket is world accessible"). The installer's lines; the move from the VM's
+clamd.conf (LocalSocket twice), DONE then nothing; a group or mode already set, another socket: left alone; rspamd not
+really in the group, clamd not coming back, rspamd not scanning after joining: everything back. The EICAR probe is the
+real test string with 1 to 40 random trailing blanks: rspamd caches the antivirus result per attachment (measured on the
+VM: the same attachment a second time never reaches clamd), so a fixed probe would pass with clamd unreachable. The
+class file does not carry the string in clear. No system.
+
+**RspamdControllerTest** — rspamd's controller (11334) only with the panel's password (reperto 236). The package's
+worker-controller.inc has `password = "q1"` in clear and `secure_ip` 127.0.0.1 and ::1: any local process got in with no
+password. The panel writes override.d/worker-controller.inc (the hash of a generated password, kept in root's secrets,
+in password and enable_password; `secure_ip = []`). Against a fake controller: DONE then nothing; a file the panel did
+not write, the admin's own password or secure_ip in local.d (override.d would silently win), the controller down,
+rspamadm giving no hash: nothing written; configtest refusing, the reload not taken, the file not writable: the file
+gone and the old secret back. No system.
+
+**RspamdBackendsE2ETest** — the three on the VM's real redis, clamd and rspamd (as root, `-De2e.vm=yes`, from an
+installation of before): `nobody` gets PONG from redis and VERSION from clamd, and the controller answers 200 with no
+password, before; after, `nobody` is refused by both, port 6379 is closed, the update's data check still reads redis,
+root still asks clamd its version, rspamd finds a never-seen EICAR and clamd's log shows the scan, the controller
+answers 401 without the password (also with q1) and 200 with it, and the panel's RspamdManager reads the statistics.
+Then each fault from the state of before on the real services (rspamd not really in the group, for redis and for clamd;
+configtest refusing; rspamd not reloaded): ROLLED_BACK and the service as before; the admin's secure_ip in local.d:
+left alone. Measured on 16/11/2026 (redis 8.10.3, ClamAV 1.5.4, rspamd 4.1.0).
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RedisSocketTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.ClamdSocketTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RspamdControllerTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RspamdBackendsE2ETest   (VM, as root)
+
 **DovecotHomeTest** — every mailbox's Dovecot home in its own folder, `home/`, not the mail root (reperto 217): with
 home = the Maildir root, the files Dovecot keeps in the home showed up as mail folders ("dovecot", "dovecot.lda-dupes",
 "dovecot.lda-dupes.locks" after one autoreply, measured on the VM; Dovecot's documentation says the home should not be

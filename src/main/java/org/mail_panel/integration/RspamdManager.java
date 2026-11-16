@@ -18,7 +18,19 @@ import java.util.List;
 public class RspamdManager {
 
     private static final String RSPAMD_HOST = "http://127.0.0.1:11334";
-    private static final String RSPAMD_PASSWORD = ""; // Set if password is configured
+
+    /**
+     * La password del controller, dai segreti di root (RspamdController, reperto 236); "" se non c'e' ancora. Prima era
+     * una costante vuota: il pannello entrava solo perche' il controller lasciava entrare chiunque da 127.0.0.1.
+     * Gli handler che usano questa classe girano nella parte root.
+     */
+    private static String password() {
+        try {
+            return org.mail_panel.security.PanelSecrets.text(org.mail_panel.security.PanelSecrets.RSPAMD_CONTROLLER_PASSWORD);
+        } catch (RuntimeException e) {
+            return "";
+        }
+    }
 
     // ========== TRAINING ==========
 
@@ -77,8 +89,9 @@ public class RspamdManager {
             conn.setDoOutput(true);
             conn.setRequestProperty("Content-Type", "message/rfc822");
 
-            if (!RSPAMD_PASSWORD.isEmpty()) {
-                conn.setRequestProperty("Password", RSPAMD_PASSWORD);
+            String password = password();
+            if (!password.isEmpty()) {
+                conn.setRequestProperty("Password", password);
             }
 
             try (OutputStream os = conn.getOutputStream()) {
@@ -124,8 +137,9 @@ public class RspamdManager {
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
 
-            if (!RSPAMD_PASSWORD.isEmpty()) {
-                conn.setRequestProperty("Password", RSPAMD_PASSWORD);
+            String password = password();
+            if (!password.isEmpty()) {
+                conn.setRequestProperty("Password", password);
             }
 
             if (conn.getResponseCode() == 200) {
@@ -181,8 +195,9 @@ public class RspamdManager {
             conn.setRequestProperty("Flag", String.valueOf(flag));
             conn.setRequestProperty("Weight", String.valueOf(weight));
 
-            if (!RSPAMD_PASSWORD.isEmpty()) {
-                conn.setRequestProperty("Password", RSPAMD_PASSWORD);
+            String password = password();
+            if (!password.isEmpty()) {
+                conn.setRequestProperty("Password", password);
             }
 
             try (OutputStream os = conn.getOutputStream()) {
@@ -228,8 +243,9 @@ public class RspamdManager {
             conn.setDoOutput(true);
             conn.setRequestProperty("Content-Type", "message/rfc822");
 
-            if (!RSPAMD_PASSWORD.isEmpty()) {
-                conn.setRequestProperty("Password", RSPAMD_PASSWORD);
+            String password = password();
+            if (!password.isEmpty()) {
+                conn.setRequestProperty("Password", password);
             }
 
             try (OutputStream os = conn.getOutputStream()) {
