@@ -286,7 +286,7 @@
          * Calcola l'FQDN di un record dato il suo nome relativo (può essere "@", una
          * sottoparte, o già un FQDN) e la zona DNS di appartenenza.
          * Necessario perché i record generati usano nomi relativi ("@", "mail._domainkey"),
-         * mentre i check del verifier usano FQDN ("domain-a.test", "mail._domainkey.domain-a.test").
+         * mentre i check del verifier usano FQDN ("example.org", "mail._domainkey.example.org").
          */
         function recordFqdn(name, zone) {
             if (!name || name === '@' || name === '') return zone || '';
