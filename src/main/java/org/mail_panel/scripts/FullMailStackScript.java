@@ -508,6 +508,11 @@ anvil     unix  -       -       n       -       1       anvil
 scache    unix  -       -       n       -       1       scache
 MASTERCONF
 
+            """
+            // Il livello di compatibilita' che chiede il Postfix installato, se esaminato (reperto 251). Lo stesso pezzo
+            // e' in FullMailServerScript e PostfixScript.
+            + PostfixLevelScript.shell() + """
+
             sysrc postfix_enable="YES"
 
             # Create /etc/aliases.db (required by Postfix)

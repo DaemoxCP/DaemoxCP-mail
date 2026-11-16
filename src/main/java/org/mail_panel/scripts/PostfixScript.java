@@ -137,12 +137,20 @@ virtual_gid_maps = static:5000
 
 # TLS settings (will be configured with certificates)
 smtpd_tls_security_level = none
+# La posta in uscita cifrata quando l'altro server lo permette, come nell'installazione completa. Deciso qui e non
+# lasciato al predefinito, che dal livello 3.11 passa da vuoto a may: cosi' il livello non cambia niente (reperto 251).
+smtp_tls_security_level = may
 
 # Mailbox size limits
 message_size_limit = 52428800
 virtual_mailbox_limit = 2147483648
 
 MAINCONF
+
+            """
+            // Il livello di compatibilita' che chiede il Postfix installato, se esaminato (reperto 251). Lo stesso pezzo
+            // e' in FullMailServerScript e FullMailStackScript.
+            + PostfixLevelScript.shell() + """
 
             # Create /etc/aliases.db (required by Postfix)
             if [ ! -f /etc/aliases ]; then
