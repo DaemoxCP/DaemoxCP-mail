@@ -197,7 +197,10 @@ state() {
     # Lo stesso per POP3 (110, 995): il pannello lo accende o lo spegne come ha scelto l'amministratore,
     # spento finche' non sceglie (Pop3, che verifica che IMAP risponda ancora e se no rimette com'era);
     # IMAP resta nella fotografia.
-    sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:(33060|110|995)$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; print "porta in ascolto: " a}' | sort -u
+    # E la 24 e la 6379, su 127.0.0.1 e ::1: le chiude il pannello al primo avvio, quando Postfix consegna a Dovecot dal
+    # socket nella sua coda (LmtpSocket, reperto 234) e rspamd parla con redis dal socket (RedisSocket, 235). Tutti e due
+    # provano una consegna e una scansione prima e dopo, e se non va rimettono la porta.
+    sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:(33060|110|995)$/) next; if (a ~ /^(127\.0\.0\.1|\[::1\]):(24|6379)$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; print "porta in ascolto: " a}' | sort -u
     printf 'nginx -t: %s\n' "$(nginx -t >/dev/null 2>&1 && echo ok || echo ERRORE)"
     printf 'postfix check: %s\n' "$(postfix check >/dev/null 2>&1 && echo ok || echo ERRORE)"
     printf 'doveconf: %s\n' "$(doveconf -n >/dev/null 2>&1 && echo ok || echo ERRORE)"
