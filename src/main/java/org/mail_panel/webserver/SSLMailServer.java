@@ -856,6 +856,11 @@ public class SSLMailServer {
             // rspamd tutto col suo utente, anche il processo principale: le sue porte sono sopra la 1023 e
             // i suoi file sono gia' suoi (RspamdUser, con una scansione vera prima e dopo).
             org.mail_panel.system.RspamdUser.ensureAtBoot();
+            // I servizi dietro rspamd solo per lui: redis sul socket Unix del gruppo redis (RedisSocket, reperto 235),
+            // clamd sul socket del gruppo clamav (ClamdSocket, 237), il controller solo con la password (RspamdController, 236).
+            org.mail_panel.system.RedisSocket.ensureAtBoot();
+            org.mail_panel.system.ClamdSocket.ensureAtBoot();
+            org.mail_panel.system.RspamdController.ensureAtBoot();
 
             // Auto-setup Postfix aliases: crea /etc/aliases (o /etc/mail/aliases) se manca
             // + compila il .db. Risolve l'errore comune "open database /etc/aliases.db: No such file".

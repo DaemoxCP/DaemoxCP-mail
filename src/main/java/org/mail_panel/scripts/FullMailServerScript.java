@@ -29,7 +29,7 @@ import java.io.IOException;
  * ║  │                                                                         │ ║
  * ║  │  4. ClamAV (Antivirus)    - integrated with Rspamd                      │ ║
  * ║  │                                                                         │ ║
- * ║  │  5. Redis                 - port 6379, cache for Rspamd                 │ ║
+ * ║  │  5. Redis                 - Unix socket only, cache for Rspamd          │ ║
  * ║  │                                                                         │ ║
  * ║  │  6. MySQL 8.0             - port 3306, mail database                    │ ║
  * ║  │                                                                         │ ║
@@ -1006,13 +1006,32 @@ echo "${YELLOW}[PHASE 8/10] Configuring Rspamd, ClamAV, Redis...${NC}"
             // di Spamhaus non rispondono. Lo stesso pezzo e' in RspamdScript e FullMailStackScript.
             + LocalResolverScript.SHELL + """
 
-# Redis
+# Redis solo sul socket Unix, 0770 del gruppo redis, e rspamd in quel gruppo: il redis.conf del pacchetto
+# ascolta su 127.0.0.1:6379 e ::1 senza password, e tutta la macchina leggeva e scriveva i dati di rspamd.
+# Le righe sono quelle di RedisSocket.java (reperto 235), che fa lo stesso sui server installati prima.
+if ! grep -qF 'reperto 235' /usr/local/etc/redis.conf 2>/dev/null; then
+    cat >> /usr/local/etc/redis.conf << 'REDIS_SOCKET'
+
+""" + org.mail_panel.system.RedisSocket.FINAL + """
+REDIS_SOCKET
+fi
+pw groupmod redis -m rspamd
 sysrc redis_enable="YES"
 service redis start 2>/dev/null || true
 
 # ClamAV
 mkdir -p /var/run/clamav
 chown clamav:clamav /var/run/clamav
+
+# Il socket di clamd solo del gruppo clamav, 0660, e rspamd in quel gruppo: il clamd.conf del pacchetto lo lascia
+# a tutti (0666). Le righe sono quelle di ClamdSocket.java (reperto 237).
+if ! grep -qF 'reperto 237' /usr/local/etc/clamd.conf 2>/dev/null; then
+    cat >> /usr/local/etc/clamd.conf << 'CLAMD_SOCKET'
+
+""" + org.mail_panel.system.ClamdSocket.BLOCK + """
+CLAMD_SOCKET
+fi
+pw groupmod clamav -m rspamd
 
 if [ -f /usr/local/etc/rc.d/clamav_clamd ]; then
     sysrc clamav_clamd_enable="YES"
@@ -1043,8 +1062,11 @@ bind_socket = "127.0.0.1:11333";
 RSPAMD_WORKER
 
 cat > /usr/local/etc/rspamd/local.d/redis.conf << 'RSPAMD_REDIS'
-servers = "127.0.0.1";
+servers = "/var/run/redis/redis.sock";
 RSPAMD_REDIS
+
+# Il controller (11334) del pacchetto lascia entrare 127.0.0.1 e ::1 senza password: la password la genera il
+# pannello al primo avvio e la tiene nei segreti di root (RspamdController.java, reperto 236).
 
 cat > /usr/local/etc/rspamd/local.d/antivirus.conf << 'RSPAMD_AV'
 clamav {
