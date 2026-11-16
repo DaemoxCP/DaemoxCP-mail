@@ -636,6 +636,26 @@ pass; with the old reset and no boot repair in the jar 9 fail: the binary gone, 
 "Error: sieve: binary ... save: failed" and "The LDA Sieve plugin does not have permission to save global Sieve script
 binaries" on the deliveries after the reset, and no repair at boot.
 
+**LmtpSocketTest** — Postfix delivers to Dovecot through a socket in its own queue, `private/dovecot-lmtp`, 0600
+postfix's, and no longer through port 24 or the 0666 socket in /var/run/dovecot, from which any process of the machine
+could deliver into any mailbox, bypassing Postfix and rspamd (reperto 234; Dovecot's "Postfix and Dovecot LMTP" guide,
+2.3 and 2.4). Against a fake Postfix and a fake Dovecot that listens where its configuration says: what the panel writes
+now (2.3 and 2.4, no TCP listener, last_valid_uid/gid 5000, the installers' transport); the move from the block of
+before in three steps (socket opened beside port 24, Postfix moved, port 24 closed), DONE then nothing; a block that is
+not the panel's or Postfix delivering elsewhere: left alone; a fault in the first two steps: everything back, mail
+flowing on port 24; a fault in the last: the middle state, which works both ways, finished by the next run; killed
+after each step: the next run finishes. No system.
+
+**LmtpSocketE2ETest** — the same on the VM's real Dovecot and Postfix (as root, `-De2e.vm=yes`, from the block of
+before): `nobody` is greeted on /var/run/dovecot/lmtp before (the fault) and on neither socket after; the socket is
+postfix's 0600, port 24 closed, /var/run/dovecot/lmtp root's 0600, last_valid_uid/gid in doveconf; a real delivery
+through Postfix arrives through the socket; back to before, then Postfix refusing the transport: ROLLED_BACK, port 24
+again and a delivery still arrives; the move again. Measured on 16/11/2026 on Dovecot 2.3.21: all OK, and
+mail-login-probe.sh passes afterwards.
+
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LmtpSocketTest
+    java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.LmtpSocketE2ETest   (VM, as root, real deliveries)
+
 **DovecotHomeTest** — every mailbox's Dovecot home in its own folder, `home/`, not the mail root (reperto 217): with
 home = the Maildir root, the files Dovecot keeps in the home showed up as mail folders ("dovecot", "dovecot.lda-dupes",
 "dovecot.lda-dupes.locks" after one autoreply, measured on the VM; Dovecot's documentation says the home should not be

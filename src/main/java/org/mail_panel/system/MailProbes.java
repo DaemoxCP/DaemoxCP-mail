@@ -105,26 +105,76 @@ final class MailProbes {
         try (Socket s = new Socket()) {
             s.connect(new InetSocketAddress(host, port), timeoutMs);
             s.setSoTimeout(timeoutMs);
-            BufferedReader in = reader(s.getInputStream());
-            OutputStream out = s.getOutputStream();
-            String r = reply(in);
-            if (!r.startsWith("220")) return "LMTP greeting: " + shown(r);
-            send(out, "LHLO localhost");
-            r = reply(in);
-            if (!r.startsWith("250")) return "LMTP LHLO: " + shown(r);
-            send(out, "MAIL FROM:<>");
-            r = reply(in);
-            if (!r.startsWith("250")) return "LMTP MAIL FROM: " + shown(r);
-            send(out, "RCPT TO:<" + recipient + ">");
-            r = reply(in);
-            if (!r.startsWith("250")) return "LMTP RCPT TO: " + shown(r);
-            send(out, "RSET");
-            reply(in);
-            send(out, "QUIT");
-            return null;
+            return lmtpDialog(reader(s.getInputStream()), s.getOutputStream(), recipient);
         } catch (Exception e) {
             return "LMTP on " + host + ":" + port + ": " + e.getMessage();
         }
+    }
+
+    /**
+     * Lo stesso sul socket Unix con cui Postfix consegna (lmtp:unix:private/dovecot-lmtp, reperto 234). Il socket e'
+     * 0600 di postfix: questa prova la fa root.
+     */
+    static String lmtpRecipient(Path socket, String recipient, int timeoutMs) {
+        if (recipient == null || !MAILBOX.matcher(recipient).matches()) return "the mailbox address is not valid";
+        return lmtpUnix(socket, recipient, timeoutMs);
+    }
+
+    /** Solo il saluto e LHLO, sul socket: quando non c'e' ancora nessuna casella da provare. */
+    static String lmtpHello(Path socket, int timeoutMs) {
+        return lmtpUnix(socket, null, timeoutMs);
+    }
+
+    private static String lmtpUnix(Path socket, String recipient, int timeoutMs) {
+        if (!Files.exists(socket)) return socket + " does not exist";
+        ExecutorService ex = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "lmtp-socket-probe");
+            t.setDaemon(true);
+            return t;
+        });
+        SocketChannel[] ch = new SocketChannel[1];
+        try {
+            Future<String> f = ex.submit(() -> {
+                try (SocketChannel c = SocketChannel.open(StandardProtocolFamily.UNIX)) {
+                    ch[0] = c;
+                    c.connect(UnixDomainSocketAddress.of(socket));
+                    return lmtpDialog(reader(java.nio.channels.Channels.newInputStream(c)),
+                            java.nio.channels.Channels.newOutputStream(c), recipient);
+                }
+            });
+            return f.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            try { if (ch[0] != null) ch[0].close(); } catch (IOException ignored) {}
+            return "LMTP on " + socket + ": no answer in " + (timeoutMs / 1000) + " s";
+        } catch (Exception e) {
+            Throwable c = e.getCause() != null ? e.getCause() : e;
+            return "LMTP on " + socket + ": " + c.getMessage();
+        } finally {
+            ex.shutdownNow();
+        }
+    }
+
+    /** Il dialogo, uguale sui due trasporti: null se Dovecot accetta il destinatario (senza destinatario: solo LHLO). */
+    private static String lmtpDialog(BufferedReader in, OutputStream out, String recipient) throws IOException {
+        String r = reply(in);
+        if (!r.startsWith("220")) return "LMTP greeting: " + shown(r);
+        send(out, "LHLO localhost");
+        r = reply(in);
+        if (!r.startsWith("250")) return "LMTP LHLO: " + shown(r);
+        if (recipient == null) {
+            send(out, "QUIT");
+            return null;
+        }
+        send(out, "MAIL FROM:<>");
+        r = reply(in);
+        if (!r.startsWith("250")) return "LMTP MAIL FROM: " + shown(r);
+        send(out, "RCPT TO:<" + recipient + ">");
+        r = reply(in);
+        if (!r.startsWith("250")) return "LMTP RCPT TO: " + shown(r);
+        send(out, "RSET");
+        reply(in);
+        send(out, "QUIT");
+        return null;
     }
 
     /**

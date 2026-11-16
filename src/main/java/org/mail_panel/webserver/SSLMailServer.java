@@ -826,6 +826,10 @@ public class SSLMailServer {
             // (la memoria delle risposte automatiche e degli inoltri) comparivano fra le cartelle della webmail (DovecotHome
             // li porta nella home come vmail, verifica con doveadm user, e se non va torna com'era).
             org.mail_panel.system.DovecotHome.ensureAtBoot();
+            // Postfix consegna a Dovecot dal socket nella sua coda (0600 suo) e non piu' dalla porta 24 o dal socket 0666, da
+            // cui qualunque processo della macchina consegnava in qualunque casella (reperto 234). In tre tempi, la posta
+            // non resta mai senza strada; se qualcosa non va torna com'era.
+            org.mail_panel.system.LmtpSocket.ensureAtBoot();
             // Gli script Sieve dell'utente (ManageSieve, i Filtri della webmail) nella sua cartella di posta, e le regole
             // del pannello prima di loro: prima non si salvava niente, la cartella era di root (SieveStorage verifica e
             // torna indietro).

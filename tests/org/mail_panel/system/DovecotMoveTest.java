@@ -72,9 +72,9 @@ public class DovecotMoveTest {
         String c = all.toString();
         check("ssl_server_prefer_ciphers = server (2.4.5 refuses \"yes\")", c.contains("ssl_server_prefer_ciphers = server")
                 && !c.matches("(?s).*\\n\\s*ssl_server_prefer_ciphers\\s*=\\s*yes.*"));
-        check("the LMTP listener with listen = 127.0.0.1, no address line (2.4.5 refuses it)",
-                c.matches("(?s).*inet_listener lmtp \\{[^}]*listen = 127\\.0\\.0\\.1[^}]*port = 24[^}]*}.*")
-                && !c.matches("(?s).*\\n\\s*address\\s*=.*"));
+        // Since reperto 234 Postfix delivers through a socket in its own queue: no TCP listener for LMTP at all.
+        check("LMTP only on Postfix's socket (0600 postfix), no TCP listener, no address line (2.4.5 refuses it)",
+                c.contains(LmtpSocket.NEW) && !c.contains("inet_listener lmtp") && !c.matches("(?s).*\\n\\s*address\\s*=.*"));
         String fragment = DovecotConfig.fromPanelConfig().scriptFragment();
         check("the script asks pkg for the 2.4 port (mail/dovecot24) too", fragment.contains("%o = \"mail/dovecot24\""));
         check("  and for 2.4's Pigeonhole, or ManageSieve would be dropped on 2.4", fragment.contains("'dovecot24-pigeonhole*'"));
@@ -121,7 +121,13 @@ public class DovecotMoveTest {
         check("lmtp:inet:127.0.0.1:24", "127.0.0.1:24".equals(join(UpdateManager.lmtpTarget("lmtp:inet:127.0.0.1:24"))));
         check("lmtp:localhost:24 -> 127.0.0.1", "127.0.0.1:24".equals(join(UpdateManager.lmtpTarget("lmtp:localhost:24"))));
         check("lmtp:inet:[::1]:24", "::1:24".equals(join(UpdateManager.lmtpTarget("lmtp:inet:[::1]:24"))));
-        check("a socket, another machine, another transport: not tested", UpdateManager.lmtpTarget("lmtp:unix:private/dovecot-lmtp") == null
+        check("the panel's socket, relative to the queue (reperto 234)", java.nio.file.Path.of("/var/spool/postfix/private/dovecot-lmtp")
+                .equals(UpdateManager.lmtpSocket("lmtp:unix:private/dovecot-lmtp", "/var/spool/postfix"))
+                && java.nio.file.Path.of("/var/run/x.sock").equals(UpdateManager.lmtpSocket("lmtp:unix:/var/run/x.sock", "/var/spool/postfix")));
+        check("  not a socket, a path that climbs out, a queue that is not a path: none", UpdateManager.lmtpSocket("lmtp:inet:127.0.0.1:24", "/q") == null
+                && UpdateManager.lmtpSocket("lmtp:unix:private/../../etc/x", "/var/spool/postfix") == null
+                && UpdateManager.lmtpSocket("lmtp:unix:private/x", "relative") == null && UpdateManager.lmtpSocket(null, null) == null);
+        check("a socket, another machine, another transport: no TCP target", UpdateManager.lmtpTarget("lmtp:unix:private/dovecot-lmtp") == null
                 && UpdateManager.lmtpTarget("lmtp:inet:mail.example.com:24") == null && UpdateManager.lmtpTarget("virtual") == null
                 && UpdateManager.lmtpTarget("") == null && UpdateManager.lmtpTarget(null) == null);
     }
