@@ -270,6 +270,8 @@ public final class DovecotConfig {
             listen = *, ::
             first_valid_uid = 5000
             first_valid_gid = 5000
+            last_valid_uid = 5000
+            last_valid_gid = 5000
             sendmail_path = /usr/local/sbin/sendmail
 
             !include conf.d/*.conf
@@ -313,15 +315,17 @@ public final class DovecotConfig {
             }
 
             service lmtp {
-              unix_listener lmtp {
-                mode = 0666
-                user = vmail
-                group = vmail
+              # Consegna solo Postfix: il socket sta nella sua coda, 0600 suo (doc.dovecot.org, «Postfix and Dovecot
+              # LMTP»; virtual_transport = lmtp:unix:private/dovecot-lmtp). Niente piu' porta 24 su 127.0.0.1 ne'
+              # socket 0666, da cui qualunque processo della macchina consegnava in qualunque casella (reperto 234).
+              unix_listener /var/spool/postfix/private/dovecot-lmtp {
+                mode = 0600
+                user = postfix
+                group = postfix
               }
-              # LMTP su porta 24 per Postfix (virtual_transport = lmtp:inet:127.0.0.1:24)
-              inet_listener lmtp {
-                address = 127.0.0.1
-                port = 24
+              # Il socket di Dovecot in /var/run/dovecot e' 0666 per impostazione predefinita: solo root.
+              unix_listener lmtp {
+                mode = 0600
               }
             }
 
@@ -523,9 +527,12 @@ public final class DovecotConfig {
             sendmail_path = /usr/local/sbin/sendmail
 
             # Il limite inferiore di uid e gid: senza, un utente di sistema potrebbe ricevere
-            # posta. Non e' fra le impostazioni rimosse dalla 2.4.
+            # posta. Non e' fra le impostazioni rimosse dalla 2.4. E quello superiore: tutta la posta e' di vmail (5000),
+            # e la documentazione di Dovecot chiede di limitare i due estremi a cio' che si usa (reperto 234).
             first_valid_uid = 5000
             first_valid_gid = 5000
+            last_valid_uid = 5000
+            last_valid_gid = 5000
 
             !include conf.d/*.conf
             """, true));
@@ -580,15 +587,17 @@ public final class DovecotConfig {
             }
 
             service lmtp {
-              unix_listener lmtp {
-                mode = 0666
-                user = vmail
-                group = vmail
+              # Consegna solo Postfix: il socket sta nella sua coda, 0600 suo (doc.dovecot.org, «Postfix and Dovecot
+              # LMTP»; virtual_transport = lmtp:unix:private/dovecot-lmtp). Niente piu' porta 24 su 127.0.0.1 ne'
+              # socket 0666, da cui qualunque processo della macchina consegnava in qualunque casella (reperto 234).
+              unix_listener /var/spool/postfix/private/dovecot-lmtp {
+                mode = 0600
+                user = postfix
+                group = postfix
               }
-              # address non esiste piu' nei listener: si chiama listen (provato sulla 2.4.5 il 09/11/2026).
-              inet_listener lmtp {
-                listen = 127.0.0.1
-                port = 24
+              # Il socket di Dovecot in /var/run/dovecot e' 0666 per impostazione predefinita: solo root.
+              unix_listener lmtp {
+                mode = 0600
               }
             }
 

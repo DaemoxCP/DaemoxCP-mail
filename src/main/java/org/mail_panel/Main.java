@@ -55,7 +55,7 @@ import java.sql.ResultSet;
  * ║  │  ──────────────────────────────                                         │ ║
  * ║  │  • Port 143  - IMAP (STARTTLS)                                          │ ║
  * ║  │  • Port 993  - IMAPS (SSL)                                              │ ║
- * ║  │  • LMTP socket: /var/run/dovecot/lmtp                                   │ ║
+ * ║  │  • LMTP socket: private/dovecot-lmtp                                    │ ║
  * ║  │  • Config: /usr/local/etc/dovecot/                                      │ ║
  * ║  │  • Mailboxes: /var/vmail/{domain}/{user}                                │ ║
  * ║  └─────────────────────────────────────────────────────────────────────────┘ ║

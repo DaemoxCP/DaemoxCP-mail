@@ -2840,6 +2840,9 @@ public final class UpdateManager {
                 job.errorMessage = I18n.tr("server.um.runDovecotRegeneration.6");
                 return;
             }
+            // La configurazione appena scritta consegna dal socket nella coda di Postfix: Postfix si allinea (reperto 234).
+            String lmtp = LmtpSocket.alignPostfix();
+            if (!lmtp.isEmpty()) job.write("    " + lmtp);
 
             // === Prova funzionale: l'autenticazione funziona ancora? ===
             // Questo passo riscrive dovecot-sql.conf, cioe' il file con cui Dovecot interroga
@@ -4407,6 +4410,20 @@ public final class UpdateManager {
         return new String[]{"localhost".equals(host) ? "127.0.0.1" : host, m.group(2)};
     }
 
+    /**
+     * Il socket Unix con cui Postfix consegna con LMTP, dal suo virtual_transport e dalla sua coda: lmtp:unix:private/X
+     * e' relativo alla coda (reperto 234). Null se non e' un socket Unix, o se i nomi non hanno la forma attesa.
+     */
+    static Path lmtpSocket(String transport, String queueDirectory) {
+        Matcher m = Pattern.compile("^lmtp:unix:([A-Za-z0-9._/-]{1,200})$").matcher(transport == null ? "" : transport.trim());
+        if (!m.find() || m.group(1).contains("..")) return null;
+        String p = m.group(1);
+        if (p.startsWith("/")) return Paths.get(p);
+        String q = queueDirectory == null ? "" : queueDirectory.trim();
+        if (!q.matches("/[A-Za-z0-9._/-]{1,200}") || q.contains("..")) return null;
+        return Paths.get(q, p);
+    }
+
     /** Il socket di autenticazione di Dovecot che Postfix usa per l'invio; null se Postfix non chiede a Dovecot. */
     private static Path postfixAuthSocket() {
         if (!"dovecot".equals(sh("postconf -h smtpd_sasl_type 2>/dev/null", 20).trim())) return null;
@@ -4445,9 +4462,13 @@ public final class UpdateManager {
         if (mailbox != null) {
             String du = sh("doveadm user '" + mailbox + "' 2>&1 | head -5", 60);
             res.put("doveadm user " + mailbox, du.contains("uid") && du.contains("home") ? null : firstLineOf(du));
-            String[] lmtp = lmtpTarget(sh("postconf -h virtual_transport 2>/dev/null", 20));
+            String transport = sh("postconf -h virtual_transport 2>/dev/null", 20);
+            String[] lmtp = lmtpTarget(transport);
+            Path lmtpUnix = lmtp == null ? lmtpSocket(transport, sh("postconf -h queue_directory 2>/dev/null", 20)) : null;
             if (lmtp != null) res.put(I18n.tr("server.um.dv24move.tLmtp", Map.of("mailbox", mailbox)),
                     MailProbes.lmtpRecipient(lmtp[0], Integer.parseInt(lmtp[1]), mailbox, 15_000));
+            else if (lmtpUnix != null) res.put(I18n.tr("server.um.dv24move.tLmtp", Map.of("mailbox", mailbox)),
+                    MailProbes.lmtpRecipient(lmtpUnix, mailbox, 15_000));
             else job.write("    " + I18n.tr("server.um.dv24move.noLmtp"));
             Path cert = dovecotCertificatePath();
             if (masterPassword != null && cert != null && listeners.stream().anyMatch(l -> l.endsWith(":993"))) {
@@ -4835,6 +4856,9 @@ public final class UpdateManager {
             MailDbUsers.ensureAtBoot();
             // POP3 come l'ha scelto l'amministratore: la configurazione scritta ha solo IMAP (Pop3).
             Pop3.ensureAtBoot();
+            // E Postfix sul socket LMTP della configurazione scritta (reperto 234), prima delle prove.
+            String lmtp = LmtpSocket.alignPostfix();
+            if (!lmtp.isEmpty()) job.write("    " + lmtp);
             String dbUserAfter = dovecotDbUser();
             job.write("    " + I18n.tr("server.um.dv24move.dbUser", Map.of("before", dbUserBefore.isEmpty() ? "?" : dbUserBefore,
                     "after", dbUserAfter.isEmpty() ? "?" : dbUserAfter)));

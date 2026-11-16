@@ -20,7 +20,7 @@ import java.io.IOException;
  * ║  │     • Config: /usr/local/etc/postfix/                                   │ ║
  * ║  │                                                                         │ ║
  * ║  │  2. Dovecot (IMAP)        - ports 143/993                               │ ║
- * ║  │     • LMTP delivery on localhost:24                                     │ ║
+ * ║  │     • LMTP via private/dovecot-lmtp                                     │ ║
  * ║  │     • SASL authentication for Postfix                                   │ ║
  * ║  │     • Mailboxes in /var/vmail/{domain}/{user}                           │ ║
  * ║  │                                                                         │ ║
@@ -806,7 +806,7 @@ inet_protocols = all
 virtual_mailbox_domains = mysql:/usr/local/etc/postfix/mysql-virtual-domains.cf
 virtual_mailbox_maps = mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf
 virtual_alias_maps = mysql:/usr/local/etc/postfix/mysql-virtual-aliases.cf
-virtual_transport = lmtp:inet:127.0.0.1:24
+virtual_transport = lmtp:unix:private/dovecot-lmtp
 
 # TLS settings
 smtpd_tls_cert_file = /usr/local/etc/ssl/mail/fullchain.pem

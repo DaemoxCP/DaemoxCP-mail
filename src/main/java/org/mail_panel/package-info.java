@@ -27,7 +27,7 @@
  * ║  │                        IMAP: Dovecot                                   │   ║
  * ║  │  ═══════════════════════════════════════════════════════════════════  │   ║
  * ║  │  • Ports: 143 (IMAP), 993 (IMAPS)                                     │   ║
- * ║  │  • LMTP: 127.0.0.1:24 (for Postfix delivery)                          │   ║
+ * ║  │  • LMTP: postfix/private/dovecot-lmtp (0600)                          │   ║
  * ║  │  • SASL: /var/spool/postfix/private/auth (for Postfix auth)           │   ║
  * ║  │  • Mailboxes: /var/vmail/{domain}/{user}                              │   ║
  * ║  │  • Config: /usr/local/etc/dovecot/                                    │   ║
