@@ -663,7 +663,7 @@ public class MailDatabase {
                     try (PreparedStatement ins = getConnection().prepareStatement(SqlCatalog.MAIL_ENSURE_CLOUDFLARE_ACCOUNTS_SCHEMA_5,
                         Statement.RETURN_GENERATED_KEYS)) {
                         ins.setString(1, "Account principale");
-                        ins.setString(2, legacyToken);
+                        ins.setString(2, org.mail_panel.security.CloudflareTokens.seal(legacyToken));
                         ins.executeUpdate();
                         ResultSet gk = ins.getGeneratedKeys();
                         if (gk.next()) {
@@ -870,7 +870,8 @@ public class MailDatabase {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_ADD_CLOUDFLARE_ACCOUNT, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setString(1, label);
             if (email == null || email.isEmpty()) stmt.setNull(2, Types.VARCHAR); else stmt.setString(2, email);
-            stmt.setString(3, apiToken);
+            // Cifrato: un token di Cloudflare scrive i DNS di tutte le zone (CloudflareTokens)
+            stmt.setString(3, org.mail_panel.security.CloudflareTokens.seal(apiToken));
             stmt.executeUpdate();
             try (ResultSet rs = stmt.getGeneratedKeys()) {
                 if (rs.next()) return rs.getInt(1);
@@ -890,7 +891,7 @@ public class MailDatabase {
 
     public boolean updateCloudflareAccountToken(int id, String newToken) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_UPDATE_CLOUDFLARE_ACCOUNT_TOKEN)) {
-            stmt.setString(1, newToken);
+            stmt.setString(1, org.mail_panel.security.CloudflareTokens.seal(newToken));
             stmt.setInt(2, id);
             return stmt.executeUpdate() > 0;
         }
@@ -938,6 +939,26 @@ public class MailDatabase {
         return null;
     }
 
+    /** I token come stanno nel database (id, valore), per la loro migrazione: CloudflareTokens.ensureAtBoot. */
+    public List<String[]> cloudflareStoredTokens() throws SQLException {
+        List<String[]> out = new ArrayList<>();
+        try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_LIST_CLOUDFLARE_STORED_TOKENS);
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) out.add(new String[] {String.valueOf(rs.getInt("id")), rs.getString("api_token")});
+        }
+        return out;
+    }
+
+    /** Il token cifrato al posto di quello in chiaro, solo se la riga ha ancora quello: vero se l'ha scritto. */
+    public boolean replaceCloudflareStoredToken(int id, String before, String sealed) throws SQLException {
+        try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_REPLACE_CLOUDFLARE_STORED_TOKEN)) {
+            stmt.setString(1, sealed);
+            stmt.setInt(2, id);
+            stmt.setString(3, before);
+            return stmt.executeUpdate() == 1;
+        }
+    }
+
     /** Assegna (o disassegna passando 0/-1) un account a un dominio. */
     public boolean assignCloudflareAccountToDomain(int domainId, int accountId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_ASSIGN_CLOUDFLARE_ACCOUNT_TO_DOMAIN)) {
@@ -953,7 +974,7 @@ public class MailDatabase {
         a.id = rs.getInt("id");
         a.label = rs.getString("label");
         a.email = rs.getString("email");
-        a.apiToken = rs.getString("api_token");
+        a.apiToken = org.mail_panel.security.CloudflareTokens.open(a.id, rs.getString("api_token"));
         a.verifiedAt = rs.getTimestamp("verified_at");
         a.createdAt = rs.getTimestamp("created_at");
         return a;

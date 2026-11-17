@@ -11,9 +11,11 @@ import java.util.function.Function;
 /**
  * RcScriptRepair: the start script written by the panel, with the files under their old names, in a
  * temporary folder. The script is the real one of the committente's mail server (read on
- * 31/10/2026, written by the 11/10 version, its comments put into English here), with the signature
- * and the log taken from the code and from the data file instead of written here. sh -n is the real
- * one: it is on macOS and on FreeBSD.
+ * 31/10/2026, written by the 11/10 version, its comments put into English here), with the signature,
+ * the log and the two messages taken from the code and from the data file instead of written here: the
+ * messages as the versions before wrote them, and as the panel writes them now (in English, seen in
+ * Italian after "service mailpanel start" on the clean VM on 16/11/2026). sh -n is the real one: it is
+ * on macOS and on FreeBSD.
  *
  *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RcScriptRepairTest
  */
@@ -69,14 +71,14 @@ public class RcScriptRepairTest {
             mailpanel_start()
             {
             	if [ -f "${pidfile}" ] && kill -0 "$(cat "${pidfile}")" 2>/dev/null; then
-            		echo "${name}: already running (pid $(cat ${pidfile}))"
+            		@RUNNING@
             		return 1
             	fi
             	mkdir -p "$(dirname "${mailpanel_log}")"
             	if [ -f "${mailpanel_log}" ] && [ $(stat -f %z "${mailpanel_log}") -gt 10485760 ]; then
             		mv "${mailpanel_log}" "${mailpanel_log}.1"
             	fi
-            	echo "Starting ${name} (web only). Log: ${mailpanel_log}"
+            	@STARTING@
             	/usr/sbin/daemon -f -o "${mailpanel_log}" -p "${pidfile}" -t "${name}" \\
             		/bin/sh -c "cd '${mailpanel_dir}' && exec '${mailpanel_java}' ${mailpanel_opts} -jar '${mailpanel_jar}' --web"
             }
@@ -89,9 +91,14 @@ public class RcScriptRepairTest {
             run_rc_command "$1"
             """;
 
-    static String script(String log, boolean ours) {
-        return SERVER_SCRIPT.replace("@MARKER@", ours ? RcScriptRepair.MARKER : "Written by hand").replace("@LOG@", log);
+    /** The script with the old messages (as the versions before wrote them) or with today's. */
+    static String script(String log, boolean ours, boolean oldMessages) {
+        return SERVER_SCRIPT.replace("@MARKER@", ours ? RcScriptRepair.MARKER : "Written by hand").replace("@LOG@", log)
+                .replace("@STARTING@", RcScriptRepair.MESSAGES.get(0)[oldMessages ? 0 : 1])
+                .replace("@RUNNING@", RcScriptRepair.MESSAGES.get(1)[oldMessages ? 0 : 1]);
     }
+
+    static String script(String log, boolean ours) { return script(log, ours, false); }
 
     static final Function<Path, Shell.Result> SH_N = f -> Shell.run(java.time.Duration.ofSeconds(30), "sh", "-n", f.toString());
 
@@ -102,17 +109,21 @@ public class RcScriptRepairTest {
     public static void main(String[] args) throws Exception {
         List<String[]> pairs = LegacyNames.pairs("files");
         check("the data file gives an old name for the log (" + OLD_LOG + ")", !OLD_LOG.equals(NEW_LOG) && OLD_LOG.endsWith(".log"));
-        check("the server's script passes sh -n, as it is", SH_N.apply(write(script(OLD_LOG, true))).success());
+        check("the server's script passes sh -n, as it is", SH_N.apply(write(script(OLD_LOG, true, true))).success());
+        check("the old messages are other lines than today's, and today's have no old word",
+                RcScriptRepair.MESSAGES.stream().allMatch(m -> !m[0].equals(m[1]))
+                && RcScriptRepair.MESSAGES.get(0)[1].equals(RcScriptRepair.STARTING)
+                && RcScriptRepair.MESSAGES.get(1)[1].equals(RcScriptRepair.RUNNING));
 
         System.out.println("\n== The server's script ==");
         Path dir = Files.createTempDirectory("rc-script-repair");
         Path rc = dir.resolve("mailpanel");
-        Files.writeString(rc, script(OLD_LOG, true));
+        Files.writeString(rc, script(OLD_LOG, true, true));
         Files.setPosixFilePermissions(rc, PosixFilePermissions.fromString("r-xr-xr-x"));
         RcScriptRepair.Report r = RcScriptRepair.repair(rc, pairs, SH_N);
         System.out.println("        -> " + r.outcome() + ": " + r.detail());
         check("repaired: DONE", r.outcome() == RcScriptRepair.Outcome.DONE);
-        check("  the log now has the new name, and nothing else changed",
+        check("  the log now has the new name, the messages are today's, and nothing else changed",
                 Files.readString(rc).equals(script(NEW_LOG, true)));
         check("  with the old permissions (r-xr-xr-x)",
                 PosixFilePermissions.toString(Files.getPosixFilePermissions(rc)).equals("r-xr-xr-x"));
@@ -124,6 +135,25 @@ public class RcScriptRepairTest {
         r = RcScriptRepair.repair(rc, pairs, COUNTING_SH_N);
         check("nothing to do, not even sh -n", r.outcome() == RcScriptRepair.Outcome.NOTHING && checks == 0
                 && Files.readString(rc).equals(script(NEW_LOG, true)));
+
+        System.out.println("\n== Only the messages ==");
+        Path messagesOnly = dir.resolve("messages-only");
+        Files.writeString(messagesOnly, script(NEW_LOG, true, true));
+        r = RcScriptRepair.repair(messagesOnly, pairs, SH_N);
+        System.out.println("        -> " + r.outcome() + ": " + r.detail());
+        check("the log already new, the messages old: DONE, only the two lines change",
+                r.outcome() == RcScriptRepair.Outcome.DONE && Files.readString(messagesOnly).equals(script(NEW_LOG, true)));
+        Path theirMessages = dir.resolve("their-messages");
+        Files.writeString(theirMessages, script(NEW_LOG, false, true));
+        r = RcScriptRepair.repair(theirMessages, pairs, SH_N);
+        check("the old messages in a script without the panel's signature: NOT_OURS, as it was",
+                r.outcome() == RcScriptRepair.Outcome.NOT_OURS && Files.readString(theirMessages).equals(script(NEW_LOG, false, true)));
+        Path quoted = dir.resolve("quoted");
+        String quotedText = script(NEW_LOG, true) + "# " + RcScriptRepair.MESSAGES.get(0)[0] + " was the old line\n";
+        Files.writeString(quoted, quotedText);
+        r = RcScriptRepair.repair(quoted, pairs, SH_N);
+        check("an old message inside a longer line (a comment): NOTHING, only whole lines change",
+                r.outcome() == RcScriptRepair.Outcome.NOTHING && Files.readString(quoted).equals(quotedText));
 
         System.out.println("\n== Things that are not touched ==");
         Path theirs = dir.resolve("theirs");
@@ -158,9 +188,14 @@ public class RcScriptRepairTest {
         check("no script: NOTHING", r.outcome() == RcScriptRepair.Outcome.NOTHING);
 
         System.out.println("\n== The script the panel writes today ==");
+        String generator = Files.readString(Path.of("src/main/java/org/mail_panel/system/UpdateManager.java"));
         check("it has the signature RcScriptRepair recognises, at the start of its comment",
-                Files.readString(Path.of("src/main/java/org/mail_panel/system/UpdateManager.java"))
-                        .contains("+ \"# \" + RcScriptRepair.MARKER + \". "));
+                generator.contains("+ \"# \" + RcScriptRepair.MARKER + \". "));
+        check("it writes today's two messages, from RcScriptRepair",
+                generator.contains("+ \"\\t\" + RcScriptRepair.STARTING + \"\\n\"")
+                && generator.contains("+ \"\\t\\t\" + RcScriptRepair.RUNNING + \"\\n\""));
+        check("and none of the old ones", RcScriptRepair.MESSAGES.stream().noneMatch(m -> generator.contains(
+                m[0].replace("\\", "\\\\").replace("\"", "\\\""))));
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);

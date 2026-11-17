@@ -155,7 +155,7 @@ public class DomainSetup {
             CloudflareManager.ZoneLookup zl = zones.find(current);
             if (zl != null && zl.found) return new CloudflareChoice(true, null, null);
             return CloudflareChoice.no(I18n.tr("server.cfgdom.cfZoneNotSeen", java.util.Map.of("a", String.valueOf(current.label),
-                    "d", domain, "e", String.valueOf(zl == null ? I18n.tr("server.cfgdom.noAnswer") : zl.error))));
+                    "d", domain, "e", withoutFinalStop(zl == null ? I18n.tr("server.cfgdom.noAnswer") : zl.error))));
         }
         if (accounts == null || accounts.isEmpty())
             return CloudflareChoice.no(I18n.tr("server.cfgdom.cfNone", java.util.Map.of("d", domain)));
@@ -172,6 +172,13 @@ public class DomainSetup {
         List<String> which = new ArrayList<>();
         for (MailDatabase.CloudflareAccount a : seeing) which.add(String.valueOf(a.label));
         return CloudflareChoice.no(I18n.tr("server.cfgdom.cfSeveral", java.util.Map.of("d", domain, "list", String.join(", ", which))));
+    }
+
+    /** Il motivo senza il punto finale: la frase che lo contiene ne mette uno suo («... after.. On Cloudflare»). */
+    static String withoutFinalStop(String reason) {
+        String r = String.valueOf(reason).trim();
+        while (r.endsWith(".")) r = r.substring(0, r.length() - 1);
+        return r;
     }
 
     /** Il controllo vero: account del dominio, account del pannello, e la zona chiesta a Cloudflare col token di ognuno. */

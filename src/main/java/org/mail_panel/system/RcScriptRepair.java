@@ -29,8 +29,13 @@ import java.util.regex.Pattern;
  * server vero il 31/10/2026, dove lo script l'aveva scritto la versione dell'11/10. Sulla VM non si
  * vedeva: li' il pannello si avviava a mano, senza script.
  *
+ * <p>E i due messaggi dello script, che nascevano in italiano («Avvio mailpanel (solo web). Registro: ...» dopo
+ * service mailpanel start): fuori dai file di lingua il pannello parla inglese, e la guida d'installazione e' in
+ * inglese. Visto seguendo la guida sulla VM pulita il 16/11/2026 (MESSAGES).
+ *
  * <p>Si tocca solo lo script scritto dal pannello (riconosciuto dalla riga MARKER), e dentro solo i
- * percorsi interi che il file di dati da' per rinominati (LegacyNames, sezione "files"). Lo script
+ * percorsi interi che il file di dati da' per rinominati (LegacyNames, sezione "files") e le righe intere dei
+ * messaggi di prima. Lo script
  * nuovo si scrive accanto, si prova con sh -n, prende proprietario e permessi del vecchio e lo
  * sostituisce con un rename: rc(8) non vede mai uno script a meta'. Ripeterlo non cambia niente.
  */
@@ -42,6 +47,15 @@ public final class RcScriptRepair {
     static final String MARKER = "Generato dal pannello il giorno dell'installazione";
 
     static final List<Path> SCRIPTS = List.of(Path.of("/usr/local/etc/rc.d/mailpanel"), Path.of("/etc/rc.d/mailpanel"));
+
+    /** I due messaggi dello script (UpdateManager li scrive da qui). */
+    static final String STARTING = "echo \"Starting ${name} (web only). Log: ${mailpanel_log}\"";
+    static final String RUNNING = "echo \"${name}: already running (pid $(cat ${pidfile}))\"";
+
+    /** Le righe dei messaggi come le scrivevano le versioni di prima, e quelle di adesso. */
+    static final List<String[]> MESSAGES = List.of(
+            new String[] {"echo \"Avvio ${name} (solo web). Registro: ${mailpanel_log}\"", STARTING},
+            new String[] {"echo \"${name}: gia' in esecuzione (pid $(cat ${pidfile}))\"", RUNNING});
 
     private RcScriptRepair() {}
 
@@ -61,6 +75,15 @@ public final class RcScriptRepair {
         return s;
     }
 
+    /** Lo script coi messaggi di adesso al posto di quelli di prima: solo righe intere. */
+    static String currentMessages(String script) {
+        String s = script;
+        for (String[] m : MESSAGES)
+            s = Pattern.compile("^([ \\t]*)" + Pattern.quote(m[0]) + "$", Pattern.MULTILINE)
+                    .matcher(s).replaceAll("$1" + Matcher.quoteReplacement(m[1]));
+        return s;
+    }
+
     /** I percorsi di prima che lo script cita, nell'ordine del file di dati. */
     static List<String> oldPathsIn(String script, List<String[]> pairs) {
         List<String> out = new ArrayList<>();
@@ -74,19 +97,23 @@ public final class RcScriptRepair {
         if (!Files.isRegularFile(script, LinkOption.NOFOLLOW_LINKS)) return new Report(Outcome.NOTHING, "");
         String text = Files.readString(script, StandardCharsets.UTF_8);
         List<String> old = oldPathsIn(text, pairs);
-        if (old.isEmpty()) return new Report(Outcome.NOTHING, "");
+        String repaired = currentMessages(current(text, pairs));
+        boolean messages = !currentMessages(text).equals(text);
+        if (repaired.equals(text)) return new Report(Outcome.NOTHING, "");
         if (!text.contains(MARKER))
-            return new Report(Outcome.NOT_OURS, script + " cites " + old + " but was not written by the panel: left alone");
+            return new Report(Outcome.NOT_OURS, script + " cites " + (old.isEmpty() ? "the old messages" : old)
+                    + " but was not written by the panel: left alone");
         // Un file che comincia col punto: rc(8) prende gli script di rc.d con un glob, che non lo vede.
         Path temp = script.resolveSibling("." + script.getFileName() + ".panel-new");
         try {
-            Files.writeString(temp, current(text, pairs), StandardCharsets.UTF_8);
+            Files.writeString(temp, repaired, StandardCharsets.UTF_8);
             Shell.Result check = syntaxCheck.apply(temp);
             if (!check.success())
                 return new Report(Outcome.REFUSED, "sh -n refused the repaired " + script + ": " + check.outputTrim() + "; left as it was");
             sameOwnerAndMode(script, temp);
             Files.move(temp, script, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            return new Report(Outcome.DONE, script + ": " + old + " now with the current names");
+            return new Report(Outcome.DONE, script + ": " + (old.isEmpty() ? "" : old + " now with the current names")
+                    + (old.isEmpty() || !messages ? "" : ", ") + (messages ? "messages in English" : ""));
         } finally {
             Files.deleteIfExists(temp);
         }

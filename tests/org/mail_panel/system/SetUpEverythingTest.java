@@ -110,6 +110,9 @@ public class SetUpEverythingTest {
         c = DomainSetup.choose("example.org", mine, List.of(mine), a -> blind("no zone"));
         check("its own account does not see the zone: refused, saying which account",
                 !c.ready() && c.error().equals(I18n.tr("server.cfgdom.cfZoneNotSeen", Map.of("a", "Main", "d", "example.org", "e", "no zone"))));
+        c = DomainSetup.choose("example.org", mine, List.of(mine), a -> blind("Cloudflare does not accept this token. Copy it again."));
+        check("a reason that ends with a full stop: one stop in the message, not two", !c.ready() && !c.error().contains("..")
+                && c.error().contains("Copy it again"));
         c = DomainSetup.choose("example.org", null, List.of(), a -> sees("example.org"));
         check("no account in the panel: refused", !c.ready()
                 && c.error().equals(I18n.tr("server.cfgdom.cfNone", Map.of("d", "example.org"))));
