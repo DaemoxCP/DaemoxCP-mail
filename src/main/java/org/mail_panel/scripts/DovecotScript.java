@@ -109,7 +109,9 @@ public class DovecotScript {
             pw group show vmail >/dev/null 2>&1 || pw groupadd vmail -g 5000
 
             mkdir -p /var/vmail
-            chown -R vmail:vmail /var/vmail
+            """
+            // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
+            + org.mail_panel.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + """
             chmod 700 /var/vmail
 
             # Configure Dovecot

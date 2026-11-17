@@ -340,7 +340,9 @@ install_packages php84-mysqli php84-mbstring php84-intl php84-xml php84-zip php8
 pw groupadd vmail -g 5000 2>/dev/null || true
 pw useradd vmail -u 5000 -g vmail -d /var/vmail -s /usr/sbin/nologin -c "Virtual Mail" 2>/dev/null || true
 mkdir -p /var/vmail
-chown -R vmail:vmail /var/vmail
+"""
+            // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
+            + org.mail_panel.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + """
 chmod 770 /var/vmail
 
 echo "${GREEN}  Packages installed${NC}"
@@ -731,7 +733,9 @@ mkdir -p /var/vmail
 mkdir -p /var/run/dovecot
 mkdir -p /var/db/mailpanel
 
-chown -R vmail:vmail /var/vmail
+"""
+            // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
+            + org.mail_panel.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + """
 chmod 770 /var/vmail
 chown root:dovecot /var/run/dovecot
 chmod 755 /var/run/dovecot

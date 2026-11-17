@@ -523,7 +523,8 @@ public final class AcmeUser {
             List<Path> all;
             try (Stream<Path> s = Files.walk(p)) { all = s.toList(); }
             for (Path x : all) {
-                if (Files.isSymbolicLink(x)) continue;
+                // Ne' collegamenti ne' file con piu' nomi: un hard link a un file di root e' quel file (reperto 252)
+                if (!SafeOwnership.safeToChange(x)) continue;
                 PosixFileAttributeView v = Files.getFileAttributeView(x, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
                 v.setOwner(u);
                 v.setGroup(g);

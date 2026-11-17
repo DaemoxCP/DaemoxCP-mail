@@ -178,7 +178,9 @@ public class FullMailStackScript {
             # Create vmail user
             pw groupadd vmail -g 5000 2>/dev/null || true
             pw useradd vmail -c "Virtual Mail" -d /var/vmail -s /usr/sbin/nologin -u 5000 -g 5000 2>/dev/null || true
-            chown -R vmail:vmail /var/vmail
+            """
+            // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
+            + org.mail_panel.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + """
 
             # ============ 1. MySQL ============
             echo ""
