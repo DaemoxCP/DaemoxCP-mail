@@ -598,6 +598,11 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
 > [!NOTE]
 > Sono previsti gli aggiornamenti del pannello dalle release di GitHub, verificati e installati dal pannello stesso.
 
+### I test
+
+`tests/` contiene i test del pannello, una classe Java ciascuno, più le prove nel browser con Playwright. Si lanciano a
+mano su una macchina FreeBSD di prova prima di ogni release: come, in [`tests/README.md`](tests/README.md).
+
 ---
 
 ## Da FreeBSD Mail Panel
