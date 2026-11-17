@@ -86,7 +86,8 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 - Certificati Let's Encrypt con `acme.sh` (il pacchetto di FreeBSD, che gira col suo utente `acme`), con la
   verifica DNS su Cloudflare.
 - Profili di configurazione di Apple Mail (Mac, iPhone, iPad) e autoconfig di Thunderbird: i programmi di posta
-  si configurano da soli.
+  si configurano da soli. Provati con Apple Mail su macOS sul server vero: il profilo configura l'account, e la
+  posta parte e arriva. iPhone, iPad e Thunderbird non sono ancora stati provati con un programma di posta vero.
 
 **Sicurezza**
 - Accesso senza password: **passkey** (WebAuthn), codici monouso via email, o un codice dalla console del server.

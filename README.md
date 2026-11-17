@@ -86,6 +86,8 @@ It is **careful**. The panel never changes something it cannot check, and it say
 - Let's Encrypt certificates through `acme.sh` (the FreeBSD package, running as its own `acme` user), with the
   DNS challenge on Cloudflare.
 - Apple Mail configuration profiles (Mac, iPhone, iPad) and Thunderbird autoconfig: clients set themselves up.
+  Tested with Apple Mail on macOS on the real server: the profile sets up the account, and mail is sent and
+  received. iPhone, iPad and Thunderbird have not been tried with a real client yet.
 
 **Security**
 - Sign-in without passwords: **passkeys** (WebAuthn), one-time codes by email, or a code from the server
