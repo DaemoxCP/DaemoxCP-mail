@@ -184,7 +184,8 @@ public final class PanelMarker {
     static final List<String> PRODUCT_FOLDERS = List.of(
             "/usr/local/etc/dovecot/conf.d", "/usr/local/etc/fail2ban/jail.d", "/usr/local/etc/fail2ban/filter.d",
             "/usr/local/etc/fail2ban/action.d", "/etc/pf.anchors", "/usr/local/etc/rspamd/local.d",
-            "/usr/local/etc/php-fpm.d", "/usr/local/etc/newsyslog.conf.d", "/usr/local/etc/nginx/conf.d");
+            "/usr/local/etc/rspamd/override.d", "/usr/local/etc/php-fpm.d", "/usr/local/etc/newsyslog.conf.d",
+            "/usr/local/etc/nginx/conf.d", "install_scripts");
 
     /**
      * All'avvio (ProductRename): nei file dei servizi, le righe di commento col nome di prima del prodotto prendono

@@ -327,7 +327,9 @@ stat -f '%Su:%Sg %N' /var/log/php_errors.log > "$WORK/php-errors-owner-before.tx
 # Il registro degli accessi al pannello col suo nome di adesso o di prima (AuthJailRename lo rinomina), e cosa c'e'
 # in /var/log: sta fuori dai boot environment, e rollback-panel.sh rimette i nomi di prima.
 for f in /var/log/daemoxcp-mail-auth.log /var/log/mail-panel-auth.log; do
-    [ -f "$f" ] && stat -f '%Su:%Sg %N' "$f" > "$WORK/auth-log-owner-before.txt" && break
+    # Coi numeri, non coi nomi: il primo avvio rinomina l'utente della parte web, e prima del riavvio nel boot
+    # environment di prima chown non conoscerebbe piu' il nome di prima (visto sulla VM il 17/11/2026).
+    [ -f "$f" ] && stat -f '%u:%g %N' "$f" > "$WORK/auth-log-owner-before.txt" && break
 done
 ls -1 /var/log > "$WORK/var-log-before.txt" 2>/dev/null
 say "Copy of the panel folder: $WORK/panel-dir.tar"

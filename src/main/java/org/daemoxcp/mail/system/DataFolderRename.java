@@ -70,7 +70,7 @@ public final class DataFolderRename {
             "/usr/local/etc/php-fpm.d", "/etc/pf.anchors", "/usr/local/etc/newsyslog.conf.d",
             "/usr/local/etc/fail2ban/jail.d", "/usr/local/etc/fail2ban/action.d", "/usr/local/etc/fail2ban/filter.d",
             "/usr/local/www/roundcube/config", "/usr/local/etc/nginx/conf.d", "/usr/local/etc/dovecot/conf.d",
-            "/usr/local/etc/rspamd/local.d");
+            "/usr/local/etc/rspamd/local.d", "/usr/local/etc/rspamd/override.d");
 
     enum Outcome { NOTHING, DONE, LEFT, ROLLED_BACK }
 

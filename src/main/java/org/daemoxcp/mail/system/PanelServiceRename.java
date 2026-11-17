@@ -32,8 +32,10 @@ import java.util.regex.Pattern;
  * <ol>
  *   <li>dallo script vecchio (solo se l'ha scritto il pannello) i valori: cartella, java, jar, opzioni; da rc.conf le
  *       variabili mailpanel_* che l'amministratore ha impostato;</li>
- *   <li>il jar prende il nome nuovo nella stessa cartella. La macchina virtuale che lo sta usando lo tiene aperto e
- *       non se ne accorge; chi chiede al pannello il suo jar (UpdateManager.jarPath) riceve il nome nuovo;</li>
+ *   <li>il jar prende ANCHE il nome nuovo, con un collegamento allo stesso file nella stessa cartella. Non si sposta:
+ *       misurato sulla VM il 17/11/2026, col jar spostato mentre girava la macchina virtuale non trovava piu' il
+ *       driver di SQLite (ServiceLoader rilegge il jar per nome) e il pannello si fermava a meta' dell'avvio. Il
+ *       nome di prima lo toglie l'avvio successivo, che gira gia' dal nome nuovo (oldJarNames);</li>
  *   <li>lo script nuovo (PanelRcScript, firmato dal pannello) si scrive accanto, si prova con sh -n e si mette al suo
  *       posto; le variabili passano in rc.conf col nome nuovo (le opzioni -Dmailpanel.* col prefisso nuovo);</li>
  *   <li>il pidfile prende il nome nuovo: e' il pid di questa java, e rc.subr lo confronta con procname (la java), quindi
@@ -83,6 +85,7 @@ public final class PanelServiceRename {
     }
 
     public static void ensureAtBoot() {
+        oldJarNames();
         for (String[] p : LegacyNames.pairs("rcNames")) {
             for (String dir : List.of("/usr/local/etc/rc.d", "/etc/rc.d")) {
                 try {
@@ -94,6 +97,29 @@ public final class PanelServiceRename {
                     LOGGER.warning("[PanelServiceRename] " + dir + "/" + p[0] + ": " + t);
                 }
             }
+        }
+    }
+
+    /**
+     * Il pannello gira dal jar col nome di adesso: il nome di prima accanto, se e' lo stesso file (il collegamento
+     * lasciato dal passaggio), se ne va. Un file diverso col nome di prima non si tocca. La riga del registro non e' di
+     * una migrazione: il passaggio l'ha gia' detto all'avvio prima, e il secondo avvio di upgrade-panel.sh deve restare
+     * muto.
+     */
+    static void oldJarNames() {
+        try {
+            Path running = Path.of(PanelServiceRename.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            if (!Files.isRegularFile(running) || !running.getFileName().toString().startsWith(Product.SLUG + "-")) return;
+            String rest = running.getFileName().toString().substring(Product.SLUG.length());
+            for (String old : LegacyNames.oldNamesOf("jarNames", Product.SLUG)) {
+                Path o = running.resolveSibling(old + rest);
+                if (Files.isRegularFile(o, LinkOption.NOFOLLOW_LINKS) && Files.isSameFile(o, running)) {
+                    Files.delete(o);
+                    LOGGER.info("[PanelServiceRename] the jar's name of before (" + o + ") removed: the panel runs from " + running);
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.info("[PanelServiceRename] the jar's name of before is still there: " + e.getMessage());
         }
     }
 
@@ -160,9 +186,9 @@ public final class PanelServiceRename {
         boolean jarMoved = false, scriptWritten = false, pidMoved = false, oldRemoved = false;
         List<String> varsWritten = new ArrayList<>(), varsRemoved = new ArrayList<>();
         try {
-            // 1. il jar
+            // 1. il jar: anche col nome nuovo, lo stesso file (un collegamento); quello di prima resta fino al riavvio.
             if (!newJar.equals(oldJar) && Files.isRegularFile(Path.of(oldJar)) && !Files.exists(Path.of(newJar))) {
-                Files.move(Path.of(oldJar), Path.of(newJar), StandardCopyOption.ATOMIC_MOVE);
+                Files.createLink(Path.of(newJar), Path.of(oldJar));
                 jarMoved = true;
                 MOVED_JARS.put(oldJar, newJar);
             }
@@ -213,7 +239,7 @@ public final class PanelServiceRename {
                 if (pidMoved) Files.move(newPid, oldPid, StandardCopyOption.ATOMIC_MOVE);
                 if (scriptWritten) Files.deleteIfExists(newScript);
                 if (jarMoved) {
-                    Files.move(Path.of(newJar), Path.of(oldJar), StandardCopyOption.ATOMIC_MOVE);
+                    Files.deleteIfExists(Path.of(newJar));
                     MOVED_JARS.remove(oldJar);
                 }
             } catch (IOException x) {
@@ -242,7 +268,7 @@ public final class PanelServiceRename {
         }
         return new Report(Outcome.DONE, oldScript + " -> " + newScript + " (copy of the old one in " + copy + ")"
                 + (set.isEmpty() ? "" : ", rc.conf " + set.keySet() + " now " + PanelRcScript.NAME + "_*")
-                + (pidMoved ? ", pidfile " + newPid : "") + (jarMoved ? ", jar " + newJar : "") + runSh);
+                + (pidMoved ? ", pidfile " + newPid : "") + (jarMoved ? ", jar also " + newJar + " (the same file: the old name goes at the next start)" : "") + runSh);
     }
 
     // ===================== il sistema vero =====================
