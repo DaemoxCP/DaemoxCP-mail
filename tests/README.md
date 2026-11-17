@@ -910,7 +910,7 @@ verifies the three properties that must hold: no waiting if the domains already 
 soon as they answer, and it leaves anyway at the deadline instead of running forever.
 
 **MtaStsSequenceTest** — the pieces born from merging the two sequences: `filter()`, the filter by
-domain (exact comparison, case-insensitive: "ake.net" must not catch "domain-d.test", and a nonexistent
+domain (exact comparison, case-insensitive: "in-d.test" must not catch "domain-d.test", and a nonexistent
 domain must give an empty list, which is the guard against the false success), and `asEntries()`,
 which turns the outcome into the DNS page's rows without losing the red rows.
 
