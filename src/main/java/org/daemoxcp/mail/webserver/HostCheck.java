@@ -133,7 +133,7 @@ public final class HostCheck {
                 + (isWildcardHost(configuredHost)
                    ? "and the panel address is " + configuredHost + " (listen everywhere), so only"
                      + " localhost and this machine's own addresses are accepted "
-                     + localAddresses() + ". Set the real panel name in 'Modify Data'."
+                     + localAddresses() + ". Set the panel's name in the terminal menu, option 2 (Edit Panel Configuration)."
                    : "while the panel answers to " + configuredHost + ".");
     }
 }

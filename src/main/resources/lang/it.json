@@ -397,7 +397,6 @@
   "cfi.intro1.html": "I due pannelli stanno dietro Cloudflare, quindi ogni richiesta arriva da un indirizzo dell'edge. L'indirizzo vero di chi bussa è nell'intestazione <code>CF-Connecting-IP</code>, e il pannello se ne fida <strong>solo</strong> se la connessione viene da un indirizzo che riconosce come Cloudflare — altrimenti chiunque potrebbe scriverci dentro quello che vuole e falsificarsi nei registri.",
   "cfi.intro2.html": "Quell'elenco è <strong>scritto a mano</strong> dentro il pannello e deve restare uguale a quello ufficiale. Se Cloudflare aggiunge un intervallo e comincia a servire da lì, il pannello smette di riconoscerlo: da quel momento <strong>tutti i visitatori diventano un indirizzo solo</strong>, e il limite dei tentativi di accesso vale per tutti insieme — cinque tentativi sbagliati di chiunque chiuderebbero fuori anche te. Fallisce diventando più severo, che è il modo più silenzioso di rompersi.",
   "cfi.intro3.html": "Questo controllo <strong>legge e basta</strong>: scarica le due liste ufficiali e le confronta. Non aggiorna niente da solo — una lista di chi è degno di fiducia non si riscrive senza che un essere umano l'abbia guardata.",
-  "cfi.local": "Locali",
   "cfi.missing.html": "Usati da Cloudflare, assenti qui — da aggiungere in <code>TrustedProxy</code>",
   "cfi.official": "Ufficiali su cloudflare.com",
   "cfi.ph": "Premi Confronta con l'originale: legge e basta.",

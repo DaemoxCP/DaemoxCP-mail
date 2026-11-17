@@ -397,7 +397,6 @@
   "cfi.intro1.html": "Both panels sit behind Cloudflare, so every request comes from an edge address. The real address of whoever knocks is in the <code>CF-Connecting-IP</code> header, and the panel trusts it <strong>only</strong> if the connection comes from an address it recognizes as Cloudflare — otherwise anyone could write whatever they like in it and forge their entry in the logs.",
   "cfi.intro2.html": "That list is <strong>written by hand</strong> inside the panel and must stay the same as the official one. If Cloudflare adds a range and starts serving from it, the panel stops recognizing it: from then on <strong>every visitor becomes a single address</strong>, and the login attempt limit applies to everyone together — five wrong attempts by anyone would lock you out too. It fails by becoming stricter, which is the quietest way to break.",
   "cfi.intro3.html": "This check <strong>only reads</strong>: it downloads the two official lists and compares them. It updates nothing by itself — a list of who deserves trust is not rewritten without a human having looked at it.",
-  "cfi.local": "Local",
   "cfi.missing.html": "Used by Cloudflare, missing here — to add to <code>TrustedProxy</code>",
   "cfi.official": "Official on cloudflare.com",
   "cfi.ph": "Press Compare with the original: it only reads.",

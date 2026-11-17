@@ -11,7 +11,6 @@
                   + entries.map(c => '<code class="me-2">' + updEsc(c) + '</code>').join('') + '</div>';
             return one('Cloudflare IPv4', r.listV4)
                  + one('Cloudflare IPv6', r.listV6)
-                 + one(t('cfi.local'), r.localList)
                  + '<div class="small text-muted mt-2">' + escHtml(t('cfi.compiledOn', { date: r.updatedOn || '?' })) + ' '
                  + t('cfi.bitwise.html') + '</div>';
         }

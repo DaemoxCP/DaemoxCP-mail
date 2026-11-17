@@ -6,25 +6,20 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Verifica se un indirizzo IP appartiene a un proxy considerato "trusted",
- * cioè uno dei cui header forwarding (CF-Connecting-IP, X-Forwarded-For,
- * X-Real-IP) ci possiamo fidare.
+ * Chi il pannello riconosce come Cloudflare: l'unico da cui accetta l'intestazione CF-Connecting-IP con
+ * l'indirizzo vero di chi bussa (r18). Da qualunque altro indirizzo, loopback e reti private comprese,
+ * le intestazioni di inoltro (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) sono testo che chiunque puo'
+ * scrivere, e conta solo l'indirizzo TCP.
  *
- * Lista corrente:
- *  - IP range ufficiali di Cloudflare (https://www.cloudflare.com/ips/)
- *  - localhost (127.0.0.1, ::1) — per setup con nginx davanti sullo stesso host
- *  - rete privata 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 — per setup
- *    in cui un reverse proxy è in LAN
+ * Prima ci si fidava anche del loopback e delle reti private (10/8, 172.16/12, 192.168/16, fc00::/7):
+ * bastava un'altra macchina nella stessa rete privata del fornitore, o una richiesta alla superficie
+ * sulla 443 (nginx passa al pannello le intestazioni del client), per scegliersi l'indirizzo nei registri e
+ * nei limiti dei tentativi.
  *
- * Se il TCP source di una richiesta NON è in queste liste, NON ci si deve
- * fidare degli header forwarding (un attaccante potrebbe averli falsificati).
- *
- * Le IP range Cloudflare possono cambiare nel tempo. Andrebbero aggiornate
- * periodicamente dai file ufficiali:
+ * Le IP range Cloudflare possono cambiare nel tempo: la scheda "Chi il pannello riconosce come
+ * Cloudflare" le confronta con quelle ufficiali.
  *   https://www.cloudflare.com/ips-v4
  *   https://www.cloudflare.com/ips-v6
- *
- * Aggiornato: 2025-12 (lista Cloudflare ufficiale)
  */
 public final class TrustedProxy {
     private TrustedProxy() {}
@@ -59,16 +54,6 @@ public final class TrustedProxy {
         "2c0f:f248::/32"
     );
 
-    // Range privati / loopback per setup interni
-    private static final List<String> PRIVATE_RANGES = Arrays.asList(
-        "127.0.0.0/8",     // loopback IPv4
-        "::1/128",         // loopback IPv6
-        "10.0.0.0/8",      // RFC1918
-        "172.16.0.0/12",   // RFC1918
-        "192.168.0.0/16",  // RFC1918
-        "fc00::/7"         // IPv6 ULA
-    );
-
     /**
      * Quando la lista qui sopra e' stata confrontata con quella ufficiale, da un essere umano.
      *
@@ -84,37 +69,36 @@ public final class TrustedProxy {
      *  una lista che decide di chi fidarsi e che nessuno puo' leggere e' una regola segreta. */
     public static List<String> cloudflareV4() { return List.copyOf(CLOUDFLARE_V4); }
     public static List<String> cloudflareV6() { return List.copyOf(CLOUDFLARE_V6); }
-    public static List<String> localIntervals() { return List.copyOf(PRIVATE_RANGES); }
 
     /**
-     * Ritorna true se l'IP appartiene a un range Cloudflare o privato/loopback.
-     * @param ipString l'IP da verificare in formato testuale
+     * L'indirizzo appartiene a Cloudflare? Solo gli intervalli pubblicati, confrontati bit per bit.
+     * @param ipString l'IP da verificare in formato testuale (mai un nome: non si interroga il DNS)
      */
-    public static boolean isTrustedProxy(String ipString) {
-        if (ipString == null || ipString.isEmpty()) return false;
+    public static boolean isCloudflare(String ipString) {
+        if (ipString == null || ipString.isEmpty() || !InputValidator.isValidIp(ipString.trim())) return false;
         try {
-            InetAddress addr = InetAddress.getByName(ipString);
-            byte[] addrBytes = addr.getAddress();
-
-            List<String> ranges;
-            if (addrBytes.length == 4) {
-                ranges = CLOUDFLARE_V4;
-            } else if (addrBytes.length == 16) {
-                ranges = CLOUDFLARE_V6;
-            } else {
-                return false;
-            }
-
+            byte[] addrBytes = InetAddress.getByName(ipString.trim()).getAddress();
+            List<String> ranges = addrBytes.length == 4 ? CLOUDFLARE_V4 : addrBytes.length == 16 ? CLOUDFLARE_V6 : List.of();
             for (String cidr : ranges) {
-                if (isInRange(addrBytes, cidr)) return true;
-            }
-            for (String cidr : PRIVATE_RANGES) {
                 if (isInRange(addrBytes, cidr)) return true;
             }
         } catch (UnknownHostException e) {
             return false;
         }
         return false;
+    }
+
+    /**
+     * L'indirizzo di chi bussa (r18): quello di CF-Connecting-IP se la connessione arriva da Cloudflare e
+     * l'intestazione e' un indirizzo valido, altrimenti quello TCP. Nient'altro: X-Forwarded-For e
+     * X-Real-IP non contano da nessuno, perche' Cloudflare manda sempre CF-Connecting-IP.
+     */
+    public static String clientAddress(String tcpAddress, String cfConnectingIp) {
+        if (isCloudflare(tcpAddress) && cfConnectingIp != null) {
+            String claimed = cfConnectingIp.trim();
+            if (InputValidator.isValidIp(claimed)) return claimed;
+        }
+        return tcpAddress;
     }
 
     /**
