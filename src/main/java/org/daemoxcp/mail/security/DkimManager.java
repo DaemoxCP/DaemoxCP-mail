@@ -129,34 +129,104 @@ public class DkimManager {
      */
     public DkimResult generateDkimKeys(int domainId, String domain, String selector) {
         try {
-            // Generate RSA key pair
-            KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
-            keyGen.initialize(RSA_KEY_SIZE, new SecureRandom());
-            KeyPair keyPair = keyGen.generateKeyPair();
-
-            // Get private key in PEM format
-            String privateKeyPem = formatPrivateKeyPem(keyPair.getPrivate());
-
-            // Get public key in DNS format (base64, no headers)
-            String publicKeyDns = formatPublicKeyDns(keyPair.getPublic());
-
-            // Full DNS TXT record value
-            String dnsRecord = buildDkimDnsRecord(publicKeyDns);
-
-            // Save to database
-            database.setDkim(domainId, selector, privateKeyPem, publicKeyDns);
-
-            // Write private key to filesystem for Rspamd
-            writePrivateKeyFile(domain, selector, privateKeyPem);
-
-            // Update Rspamd configuration
-            updateRspamdConfig();
-
-            return new DkimResult(true, selector, publicKeyDns, dnsRecord, null);
+            NewKey k = newKey(selector);
+            install(domainId, domain, k);
+            return new DkimResult(true, selector, k.publicKeyDns(), k.dnsRecord(), null);
 
         } catch (Exception e) {
             return new DkimResult(false, selector, null, null, e.getMessage());
         }
+    }
+
+    /** Una coppia di chiavi appena fatta, solo in memoria: nessuno la usa finche' non la si installa. */
+    public record NewKey(String selector, String privateKeyPem, String publicKeyDns, String dnsRecord) {}
+
+    /** Una coppia RSA nuova, senza toccare database, file o rspamd. */
+    public NewKey newKey(String selector) throws Exception {
+        KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+        keyGen.initialize(RSA_KEY_SIZE, new SecureRandom());
+        KeyPair keyPair = keyGen.generateKeyPair();
+        String publicKeyDns = formatPublicKeyDns(keyPair.getPublic());
+        return new NewKey(selector, formatPrivateKeyPem(keyPair.getPrivate()), publicKeyDns, buildDkimDnsRecord(publicKeyDns));
+    }
+
+    /** L'esito del passo DKIM di "Configura tutto": riuscito o no, e la frase da mostrare. */
+    public record RecordStep(boolean ok, String message) {}
+
+    public interface NewKeySource { NewKey make(String selector) throws Exception; }
+
+    public interface KeyInstaller { void install(NewKey k) throws Exception; }
+
+    /**
+     * La chiave DKIM del dominio e il suo record, in quest'ordine: si firma solo con una chiave il cui record e' davvero
+     * nella zona. Prima la chiave si salvava e rspamd firmava subito, poi si provava a pubblicare: se su quel nome c'era
+     * gia' un record, o Cloudflare rifiutava, la posta partiva firmata con una chiave che nessuno poteva verificare. E
+     * il giro dopo diceva "presente" solo perche' la chiave era nel database.
+     *
+     * Con una chiave gia' nel database: se il suo record c'e', a posto; se su quel nome c'e' un record con un'altra
+     * chiave, lo si dice e non lo si tocca; se non c'e' niente, si pubblica quello della chiave che c'e'. Senza
+     * chiave: se il nome e' occupato non si fa niente; altrimenti chiave nuova in memoria, record, rilettura, e solo
+     * allora installer (database, file, firma). Una zona che non si legge lancia ZoneReadException e non si scrive niente.
+     */
+    public static RecordStep ensurePublished(CloudflareManager cf, String token, String zoneId, String domain,
+                                             String selector, String publicKey,
+                                             NewKeySource newKey, KeyInstaller installer) throws Exception {
+        boolean hasKey = selector != null && !selector.isBlank() && publicKey != null && !publicKey.isBlank();
+        String sel = hasKey ? selector : "mail";
+        String name = sel + "._domainkey." + domain;
+        java.util.List<String> here = dkimContents(cf, token, zoneId, name);
+
+        if (hasKey) {
+            String expected = "p=" + publicKey.replaceAll("\\s", "");
+            for (String c : here)
+                if (c.replaceAll("\\s", "").contains(expected))
+                    return new RecordStep(true, I18n.tr("server.cfgdom.dkimPresent", java.util.Map.of("s", sel)));
+            if (!here.isEmpty())
+                return new RecordStep(false, I18n.tr("server.cfgdom.dkimOtherKey", java.util.Map.of("name", name, "d", domain)));
+            // La chiave c'e' e firma gia', ma il suo record manca: si pubblica quello della chiave che c'e'.
+            return publishThenInstall(cf, token, zoneId, name, "v=DKIM1; k=rsa; p=" + publicKey, null, null);
+        }
+
+        if (!here.isEmpty())
+            return new RecordStep(false, I18n.tr("server.cfgdom.dkimExists", java.util.Map.of("name", name)));
+        NewKey k = newKey.make(sel);
+        return publishThenInstall(cf, token, zoneId, name, k.dnsRecord(), k, installer);
+    }
+
+    /** I contenuti dei TXT che stanno esattamente su quel nome. */
+    private static java.util.List<String> dkimContents(CloudflareManager cf, String token, String zoneId, String name) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (CloudflareManager.TxtRecordInfo t : cf.listTxtRecordsContaining(token, zoneId, name))
+            if (t.name != null && t.name.equalsIgnoreCase(name)) out.add(DnsRules.cloudflareContent(t.content));
+        return out;
+    }
+
+    /** Crea il record, lo rilegge, e solo se c'e' installa la chiave nuova (se ce n'e' una). */
+    private static RecordStep publishThenInstall(CloudflareManager cf, String token, String zoneId, String name,
+                                                 String value, NewKey k, KeyInstaller installer) throws Exception {
+        CloudflareManager.RecordOp op = cf.createTxtRecord(token, zoneId, name, value, 3600);
+        if (op == null || !op.success)
+            return new RecordStep(false, I18n.tr("server.cfgdom.dkimRejected", java.util.Map.of("err",
+                    String.valueOf(op == null ? I18n.tr("server.cfgdom.noAnswer") : op.error))));
+        String key = value.substring(value.indexOf("p=")).replaceAll("\\s", "");
+        boolean seen = false;
+        for (String c : dkimContents(cf, token, zoneId, name))
+            if (c.replaceAll("\\s", "").contains(key)) seen = true;
+        if (!seen)
+            return new RecordStep(false, I18n.tr("server.cfgdom.dkimNotConfirmed", java.util.Map.of("name", name)));
+        if (k != null && installer != null) installer.install(k);
+        return new RecordStep(true, I18n.tr("server.cfgdom.dkimPublished", java.util.Map.of("name", name)));
+    }
+
+    /**
+     * La chiave diventa quella del dominio e rspamd comincia a firmare con lei. "Configura tutto" la installa solo dopo
+     * aver visto il suo record pubblicato (DomainSetup): firmare prima vorrebbe dire mandare posta con una firma che
+     * nessuno puo' verificare, se la pubblicazione poi non riesce.
+     */
+    public void install(int domainId, String domain, NewKey k) throws Exception {
+        database.setDkim(domainId, k.selector(), k.privateKeyPem(), k.publicKeyDns());
+        writePrivateKeyFile(domain, k.selector(), k.privateKeyPem());
+        updateRspamdConfig();
     }
 
     /**

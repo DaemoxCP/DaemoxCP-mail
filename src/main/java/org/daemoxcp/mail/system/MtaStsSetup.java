@@ -506,8 +506,15 @@ public class MtaStsSetup {
                     continue;
                 }
                 String name = ("mta-sts." + d.domain).toLowerCase(Locale.ROOT);
-                java.util.List<CloudflareManager.DnsRecordInfo> allItems =
-                        cf.listRecords(a.apiToken, zl.zoneId);
+                java.util.List<CloudflareManager.DnsRecordInfo> allItems;
+                try {
+                    allItems = cf.listRecords(a.apiToken, zl.zoneId);
+                } catch (CloudflareManager.ZoneReadException e) {
+                    // Una zona che non si legge non e' una zona senza il nome: non si tocca niente.
+                    blind++;
+                    proxy.put(note(d.domain, false, e.getMessage()));
+                    continue;
+                }
                 if (allItems.isEmpty()) {
                     blind++;
                     proxy.put(note(d.domain, false, I18n.tr("server.sts.emptyZone")));
@@ -829,7 +836,13 @@ public class MtaStsSetup {
                             I18n.tr("server.sts.blindZone"), resolves));
                     continue;
                 }
-                List<CloudflareManager.DnsRecordInfo> allItems = cf.listRecords(a.apiToken, zl.zoneId);
+                List<CloudflareManager.DnsRecordInfo> allItems;
+                try {
+                    allItems = cf.listRecords(a.apiToken, zl.zoneId);
+                } catch (CloudflareManager.ZoneReadException e) {
+                    out.add(new NameReview(d.domain, NameState.BLIND, e.getMessage(), resolves));
+                    continue;
+                }
                 if (allItems.isEmpty()) {
                     out.add(new NameReview(d.domain, NameState.BLIND,
                             I18n.tr("server.sts.blindEmpty"), resolves));
