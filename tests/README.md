@@ -396,6 +396,11 @@ the panel folder: option 1 refuses a made-up time zone in a dialog; option 2 ref
 that does not cover the panel name, and shows the right one in the confirmation (its key, the self-signed warning);
 Cancel saves nothing. The header says how to prepare the copy and how to read the log.
 
+`real-ip-browser-test.js` (Playwright, VM): whose address the panel believes and which names it answers to (r18),
+reaching the panel directly from this computer's address in the VM's private network, the case that used to be trusted
+like Cloudflare: another name with Cloudflare's headers gets 421, the panel's own name answers, and a sign-in with a
+forged CF-Connecting-IP leaves this computer's real address in the session. Red on the panel before the fix in all three.
+
 `acme-install-browser-test.js` (Playwright, VM, reperto 247): on a server installed from scratch acme.sh is not
 there, and nothing in the pages installed it. The SSL page shows the card "Let's Encrypt is not ready" while acme.sh or
 its Let's Encrypt account is missing; a malformed address is refused in the page; "Install acme.sh" installs the
