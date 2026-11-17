@@ -6,7 +6,7 @@
 
 Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx · fail2ban · pf
 
-`FreeBSD 15.0+ only` · `amd64 / arm64` · `Java 25` · `no Docker, no Linux layer` · `passwordless sign-in`
+`FreeBSD 15.0+ only` · `amd64 / arm64` · `Java 25` · `AGPL-3.0` · `no Docker, no Linux layer` · `passwordless sign-in`
 
 **English** · [Italiano](README.it.md)
 
@@ -677,7 +677,11 @@ next, in order of importance. Then:
 
 **Created by Pietro Giuseppe D'Amico.**
 
-DaemoxCP Mail is distributed under the MIT License.
+Copyright © 2025–2026 Pietro Giuseppe D'Amico.
+
+DaemoxCP Mail is free software, licensed under the **GNU Affero General Public License, version 3 or later**
+([LICENSE](LICENSE)). You may use, study, modify and share it. If you distribute a modified version, or let others
+use it over a network, you must give them its source under the same license, with this copyright notice.
 
 FreeBSD is a registered trademark of The FreeBSD Foundation; DaemoxCP is not affiliated with or endorsed by it.
 The 😈 is a plain emoji, used as a nod to the BSD Daemon: the official BSD Daemon artwork is
