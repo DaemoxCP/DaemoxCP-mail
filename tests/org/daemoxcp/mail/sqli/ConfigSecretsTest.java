@@ -64,10 +64,10 @@ public class ConfigSecretsTest {
         old.create_tables();
         old.insert_data_default();
         setColumns(old, "Old-Mysql-Password", key);
-        check("before: both values in SQLite", "Old-Mysql-Password".equals(column(old, "mysql_password")) && key.equals(column(old, "mail_panel_ssl_cert_key")));
+        check("before: both values in SQLite", "Old-Mysql-Password".equals(column(old, "mysql_password")) && key.equals(column(old, "panel_ssl_cert_key")));
 
         dataBaseManager db = new dataBaseManager();      // the first start of the new version
-        check("after the start: the columns are empty", column(db, "mysql_password").isEmpty() && column(db, "mail_panel_ssl_cert_key").isEmpty());
+        check("after the start: the columns are empty", column(db, "mysql_password").isEmpty() && column(db, "panel_ssl_cert_key").isEmpty());
         check("the values are in the secrets file", "Old-Mysql-Password".equals(PanelSecrets.text(PanelSecrets.MYSQL_PASSWORD))
                 && key.equals(PanelSecrets.text(PanelSecrets.PANEL_TLS_KEY)));
         check("the accessors give them back (the PEM byte for byte)", "Old-Mysql-Password".equals(db.mysqlPassword()) && key.equals(db.panelTlsKey()));
@@ -86,7 +86,7 @@ public class ConfigSecretsTest {
         String key2 = key.replace("BKcw", "ZZzz");
         db.update_panel_config("127.0.0.1", "2096", "-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----\n", key2, "", "mailpanel-");
         check("Edit Panel Configuration: the key in the file, the certificate in SQLite", key2.equals(db.panelTlsKey())
-                && column(db, "mail_panel_ssl_cert_key").isEmpty() && column(db, "mail_panel_ssl_cert").contains("BEGIN CERTIFICATE"));
+                && column(db, "panel_ssl_cert_key").isEmpty() && column(db, "panel_ssl_cert").contains("BEGIN CERTIFICATE"));
 
         System.out.println("\n== An older version wrote a column after the move ==");
         setColumns(db, "Written-By-Old-Version", "");
@@ -130,7 +130,7 @@ public class ConfigSecretsTest {
 
     static void setColumns(dataBaseManager db, String password, String key) throws Exception {
         try (java.sql.Connection c = TestSql.sqlite(); PreparedStatement p = c.prepareStatement(
-                "UPDATE config SET mysql_password = ?, mail_panel_ssl_cert_key = CASE WHEN ? = '' THEN mail_panel_ssl_cert_key ELSE ? END WHERE id = 1")) {
+                "UPDATE config SET mysql_password = ?, panel_ssl_cert_key = CASE WHEN ? = '' THEN panel_ssl_cert_key ELSE ? END WHERE id = 1")) {
             p.setString(1, password);
             p.setString(2, key);
             p.setString(3, key);

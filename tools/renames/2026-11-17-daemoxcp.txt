@@ -6,3 +6,12 @@ package org.mail_panel org.daemoxcp.mail
 
 # --- giro 2: i tipi
 type:org.daemoxcp.mail.content.MailPanelContent PanelContent
+
+# --- giro 3: i campi del menu di configurazione (le colonne di SQLite cambiano nome a parte)
+member:org.daemoxcp.mail.gui.ModifyData#mail_panel_port panelPort
+member:org.daemoxcp.mail.gui.ModifyData#mail_panel_host panelHost
+member:org.daemoxcp.mail.gui.ModifyData#mail_panel_ssl_cert panelSslCert
+member:org.daemoxcp.mail.gui.ModifyData#mail_panel_ssl_cert_key panelSslCertKey
+member:org.daemoxcp.mail.gui.ModifyData#mail_panel_ssl_chain panelSslChain
+member:org.daemoxcp.mail.gui.ModifyData#mail_panel_session_prefix panelSessionPrefix
+member:org.daemoxcp.mail.database.SqlCatalog#CONFIG_DB_ADD_MAIL_PANEL_SSL_CHAIN CONFIG_DB_ADD_PANEL_SSL_CHAIN

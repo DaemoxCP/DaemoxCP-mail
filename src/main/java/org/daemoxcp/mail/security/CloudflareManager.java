@@ -212,7 +212,7 @@ public class CloudflareManager {
             // mostra avvisi di quoting e il record è esplicitamente conforme.
             payload.put("content", formatTxtRecordContent(value));
             payload.put("ttl", ttl <= 0 ? 1 : ttl);
-            payload.put("comment", "DKIM rotation - auto-managed by DaemoxCP Mail");
+            payload.put("comment", "DKIM rotation - auto-managed by " + org.daemoxcp.mail.system.Product.NAME);
 
             HttpResponse<String> resp = call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString());
             JSONObject body = new JSONObject(resp.body());

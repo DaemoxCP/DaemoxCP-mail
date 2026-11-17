@@ -106,6 +106,32 @@ public class database {
         }
     }
 
+    /**
+     * Le colonne della configurazione col nome di prima del prodotto (mail_panel_*, fino al 17/11/2026) prendono
+     * quello di adesso (panel_*): una colonna alla volta, solo se c'e' la vecchia e non la nuova. Prima di aggiungere le
+     * colonne che mancano, che altrimenti nascerebbero vuote accanto a quelle coi valori.
+     */
+    public void renameProductColumns() {
+        // Nome di prima, di adesso, e l'istruzione fissa: un ALTER non prende parametri.
+        String[][] columns = {
+            {"mail_panel_ssl_cert_key", "panel_ssl_cert_key", SqlCatalog.CONFIG_DB_RENAME_MAIL_PANEL_SSL_CERT_KEY},
+            {"mail_panel_ssl_chain", "panel_ssl_chain", SqlCatalog.CONFIG_DB_RENAME_MAIL_PANEL_SSL_CHAIN},
+            {"mail_panel_ssl_cert", "panel_ssl_cert", SqlCatalog.CONFIG_DB_RENAME_MAIL_PANEL_SSL_CERT},
+            {"mail_panel_sessions_prefix", "panel_sessions_prefix", SqlCatalog.CONFIG_DB_RENAME_MAIL_PANEL_SESSIONS_PREFIX},
+            {"mail_panel_host", "panel_host", SqlCatalog.CONFIG_DB_RENAME_MAIL_PANEL_HOST},
+            {"mail_panel_port", "panel_port", SqlCatalog.CONFIG_DB_RENAME_MAIL_PANEL_PORT}
+        };
+        for (String[] c : columns) {
+            if (!columnExists(c[0]) || columnExists(c[1])) continue;
+            try {
+                execute(c[2]);
+                System.out.println("[ProductRename] DONE: config." + c[0] + " -> " + c[1]);
+            } catch (SQLException e) {
+                System.out.println("[ProductRename] LEFT: config." + c[0] + " not renamed: " + e.getMessage());
+            }
+        }
+    }
+
     public void ensureMailHostnameColumn() {
         if (columnExists("mail_hostname")) return;
         try {
@@ -116,9 +142,9 @@ public class database {
     }
 
     public void ensureSslChainColumn() {
-        if (columnExists("mail_panel_ssl_chain")) return;
+        if (columnExists("panel_ssl_chain")) return;
         try {
-            execute(SqlCatalog.CONFIG_DB_ADD_MAIL_PANEL_SSL_CHAIN);
+            execute(SqlCatalog.CONFIG_DB_ADD_PANEL_SSL_CHAIN);
         } catch (SQLException e2) {
             // Silent fail
         }

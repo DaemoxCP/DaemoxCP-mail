@@ -699,7 +699,7 @@ public class SSLMailServer {
         String host = exchange.getRequestHeaders().getFirst("Host");
         String configured = "";
         try (java.sql.ResultSet r = Main.dbManager.get_data_config()) {
-            if (r.next()) configured = r.getString("mail_panel_host");
+            if (r.next()) configured = r.getString("panel_host");
         } catch (Exception e) {
             // Non si sa a che nome risponde il pannello: si lascia passare solo il loopback,
             // cosi' la macchina resta amministrabile e nessun nome di fuori entra.

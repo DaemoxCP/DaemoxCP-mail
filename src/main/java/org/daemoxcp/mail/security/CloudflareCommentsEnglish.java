@@ -46,7 +46,7 @@ public final class CloudflareCommentsEnglish {
                         + ": Cloudflare did not answer as expected; the comments are tried again at the next start");
                 else if (n > 0) {
                     LOGGER.info("[CloudflareComments] zone " + z.getValue()[0] + ": " + n
-                            + " records with the Italian comment of before now say \"" + CloudflareManager.RECORD_COMMENT + "\"");
+                            + " records with a comment of before now say \"" + CloudflareManager.RECORD_COMMENT + "\"");
                     total += n;
                 }
             }

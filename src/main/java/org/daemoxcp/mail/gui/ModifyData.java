@@ -15,12 +15,12 @@ import java.util.regex.Pattern;
 
 public class ModifyData {
     // Panel settings only (MySQL is configured during mail server installation)
-    private TextBox mail_panel_port;
-    private TextBox mail_panel_host;
-    private TextBox mail_panel_ssl_cert;
-    private TextBox mail_panel_ssl_cert_key;
-    private TextBox mail_panel_ssl_chain;
-    private TextBox mail_panel_session_prefix;
+    private TextBox panelPort;
+    private TextBox panelHost;
+    private TextBox panelSslCert;
+    private TextBox panelSslCertKey;
+    private TextBox panelSslChain;
+    private TextBox panelSessionPrefix;
 
     private Button submitButton;
     private Button exitButton;
@@ -47,17 +47,17 @@ public class ModifyData {
 
     private void initializeComponents() {
         // Panel settings only
-        this.mail_panel_port = new TextBox(new TerminalSize(40, 1));
-        this.mail_panel_host = new TextBox(new TerminalSize(40, 1));
-        this.mail_panel_ssl_cert = new TextBox(new TerminalSize(40, 3));
-        this.mail_panel_ssl_cert_key = new TextBox(new TerminalSize(40, 3));
-        this.mail_panel_ssl_chain = new TextBox(new TerminalSize(40, 2));
-        this.mail_panel_session_prefix = new TextBox(new TerminalSize(40, 1));
+        this.panelPort = new TextBox(new TerminalSize(40, 1));
+        this.panelHost = new TextBox(new TerminalSize(40, 1));
+        this.panelSslCert = new TextBox(new TerminalSize(40, 3));
+        this.panelSslCertKey = new TextBox(new TerminalSize(40, 3));
+        this.panelSslChain = new TextBox(new TerminalSize(40, 2));
+        this.panelSessionPrefix = new TextBox(new TerminalSize(40, 1));
 
         // Validation patterns for input filtering
-        mail_panel_port.setValidationPattern(Pattern.compile("[0-9]*"));
-        mail_panel_host.setValidationPattern(Pattern.compile("[a-zA-Z0-9.-]*"));
-        mail_panel_session_prefix.setValidationPattern(Pattern.compile("[a-zA-Z0-9_-]*"));
+        panelPort.setValidationPattern(Pattern.compile("[0-9]*"));
+        panelHost.setValidationPattern(Pattern.compile("[a-zA-Z0-9.-]*"));
+        panelSessionPrefix.setValidationPattern(Pattern.compile("[a-zA-Z0-9_-]*"));
 
         this.submitButton = new Button("Submit", this::onSubmit);
         this.exitButton = new Button("Exit", this::onExit);
@@ -67,20 +67,20 @@ public class ModifyData {
         try (ResultSet result = this.database_manager.get_data_config()) {
             if (result.next()) {
                 // Use helper method to handle null values (setText(null) crashes Lanterna)
-                setTextSafe(mail_panel_port, result.getString("mail_panel_port"));
-                setTextSafe(mail_panel_host, result.getString("mail_panel_host"));
-                setTextSafe(mail_panel_ssl_cert, result.getString("mail_panel_ssl_cert"));
-                setTextSafe(mail_panel_ssl_cert_key, database_manager.panelTlsKey());
+                setTextSafe(panelPort, result.getString("panel_port"));
+                setTextSafe(panelHost, result.getString("panel_host"));
+                setTextSafe(panelSslCert, result.getString("panel_ssl_cert"));
+                setTextSafe(panelSslCertKey, database_manager.panelTlsKey());
 
-                // mail_panel_ssl_chain might not exist in older databases
+                // panel_ssl_chain might not exist in older databases
                 try {
-                    setTextSafe(mail_panel_ssl_chain, result.getString("mail_panel_ssl_chain"));
+                    setTextSafe(panelSslChain, result.getString("panel_ssl_chain"));
                 } catch (SQLException e) {
                     // Column doesn't exist, leave empty
-                    mail_panel_ssl_chain.setText("");
+                    panelSslChain.setText("");
                 }
 
-                setTextSafe(mail_panel_session_prefix, result.getString("mail_panel_sessions_prefix"));
+                setTextSafe(panelSessionPrefix, result.getString("panel_sessions_prefix"));
             }
         } catch (SQLException e) {
             System.out.println("Error loading config: " + e.getMessage());
@@ -129,12 +129,12 @@ public class ModifyData {
     private Panel createPanelSettingsForm() {
         Panel formPanel = new Panel(new GridLayout(2).setHorizontalSpacing(3).setVerticalSpacing(1));
 
-        addLabelAndTextBox(formPanel, "PANEL PORT:", mail_panel_port);
-        addLabelAndTextBox(formPanel, "PANEL HOST:", mail_panel_host);
-        addLabelAndTextBox(formPanel, "SSL CERTIFICATE (PEM):", mail_panel_ssl_cert);
-        addLabelAndTextBox(formPanel, "SSL PRIVATE KEY (PEM):", mail_panel_ssl_cert_key);
-        addLabelAndTextBox(formPanel, "SSL CA CHAIN (optional):", mail_panel_ssl_chain);
-        addLabelAndTextBox(formPanel, "SESSION PREFIX:", mail_panel_session_prefix);
+        addLabelAndTextBox(formPanel, "PANEL PORT:", panelPort);
+        addLabelAndTextBox(formPanel, "PANEL HOST:", panelHost);
+        addLabelAndTextBox(formPanel, "SSL CERTIFICATE (PEM):", panelSslCert);
+        addLabelAndTextBox(formPanel, "SSL PRIVATE KEY (PEM):", panelSslCertKey);
+        addLabelAndTextBox(formPanel, "SSL CA CHAIN (optional):", panelSslChain);
+        addLabelAndTextBox(formPanel, "SESSION PREFIX:", panelSessionPrefix);
 
         return formPanel;
     }
@@ -172,7 +172,7 @@ public class ModifyData {
         StringBuilder errors = new StringBuilder();
 
         // Validate panel port
-        String port = mail_panel_port.getText().trim();
+        String port = panelPort.getText().trim();
         if (port.isEmpty()) {
             errors.append("- Panel Port is required\n");
         } else if (!PORT_PATTERN.matcher(port).matches()) {
@@ -185,7 +185,7 @@ public class ModifyData {
         }
 
         // Validate panel host
-        String host = mail_panel_host.getText().trim();
+        String host = panelHost.getText().trim();
         if (host.isEmpty()) {
             errors.append("- Panel Host is required\n");
         } else if (!HOST_PATTERN.matcher(host).matches()) {
@@ -193,7 +193,7 @@ public class ModifyData {
         }
 
         // Validate session prefix
-        String prefix = mail_panel_session_prefix.getText().trim();
+        String prefix = panelSessionPrefix.getText().trim();
         if (prefix.isEmpty()) {
             errors.append("- Session prefix is required\n");
         } else if (!PREFIX_PATTERN.matcher(prefix).matches()) {
@@ -201,8 +201,8 @@ public class ModifyData {
         }
 
         // SSL cert validation (optional but if one is provided, both needed)
-        String sslCert = mail_panel_ssl_cert.getText().trim();
-        String sslKey = mail_panel_ssl_cert_key.getText().trim();
+        String sslCert = panelSslCert.getText().trim();
+        String sslKey = panelSslCertKey.getText().trim();
         if (!sslCert.isEmpty() && sslKey.isEmpty()) {
             errors.append("- SSL Private Key is required when SSL Cert is provided\n");
         }
@@ -214,7 +214,7 @@ public class ModifyData {
         // controllo prima di salvare (reperto 243): leggibile, valido adesso, copre il nome, chiave sua.
         resolvedCert = resolve(sslCert, "SSL Certificate", errors);
         resolvedKey = resolve(sslKey, "SSL Private Key", errors);
-        resolvedChain = resolve(mail_panel_ssl_chain.getText().trim(), "SSL CA Chain", errors);
+        resolvedChain = resolve(panelSslChain.getText().trim(), "SSL CA Chain", errors);
         certCheck = null;
         if (errors.length() == 0 && !resolvedCert.isEmpty() && !resolvedKey.isEmpty()) {
             certCheck = PemTls.check(host, resolvedCert, resolvedKey, java.time.Instant.now());
@@ -252,9 +252,9 @@ public class ModifyData {
         }
 
         StringBuilder message = new StringBuilder();
-        message.append("Panel Port: ").append(mail_panel_port.getText()).append("\n");
-        message.append("Panel Host: ").append(mail_panel_host.getText()).append("\n");
-        message.append("Session Prefix: ").append(mail_panel_session_prefix.getText()).append("\n");
+        message.append("Panel Port: ").append(panelPort.getText()).append("\n");
+        message.append("Panel Host: ").append(panelHost.getText()).append("\n");
+        message.append("Session Prefix: ").append(panelSessionPrefix.getText()).append("\n");
         if (certCheck != null) {
             message.append("\n");
             for (String line : certCheck.info()) message.append(line).append("\n");
@@ -308,12 +308,12 @@ public class ModifyData {
     private boolean saveDataToDatabase() {
         try {
             return database_manager.update_panel_config(
-                    mail_panel_host.getText().trim(),
-                    mail_panel_port.getText().trim(),
+                    panelHost.getText().trim(),
+                    panelPort.getText().trim(),
                     resolvedCert.trim(),
                     resolvedKey.trim(),
                     resolvedChain.trim(),
-                    mail_panel_session_prefix.getText().trim()
+                    panelSessionPrefix.getText().trim()
             );
         } catch (Exception e) {
             MessageDialog.showMessageDialog(

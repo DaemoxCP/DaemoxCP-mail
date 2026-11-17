@@ -120,7 +120,7 @@ public final class ProviderFirewall {
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
         SortedSet<Integer> ssh = PfPolicy.sshPorts(Shell.run(Duration.ofSeconds(15), "sockstat", "-46l", "-P", "tcp").output());
-        r.put("rules", rules(ssh, port(configValue("mail_panel_port")),
+        r.put("rules", rules(ssh, port(configValue("panel_port")),
                 port(org.daemoxcp.mail.Main.dbManager == null ? null : org.daemoxcp.mail.Main.dbManager.getRoundcubePort()),
                 org.daemoxcp.mail.system.Pop3.wanted()));
         return withList(r, official(false), acknowledged());

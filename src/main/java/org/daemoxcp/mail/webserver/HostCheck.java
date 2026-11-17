@@ -35,7 +35,7 @@ import java.util.Set;
  * {@code 0:0:0:0:0:0:0:1} sono lo stesso indirizzo e come testo sembrano diversi.
  *
  * <p>Caso a parte, e non teorico: l'indirizzo configurato e' un <em>wildcard</em>. L'installatore
- * del pannello mail scrive proprio {@code 0.0.0.0} in {@code mail_panel_host} dopo
+ * del pannello mail scrive proprio {@code 0.0.0.0} in {@code panel_host} dopo
  * l'installazione. {@code 0.0.0.0} non e' un nome, e' "ascolta su ogni indirizzo": nessun
  * browser mandera' mai {@code Host: 0.0.0.0}, quindi confrontarlo con l'Host non potrebbe
  * riuscire mai e il pannello rifiuterebbe ogni richiesta. Allora si accetta quello che

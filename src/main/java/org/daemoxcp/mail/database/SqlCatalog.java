@@ -861,7 +861,7 @@ public final class SqlCatalog {
     public static final String SERVER_FILL_TIMEZONE_DIAGNOSTICS = "SELECT @@global.time_zone, @@session.time_zone, NOW(), UTC_TIMESTAMP(), @@system_time_zone, UNIX_TIMESTAMP() AS unix_ts";
 
     /** dataBaseManager.update_panel_config */
-    public static final String CONFIG_UPDATE_PANEL_CONFIG = "UPDATE config SET mail_panel_host = ?, mail_panel_port = ?, mail_panel_ssl_cert = ?, mail_panel_ssl_cert_key = ?, mail_panel_ssl_chain = ?, mail_panel_sessions_prefix = ? WHERE id = 1";
+    public static final String CONFIG_UPDATE_PANEL_CONFIG = "UPDATE config SET panel_host = ?, panel_port = ?, panel_ssl_cert = ?, panel_ssl_cert_key = ?, panel_ssl_chain = ?, panel_sessions_prefix = ? WHERE id = 1";
 
     /** dataBaseManager.update_mysql_config */
     /** MysqlRename: il database e l'utente del pannello col nome di adesso, la password resta */
@@ -870,7 +870,7 @@ public final class SqlCatalog {
     public static final String CONFIG_UPDATE_MYSQL_CONFIG = "UPDATE config SET mysql_host = ?, mysql_port = ?, mysql_user = ?, mysql_password = ?, mysql_database = ? WHERE id = 1";
 
     /** dataBaseManager.insert_data_default */
-    public static final String CONFIG_INSERT_DATA_DEFAULT = "INSERT INTO config (mail_panel_port, mail_panel_host, mail_panel_ssl_cert, mail_panel_ssl_cert_key, mail_panel_ssl_chain, mail_panel_sessions_prefix, mysql_host, mysql_port, mysql_user, mysql_password, mysql_database, postfix_installed, dovecot_installed, rspamd_installed, clamav_installed, roundcube_installed, roundcube_domain, roundcube_port, roundcube_ssl_cert, roundcube_ssl_key) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+    public static final String CONFIG_INSERT_DATA_DEFAULT = "INSERT INTO config (panel_port, panel_host, panel_ssl_cert, panel_ssl_cert_key, panel_ssl_chain, panel_sessions_prefix, mysql_host, mysql_port, mysql_user, mysql_password, mysql_database, postfix_installed, dovecot_installed, rspamd_installed, clamav_installed, roundcube_installed, roundcube_domain, roundcube_port, roundcube_ssl_cert, roundcube_ssl_key) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
     /** dataBaseManager.get_data_config */
     public static final String CONFIG_GET_DATA_CONFIG = "SELECT * FROM config WHERE id = 1";
@@ -1164,10 +1164,10 @@ public final class SqlCatalog {
     public static final String CONFIG_CLEAR_MYSQL_PASSWORD = "UPDATE config SET mysql_password = '' WHERE id = 1";
 
     /** dataBaseManager: la colonna del segreto, vuota dopo lo spostamento nel file */
-    public static final String CONFIG_GET_PANEL_TLS_KEY = "SELECT mail_panel_ssl_cert_key FROM config WHERE id = 1";
+    public static final String CONFIG_GET_PANEL_TLS_KEY = "SELECT panel_ssl_cert_key FROM config WHERE id = 1";
 
     /** dataBaseManager.migrateSecrets */
-    public static final String CONFIG_CLEAR_PANEL_TLS_KEY = "UPDATE config SET mail_panel_ssl_cert_key = '' WHERE id = 1";
+    public static final String CONFIG_CLEAR_PANEL_TLS_KEY = "UPDATE config SET panel_ssl_cert_key = '' WHERE id = 1";
 
     /** dataBaseManager.setMysqlPassword e updateMySQLPassword */
     public static final String CONFIG_SET_MYSQL_PASSWORD = "UPDATE config SET mysql_password = ? WHERE id = 1";
@@ -1211,12 +1211,12 @@ public final class SqlCatalog {
     /** database.create_tables */
     public static final String CONFIG_DB_CREATE_TABLE = "CREATE TABLE config (\n"
             + "    id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
-            + "    mail_panel_port TEXT DEFAULT '2096',\n"
-            + "    mail_panel_host TEXT DEFAULT '127.0.0.1',\n"
-            + "    mail_panel_ssl_cert TEXT DEFAULT '',\n"
-            + "    mail_panel_ssl_cert_key TEXT DEFAULT '',\n"
-            + "    mail_panel_ssl_chain TEXT DEFAULT '',\n"
-            + "    mail_panel_sessions_prefix TEXT DEFAULT 'daemoxcp-mail-',\n"
+            + "    panel_port TEXT DEFAULT '2096',\n"
+            + "    panel_host TEXT DEFAULT '127.0.0.1',\n"
+            + "    panel_ssl_cert TEXT DEFAULT '',\n"
+            + "    panel_ssl_cert_key TEXT DEFAULT '',\n"
+            + "    panel_ssl_chain TEXT DEFAULT '',\n"
+            + "    panel_sessions_prefix TEXT DEFAULT 'daemoxcp-mail-',\n"
             + "    mysql_host TEXT DEFAULT '127.0.0.1',\n"
             + "    mysql_port TEXT DEFAULT '3306',\n"
             + "    mysql_user TEXT DEFAULT 'daemoxcp_mail',\n"
@@ -1238,7 +1238,15 @@ public final class SqlCatalog {
     public static final String CONFIG_DB_ADD_MAIL_HOSTNAME = "ALTER TABLE config ADD COLUMN mail_hostname TEXT DEFAULT ''";
 
     /** database: le colonne aggiunte dopo la prima versione */
-    public static final String CONFIG_DB_ADD_MAIL_PANEL_SSL_CHAIN = "ALTER TABLE config ADD COLUMN mail_panel_ssl_chain TEXT DEFAULT ''";
+    /** database: le colonne della configurazione col nome di prima del prodotto (17/11/2026); un nome di colonna non e' un parametro */
+    public static final String CONFIG_DB_RENAME_MAIL_PANEL_SSL_CERT_KEY = "ALTER TABLE config RENAME COLUMN mail_panel_ssl_cert_key TO panel_ssl_cert_key";
+    public static final String CONFIG_DB_RENAME_MAIL_PANEL_SSL_CHAIN = "ALTER TABLE config RENAME COLUMN mail_panel_ssl_chain TO panel_ssl_chain";
+    public static final String CONFIG_DB_RENAME_MAIL_PANEL_SSL_CERT = "ALTER TABLE config RENAME COLUMN mail_panel_ssl_cert TO panel_ssl_cert";
+    public static final String CONFIG_DB_RENAME_MAIL_PANEL_SESSIONS_PREFIX = "ALTER TABLE config RENAME COLUMN mail_panel_sessions_prefix TO panel_sessions_prefix";
+    public static final String CONFIG_DB_RENAME_MAIL_PANEL_HOST = "ALTER TABLE config RENAME COLUMN mail_panel_host TO panel_host";
+    public static final String CONFIG_DB_RENAME_MAIL_PANEL_PORT = "ALTER TABLE config RENAME COLUMN mail_panel_port TO panel_port";
+
+    public static final String CONFIG_DB_ADD_PANEL_SSL_CHAIN = "ALTER TABLE config ADD COLUMN panel_ssl_chain TEXT DEFAULT ''";
 
     /** database: le colonne aggiunte dopo la prima versione */
     public static final String CONFIG_DB_ADD_ROUNDCUBE_DOMAIN = "ALTER TABLE config ADD COLUMN roundcube_domain TEXT DEFAULT 'webmail.example.com'";

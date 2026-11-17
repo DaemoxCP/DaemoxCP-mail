@@ -86,7 +86,9 @@
     ["attivo", "active"]
   ],
   "cloudflareRecordComments": [
-    ["Creato dal pannello di posta", "Created by the mail panel"]
+    ["Creato dal pannello di posta", "Created by DaemoxCP Mail"],
+    ["Created by the mail panel", "Created by DaemoxCP Mail"],
+    ["DKIM rotation - auto-managed by FreeBSD Mail Panel", "DKIM rotation - auto-managed by DaemoxCP Mail"]
   ],
   "javaScriptOutcomes": [
     ["=== ESITO: RIUSCITO", "=== OUTCOME: SUCCEEDED"],

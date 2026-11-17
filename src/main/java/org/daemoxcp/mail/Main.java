@@ -417,6 +417,7 @@ public class Main {
 
         // Initialize database BEFORE screen to avoid warnings during GUI
         dbManager = new dataBaseManager();
+        dbManager.renameProductColumns();
         dbManager.ensureMailHostnameColumn();
         dbManager.ensureSslChainColumn();
         dbManager.ensureRoundcubeColumns();
@@ -749,7 +750,7 @@ public class Main {
     private static String savedPanelHost() {
         try (ResultSet r = dbManager.get_data_config()) {
             if (r.next()) {
-                String h = r.getString("mail_panel_host");
+                String h = r.getString("panel_host");
                 return h == null ? "" : h.trim();
             }
         } catch (Exception ignored) {
@@ -974,11 +975,11 @@ public class Main {
                 // Read panel's SSL certificates from database
                 try (java.sql.ResultSet configResult = dbManager.get_data_config()) {
                     if (configResult.next()) {
-                        String panelCert = configResult.getString("mail_panel_ssl_cert");
+                        String panelCert = configResult.getString("panel_ssl_cert");
                         String panelKey = dbManager.panelTlsKey();
                         String panelChain = null;
                         try {
-                            panelChain = configResult.getString("mail_panel_ssl_chain");
+                            panelChain = configResult.getString("panel_ssl_chain");
                         } catch (Exception ignored) {}
 
                         if (panelCert != null && !panelCert.isEmpty() &&
@@ -1107,7 +1108,7 @@ public class Main {
                 boolean hasCertConfigured = false;
                 try (ResultSet configResult = dbManager.get_data_config()) {
                     if (configResult.next()) {
-                        String existingCert = configResult.getString("mail_panel_ssl_cert");
+                        String existingCert = configResult.getString("panel_ssl_cert");
                         if (existingCert != null && !existingCert.trim().isEmpty()
                             && existingCert.contains("-----BEGIN CERTIFICATE-----")) {
                             hasCertConfigured = true;
@@ -1121,9 +1122,9 @@ public class Main {
                 String keptHost = "", keptPort = "", keptPrefix = "";
                 try (ResultSet configResult = dbManager.get_data_config()) {
                     if (configResult.next()) {
-                        keptHost = String.valueOf(configResult.getString("mail_panel_host")).trim();
-                        keptPort = String.valueOf(configResult.getString("mail_panel_port")).trim();
-                        keptPrefix = String.valueOf(configResult.getString("mail_panel_sessions_prefix")).trim();
+                        keptHost = String.valueOf(configResult.getString("panel_host")).trim();
+                        keptPort = String.valueOf(configResult.getString("panel_port")).trim();
+                        keptPrefix = String.valueOf(configResult.getString("panel_sessions_prefix")).trim();
                     }
                 }
                 if (!hasCertConfigured) {
@@ -1194,10 +1195,10 @@ public class Main {
     private static boolean startWebServer() {
         try (ResultSet result = dbManager.get_data_config()) {
             if (result.next()) {
-                String certContent = result.getString("mail_panel_ssl_cert");
+                String certContent = result.getString("panel_ssl_cert");
                 String keyContent = dbManager.panelTlsKey();
-                int port = Integer.parseInt(result.getString("mail_panel_port"));
-                String host = result.getString("mail_panel_host");
+                int port = Integer.parseInt(result.getString("panel_port"));
+                String host = result.getString("panel_host");
 
                 // Validate SSL
                 if (certContent == null || certContent.trim().isEmpty()) {
@@ -1442,9 +1443,9 @@ public class Main {
                     System.err.println("Web part: no panel configuration in SQLite");
                     return false;
                 }
-                certContent = result.getString("mail_panel_ssl_cert");
-                port = Integer.parseInt(result.getString("mail_panel_port"));
-                host = result.getString("mail_panel_host");
+                certContent = result.getString("panel_ssl_cert");
+                port = Integer.parseInt(result.getString("panel_port"));
+                host = result.getString("panel_host");
                 mysqlHost = result.getString("mysql_host");
                 mysqlPort = result.getString("mysql_port");
                 mysqlUser = result.getString("mysql_user");

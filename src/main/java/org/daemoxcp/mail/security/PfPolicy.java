@@ -183,7 +183,7 @@ public final class PfPolicy {
     static Ports currentPorts() {
         SortedSet<Integer> ssh = sshPorts(Shell.run(Duration.ofSeconds(15), "sockstat", "-46l", "-P", "tcp").output());
         SortedSet<Integer> services = new TreeSet<>();
-        addPort(services, configValue("mail_panel_port"));
+        addPort(services, configValue("panel_port"));
         if (org.daemoxcp.mail.Main.dbManager != null) addPort(services, org.daemoxcp.mail.Main.dbManager.getRoundcubePort());
         if (org.daemoxcp.mail.system.Pop3.wanted()) services.addAll(List.of(110, 995));
         return new Ports(ssh, services);

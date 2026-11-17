@@ -73,7 +73,7 @@ public class dataBaseManager {
     private static final SecretColumn[] SECRET_COLUMNS = {
             new SecretColumn("mysql_password", org.daemoxcp.mail.security.PanelSecrets.MYSQL_PASSWORD,
                     SqlCatalog.CONFIG_GET_MYSQL_PASSWORD, SqlCatalog.CONFIG_CLEAR_MYSQL_PASSWORD),
-            new SecretColumn("mail_panel_ssl_cert_key", org.daemoxcp.mail.security.PanelSecrets.PANEL_TLS_KEY,
+            new SecretColumn("panel_ssl_cert_key", org.daemoxcp.mail.security.PanelSecrets.PANEL_TLS_KEY,
                     SqlCatalog.CONFIG_GET_PANEL_TLS_KEY, SqlCatalog.CONFIG_CLEAR_PANEL_TLS_KEY)};
 
     /** Sposta nel file dei segreti quello che e' ancora in SQLite. Ritorna quanti valori ha spostato. */
@@ -369,6 +369,11 @@ public class dataBaseManager {
 
     public void ensureMailHostnameColumn() {
         this.database_.get(1).ensureMailHostnameColumn();
+    }
+
+    /** Le colonne della configurazione col nome di prima del prodotto: prima di ogni ensure*Column. */
+    public void renameProductColumns() {
+        this.database_.get(1).renameProductColumns();
     }
 
     public void ensureSslChainColumn() {
