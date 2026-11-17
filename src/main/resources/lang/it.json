@@ -867,7 +867,7 @@
   "dom.name": "Nome del dominio",
   "dom.none": "Nessun dominio. Premi \"Aggiungi dominio\" per crearne uno.",
   "dom.title": "Domini mail",
-  "footer.text": "FreeBSD 15 · Mail Control Panel · Copyright di Pietro Giuseppe D'Amico",
+  "footer.text": "FreeBSD 15 · DaemoxCP Mail · Copyright di Pietro Giuseppe D'Amico",
   "fw.addHint": "Un preset AGGIUNGE i suoi paesi alla selezione attuale, senza togliere niente",
   "fw.allFresh": "Tutti i paesi sono aggiornati",
   "fw.allVisibleSelected": "Tutti i paesi visibili sono già selezionati",
@@ -7081,5 +7081,6 @@
   "server.cfgdom.cfNoneSees": "Nessuno degli account Cloudflare del pannello ({list}) vede la zona di {d}. Su Cloudflare controlla che {d} sia in uno di quegli account e che il suo token abbia Zone > DNS > Edit e Zone > Zone > Read su di essa. Non è stato cambiato niente.",
   "server.cfgdom.cfSeveral": "Più di un account Cloudflare vede la zona di {d} ({list}): scegli quale nella pagina DNS (Account Cloudflare, Assegnazione domini → account), poi premi di nuovo. Non è stato cambiato niente.",
   "server.cfgdom.partial": "Configurazione finita, ma solo {ok} passi su {tot} sono in ordine: le righe con FALLITA nel registro qui sotto dicono cosa serve a ognuno.",
-  "server.cfm.tokenRefused": "Cloudflare non accetta questo token ({m}). Copialo di nuovo da Cloudflare, My Profile, API Tokens: tutto, senza spazi prima o dopo."
+  "server.cfm.tokenRefused": "Cloudflare non accetta questo token ({m}). Copialo di nuovo da Cloudflare, My Profile, API Tokens: tutto, senza spazi prima o dopo.",
+  "brand.name": "DaemoxCP Mail"
 }

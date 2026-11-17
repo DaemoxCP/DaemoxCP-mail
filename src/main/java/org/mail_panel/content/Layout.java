@@ -174,11 +174,11 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
 <a class="visually-hidden-focusable skip-link" href="#main">{{t:layout.skipToContent}}</a>
 <aside class="offcanvas-lg offcanvas-start sidebar" tabindex="-1" id="sidebar" aria-labelledby="sidebarTitle">
     <div class="offcanvas-header">
-        <span class="offcanvas-title sidebar-brand p-0" id="sidebarTitle"><i class="fas fa-envelope" aria-hidden="true"></i>Mail Control Panel</span>
+        <span class="offcanvas-title sidebar-brand p-0" id="sidebarTitle"><i class="fas fa-envelope" aria-hidden="true"></i>{{t:brand.name}}</span>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" data-bs-target="#sidebar" aria-label="{{t:layout.closeMenu}}"></button>
     </div>
     <div class="offcanvas-body">
-        <a class="sidebar-brand d-none d-lg-flex" href="/home"><i class="fas fa-envelope" aria-hidden="true"></i>Mail Control Panel</a>
+        <a class="sidebar-brand d-none d-lg-flex" href="/home"><i class="fas fa-envelope" aria-hidden="true"></i>{{t:brand.name}}</a>
         <nav aria-label="{{t:layout.mainMenu}}">
             <ul class="sidebar-menu">
 """ + menu + """

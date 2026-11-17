@@ -34,7 +34,7 @@ public class Chooser {
     public int option = -1;
 
     public Chooser() {
-        this.window = new BasicWindow("FreeBSD Mail Panel - Select an option");
+        this.window = new BasicWindow(org.mail_panel.i18n.I18n.tr("brand.name") + " - Select an option");
     }
 
     public void run(MultiWindowTextGUI gui) throws IOException {
@@ -159,7 +159,7 @@ public class Chooser {
         mainPanel.addComponent(exitButton);
 
         this.window.setComponent(Panels.vertical(
-                mainPanel.withBorder(Borders.doubleLine("FreeBSD Mail Panel v1.0")),
+                mainPanel.withBorder(Borders.doubleLine(org.mail_panel.i18n.I18n.tr("brand.name") + " v1.0")),
                 new EmptySpace(new TerminalSize(0, 1))
         ));
 

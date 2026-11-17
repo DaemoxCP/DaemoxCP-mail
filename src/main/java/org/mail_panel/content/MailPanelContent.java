@@ -368,7 +368,7 @@ public class MailPanelContent {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="{{COLOR_SCHEME}}">
     <title>{{t:""" + titleKey + """
-}} - Mail Control Panel</title>
+}} - {{t:brand.name}}</title>
     """ + PageAssets.ACTIONS + """
     <script>
         (function () {
@@ -655,7 +655,7 @@ public class MailPanelContent {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{t:login.title}} - Mail Control Panel</title>
+    <title>{{t:login.title}} - {{t:brand.name}}</title>
     """ + PageAssets.ACTIONS + """
     <script src="/i18n/{{lang}}.js?v={{i18nVersion}}"></script>
     <link rel="icon" type="image/svg+xml" href="/vendor/favicon.svg">
@@ -797,7 +797,7 @@ public class MailPanelContent {
         <div class="container">
             <div class="login-container">
                 <div class="login-logo"><i class="fas fa-envelope" aria-hidden="true"></i></div>
-                <h1 class="h2 text-center mb-4">Mail Control Panel</h1>
+                <h1 class="h2 text-center mb-4">{{t:brand.name}}</h1>
                 <div class="alert alert-success d-none" id="successAlert" role="status" aria-live="polite">{{t:login.success}}</div>
                 <div class="alert alert-danger d-none" id="errorAlert" role="alert">
                     <span id="errorMessage">{{t:login.error}}</span>
@@ -980,7 +980,7 @@ public class MailPanelContent {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{t:su.pageTitle}} - FreeBSD Mail Panel</title>
+    <title>{{t:su.pageTitle}} - {{t:brand.name}}</title>
     """ + PageAssets.ACTIONS + """
     <script src="/i18n/{{lang}}.js?v={{i18nVersion}}"></script>
     <link rel="icon" type="image/svg+xml" href="/vendor/favicon.svg">
@@ -1023,7 +1023,7 @@ public class MailPanelContent {
     <main class="setup-card">
         <div class="setup-header">
             <i class="fas fa-user-shield" aria-hidden="true"></i>
-            <h1 class="h2">FreeBSD Mail Panel</h1>
+            <h1 class="h2">{{t:brand.name}}</h1>
             <p class="text-muted mb-0">{{t:su.pageTitle}}</p>
         </div>
         <p>{{t:su.noAdmin}}</p>

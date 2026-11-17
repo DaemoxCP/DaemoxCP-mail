@@ -1,4 +1,4 @@
-# FreeBSD Mail Panel
+# DaemoxCP Mail
 
 **Native mail server control panel for FreeBSD 15+**
 
@@ -31,11 +31,11 @@ Similar to Mailcow but **100% native** - NO Docker required.
 
 ## Overview
 
-FreeBSD Mail Panel is a complete mail server solution that installs and manages:
+DaemoxCP Mail (formerly FreeBSD Mail Panel) is a complete mail server solution that installs and manages:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     FreeBSD Mail Panel                          │
+│                          DaemoxCP Mail                          │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐        │
@@ -1003,7 +1003,7 @@ shortcut, nothing depends on it.
 
 ```
 ╔═══════════════════════════════════════════════════════════════╗
-║            FreeBSD Mail Panel v1.0 - Select an option         ║
+║             DaemoxCP Mail v1.0 - Select an option             ║
 ╠═══════════════════════════════════════════════════════════════╣
 ║  1) Time zone, clock (NTP) and DNS resolver                   ║
 ║  2) Edit Panel Configuration                                  ║
@@ -1246,7 +1246,7 @@ ls -la /var/vmail/
 ## Architecture
 
 ```
-FreeBSD Mail Panel (Java 25)
+DaemoxCP Mail (Java 25)
 ├── Main.java                 # Entry point, terminal GUI
 ├── webserver/
 │   ├── SSLMailServer.java    # HTTPS server
@@ -1315,4 +1315,4 @@ MIT License
 
 ---
 
-&copy; 2025 FreeBSD Mail Panel - Created by Pietro Giuseppe D'Amico
+&copy; 2025 DaemoxCP Mail - Created by Pietro Giuseppe D'Amico

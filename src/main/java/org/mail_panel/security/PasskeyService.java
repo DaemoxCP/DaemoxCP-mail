@@ -98,7 +98,7 @@ public final class PasskeyService {
 
     private static RelyingParty relyingParty(String rpId, String origin) {
         return RelyingParty.builder()
-                .identity(RelyingPartyIdentity.builder().id(rpId).name("FreeBSD Mail Panel").build())
+                .identity(RelyingPartyIdentity.builder().id(rpId).name(org.mail_panel.i18n.I18n.tr("brand.name")).build())
                 .credentialRepository(REPOSITORY)
                 .origins(Set.of(origin))
                 .allowOriginPort(false)

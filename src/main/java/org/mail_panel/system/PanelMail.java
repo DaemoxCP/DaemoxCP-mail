@@ -113,7 +113,7 @@ public final class PanelMail {
          // (X-Auto-Response-Suppress) non devono rispondere.
          .append("Auto-Submitted: auto-generated\r\n")
          .append("X-Auto-Response-Suppress: All\r\n")
-         .append("X-Mailer: FreeBSD Mail Panel\r\n")
+         .append("X-Mailer: ").append(I18n.tr("brand.name")).append("\r\n")
          .append("Content-Type: multipart/alternative; boundary=\"").append(boundary).append("\"\r\n")
          .append("\r\n")
          .append("--").append(boundary).append("\r\n")
