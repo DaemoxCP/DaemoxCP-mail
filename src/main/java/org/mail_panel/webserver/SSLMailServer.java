@@ -815,6 +815,10 @@ public class SSLMailServer {
             // root non gli serve. Si verifica con una ricerca vera, e se non va si rimette com'era.
             org.mail_panel.system.DovecotAuthWorker.ensureAtBoot();
 
+            // I socket di Dovecot aperti a tutti (0666) che il pannello non usa: indexer, imap-urlauth, auth-token. Solo
+            // nella 2.4; serve un riavvio, verificato, e se Dovecot non riparte si toglie il file (DovecotSockets).
+            org.mail_panel.system.DovecotSockets.ensureAtBoot();
+
             // POP3 come l'ha scelto l'amministratore, spento se non ha scelto: nessuno lo usava, e le sue porte
             // erano solo bersagli (Pop3 verifica e torna indietro).
             org.mail_panel.system.Pop3.ensureAtBoot();

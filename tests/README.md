@@ -71,6 +71,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RcScriptRepairTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SafeOwnershipTest   (VM, as root)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeCloudflareCopyTest   (VM, as root)
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotSocketsTest   (VM, as root: it restarts Dovecot)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMoveTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveStorageTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/integration/*.java
@@ -293,6 +294,13 @@ SafeOwnership: 10 FAILED.
 acme.sh saves in its account.conf (SAVED_CF_Token, SAVED_CF_Account_ID) removed after every run the panel gives the
 token to, and at boot: only those lines go, the rest stays byte for byte with owner and permissions; a link or a file
 with two names is left; a second run has nothing to do. Falsified with a version that removes nothing: 4 FAILED.
+
+`DovecotSocketsTest`: the three Dovecot sockets open to anyone that the panel does not use, closed (indexer 0660
+root:vmail, imap-urlauth and auth-token 0600; dns-client stays). The decision (only on 2.4; write, restart or nothing),
+the file (each listener in its own service: imap-urlauth belongs to imap-urlauth-login, and in imap-urlauth Dovecot does
+not start), the installer and the move to 2.4 write it. With -De2e.vm=yes, before the panel applied it: the wrong file
+written by the migration, accepted by doveconf and refused at the restart, is taken away and Dovecot brought back with
+authentication, LMTP and IMAP answering. Falsified with a decision that always writes: 3 FAILED.
 
 `RcScriptRepairTest` (from the project root, it reads UpdateManager.java): the start script the panel wrote, with the
 old file names and the old Italian messages, repaired at boot (whole lines only, sh -n, same owner and mode, atomic
