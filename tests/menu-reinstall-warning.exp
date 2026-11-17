@@ -15,7 +15,7 @@ proc step {what pattern} {
         eof { puts "  FAILED $what (the menu exited)"; exit 1 }
     }
 }
-step "the menu opens with the welcome" "Welcome to FreeBSD Mail Panel"
+step "the menu opens with the welcome" "Welcome to DaemoxCP Mail"
 send "\r"
 step "the menu items" "Select an option"
 step "item 4 is there" "4\\) Install/Reinstall Mail Server"

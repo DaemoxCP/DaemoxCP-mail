@@ -24,9 +24,9 @@ public final class TestSql {
     public static synchronized Connection mysql() throws SQLException {
         if (mysql == null || mysql.isClosed()) {
             String url = "jdbc:mysql://127.0.0.1:" + System.getProperty("mysql.port") + "/"
-                    + System.getProperty("mysql.database", "mailpanel_test")
+                    + System.getProperty("mysql.database", "daemoxcp_mail_test")
                     + "?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
-            mysql = DriverManager.getConnection(url, System.getProperty("mysql.user", "mailpanel"),
+            mysql = DriverManager.getConnection(url, System.getProperty("mysql.user", "daemoxcp_mail"),
                     System.getProperty("mysql.password", ""));
         }
         return mysql;

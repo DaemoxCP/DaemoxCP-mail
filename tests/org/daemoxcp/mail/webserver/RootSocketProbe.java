@@ -7,7 +7,7 @@ import java.util.Map;
 /**
  * One request forged on the real root socket of a separated panel: what a broken-into web part could
  * send. It prints the status and the body, or "NO ANSWER" if the root part closed the connection
- * without answering (a user other than mailpanel). Used by tests/separation-service-test.sh.
+ * without answering (a user other than daemoxcp_mail). Used by tests/separation-service-test.sh.
  *
  * Usage: java -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RootSocketProbe
  *        <socket> <route> <method> <path> <admin id> <session id> [json body]

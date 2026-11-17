@@ -32,7 +32,7 @@ import java.util.regex.Pattern;
  * frame around the pages, and /api/language before and after logging in, always with a CSRF token.
  *
  * Usage (with the test MySQL of README.md, tables already created by AddressConversionTest):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
+ *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
  *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.LanguageRoutesTest
  */
 public class LanguageRoutesTest {
@@ -78,8 +78,8 @@ public class LanguageRoutesTest {
         Path dir = Files.createTempDirectory("language-routes");
 
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
+        db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
+        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "daemoxcp_mail_test"));
         check("connected to MySQL", db.connect());
         TestSessions.prepare(db);
         db.ensureLanguageColumn();

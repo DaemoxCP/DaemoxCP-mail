@@ -36,7 +36,7 @@ import java.util.concurrent.Executors;
  * must always hold: that the response and the audit log say the same outcome.
  *
  * Usage (with the test MySQL of README.md; it prepares the schema by itself):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
+ *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
  *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.VersionsApiTest
  */
 public class VersionsApiTest {
@@ -109,8 +109,8 @@ public class VersionsApiTest {
         Path log = folder.resolve("audit.log");
 
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
+        db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
+        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "daemoxcp_mail_test"));
         real("connection to MySQL", db.connect());
         // The schema BEFORE the entry, and the entry read back: see TestSessions.auditLogTo.
         // Written before the tables existed, it was not saved and the panel wrote to the real

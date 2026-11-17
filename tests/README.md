@@ -203,7 +203,7 @@ page reloaded while the Java script works says "In progress: the update of the p
 ..."), offers nothing and warns of no job that did not finish (reperto 210); then the
 page that reloads by itself on the sign-in page when the panel comes back (a restart ends every session), the sign-in
 again, the Java report in Diagnostics, and on the VM through `java-update-state.sh` the service that sees the panel
-again (its pidfile is the root part), the web part as mailpanel holding the port, the JVM new and protected again.
+again (its pidfile is the root part), the web part as daemoxcp_mail holding the port, the JVM new and protected again.
 Afterwards: nothing left to update, Update everything completed in the operation logs, every service up, the
 protected packages protected again, postfix's `inet_protocols` written and postfix listening as before. It needs
 updates waiting on the VM; the way back is the boot environment the job makes before the first step.
@@ -341,10 +341,10 @@ root add `--user=root` to the two mysqld lines):
     mysqld --initialize-insecure --datadir=$M/data
     mysqld --datadir=$M/data --socket=$M/m.sock --port=33062 --bind-address=127.0.0.1 \
            --mysqlx=OFF --secure-file-priv= --pid-file=$M/m.pid &
-    mysql -uroot -S $M/m.sock -e "CREATE DATABASE mailpanel_test;
-        CREATE USER 'mailpanel'@'127.0.0.1' IDENTIFIED BY 'test-password';
-        GRANT ALL ON mailpanel_test.* TO 'mailpanel'@'127.0.0.1';"
-    P="-Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=test-password -Dmysql.database=mailpanel_test"
+    mysql -uroot -S $M/m.sock -e "CREATE DATABASE daemoxcp_mail_test;
+        CREATE USER 'daemoxcp_mail'@'127.0.0.1' IDENTIFIED BY 'test-password';
+        GRANT ALL ON daemoxcp_mail_test.* TO 'daemoxcp_mail'@'127.0.0.1';"
+    P="-Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=test-password -Dmysql.database=daemoxcp_mail_test"
     java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.AddressConversionTest
     java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SoftwareVersionsTest
     java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.VersionsApiTest
@@ -358,7 +358,7 @@ root add `--user=root` to the two mysqld lines):
     java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.LoginSecurityTest
     java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.ResetDatabaseTest
 
-The tests default to the database `mailpanel_test` when `-Dmysql.database` is not given.
+The tests default to the database `daemoxcp_mail_test` when `-Dmysql.database` is not given.
 
 **Never on the panel's database**: AddressConversionTest's part drops and creates again all the
 tables of the database it is given (VersionsApiTest, LanguageRoutesTest, QueueApiTest,
@@ -514,7 +514,7 @@ Italian: `sh -n`, no placeholder left, every variable a report line prints is se
 (`{VIA}` and `{backupPath}` were not), dates in UTC, download before the stop. Run: everything
 works (way back, unlock and lock of every package of the plan, web part stopped, panel started
 again, the port checked); the download fails and the job is cancelled with the protections back and
-the panel restarted to close it; no way back; the port held by root instead of mailpanel (TO
+the panel restarted to close it; no way back; the port held by root instead of daemoxcp_mail (TO
 CHECK); the new java does not start and the way back goes in. Plus the service detection (rc script
 and pidfile). FreeBSD only (`stat -f`): on the VM. The same flow from the browser, on the real VM
 panel, is in reperto 195.
@@ -1567,23 +1567,23 @@ nothing logged. With the jar before the fix it fails.
 
     java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.HeadRequestTest
 
-**PanelSeparationTest** — the root part's preparation: a user mailpanel that is not the panel's
+**PanelSeparationTest** — the root part's preparation: a user daemoxcp_mail that is not the panel's
 (another comment, home or shell, a password, uid 0, another group, other members in the group) is
 refused with its reason; the daemon(8) line; as root on the VM, a folder opened to the web part is
-0750 root:mailpanel with its data files 0640, every other file only root's and back in root's group,
+0750 root:daemoxcp_mail with its data files 0640, every other file only root's and back in root's group,
 and a symbolic link where a data file should be is refused.
 
 **separation-service-test.sh** — the separated panel as the real service on the VM, as root, with
-the jar to test installed in the panel folder and the compiled tests in a folder mailpanel can read:
+the jar to test installed in the panel folder and the compiled tests in a folder daemoxcp_mail can read:
 
     sh tests/separation-service-test.sh /home/panel /var/tmp/sep-tests
 
-Who runs what and who listens (the web part as mailpanel on 2096, the root part on no port), every
-shared file's permissions, what mailpanel can and cannot read or write, a sign-in with a console code
+Who runs what and who listens (the web part as daemoxcp_mail on 2096, the root part on no port), every
+shared file's permissions, what daemoxcp_mail can and cannot read or write, a sign-in with a console code
 and the API through the web part, the routes the web part serves by itself (a test domain and mailbox
 added and removed, their mail folders made by the root part as vmail, the password read back from the
-vault by the web part), requests forged on the real socket, a second start with no DONE and no WARNING; then the planted faults, each put back: the user mailpanel someone else's, the jar
-unreadable by mailpanel, the web part killed every time it starts (the panel goes back to serving
+vault by the web part), requests forged on the real socket, a second start with no DONE and no WARNING; then the planted faults, each put back: the user daemoxcp_mail someone else's, the jar
+unreadable by daemoxcp_mail, the web part killed every time it starts (the panel goes back to serving
 everything as root), the root part killed with -9 (the next start stops the web part left behind).
 
 **CsrfFilterTest** — the CSRF token checked once for all the routes (the filter of

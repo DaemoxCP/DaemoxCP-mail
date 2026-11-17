@@ -99,10 +99,10 @@ public class InstallScriptsTest {
 
         System.out.println("\n== 4. The fingerprint and the check after the #! ==");
         String s = InstallScripts.stamped("#!/bin/sh\necho x\n");
-        check("the #! line stays the first", s.startsWith("#!/bin/sh\n# --- Written by the mail panel"));
+        check("the #! line stays the first", s.startsWith("#!/bin/sh\n# --- Written by DaemoxCP Mail"));
         check("the fingerprint is the running jar's", s.contains("DAEMOXCP_MAIL_WRITTEN_BY_JAR=\"" + InstallScripts.jarSha256() + "\"")
                 && InstallScripts.jarSha256().matches("[0-9a-f]{64}"));
-        check("an indented #! goes back to the start of the file", Files.readString(tz).startsWith("#!/bin/sh\n# --- Written by the mail panel"));
+        check("an indented #! goes back to the start of the file", Files.readString(tz).startsWith("#!/bin/sh\n# --- Written by DaemoxCP Mail"));
         System.exit(failed == 0 ? 0 : 1);
     }
 

@@ -6,7 +6,7 @@
 //  - every service up, nothing left to update, the protected packages protected again;
 //  - postfix's inet_protocols written in main.cf, and postfix listening on the same addresses as before;
 //  - with the Java: the Java report says it succeeded, the service sees the panel again (its pidfile is the root
-//    part), the web part runs as mailpanel and holds the port, Java is the new one and protected again.
+//    part), the web part runs as daemoxcp_mail and holds the port, Java is the new one and protected again.
 // It takes the place of java-update-browser-test.js: the Java row and its "Prepare" are gone, the Java is the last step.
 // With the Java, the page is reloaded while its script works (reperto 210): it must say the Java is being updated, with
 // the script's log, offer nothing, and still reload by itself when the panel comes back.
@@ -150,13 +150,13 @@ async function topRow(page) {
             await page.waitForFunction(() => { const p = document.getElementById('jv-log'); return p && p.textContent && !/^Reading/.test(p.textContent); }, null, { timeout: 60000 });
             const report = await page.locator('#jv-log').textContent();
             check('the Java report says it succeeded, with its way back, in UTC', /RESULT: SUCCEEDED/.test(report)
-                && /\/var\/db\/mailpanel\/jdk\/[0-9]{8}-[0-9]{6}/.test(report) && / UTC ===/.test(report) && !/\{[A-Za-z_]+\}/.test(report));
+                && /\/var\/db\/daemoxcp-mail\/jdk\/[0-9]{8}-[0-9]{6}/.test(report) && / UTC ===/.test(report) && !/\{[A-Za-z_]+\}/.test(report));
             const state2 = vm('sh /root/signed/java-update-state.sh');
             console.log('    VM:\n      ' + state2.split('\n').slice(0, 9).join('\n      '));
             const pidfile = (state2.match(/^pidfile: ([0-9]+)/m) || [])[1];
-            check('the service sees the panel again, its pidfile the root part', /^service: mailpanel is running as pid [0-9]+/m.test(state2)
+            check('the service sees the panel again, its pidfile the root part', /^service: daemoxcp_mail is running as pid [0-9]+/m.test(state2)
                 && !!pidfile && new RegExp('^\\s*' + pidfile + '\\s+[0-9]+\\s+root\\s+.*--web$', 'm').test(state2));
-            check('the web part runs as mailpanel and holds the port', /port 2096: mailpanel java/.test(state2));
+            check('the web part runs as daemoxcp_mail and holds the port', /port 2096: daemoxcp_mail java/.test(state2));
             check('Java is the new one, protected again', /openjdk25: ([^,]+), repo \1, locked: 1/.test(state2));
         }
 
@@ -170,7 +170,7 @@ async function topRow(page) {
         await page.waitForSelector('#jr-list table', { timeout: 60000 });
         const rows = await page.$$eval('#jr-list tbody tr', trs => trs.map(tr => tr.innerText.replace(/\s+/g, ' ').trim()));
         check('Operation logs: Update everything, completed (not "without an end")', rows.some(r => /Update everything/.test(r) && /completed/i.test(r) && !/without/i.test(r)));
-        const services = vm('for s in mailpanel dovecot postfix rspamd mysql-server nginx php_fpm redis clamav_clamd fail2ban; do service $s status >/dev/null 2>&1 && printf "%s up, " $s || printf "%s DOWN, " $s; done');
+        const services = vm('for s in daemoxcp_mail dovecot postfix rspamd mysql-server nginx php_fpm redis clamav_clamd fail2ban; do service $s status >/dev/null 2>&1 && printf "%s up, " $s || printf "%s DOWN, " $s; done');
         console.log('    services: ' + services);
         check('every service up', !/DOWN/.test(services));
         check('the protected packages protected again (' + lockedBefore + ')', vm('pkg lock -l 2>/dev/null | tail -n +2 | wc -l').trim() === lockedBefore);

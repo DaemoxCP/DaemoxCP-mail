@@ -40,7 +40,7 @@ import java.util.logging.Logger;
  *  4. the guard on that connection: SQLite statements, other texts, prepareCall and batches refused.
  *
  * Usage (on the VM, with the test MySQL of tests/README.md, as root):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
+ *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
  *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.WebRoutinesTest
  */
 public class WebRoutinesTest {
@@ -118,7 +118,7 @@ public class WebRoutinesTest {
 
     public static void main(String[] args) throws Exception {
         port = System.getProperty("mysql.port");
-        database = System.getProperty("mysql.database", "mailpanel_test");
+        database = System.getProperty("mysql.database", "daemoxcp_mail_test");
         if (port == null) {
             System.out.println("No MySQL given (-Dmysql.port=...): this test needs the test MySQL, and its root.");
             System.exit(1);
@@ -133,7 +133,7 @@ public class WebRoutinesTest {
         });
 
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
+        db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(port), database);
         check("connected to MySQL as the panel user", db.connect());
         Main.mailDatabase = db;
@@ -149,7 +149,7 @@ public class WebRoutinesTest {
         // default would have hidden it.
         exec(root, "ALTER DATABASE " + database + " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
         // A clean start: none of the users and procedures of an earlier run.
-        exec(root, "DROP USER IF EXISTS 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1', 'mailpanel_routines'@'localhost'");
+        exec(root, "DROP USER IF EXISTS 'daemoxcp_mail_web'@'localhost', 'daemoxcp_mail_web'@'127.0.0.1', 'daemoxcp_mail_routines'@'localhost'");
         for (WebDbAccess.Definition d : WebDbAccess.definitions()) exec(root, d.drop());
         exec(root, "DELETE FROM domains WHERE domain LIKE 'wr-%'");
         exec(root, "DELETE FROM audit_log WHERE action = 'WR_TEST'");
@@ -157,20 +157,20 @@ public class WebRoutinesTest {
         System.out.println("== 1. The migration ==");
         String r = ensure(db);
         check("it says the web part can use its own user (" + r + ")", r == null);
-        check("  and logs what it did (" + LOG + ")", logged("DONE") && logged("all 38 procedures") && logged("user mailpanel_web"));
-        check("mailpanel_routines exists and is locked",
-                rows(root, "SELECT account_locked FROM mysql.user WHERE user = 'mailpanel_routines' AND host = 'localhost'").equals(List.of("Y")));
-        check("mailpanel_web exists with both names, not locked", rows(root,
-                "SELECT host, account_locked FROM mysql.user WHERE user = 'mailpanel_web' ORDER BY host").equals(List.of("127.0.0.1|N", "localhost|N")));
-        List<String> procs = rows(root, "SELECT routine_name, definer, security_type, routine_comment LIKE 'mailpanel %' FROM information_schema.routines"
+        check("  and logs what it did (" + LOG + ")", logged("DONE") && logged("all 38 procedures") && logged("user daemoxcp_mail_web"));
+        check("daemoxcp_mail_routines exists and is locked",
+                rows(root, "SELECT account_locked FROM mysql.user WHERE user = 'daemoxcp_mail_routines' AND host = 'localhost'").equals(List.of("Y")));
+        check("daemoxcp_mail_web exists with both names, not locked", rows(root,
+                "SELECT host, account_locked FROM mysql.user WHERE user = 'daemoxcp_mail_web' ORDER BY host").equals(List.of("127.0.0.1|N", "localhost|N")));
+        List<String> procs = rows(root, "SELECT routine_name, definer, security_type, routine_comment LIKE 'daemoxcp_mail %' FROM information_schema.routines"
                 + " WHERE routine_schema = DATABASE() AND routine_type = 'PROCEDURE'");
-        check("38 procedures (" + procs.size() + "), every one of mailpanel_routines, SQL SECURITY DEFINER, with its comment",
-                procs.size() == 38 && procs.stream().allMatch(p -> p.endsWith("|mailpanel_routines@localhost|DEFINER|1")));
+        check("38 procedures (" + procs.size() + "), every one of daemoxcp_mail_routines, SQL SECURITY DEFINER, with its comment",
+                procs.size() == 38 && procs.stream().allMatch(p -> p.endsWith("|daemoxcp_mail_routines@localhost|DEFINER|1")));
         check("the web user has EXECUTE on the 37 procedures of the web and nothing else (" + rows(root,
-                "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web'") + ")",
-                rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web' AND proc_priv = 'Execute' AND routine_name <> 'web_session_admin'").equals(List.of("74"))
-                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web'").equals(List.of("74"))
-                && rows(root, "SHOW GRANTS FOR 'mailpanel_web'@'127.0.0.1'").stream().noneMatch(g -> g.contains("ON *.*") && !g.startsWith("GRANT USAGE")));
+                "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'daemoxcp_mail_web'") + ")",
+                rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'daemoxcp_mail_web' AND proc_priv = 'Execute' AND routine_name <> 'web_session_admin'").equals(List.of("74"))
+                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'daemoxcp_mail_web'").equals(List.of("74"))
+                && rows(root, "SHOW GRANTS FOR 'daemoxcp_mail_web'@'127.0.0.1'").stream().noneMatch(g -> g.contains("ON *.*") && !g.startsWith("GRANT USAGE")));
         int expected = 0;
         for (String role : AuthStore.ROLES) expected += AuthStore.permissionsOf(role).size();
         check("the role permissions are the Java ones (" + expected + " rows)",
@@ -190,30 +190,30 @@ public class WebRoutinesTest {
         exec(root, "DROP PROCEDURE list_domains");
         r = ensure(db);
         check("a dropped procedure is created again, with its EXECUTE (" + LOG + ")", r == null && logged("procedures list_domains")
-                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web' AND routine_name = 'list_domains'").equals(List.of("2")));
-        exec(root, "GRANT SELECT ON domains TO 'mailpanel_web'@'127.0.0.1'");
+                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'daemoxcp_mail_web' AND routine_name = 'list_domains'").equals(List.of("2")));
+        exec(root, "GRANT SELECT ON domains TO 'daemoxcp_mail_web'@'127.0.0.1'");
         r = ensure(db);
         check("a table privilege given by hand is taken away, and the procedures stay (" + LOG + ")", r == null
-                && logged("every other privilege of mailpanel_web revoked")
-                && rows(root, "SELECT COUNT(*) FROM information_schema.table_privileges WHERE grantee LIKE '%mailpanel_web%'").equals(List.of("0"))
-                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web'").equals(List.of("74")));
+                && logged("every other privilege of daemoxcp_mail_web revoked")
+                && rows(root, "SELECT COUNT(*) FROM information_schema.table_privileges WHERE grantee LIKE '%daemoxcp_mail_web%'").equals(List.of("0"))
+                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'daemoxcp_mail_web'").equals(List.of("74")));
         // A procedure the web part had before the asymmetric vault (the copy of a password), granted to it.
-        exec(root, "CREATE DEFINER = 'mailpanel_routines'@'localhost' PROCEDURE get_mailbox_password_hash(IN p_session CHAR(64), IN p_id INT)"
+        exec(root, "CREATE DEFINER = 'daemoxcp_mail_routines'@'localhost' PROCEDURE get_mailbox_password_hash(IN p_session CHAR(64), IN p_id INT)"
                 + " SQL SECURITY DEFINER SELECT password FROM mailboxes WHERE id = p_id");
-        exec(root, "GRANT EXECUTE ON PROCEDURE get_mailbox_password_hash TO 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'");
+        exec(root, "GRANT EXECUTE ON PROCEDURE get_mailbox_password_hash TO 'daemoxcp_mail_web'@'localhost', 'daemoxcp_mail_web'@'127.0.0.1'");
         r = ensure(db);
         check("a procedure the web part no longer has is removed, and its EXECUTE with it (" + LOG + ")", r == null
                 && logged("removed: get_mailbox_password_hash")
                 && rows(root, "SELECT COUNT(*) FROM information_schema.routines WHERE routine_schema = DATABASE() AND routine_name = 'get_mailbox_password_hash'").equals(List.of("0"))
-                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'mailpanel_web'").equals(List.of("74")));
-        exec(root, "ALTER USER 'mailpanel_web'@'127.0.0.1' IDENTIFIED BY 'someone-else-1234'");
+                && rows(root, "SELECT COUNT(*) FROM mysql.procs_priv WHERE user = 'daemoxcp_mail_web'").equals(List.of("74")));
+        exec(root, "ALTER USER 'daemoxcp_mail_web'@'127.0.0.1' IDENTIFIED BY 'someone-else-1234'");
         r = ensure(db);
         check("a password changed by someone else is set back to the one in the web's file (" + r + ", " + LOG + ")",
-                r == null && logged("mailpanel_web password set") && webPassword.equals(PanelSecrets.text(PanelSecrets.MYSQL_WEB_PASSWORD)));
-        exec(root, "ALTER USER 'mailpanel_routines'@'localhost' ACCOUNT UNLOCK");
+                r == null && logged("daemoxcp_mail_web password set") && webPassword.equals(PanelSecrets.text(PanelSecrets.MYSQL_WEB_PASSWORD)));
+        exec(root, "ALTER USER 'daemoxcp_mail_routines'@'localhost' ACCOUNT UNLOCK");
         r = ensure(db);
-        check("an unlocked owner is locked again (" + r + ", " + LOG + ")", r == null && logged("mailpanel_routines locked again")
-                && rows(root, "SELECT account_locked FROM mysql.user WHERE user = 'mailpanel_routines'").equals(List.of("Y")));
+        check("an unlocked owner is locked again (" + r + ", " + LOG + ")", r == null && logged("daemoxcp_mail_routines locked again")
+                && rows(root, "SELECT account_locked FROM mysql.user WHERE user = 'daemoxcp_mail_routines'").equals(List.of("Y")));
 
         // Administrators and sessions, written as the root part writes them.
         long boss = admin("wr-boss", "superadmin"), vera = admin("wr-vera", "viewer"), otto = admin("wr-otto", "operator");
@@ -224,7 +224,7 @@ public class WebRoutinesTest {
         db.setSetting("cloudflare_api_token", "wr-secret-token");
 
         System.out.println("\n== 2. The web user by itself ==");
-        try (Connection w = as("mailpanel_web", webPassword)) {
+        try (Connection w = as("daemoxcp_mail_web", webPassword)) {
             check("SELECT on a table: refused (" + refusal(() -> rows(w, "SELECT * FROM panel_admin")) + ")",
                     refusal(() -> rows(w, "SELECT * FROM panel_admin")).endsWith("/1142"));
             check("INSERT of a session: refused", refusal(() -> exec(w, "INSERT INTO panel_sessions (token_hash) VALUES ('x')")).endsWith("/1142"));
@@ -269,7 +269,7 @@ public class WebRoutinesTest {
         MailDatabase webDb = new MailDatabase();
         webDb.setConnection("127.0.0.1", Integer.parseInt(port), database);
         webDb.useRoutines(WebDbAccess.WEB_USER, () -> PanelSecrets.text(PanelSecrets.MYSQL_WEB_PASSWORD));
-        check("the web part connects as mailpanel_web, through the procedures", webDb.connect() && webDb.usesRoutines()
+        check("the web part connects as daemoxcp_mail_web, through the procedures", webDb.connect() && webDb.usesRoutines()
                 && WebDbAccess.WEB_USER.equals(webDb.getConnection().getMetaData().getUserName().replaceAll("@.*", "")));
         CatalogGuard.forgetSession();
         check("without a session: is there an administrator, the domain names", webDb.hasAdminUser()
@@ -373,7 +373,7 @@ public class WebRoutinesTest {
         }).isEmpty() && rows(TestSql(), "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'domains'").equals(List.of("1")));
 
         // Back as it was for the other tests: no web user, the panel user's password in the web's file.
-        exec(root, "DROP USER IF EXISTS 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'");
+        exec(root, "DROP USER IF EXISTS 'daemoxcp_mail_web'@'localhost', 'daemoxcp_mail_web'@'127.0.0.1'");
         root.close();
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         System.exit(failed == 0 ? 0 : 1);

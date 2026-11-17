@@ -17,8 +17,10 @@
 #     rinominati: /var/log sta fuori dai boot environment, e due nomi insieme fermerebbero il
 #     prossimo passaggio (BOTH_NAMES);
 #   - il proprietario di /var/log/php_errors.log, che RoundcubeUser da' all'utente della webmail;
-#   - il proprietario di /var/log/mail-panel-auth.log, che col pannello separato e' dell'utente
-#     mailpanel (PanelSeparation): nel boot environment di prima quell'utente non c'e'.
+#   - il proprietario del registro degli accessi al pannello, che col pannello separato e' dell'utente
+#     della parte web (PanelSeparation): nel boot environment di prima quell'utente non c'e';
+#   - i nomi di prima in /var/log, se il primo avvio li aveva cambiati col nome del prodotto (DaemoxCP Mail,
+#     17/11/2026): il registro degli accessi con le sue copie e la cartella delle reinstallazioni.
 # La posta NON torna indietro: /var/vmail sta DENTRO il boot environment (sul server vero come sulla
 # VM), quindi prima di attivarlo ci si copia la posta di adesso, e quella di prima resta li' accanto
 # (/var/vmail.before-rollback-...). MySQL invece torna al momento del passaggio: caselle, domini e
@@ -45,9 +47,13 @@ STAMP=${WORK##*/panel-upgrade-}
 bectl list -H | awk '{print $1}' | grep -qxF "$BE" || fail "the boot environment $BE is no longer there"
 
 echo "Going back to before the upgrade $STAMP"
-if service mailpanel status >/dev/null 2>&1; then
-    service mailpanel stop || fail "the panel does not stop"
-fi
+# Il servizio col nome di adesso o con quello di prima: il primo avvio del pannello nuovo lo rinomina.
+for svc in daemoxcp_mail mailpanel; do
+    [ -f "/usr/local/etc/rc.d/$svc" ] || continue
+    if service "$svc" status >/dev/null 2>&1; then
+        service "$svc" stop || fail "the panel does not stop"
+    fi
+done
 
 # La posta di adesso nel boot environment di prima, coi servizi di posta fermi perche' non cambi
 # mentre si copia. Si riaccendono subito se qualcosa non va: fino a bectl activate niente e' cambiato.
@@ -89,9 +95,13 @@ echo "Panel folder as it was: $PANEL_DIR (the one from after: $PANEL_DIR.after-u
 if [ -f "$WORK/nginx-logs-before.txt" ]; then
     while read -r old; do
         [ -e "/var/log/nginx/$old" ] && continue
-        new=$(printf '%s' "$old" | sed 's/mailpanel-pubblico/mailpanel-public/')
-        [ "$new" != "$old" ] && [ -e "/var/log/nginx/$new" ] || continue
-        mv "/var/log/nginx/$new" "/var/log/nginx/$old" && echo "nginx log: $new -> $old"
+        # Dall'italiano all'inglese (30/10/2026), poi al nome del prodotto (17/11/2026).
+        for new in $(printf '%s' "$old" | sed 's/mailpanel-pubblico/mailpanel-public/') \
+                   $(printf '%s' "$old" | sed 's/mailpanel-pubblico/daemoxcp-mail-public/; s/mailpanel-public/daemoxcp-mail-public/'); do
+            [ "$new" != "$old" ] && [ -e "/var/log/nginx/$new" ] || continue
+            mv "/var/log/nginx/$new" "/var/log/nginx/$old" && echo "nginx log: $new -> $old"
+            break
+        done
     done < "$WORK/nginx-logs-before.txt"
 fi
 
@@ -100,9 +110,20 @@ if [ -s "$WORK/php-errors-owner-before.txt" ] && [ -f /var/log/php_errors.log ];
     chown "$owner" /var/log/php_errors.log && echo "owner of /var/log/php_errors.log: $owner"
 fi
 
-if [ -s "$WORK/auth-log-owner-before.txt" ] && [ -f /var/log/mail-panel-auth.log ]; then
+# /var/log col nome di prima del prodotto: quello che c'era prima e adesso manca, se c'e' il suo nome nuovo.
+if [ -f "$WORK/var-log-before.txt" ]; then
+    while read -r old; do
+        [ -e "/var/log/$old" ] && continue
+        new=$(printf '%s' "$old" | sed 's/^mail-panel-auth/daemoxcp-mail-auth/; s/^mailpanel$/daemoxcp-mail/')
+        [ "$new" != "$old" ] && [ -e "/var/log/$new" ] || continue
+        mv "/var/log/$new" "/var/log/$old" && echo "/var/log: $new -> $old"
+    done < "$WORK/var-log-before.txt"
+fi
+
+if [ -s "$WORK/auth-log-owner-before.txt" ]; then
     owner=$(awk '{print $1}' "$WORK/auth-log-owner-before.txt")
-    chown "$owner" /var/log/mail-panel-auth.log && echo "owner of /var/log/mail-panel-auth.log: $owner"
+    file=$(awk '{print $2}' "$WORK/auth-log-owner-before.txt")
+    [ -f "$file" ] && chown "$owner" "$file" && echo "owner of $file: $owner"
 fi
 
 echo ""

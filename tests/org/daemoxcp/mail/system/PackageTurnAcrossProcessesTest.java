@@ -210,7 +210,7 @@ public class PackageTurnAcrossProcessesTest {
         int rc;
         String out;
 
-        static final List<String> ARGS = List.of("127.0.0.1", "3306", "mailpanel", "mailserver", "mail.turn.test",
+        static final List<String> ARGS = List.of("127.0.0.1", "3306", "daemoxcp_mail", "mailserver", "mail.turn.test",
                 "webmail.turn.test", "8443", "", "", "");
 
         static Process start(Path script, Map<String, String> env) throws Exception {

@@ -42,7 +42,7 @@ import java.util.concurrent.Executors;
  *     the root part gone the web answers 503.
  *
  * Usage (on the VM, with the test MySQL of tests/README.md):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
+ *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
  *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SeparatedPanelTest
  */
 public class SeparatedPanelTest {
@@ -117,8 +117,8 @@ public class SeparatedPanelTest {
         System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
         Path audit = dir.resolve("audit.log");
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
+        db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
+        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "daemoxcp_mail_test"));
         check("connected to MySQL", db.connect());
         TestSessions.auditLogTo(db, audit);
         Main.mailDatabase = db;

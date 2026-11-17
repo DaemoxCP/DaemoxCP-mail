@@ -2,9 +2,9 @@
 # What the Java update touches, on the TEST VM: the panel's processes, the service's pidfile, the port and who holds
 # it, the JVM and its protection, the package jobs, the services. Read only. Used by everything-browser-test.js
 # (copied to /root/signed on the VM).
-echo "service: $(service mailpanel status 2>&1)"
-echo "pidfile: $(cat /var/run/mailpanel.pid 2>/dev/null || echo none)"
-ps -axww -o pid= -o ppid= -o user= -o command= | grep -E '[j]ava -jar|daemon: mailpanel' | cut -c1-200
+echo "service: $(service daemoxcp_mail status 2>&1)"
+echo "pidfile: $(cat /var/run/daemoxcp_mail.pid 2>/dev/null || echo none)"
+ps -axww -o pid= -o ppid= -o user= -o command= | grep -E '[j]ava -jar|daemon: daemoxcp_mail' | cut -c1-200
 echo "port 2096: $(sockstat -46l -p 2096 | tail -n +2 | awk '{print $1, $2, $3, $5, $6}' | sort -u | tr '\n' ';')"
 echo "root.sock: $(sockstat -u | grep -c root.sock) entries"
 echo "openjdk25: $(pkg query '%v' openjdk25), repo $(pkg rquery -U '%v' openjdk25 2>/dev/null), locked: $(pkg lock -l | grep -c openjdk25)"

@@ -98,8 +98,8 @@ public class RoundcubeDbUserTest {
 
         Fake(Path config) throws Exception {
             this.config = config;
-            accounts.put("mailpanel@localhost", new Account(PANEL_PASS, "mailserver", "roundcubemail"));
-            accounts.put("mailpanel@127.0.0.1", new Account(PANEL_PASS, "mailserver", "roundcubemail"));
+            accounts.put("daemoxcp_mail@localhost", new Account(PANEL_PASS, "mailserver", "roundcubemail"));
+            accounts.put("daemoxcp_mail@127.0.0.1", new Account(PANEL_PASS, "mailserver", "roundcubemail"));
             reload();
         }
 
@@ -108,7 +108,7 @@ public class RoundcubeDbUserTest {
         static Shell.Result r(boolean ok, String out) { return new Shell.Result(ok ? 0 : 1, out, false, List.of()); }
 
         @Override public String secret() { return secret; }
-        @Override public String panelUser() { return "mailpanel"; }
+        @Override public String panelUser() { return "daemoxcp_mail"; }
         @Override public String panelPassword() { return PANEL_PASS; }
 
         boolean canUse(String user, String password, String host, String db) {
@@ -207,7 +207,7 @@ public class RoundcubeDbUserTest {
             if (d == null) return false;
             boolean ok = canUse(d.user(), d.password(), d.accountHost(), d.db());
             if (ok && USER.equals(d.user())) rcConnections++;
-            if (ok && pluginUsesPanel) ok = canUse("mailpanel", PANEL_PASS, "127.0.0.1", d.db());
+            if (ok && pluginUsesPanel) ok = canUse("daemoxcp_mail", PANEL_PASS, "127.0.0.1", d.db());
             return ok;
         }
 
@@ -302,7 +302,7 @@ public class RoundcubeDbUserTest {
                      + "  $config[\"db_dsnw\"] = \"mysql://mailpanel:p3@127.0.0.1:3306/roundcubemail\"; // the last one wins\n"
                      + " * $config['db_dsnw'] = 'mysql://doc:p4@127.0.0.1/doc';\n";
             RoundcubeDbUser.Dsn d = RoundcubeDbUser.activeDsn(c);
-            check("the last active assignment wins, not the commented ones", d != null && d.user().equals("mailpanel")
+            check("the last active assignment wins, not the commented ones", d != null && d.user().equals("daemoxcp_mail")
                     && d.password().equals("p3") && d.host().equals("127.0.0.1:3306") && d.db().equals("roundcubemail"));
             check("the account's host is without the port", d != null && d.accountHost().equals("127.0.0.1"));
             String w = RoundcubeDbUser.withCredentials(c, d, "roundcube", "NEW");
@@ -321,7 +321,7 @@ public class RoundcubeDbUserTest {
                     + "  server { listen 8443 ssl; listen [::]:8443 ssl; server_name webmail.example.test;\n"
                     + "    root /usr/local/www/roundcube/public_html; location ~ \\.php$ { fastcgi_pass unix:/var/run/php-fpm-roundcube.sock; } }\n"
                     + "  # server { listen 9443 ssl; server_name old.example.test; root /usr/local/www/roundcube; }\n"
-                    + "}\n# configuration file /usr/local/etc/nginx/conf.d/mailpanel-public.conf:\n"
+                    + "}\n# configuration file /usr/local/etc/nginx/conf.d/daemoxcp-mail-public.conf:\n"
                     + "server { listen 443 ssl; server_name mta-sts.example.test; root /var/db/daemoxcp-mail/public; }\n";
             List<RoundcubeDbUser.Site> s = RoundcubeDbUser.webmailSites(dump, Path.of("/usr/local/www/roundcube"));
             check("one site only: the webmail on 8443, not the commented ones nor the others",
@@ -362,7 +362,7 @@ public class RoundcubeDbUserTest {
 
         OUT.println("== the migration that succeeds, with the permissions of before (www:wheel 644)");
         {
-            Fake f = bench("ok", config("mailpanel", PANEL_PASS), "www", "wheel", "rw-r--r--");
+            Fake f = bench("ok", config("daemoxcp_mail", PANEL_PASS), "www", "wheel", "rw-r--r--");
             String before = Files.readString(f.config);
             long c0 = f.rcConnections;
             RoundcubeDbUser.Report r = run(f);
@@ -375,8 +375,8 @@ public class RoundcubeDbUserTest {
                     && f.accounts.get("roundcube@127.0.0.1").password.equals(SECRET)
                     && f.accounts.get("roundcube@127.0.0.1").dbs.equals(Set.of("roundcubemail")));
             check("the panel has mailserver only, from both hosts",
-                    f.accounts.get("mailpanel@localhost").dbs.equals(Set.of("mailserver"))
-                    && f.accounts.get("mailpanel@127.0.0.1").dbs.equals(Set.of("mailserver")));
+                    f.accounts.get("daemoxcp_mail@localhost").dbs.equals(Set.of("mailserver"))
+                    && f.accounts.get("daemoxcp_mail@127.0.0.1").dbs.equals(Set.of("mailserver")));
             check("php-fpm loaded the new configuration, and the webmail answers", f.loaded.equals(after) && f.webmailDb());
             check("MySQL saw roundcube come in", f.rcConnections > c0);
             check("also verified with a real login", r.detail().contains("real login through the panel's SSO") && f.realLogins >= 3);
@@ -392,7 +392,7 @@ public class RoundcubeDbUserTest {
 
         OUT.println("== without a real login (the SSO already does not get in before) and without performance_schema");
         {
-            Fake f = bench("nosso", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
+            Fake f = bench("nosso", config("daemoxcp_mail", PANEL_PASS), "root", "www", "rw-r-----");
             f.ssoBroken = true;
             f.performanceSchema = false;
             RoundcubeDbUser.Report r = run(f);
@@ -409,11 +409,11 @@ public class RoundcubeDbUserTest {
             {"reloadIgnored", "php-fpm keeps the configuration of before (opcache)", "php-fpm still runs the old configuration"},
             {"roundcubeCannotWriteSessions", "roundcube's session does not reach the database", "is not in the database roundcubemail after the switch"},
             {"ssoBreaksForRoundcube", "the real login fails after the switch", "the real login failed"},
-            {"pluginUsesPanel", "a plugin enters as the panel: it shows after the revoke", "once mailpanel lost roundcubemail"},
-            {"revokeFails", "the revoke fails", "cannot take roundcubemail away from mailpanel"},
+            {"pluginUsesPanel", "a plugin enters as the panel: it shows after the revoke", "once daemoxcp_mail lost roundcubemail"},
+            {"revokeFails", "the revoke fails", "cannot take roundcubemail away from daemoxcp_mail"},
         };
         for (String[] fault : faults) {
-            Fake f = bench("fault-" + fault[0], config("mailpanel", PANEL_PASS), "www", "wheel", "rw-r--r--");
+            Fake f = bench("fault-" + fault[0], config("daemoxcp_mail", PANEL_PASS), "www", "wheel", "rw-r--r--");
             String st = f.state();
             Map<String, Account> acc = f.accountsCopy();
             f.getClass().getDeclaredField(fault[0]).setBoolean(f, true);
@@ -429,24 +429,24 @@ public class RoundcubeDbUserTest {
         }
         {
             // Without performance_schema, the php-fpm that keeps the old configuration is seen by the check after the revoke.
-            Fake f = bench("stale-nops", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
+            Fake f = bench("stale-nops", config("daemoxcp_mail", PANEL_PASS), "root", "www", "rw-r-----");
             String st = f.state();
             f.reloadIgnored = true;
             f.performanceSchema = false;
             RoundcubeDbUser.Report r = run(f);
             f.reloadIgnored = false;
             check("opcache without performance_schema: the check after the revoke sees it (" + r.detail() + ")",
-                    r.outcome() == RoundcubeDbUser.Outcome.ROLLED_BACK && r.detail().contains("once mailpanel lost roundcubemail")
+                    r.outcome() == RoundcubeDbUser.Outcome.ROLLED_BACK && r.detail().contains("once daemoxcp_mail lost roundcubemail")
                     && f.state().equals(st));
         }
 
         OUT.println("== the refusals: nothing changes");
         Object[][] refusals = {
             {"another user", config("someone", "x1"), "NOT_OURS", "neither the panel's"},
-            {"another server", config("mailpanel", PANEL_PASS).replace("127.0.0.1/roundcubemail", "db.example.test/roundcubemail"), "NOT_OURS", "not to the panel's MySQL"},
-            {"another engine", config("mailpanel", PANEL_PASS).replace("'mysql://", "'pgsql://"), "NOT_OURS", "not to the panel's MySQL"},
+            {"another server", config("daemoxcp_mail", PANEL_PASS).replace("127.0.0.1/roundcubemail", "db.example.test/roundcubemail"), "NOT_OURS", "not to the panel's MySQL"},
+            {"another engine", config("daemoxcp_mail", PANEL_PASS).replace("'mysql://", "'pgsql://"), "NOT_OURS", "not to the panel's MySQL"},
             {"no db_dsnw", "<?php\n$config['imap_host'] = 'x';\n", "NOT_OURS", "no active db_dsnw"},
-            {"db_dsnr as the panel", config("mailpanel", PANEL_PASS) + "$config['db_dsnr'] = 'mysql://mailpanel:" + PANEL_PASS + "@127.0.0.1/roundcubemail';\n",
+            {"db_dsnr as the panel", config("daemoxcp_mail", PANEL_PASS) + "$config['db_dsnr'] = 'mysql://mailpanel:" + PANEL_PASS + "@127.0.0.1/roundcubemail';\n",
                     "NOT_OURS", "config.inc.php line 10"},
         };
         for (Object[] c : refusals) {
@@ -457,7 +457,7 @@ public class RoundcubeDbUserTest {
                     && f.state().equals(st) && noWrites(f));
         }
         {
-            Fake f = bench("refuse-plugin", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
+            Fake f = bench("refuse-plugin", config("daemoxcp_mail", PANEL_PASS), "root", "www", "rw-r-----");
             Path pc = f.config.getParent().getParent().resolve("plugins/password");
             Files.createDirectories(pc);
             Files.writeString(pc.resolve("config.inc.php"), "<?php\n// $config['password_db_dsn'] = 'mysql://mailpanel:x@127.0.0.1/mailserver';\n"
@@ -467,12 +467,12 @@ public class RoundcubeDbUserTest {
                     r.outcome() == RoundcubeDbUser.Outcome.NOT_OURS && r.detail().contains("plugins/password/config.inc.php line 3") && noWrites(f));
         }
         {
-            Fake f = bench("commented-other", config("mailpanel", PANEL_PASS) + "// $config['db_dsnr'] = 'mysql://mailpanel:x@127.0.0.1/roundcubemail';\n",
+            Fake f = bench("commented-other", config("daemoxcp_mail", PANEL_PASS) + "// $config['db_dsnr'] = 'mysql://mailpanel:x@127.0.0.1/roundcubemail';\n",
                     "root", "www", "rw-r-----");
             check("a commented line stops nothing", run(f).outcome() == RoundcubeDbUser.Outcome.DONE);
         }
         {
-            Fake f = bench("refuse-existing", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
+            Fake f = bench("refuse-existing", config("daemoxcp_mail", PANEL_PASS), "root", "www", "rw-r-----");
             f.accounts.put("roundcube@127.0.0.1", new Account("SomethingElse12345678", "roundcubemail"));
             String st = f.state();
             RoundcubeDbUser.Report r = run(f);
@@ -495,7 +495,7 @@ public class RoundcubeDbUserTest {
             {"noSites", "no site serves the webmail", "NOT_SERVED"},
         };
         for (Object[] c : blocked) {
-            Fake f = bench("blocked-" + c[0], config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
+            Fake f = bench("blocked-" + c[0], config("daemoxcp_mail", PANEL_PASS), "root", "www", "rw-r-----");
             String st = f.state();
             f.getClass().getDeclaredField((String) c[0]).setBoolean(f, true);
             RoundcubeDbUser.Report r = run(f);
@@ -503,7 +503,7 @@ public class RoundcubeDbUserTest {
             check(c[1] + ": " + c[2] + " (" + r.detail() + ")", r.outcome().name().equals(c[2]) && f.state().equals(st) && noWrites(f));
         }
         {
-            Fake f = bench("bad-secret", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
+            Fake f = bench("bad-secret", config("daemoxcp_mail", PANEL_PASS), "root", "www", "rw-r-----");
             f.secret = "with'quote@and/slash000";
             RoundcubeDbUser.Report r = run(f);
             check("a password in the secrets file that the panel does not generate: NOT_OURS",
@@ -514,8 +514,8 @@ public class RoundcubeDbUserTest {
         {
             Fake f = bench("shared", config("roundcube", PANEL_PASS), "root", "www", "rw-r-----");
             f.accounts.put("roundcube@127.0.0.1", new Account(PANEL_PASS, "roundcubemail"));
-            f.accounts.get("mailpanel@localhost").dbs.remove("roundcubemail");
-            f.accounts.get("mailpanel@127.0.0.1").dbs.remove("roundcubemail");
+            f.accounts.get("daemoxcp_mail@localhost").dbs.remove("roundcubemail");
+            f.accounts.get("daemoxcp_mail@127.0.0.1").dbs.remove("roundcubemail");
             String st = f.state();
             f.reloadFails = true;
             RoundcubeDbUser.Report r = run(f);
@@ -541,15 +541,15 @@ public class RoundcubeDbUserTest {
                     r.outcome() == RoundcubeDbUser.Outcome.ROLLED_BACK && acc.toString().equals(f.accounts.toString()));
             r = run(f);
             check("FINISHED: the panel loses roundcubemail (" + r.detail() + ")", r.outcome() == RoundcubeDbUser.Outcome.FINISHED
-                    && f.accounts.get("mailpanel@localhost").dbs.equals(Set.of("mailserver")) && f.webmailDb());
+                    && f.accounts.get("daemoxcp_mail@localhost").dbs.equals(Set.of("mailserver")) && f.webmailDb());
             check("then it does nothing any more", run(f).outcome() == RoundcubeDbUser.Outcome.NOTHING);
         }
 
         OUT.println("== the panel still reads through a global privilege: it says so");
         {
-            Fake f = bench("global", config("mailpanel", PANEL_PASS), "root", "www", "rw-r-----");
-            f.accounts.get("mailpanel@localhost").globalSelect = true;
-            f.accounts.get("mailpanel@127.0.0.1").globalSelect = true;
+            Fake f = bench("global", config("daemoxcp_mail", PANEL_PASS), "root", "www", "rw-r-----");
+            f.accounts.get("daemoxcp_mail@localhost").globalSelect = true;
+            f.accounts.get("daemoxcp_mail@127.0.0.1").globalSelect = true;
             RoundcubeDbUser.Report r = run(f);
             check("PARTIAL, with the privilege (" + r.detail() + ")", r.outcome() == RoundcubeDbUser.Outcome.PARTIAL
                     && r.detail().contains("GRANT SELECT ON *.*") && f.accounts.get("roundcube@127.0.0.1") != null);

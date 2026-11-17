@@ -49,7 +49,7 @@ import java.util.concurrent.Executors;
  *     pages ask again, never the sign-in page nor a 401 (reperto 209).
  *
  * Usage (with the test MySQL of README.md, on the test VM):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
+ *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
  *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SessionRunTest
  */
 public class SessionRunTest {
@@ -64,8 +64,8 @@ public class SessionRunTest {
 
     static MailDatabase connect() {
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(System.getProperty("mysql.port")), System.getProperty("mysql.database", "mailpanel_test"));
+        db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
+        db.setConnection("127.0.0.1", Integer.parseInt(System.getProperty("mysql.port")), System.getProperty("mysql.database", "daemoxcp_mail_test"));
         if (!db.connect()) throw new IllegalStateException("MySQL not reachable");
         return db;
     }

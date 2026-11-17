@@ -34,7 +34,7 @@ import java.util.concurrent.Executors;
  * unknown job, an action that does not exist, a confirmation that is missing).
  *
  * Usage (with the test MySQL of README.md):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
+ *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
  *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RolesTest
  */
 public class RolesTest {
@@ -97,8 +97,8 @@ public class RolesTest {
         Path dir = Files.createTempDirectory("roles");
         Path audit = dir.resolve("audit.log");
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
+        db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
+        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "daemoxcp_mail_test"));
         check("connected to MySQL", db.connect());
         // The schema BEFORE the entry, and the entry read back: see TestSessions.auditLogTo.
         // Written before the tables existed, it was not saved and the panel wrote to the real

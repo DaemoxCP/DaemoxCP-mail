@@ -42,7 +42,7 @@ public class PanelDbPasswordTest {
         if (!ok) failed++;
     }
 
-    static final String USER = "mailpanel";
+    static final String USER = "daemoxcp_mail";
     static final String OLD = "OldPanelPassword0123456789";
 
     /** MySQL: per host the primary and the secondary password; the probe enters through localhost. */
@@ -271,7 +271,7 @@ public class PanelDbPasswordTest {
             Path dovecot = Files.createDirectories(base.resolve("dovecot/conf.d"));
             Path mail = Files.createDirectories(base.resolve("mail"));
             Files.writeString(postfix.resolve("mysql-virtual-domains.cf"), "user = postfix\npassword = Other\n");
-            Path used = Files.writeString(dovecot.resolve("auth-sql.conf.ext"), "connect = user=mailpanel password=" + OLD + "\n");
+            Path used = Files.writeString(dovecot.resolve("auth-sql.conf.ext"), "connect = user=daemoxcp_mail password=" + OLD + "\n");
             Files.writeString(postfix.resolve("mysql-virtual-domains.cf.bak"), "password = " + OLD + "\n");
             Files.writeString(postfix.resolve("main.cf-20261101"), "password = " + OLD + "\n");
             Path outside = Files.writeString(base.resolve("outside.cf"), "password = " + OLD + "\n");

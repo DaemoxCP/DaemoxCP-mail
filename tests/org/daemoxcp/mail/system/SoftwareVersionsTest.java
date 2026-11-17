@@ -35,7 +35,7 @@ import java.util.Set;
  *
  * Uso: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SoftwareVersionsTest
  * With a test MySQL it also reads the version from the real server (reads only):
- *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test
+ *   -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test
  */
 public class SoftwareVersionsTest {
 
@@ -336,8 +336,8 @@ public class SoftwareVersionsTest {
         } else {
             System.out.println("\n== Real MySQL on port " + port + " ==");
             org.daemoxcp.mail.database.MailDatabase db = new org.daemoxcp.mail.database.MailDatabase();
-            db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-            db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
+            db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
+            db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "daemoxcp_mail_test"));
             real("connection", db.connect());
             String v = db.serverVersion();
             real("serverVersion(): " + v, v != null && SoftwareVersions.numbers(v).matches("\\d+\\.\\d+\\.\\d+"));

@@ -34,9 +34,9 @@ public class LoginE2EServer {
         int port = Integer.parseInt(args[0]);
         Path dir = Path.of("").toAbsolutePath();
         String mysqlPort = System.getProperty("mysql.port");
-        String user = System.getProperty("mysql.user", "mailpanel");
+        String user = System.getProperty("mysql.user", "daemoxcp_mail");
         String password = System.getProperty("mysql.password", "");
-        String database = System.getProperty("mysql.database", "mailpanel_test");
+        String database = System.getProperty("mysql.database", "daemoxcp_mail_test");
 
         Files.createDirectories(dir.resolve("database"));
         Main.dbManager = new dataBaseManager();

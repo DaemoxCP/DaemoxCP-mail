@@ -22,7 +22,7 @@
 //
 // Usage (from the project root, after mvn package, with the test MySQL of README.md):
 //   D=$(mktemp -d) && cp target/daemoxcp-mail-1.0.jar $D/
-//   MYSQL="-Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test" \
+//   MYSQL="-Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test" \
 //     NODE_PATH=$(npm root -g) node tests/login-browser-test.js $D [screenshots-dir]
 const { chromium } = require('playwright');
 const { spawn, execFileSync } = require('child_process');

@@ -31,7 +31,7 @@ import java.util.stream.Stream;
  * Second part, on a real MySQL (the same as the panel: mysql80-server): the two transactions, looked
  * at with the same queries Postfix uses. That a half-done conversion never stays: if the last step
  * fails, the database goes back as it was. It is skipped if MySQL is not given:
- *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test
+ *   -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test
  */
 public class AddressConversionTest {
 
@@ -268,8 +268,8 @@ public class AddressConversionTest {
         }
         System.out.println("\n== On MySQL " + port + ": the two conversions, as Postfix sees them ==");
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
+        db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
+        db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "daemoxcp_mail_test"));
         if (!db.connect()) { real("connection to MySQL", false); return; }
         db.dropAllTables();
         db.createSchema();

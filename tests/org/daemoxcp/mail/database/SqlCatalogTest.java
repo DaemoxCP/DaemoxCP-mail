@@ -252,7 +252,7 @@ public class SqlCatalogTest {
                 check("  and not with the password without the backslash", !wrong);
                 s.execute("DROP USER IF EXISTS 'mailserver'@'127.0.0.1'");
                 s.execute("DROP DATABASE IF EXISTS mailserver");
-                s.execute("DROP DATABASE IF EXISTS mailpanel");
+                s.execute("DROP DATABASE IF EXISTS daemoxcp_mail");
             }
         } else {
             System.out.println("\n  (part 5 skipped: it creates MySQL users, turned on with -Dmysql.root=yes and the test MySQL's -Dmysql.port)");
@@ -306,10 +306,10 @@ public class SqlCatalogTest {
             int createParams = r.create().split("\\b(IN|OUT) p_").length - 1;
             boolean ok = call.matches() && callParams == params + 1 && createParams == params + 1
                     && r.create().chars().filter(ch -> ch == '?').count() == 1
-                    && r.create().startsWith("CREATE DEFINER = 'mailpanel_routines'@'localhost' PROCEDURE " + routine + "(IN p_session CHAR(64) CHARACTER SET ascii")
+                    && r.create().startsWith("CREATE DEFINER = 'daemoxcp_mail_routines'@'localhost' PROCEDURE " + routine + "(IN p_session CHAR(64) CHARACTER SET ascii")
                     && r.create().contains(" COMMENT ? SQL SECURITY DEFINER\n") && r.create().endsWith("END")
                     && r.drop().equals("DROP PROCEDURE IF EXISTS " + routine)
-                    && r.grant().equals("GRANT EXECUTE ON PROCEDURE " + routine + " TO 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'")
+                    && r.grant().equals("GRANT EXECUTE ON PROCEDURE " + routine + " TO 'daemoxcp_mail_web'@'localhost', 'daemoxcp_mail_web'@'127.0.0.1'")
                     && r.read() == r.create().replaceAll("(?s).*\nBEGIN\n", "").lines()
                             .filter(l -> !l.contains("DECLARE") && !l.contains("CALL web_session_admin") && !l.trim().startsWith("IF ")
                                     && !l.contains("SIGNAL") && !l.trim().equals("END IF;")).findFirst().orElse("").trim().startsWith("SELECT");

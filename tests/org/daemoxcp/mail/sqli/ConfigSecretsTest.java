@@ -78,9 +78,9 @@ public class ConfigSecretsTest {
         check("a second start moves nothing", db.migrateSecrets() == 0);
 
         System.out.println("\n== What the panel saves goes to the file ==");
-        db.update_mysql_config("127.0.0.1", "3306", "mailpanel", "New-Mysql-Password", "mailserver");
+        db.update_mysql_config("127.0.0.1", "3306", "daemoxcp_mail", "New-Mysql-Password", "mailserver");
         check("installation: the new MySQL password in the file, not in SQLite", "New-Mysql-Password".equals(db.mysqlPassword())
-                && column(db, "mysql_password").isEmpty() && "mailpanel".equals(column(db, "mysql_user")));
+                && column(db, "mysql_password").isEmpty() && "daemoxcp_mail".equals(column(db, "mysql_user")));
         db.updateMySQLPassword("Cambiata-Password-Mysql");
         check("password change: the same", "Cambiata-Password-Mysql".equals(db.mysqlPassword()) && column(db, "mysql_password").isEmpty());
         String key2 = key.replace("BKcw", "ZZzz");

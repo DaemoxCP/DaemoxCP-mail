@@ -69,7 +69,7 @@ public class PendingDbPasswordTest {
         Path d = Files.createTempDirectory("pending-db-password");
         map = d.resolve("mysql-virtual-domains.cf");
         PendingDbPassword.postfixMap = map;
-        final String U = "mailpanel";
+        final String U = "daemoxcp_mail";
 
         System.out.println("== The script exits before phase 3 (Roundcube, parameter, turn, packages) ==");
         FakeStore s = new FakeStore();
@@ -224,12 +224,12 @@ public class PendingDbPasswordTest {
         check("it is not decided: the new one stays pending", r.outcome() == PendingDbPassword.Outcome.UNDECIDED && s.pending.equals("New1") && s.current.equals("Old1"));
 
         System.out.println("\n== The Postfix file ==");
-        Files.writeString(map, "user=mailpanel\npassword=  Spaces1  \n#password = Comment\n");
-        check("values without spaces around, comments skipped", PendingDbPassword.postfixCopy("mailpanel").equals("Spaces1"));
+        Files.writeString(map, "user=daemoxcp_mail\npassword=  Spaces1  \n#password = Comment\n");
+        check("values without spaces around, comments skipped", PendingDbPassword.postfixCopy("daemoxcp_mail").equals("Spaces1"));
         Files.writeString(map, "password = Withoutuser\n");
-        check("without a user: nothing", PendingDbPassword.postfixCopy("mailpanel").isEmpty());
+        check("without a user: nothing", PendingDbPassword.postfixCopy("daemoxcp_mail").isEmpty());
         noPostfix();
-        check("without a file: nothing", PendingDbPassword.postfixCopy("mailpanel").isEmpty());
+        check("without a file: nothing", PendingDbPassword.postfixCopy("daemoxcp_mail").isEmpty());
 
         Files.deleteIfExists(map);
         Files.deleteIfExists(d);

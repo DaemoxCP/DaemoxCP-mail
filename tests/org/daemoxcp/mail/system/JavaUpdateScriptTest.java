@@ -14,7 +14,7 @@ import org.daemoxcp.mail.i18n.I18n;
  * The detached script that upgrades the JVM the panel runs on (reperto 195).
  *
  * Tried from the browser on the VM on 08/11/2026, the old script reported SUCCEEDED while:
- *  - the panel came back outside its service (no pidfile: "service mailpanel status" said it was off,
+ *  - the panel came back outside its service (no pidfile: "service daemoxcp_mail status" said it was off,
  *    a stop would not stop it, a start would start a second one);
  *  - it never checked the panel answered: separated, the port belongs to the web part, the root
  *    part has none, so the port was "not known" and the check was skipped;
@@ -55,7 +55,7 @@ public class JavaUpdateScriptTest {
         System.out.println("== the script as text, in English and in Italian ==");
         for (String lang : List.of("en", "it")) {
             I18n.setCurrent(lang);
-            String s = UpdateManager.javaUpdateScript(plan(root.resolve("static-" + lang), "service", 1234, 2096, "mailpanel", "/x/web-supervisor.pid"));
+            String s = UpdateManager.javaUpdateScript(plan(root.resolve("static-" + lang), "service", 1234, 2096, "daemoxcp_mail", "/x/web-supervisor.pid"));
             I18n.setCurrent("en");
             Path f = root.resolve("static-" + lang + ".sh");
             Files.writeString(f, s);
@@ -79,7 +79,7 @@ public class JavaUpdateScriptTest {
             check(lang + ": download, then stop, then upgrade", fetch > 0 && stop > fetch && upgrade > stop);
             // The command itself, not the report line that names it (that one would pass with the check gone).
             check(lang + ": started by the service, checked by the service",
-                    Pattern.compile("(?m)^if \\[ \\$SERVICE -eq 1 \\] && ! /usr/sbin/service mailpanel status >/dev/null 2>&1; then$").matcher(s).find()
+                    Pattern.compile("(?m)^if \\[ \\$SERVICE -eq 1 \\] && ! /usr/sbin/service daemoxcp_mail status >/dev/null 2>&1; then$").matcher(s).find()
                     && s.contains("SERVICE=1"));
         }
     }
@@ -107,7 +107,7 @@ public class JavaUpdateScriptTest {
 
     static void succeeded(Path root) throws Exception {
         System.out.println("\n== everything works ==");
-        Run r = execute(root.resolve("ok"), "mailpanel", "");
+        Run r = execute(root.resolve("ok"), "daemoxcp_mail", "");
         check("SUCCEEDED", r.log.contains("=== OUTCOME: SUCCEEDED"));
         check("the way back is named in the report", r.log.contains("way back: " + r.dir.resolve("backup/openjdk25-25.0.4.pkg")));
         check("the backup folder is named in the report", r.log.contains("The way back stays in " + r.dir.resolve("backup")));
@@ -127,7 +127,7 @@ public class JavaUpdateScriptTest {
 
     static void fetchFails(Path root) throws Exception {
         System.out.println("\n== the download fails ==");
-        Run r = execute(root.resolve("fetch"), "mailpanel", "fetch");
+        Run r = execute(root.resolve("fetch"), "daemoxcp_mail", "fetch");
         check("CANCELLED", r.log.contains("=== OUTCOME: CANCELLED"));
         check("nothing upgraded", at(r, "upgrade -y openjdk25") < 0);
         check("both protected again", at(r, "lock -y openjdk25") > at(r, "upgrade -F -y openjdk25") && at(r, "lock -y libX11") > at(r, "upgrade -F -y openjdk25"));
@@ -137,7 +137,7 @@ public class JavaUpdateScriptTest {
 
     static void createFails(Path root) throws Exception {
         System.out.println("\n== no way back ==");
-        Run r = execute(root.resolve("create"), "mailpanel", "create");
+        Run r = execute(root.resolve("create"), "daemoxcp_mail", "create");
         check("CANCELLED", r.log.contains("=== OUTCOME: CANCELLED"));
         check("nothing unlocked, nothing downloaded, nothing upgraded",
                 r.calls.lines().noneMatch(l -> l.startsWith("unlock ") || l.startsWith("upgrade ")));
@@ -148,12 +148,12 @@ public class JavaUpdateScriptTest {
         System.out.println("\n== the panel comes back without the separation ==");
         Run r = execute(root.resolve("user"), "root", "");
         check("TO CHECK, not SUCCEEDED", r.log.contains("=== OUTCOME: TO CHECK") && !r.log.contains("OUTCOME: SUCCEEDED"));
-        check("the report says who holds the port", r.log.contains("port 2096 is held by root, not by mailpanel"));
+        check("the report says who holds the port", r.log.contains("port 2096 is held by root, not by daemoxcp_mail"));
     }
 
     static void javaBroken(Path root) throws Exception {
         System.out.println("\n== the new java does not start ==");
-        Run r = execute(root.resolve("java"), "mailpanel", "java");
+        Run r = execute(root.resolve("java"), "daemoxcp_mail", "java");
         check("the way back is installed", at(r, "add -f " + r.dir.resolve("backup/openjdk25-25.0.4.pkg")) > at(r, "upgrade -y openjdk25"));
         check("TO CHECK, not SUCCEEDED", r.log.contains("=== OUTCOME: TO CHECK") && !r.log.contains("OUTCOME: SUCCEEDED"));
     }
@@ -190,7 +190,7 @@ public class JavaUpdateScriptTest {
                 + "echo 'openjdk version \"25.0.5\"'\n");
         UpdateManager.JavaScriptPlan p = new UpdateManager.JavaScriptPlan("openjdk25", dir.resolve("jdk").toString(),
                 dir.resolve("backup").toString(), dir.resolve("report.log").toString(), panel.pid(), List.of("openjdk25", "libX11"),
-                "touch '" + dir.resolve("started") + "'", dir.toString(), false, 2096, "mailpanel",
+                "touch '" + dir.resolve("started") + "'", dir.toString(), false, 2096, "daemoxcp_mail",
                 dir.resolve("web-supervisor.pid").toString(), dir.resolve("log/panel.log").toString());
         Path script = dir.resolve("upgrade-jdk.sh");
         Files.writeString(script, UpdateManager.javaUpdateScript(p));
@@ -211,7 +211,7 @@ public class JavaUpdateScriptTest {
     static UpdateManager.JavaScriptPlan plan(Path dir, String start, long pid, int port, String user, String supervisor) {
         return new UpdateManager.JavaScriptPlan("openjdk25", "/usr/local/openjdk25", dir.resolve("backup").toString(),
                 dir.resolve("report.log").toString(), pid, List.of("openjdk25", "libX11"),
-                "/usr/sbin/service mailpanel onestart", dir.toString(), "service".equals(start), port, user, supervisor,
+                "/usr/sbin/service daemoxcp_mail onestart", dir.toString(), "service".equals(start), port, user, supervisor,
                 dir.resolve("panel.log").toString());
     }
 

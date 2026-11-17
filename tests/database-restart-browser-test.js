@@ -89,7 +89,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     } catch (e) { console.error(e); failed++; }
     finally {
         if (mysqlStopped) vm('service mysql-server start >/dev/null 2>&1');
-        console.log('    services: ' + vm('for s in mailpanel mysql-server dovecot postfix; do service $s status >/dev/null 2>&1 && printf "%s up, " $s || printf "%s DOWN, " $s; done'));
+        console.log('    services: ' + vm('for s in daemoxcp_mail mysql-server dovecot postfix; do service $s status >/dev/null 2>&1 && printf "%s up, " $s || printf "%s DOWN, " $s; done'));
         await browser.close();
     }
     console.log('\n' + (failed === 0 ? 'ALL OK' : failed + ' CHECKS FAILED'));

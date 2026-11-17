@@ -10,14 +10,14 @@ import java.util.Set;
 /**
  * The root part's preparation of the separated panel:
  *
- *  1. the user mailpanel is used only if it is the one the panel creates: the pw lines of a user with
+ *  1. the user daemoxcp_mail is used only if it is the one the panel creates: the pw lines of a user with
  *     another comment, home or shell, a password, uid 0, another group, or a group with other members
  *     are refused, each with its reason;
- *  2. the daemon(8) line: the web part as mailpanel, supervised and restarted, pid files and log written
+ *  2. the daemon(8) line: the web part as daemoxcp_mail, supervised and restarted, pid files and log written
  *     by the supervisor, --web-part last, and the switch that turns the separation off never passed on;
- *  3. as root on the VM (-De2e.vm=yes): a folder opened to the web part is 0750 root:mailpanel, its data
- *     files 0640 root:mailpanel, and every other file in it loses group and other permissions; a symbolic
- *     link where a data file should be is refused. The group mailpanel is created if missing, and
+ *  3. as root on the VM (-De2e.vm=yes): a folder opened to the web part is 0750 root:daemoxcp_mail, its data
+ *     files 0640 root:daemoxcp_mail, and every other file in it loses group and other permissions; a symbolic
+ *     link where a data file should be is refused. The group daemoxcp_mail is created if missing, and
  *     removed after.
  *
  * Usage (on the VM):
@@ -43,8 +43,8 @@ public class PanelSeparationTest {
 
     public static void main(String[] args) throws Exception {
         System.out.println("== 1. The user ==");
-        String good = "mailpanel:*:1003:1003::0:0:Mail panel web part:/nonexistent:/usr/sbin/nologin";
-        String group = "mailpanel:*:1003:";
+        String good = "daemoxcp_mail:*:1003:1003::0:0:Mail panel web part:/nonexistent:/usr/sbin/nologin";
+        String group = "daemoxcp_mail:*:1003:";
         check("the panel's own user is accepted", PanelSeparation.userProblem(good, group) == null);
         check("a locked account is accepted too", PanelSeparation.userProblem(good.replace(":*:", ":*LOCKED**:"), group) == null);
         String[][] bad = {
@@ -53,8 +53,8 @@ public class PanelSeparationTest {
                 {good.replace("/usr/sbin/nologin", "/bin/sh"), group, "shell"},
                 {good.replace(":*:", ":$6$abc$def:"), group, "password"},
                 {good.replace(":1003:1003:", ":0:1003:"), group, "uid 0"},
-                {good, "mailpanel:*:1004:", "group"},
-                {good, "mailpanel:*:1003:www", "other members"},
+                {good, "daemoxcp_mail:*:1004:", "group"},
+                {good, "daemoxcp_mail:*:1003:www", "other members"},
                 {"", group, "cannot be read"}};
         for (String[] b : bad) {
             String why = PanelSeparation.userProblem(b[0], b[1]);
@@ -64,8 +64,8 @@ public class PanelSeparationTest {
         System.out.println("\n== 2. The daemon(8) line ==");
         List<String> cmd = PanelSeparation.command("/usr/local/openjdk25/bin/java", "/home/panel/daemoxcp-mail-1.0.jar");
         String line = String.join(" ", cmd);
-        check("daemon runs the web part as mailpanel (" + line + ")", cmd.get(0).equals("/usr/sbin/daemon")
-                && line.contains(" -u mailpanel ") && line.contains(" -r ") && line.contains(" -H "));
+        check("daemon runs the web part as daemoxcp_mail (" + line + ")", cmd.get(0).equals("/usr/sbin/daemon")
+                && line.contains(" -u daemoxcp_mail ") && line.contains(" -r ") && line.contains(" -H "));
         check("the supervisor writes both pid files and the log", line.contains(" -P " + PanelSeparation.supervisorPid())
                 && line.contains(" -p " + PanelSeparation.webPid()) && line.contains(" -o " + PanelSeparation.webLog));
         check("its title is the one stop() looks for", line.contains(" -t " + PanelSeparation.TITLE + " "));

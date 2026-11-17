@@ -11,7 +11,7 @@ import java.util.Properties;
 
 /**
  * The panel secrets split in two files: the web part of the panel will
- * run as the user mailpanel and must not read the MySQL root password nor the webmail's MySQL password.
+ * run as the user daemoxcp_mail and must not read the MySQL root password nor the webmail's MySQL password.
  *
  *  1. the move done at start by root: the two root-only secrets leave panel-secrets.properties for
  *     root-secrets.properties (0600), the others stay, and the second time nothing moves; a different
@@ -19,8 +19,8 @@ import java.util.Properties;
  *  2. every secret goes to its own file when it is generated or written;
  *  3. as root on the VM (-De2e.vm=yes): with the separation on (the folder and the panel file in the
  *     web part's group, as PanelSeparation leaves them) a write by root keeps the panel file 0640
- *     root:mailpanel, readable by the web part and never writable by it, and the folder 0750; the lock
- *     and the root file stay 0600 root. The group mailpanel is created if missing, and removed after.
+ *     root:daemoxcp_mail, readable by the web part and never writable by it, and the folder 0750; the lock
+ *     and the root file stay 0600 root. The group daemoxcp_mail is created if missing, and removed after.
  *
  * Usage (on the VM):
  *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.SecretsSplitTest

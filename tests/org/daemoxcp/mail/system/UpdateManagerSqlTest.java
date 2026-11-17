@@ -18,7 +18,7 @@ import java.util.List;
  *  - a text that is not in the catalog never reaches MySQL, and a wrong password gives "".
  *
  * Usage (on the VM, with the test MySQL of tests/README.md, as root):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
+ *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
  *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.UpdateManagerSqlTest
  */
 public class UpdateManagerSqlTest {
@@ -32,8 +32,8 @@ public class UpdateManagerSqlTest {
 
     public static void main(String[] args) throws Exception {
         String port = System.getProperty("mysql.port");
-        String db = System.getProperty("mysql.database", "mailpanel_test");
-        String user = System.getProperty("mysql.user", "mailpanel"), password = System.getProperty("mysql.password", "");
+        String db = System.getProperty("mysql.database", "daemoxcp_mail_test");
+        String user = System.getProperty("mysql.user", "daemoxcp_mail"), password = System.getProperty("mysql.password", "");
         if (port == null) {
             System.out.println("No MySQL given (-Dmysql.port=...): this test needs the test MySQL, and its root.");
             System.exit(1);

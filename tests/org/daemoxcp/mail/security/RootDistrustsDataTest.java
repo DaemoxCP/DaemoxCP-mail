@@ -24,7 +24,7 @@ import java.nio.file.Path;
  *     record name that carries a command does not run it (before, it went to /bin/sh -c as root).
  *
  * Usage (on the VM):
- *   java -De2e.vm=yes -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=... \
+ *   java -De2e.vm=yes -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=... \
  *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.RootDistrustsDataTest
  */
 public class RootDistrustsDataTest {
@@ -88,8 +88,8 @@ public class RootDistrustsDataTest {
             System.setProperty("daemoxcp.mail.secrets.dir", dir.resolve("secrets").toString());
             System.setProperty("daemoxcp.mail.vault.key", dir.resolve("master.key").toString());
             MailDatabase db = new MailDatabase();
-            db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
-            db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));
+            db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
+            db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "daemoxcp_mail_test"));
             check("connected to the test MySQL", db.connect());
             db.createSchema();
             org.daemoxcp.mail.Main.mailDatabase = db;

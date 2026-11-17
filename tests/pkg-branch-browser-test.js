@@ -72,7 +72,7 @@ async function served(route) {
             fingerprint: stateValue().fingerprint, file: '/usr/local/etc/pkg/repos/zz-panel-branch.conf',
             changes: [{ name: 'FreeBSD-ports', from: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/quarterly', to: 'pkg+https://pkg.FreeBSD.org/${ABI}/latest' }],
             warnings: ['No package is updated: it changes where pkg takes them from.', 'On latest the next update can bring new major versions.'],
-            content: '# Written by the mail panel\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', howToReturn: '' });
+            content: '# Written by DaemoxCP Mail\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', howToReturn: '' });
         case 'branch_change':
             if (!changeSucceeds) return json(route, { success: false, error: 'A package job is already running (nginx update).' });
             rounds = 0;

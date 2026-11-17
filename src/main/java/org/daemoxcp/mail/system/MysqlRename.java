@@ -325,6 +325,8 @@ public final class MysqlRename {
             for (String m : MailDbUsers.POSTFIX_MAPS) out.add(places.postfixDir().resolve(m));
             out.add(places.dovecotSql());
             out.add(places.dovecotAuthSql());
+            // Roundcube, dove sui server piu' vecchi entra ancora con l'utente del pannello (RoundcubeDbUser.otherPanelDsn).
+            out.add(Path.of(RoundcubeDbUser.ROUNDCUBE_DIR, "config", "config.inc.php"));
             return out;
         }
 

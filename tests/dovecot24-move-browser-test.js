@@ -100,7 +100,7 @@ async function diagnostics(page) {
         oks(firstTests) >= 5 && oks(firstTests) === oks(lastTests) && !/^\[[0-9:]+\]\s+NO\s{2}/m.test(firstTests + lastTests));
     check('  the IMAP login and the LMTP delivery among them', /ok\s+IMAP login on 993/.test(lastTests) && /ok\s+LMTP delivery to/.test(lastTests));
     check('  the password process still not root, the database user still Dovecot\'s',
-        /auth-worker\) runs as dovecot/.test(step7) && /now mailpanel_dovecot/.test(log));
+        /auth-worker\) runs as dovecot/.test(step7) && /now daemoxcp_mail_dovecot/.test(log));
     check('  no way back taken', !/Putting Dovecot 2\.3 back/.test(log));
     if (OUT) await page.locator('#uc-dovecot').screenshot({ path: OUT + '/dovecot24-done-vm.png' });
 

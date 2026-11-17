@@ -14,11 +14,11 @@ public class PfComparisonTest {
 
     public static void main(String[] args) {
         // --- fail2ban's real ban command on FreeBSD (action.d/pf.conf) ---
-        String real = "pfctl -a f2b/mailpanel-public -t f2b-mailpanel-public -T add <ip>";
+        String real = "pfctl -a f2b/daemoxcp-mail-public -t f2b-daemoxcp-mail-public -T add <ip>";
         Fail2banManager.PfTarget b = Fail2banManager.targetFromCommand(real);
         real("real command: recognised", b != null);
-        same("real command: table", "f2b-mailpanel-public", b == null ? null : b.table);
-        same("real command: anchor", "f2b/mailpanel-public", b == null ? null : b.anchor);
+        same("real command: table", "f2b-daemoxcp-mail-public", b == null ? null : b.table);
+        same("real command: anchor", "f2b/daemoxcp-mail-public", b == null ? null : b.anchor);
 
         // On several lines, as fail2ban-client returns it when the action has more than one.
         Fail2banManager.PfTarget m = Fail2banManager.targetFromCommand(
@@ -43,8 +43,8 @@ public class PfComparisonTest {
         same("placeholder: anchor derived from the definitions", "f2b/dovecot",
             v == null ? null : v.stillLikely);
         // The name can contain dashes: it is split at the FIRST one, which separates the f2b prefix.
-        same("name with dashes", "f2b/mailpanel-public",
-            Fail2banManager.targetFromCommand("<pfctl> -t f2b-mailpanel-public -T add <ip>").stillLikely);
+        same("name with dashes", "f2b/daemoxcp-mail-public",
+            Fail2banManager.targetFromCommand("<pfctl> -t f2b-daemoxcp-mail-public -T add <ip>").stillLikely);
         // A table without a dash lets nothing be derived, and nothing is made up.
         real("nothing to derive", Fail2banManager.targetFromCommand("pfctl -t permaban -T add <ip>").stillLikely == null);
 

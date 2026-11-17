@@ -53,7 +53,7 @@ public class MailDbUsersTest {
         return null;
     }
 
-    static final String PANEL = "mailpanel", DB = "mailserver", PANEL_PW = "PanelPasswordPanelPassword123456";
+    static final String PANEL = "daemoxcp_mail", DB = "mailserver", PANEL_PW = "PanelPasswordPanelPassword123456";
     static final String POSTFIX_PW = "PostfixPostfixPostfixPostfix0001", DOVECOT_PW = "DovecotDovecotDovecotDovecot0001";
 
     /** Fake Postfix, Dovecot and MySQL: answers set by each case, calls counted. */
@@ -170,7 +170,7 @@ public class MailDbUsersTest {
         for (String n : MailDbUsers.POSTFIX_MAPS) {
             String body = heredoc(stack, "/usr/local/etc/postfix/" + n);
             MailDbUsers.Login l = body == null ? null : MailDbUsers.postfixLogin(body.replace("${MAILSERVER_PASS}", PANEL_PW));
-            check(n + " (stack installer, database mailpanel): read", l != null && "mailpanel".equals(l.user()) && "mailpanel".equals(l.db()));
+            check(n + " (stack installer, database daemoxcp_mail): read", l != null && "daemoxcp_mail".equals(l.user()) && "daemoxcp_mail".equals(l.db()));
         }
         MailDbUsers.Login d23 = MailDbUsers.dovecot23Login(dovecot23);
         check("dovecot-sql.conf (2.3): user, password, host and database read from connect", d23 != null

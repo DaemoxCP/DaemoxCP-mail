@@ -30,7 +30,7 @@ import java.util.logging.Logger;
  *     really enter MySQL and run the lookup; with MySQL refusing a step the files stay as they were.
  *
  * Usage (on the VM, with the test MySQL of tests/README.md, as root):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
+ *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
  *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MailDbUsersMysqlTest
  */
 public class MailDbUsersMysqlTest {
@@ -110,7 +110,7 @@ public class MailDbUsersMysqlTest {
 
     public static void main(String[] args) throws Exception {
         port = System.getProperty("mysql.port");
-        database = System.getProperty("mysql.database", "mailpanel_test");
+        database = System.getProperty("mysql.database", "daemoxcp_mail_test");
         if (port == null) {
             System.out.println("No MySQL given (-Dmysql.port=...): this test needs the test MySQL, and its root.");
             System.exit(1);
@@ -127,7 +127,7 @@ public class MailDbUsersMysqlTest {
 
         // Le tabelle come le crea il pannello (domains, mailboxes con receive_enabled, aliases).
         MailDatabase db = new MailDatabase();
-        db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
+        db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(port), database);
         check("connected to MySQL as the panel user", db.connect());
         db.createSchema();
@@ -151,7 +151,7 @@ public class MailDbUsersMysqlTest {
         check("first run: both users created (" + String.join("; ", done) + ")",
                 done.contains("MySQL user " + MailDbUsers.POSTFIX_USER) && done.contains("MySQL user " + MailDbUsers.DOVECOT_USER));
         try (Connection root = as("root", "")) {
-            List<String> users = rows(root, "SELECT user, host, account_locked FROM mysql.user WHERE user LIKE 'mailpanel\\_%' AND user IN (?, ?) ORDER BY user, host",
+            List<String> users = rows(root, "SELECT user, host, account_locked FROM mysql.user WHERE user LIKE 'daemoxcp_mail\\_%' AND user IN (?, ?) ORDER BY user, host",
                     MailDbUsers.DOVECOT_USER, MailDbUsers.POSTFIX_USER);
             check("both users with both host names: " + users, users.equals(List.of(
                     MailDbUsers.DOVECOT_USER + "|127.0.0.1|N", MailDbUsers.DOVECOT_USER + "|localhost|N",
@@ -262,14 +262,14 @@ public class MailDbUsersMysqlTest {
         System.out.println("== 4. The whole migration, files included");
         Path root = Files.createTempDirectory("mail-db-users-files");
         Path pfDir = Files.createDirectories(root.resolve("postfix")), dcDir = Files.createDirectories(root.resolve("dovecot/conf.d"));
-        String map = "user = mailpanel\npassword = PanelPw\nhosts = 127.0.0.1\ndbname = " + database
+        String map = "user = daemoxcp_mail\npassword = PanelPw\nhosts = 127.0.0.1\ndbname = " + database
                 + "\nquery = SELECT domain FROM domains WHERE domain='%s' AND active=1\n";
         Files.writeString(pfDir.resolve("mysql-virtual-domains.cf"), map);
         Files.writeString(dcDir.resolve("..").normalize().resolve("dovecot-sql.conf"), "driver = mysql\nconnect = host=127.0.0.1 dbname="
-                + database + " user=mailpanel password=PanelPw\ndefault_pass_scheme = BLF-CRYPT\n"
+                + database + " user=daemoxcp_mail password=PanelPw\ndefault_pass_scheme = BLF-CRYPT\n"
                 + "password_query = SELECT email as user, password FROM mailboxes WHERE email='%u' AND active=1\n");
         MailDbUsers.Places at = new MailDbUsers.Places(pfDir, root.resolve("dovecot"));
-        String outcome = MailDbUsers.ensure(at, new Working(), url, "", "mailpanel", database, POSTFIX_PW, DOVECOT_PW);
+        String outcome = MailDbUsers.ensure(at, new Working(), url, "", "daemoxcp_mail", database, POSTFIX_PW, DOVECOT_PW);
         check("the migration: nothing left behind (" + outcome + ")", outcome == null);
         check("  and logged as DONE", LOG.stream().anyMatch(l -> l.startsWith("[MailDbUsers] DONE:") && l.contains("Postfix enters MySQL as")));
         MailDbUsers.Login pl = MailDbUsers.postfixLogin(Files.readString(pfDir.resolve("mysql-virtual-domains.cf")));
@@ -286,7 +286,7 @@ public class MailDbUsersMysqlTest {
 
         Files.writeString(pfDir.resolve("mysql-virtual-domains.cf"), map);
         String wasMap = Files.readString(pfDir.resolve("mysql-virtual-domains.cf"));
-        outcome = MailDbUsers.ensure(at, new Working(), url, "wrong-root-password", "mailpanel", database, POSTFIX_PW, DOVECOT_PW);
+        outcome = MailDbUsers.ensure(at, new Working(), url, "wrong-root-password", "daemoxcp_mail", database, POSTFIX_PW, DOVECOT_PW);
         check("MySQL root refused: the reason given (" + outcome + ")", outcome != null && outcome.startsWith("MySQL refused a step"));
         check("  and the map is as it was", Files.readString(pfDir.resolve("mysql-virtual-domains.cf")).equals(wasMap));
 

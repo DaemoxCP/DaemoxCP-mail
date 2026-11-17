@@ -33,7 +33,7 @@ import java.util.Properties;
  *     previous private key kept, and a copy left with the previous key still opens.
  *
  * Usage (on the VM, as root):
- *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... \
+ *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... \
  *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.VaultKeysTest
  */
 public class VaultKeysTest {
@@ -134,7 +134,7 @@ public class VaultKeysTest {
         check("nothing at all: null", vault.decrypt(null) == null && vault.decrypt("") == null);
 
         System.out.println("\n== 3. The web part ==");
-        System.setProperty("user.name", "mailpanel");
+        System.setProperty("user.name", "daemoxcp_mail");
         try {
             String fromWeb = vault.encrypt(password);
             boolean decrypts;
@@ -172,7 +172,7 @@ public class VaultKeysTest {
             System.out.println("\n== 5. With MySQL: the copies of before, and a rotation ==");
             String base = "jdbc:mysql://127.0.0.1:" + port + "/";
             String opts = "?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
-            String user = System.getProperty("mysql.user", "mailpanel");
+            String user = System.getProperty("mysql.user", "daemoxcp_mail");
             try (Connection r = DriverManager.getConnection(base + opts, "root", System.getProperty("mysql.root.password", ""));
                  Statement s = r.createStatement()) {
                 s.execute("DROP DATABASE IF EXISTS vault_keys_test");

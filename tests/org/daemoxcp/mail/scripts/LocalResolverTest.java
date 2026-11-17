@@ -79,7 +79,7 @@ public class LocalResolverTest {
             piece = piece.replace(r.getKey(), r.getValue());
         }
         check("after the replacement it no longer names any system path",
-                !piece.contains("/etc/") && !piece.contains("/var/") && !piece.contains("mktemp /tmp/mail-panel"));
+                !piece.contains("/etc/") && !piece.contains("/var/") && !piece.contains("mktemp /tmp/daemoxcp-mail"));
         Path pieceFile = home.resolve("local-resolver.sh");
         Files.writeString(pieceFile, piece, StandardCharsets.UTF_8);
 
@@ -96,7 +96,7 @@ public class LocalResolverTest {
         check("and it says so", r1.out.contains("Spamhaus answers"));
         // Without it, when recursive, the reverse lookups of private addresses go to the Internet and
         // do not come back: every ssh login from the LAN took 30 seconds (measured on the VM).
-        Path lanZones = s.unbound.resolve("conf.d/mail-panel.conf");
+        Path lanZones = s.unbound.resolve("conf.d/daemoxcp-mail.conf");
         String lanZonesText = Files.exists(lanZones) ? Files.readString(lanZones) : "";
         check("the private reverse zones are resolved here (unblock-lan-zones: no in conf.d)",
                 lanZonesText.startsWith("server:\n") && lanZonesText.contains("\tunblock-lan-zones: no\n")
@@ -282,7 +282,7 @@ public class LocalResolverTest {
 
         long leftovers() throws Exception {
             try (var list = Files.list(tmp)) {
-                return list.filter(p -> p.getFileName().toString().startsWith("mail-panel-")).count();
+                return list.filter(p -> p.getFileName().toString().startsWith("daemoxcp-mail-")).count();
             }
         }
 
