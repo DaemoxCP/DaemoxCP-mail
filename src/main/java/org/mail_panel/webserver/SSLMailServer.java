@@ -3233,7 +3233,11 @@ public class SSLMailServer {
         try {
             if (Main.mailDatabase != null && Main.mysqlAvailable) {
                 String script = new ConfigRegeneratorScript(Main.mailDatabase).getScriptContent();
-                executeScript(script, "config_regen");
+                // Gli avvisi dello script nel registro: prima l'uscita si buttava, e un file con piu' nomi lasciato
+                // com'era (SafeOwnership, reperto 252) o una casella col nome sbagliato non li vedeva nessuno.
+                for (String line : executeScript(script, "config_regen").split("\n"))
+                    if (line.startsWith("WARNING") || line.startsWith("[WARNING]") || line.startsWith("[ERROR]"))
+                        LOGGER.warning("[ConfigRegenerator] " + line);
             }
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Failed to regenerate mail configs", e);
