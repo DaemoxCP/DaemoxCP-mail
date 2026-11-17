@@ -592,11 +592,22 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
   - il secondo non deve avere più niente da fare.
 
   `rollback-panel.sh` rimette tutto com'era senza perdere la posta.
+
+  Quando esce una versione nuova, il pannello te lo dice. Una volta al giorno legge l'elenco delle release di
+  [DaemoxCP/mail](https://github.com/DaemoxCP/mail/releases) su GitHub. Se una è più nuova del pannello, lo dice,
+  col link alla pagina della release:
+  - nella *Dashboard*;
+  - nella pagina *Aggiornamenti*, che ha anche *Controlla adesso*;
+  - nel rapporto periodico.
+
+  Non scarica e non installa niente: l'aggiornamento resta il passo qui sopra. Il controllo non manda a GitHub
+  nient'altro che la richiesta stessa (GitHub vede l'indirizzo del server). Si spegne dalla pagina *Aggiornamenti*.
+  Un pannello in beta (0.x) sente anche delle pre-release; uno 1.x solo delle release.
 - **Gli indirizzi di Cloudflare**: quando la *Diagnostica* dice che Cloudflare ha cambiato il suo elenco, aggiorna
   la regola di pannello e webmail nel firewall del fornitore e confermalo nella pagina *Firewall*.
 
 > [!NOTE]
-> Sono previsti gli aggiornamenti del pannello dalle release di GitHub, verificati e installati dal pannello stesso.
+> È prevista l'installazione di una release dal pannello stesso, con gli stessi controlli di `upgrade-panel.sh`.
 
 ---
 
