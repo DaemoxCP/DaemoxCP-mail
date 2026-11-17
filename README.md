@@ -6,7 +6,7 @@
 
 Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx · fail2ban · pf
 
-`FreeBSD 15.0+ only` · `amd64 / arm64` · `Java 25` · `AGPL-3.0` · `no Docker, no Linux layer` · `passwordless sign-in`
+`FreeBSD 15.1+ only` · `amd64 / arm64` · `Java 25` · `AGPL-3.0` · `no Docker, no Linux layer` · `passwordless sign-in`
 
 <a href="https://buymeacoffee.com/pietrogdamico"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black" /></a>
 <a href="https://www.paypal.com/paypalme/pietrogdamico28"><img alt="Donate with PayPal" src="https://img.shields.io/badge/PayPal-donate-00457C?logo=paypal&logoColor=white" /></a>
@@ -18,7 +18,7 @@ Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx �
 </div>
 
 > [!IMPORTANT]
-> **DaemoxCP Mail runs on FreeBSD, and only on FreeBSD 15.0 or later.** It is built around the FreeBSD base
+> **DaemoxCP Mail runs on FreeBSD, and only on FreeBSD 15.1 or later.** It is built around the FreeBSD base
 > system: `pkg`, `rc.d`, `pf`, `bectl` and ZFS boot environments, `freebsd-update`, `newsyslog`, `local-unbound`.
 > It does not run on Linux, macOS, other BSDs or FreeBSD 14 and earlier, and there is no plan to make it.
 
@@ -150,7 +150,7 @@ documentation (`203.0.113.0/24`, `2001:db8::/32`).</sub>
 
 | What | Needed |
 |---|---|
-| Operating system | **FreeBSD 15.0-RELEASE or later**, amd64 or arm64. Nothing else. |
+| Operating system | **FreeBSD 15.1-RELEASE or later**, amd64 or arm64. Nothing else. FreeBSD 15.0 reached its end of life on 30 September 2026 and no longer gets security fixes. |
 | File system | **ZFS**, for boot environments: the installation, updates and the panel's own upgrades keep a way back with `bectl`. |
 | Memory | **4 GB of RAM**. Measured on a running server: ClamAV 1–1.3 GB, the panel's two Java processes about 0.5 GB, MySQL 0.1–0.5 GB; 2.5–3 GB in all. |
 | Disk | at least 20 GB, plus the mail. |
@@ -290,7 +290,7 @@ back by itself after a reboot. Do the steps in this order: each relies on the on
 
 ### What you need before you start
 
-- **A server** with FreeBSD 15.0 or later (amd64 or arm64) on **ZFS**, a public IPv4 address, a public IPv6 one or
+- **A server** with FreeBSD 15.1 or later (amd64 or arm64) on **ZFS**, a public IPv4 address, a public IPv6 one or
   both, **4 GB of RAM** and at least 20 GB of disk.
 - **Root access over SSH with a key.**
 - **Your domains on Cloudflare** (their DNS is managed by Cloudflare).

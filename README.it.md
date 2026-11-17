@@ -6,7 +6,7 @@
 
 Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx · fail2ban · pf
 
-`solo FreeBSD 15.0+` · `amd64 / arm64` · `Java 25` · `AGPL-3.0` · `niente Docker, niente strato Linux` · `accesso senza password`
+`solo FreeBSD 15.1+` · `amd64 / arm64` · `Java 25` · `AGPL-3.0` · `niente Docker, niente strato Linux` · `accesso senza password`
 
 <a href="https://buymeacoffee.com/pietrogdamico"><img alt="Offrimi un caffè" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black" /></a>
 <a href="https://www.paypal.com/paypalme/pietrogdamico28"><img alt="Dona con PayPal" src="https://img.shields.io/badge/PayPal-donate-00457C?logo=paypal&logoColor=white" /></a>
@@ -18,7 +18,7 @@ Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx �
 </div>
 
 > [!IMPORTANT]
-> **DaemoxCP Mail gira su FreeBSD, e solo su FreeBSD 15.0 o successivo.** È costruito attorno al sistema base di
+> **DaemoxCP Mail gira su FreeBSD, e solo su FreeBSD 15.1 o successivo.** È costruito attorno al sistema base di
 > FreeBSD: `pkg`, `rc.d`, `pf`, `bectl` e i boot environment ZFS, `freebsd-update`, `newsyslog`, `local-unbound`.
 > Non gira su Linux, macOS, altri BSD o FreeBSD 14 e precedenti, e non è previsto che ci giri.
 
@@ -150,7 +150,7 @@ documentazione (`203.0.113.0/24`, `2001:db8::/32`).</sub>
 
 | Cosa | Serve |
 |---|---|
-| Sistema operativo | **FreeBSD 15.0-RELEASE o successivo**, amd64 o arm64. Nient'altro. |
+| Sistema operativo | **FreeBSD 15.1-RELEASE o successivo**, amd64 o arm64. Nient'altro. FreeBSD 15.0 è arrivato a fine vita il 30 settembre 2026 e non riceve più correzioni di sicurezza. |
 | File system | **ZFS**, per i boot environment: installazione, aggiornamenti e passaggi del pannello tengono una strada per tornare indietro con `bectl`. |
 | Memoria | **4 GB di RAM**. Misurato su un server in uso: ClamAV 1–1,3 GB, i due processi Java del pannello circa 0,5 GB, MySQL 0,1–0,5 GB; 2,5–3 GB in tutto. |
 | Disco | almeno 20 GB, più la posta. |
@@ -295,7 +295,7 @@ un riavvio. Fai i passi in quest'ordine: ognuno si appoggia ai precedenti. Gli e
 
 ### Cosa serve prima di cominciare
 
-- **Un server** con FreeBSD 15.0 o successivo (amd64 o arm64) su **ZFS**, un indirizzo IPv4 pubblico, uno IPv6
+- **Un server** con FreeBSD 15.1 o successivo (amd64 o arm64) su **ZFS**, un indirizzo IPv4 pubblico, uno IPv6
   pubblico o tutti e due, **4 GB di RAM** e almeno 20 GB di disco.
 - **Accesso root via SSH con una chiave.**
 - **I tuoi domini su Cloudflare** (il loro DNS è gestito da Cloudflare).
