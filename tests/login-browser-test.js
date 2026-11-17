@@ -66,7 +66,7 @@ function mails() {
 function startServer() {
     // TESTS_CLASSES: the test classes compiled elsewhere, so as not to leave them in tests/.
     const javaArgs = PROPS.concat(['-cp', (process.env.TESTS_CLASSES || path.join(root, 'tests')) + ':' + JAR,
-        'org.mail_panel.webserver.LoginE2EServer', String(PORT)]);
+        'org.daemoxcp.mail.webserver.LoginE2EServer', String(PORT)]);
     const server = REMOTE
         ? spawn('ssh', SSH.concat([REMOTE, 'cd ' + q(dir) + ' && exec java ' + javaArgs.map(q).join(' ')]), { stdio: ['ignore', 'ignore', 'pipe'] })
         : spawn('java', javaArgs, { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
@@ -94,7 +94,7 @@ function spki() {
 // A console command of the panel, run where the server runs (same SQLite, MySQL and keys).
 function console_(...args) {
     try {
-        const javaArgs = PROPS.concat(['-cp', JAR, 'org.mail_panel.Main'], args);
+        const javaArgs = PROPS.concat(['-cp', JAR, 'org.daemoxcp.mail.Main'], args);
         const out = REMOTE
             ? remote('cd ' + q(dir) + ' && java ' + javaArgs.map(q).join(' '), { stdio: ['ignore', 'pipe', 'pipe'] })
             : execFileSync('java', javaArgs, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });

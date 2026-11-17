@@ -48,8 +48,8 @@ import re
 import sys
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
-PAGE = os.path.join(root, "src/main/java/org/mail_panel/content/MailPanelContent.java")
-ROUTES = os.path.join(root, "src/main/java/org/mail_panel/webserver/SSLMailServer.java")
+PAGE = os.path.join(root, "src/main/java/org/daemoxcp/mail/content/MailPanelContent.java")
+ROUTES = os.path.join(root, "src/main/java/org/daemoxcp/mail/webserver/SSLMailServer.java")
 
 page = open(PAGE, encoding="utf-8", errors="replace").read()
 # Also the pages written as separate files (Home, DNS, reports, standards): they call the same

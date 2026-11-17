@@ -29,13 +29,13 @@ import re
 import sys
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
-PAGE = os.path.join(root, "src/main/java/org/mail_panel/content/MailPanelContent.java")
-ROUTES = os.path.join(root, "src/main/java/org/mail_panel/webserver/SSLMailServer.java")
+PAGE = os.path.join(root, "src/main/java/org/daemoxcp/mail/content/MailPanelContent.java")
+ROUTES = os.path.join(root, "src/main/java/org/daemoxcp/mail/webserver/SSLMailServer.java")
 # All the project's classes outside the page: the routes also call Autoconfig, AppleProfile,
 # PeriodicReport, AutoDns. With only the five classes of before, an action of those showed as
 # "not verifiable" or, worse, attributed to a same-named method of another route.
 import glob as _g
-SERVER = sorted(os.path.relpath(f, root) for f in _g.glob(os.path.join(root, "src/main/java/org/mail_panel/**/*.java"), recursive=True)
+SERVER = sorted(os.path.relpath(f, root) for f in _g.glob(os.path.join(root, "src/main/java/org/daemoxcp/mail/**/*.java"), recursive=True)
                 if "/content/" not in f)
 CLASSES = sorted({os.path.splitext(os.path.basename(f))[0] for f in SERVER}, key=len, reverse=True)
 

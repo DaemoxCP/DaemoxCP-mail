@@ -12,8 +12,8 @@
 // errors for the missing data are printed but do not count, except those of panel-actions.
 //
 // Usage (from the project root, after mvn package):
-//   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java \
-//     && java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator $D >/dev/null
+//   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java \
+//     && java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.content.PageGenerator $D >/dev/null
 //   NODE_PATH=$(npm root -g) node tests/csp-browser-test.js $D
 // On the Mac with the installed Chrome: CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome".
 const { chromium } = require('playwright');

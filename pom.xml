@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.mail_panel</groupId>
+    <groupId>org.daemoxcp.mail</groupId>
     <artifactId>freebsd-mail-panel</artifactId>
     <version>1.0</version>
 
@@ -104,7 +104,7 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>org.mail_panel.Main</mainClass>
+                                    <mainClass>org.daemoxcp.mail.Main</mainClass>
                                     <manifestEntries>
                                         <!-- Java 22+: dichiariamo esplicitamente che il jar carica codice nativo
                                              (libsqlite-jdbc.so via System.load). Senza questo, da Java 22 vedi un

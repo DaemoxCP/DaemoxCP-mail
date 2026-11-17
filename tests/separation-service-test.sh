@@ -80,8 +80,8 @@ confirm_session() {
 }
 post() { curl -sk -A "$UA" -b "$JAR_COOKIES" -H 'Content-Type: application/json' ${3:+-H "X-CSRF-Token: $3"} -d "$2" -o /var/tmp/sep-body -w '%{http_code}' "$BASE$1"; }
 del() { curl -sk -A "$UA" -b "$JAR_COOKIES" -H "X-CSRF-Token: $CSRF" -X DELETE -o /var/tmp/sep-body -w '%{http_code}' "$BASE$1"; }
-probe_root() { "$JAVA" -cp "$TESTS:$JAR" org.mail_panel.webserver.RootSocketProbe "$@"; }
-probe_web() { as_web "$JAVA" -cp "$TESTS:$JAR" org.mail_panel.webserver.RootSocketProbe "$@"; }
+probe_root() { "$JAVA" -cp "$TESTS:$JAR" org.daemoxcp.mail.webserver.RootSocketProbe "$@"; }
+probe_web() { as_web "$JAVA" -cp "$TESTS:$JAR" org.daemoxcp.mail.webserver.RootSocketProbe "$@"; }
 
 echo "== 1. Separated =="
 restart

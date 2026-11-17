@@ -4,8 +4,8 @@
 // or English according to the chosen language) and answers /api/language like the panel.
 //
 // Usage (from the project root, after mvn package):
-//   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java \
-//     && java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator $D >/dev/null
+//   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java \
+//     && java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.content.PageGenerator $D >/dev/null
 //   NODE_PATH=$(npm root -g) node tests/layout-browser-test.js $D [screenshot-folder]
 const { chromium } = require('playwright');
 const fs = require('fs');

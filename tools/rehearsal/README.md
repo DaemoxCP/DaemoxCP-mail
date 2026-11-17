@@ -136,7 +136,7 @@ dall'11/10 serve rifare il banco.
 Per le prove che non riguardano il passaggio dall'11/10, il «prima» si fa col jar di `main` su una
 VM vergine (reperti, punto 124):
 1. `InstallFromScratch` del commit di `main`, compilato contro il suo jar, in `/root/panel`;
-2. `src/org/mail_panel/RehearsalCurrentSetup.java`, compilato contro lo stesso jar e lanciato da
+2. `src/org/daemoxcp/mail/RehearsalCurrentSetup.java`, compilato contro lo stesso jar e lanciato da
    `/root/panel`: certificato, amministratore, `rehearsal.test` con alice e bob, lo script di avvio
    (punta a `/root/panel`, dentro il boot environment: niente da rimettere in `/home`);
 3. `sysrc mailpanel_enable=YES` e `service mailpanel start`.
