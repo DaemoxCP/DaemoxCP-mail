@@ -64,8 +64,8 @@ public final class MailDbUsers {
 
     private static final Logger LOGGER = Logger.getLogger(MailDbUsers.class.getName());
 
-    public static final String POSTFIX_USER = "mailpanel_postfix";
-    public static final String DOVECOT_USER = "mailpanel_dovecot";
+    public static final String POSTFIX_USER = Product.ID + "_postfix";
+    public static final String DOVECOT_USER = Product.ID + "_dovecot";
     private static final List<String> HOSTS = List.of("localhost", "127.0.0.1");
 
     /** Le mappe di Postfix che interrogano MySQL, come le scrivono gli script d'installazione. */

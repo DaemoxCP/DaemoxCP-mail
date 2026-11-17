@@ -155,7 +155,7 @@ public class RenameDamageTest {
 
     // ---------------- point 5 ----------------
 
-    /** A whole word: not a piece of rotate_start, mail-panel-auth, key.one or real(). */
+    /** A whole word: not a piece of rotate_start, daemoxcp-mail-auth, key.one or real(). */
     private static final Pattern WORD = Pattern.compile("(?<![A-Za-z0-9_.-])[A-Za-z][A-Za-z0-9]*(?![A-Za-z0-9_(-])");
     private static final Pattern CAMEL = Pattern.compile("[a-z]+[A-Z][A-Za-z0-9]*");
     /** Words that are enough to say a sentence is Italian: two in a line. */

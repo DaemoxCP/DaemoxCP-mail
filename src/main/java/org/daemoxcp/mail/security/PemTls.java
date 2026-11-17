@@ -225,7 +225,7 @@ public final class PemTls {
         try {
             PrivateKey key = privateKey(normalize(keyPem));
             String alg = "EC".equals(key.getAlgorithm()) ? "SHA256withECDSA" : "SHA256withRSA";
-            byte[] probe = "mail-panel-key-check".getBytes(StandardCharsets.US_ASCII);
+            byte[] probe = "daemoxcp-mail-key-check".getBytes(StandardCharsets.US_ASCII);
             Signature s = Signature.getInstance(alg);
             s.initSign(key);
             s.update(probe);

@@ -129,9 +129,9 @@ public class RoundcubeUserTest {
             dir(rc.resolve("config"), "root", "wheel", "rwxr-xr-x");
             write(rc.resolve("config/config.inc.php"), "<?php $config['des_key'] = 'x';\n", "root", "www", "rw-r-----");
             dir(rc.resolve("plugins"), "root", "wheel", "rwxr-xr-x");
-            dir(rc.resolve("plugins/mailpanel_sso"), "www", "www", "rwxr-xr-x");
-            write(rc.resolve("plugins/mailpanel_sso/mailpanel_sso.php"), "<?php // code\n", "www", "www", "rw-r--r--");
-            write(rc.resolve("plugins/mailpanel_sso/config.inc.php"), "<?php // secret\n", "www", "www", "rw-------");
+            dir(rc.resolve("plugins/daemoxcp_mail_sso"), "www", "www", "rwxr-xr-x");
+            write(rc.resolve("plugins/daemoxcp_mail_sso/daemoxcp_mail_sso.php"), "<?php // code\n", "www", "www", "rw-r--r--");
+            write(rc.resolve("plugins/daemoxcp_mail_sso/config.inc.php"), "<?php // secret\n", "www", "www", "rw-------");
             dir(rc.resolve("temp"), "www", "www", "rwxr-xr-x");
             write(rc.resolve("temp/upload.tmp"), "attachment\n", "www", "www", "rw-r--r--");
             dir(rc.resolve("logs"), "www", "www", "rwxr-xr-x");
@@ -348,9 +348,9 @@ public class RoundcubeUserTest {
             check("php-fpm runs roundcube as roundcube, and nothing else", f.running.equals(Map.of("roundcube", Set.of("roundcube"))));
             check("php-fpm -t and nginx -t asked", f.fpmTests == 1 && f.nginxTests == 1);
             check("config.inc.php root:roundcube 640", owner(b.rc.resolve("config/config.inc.php")).equals("root:roundcube rw-r-----"));
-            check("SSO plugin: code owned by root", owner(b.rc.resolve("plugins/mailpanel_sso")).equals("root:wheel rwxr-xr-x")
-                    && owner(b.rc.resolve("plugins/mailpanel_sso/mailpanel_sso.php")).equals("root:wheel rw-r--r--"));
-            check("SSO plugin: configuration root:roundcube 640", owner(b.rc.resolve("plugins/mailpanel_sso/config.inc.php")).equals("root:roundcube rw-r-----"));
+            check("SSO plugin: code owned by root", owner(b.rc.resolve("plugins/daemoxcp_mail_sso")).equals("root:wheel rwxr-xr-x")
+                    && owner(b.rc.resolve("plugins/daemoxcp_mail_sso/daemoxcp_mail_sso.php")).equals("root:wheel rw-r--r--"));
+            check("SSO plugin: configuration root:roundcube 640", owner(b.rc.resolve("plugins/daemoxcp_mail_sso/config.inc.php")).equals("root:roundcube rw-r-----"));
             check("roundcube's temp 700, and its content", owner(b.rc.resolve("temp")).equals("roundcube:roundcube rwx------")
                     && owner(b.rc.resolve("temp/upload.tmp")).startsWith("roundcube:roundcube rw-r-----"));
             check("roundcube's logs 750, with the logs", owner(b.rc.resolve("logs")).equals("roundcube:roundcube rwxr-x---")

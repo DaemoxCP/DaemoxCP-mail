@@ -72,7 +72,7 @@ else
     # dropping the escapes gives the password back.
     # Since the panel split its secrets the root password is in
     # root-secrets.properties; on a server not split yet it is still in panel-secrets.properties.
-    for f in /usr/local/etc/mail-panel/root-secrets.properties /usr/local/etc/mail-panel/panel-secrets.properties; do
+    for f in /usr/local/etc/daemoxcp-mail/root-secrets.properties /usr/local/etc/daemoxcp-mail/panel-secrets.properties; do
         [ -f "$f" ] || continue
         ROOT_PW=$(sed -n 's/^mysql_root_password=//p' "$f" | sed 's/\\\(.\)/\1/g')
         [ -n "$ROOT_PW" ] && break

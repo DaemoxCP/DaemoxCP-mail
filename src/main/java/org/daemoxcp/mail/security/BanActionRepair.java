@@ -17,8 +17,8 @@ import java.util.List;
  * Fa bannare con pf le jail che bannavano con iptables.
  *
  * Cosa era successo. Delle sette jail attive, cinque dichiaravano la propria azione
- * ("action = pf[name=...]") e due no: la superficie pubblica (oggi mailpanel-public, allora
- * mailpanel-pubblico) e mail-panel-auth, cioe' proprio le
+ * ("action = pf[name=...]") e due no: la superficie pubblica (oggi daemoxcp-mail-public, allora
+ * mailpanel-pubblico) e daemoxcp-mail-auth, cioe' proprio le
  * due che proteggono il pannello. Non dichiarandola ereditavano il valore predefinito di
  * jail.conf, che e' costruito su iptables — un comando che su FreeBSD non esiste. Il risultato
  * non era un errore visibile: le jail rilevavano, contavano i tentativi e incrementavano i ban
@@ -27,7 +27,7 @@ import java.util.List;
  * finche' non si guarda il firewall.
  *
  * Perche' non basta correggere il codice. Il file della superficie pubblica lo riscrive il pannello
- * a ogni installazione, quindi li' la correzione arriva da sola. La sezione [mail-panel-auth] no:
+ * a ogni installazione, quindi li' la correzione arriva da sola. La sezione [daemoxcp-mail-auth] no:
  * viene aggiunta a jail.local una volta sola e poi mai piu' toccata, per non calpestare le
  * modifiche di chi la personalizza. Ottima regola, che pero' significa che su un'installazione
  * gia' fatta quella sezione resterebbe con iptables per sempre. Serve un intervento che la
@@ -123,30 +123,30 @@ public final class BanActionRepair {
                     I18n.tr("server.banfix.notInstalled")));
             }
 
-            // 2. mail-panel-auth: sezione dentro jail.local, si cambia solo la riga dell'azione.
+            // 2. daemoxcp-mail-auth: sezione dentro jail.local, si cambia solo la riga dell'azione.
             Path loc = Paths.get(JAIL_LOCAL);
             if (Files.exists(loc)) {
                 String before = Files.readString(loc, StandardCharsets.UTF_8);
-                Outcome e = withPfAction(before, "mail-panel-auth");
+                Outcome e = withPfAction(before, "daemoxcp-mail-auth");
                 switch (e.type) {
-                    case ABSENT -> steps.put(step("mail-panel-auth", true,
+                    case ABSENT -> steps.put(step("daemoxcp-mail-auth", true,
                         I18n.tr("server.banfix.noSection")));
-                    case ALREADY_IN_PLACE -> steps.put(step("mail-panel-auth", true,
+                    case ALREADY_IN_PLACE -> steps.put(step("daemoxcp-mail-auth", true,
                         I18n.tr("server.banfix.alreadyOk")));
                     case TO_REVIEW -> {
-                        steps.put(step("mail-panel-auth", false, e.reason));
+                        steps.put(step("daemoxcp-mail-auth", false, e.reason));
                         toReviewByHand = true;
                     }
                     case MODIFIED -> {
                         copies.add(copy(loc));
                         Files.writeString(loc, e.content, StandardCharsets.UTF_8);
                         touched = true;
-                        steps.put(step("mail-panel-auth", true,
+                        steps.put(step("daemoxcp-mail-auth", true,
                             I18n.tr("server.banfix.lineUpdated", java.util.Map.of("file", String.valueOf(JAIL_LOCAL), "line", String.valueOf(actionLineOf(e.content))))));
                     }
                 }
             } else {
-                steps.put(step("mail-panel-auth", true, I18n.tr("server.banfix.noJailLocal")));
+                steps.put(step("daemoxcp-mail-auth", true, I18n.tr("server.banfix.noJailLocal")));
             }
 
             if (!touched && !toReviewByHand) {
@@ -155,7 +155,7 @@ public final class BanActionRepair {
                 // direbbe "non serviva" guardando solo il disco. Se il runtime non riporta
                 // l'azione di qualche jail, il lavoro non e' finito — si ricarica e si riguarda.
                 java.util.List<String> mute = new ArrayList<>();
-                for (String jail : new String[] { PUBLIC_NAME, "mail-panel-auth" }) {
+                for (String jail : new String[] { PUBLIC_NAME, "daemoxcp-mail-auth" }) {
                     String c = banCommand(jail);
                     if (c == null || c.isEmpty()) mute.add(jail);
                 }
@@ -190,7 +190,7 @@ public final class BanActionRepair {
             // la configurazione e' giusta ma non e' stata applicata: si ricrea la jail. Senza
             // "--unban", che il manuale indica come l'opzione che invece toglierebbe i ban.
             java.util.List<String> stillMute = new ArrayList<>();
-            for (String jail : new String[] { PUBLIC_NAME, "mail-panel-auth" }) {
+            for (String jail : new String[] { PUBLIC_NAME, "daemoxcp-mail-auth" }) {
                 String c = banCommand(jail);
                 if (c == null || c.isEmpty()) stillMute.add(jail);
             }
@@ -203,7 +203,7 @@ public final class BanActionRepair {
             // 4. La verifica che conta: cosa esegue ADESSO, chiesto a fail2ban.
             JSONArray verification = new JSONArray();
             boolean allOk = true;
-            for (String jail : new String[] { PUBLIC_NAME, "mail-panel-auth" }) {
+            for (String jail : new String[] { PUBLIC_NAME, "daemoxcp-mail-auth" }) {
                 String cmd = banCommand(jail);
                 boolean ok = cmd != null && cmd.contains("pfctl");
                 if (cmd == null || cmd.isEmpty()) {
@@ -541,7 +541,7 @@ public final class BanActionRepair {
         return null;
     }
 
-    private static final String BACKUP_FOLDER = "/var/db/mail-panel/fail2ban-backups";
+    private static final String BACKUP_FOLDER = "/var/db/daemoxcp-mail/fail2ban-backups";
 
     /**
      * La copia di sicurezza va FUORI da jail.d.

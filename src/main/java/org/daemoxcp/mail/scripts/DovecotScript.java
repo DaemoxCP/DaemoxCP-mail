@@ -138,7 +138,7 @@ public class DovecotScript {
                 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \\
                     -keyout /usr/local/etc/ssl/mail/privkey.pem \\
                     -out /usr/local/etc/ssl/mail/fullchain.pem \\
-                    -subj "/CN=mail.localhost/O=FreeBSD Mail Panel"
+                    -subj "/CN=mail.localhost/O=DaemoxCP Mail"
                 chmod 600 /usr/local/etc/ssl/mail/privkey.pem
             fi
 

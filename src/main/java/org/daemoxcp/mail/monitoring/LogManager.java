@@ -10,7 +10,7 @@ import java.util.regex.*;
 import java.util.stream.*;
 
 /**
- * Log Manager for FreeBSD Mail Panel
+ * Log Manager for DaemoxCP Mail
  *
  * Handles reading, parsing, and streaming of mail server logs:
  * - Postfix: /var/log/maillog

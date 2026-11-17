@@ -55,12 +55,12 @@ public class WebProtection {
      * fra tre servizi: nginx scrive il log che fail2ban legge. Fino al 30/10/2026 era
      * "mailpanel-pubblico": i server installati prima li sposta PublicSurfaceRename all'avvio.
      */
-    public static final String NAME = "mailpanel-public";
+    public static final String NAME = Product.SLUG + "-public";
 
     private static final String NGINX_PREFIX = "/usr/local/etc/nginx";
     static final String FILE_NAME = NAME + ".conf";
-    private static final String COPY = "/var/db/mailpanel/" + NAME + ".conf-previous";
-    public static final String PUBLIC_DIR = "/var/db/mailpanel/public";
+    private static final String COPY = "/var/db/daemoxcp-mail/" + NAME + ".conf-previous";
+    public static final String PUBLIC_DIR = "/var/db/daemoxcp-mail/public";
     public static final String POLICY_FILE = PUBLIC_DIR + "/mta-sts.txt";
     static final String LOG_DIR = "/var/log/nginx";
     public static final String ACCESS_LOG = LOG_DIR + "/" + NAME + "-access.log";
@@ -115,7 +115,7 @@ public class WebProtection {
     public static String configuration(String cert, String key) {
         return """
             # Superficie pubblica del pannello di posta sulla porta 443.
-            # Written by the mail panel: non modificare a mano, verrebbe sovrascritto.
+            # Written by DaemoxCP Mail: non modificare a mano, verrebbe sovrascritto.
             #
             # Qui si servono DUE file e nient'altro:
             #   /.well-known/mta-sts.txt   la politica MTA-STS, file statico
@@ -317,7 +317,7 @@ public class WebProtection {
      * =================================================================== */
 
     public static final String PROPOSED_FOLDER = NGINX_PREFIX + "/conf.d";
-    private static final String MAIN_COPY = "/var/db/mailpanel/nginx.conf-before-include";
+    private static final String MAIN_COPY = "/var/db/daemoxcp-mail/nginx.conf-before-include";
 
     /**
      * Il file principale, ricavato da "nginx -T": la prima riga "# configuration file X:"
@@ -449,7 +449,7 @@ public class WebProtection {
      */
     public static String filter() {
         return """
-            # Written by the mail panel. Guarda il solo log della superficie pubblica 443.
+            # Written by DaemoxCP Mail. Guarda il solo log della superficie pubblica 443.
             [Definition]
             failregex = ^<HOST> .* "(GET|HEAD|POST|PUT|DELETE|OPTIONS|PATCH|TRACE|CONNECT)[^"]*" (404|405|429) 
             ignoreregex =
@@ -458,7 +458,7 @@ public class WebProtection {
 
     public static String jail() {
         return """
-            # Written by the mail panel.
+            # Written by DaemoxCP Mail.
             [%1$s]
             enabled  = true
             filter   = %1$s

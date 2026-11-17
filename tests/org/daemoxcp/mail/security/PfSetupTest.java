@@ -128,9 +128,9 @@ public class PfSetupTest {
         }
         // The list of the permanent blocks must exist, otherwise pfctl refuses the table persist
         // file: it is the same order the script keeps.
-        Files.createDirectories(Path.of("/var/db/mail-panel"));
-        if (!Files.exists(Path.of("/var/db/mail-panel/permaban.list")))
-            Files.writeString(Path.of("/var/db/mail-panel/permaban.list"), "");
+        Files.createDirectories(Path.of("/var/db/daemoxcp-mail"));
+        if (!Files.exists(Path.of("/var/db/daemoxcp-mail/permaban.list")))
+            Files.writeString(Path.of("/var/db/daemoxcp-mail/permaban.list"), "");
         Path candidate = home.resolve("pf.conf");
         Files.writeString(candidate, pfConf + "\n", StandardCharsets.UTF_8);
         check("pfctl -nf accepts it", run("/sbin/pfctl", "-nf", candidate.toString()) == 0);

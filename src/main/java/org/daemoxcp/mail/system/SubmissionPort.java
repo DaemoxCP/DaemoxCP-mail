@@ -32,7 +32,7 @@ public class SubmissionPort {
 
     public static final String RESTRICTION = "smtpd_client_restrictions=permit_sasl_authenticated,reject";
     private static final String MASTER = "/usr/local/etc/postfix/master.cf";
-    private static final String COPY = "/var/db/mailpanel/master.cf-before-465";
+    private static final String COPY = "/var/db/daemoxcp-mail/master.cf-before-465";
 
     /** I nomi con cui la porta 465 puo' comparire in master.cf. */
     private static final List<String> NAMES = List.of("smtps", "submissions");

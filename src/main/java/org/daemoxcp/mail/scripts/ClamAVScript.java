@@ -77,7 +77,7 @@ public class ClamAVScript {
             # clamd.conf
             cat > /usr/local/etc/clamd.conf << 'CLAMDCONF'
 # ClamAV Daemon Configuration
-# Managed by FreeBSD Mail Panel
+# Managed by DaemoxCP Mail
 
 LocalSocket /var/run/clamav/clamd.sock
 FixStaleSocket yes
@@ -104,7 +104,7 @@ CLAMDCONF
             # freshclam.conf (virus database updater)
             cat > /usr/local/etc/freshclam.conf << 'FRESHCONF'
 # Freshclam Configuration
-# Managed by FreeBSD Mail Panel
+# Managed by DaemoxCP Mail
 
 DatabaseDirectory /var/db/clamav
 DatabaseOwner clamav

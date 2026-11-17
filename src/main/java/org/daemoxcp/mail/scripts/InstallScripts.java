@@ -84,7 +84,7 @@ public final class InstallScripts {
 
     /**
      * Lo script con l'impronta del jar e il controllo per chi lo lancia a mano, subito dopo la riga
-     * #!. Il jar del servizio lo dice rc.conf (mailpanel_jar) o, se li' non c'e', il valore
+     * #!. Il jar del servizio lo dice rc.conf (daemoxcp_mail_jar) o, se li' non c'e', il valore
      * predefinito scritto nello script rc.d del pannello. Senza servizio del pannello, o lanciato dal
      * pannello stesso (che l'ha appena scritto), il controllo non si fa.
      *
@@ -93,16 +93,16 @@ public final class InstallScripts {
      */
     static String stamped(String content) {
         String guard = """
-                # --- Written by the mail panel (InstallScripts) -------------------------------------------
+                # --- Written by DaemoxCP Mail (InstallScripts) --------------------------------------------
                 # L'impronta del jar che ha scritto questo script. Lanciato a mano (non dal pannello), lo
                 # script la confronta col jar che il servizio del pannello usa: se sono diversi, lo script e'
                 # di un'altra versione del pannello e si ferma prima di cambiare qualunque cosa.
                 DAEMOXCP_MAIL_WRITTEN_BY_JAR="%s"
                 if [ -z "${DAEMOXCP_MAIL_FROM_PANEL:-}" ] && [ -n "$DAEMOXCP_MAIL_WRITTEN_BY_JAR" ]; then
-                    daemoxcp_mail_jar=$(sysrc -n mailpanel_jar 2>/dev/null) || daemoxcp_mail_jar=""
-                    [ -n "$daemoxcp_mail_jar" ] || daemoxcp_mail_jar=$(sed -n 's/^: \\${mailpanel_jar:="\\(.*\\)"}$/\\1/p' /usr/local/etc/rc.d/mailpanel 2>/dev/null)
+                    daemoxcp_mail_jar=$(sysrc -n daemoxcp_mail_jar 2>/dev/null) || daemoxcp_mail_jar=""
+                    [ -n "$daemoxcp_mail_jar" ] || daemoxcp_mail_jar=$(sed -n 's/^: \\${daemoxcp_mail_jar:="\\(.*\\)"}$/\\1/p' /usr/local/etc/rc.d/daemoxcp_mail 2>/dev/null)
                     if [ -n "$daemoxcp_mail_jar" ] && [ -f "$daemoxcp_mail_jar" ] && [ "$(sha256 -q "$daemoxcp_mail_jar" 2>/dev/null)" != "$DAEMOXCP_MAIL_WRITTEN_BY_JAR" ]; then
-                        echo "STOPPED: this script was written by another version of the mail panel than the one the panel service runs ($daemoxcp_mail_jar)."
+                        echo "STOPPED: this script was written by another version of DaemoxCP Mail than the one the panel service runs ($daemoxcp_mail_jar)."
                         echo "Open the panel menu (it writes its scripts again at every start) and run it from there."
                         echo "Nothing was stopped and nothing was changed."
                         exit 1
@@ -127,7 +127,8 @@ public final class InstallScripts {
         if (s != null) return s;
         s = "";
         try {
-            Path p = Path.of(InstallScripts.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            Path p = Path.of(org.daemoxcp.mail.system.PanelServiceRename.current(
+                    Path.of(InstallScripts.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toString()));
             if (Files.isRegularFile(p) && p.getFileName().toString().endsWith(".jar")) {
                 MessageDigest md = MessageDigest.getInstance("SHA-256");
                 try (InputStream in = Files.newInputStream(p)) {

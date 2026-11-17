@@ -238,7 +238,7 @@ nginx php84 php84-extensions roundcube-php84
     └── rspamd/
 
 ./database/                     # Panel SQLite database
-    └── mail_panel.db
+    └── daemoxcp-mail.db
 
 ./install_scripts/              # Generated install scripts
     ├── install_mail_server.sh
@@ -300,7 +300,7 @@ password_query = SELECT email as user, password FROM mailboxes WHERE email='%u' 
 
 ### SQLite (Panel Configuration)
 
-File: `./database/mail_panel.db`
+File: `./database/daemoxcp-mail.db`
 
 ```sql
 CREATE TABLE config (
@@ -545,7 +545,7 @@ how many updates the lock is holding back, and marks the vulnerable ones.
 shutdown, by design. Those packages then stop receiving updates, **including security
 fixes**, silently. The panel leaves the explanation on the machine:
 
-- `/var/db/mailpanel/locked-packages.txt` — why they are locked, the list, and the commands
+- `/var/db/daemoxcp-mail/locked-packages.txt` — why they are locked, the list, and the commands
   to release them. Rewritten at every startup and at every lock change.
 - each locked package carries a `mail_panel_lock` annotation in pkg's own database, visible
   with `pkg info -A <name>`, pointing at that file.
@@ -571,14 +571,14 @@ boot environment, going back also brings back the mail and the databases as they
 says so, and `tools/upgrade/rollback-panel.sh` shows how to copy the newer mail first.
 
 **One package job at a time, across processes.** The package turn is also an `fcntl` lock on
-`/var/db/mailpanel/package-turn.lock` (the file says who holds it). A second panel process —
+`/var/db/daemoxcp-mail/package-turn.lock` (the file says who holds it). A second panel process —
 the terminal menu opened while the web panel is updating — cannot start a job and does not
 touch the running job's list at startup. The lock disappears with the process that held it.
 
 **If a job is interrupted** (the panel killed, restarted or crashed, a power loss), the next
 start protects the listed packages again; if `pkg` is still working, it retries every 30
 seconds until it can, instead of waiting for the next restart. It also writes
-`/var/db/mailpanel/package-job-interrupted.json`: which job, when, and what to check by hand.
+`/var/db/daemoxcp-mail/package-job-interrupted.json`: which job, when, and what to check by hand.
 The notice stays at the top of *Updates* and in the periodic report until an administrator
 marks it as checked (recorded in the audit log). The report also names packages still
 unprotected, and mail stack packages that nobody unlocked from the panel.
@@ -921,7 +921,7 @@ the options in this order:
    starting it checks the three names (the webmail's must be set, mail and web must be different
    names). It installs and configures MySQL, Postfix, Dovecot, Rspamd, ClamAV, Redis, nginx, PHP
    and Roundcube, fail2ban and the firewall, and takes several minutes; it goes on even if the
-   terminal closes, and its log is in `/var/log/mailpanel/`. **It erases any existing mail
+   terminal closes, and its log is in `/var/log/daemoxcp-mail/`. **It erases any existing mail
    configuration, mailboxes and panel accounts**: on a new server there is nothing to lose.
 5. **5) Emergency access code.** There is no administrator yet: it asks for a name and an email and
    creates the first administrator, then shows an **8-digit code**, valid for 15 minutes.
@@ -1064,14 +1064,14 @@ always available from the server, for any active administrator, when passkey and
 enough (and it creates the first administrator if there is none yet).
 
 The panel keys (data encryption, blind index, code HMAC, CSRF, webmail key) and the panel's
-MySQL password and TLS private key are in `/usr/local/etc/mail-panel/panel-secrets.properties`
+MySQL password and TLS private key are in `/usr/local/etc/daemoxcp-mail/panel-secrets.properties`
 (mode 600, folder 700), never in the database. On a server that is already running, the first
-start of this version moves the MySQL password and the TLS key out of `database/mail_panel.db`
-by itself and empties those columns; `database/` becomes 700 and `mail_panel.db` 600.
+start of this version moves the MySQL password and the TLS key out of `database/daemoxcp-mail.db`
+by itself and empties those columns; `database/` becomes 700 and `daemoxcp-mail.db` 600.
 
 **Mailbox passwords can always be seen and copied** (Mailboxes → Edit → Reveal): each one is
 stored as the bcrypt hash Dovecot reads and as an AES-256-GCM copy (key in
-`/usr/local/etc/mail-panel/master.key`). If the copy cannot be written, the password is not saved
+`/usr/local/etc/daemoxcp-mail/master.key`). If the copy cannot be written, the password is not saved
 at all. Reveal shows the copy only while it matches the hash. Password changes from the webmail
 go through the panel (Roundcube password plugin, `httpapi` driver, to
 `https://127.0.0.1:<panel port>/api/internal/mailbox-password`, loopback only, with the webmail
@@ -1239,7 +1239,7 @@ ls -la /var/vmail/
 1. Clear browser cookies
 2. Check if using Cloudflare proxy
 3. Verify MySQL connection in panel config
-4. Check `./database/mail_panel.db` exists (in the panel's folder, `/home/panel`)
+4. Check `./database/daemoxcp-mail.db` exists (in the panel's folder, `/home/panel`)
 
 ---
 

@@ -24,7 +24,7 @@ const VM = 'ssh -i ' + process.env.HOME + '/.ssh/freebsd_test_vm -o IdentitiesOn
 let failed = 0;
 const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + what); if (!ok) failed++; };
 const vm = cmd => execSync(VM + " '" + cmd + "'").toString().trim();
-const refusals = () => Number(vm('grep -c "forwarded request refused" /var/db/mailpanel/panel.log || true'));
+const refusals = () => Number(vm('grep -c "forwarded request refused" /var/db/daemoxcp-mail/panel.log || true'));
 
 (async () => {
     const browser = await chromium.launch({ headless: true, channel: 'chrome' });

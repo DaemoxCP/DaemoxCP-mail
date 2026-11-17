@@ -54,7 +54,7 @@ public final class PackageQueue {
      * se il processo muore (riavvio del pannello, kill, crash della JVM): questo file e' l'unica
      * cosa che sopravvive, e all'avvio il pannello riprotegge cio' che c'e' scritto.
      */
-    public static final String STATE_PATH = "/var/db/mail-panel-maintenance-locks";
+    public static final String STATE_PATH = "/var/db/daemoxcp-mail-maintenance-locks";
 
     /** Dove sta l'elenco. E' una variabile solo perche' le prove non scrivano in /var/db. */
     static Path list = Path.of(STATE_PATH);
@@ -64,7 +64,7 @@ public final class PackageQueue {
     private static final AtomicReference<Turn> IN_PROGRESS = new AtomicReference<>();
 
     /** Il lock del turno fra processi. Dentro c'e' scritto chi lo tiene, per dirlo a chi lo trova preso. */
-    public static final String TURN_LOCK_PATH = "/var/db/mailpanel/package-turn.lock";
+    public static final String TURN_LOCK_PATH = "/var/db/daemoxcp-mail/package-turn.lock";
 
     /** Dove sta il lock. E' una variabile solo perche' le prove non scrivano in /var/db. */
     static Path turnLock = Path.of(TURN_LOCK_PATH);

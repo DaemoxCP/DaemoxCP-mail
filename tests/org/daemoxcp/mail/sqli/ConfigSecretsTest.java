@@ -23,9 +23,9 @@ import java.sql.ResultSet;
  *    the columns. A value written in a column by an older version wins at the next start.
  *  - A multi-line PEM key comes back byte for byte.
  *  - Secrets file not writable: the value stays in SQLite and is still read (nothing lost).
- *  - database/ is 700 and mail_panel.db 600.
+ *  - database/ is 700 and daemoxcp-mail.db 600.
  *
- * dataBaseManager works on database/mail_panel.db in the working directory, so the checks run in
+ * dataBaseManager works on database/daemoxcp-mail.db in the working directory, so the checks run in
  * a child JVM started in a temporary directory.
  *
  * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.sqli.ConfigSecretsTest
@@ -73,8 +73,8 @@ public class ConfigSecretsTest {
         check("the accessors give them back (the PEM byte for byte)", "Old-Mysql-Password".equals(db.mysqlPassword()) && key.equals(db.panelTlsKey()));
         check("the secrets file is 600, its folder 700", "rw-------".equals(perms(secrets.resolve("panel-secrets.properties")))
                 && "rwx------".equals(perms(secrets)));
-        check("database/ is 700, mail_panel.db 600", "rwx------".equals(perms(Path.of("database")))
-                && "rw-------".equals(perms(Path.of("database", "mail_panel.db"))));
+        check("database/ is 700, daemoxcp-mail.db 600", "rwx------".equals(perms(Path.of("database")))
+                && "rw-------".equals(perms(Path.of("database", "daemoxcp-mail.db"))));
         check("a second start moves nothing", db.migrateSecrets() == 0);
 
         System.out.println("\n== What the panel saves goes to the file ==");

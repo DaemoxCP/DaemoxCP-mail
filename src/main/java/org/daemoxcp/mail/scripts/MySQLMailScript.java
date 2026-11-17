@@ -11,7 +11,7 @@ public class MySQLMailScript {
     public MySQLMailScript() {
         this.data = """
             #!/bin/sh
-            # MySQL Installation for FreeBSD Mail Panel
+            # MySQL Installation for DaemoxCP Mail
             # FULLY AUTOMATIC: Generates and sets all passwords automatically
 
             echo "=== MySQL Installation for Mail Panel ==="

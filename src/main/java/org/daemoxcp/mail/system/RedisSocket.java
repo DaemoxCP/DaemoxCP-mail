@@ -48,7 +48,7 @@ public final class RedisSocket {
     static final String RSPAMD = "rspamd";
 
     /** Le righe che il pannello aggiunge in fondo a redis.conf: in redis.conf vince l'ultima. */
-    static final String MARK = "# mail-panel: redis solo sul socket Unix, del gruppo redis, in cui sta rspamd (reperto 235)\n";
+    static final String MARK = "# daemoxcp-mail: redis solo sul socket Unix, del gruppo redis, in cui sta rspamd (reperto 235)\n";
     static final String SOCKET_LINES = "unixsocket " + SOCKET + "\nunixsocketperm 770\n";
     static final String MID = MARK + SOCKET_LINES;
     public static final String FINAL = MID + "port 0\n";

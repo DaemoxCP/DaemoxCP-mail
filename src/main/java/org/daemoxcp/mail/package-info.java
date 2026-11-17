@@ -1,6 +1,6 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════════╗
- * ║                         FreeBSD Mail Panel                                    ║
+ * ║                         DaemoxCP Mail                                    ║
  * ║                    Native Mail Server Control Panel                           ║
  * ╠══════════════════════════════════════════════════════════════════════════════╣
  * ║                                                                               ║
@@ -93,7 +93,7 @@
  * ║                                                                               ║
  * ╚══════════════════════════════════════════════════════════════════════════════╝
  *
- * @author FreeBSD Mail Panel Team
+ * @author DaemoxCP Mail Team
  * @version 1.0
  */
 package org.daemoxcp.mail;

@@ -212,7 +212,7 @@ public class CloudflareManager {
             // mostra avvisi di quoting e il record è esplicitamente conforme.
             payload.put("content", formatTxtRecordContent(value));
             payload.put("ttl", ttl <= 0 ? 1 : ttl);
-            payload.put("comment", "DKIM rotation - auto-managed by FreeBSD Mail Panel");
+            payload.put("comment", "DKIM rotation - auto-managed by DaemoxCP Mail");
 
             HttpResponse<String> resp = call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString());
             JSONObject body = new JSONObject(resp.body());
@@ -342,7 +342,7 @@ public class CloudflareManager {
      * italiano, e lo tengono: cambiarlo vorrebbe dire scrivere su Cloudflare all'avvio per un
      * commento.
      */
-    static final String RECORD_COMMENT = "Created by the mail panel";
+    static final String RECORD_COMMENT = "Created by " + org.daemoxcp.mail.system.Product.NAME;
 
     /**
      * I record di questa zona che hanno il commento di prima (in italiano fino al 30/10/2026, legacy-names.json,

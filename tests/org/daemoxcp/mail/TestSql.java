@@ -12,7 +12,7 @@ import java.sql.Statement;
  *
  *  - mysql(): the test MySQL, from the same properties the tests give the panel
  *    (-Dmysql.port, -Dmysql.user, -Dmysql.password, -Dmysql.database), one connection kept open;
- *  - sqlite(): a new connection to database/mail_panel.db in the working directory, the panel's
+ *  - sqlite(): a new connection to database/daemoxcp-mail.db in the working directory, the panel's
  *    SQLite file, for the caller to close.
  */
 public final class TestSql {
@@ -33,7 +33,7 @@ public final class TestSql {
     }
 
     public static Connection sqlite() throws SQLException {
-        Connection c = DriverManager.getConnection("jdbc:sqlite:database/mail_panel.db");
+        Connection c = DriverManager.getConnection("jdbc:sqlite:database/daemoxcp-mail.db");
         try (Statement s = c.createStatement()) {
             s.execute("PRAGMA busy_timeout = 15000");
         }

@@ -874,7 +874,7 @@ only with the pinned certificate, EXAMINE and never SELECT, the password quoted;
 the authentication socket that greets, the silent one and the missing one. On the VM.
 
 **JobJournalTest** — the jobs' log on disk (`JobJournal`, reperto 196): one file per job in
-`/var/db/mailpanel/jobs` (here a temporary folder), that survives a restart of the panel or of the server and is
+`/var/db/daemoxcp-mail/jobs` (here a temporary folder), that survives a restart of the panel or of the server and is
 read from Diagnostics, Operation logs. The start line, every line with its UTC time, the end with status, error and
 duration written once only; folder 0700 and files 0600; only the newest KEEP stay; the list newest first, with the
 type from the name and the status from the end line (a job that never ended says so); reading only a well formed
@@ -1225,14 +1225,14 @@ attempts, no password in the log. /api/internal/mailbox-vault fills a missing co
 login. Roundcube's configuration: away with the sql driver's lines (with the panel's MySQL
 password), the panel's block only once, file not readable by other users.
 With `-Droundcube.dir=<roundcubemail-1.6.x-complete unpacked>` and `php` it also runs Roundcube's
-real code (webmail-roundcube-test.php): the httpapi driver with its Guzzle and the mailpanel_sso
+real code (webmail-roundcube-test.php): the httpapi driver with its Guzzle and the daemoxcp_mail_sso
 plugin's login hook, against the panel.
 
 **ConfigSecretsTest** — the MySQL password and the TLS private key leave the SQLite database even
 on a server already started: at the first start they move to the secrets file (600, folder 700) and
 the columns are emptied; what the panel saves afterwards goes into the file; a value written by an
 old version wins at the next start; the PEM key comes back identical; with the file not writable
-the value stays in SQLite and is read all the same; database/ 700 and mail_panel.db 600.
+the value stays in SQLite and is read all the same; database/ 700 and daemoxcp-mail.db 600.
 
 **csp-browser-test.js** — every generated page in Chromium with the panel's
 Content-Security-Policy (without 'unsafe-inline', reperto 178): no violation, no on...= handler or
@@ -1331,7 +1331,7 @@ upgrade of the whole Sieve chain (reperti 212-224) with `tools/upgrade/upgrade-p
 
 SieveDialogsE2EServer, SieveRulesE2EServer and HomePanelE2EServer keep the panel's secrets and the vault's old key in
 their working folder unless `-Ddaemoxcp.mail.secrets.dir` / `-Ddaemoxcp.mail.vault.key` say otherwise. Before 10/11/2026 they
-wrote their test MySQL password and TLS key into `/usr/local/etc/mail-panel`, the RUNNING panel's: the VM's panel went
+wrote their test MySQL password and TLS key into `/usr/local/etc/daemoxcp-mail`, the RUNNING panel's: the VM's panel went
 on until its next start, then could not reach MySQL and stopped separating.
 
 **PanelInfoTest** — what the card reads (PanelInfo): the entries Maven writes into the jar and those

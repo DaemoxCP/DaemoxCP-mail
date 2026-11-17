@@ -71,7 +71,7 @@ public class ErrorTextTest {
 
         System.out.println("\n== Anything else: the generic text, and the log");
         Object[][] hidden = {
-                {"an IOException with a path", new IOException("/usr/local/etc/mail-panel/secrets.json: Permission denied"), "/usr/local/etc"},
+                {"an IOException with a path", new IOException("/usr/local/etc/daemoxcp-mail/secrets.json: Permission denied"), "/usr/local/etc"},
                 {"an SQLException naming a table", new SQLException("Table 'mailserver.virtual_users' doesn't exist", "42S02", 1146), "virtual_users"},
                 {"an InvalidPathException (a subtype of IllegalArgumentException)", new InvalidPathException("/var/mail/\0x", "Nul character not allowed"), "/var/mail"},
                 {"a NumberFormatException (a subtype of IllegalArgumentException)", new NumberFormatException("For input string: \"12a\""), "12a"},

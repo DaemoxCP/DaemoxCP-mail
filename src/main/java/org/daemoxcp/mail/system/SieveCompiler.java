@@ -68,7 +68,7 @@ public final class SieveCompiler {
 
     /** L'utente e il gruppo con cui gira sievec. */
     public static final String USER = "sievec";
-    static final PanelUser COMPILER_USER = new PanelUser(USER, "Mail panel Sieve compiler");
+    static final PanelUser COMPILER_USER = new PanelUser(USER, Product.NAME + " Sieve compiler");
 
     static final String CHROOT = "/usr/sbin/chroot";
     static final String CAT = "/bin/cat";

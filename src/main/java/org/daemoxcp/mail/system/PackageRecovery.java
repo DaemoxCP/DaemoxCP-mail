@@ -42,7 +42,7 @@ public final class PackageRecovery {
     private static final Logger LOGGER = Logger.getLogger(PackageRecovery.class.getName());
 
     /** L'avviso di un lavoro interrotto: resta finche' un amministratore non lo chiude. */
-    public static final String NOTICE_PATH = "/var/db/mailpanel/package-job-interrupted.json";
+    public static final String NOTICE_PATH = "/var/db/daemoxcp-mail/package-job-interrupted.json";
 
     /** Dove sta l'avviso. E' una variabile solo perche' le prove non scrivano in /var/db. */
     static Path notice = Path.of(NOTICE_PATH);

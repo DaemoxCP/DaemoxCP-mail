@@ -386,7 +386,7 @@ REDISCONF
             chmod 710 /var/spool/postfix/private
 
             cat > /usr/local/etc/postfix/main.cf << 'POSTFIXCONF'
-# Postfix - Managed by FreeBSD Mail Panel
+# Postfix - Managed by DaemoxCP Mail
 myhostname = mail.localhost
 mydomain = localhost
 inet_interfaces = all
@@ -551,7 +551,7 @@ MASTERCONF
             openssl req -x509 -nodes -days 365 -newkey rsa:2048 \\
                 -keyout /usr/local/etc/ssl/mail/privkey.pem \\
                 -out /usr/local/etc/ssl/mail/fullchain.pem \\
-                -subj "/CN=mail.localhost/O=FreeBSD Mail Panel"
+                -subj "/CN=mail.localhost/O=DaemoxCP Mail"
             chmod 600 /usr/local/etc/ssl/mail/privkey.pem
 
             sysrc dovecot_enable="YES"
@@ -709,13 +709,13 @@ NGINXCONF
 \\$config['smtp_user'] = '%u';
 \\$config['smtp_pass'] = '%p';
 \\$config['support_url'] = '';
-\\$config['product_name'] = 'FreeBSD Mail Panel Webmail';
+\\$config['product_name'] = 'DaemoxCP Mail Webmail';
 \\$config['des_key'] = '$(openssl rand -base64 24)';
 \\$config['plugins'] = array('archive', 'zipdownload', 'managesieve', 'password');
 \\$config['skin'] = 'elastic';
 \\$config['language'] = 'it_IT';
 
-// Password plugin (change password from webmail): the settings are added by the mail panel at
+// Password plugin (change password from webmail): the settings are added by DaemoxCP Mail at
 // startup, in the "mail-panel: webmail password changes" block at the end of this file. The change
 // goes through the panel, which writes the bcrypt hash and the encrypted copy it can show again.
 

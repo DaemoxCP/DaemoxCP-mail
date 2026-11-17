@@ -48,7 +48,7 @@ public class PfPolicyTest {
             pass
 
             # === Permaban (auto-gestito dal mail panel) ===
-            table <permaban> persist file "/var/db/mail-panel/permaban.list"
+            table <permaban> persist file "/var/db/daemoxcp-mail/permaban.list"
             block in quick from <permaban>
 
             # Panel firewall anchor (auto-aggiunto)
@@ -65,7 +65,7 @@ public class PfPolicyTest {
             # Il loopback non si filtra.
             set skip on lo
 
-            table <permaban> persist file "/var/db/mail-panel/permaban.list"
+            table <permaban> persist file "/var/db/daemoxcp-mail/permaban.list"
             block in quick from <permaban>
 
             anchor "f2b/*"
@@ -100,7 +100,7 @@ public class PfPolicyTest {
         List<String> r = fromServer == null ? List.of() : rules(fromServer);
         check("  the table limit stays", r.contains("set limit table-entries 2000000"));
         check("  the fail2ban anchor, the permaban table and the panel's anchor stay", r.contains("anchor \"f2b/*\"")
-                && r.contains("table <permaban> persist file \"/var/db/mail-panel/permaban.list\"") && r.contains("block in quick from <permaban>")
+                && r.contains("table <permaban> persist file \"/var/db/daemoxcp-mail/permaban.list\"") && r.contains("block in quick from <permaban>")
                 && r.contains("anchor \"panel-fw\""));
         check("  the blocks come before the default, which is: nothing comes in", r.indexOf("anchor \"panel-fw\"") < r.indexOf("block in all")
                 && r.indexOf("anchor \"f2b/*\"") < r.indexOf("block in all"));

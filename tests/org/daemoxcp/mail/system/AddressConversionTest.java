@@ -93,7 +93,7 @@ public class AddressConversionTest {
         org.daemoxcp.mail.i18n.I18n.setCurrent("en");
         Path root = Files.createTempDirectory("transform-test");
         // The panel's secrets and the vault's keys in the test folder, never the machine's: the mailboxes this test
-        // creates encrypt their password copy, and as root the vault would write its keys in /usr/local/etc/mail-panel.
+        // creates encrypt their password copy, and as root the vault would write its keys in /usr/local/etc/daemoxcp-mail.
         if (System.getProperty("daemoxcp.mail.secrets.dir") == null)
             System.setProperty("daemoxcp.mail.secrets.dir", root.resolve("secrets").toString());
         if (System.getProperty("daemoxcp.mail.vault.key") == null)

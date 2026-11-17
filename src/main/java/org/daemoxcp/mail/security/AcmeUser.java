@@ -80,7 +80,7 @@ public final class AcmeUser {
     public static final String OLD_HOME = "/root/.acme.sh";
     /** Il nome che prende /root/.acme.sh dopo la migrazione: resta, ma nessuno lo esegue piu'. */
     public static final String MOVED_HOME = OLD_HOME + ".moved-to-var-db-acme";
-    static final String BACKUP_DIR = "/var/db/mailpanel/service-users-backup";
+    static final String BACKUP_DIR = "/var/db/daemoxcp-mail/service-users-backup";
 
     /** Le chiavi di account.conf che parlano di percorsi o dell'aggiornamento da se': non si portano. */
     private static final Set<String> NOT_CARRIED = Set.of("LOG_FILE", "CERT_HOME", "LE_WORKING_DIR",
@@ -422,7 +422,7 @@ public final class AcmeUser {
         }
         StringBuilder b = new StringBuilder();
         for (String c : comments) b.append(c).append('\n');
-        b.append("# Account moved from ").append(oldHome).append(" by the mail panel on ")
+        b.append("# Account moved from ").append(oldHome).append(" by DaemoxCP Mail on ")
          .append(LocalDate.now(ZoneOffset.UTC)).append('\n');
         for (String l : lines.values()) b.append(l).append('\n');
         return b.toString();

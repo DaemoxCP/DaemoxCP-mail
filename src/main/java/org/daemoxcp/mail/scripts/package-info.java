@@ -1,6 +1,6 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════════╗
- * ║                      FreeBSD Mail Panel - Scripts Package                     ║
+ * ║                      DaemoxCP Mail - Scripts Package                     ║
  * ╠══════════════════════════════════════════════════════════════════════════════╣
  * ║                                                                               ║
  * ║  This package contains shell script generators for FreeBSD mail services.    ║

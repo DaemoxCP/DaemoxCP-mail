@@ -20,10 +20,10 @@ import java.util.stream.Collectors;
  *  - Apply atomico con syntax check + rollback
  *
  * File di stato (configurazione persistente):
- *   /usr/local/etc/mail-panel/firewall.json
+ *   /usr/local/etc/daemoxcp-mail/firewall.json
  *
  * Storage GeoIP (zone files):
- *   /var/db/mail-panel/geoip/{cc}.zone
+ *   /var/db/daemoxcp-mail/geoip/{cc}.zone
  *
  * Anchor pf generato:
  *   /etc/pf.anchors/panel-fw.conf
@@ -38,9 +38,9 @@ public class PfFirewallManager {
     private static final Logger LOGGER = Logger.getLogger(PfFirewallManager.class.getName());
 
     // === Paths ===
-    private static final String STATE_DIR  = "/usr/local/etc/mail-panel";
+    private static final String STATE_DIR  = "/usr/local/etc/daemoxcp-mail";
     private static final String STATE_FILE = STATE_DIR + "/firewall.json";
-    private static final String GEOIP_DIR  = "/var/db/mail-panel/geoip";
+    private static final String GEOIP_DIR  = "/var/db/daemoxcp-mail/geoip";
     private static final String ANCHOR_FILE = "/etc/pf.anchors/panel-fw.conf";
     private static final String PF_CONF    = "/etc/pf.conf";
 
@@ -478,7 +478,7 @@ public class PfFirewallManager {
      */
     public String generateAnchorContent() {
         StringBuilder sb = new StringBuilder();
-        sb.append("# Anchor panel-fw — generato automaticamente dal mail panel\n");
+        sb.append("# Anchor panel-fw — written by DaemoxCP Mail\n");
         sb.append("# Generato: ").append(Instant.now()).append("\n");
         sb.append("# NON modificare a mano: viene sovrascritto.\n\n");
 

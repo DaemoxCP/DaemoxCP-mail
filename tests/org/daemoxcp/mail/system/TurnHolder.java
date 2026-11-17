@@ -13,7 +13,7 @@ import java.util.List;
  * for stdin to close (or to be killed) and releases.
  *
  * Usage: java -cp tests:<jar> org.daemoxcp.mail.system.TurnHolder <list> <description> [package...]
- *        <list> is the list's path ("-" for the real one, /var/db/mail-panel-maintenance-locks):
+ *        <list> is the list's path ("-" for the real one, /var/db/daemoxcp-mail-maintenance-locks):
  *        the turn file sits next to it.
  */
 public class TurnHolder {

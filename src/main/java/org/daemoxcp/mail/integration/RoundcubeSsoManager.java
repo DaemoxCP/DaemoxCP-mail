@@ -12,7 +12,7 @@ import java.time.*;
 import java.util.*;
 
 /**
- * Roundcube Single Sign-On Manager for FreeBSD Mail Panel
+ * Roundcube Single Sign-On Manager for DaemoxCP Mail
  *
  * Implements secure SSO between the mail panel and Roundcube webmail.
  * Uses encrypted tokens to authenticate users without exposing passwords.
@@ -35,8 +35,10 @@ public class RoundcubeSsoManager {
     private static final String ROUNDCUBE_PATH = "/usr/local/www/roundcube";
     private static final String ROUNDCUBE_CONFIG = ROUNDCUBE_PATH + "/config/config.inc.php";
     private static final String ROUNDCUBE_PLUGINS = ROUNDCUBE_PATH + "/plugins";
-    private static final String SSO_PLUGIN_PATH = ROUNDCUBE_PLUGINS + "/mailpanel_sso";
-    private static final String SSO_SECRET_FILE = "/var/db/mailpanel/roundcube_sso.key";
+    /** Il nome del plugin, della sua cartella e della sua classe PHP: Roundcube vuole che coincidano. */
+    static final String PLUGIN = org.daemoxcp.mail.system.Product.ID + "_sso";
+    private static final String SSO_PLUGIN_PATH = ROUNDCUBE_PLUGINS + "/" + PLUGIN;
+    private static final String SSO_SECRET_FILE = "/var/db/daemoxcp-mail/roundcube_sso.key";
 
     // Token settings
     private static final int TOKEN_EXPIRY_SECONDS = 60;
@@ -47,7 +49,7 @@ public class RoundcubeSsoManager {
     // Master user settings. In Roundcube chi entra cosi' e' "casella*admin" (la riga di users e il
     // registro degli accessi lo dicono): RoundcubeDbUser lo usa per scegliere la casella di prova.
     public static final String MASTER_USER = "admin";
-    public static final String MASTER_PASSWORD_FILE = "/var/db/mailpanel/dovecot_master.key";
+    public static final String MASTER_PASSWORD_FILE = "/var/db/daemoxcp-mail/dovecot_master.key";
 
     private final MailDatabase database;
     private SecretKey secretKey;
@@ -367,6 +369,14 @@ public class RoundcubeSsoManager {
 
             System.out.println("[SSO] Installing Roundcube SSO plugin...");
 
+            // Il plugin col nome di prima (sezione "roundcubePlugin" di legacy-names.json): se l'ha scritto il pannello
+            // (la sua classe ha quel nome) se ne va, e nella configurazione di Roundcube prende il nome di adesso.
+            for (String old : org.daemoxcp.mail.system.LegacyNames.oldNamesOf("roundcubePlugin", PLUGIN)) {
+                Path oldPhp = Paths.get(ROUNDCUBE_PLUGINS, old, old + ".php");
+                if (Files.isRegularFile(oldPhp) && Files.readString(oldPhp).contains("class " + old + " extends rcube_plugin"))
+                    executeCommand("rm -rf " + ROUNDCUBE_PLUGINS + "/" + old);
+            }
+
             // Create plugin directory (using shell to ensure proper permissions)
             executeCommand("mkdir -p " + SSO_PLUGIN_PATH);
 
@@ -376,7 +386,7 @@ public class RoundcubeSsoManager {
 
             // Write files using shell commands to handle permissions properly
             // This ensures the files are written even if they exist with different ownership
-            Path pluginFile = Paths.get(SSO_PLUGIN_PATH, "mailpanel_sso.php");
+            Path pluginFile = Paths.get(SSO_PLUGIN_PATH, "daemoxcp_mail_sso.php");
             Path configFile = Paths.get(SSO_PLUGIN_PATH, "config.inc.php");
 
             // Remove old files first
@@ -407,7 +417,7 @@ public class RoundcubeSsoManager {
             // roundcube dopo la migrazione (RoundcubeUser), www prima. Non piu' nginx.
             executeCommand("chown -R root:wheel " + SSO_PLUGIN_PATH);
             executeCommand("chmod 755 " + SSO_PLUGIN_PATH);
-            executeCommand("chmod 644 " + SSO_PLUGIN_PATH + "/mailpanel_sso.php");
+            executeCommand("chmod 644 " + SSO_PLUGIN_PATH + "/daemoxcp_mail_sso.php");
             executeCommand("chown root:" + org.daemoxcp.mail.system.RoundcubeUser.runtimeGroup() + " " + SSO_PLUGIN_PATH + "/config.inc.php");
             executeCommand("chmod 640 " + SSO_PLUGIN_PATH + "/config.inc.php");
 
@@ -434,11 +444,11 @@ public class RoundcubeSsoManager {
         return """
 <?php
 /**
- * Mail Panel SSO Plugin for Roundcube
- * Auto-login users from Mail Panel with encrypted tokens
+ * DaemoxCP Mail SSO Plugin for Roundcube
+ * Auto-login users from DaemoxCP Mail with encrypted tokens
  * Uses Dovecot master user for authentication
  */
-class mailpanel_sso extends rcube_plugin
+class daemoxcp_mail_sso extends rcube_plugin
 {
     public $task = 'login|mail';
     private $sso_user = null;
@@ -464,8 +474,8 @@ class mailpanel_sso extends rcube_plugin
             return $args;
         }
         $rcmail = rcmail::get_instance();
-        $url = $rcmail->config->get('mailpanel_vault_url');
-        $key = $rcmail->config->get('mailpanel_vault_key');
+        $url = $rcmail->config->get('daemoxcp_mail_vault_url');
+        $key = $rcmail->config->get('daemoxcp_mail_vault_key');
         $user = $rcmail->get_user_name();
         $pass = $rcmail->get_user_password();
         if (empty($url) || empty($key) || empty($user) || !is_string($pass) || $pass === '' || strpos($user, '*') !== false) {
@@ -475,10 +485,10 @@ class mailpanel_sso extends rcube_plugin
             $client = $rcmail->get_http_client(array('verify' => false, 'timeout' => 5, 'http_errors' => false));
             $client->request('POST', $url, array(
                 'form_params' => array('user' => $user, 'pass' => $pass),
-                'headers' => array('X-MailPanel-Key' => $key),
+                'headers' => array('" + WebmailPasswordConfig.KEY_HEADER + "' => $key),
             ));
         } catch (Exception $e) {
-            rcube::write_log('errors', 'mailpanel_sso: the mail panel did not answer the password copy request');
+            rcube::write_log('errors', 'daemoxcp_mail_sso: DaemoxCP Mail did not answer the password copy request');
         }
         return $args;
     }
@@ -515,7 +525,7 @@ class mailpanel_sso extends rcube_plugin
                 $_REQUEST['_task'] = 'login';
                 $_REQUEST['_action'] = 'login';
             } else {
-                error_log('mailpanel_sso: Token validation failed - ' . ($validation['error'] ?? 'unknown'));
+                error_log('daemoxcp_mail_sso: Token validation failed - ' . ($validation['error'] ?? 'unknown'));
             }
         }
 
@@ -540,10 +550,10 @@ class mailpanel_sso extends rcube_plugin
     private function validate_token($token)
     {
         $rcmail = rcmail::get_instance();
-        $secret = $rcmail->config->get('mailpanel_sso_secret');
+        $secret = $rcmail->config->get('daemoxcp_mail_sso_secret');
 
         if (empty($secret)) {
-            error_log('mailpanel_sso: Secret not configured');
+            error_log('daemoxcp_mail_sso: Secret not configured');
             return array('valid' => false, 'error' => 'SSO not configured');
         }
 
@@ -557,7 +567,7 @@ class mailpanel_sso extends rcube_plugin
             $combined = base64_decode($token, true);
 
             if ($combined === false || strlen($combined) < 28) {
-                error_log('mailpanel_sso: Invalid token length: ' . strlen($combined));
+                error_log('daemoxcp_mail_sso: Invalid token length: ' . strlen($combined));
                 return array('valid' => false, 'error' => 'Invalid token');
             }
 
@@ -582,7 +592,7 @@ class mailpanel_sso extends rcube_plugin
             );
 
             if ($decrypted === false) {
-                error_log('mailpanel_sso: Decryption failed - ' . openssl_error_string());
+                error_log('daemoxcp_mail_sso: Decryption failed - ' . openssl_error_string());
                 return array('valid' => false, 'error' => 'Decryption failed');
             }
 
@@ -590,13 +600,13 @@ class mailpanel_sso extends rcube_plugin
             $data = json_decode($decrypted, true);
 
             if (!$data || !isset($data['email']) || !isset($data['timestamp'])) {
-                error_log('mailpanel_sso: Invalid token content');
+                error_log('daemoxcp_mail_sso: Invalid token content');
                 return array('valid' => false, 'error' => 'Invalid token format');
             }
 
             // Check expiry (60 seconds)
             if (time() - intval($data['timestamp']) > 60) {
-                error_log('mailpanel_sso: Token expired');
+                error_log('daemoxcp_mail_sso: Token expired');
                 return array('valid' => false, 'error' => 'Token expired');
             }
 
@@ -623,11 +633,11 @@ class mailpanel_sso extends rcube_plugin
                 );
             }
 
-            error_log('mailpanel_sso: Empty password in token');
+            error_log('daemoxcp_mail_sso: Empty password in token');
             return array('valid' => false, 'error' => 'Empty password');
 
         } catch (Exception $e) {
-            error_log('mailpanel_sso: Exception - ' . $e->getMessage());
+            error_log('daemoxcp_mail_sso: Exception - ' . $e->getMessage());
             return array('valid' => false, 'error' => $e->getMessage());
         }
     }
@@ -641,17 +651,17 @@ class mailpanel_sso extends rcube_plugin
     private String generatePluginConfig() {
         String base64Secret = Base64.getEncoder().encodeToString(secretKey.getEncoded());
         String vault = panelPort > 0
-                ? "$config['mailpanel_vault_url'] = 'https://127.0.0.1:" + panelPort + WebmailPasswordConfig.VAULT_PATH + "';\n"
-                  + "$config['mailpanel_vault_key'] = '" + org.daemoxcp.mail.security.PanelSecrets.webmailKey() + "';\n"
+                ? "$config['daemoxcp_mail_vault_url'] = 'https://127.0.0.1:" + panelPort + WebmailPasswordConfig.VAULT_PATH + "';\n"
+                  + "$config['daemoxcp_mail_vault_key'] = '" + org.daemoxcp.mail.security.PanelSecrets.webmailKey() + "';\n"
                 : "";
         return String.format("""
 <?php
-// Mail Panel SSO Configuration
+// DaemoxCP Mail SSO Configuration
 // DO NOT EDIT - Generated automatically
 
-$config['mailpanel_sso_secret'] = '%s';
-$config['mailpanel_sso_enabled'] = true;
-$config['mailpanel_sso_token_expiry'] = %d;
+$config['daemoxcp_mail_sso_secret'] = '%s';
+$config['daemoxcp_mail_sso_enabled'] = true;
+$config['daemoxcp_mail_sso_token_expiry'] = %d;
 """, base64Secret, TOKEN_EXPIRY_SECONDS) + vault;
     }
 
@@ -665,9 +675,17 @@ $config['mailpanel_sso_token_expiry'] = %d;
         }
 
         String config = Files.readString(configPath);
+        // Il plugin col nome di prima nell'elenco dei plugin: diventa quello di adesso, nello stesso posto.
+        for (String old : org.daemoxcp.mail.system.LegacyNames.oldNamesOf("roundcubePlugin", PLUGIN)) {
+            String renamed = config.replace("'" + old + "'", "'" + PLUGIN + "'");
+            if (!renamed.equals(config)) {
+                config = renamed;
+                Files.writeString(configPath, config);
+            }
+        }
 
         // Check if plugin already enabled
-        if (config.contains("mailpanel_sso")) {
+        if (config.contains("daemoxcp_mail_sso")) {
             System.out.println("[SSO] Plugin already enabled in config");
             return; // Already enabled
         }
@@ -679,27 +697,27 @@ $config['mailpanel_sso_token_expiry'] = %d;
             if (config.contains("['plugins'] = [")) {
                 config = config.replaceFirst(
                     "(\\$config\\['plugins'\\]\\s*=\\s*\\[)",
-                    "$1\n    'mailpanel_sso',"
+                    "$1\n    'daemoxcp_mail_sso',"
                 );
             }
             // Try array() syntax: $config['plugins'] = array('
             else if (config.contains("['plugins'] = array(")) {
-                // Handle: array('first' -> array('mailpanel_sso', 'first'
+                // Handle: array('first' -> array('daemoxcp_mail_sso', 'first'
                 config = config.replaceFirst(
                     "(\\$config\\['plugins'\\]\\s*=\\s*array\\()'",
-                    "$1'mailpanel_sso', '"
+                    "$1'daemoxcp_mail_sso', '"
                 );
                 // Handle: array( with newline
-                if (!config.contains("mailpanel_sso")) {
+                if (!config.contains("daemoxcp_mail_sso")) {
                     config = config.replaceFirst(
                         "(\\$config\\['plugins'\\]\\s*=\\s*array\\()",
-                        "$1'mailpanel_sso', "
+                        "$1'daemoxcp_mail_sso', "
                     );
                 }
             }
         } else {
             // Add plugins config
-            config += "\n\n// Mail Panel SSO Plugin\n$config['plugins'] = ['mailpanel_sso'];\n";
+            config += "\n\n// DaemoxCP Mail SSO Plugin\n$config['plugins'] = ['daemoxcp_mail_sso'];\n";
         }
 
         Files.writeString(configPath, config);
@@ -717,7 +735,7 @@ $config['mailpanel_sso_token_expiry'] = %d;
             status.roundcubePath = ROUNDCUBE_PATH;
 
             // Check plugin installation
-            status.pluginInstalled = Files.exists(Paths.get(SSO_PLUGIN_PATH, "mailpanel_sso.php"));
+            status.pluginInstalled = Files.exists(Paths.get(SSO_PLUGIN_PATH, "daemoxcp_mail_sso.php"));
             status.pluginPath = SSO_PLUGIN_PATH;
 
             // Check secret file
@@ -726,7 +744,7 @@ $config['mailpanel_sso_token_expiry'] = %d;
             // Check if plugin enabled in config
             if (Files.exists(Paths.get(ROUNDCUBE_CONFIG))) {
                 String config = Files.readString(Paths.get(ROUNDCUBE_CONFIG));
-                status.pluginEnabled = config.contains("mailpanel_sso");
+                status.pluginEnabled = config.contains("daemoxcp_mail_sso");
             }
 
             status.configured = status.roundcubeInstalled &&
@@ -757,8 +775,8 @@ $config['mailpanel_sso_token_expiry'] = %d;
             Path configPath = Paths.get(ROUNDCUBE_CONFIG);
             if (Files.exists(configPath)) {
                 String config = Files.readString(configPath);
-                config = config.replace("'mailpanel_sso',", "");
-                config = config.replace("'mailpanel_sso'", "");
+                config = config.replace("'daemoxcp_mail_sso',", "");
+                config = config.replace("'daemoxcp_mail_sso'", "");
                 Files.writeString(configPath, config);
             }
 

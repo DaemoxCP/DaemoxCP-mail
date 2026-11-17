@@ -50,7 +50,7 @@ import java.util.stream.Stream;
  * riparazione (quella la fanno installJail e BanActionRepair). Nei file scritti dal pannello il
  * nome vecchio compare solo dove e' un nome.
  *
- * <p>Con la superficie si sposta anche la cartella dei suoi file, /var/db/mailpanel/pubblico ->
+ * <p>Con la superficie si sposta anche la cartella dei suoi file, /var/db/daemoxcp-mail/pubblico ->
  * public: nginx la legge (alias .../mta-sts.txt), quindi non sta in PathMigration ma qui, nello
  * stesso tutto-o-niente, e il percorso dentro il file di nginx cambia con lei. Misurato sul server
  * vero il 31/10/2026: con la cartella spostata da PathMigration e il file di nginx che citava
@@ -72,7 +72,7 @@ public final class PublicSurfaceRename {
     private static final Logger LOGGER = Logger.getLogger(PublicSurfaceRename.class.getName());
 
     /** Il nome di prima, dal file di dati: serve solo a trovarlo sul disco. */
-    static final String OLD_NAME = LegacyNames.single("publicSurface");
+    static String OLD_NAME = LegacyNames.single("publicSurface");
     static final String NEW_NAME = WebProtection.NAME;
     /** La cartella dei file pubblici: quella di prima dal file di dati, quella di adesso da WebProtection. */
     static final String OLD_FOLDER = LegacyNames.single("publicFolder");
@@ -109,10 +109,15 @@ public final class PublicSurfaceRename {
         try {
             Places at = new Places(Path.of(WebProtection.F2B_DIR), Path.of(WebProtection.LOG_DIR),
                     Path.of(WebProtection.PROPOSED_FOLDER), OLD_FOLDER.isEmpty() ? null : Path.of(OLD_FOLDER), Path.of(NEW_FOLDER));
-            Report r = migrate(at, new RealServices());
-            if (r.outcome() == Outcome.NOTHING) return;
-            String line = "[PublicSurfaceRename] " + r.outcome() + ": " + r.detail();
-            if (r.outcome() == Outcome.DONE) LOGGER.info(line); else LOGGER.warning(line);
+            // Ogni nome di prima, nell'ordine del file di dati: in italiano, poi col nome di prima del prodotto
+            // (mailpanel-public, fino al 17/11/2026). Un server ne ha al piu' uno.
+            for (String[] p : LegacyNames.pairs("publicSurface")) {
+                OLD_NAME = p[0];
+                Report r = migrate(at, new RealServices());
+                if (r.outcome() == Outcome.NOTHING) continue;
+                String line = "[PublicSurfaceRename] " + r.outcome() + ": " + r.detail();
+                if (r.outcome() == Outcome.DONE) LOGGER.info(line); else LOGGER.warning(line);
+            }
         } catch (Throwable t) {
             LOGGER.warning("[PublicSurfaceRename] failed: " + t);
         }
@@ -374,40 +379,48 @@ public final class PublicSurfaceRename {
             return r.success() && !r.output().contains("does not exist") ? bannedFrom(r.output()) : null;
         }
         @Override public boolean moveJailState(String from, String to, String fromLog, String toLog) {
-            String db = fail2banDatabase(Shell.run(SHORT, "fail2ban-client", "get", "dbfile").output());
-            if (db == null) {
-                LOGGER.warning("[PublicSurfaceRename] fail2ban has no database file: bans not carried over");
-                return false;
-            }
-            try (java.sql.Connection c = org.daemoxcp.mail.database.CatalogGuard.open("jdbc:sqlite:" + db);
-                 java.sql.Statement st = c.createStatement()) {
-                // fail2ban tiene il database aperto: si aspetta il suo turno invece di fallire.
-                st.execute(SqlCatalog.RENAME_BUSY_TIMEOUT);
-                c.setAutoCommit(false);
-                try {
-                    // Lo schema e' quello di fail2ban (server/database.py): jails, bips, bans, logs.
-                    exec(c, SqlCatalog.RENAME_ADD_JAIL, to);
-                    exec(c, SqlCatalog.RENAME_MOVE_JAIL_BIPS, to, from);
-                    exec(c, SqlCatalog.RENAME_MOVE_JAIL_BANS, to, from);
-                    exec(c, SqlCatalog.RENAME_MOVE_JAIL_LOGS, to, toLog, from, fromLog);
-                    c.commit();
-                    return true;
-                } catch (java.sql.SQLException e) {
-                    c.rollback();
-                    throw e;
-                }
-            } catch (Exception e) {
-                LOGGER.warning("[PublicSurfaceRename] cannot move the state of " + from + " to " + to
-                        + " in " + db + ": " + e.getMessage());
-                return false;
-            }
+            return moveFail2banJailState(from, to, fromLog, toLog, "PublicSurfaceRename");
         }
+    }
 
-        private static void exec(java.sql.Connection c, String sql, String... args) throws java.sql.SQLException {
-            try (java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
-                for (int i = 0; i < args.length; i++) ps.setString(i + 1, args[i]);
-                ps.executeUpdate();
+    /**
+     * Nel database di fail2ban, i ban e la posizione nel log della jail {@code from} passano a {@code to}: la jail
+     * rinominata riparte coi ban che aveva, senza ribannare (vedi sopra, recidive). Anche per AuthJailRename.
+     */
+    static boolean moveFail2banJailState(String from, String to, String fromLog, String toLog, String who) {
+        String db = fail2banDatabase(Shell.run(Duration.ofSeconds(20), "fail2ban-client", "get", "dbfile").output());
+        if (db == null) {
+            LOGGER.warning("[" + who + "] fail2ban has no database file: bans not carried over");
+            return false;
+        }
+        try (java.sql.Connection c = org.daemoxcp.mail.database.CatalogGuard.open("jdbc:sqlite:" + db);
+             java.sql.Statement st = c.createStatement()) {
+            // fail2ban tiene il database aperto: si aspetta il suo turno invece di fallire.
+            st.execute(SqlCatalog.RENAME_BUSY_TIMEOUT);
+            c.setAutoCommit(false);
+            try {
+                // Lo schema e' quello di fail2ban (server/database.py): jails, bips, bans, logs.
+                exec(c, SqlCatalog.RENAME_ADD_JAIL, to);
+                exec(c, SqlCatalog.RENAME_MOVE_JAIL_BIPS, to, from);
+                exec(c, SqlCatalog.RENAME_MOVE_JAIL_BANS, to, from);
+                exec(c, SqlCatalog.RENAME_MOVE_JAIL_LOGS, to, toLog, from, fromLog);
+                c.commit();
+                return true;
+            } catch (java.sql.SQLException e) {
+                c.rollback();
+                throw e;
             }
+        } catch (Exception e) {
+            LOGGER.warning("[" + who + "] cannot move the state of " + from + " to " + to
+                    + " in " + db + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    private static void exec(java.sql.Connection c, String sql, String... args) throws java.sql.SQLException {
+        try (java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < args.length; i++) ps.setString(i + 1, args[i]);
+            ps.executeUpdate();
         }
     }
 }

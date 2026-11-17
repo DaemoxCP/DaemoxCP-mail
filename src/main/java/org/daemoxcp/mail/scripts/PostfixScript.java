@@ -98,7 +98,7 @@ public class PostfixScript {
             echo "[5/6] Creating base configuration..."
             cat > /usr/local/etc/postfix/main.cf << 'MAINCONF'
 # Postfix Configuration
-# Managed by FreeBSD Mail Panel - Basic Setup
+# Managed by DaemoxCP Mail - Basic Setup
 # Full configuration is done by FullMailServerScript
 
 # Basic settings

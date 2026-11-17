@@ -192,8 +192,8 @@ public class InstallSideEffectsTest {
                     InstallSideEffects.configChanges(after, again, changed).isEmpty());
 
             // --- the panel's folder is not looked at ---
-            check("the panel's folder is excluded", InstallSideEffects.excluded("/usr/local/etc/mail-panel/firewall.json"));
-            check("  but only it, not a name that resembles it", !InstallSideEffects.excluded("/usr/local/etc/mail-panel2/x"));
+            check("the panel's folder is excluded", InstallSideEffects.excluded("/usr/local/etc/daemoxcp-mail/firewall.json"));
+            check("  but only it, not a name that resembles it", !InstallSideEffects.excluded("/usr/local/etc/daemoxcp-mail2/x"));
         } finally {
             try (var s = Files.walk(d)) {
                 s.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());

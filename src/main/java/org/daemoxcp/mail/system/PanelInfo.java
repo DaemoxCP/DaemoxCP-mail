@@ -126,7 +126,8 @@ public final class PanelInfo {
 
         String jar = "";
         try {
-            Path p = Path.of(PanelInfo.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            Path p = Path.of(PanelServiceRename.current(
+                    Path.of(PanelInfo.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toString()));
             if (p.getFileName() != null && p.getFileName().toString().endsWith(".jar")) jar = p.toString();
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "panel jar path", e);

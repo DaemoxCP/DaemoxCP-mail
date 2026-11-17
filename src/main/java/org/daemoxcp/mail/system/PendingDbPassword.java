@@ -237,7 +237,7 @@ public final class PendingDbPassword {
 
     /** Host, porta e utente MySQL dalla configurazione del pannello, con i valori di sempre se manca. */
     public static String[] mysqlTarget(org.daemoxcp.mail.sqli.dataBaseManager db) {
-        String host = "127.0.0.1", port = "3306", user = "mailpanel";
+        String host = "127.0.0.1", port = "3306", user = Product.ID;
         try (ResultSet r = db.get_data_config()) {
             if (r.next()) {
                 if (notBlank(r.getString("mysql_host"))) host = r.getString("mysql_host");

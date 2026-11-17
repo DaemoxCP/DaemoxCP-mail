@@ -117,7 +117,7 @@ public class PackageQueueTest {
         Files.deleteIfExists(PackageQueue.running());
 
         // The file of the lock between processes stays (the lock is what counts, not the file): it is
-        // the test folder's, not the one in /var/db/mailpanel.
+        // the test folder's, not the one in /var/db/daemoxcp-mail.
         real("the turn's lock is the test folder's, not the one in /var/db",
             Files.exists(PackageQueue.turnLock) && PackageQueue.turnLock.getParent().equals(d));
         Files.deleteIfExists(PackageQueue.turnLock);

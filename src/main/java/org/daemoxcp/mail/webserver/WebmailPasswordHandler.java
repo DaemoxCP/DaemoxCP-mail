@@ -29,11 +29,11 @@ import java.util.logging.Logger;
  *    manda qui invece di scrivere da se' nel database: il pannello controlla la password attuale
  *    e scrive insieme l'hash bcrypt e la copia cifrata, cosi' la password si puo' sempre rivedere.
  *  - POST /api/internal/mailbox-vault (user, pass): dopo un accesso alla webmail con la password
- *    della casella, il plugin mailpanel_sso la manda qui. Se il pannello non ne ha la copia (casella
+ *    della casella, il plugin daemoxcp_mail_sso la manda qui. Se il pannello non ne ha la copia (casella
  *    di prima del vault) o la copia e' vecchia, e la password corrisponde all'hash, la copia si scrive.
  *
  * Chi chiama deve arrivare da 127.0.0.1 (o ::1) direttamente, senza intestazioni di un proxy
- * davanti, e mandare la chiave della webmail (X-MailPanel-Key, nel file dei segreti del pannello).
+ * davanti, e mandare la chiave della webmail (X-DaemoxCP-Key, nel file dei segreti del pannello).
  * Altrimenti la risposta e' 404, come per una rotta che non c'e'. Nessuna password nei log.
  *
  * <p>Col pannello separato le serve la root: la web controlla chi chiama
@@ -207,7 +207,12 @@ final class WebmailPasswordHandler {
         var h = ex.getRequestHeaders();
         if (h.containsKey("X-Forwarded-For") || h.containsKey("X-Real-IP") || h.containsKey("CF-Connecting-IP")
                 || h.containsKey("Forwarded")) return false;
-        String given = h.getFirst("X-MailPanel-Key");
+        // L'intestazione di adesso, o una di prima (sezione "webmailKeyHeaders"): Roundcube la manda come dice il suo
+        // config.inc.php, che il pannello riscrive all'avvio, ma una richiesta puo' arrivare in mezzo.
+        String given = h.getFirst(org.daemoxcp.mail.integration.WebmailPasswordConfig.KEY_HEADER);
+        for (String old : org.daemoxcp.mail.system.LegacyNames.oldNamesOf("webmailKeyHeaders",
+                org.daemoxcp.mail.integration.WebmailPasswordConfig.KEY_HEADER))
+            if (given == null) given = h.getFirst(old);
         if (given == null || given.isEmpty() || given.length() > 128) return false;
         String expected = PanelSecrets.webmailKey();
         return MessageDigest.isEqual(expected.getBytes(StandardCharsets.US_ASCII), given.getBytes(StandardCharsets.US_ASCII));

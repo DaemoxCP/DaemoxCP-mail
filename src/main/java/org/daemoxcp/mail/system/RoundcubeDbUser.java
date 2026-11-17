@@ -82,7 +82,7 @@ public final class RoundcubeDbUser {
     public static final String HOST = "127.0.0.1";
     public static final String ROUNDCUBE_DIR = "/usr/local/www/roundcube";
     /** Dove il pannello mette i file di passaggio con un segreto (cartelle 700 che durano un comando). */
-    static final String WORK_DIR = "/var/db/mailpanel";
+    static final String WORK_DIR = "/var/db/daemoxcp-mail";
 
     /** La chiave fra apici o virgolette, tutte e due valide in PHP: prima le virgolette non si vedevano. */
     private static final Pattern DSN = Pattern.compile(
@@ -685,7 +685,7 @@ public final class RoundcubeDbUser {
         @Override public String secret() { return PanelSecrets.ensureRoundcubeDbPassword(); }
 
         @Override public String panelUser() {
-            String user = "mailpanel";
+            String user = Product.ID;
             if (org.daemoxcp.mail.Main.dbManager != null) {
                 try (java.sql.ResultSet rs = org.daemoxcp.mail.Main.dbManager.get_data_config()) {
                     if (rs.next() && rs.getString("mysql_user") != null && !rs.getString("mysql_user").isBlank())

@@ -40,7 +40,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
         await page.goto(BASE + '/updates');
         await page.waitForSelector('#uc-all .uc-head', { timeout: 120000 });
         await page.waitForFunction(() => !/Reading/.test(document.getElementById('ucList').innerText), null, { timeout: 180000 });
-        const logLines = Number(vm('wc -l < /var/db/mailpanel/panel-web.log'));
+        const logLines = Number(vm('wc -l < /var/db/daemoxcp-mail/panel-web.log'));
 
         console.log('\n== MySQL stopped ==');
         vm('service mysql-server stop >/dev/null 2>&1');
@@ -80,7 +80,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
         check('the page opened during the stop reloaded by itself into Diagnostics, signed in (' + otherTitle + ')',
             other.url().includes('/diagnostics') && !/restarting/i.test(otherTitle) && !(await other.innerText('body')).includes('The database is restarting'));
         if (OUT) await page.screenshot({ path: OUT + '/database-3-after.png' });
-        const added = vm('tail -n +' + (logLines + 1) + ' /var/db/mailpanel/panel-web.log | grep -cE "Session check failed"');
+        const added = vm('tail -n +' + (logLines + 1) + ' /var/db/daemoxcp-mail/panel-web.log | grep -cE "Session check failed"');
         console.log('    session checks that failed while it was down: ' + added);
         const ended = await page.evaluate(async () => (await fetch('/api/updates', { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'package_turn' }) })).status);

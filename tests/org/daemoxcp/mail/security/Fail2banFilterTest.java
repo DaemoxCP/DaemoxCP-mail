@@ -81,11 +81,11 @@ public class Fail2banFilterTest {
             log.append(SSLMailServer.auditLine("LOGIN_SUCCESS", "203.0.113." + (10 + i), "admin", "ok"));
         log.append(SSLMailServer.auditLine("CSRF_FAILURE", "198.51.100.7", "", "bad token"));
         log.append(SSLMailServer.auditLine("PASSKEY_REGISTER_FAILED", "198.51.100.8", "admin", "refused"));
-        Path logFile = home.resolve("mail-panel-auth.log");
+        Path logFile = home.resolve("daemoxcp-mail-auth.log");
         Files.writeString(logFile, log, StandardCharsets.UTF_8);
         int lines = log.toString().split("\n").length;
 
-        Path filter = home.resolve("mail-panel-auth.conf");
+        Path filter = home.resolve("daemoxcp-mail-auth.conf");
         Files.writeString(filter, Fail2banAutoSetup.filterContent(), StandardCharsets.UTF_8);
         Result now = fail2banRegex(logFile, filter);
         OUT.println("  " + now);

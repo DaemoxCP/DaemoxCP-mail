@@ -6,7 +6,7 @@ import java.net.URISyntaxException;
 import java.nio.file.*;
 
 /**
- * System Time and DNS Configuration Script for FreeBSD Mail Panel
+ * System Time and DNS Configuration Script for DaemoxCP Mail
  * Sets the time zone chosen in the menu (first argument, reperto 242; before: always Europe/Rome), configures NTP,
  * and the DNS resolver (1.1.1.1 until the installation turns on the local recursive resolver).
  */
@@ -17,7 +17,7 @@ public class SetTimeOnSystem {
     public SetTimeOnSystem() {
         this.data = """
             #!/bin/sh
-            # System Time and DNS Configuration for FreeBSD Mail Panel
+            # System Time and DNS Configuration for DaemoxCP Mail
             # Sets timezone, configures NTP, and sets Cloudflare DNS
 
             echo "=== System Time and DNS Configuration ==="

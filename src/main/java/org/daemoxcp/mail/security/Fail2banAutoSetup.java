@@ -13,9 +13,9 @@ import java.util.logging.Logger;
  * Setup automatico di Fail2ban per il mail panel al boot.
  *
  * Operazioni (TUTTE idempotenti, fail-safe):
- *   1. Crea /var/log/mail-panel-auth.log con perms 640 root:wheel
- *   2. Scrive il filter Fail2ban in /usr/local/etc/fail2ban/filter.d/mail-panel-auth.conf
- *   3. Aggiunge la jail [mail-panel-auth] a /usr/local/etc/fail2ban/jail.local
+ *   1. Crea /var/log/daemoxcp-mail-auth.log con perms 640 root:wheel
+ *   2. Scrive il filter Fail2ban in /usr/local/etc/fail2ban/filter.d/daemoxcp-mail-auth.conf
+ *   3. Aggiunge la jail [daemoxcp-mail-auth] a /usr/local/etc/fail2ban/jail.local
  *      (solo se non esiste già — non sovrascrive customizzazioni)
  *   4. Aggiunge log rotation in /usr/local/etc/newsyslog.conf.d/
  *   5. Reload Fail2ban
@@ -28,16 +28,18 @@ import java.util.logging.Logger;
 public final class Fail2banAutoSetup {
     private static final Logger LOGGER = Logger.getLogger(Fail2banAutoSetup.class.getName());
 
-    private static final String LOG_FILE          = "/var/log/mail-panel-auth.log";
+    /** La jail degli accessi al pannello, col nome del prodotto (prima mail-panel-auth: AuthJailRename). */
+    public static final String AUTH_JAIL         = org.daemoxcp.mail.system.Product.SLUG + "-auth";
+    public static final String LOG_FILE          = "/var/log/" + AUTH_JAIL + ".log";
     private static final String FILTER_DIR        = "/usr/local/etc/fail2ban/filter.d";
     private static final String JAIL_D            = "/usr/local/etc/fail2ban/jail.d";
-    private static final String FILTER_FILE       = FILTER_DIR + "/mail-panel-auth.conf";
+    public static final String FILTER_FILE       = FILTER_DIR + "/" + AUTH_JAIL + ".conf";
     private static final String JAIL_LOCAL        = "/usr/local/etc/fail2ban/jail.local";
     private static final String NEWSYSLOG_DIR     = "/usr/local/etc/newsyslog.conf.d";
-    private static final String NEWSYSLOG_CONF    = NEWSYSLOG_DIR + "/mail-panel-auth.conf";
+    public static final String NEWSYSLOG_CONF    = NEWSYSLOG_DIR + "/" + AUTH_JAIL + ".conf";
     private static final String FAIL2BAN_CLIENT   = "/usr/local/bin/fail2ban-client";
 
-    private static final String JAIL_MARKER = "[mail-panel-auth]";
+    private static final String JAIL_MARKER = "[" + AUTH_JAIL + "]";
 
     /** Avvia il setup. Idempotente: chiamabile più volte senza danni. */
     public static void run() {
@@ -69,7 +71,7 @@ public final class Fail2banAutoSetup {
 
     /**
      * Setup della feature permaban:
-     *  1. Crea /var/db/mail-panel/permaban.list se manca
+     *  1. Crea /var/db/daemoxcp-mail/permaban.list se manca
      *  2. Aggiunge a /etc/pf.conf (se esiste): table <permaban> persist + block rule
      *  3. Ricarica pf e popola la tabella runtime dal file
      */
@@ -80,8 +82,8 @@ public final class Fail2banAutoSetup {
             if (!Files.isDirectory(dir)) Files.createDirectories(dir);
             Path file = Paths.get(Fail2banManager.PERMABAN_FILE);
             if (!Files.exists(file)) {
-                String header = "# Permaban list — gestito dal mail panel\n"
-                    + "# Aggiungi/rimuovi IP dall'UI del pannello, NON modificare a mano.\n\n";
+                String header = "# Permaban list — managed by DaemoxCP Mail\n"
+                    + "# Add or remove addresses from the panel's page, do not edit by hand.\n\n";
                 Files.writeString(file, header);
                 try {
                     Files.setPosixFilePermissions(file,
@@ -99,7 +101,7 @@ public final class Fail2banAutoSetup {
                 boolean hasF2bAnchor = hasF2bAnchor(content);
                 if (!hasTable || !hasBlock || !hasF2bAnchor) {
                     StringBuilder additions = new StringBuilder();
-                    additions.append("\n# === Permaban (auto-gestito dal mail panel) ===\n");
+                    additions.append("\n# === Permaban (managed by DaemoxCP Mail) ===\n");
                     if (!hasTable) {
                         additions.append("table <permaban> persist file \"")
                             .append(Fail2banManager.PERMABAN_FILE).append("\"\n");
@@ -108,7 +110,7 @@ public final class Fail2banAutoSetup {
                         additions.append("block in quick from <permaban>\n");
                     }
                     if (!hasF2bAnchor) {
-                        // L'anchor di fail2ban. La jail [mail-panel-auth] ha
+                        // L'anchor di fail2ban. La jail [daemoxcp-mail-auth] ha
                         // "action = pf[...]", e l'azione pf di fail2ban mette le sue regole
                         // dentro l'anchor "f2b/<nome>". Un anchor che pf.conf non nomina non
                         // viene MAI guardato: fail2ban annota il blocco, lo scrive nel suo
@@ -339,6 +341,14 @@ public final class Fail2banAutoSetup {
      * non comincia piu' con la firma. Vale anche la firma di prima (legacy-names.json): su un
      * server installato prima il filtro si riscrive una volta, e prende quella di adesso.
      */
+    /** Il filtro l'ha scritto il pannello: comincia con la sua firma, di adesso o di prima. */
+    public static boolean ownFilter(String existing) {
+        if (existing == null) return false;
+        for (String f : org.daemoxcp.mail.system.PanelMarker.forms(MARKER_SECTION, MARKER))
+            if (existing.startsWith(f)) return true;
+        return false;
+    }
+
     static boolean shouldRewriteFilter(String existing) {
         if (existing == null) return true;
         if (existing.equals(filterContent())) return false;
@@ -427,7 +437,7 @@ public final class Fail2banAutoSetup {
         }
     }
 
-    /** Aggiunge la sezione [mail-panel-auth] a jail.local solo se manca. */
+    /** Aggiunge la sezione [daemoxcp-mail-auth] a jail.local solo se manca. */
     private static boolean appendJailIfMissing() {
         try {
             Path jailPath = Paths.get(JAIL_LOCAL);
@@ -456,7 +466,7 @@ public final class Fail2banAutoSetup {
                     StandardOpenOption.APPEND);
             }
             try { Files.setPosixFilePermissions(jailPath, PosixFilePermissions.fromString("rw-r--r--")); } catch (Exception ignored) {}
-            LOGGER.info("[Fail2banAutoSetup] Added jail [mail-panel-auth] to " + JAIL_LOCAL);
+            LOGGER.info("[Fail2banAutoSetup] Added jail [daemoxcp-mail-auth] to " + JAIL_LOCAL);
             return true;
         } catch (IOException e) {
             LOGGER.warning("[Fail2banAutoSetup] Cannot modify jail.local: " + e.getMessage());
@@ -485,7 +495,7 @@ public final class Fail2banAutoSetup {
                 // che newsyslog ricrea a ogni rotazione deve restare suo, se no la web non scrive piu' e
                 // fail2ban non vede piu' i tentativi.
                 String now = Files.readString(conf, StandardCharsets.UTF_8);
-                if (now.equals(content) || !now.startsWith(NEWSYSLOG_HEADER)) return;
+                if (now.equals(content) || !ownNewsyslog(now)) return;
                 Files.writeString(conf, content, StandardCharsets.UTF_8);
                 LOGGER.info("[Fail2banAutoSetup] DONE: " + NEWSYSLOG_CONF + " recreates the log as " + logOwner());
                 return;
@@ -497,7 +507,15 @@ public final class Fail2banAutoSetup {
         }
     }
 
-    static final String NEWSYSLOG_HEADER = "# Log rotation per mail-panel auth log (auto-generato dal pannello)\n";
+    static final String NEWSYSLOG_HEADER = "# Rotation of the " + org.daemoxcp.mail.system.Product.NAME + " sign-in log ("
+            + org.daemoxcp.mail.system.PanelMarker.WRITTEN + ")\n";
+
+    /** Il file di newsyslog l'ha scritto il pannello: la riga di testa di adesso o una di prima ("newsyslogHeaders"). */
+    public static boolean ownNewsyslog(String text) {
+        for (String h : org.daemoxcp.mail.system.PanelMarker.forms("newsyslogHeaders", NEWSYSLOG_HEADER.strip()))
+            if (text.startsWith(h + "\n")) return true;
+        return false;
+    }
 
     /** La riga di newsyslog.conf(5): file, proprietario:gruppo, modo, copie, dimensione in KB, quando, flag. */
     static String newsyslogText(String owner) {
@@ -546,8 +564,9 @@ public final class Fail2banAutoSetup {
     // ================== EMBEDDED CONFIG CONTENT ==================
 
     /** La riga con cui il pannello firma i file che scrive lui: solo quelli li riscrive. */
-    static final String MARKER = "# Fail2ban filter for FreeBSD-Mail-Panel (written by the mail panel)";
-    static final String MARKER_SECTION = "fail2banFilterSignature";
+    public static final String MARKER = "# Fail2ban filter for " + org.daemoxcp.mail.system.Product.NAME + " sign-ins ("
+            + org.daemoxcp.mail.system.PanelMarker.WRITTEN + ")";
+    public static final String MARKER_SECTION = "fail2banFilterSignature";
 
     private static final String FAILURES = "LOGIN_FAILURE|LOGIN_2FA_FAILURE|LOGIN_INVALID_INPUT"
         + "|LOGIN_BLOCKED|CSRF_FAILURE|SSL_CERT_[A-Z_]+_FAILED|FAIL2BAN_[A-Z_]+_FAILED"
@@ -596,15 +615,15 @@ public final class Fail2banAutoSetup {
     }
 
     private static final String JAIL_BLOCK = ""
-        + "# Auto-generato da FreeBSD-Mail-Panel — modifica i parametri liberamente,\n"
-        + "# il pannello NON sovrascrive questa sezione una volta presente.\n"
-        + "[mail-panel-auth]\n"
+        + "# " + org.daemoxcp.mail.system.PanelMarker.WRITTEN + ": the values can be changed freely, the panel does not\n"
+        + "# rewrite this section once it is there.\n"
+        + "[" + AUTH_JAIL + "]\n"
         + "enabled  = true\n"
-        + "filter   = mail-panel-auth\n"
-        + "logpath  = /var/log/mail-panel-auth.log\n"
+        + "filter   = " + AUTH_JAIL + "\n"
+        + "logpath  = " + LOG_FILE + "\n"
         + "maxretry = 5\n"
         + "findtime = 600\n"
         + "bantime  = 3600\n"
         + "backend  = auto\n"
-        + "action   = pf[name=mail-panel-auth, port=\"0:65535\"]\n";
+        + "action   = pf[name=" + AUTH_JAIL + ", port=\"0:65535\"]\n";
 }

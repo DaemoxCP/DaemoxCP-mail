@@ -143,7 +143,7 @@ SQLEOF
             cat > /usr/local/www/roundcube/config/config.inc.php << RCCONFIG
 <?php
 // Roundcube Configuration
-// Managed by FreeBSD Mail Panel
+// Managed by DaemoxCP Mail
 
 \\$config = [];
 
@@ -189,7 +189,7 @@ SQLEOF
 \\$config['log_dir'] = '/usr/local/www/roundcube/logs/';
 \\$config['log_logins'] = true;
 
-// Plugins (mailpanel_sso is installed separately by the panel)
+// Plugins (daemoxcp_mail_sso is installed separately by the panel)
 \\$config['plugins'] = [
     'archive',
     'zipdownload',
@@ -197,7 +197,7 @@ SQLEOF
     'password',
 ];
 
-// Password plugin (change password from webmail): the settings are added by the mail panel at
+// Password plugin (change password from webmail): the settings are added by DaemoxCP Mail at
 // startup, in the "mail-panel: webmail password changes" block at the end of this file. The change
 // goes through the panel, which writes the bcrypt hash and the encrypted copy it can show again.
 

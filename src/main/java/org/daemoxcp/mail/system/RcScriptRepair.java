@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
  * All'avvio: lo script di avvio che il pannello ha scritto il giorno dell'installazione
  * (/usr/local/etc/rc.d/mailpanel) cita ancora i file coi nomi di prima.
  *
- * <p>PathMigration rinomina /var/db/mailpanel/pannello.log in panel.log, ma lo script di un server
+ * <p>PathMigration rinomina /var/db/daemoxcp-mail/pannello.log in panel.log, ma lo script di un server
  * installato prima della rinomina fa scrivere a daemon(8) proprio quel nome (mailpanel_log). Al
  * riavvio successivo il log ripartirebbe col nome vecchio, accanto al nuovo: PathMigration vedrebbe
  * i due nomi e, giustamente, non sceglierebbe, e il pannello mostrerebbe un log fermo. Visto sul
@@ -46,7 +46,22 @@ public final class RcScriptRepair {
     /** La riga con cui il pannello firma lo script (UpdateManager la scrive da qui). */
     static final String MARKER = "Generato dal pannello il giorno dell'installazione";
 
-    static final List<Path> SCRIPTS = List.of(Path.of("/usr/local/etc/rc.d/mailpanel"), Path.of("/etc/rc.d/mailpanel"));
+    /** Lo script di adesso e quelli coi nomi di prima (sezione "rcNames"), che PanelServiceRename non ha potuto spostare. */
+    static final List<Path> SCRIPTS = scripts();
+
+    private static List<Path> scripts() {
+        List<Path> out = new ArrayList<>(List.of(Path.of(PanelRcScript.PATH)));
+        for (String[] p : LegacyNames.pairs("rcNames")) {
+            out.add(Path.of("/usr/local/etc/rc.d", p[0]));
+            out.add(Path.of("/etc/rc.d", p[0]));
+        }
+        return List.copyOf(out);
+    }
+
+    /** Lo script l'ha scritto il pannello: la riga delle versioni di prima o la firma di adesso (PanelMarker). */
+    static boolean writtenByPanel(String script) {
+        return script.contains(MARKER) || PanelMarker.writtenByPanel(script);
+    }
 
     /** I due messaggi dello script (UpdateManager li scrive da qui). */
     static final String STARTING = "echo \"Starting ${name} (web only). Log: ${mailpanel_log}\"";
@@ -100,7 +115,7 @@ public final class RcScriptRepair {
         String repaired = currentMessages(current(text, pairs));
         boolean messages = !currentMessages(text).equals(text);
         if (repaired.equals(text)) return new Report(Outcome.NOTHING, "");
-        if (!text.contains(MARKER))
+        if (!writtenByPanel(text))
             return new Report(Outcome.NOT_OURS, script + " cites " + (old.isEmpty() ? "the old messages" : old)
                     + " but was not written by the panel: left alone");
         // Un file che comincia col punto: rc(8) prende gli script di rc.d con un glob, che non lo vede.

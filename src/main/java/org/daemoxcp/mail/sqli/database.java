@@ -32,7 +32,7 @@ public class database {
     public database(boolean readOnly) {
         Connection conn = null;
         try {
-            String url = "jdbc:sqlite:database/mail_panel.db";
+            String url = "jdbc:sqlite:database/daemoxcp-mail.db";
             if (readOnly) {
                 org.sqlite.SQLiteConfig config = new org.sqlite.SQLiteConfig();
                 config.setReadOnly(true);

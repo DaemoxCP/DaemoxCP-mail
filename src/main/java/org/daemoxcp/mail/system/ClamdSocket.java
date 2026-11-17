@@ -40,7 +40,7 @@ public final class ClamdSocket {
     static final String GROUP = "clamav";
     static final String RSPAMD = "rspamd";
 
-    static final String MARK = "# mail-panel: il socket di clamd solo del gruppo clamav, in cui sta rspamd (reperto 237)\n";
+    static final String MARK = "# daemoxcp-mail: il socket di clamd solo del gruppo clamav, in cui sta rspamd (reperto 237)\n";
     public static final String BLOCK = MARK + "LocalSocketGroup clamav\nLocalSocketMode 660\n";
 
     /** Quello che serve, per provarlo senza clamd e rspamd. */

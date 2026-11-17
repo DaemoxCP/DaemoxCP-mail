@@ -62,7 +62,7 @@ public class RoundcubeDbUserTest {
              + "$config['db_dsnw'] = 'mysql://" + user + ":" + password + "@127.0.0.1/roundcubemail';\n"
              + "$config['imap_host'] = 'ssl://127.0.0.1:993';\n"
              + "$config['des_key'] = 'abcdefghijklmnopqrstuvwx';\n"
-             + "$config['plugins'] = array('mailpanel_sso', 'archive', 'zipdownload');\n"
+             + "$config['plugins'] = array('daemoxcp_mail_sso', 'archive', 'zipdownload');\n"
              + "\n// BEGIN mail-panel: webmail password changes (rewritten by the panel at startup)\n"
              + "$config['password_driver'] = 'httpapi';\n"
              + "// END mail-panel: webmail password changes\n";
@@ -264,9 +264,9 @@ public class RoundcubeDbUserTest {
     static Fake bench(String name, String configText, String owner, String group, String perms) throws Exception {
         Path rc = root.resolve(name);
         Files.createDirectories(rc.resolve("config"));
-        Files.createDirectories(rc.resolve("plugins/mailpanel_sso"));
-        Files.writeString(rc.resolve("plugins/mailpanel_sso/config.inc.php"),
-                "<?php\n$config['mailpanel_sso_secret'] = 'c2VjcmV0';\n");
+        Files.createDirectories(rc.resolve("plugins/daemoxcp_mail_sso"));
+        Files.writeString(rc.resolve("plugins/daemoxcp_mail_sso/config.inc.php"),
+                "<?php\n$config['daemoxcp_mail_sso_secret'] = 'c2VjcmV0';\n");
         Path cfg = rc.resolve("config/config.inc.php");
         Files.writeString(cfg, configText);
         Shell.run("chown", owner + ":" + group, cfg.toString());
@@ -322,7 +322,7 @@ public class RoundcubeDbUserTest {
                     + "    root /usr/local/www/roundcube/public_html; location ~ \\.php$ { fastcgi_pass unix:/var/run/php-fpm-roundcube.sock; } }\n"
                     + "  # server { listen 9443 ssl; server_name old.example.test; root /usr/local/www/roundcube; }\n"
                     + "}\n# configuration file /usr/local/etc/nginx/conf.d/mailpanel-public.conf:\n"
-                    + "server { listen 443 ssl; server_name mta-sts.example.test; root /var/db/mailpanel/public; }\n";
+                    + "server { listen 443 ssl; server_name mta-sts.example.test; root /var/db/daemoxcp-mail/public; }\n";
             List<RoundcubeDbUser.Site> s = RoundcubeDbUser.webmailSites(dump, Path.of("/usr/local/www/roundcube"));
             check("one site only: the webmail on 8443, not the commented ones nor the others",
                     s.size() == 1 && s.get(0).name().equals("webmail.example.test") && s.get(0).port().equals("8443"));

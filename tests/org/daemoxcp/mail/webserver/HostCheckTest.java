@@ -127,7 +127,7 @@ public class HostCheckTest {
             System.exit(1);
         }
         // The secrets file in a test folder: update_panel_config puts the TLS key there, and the
-        // real path is /usr/local/etc/mail-panel, which a test must not touch.
+        // real path is /usr/local/etc/daemoxcp-mail, which a test must not touch.
         Field secretsDir = org.daemoxcp.mail.security.PanelSecrets.class.getDeclaredField("dir");
         secretsDir.setAccessible(true);
         secretsDir.set(null, home.resolve("secrets"));

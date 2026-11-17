@@ -13,7 +13,7 @@ import java.util.concurrent.*;
 import java.util.regex.*;
 
 /**
- * ACME/Let's Encrypt Certificate Manager for FreeBSD Mail Panel
+ * ACME/Let's Encrypt Certificate Manager for DaemoxCP Mail
  *
  * Uses acme.sh for certificate management (lightweight, pure shell)
  * Supports:
@@ -498,7 +498,7 @@ public class AcmeManager {
             // irreversibile su qualcosa che funziona non si fa senza una via di ritorno.
             java.util.Map<String, String> saved = new java.util.HashMap<>();
             try {
-                Path copyDir = Paths.get("/var/db/mailpanel/ssl-previous");
+                Path copyDir = Paths.get("/var/db/daemoxcp-mail/ssl-previous");
                 Files.createDirectories(copyDir);
                 for (String f : new String[] { CERT_FILE, KEY_FILE, FULLCHAIN_FILE, CA_FILE }) {
                     Path orig = Paths.get(f);
@@ -574,7 +574,7 @@ public class AcmeManager {
      */
     private void updateDovecotSsl() throws IOException {
         String dovecotSslConf = """
-            # SSL Configuration - Managed by Mail Panel
+            # SSL configuration - managed by DaemoxCP Mail
             ssl = required
             ssl_cert = <%s
             ssl_key = <%s
@@ -1369,7 +1369,7 @@ public class AcmeManager {
     public String getInstallScript(String email) {
         return """
             #!/bin/sh
-            # ACME.sh Installation Script for FreeBSD Mail Panel
+            # ACME.sh Installation Script for DaemoxCP Mail
 
             echo "=== Installing acme.sh for Let's Encrypt ==="
             echo ""

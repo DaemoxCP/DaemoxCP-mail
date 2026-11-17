@@ -12,7 +12,7 @@ import org.daemoxcp.mail.sqli.dataBaseManager;
  * wants a terminal and a person typing; this does not.
  *
  * It prepares nothing: it uses the configuration in the panel's folder (SQLite, the secrets in
- * /usr/local/etc/mail-panel), as the menu does. So it stops mail, empties /var/vmail, changes the
+ * /usr/local/etc/daemoxcp-mail), as the menu does. So it stops mail, empties /var/vmail, changes the
  * panel's MySQL password: ONLY on a clone of a boot environment, from a COPY of the panel's folder
  * if that is outside the boot environment (/home).
  *

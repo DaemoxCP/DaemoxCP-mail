@@ -9,7 +9,7 @@ import java.sql.SQLException;
 import java.util.HashMap;
 
 /**
- * SQLite Database Manager for FreeBSD Mail Panel
+ * SQLite Database Manager for DaemoxCP Mail
  *
  * This class manages the SQLite database that stores PANEL configuration only.
  * Mail data (domains, users, aliases) is stored in MySQL.
@@ -61,8 +61,8 @@ public class dataBaseManager {
 
     /*
      * La password MySQL del pannello e la chiave privata TLS stanno nel file dei segreti
-     * (PanelSecrets, /usr/local/etc/mail-panel, 600), non nel database SQLite: chi copia
-     * database/mail_panel.db non porta via le chiavi. Le colonne restano (vuote) per le versioni
+     * (PanelSecrets, /usr/local/etc/daemoxcp-mail, 600), non nel database SQLite: chi copia
+     * database/daemoxcp-mail.db non porta via le chiavi. Le colonne restano (vuote) per le versioni
      * di prima. Su un server gia' avviato lo spostamento avviene da solo al primo avvio della
      * nuova versione (anche di un comando da console): se una colonna ha un valore, e' il piu'
      * recente (le versioni nuove non ci scrivono piu') e va nel file; poi la colonna si svuota.
@@ -169,7 +169,7 @@ public class dataBaseManager {
     }
 
     /**
-     * La cartella database/ 700 e mail_panel.db 600 (anche i file -journal e -wal di SQLite):
+     * La cartella database/ 700 e daemoxcp-mail.db 600 (anche i file -journal e -wal di SQLite):
      * oltre ai segreti spostati, dentro ci sono certificato, impostazioni e stato dei servizi.
      */
     static void restrictFiles() {
@@ -181,11 +181,11 @@ public class dataBaseManager {
             // della separazione (il menu, un comando da console) la lasciava chiusa alla web.
             boolean web = webGroup(dir);
             java.nio.file.Files.setPosixFilePermissions(dir, java.nio.file.attribute.PosixFilePermissions.fromString(web ? "rwxr-x---" : "rwx------"));
-            for (String f : new String[]{"mail_panel.db", "mail_panel.db-journal", "mail_panel.db-wal", "mail_panel.db-shm"}) {
+            for (String f : new String[]{"daemoxcp-mail.db", "daemoxcp-mail.db-journal", "daemoxcp-mail.db-wal", "daemoxcp-mail.db-shm"}) {
                 java.nio.file.Path p = dir.resolve(f);
                 if (java.nio.file.Files.exists(p))
                     java.nio.file.Files.setPosixFilePermissions(p, java.nio.file.attribute.PosixFilePermissions.fromString(
-                            web && f.equals("mail_panel.db") && webGroup(p) ? "rw-r-----" : "rw-------"));
+                            web && f.equals("daemoxcp-mail.db") && webGroup(p) ? "rw-r-----" : "rw-------"));
             }
         } catch (java.io.IOException | UnsupportedOperationException e) {
             // File system senza permessi POSIX, o non nostri: restano come sono
@@ -226,6 +226,18 @@ public class dataBaseManager {
         }
     }
 
+    /** Il database e l'utente MySQL del pannello coi nomi di adesso (MysqlRename); la password non cambia. */
+    public boolean renameMysql(String mysqlUser, String mysqlDatabase) {
+        try (PreparedStatement ps = this.database_.get(1).connection.prepareStatement(SqlCatalog.CONFIG_RENAME_MYSQL)) {
+            ps.setString(1, mysqlUser);
+            ps.setString(2, mysqlDatabase);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.out.println("Error renaming the MySQL config: " + e.getMessage());
+            return false;
+        }
+    }
+
     /**
      * Update MySQL configuration (used during mail server installation)
      */
@@ -255,12 +267,12 @@ public class dataBaseManager {
             prepare.setString(3, "");
             prepare.setString(4, "");
             prepare.setString(5, "");
-            prepare.setString(6, "mailpanel-");
+            prepare.setString(6, org.daemoxcp.mail.system.Product.SLUG + "-");
             prepare.setString(7, "127.0.0.1");
             prepare.setString(8, "3306");
-            prepare.setString(9, "mailpanel");
+            prepare.setString(9, org.daemoxcp.mail.system.Product.ID);
             prepare.setString(10, "");
-            prepare.setString(11, "mailserver");
+            prepare.setString(11, org.daemoxcp.mail.system.Product.ID);
             prepare.setInt(12, 0);
             prepare.setInt(13, 0);
             prepare.setInt(14, 0);

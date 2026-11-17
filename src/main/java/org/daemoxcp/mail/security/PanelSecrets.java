@@ -22,7 +22,7 @@ import java.util.Set;
  * cieco, impronte dei codici monouso, chiave della webmail; e i segreti di testo che
  * prima stavano nel database SQLite di configurazione (password MySQL, chiave privata TLS).
  *
- * Il file sta in /usr/local/etc/mail-panel/panel-secrets.properties, accanto a master.key del
+ * Il file sta in /usr/local/etc/daemoxcp-mail/panel-secrets.properties, accanto a master.key del
  * vault. La cartella e' 700 e il file 600; le chiavi si generano al primo uso con SecureRandom.
  * Chi copia il database senza questo file non legge le email cifrate e non puo' fabbricare un
  * codice valido. I test spostano la cartella con -Ddaemoxcp.mail.secrets.dir=...
@@ -81,7 +81,7 @@ public final class PanelSecrets {
     public static final String RSPAMD_CONTROLLER_PASSWORD = "rspamd_controller_password";
 
     /** La cartella dei file; i test la spostano in una cartella temporanea. */
-    static Path dir = Paths.get(System.getProperty("daemoxcp.mail.secrets.dir", "/usr/local/etc/mail-panel"));
+    static Path dir = Paths.get(System.getProperty("daemoxcp.mail.secrets.dir", "/usr/local/etc/daemoxcp-mail"));
     private static final SecureRandom RANDOM = new SecureRandom();
 
     /**
@@ -110,7 +110,7 @@ public final class PanelSecrets {
      * (un rename): prende il gruppo e i permessi di quello che sostituisce, cosi' chiunque scriva (la root,
      * il menu, un comando da console) lascia la web in grado di leggere. Il file di root resta 0600.
      */
-    static final String WEB_GROUP = "mailpanel";
+    static final String WEB_GROUP = org.daemoxcp.mail.system.Product.ID;
 
     static final Store WEB = new Store("panel-secrets.properties", "panel-secrets.lock", true);
     static final Store ROOT = new Store("root-secrets.properties", "root-secrets.lock", false);
@@ -214,8 +214,8 @@ public final class PanelSecrets {
             Files.createFile(tmp);
             setPermissions(tmp, "rw-------");
             try (Writer w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-                p.store(w, web ? "FreeBSD Mail Panel secrets - the panel only, never in the database or the repository"
-                               : "FreeBSD Mail Panel root secrets - root only, never in the database or the repository");
+                p.store(w, web ? "DaemoxCP Mail secrets - the panel only, never in the database or the repository"
+                               : "DaemoxCP Mail root secrets - root only, never in the database or the repository");
             }
             // Il file della web, col pannello separato: il nuovo resta leggibile dal gruppo della web come
             // quello che sostituisce. Prima del rename, cosi' non c'e' un istante in cui la web non legge.
@@ -501,7 +501,7 @@ public final class PanelSecrets {
 
     /**
      * La chiave della webmail in base64url senza '=': va scritta nella configurazione di Roundcube
-     * (letta solo da www), che la manda nell'intestazione X-MailPanel-Key.
+     * (letta solo da www), che la manda nell'intestazione X-DaemoxCP-Key.
      */
     public static String webmailKey() {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(key(WEBMAIL_KEY));

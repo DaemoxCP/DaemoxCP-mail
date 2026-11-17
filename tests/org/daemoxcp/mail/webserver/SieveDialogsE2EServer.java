@@ -38,7 +38,7 @@ public class SieveDialogsE2EServer {
         int port = Integer.parseInt(args[0]);
         Path dir = Path.of("").toAbsolutePath();
         // The panel's secrets and the vault's old key in this test folder, unless given: by default PanelSecrets and
-        // PasswordVault use /usr/local/etc/mail-panel, and update_mysql_config and update_panel_config below would
+        // PasswordVault use /usr/local/etc/daemoxcp-mail, and update_mysql_config and update_panel_config below would
         // overwrite the RUNNING panel's MySQL password and TLS key on the test machine. Measured on 10/11/2026: the
         // VM's panel kept working until its next start, then could not reach MySQL and stopped separating.
         if (System.getProperty("daemoxcp.mail.secrets.dir") == null)

@@ -28,7 +28,7 @@ public class RcScriptRepairTest {
         if (!ok) failed++;
     }
 
-    static final String NEW_LOG = "/var/db/mailpanel/panel.log";
+    static final String NEW_LOG = "/var/db/daemoxcp-mail/panel.log";
     static final String OLD_LOG = LegacyNames.oldNamesOf("files", NEW_LOG).get(0);
 
     /**

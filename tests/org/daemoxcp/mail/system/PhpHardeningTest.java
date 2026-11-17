@@ -79,7 +79,7 @@ public class PhpHardeningTest {
         String installer = new org.daemoxcp.mail.scripts.FullMailServerScript().getScriptContent();
         check("php.ini is PhpHardening.INI", installer.contains("<< 'PHPINIEOF'\n" + PhpHardening.INI + "PHPINIEOF\n"));
         for (String line : new String[]{"expose_php = Off", "display_errors = Off", "session.upload_progress.enabled = Off",
-                "session.save_path = \"/var/db/mailpanel/php_sessions\"", "allow_url_include = Off", "date.timezone = UTC"})
+                "session.save_path = \"/var/db/daemoxcp-mail/php_sessions\"", "allow_url_include = Off", "date.timezone = UTC"})
             check("  " + line, PhpHardening.INI.contains("\n" + line + "\n"));
         check("the panel's pool has security.limit_extensions = .php", RoundcubeUser.poolConf(null).contains("\n" + PhpHardening.LIMIT)
                 && PhpHardening.hasLimit(RoundcubeUser.poolConf(null)));

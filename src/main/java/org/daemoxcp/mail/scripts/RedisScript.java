@@ -67,7 +67,7 @@ public class RedisScript {
             echo "[2/3] Configuring Redis..."
             cat > /usr/local/etc/redis.conf << 'REDISCONF'
 # Redis Configuration for Mail Panel
-# Managed by FreeBSD Mail Panel
+# Managed by DaemoxCP Mail
 
 bind 127.0.0.1
 port 6379

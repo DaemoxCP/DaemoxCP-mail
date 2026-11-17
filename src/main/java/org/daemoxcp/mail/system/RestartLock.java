@@ -35,7 +35,7 @@ public final class RestartLock {
     private static final Logger LOGGER = Logger.getLogger(RestartLock.class.getName());
 
     /** Dove il pannello scrive il processo e l'ora del riavvio che programma: "pid millisecondi". */
-    static Path AT = Path.of("/var/db/mailpanel/reboot-at");
+    static Path AT = Path.of("/var/db/daemoxcp-mail/reboot-at");
 
     /** Lo stato. known falso: non si e' potuto leggere (pgrep non ha risposto). at 0: l'ora non si sa. */
     public record State(boolean scheduled, long at, boolean known) {

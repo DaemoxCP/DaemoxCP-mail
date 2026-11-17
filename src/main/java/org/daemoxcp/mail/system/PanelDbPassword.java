@@ -56,7 +56,7 @@ import java.util.stream.Stream;
  * Dovecot o della webmail (qualcuno entra ancora con lei: cambiarla lo romperebbe). Gli account dello stesso utente
  * per altri host non si toccano, e il log li nomina.
  *
- * <p>Restano con la vecchia, che dopo non apre piu' niente: le copie di sicurezza (/var/db/mailpanel, gli ambienti di
+ * <p>Restano con la vecchia, che dopo non apre piu' niente: le copie di sicurezza (/var/db/daemoxcp-mail, gli ambienti di
  * avvio), e un MySQL ripristinato da prima, che riporterebbe anche la vecchia password.
  */
 public final class PanelDbPassword {

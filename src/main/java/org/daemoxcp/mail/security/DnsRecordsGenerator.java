@@ -8,7 +8,7 @@ import java.net.*;
 import java.util.*;
 
 /**
- * DNS Records Generator for FreeBSD Mail Panel
+ * DNS Records Generator for DaemoxCP Mail
  *
  * Generates all DNS records needed for a properly configured mail server:
  * - MX Record: Mail exchange record

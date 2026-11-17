@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  * chiaro. Dovecot legge BLF-CRYPT, quindi la casella non entrava piu', e la copia cifrata del
  * pannello restava quella di prima. Adesso il plugin usa il driver httpapi e manda utente,
  * password attuale e password nuova a /api/internal/mailbox-password sul pannello (solo da
- * 127.0.0.1, con la chiave X-MailPanel-Key): il pannello controlla la password attuale e scrive
+ * 127.0.0.1, con la chiave X-DaemoxCP-Key): il pannello controlla la password attuale e scrive
  * insieme l'hash bcrypt e la copia cifrata.
  *
  * Le impostazioni stanno in un blocco in fondo a config.inc.php, che il pannello riscrive a ogni
@@ -28,11 +28,11 @@ public final class WebmailPasswordConfig {
 
     private WebmailPasswordConfig() {}
 
-    static final String BEGIN = "// BEGIN mail-panel: webmail password changes (rewritten by the panel at startup)";
-    static final String END = "// END mail-panel: webmail password changes";
+    static final String BEGIN = "// BEGIN daemoxcp-mail: webmail password changes (rewritten by the panel at startup)";
+    static final String END = "// END daemoxcp-mail: webmail password changes";
     /** Il percorso della rotta sul pannello. */
     public static final String PATH = "/api/internal/mailbox-password";
-    /** La rotta della copia nel vault dopo un accesso alla webmail (RoundcubeSsoManager, plugin mailpanel_sso). */
+    /** La rotta della copia nel vault dopo un accesso alla webmail (RoundcubeSsoManager, plugin daemoxcp_mail_sso). */
     public static final String VAULT_PATH = "/api/internal/mailbox-vault";
 
     /** Le righe del plugin password che il blocco sostituisce, scritte da noi o a mano. */
@@ -41,6 +41,9 @@ public final class WebmailPasswordConfig {
             + "httpapi_[a-z_]+|http_client|minimum_length)['\"]\\][ \\t]*=[^\\n]*;[ \\t]*\\r?\\n?");
     private static final Pattern KEY = Pattern.compile("[A-Za-z0-9_-]{20,128}");
 
+    /** L'intestazione con cui Roundcube manda la chiave della webmail (WebmailPasswordHandler la legge). */
+    public static final String KEY_HEADER = "X-DaemoxCP-Key";
+
     /**
      * La configurazione con il blocco del pannello al posto delle impostazioni di prima.
      * La chiave e' base64url (solo lettere, cifre, - e _): dentro gli apici PHP non serve altro.
@@ -48,7 +51,9 @@ public final class WebmailPasswordConfig {
     public static String apply(String config, int port, String key) {
         if (port < 1 || port > 65535) throw new IllegalArgumentException("Invalid panel port: " + port);
         if (key == null || !KEY.matcher(key).matches()) throw new IllegalArgumentException("Invalid webmail key");
-        String s = config == null ? "" : config;
+        // Il blocco scritto da una versione di prima ha i marcatori col nome di prima del prodotto: si leggono come
+        // quelli di adesso (legacy-names.json, sezione "productComments"), cosi' si toglie anche lui.
+        String s = org.daemoxcp.mail.system.PanelMarker.current(config == null ? "" : config, "productComments");
         int b = s.indexOf(BEGIN);
         while (b >= 0) {
             int e = s.indexOf(END, b);
@@ -77,7 +82,7 @@ public final class WebmailPasswordConfig {
                 + "$config['password_httpapi_expect'] = '/^ok$/';\n"
                 + "// The panel's certificate is for its public name, not for 127.0.0.1: the key authenticates the request.\n"
                 + "// http_errors off: a refusal (403) reaches the driver's own check as a password error, not as a connection error\n"
-                + "$config['password_http_client'] = ['verify' => false, 'timeout' => 15, 'http_errors' => false, 'headers' => ['X-MailPanel-Key' => '" + key + "']];\n"
+                + "$config['password_http_client'] = ['verify' => false, 'timeout' => 15, 'http_errors' => false, 'headers' => ['" + KEY_HEADER + "' => '" + key + "']];\n"
                 + "// Same rule as the panel (SecurityUtils.isValidMailboxPassword): the panel checks it again\n"
                 + "$config['password_minimum_length'] = 12;\n"
                 + END + "\n";

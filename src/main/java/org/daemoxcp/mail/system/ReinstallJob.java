@@ -40,7 +40,7 @@ import java.util.logging.Logger;
  * l'esito. Riaprendo il menu durante una reinstallazione, il menu segue quella in corso invece di
  * partirne un'altra.
  *
- * <p>Il registro sta in /var/log/mailpanel, fuori dal boot environment: resta anche dopo essere
+ * <p>Il registro sta in /var/log/daemoxcp-mail, fuori dal boot environment: resta anche dopo essere
  * tornati indietro con la via di ritorno, che e' proprio quando serve leggerlo.
  */
 public final class ReinstallJob {
@@ -50,7 +50,7 @@ public final class ReinstallJob {
     private ReinstallJob() {}
 
     /** La cartella dei registri. Le prove la spostano con -Ddaemoxcp.mail.reinstall.dir. */
-    static Path dir = Path.of(System.getProperty("daemoxcp.mail.reinstall.dir", "/var/log/mailpanel"));
+    static Path dir = Path.of(System.getProperty("daemoxcp.mail.reinstall.dir", "/var/log/daemoxcp-mail"));
 
     /** daemon(8) della base di FreeBSD. */
     static String daemon = "/usr/sbin/daemon";

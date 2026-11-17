@@ -11,10 +11,10 @@ public final class SqlCatalog {
     private SqlCatalog() {}
 
     /** MailDatabase.createDatabaseAndUser */
-    public static final String MAIL_CREATE_PANEL_DATABASE = "CREATE DATABASE IF NOT EXISTS mailpanel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+    public static final String MAIL_CREATE_PANEL_DATABASE = "CREATE DATABASE IF NOT EXISTS daemoxcp_mail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
 
     /** MailDatabase.createDatabaseAndUser */
-    public static final String MAIL_GRANT_PANEL_USER = "GRANT ALL PRIVILEGES ON mailpanel.* TO 'mailpanel'@'127.0.0.1'";
+    public static final String MAIL_GRANT_PANEL_USER = "GRANT ALL PRIVILEGES ON daemoxcp_mail.* TO 'daemoxcp_mail'@'127.0.0.1'";
 
     /** MailDatabase.createDatabaseAndUser */
     public static final String MAIL_CREATE_MAILSERVER_DATABASE = "CREATE DATABASE IF NOT EXISTS mailserver CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
@@ -864,6 +864,9 @@ public final class SqlCatalog {
     public static final String CONFIG_UPDATE_PANEL_CONFIG = "UPDATE config SET mail_panel_host = ?, mail_panel_port = ?, mail_panel_ssl_cert = ?, mail_panel_ssl_cert_key = ?, mail_panel_ssl_chain = ?, mail_panel_sessions_prefix = ? WHERE id = 1";
 
     /** dataBaseManager.update_mysql_config */
+    /** MysqlRename: il database e l'utente del pannello col nome di adesso, la password resta */
+    public static final String CONFIG_RENAME_MYSQL = "UPDATE config SET mysql_user = ?, mysql_database = ? WHERE id = 1";
+
     public static final String CONFIG_UPDATE_MYSQL_CONFIG = "UPDATE config SET mysql_host = ?, mysql_port = ?, mysql_user = ?, mysql_password = ?, mysql_database = ? WHERE id = 1";
 
     /** dataBaseManager.insert_data_default */
@@ -905,7 +908,7 @@ public final class SqlCatalog {
     // ===== Scritte a mano dal SQL composto di prima =====
 
     /** MailDatabase.createDatabaseAndUser: la password e' un parametro, che il driver mette fra apici con l'escape giusto */
-    public static final String MAIL_CREATE_PANEL_USER = "CREATE USER IF NOT EXISTS 'mailpanel'@'127.0.0.1' IDENTIFIED BY ?";
+    public static final String MAIL_CREATE_PANEL_USER = "CREATE USER IF NOT EXISTS 'daemoxcp_mail'@'127.0.0.1' IDENTIFIED BY ?";
 
     /** MailDatabase.createDatabaseAndUser */
     public static final String MAIL_CREATE_MAILSERVER_USER = "CREATE USER IF NOT EXISTS 'mailserver'@'127.0.0.1' IDENTIFIED BY ?";
@@ -1213,12 +1216,12 @@ public final class SqlCatalog {
             + "    mail_panel_ssl_cert TEXT DEFAULT '',\n"
             + "    mail_panel_ssl_cert_key TEXT DEFAULT '',\n"
             + "    mail_panel_ssl_chain TEXT DEFAULT '',\n"
-            + "    mail_panel_sessions_prefix TEXT DEFAULT 'mailpanel-',\n"
+            + "    mail_panel_sessions_prefix TEXT DEFAULT 'daemoxcp-mail-',\n"
             + "    mysql_host TEXT DEFAULT '127.0.0.1',\n"
             + "    mysql_port TEXT DEFAULT '3306',\n"
-            + "    mysql_user TEXT DEFAULT 'mailpanel',\n"
+            + "    mysql_user TEXT DEFAULT 'daemoxcp_mail',\n"
             + "    mysql_password TEXT DEFAULT '',\n"
-            + "    mysql_database TEXT DEFAULT 'mailserver',\n"
+            + "    mysql_database TEXT DEFAULT 'daemoxcp_mail',\n"
             + "    mail_hostname TEXT DEFAULT '',\n"
             + "    postfix_installed INTEGER DEFAULT 0,\n"
             + "    dovecot_installed INTEGER DEFAULT 0,\n"
@@ -1293,93 +1296,93 @@ public final class SqlCatalog {
     public static final String ROLES_ADD = "INSERT INTO panel_role_permissions (role, permission) VALUES (?, ?)";
 
     /** WebDbAccess, come root di MySQL: i due utenti nuovi, se ci sono e se sono bloccati */
-    public static final String WEB_DB_USERS = "SELECT user, host, account_locked FROM mysql.user WHERE user IN ('mailpanel_routines', 'mailpanel_web')";
+    public static final String WEB_DB_USERS = "SELECT user, host, account_locked FROM mysql.user WHERE user IN ('daemoxcp_mail_routines', 'daemoxcp_mail_web')";
 
     /**
      * WebDbAccess: chi possiede le procedure. Bloccato (nessuno entra con lui), e con una password che non e'
      * scritta da nessuna parte: se qualcuno lo sbloccasse, non saprebbe comunque con cosa entrare.
      */
-    public static final String WEB_DB_CREATE_ROUTINES_USER = "CREATE USER IF NOT EXISTS 'mailpanel_routines'@'localhost' IDENTIFIED BY ? ACCOUNT LOCK";
+    public static final String WEB_DB_CREATE_ROUTINES_USER = "CREATE USER IF NOT EXISTS 'daemoxcp_mail_routines'@'localhost' IDENTIFIED BY ? ACCOUNT LOCK";
 
     /** WebDbAccess */
-    public static final String WEB_DB_LOCK_ROUTINES_USER = "ALTER USER 'mailpanel_routines'@'localhost' ACCOUNT LOCK";
+    public static final String WEB_DB_LOCK_ROUTINES_USER = "ALTER USER 'daemoxcp_mail_routines'@'localhost' ACCOUNT LOCK";
 
     /**
-     * WebDbAccess: i permessi di mailpanel_routines, quelli che servono alle procedure e niente di piu', nel
+     * WebDbAccess: i permessi di daemoxcp_mail_routines, quelli che servono alle procedure e niente di piu', nel
      * database del pannello (quello della connessione). EXECUTE sul database: MySQL lo chiede anche a chi ha
      * definito una procedura, per farla girare (e per web_session_admin, che le altre chiamano). Le UPDATE solo
      * sulle colonne che le procedure cambiano; la SELECT anche dove si scrive, perche' MySQL la chiede per le
      * colonne del WHERE.
      */
-    public static final String WEB_DB_GRANT_ROUTINES_EXECUTE = "GRANT EXECUTE ON * TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_EXECUTE = "GRANT EXECUTE ON * TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_SESSIONS = "GRANT SELECT, UPDATE (last_seen_at) ON panel_sessions TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_SESSIONS = "GRANT SELECT, UPDATE (last_seen_at) ON panel_sessions TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_ADMINS = "GRANT SELECT, UPDATE (theme, language) ON panel_admin TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_ADMINS = "GRANT SELECT, UPDATE (theme, language) ON panel_admin TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_ROLES = "GRANT SELECT ON panel_role_permissions TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_ROLES = "GRANT SELECT ON panel_role_permissions TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_SETTINGS = "GRANT SELECT ON panel_settings TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_SETTINGS = "GRANT SELECT ON panel_settings TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_AUDIT = "GRANT INSERT ON audit_log TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_AUDIT = "GRANT INSERT ON audit_log TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_DOMAINS = "GRANT SELECT, INSERT, UPDATE (description), DELETE ON domains TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_DOMAINS = "GRANT SELECT, INSERT, UPDATE (description), DELETE ON domains TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_MAILBOXES = "GRANT SELECT, INSERT, UPDATE (name, quota_mb, active, receive_enabled, password, password_encrypted, password_encrypted_at), DELETE ON mailboxes TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_MAILBOXES = "GRANT SELECT, INSERT, UPDATE (name, quota_mb, active, receive_enabled, password, password_encrypted, password_encrypted_at), DELETE ON mailboxes TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_ALIASES = "GRANT SELECT, INSERT, UPDATE (active), DELETE ON aliases TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_ALIASES = "GRANT SELECT, INSERT, UPDATE (active), DELETE ON aliases TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_RATE_LIMITS = "GRANT SELECT, DELETE ON rate_limits TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_RATE_LIMITS = "GRANT SELECT, DELETE ON rate_limits TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_AUTO_RESPONDERS = "GRANT SELECT ON auto_responders TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_AUTO_RESPONDERS = "GRANT SELECT ON auto_responders TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_FORWARDING = "GRANT SELECT ON forwarding_rules TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_FORWARDING = "GRANT SELECT ON forwarding_rules TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_FILTERS = "GRANT SELECT ON sieve_filters TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_FILTERS = "GRANT SELECT ON sieve_filters TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_STATISTICS = "GRANT SELECT ON email_statistics TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_STATISTICS = "GRANT SELECT ON email_statistics TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_TRAINING = "GRANT SELECT ON rspamd_training TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_TRAINING = "GRANT SELECT ON rspamd_training TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_WEBMAIL_TOKENS = "GRANT INSERT ON roundcube_tokens TO 'mailpanel_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_WEBMAIL_TOKENS = "GRANT INSERT ON roundcube_tokens TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess: le procedure del database del pannello, col loro commento (l'impronta del testo) e chi le ha definite */
     public static final String WEB_DB_ROUTINES = "SELECT routine_name, routine_comment, definer, security_type FROM information_schema.routines WHERE routine_schema = DATABASE() AND routine_type = 'PROCEDURE'";
 
     /** WebDbAccess: l'utente della parte web, coi due nomi con cui entra in MySQL (come l'utente del pannello) */
-    public static final String WEB_DB_CREATE_WEB_USER = "CREATE USER IF NOT EXISTS 'mailpanel_web'@'localhost' IDENTIFIED BY ?, 'mailpanel_web'@'127.0.0.1' IDENTIFIED BY ?";
+    public static final String WEB_DB_CREATE_WEB_USER = "CREATE USER IF NOT EXISTS 'daemoxcp_mail_web'@'localhost' IDENTIFIED BY ?, 'daemoxcp_mail_web'@'127.0.0.1' IDENTIFIED BY ?";
 
     /** WebDbAccess */
-    public static final String WEB_DB_SET_WEB_PASSWORD = "ALTER USER 'mailpanel_web'@'localhost' IDENTIFIED BY ?, 'mailpanel_web'@'127.0.0.1' IDENTIFIED BY ?";
+    public static final String WEB_DB_SET_WEB_PASSWORD = "ALTER USER 'daemoxcp_mail_web'@'localhost' IDENTIFIED BY ?, 'daemoxcp_mail_web'@'127.0.0.1' IDENTIFIED BY ?";
 
     /** WebDbAccess: i permessi dell'utente della web che non sono l'EXECUTE di una procedura (ce ne devono essere zero) */
     public static final String WEB_DB_WEB_OTHER_PRIVILEGES = "SELECT privilege_type FROM information_schema.user_privileges WHERE grantee IN (?, ?) AND privilege_type <> 'USAGE'\n"
             + "UNION ALL SELECT privilege_type FROM information_schema.schema_privileges WHERE grantee IN (?, ?)\n"
             + "UNION ALL SELECT privilege_type FROM information_schema.table_privileges WHERE grantee IN (?, ?)\n"
             + "UNION ALL SELECT privilege_type FROM information_schema.column_privileges WHERE grantee IN (?, ?)\n"
-            + "UNION ALL SELECT priv FROM mysql.global_grants WHERE user = 'mailpanel_web'\n"
-            + "UNION ALL SELECT from_user FROM mysql.role_edges WHERE to_user = 'mailpanel_web'";
+            + "UNION ALL SELECT priv FROM mysql.global_grants WHERE user = 'daemoxcp_mail_web'\n"
+            + "UNION ALL SELECT from_user FROM mysql.role_edges WHERE to_user = 'daemoxcp_mail_web'";
 
     /** WebDbAccess: le procedure su cui l'utente della web ha un permesso, in quale database e quale */
-    public static final String WEB_DB_WEB_ROUTINE_PRIVILEGES = "SELECT host, db, routine_name, routine_type, proc_priv FROM mysql.procs_priv WHERE user = 'mailpanel_web'";
+    public static final String WEB_DB_WEB_ROUTINE_PRIVILEGES = "SELECT host, db, routine_name, routine_type, proc_priv FROM mysql.procs_priv WHERE user = 'daemoxcp_mail_web'";
 
     /** WebDbAccess: se l'utente della web avesse altro, gli si toglie tutto e gli si ridanno solo le procedure */
-    public static final String WEB_DB_REVOKE_WEB = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'";
+    public static final String WEB_DB_REVOKE_WEB = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'daemoxcp_mail_web'@'localhost', 'daemoxcp_mail_web'@'127.0.0.1'";
 
     // ========== La root di MySQL e le domande degli aggiornamenti (MysqlRoot, MysqlListen, UpdateManager) ==========
     //
@@ -1507,31 +1510,31 @@ public final class SqlCatalog {
     // nel database puo' tutto. I nomi sono fissi, i due host come per l'utente del pannello.
 
     /** MailDbUsers, come root di MySQL: i due utenti, se ci sono */
-    public static final String MAILDB_USERS = "SELECT user, host FROM mysql.user WHERE user IN ('mailpanel_postfix', 'mailpanel_dovecot')";
+    public static final String MAILDB_USERS = "SELECT user, host FROM mysql.user WHERE user IN ('daemoxcp_mail_postfix', 'daemoxcp_mail_dovecot')";
 
     /** MailDbUsers */
-    public static final String MAILDB_CREATE_POSTFIX_USER = "CREATE USER IF NOT EXISTS 'mailpanel_postfix'@'localhost' IDENTIFIED BY ?, 'mailpanel_postfix'@'127.0.0.1' IDENTIFIED BY ?";
+    public static final String MAILDB_CREATE_POSTFIX_USER = "CREATE USER IF NOT EXISTS 'daemoxcp_mail_postfix'@'localhost' IDENTIFIED BY ?, 'daemoxcp_mail_postfix'@'127.0.0.1' IDENTIFIED BY ?";
 
     /** MailDbUsers */
-    public static final String MAILDB_SET_POSTFIX_PASSWORD = "ALTER USER 'mailpanel_postfix'@'localhost' IDENTIFIED BY ?, 'mailpanel_postfix'@'127.0.0.1' IDENTIFIED BY ?";
+    public static final String MAILDB_SET_POSTFIX_PASSWORD = "ALTER USER 'daemoxcp_mail_postfix'@'localhost' IDENTIFIED BY ?, 'daemoxcp_mail_postfix'@'127.0.0.1' IDENTIFIED BY ?";
 
     /** MailDbUsers */
-    public static final String MAILDB_CREATE_DOVECOT_USER = "CREATE USER IF NOT EXISTS 'mailpanel_dovecot'@'localhost' IDENTIFIED BY ?, 'mailpanel_dovecot'@'127.0.0.1' IDENTIFIED BY ?";
+    public static final String MAILDB_CREATE_DOVECOT_USER = "CREATE USER IF NOT EXISTS 'daemoxcp_mail_dovecot'@'localhost' IDENTIFIED BY ?, 'daemoxcp_mail_dovecot'@'127.0.0.1' IDENTIFIED BY ?";
 
     /** MailDbUsers */
-    public static final String MAILDB_SET_DOVECOT_PASSWORD = "ALTER USER 'mailpanel_dovecot'@'localhost' IDENTIFIED BY ?, 'mailpanel_dovecot'@'127.0.0.1' IDENTIFIED BY ?";
+    public static final String MAILDB_SET_DOVECOT_PASSWORD = "ALTER USER 'daemoxcp_mail_dovecot'@'localhost' IDENTIFIED BY ?, 'daemoxcp_mail_dovecot'@'127.0.0.1' IDENTIFIED BY ?";
 
     /** MailDbUsers: Postfix, i domini (virtual_mailbox_domains) */
-    public static final String MAILDB_GRANT_POSTFIX_DOMAINS = "GRANT SELECT (domain, active) ON domains TO 'mailpanel_postfix'@'localhost', 'mailpanel_postfix'@'127.0.0.1'";
+    public static final String MAILDB_GRANT_POSTFIX_DOMAINS = "GRANT SELECT (domain, active) ON domains TO 'daemoxcp_mail_postfix'@'localhost', 'daemoxcp_mail_postfix'@'127.0.0.1'";
 
     /** MailDbUsers: Postfix, le caselle (virtual_mailbox_maps): niente password */
-    public static final String MAILDB_GRANT_POSTFIX_MAILBOXES = "GRANT SELECT (email, active, receive_enabled) ON mailboxes TO 'mailpanel_postfix'@'localhost', 'mailpanel_postfix'@'127.0.0.1'";
+    public static final String MAILDB_GRANT_POSTFIX_MAILBOXES = "GRANT SELECT (email, active, receive_enabled) ON mailboxes TO 'daemoxcp_mail_postfix'@'localhost', 'daemoxcp_mail_postfix'@'127.0.0.1'";
 
     /** MailDbUsers: Postfix, gli alias (virtual_alias_maps) */
-    public static final String MAILDB_GRANT_POSTFIX_ALIASES = "GRANT SELECT (source, destination, active) ON aliases TO 'mailpanel_postfix'@'localhost', 'mailpanel_postfix'@'127.0.0.1'";
+    public static final String MAILDB_GRANT_POSTFIX_ALIASES = "GRANT SELECT (source, destination, active) ON aliases TO 'daemoxcp_mail_postfix'@'localhost', 'daemoxcp_mail_postfix'@'127.0.0.1'";
 
     /** MailDbUsers: Dovecot, l'accesso alle caselle (passdb) */
-    public static final String MAILDB_GRANT_DOVECOT_MAILBOXES = "GRANT SELECT (email, password, active) ON mailboxes TO 'mailpanel_dovecot'@'localhost', 'mailpanel_dovecot'@'127.0.0.1'";
+    public static final String MAILDB_GRANT_DOVECOT_MAILBOXES = "GRANT SELECT (email, password, active) ON mailboxes TO 'daemoxcp_mail_dovecot'@'localhost', 'daemoxcp_mail_dovecot'@'127.0.0.1'";
 
     /** MailDbUsers: i permessi di un utente che non sono quelli per colonna (ce ne devono essere zero) */
     public static final String MAILDB_OTHER_PRIVILEGES = "SELECT privilege_type FROM information_schema.user_privileges WHERE grantee IN (?, ?) AND privilege_type <> 'USAGE'\n"
@@ -1545,10 +1548,10 @@ public final class SqlCatalog {
     public static final String MAILDB_COLUMN_PRIVILEGES = "SELECT grantee, table_schema, table_name, column_name, privilege_type FROM information_schema.column_privileges WHERE grantee IN (?, ?)";
 
     /** MailDbUsers */
-    public static final String MAILDB_REVOKE_POSTFIX = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'mailpanel_postfix'@'localhost', 'mailpanel_postfix'@'127.0.0.1'";
+    public static final String MAILDB_REVOKE_POSTFIX = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'daemoxcp_mail_postfix'@'localhost', 'daemoxcp_mail_postfix'@'127.0.0.1'";
 
     /** MailDbUsers */
-    public static final String MAILDB_REVOKE_DOVECOT = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'mailpanel_dovecot'@'localhost', 'mailpanel_dovecot'@'127.0.0.1'";
+    public static final String MAILDB_REVOKE_DOVECOT = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'daemoxcp_mail_dovecot'@'localhost', 'daemoxcp_mail_dovecot'@'127.0.0.1'";
 
     /** MailDbUsers, come root di MySQL: le connessioni aperte adesso da un utente (Dovecot tiene la sua) */
     public static final String MAILDB_CONNECTIONS = "SELECT COUNT(*) FROM information_schema.processlist WHERE user = ?";
@@ -1575,13 +1578,13 @@ public final class SqlCatalog {
     //
     // Ogni istruzione MySQL della parte web ha la sua procedura: la connessione della web (CatalogGuard,
     // routines) chiama questa invece di mandare l'istruzione, con l'impronta della sessione della richiesta
-    // davanti agli stessi parametri. Le procedure sono di mailpanel_routines, bloccato, e girano coi suoi
+    // davanti agli stessi parametri. Le procedure sono di daemoxcp_mail_routines, bloccato, e girano coi suoi
     // permessi; l'utente MySQL della web ha solo EXECUTE su queste (WebDbAccess). Ognuna ha quattro testi:
     // la chiamata, la creazione (con il commento come parametro: l'impronta del testo stesso), la
     // cancellazione e il permesso.
 
-    /** L'inizio di ogni procedura della web: di mailpanel_routines. */
-    private static final String WEB_CREATE = "CREATE DEFINER = 'mailpanel_routines'@'localhost' PROCEDURE ";
+    /** L'inizio di ogni procedura della web: di daemoxcp_mail_routines. */
+    private static final String WEB_CREATE = "CREATE DEFINER = 'daemoxcp_mail_routines'@'localhost' PROCEDURE ";
     /** Dopo i parametri: il commento (l'impronta del testo, WebDbAccess) e i permessi di chi l'ha definita. */
     private static final String WEB_BEGIN = " COMMENT ? SQL SECURITY DEFINER\nBEGIN\n";
     /**
@@ -1594,7 +1597,7 @@ public final class SqlCatalog {
      */
     private static final String WEB_SESSION = "IN p_session CHAR(64) CHARACTER SET ascii";
     /** Chi le puo' chiamare: l'utente della parte web, da tutti e due i nomi con cui entra. */
-    private static final String WEB_TO = " TO 'mailpanel_web'@'localhost', 'mailpanel_web'@'127.0.0.1'";
+    private static final String WEB_TO = " TO 'daemoxcp_mail_web'@'localhost', 'daemoxcp_mail_web'@'127.0.0.1'";
     /**
      * La sessione s della richiesta: c'e', non e' scaduta e non e' ferma da piu' di 30 minuti
      * (WebSessions.IDLE_SECONDS, lo controlla SqlCatalogTest), con l'ora del database.
@@ -2365,4 +2368,187 @@ public final class SqlCatalog {
 
     /** WebDbAccess: vedi WEB_DROP_RETIRED_GET_MAILBOX_VAULT_COPY. */
     public static final String WEB_DROP_RETIRED_GET_MAILBOX_PASSWORD_HASH = "DROP PROCEDURE IF EXISTS get_mailbox_password_hash";
+
+    // ===================== MysqlRename: il database e gli utenti col nome di DaemoxCP Mail (17/11/2026) =====================
+    // In SQL un identificatore non e' un parametro: i nomi di prima degli utenti stanno qui, nel testo delle istruzioni, e
+    // sono gli unici nomi di prima nel codice (le altre migrazioni li leggono da legacy-names.json). Il database di prima
+    // non c'e': le tabelle si spostano con la connessione aperta su di lui (RENAME TABLE tabella TO daemoxcp_mail.tabella).
+
+    /** MysqlRename: i due database, se ci sono, con set di caratteri e ordinamento */
+    public static final String RENAME_SCHEMAS = "SELECT schema_name, default_character_set_name, default_collation_name FROM information_schema.schemata WHERE schema_name IN (?, ?)";
+
+    /** MysqlRename: le tabelle e le viste di un database */
+    public static final String RENAME_TABLES_OF = "SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = ?";
+
+    /** MysqlRename: trigger ed eventi di un database (non si sanno spostare: con uno di loro non si sposta niente) */
+    public static final String RENAME_OTHER_OBJECTS_OF = "SELECT (SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema = ?) + (SELECT COUNT(*) FROM information_schema.events WHERE event_schema = ?)";
+
+    /** MysqlRename: le procedure e le funzioni di un database */
+    public static final String RENAME_ROUTINES_OF = "SELECT routine_name FROM information_schema.routines WHERE routine_schema = ?";
+
+    /** MysqlRename: gli utenti del pannello, coi nomi di prima e con quelli di adesso */
+    public static final String RENAME_USERS = "SELECT user, host FROM mysql.user WHERE user IN ('mailpanel', 'daemoxcp_mail', 'mailpanel_web', 'daemoxcp_mail_web', 'mailpanel_routines', 'daemoxcp_mail_routines', 'mailpanel_postfix', 'daemoxcp_mail_postfix', 'mailpanel_dovecot', 'daemoxcp_mail_dovecot')";
+
+    /** MysqlRename: il database col nome di adesso, come lo crea l'installatore */
+    public static final String RENAME_CREATE_DATABASE = "CREATE DATABASE daemoxcp_mail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+
+    /** MysqlRename, per tornare indietro: il database nuovo, se e' rimasto vuoto */
+    public static final String RENAME_DROP_NEW_DATABASE = "DROP DATABASE daemoxcp_mail";
+
+    /** MysqlRename: il database di prima col nome dell'installatore, quando e' rimasto vuoto */
+    public static final String RENAME_DROP_OLD_DEFAULT_DATABASE = "DROP DATABASE mailserver";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_ADMIN_PASSKEYS = "RENAME TABLE admin_passkeys TO daemoxcp_mail.admin_passkeys";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_ADMIN_PASSKEYS = "RENAME TABLE daemoxcp_mail.admin_passkeys TO admin_passkeys";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_RSPAMD_TRAINING = "RENAME TABLE rspamd_training TO daemoxcp_mail.rspamd_training";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_RSPAMD_TRAINING = "RENAME TABLE daemoxcp_mail.rspamd_training TO rspamd_training";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_PANEL_SESSIONS = "RENAME TABLE panel_sessions TO daemoxcp_mail.panel_sessions";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_PANEL_SESSIONS = "RENAME TABLE daemoxcp_mail.panel_sessions TO panel_sessions";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_LOGIN_CODE_EMAIL = "RENAME TABLE login_code_email TO daemoxcp_mail.login_code_email";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_LOGIN_CODE_EMAIL = "RENAME TABLE daemoxcp_mail.login_code_email TO login_code_email";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_LOGIN_CODE_CONSOLE = "RENAME TABLE login_code_console TO daemoxcp_mail.login_code_console";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_LOGIN_CODE_CONSOLE = "RENAME TABLE daemoxcp_mail.login_code_console TO login_code_console";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_STEPUP_CODE = "RENAME TABLE stepup_code TO daemoxcp_mail.stepup_code";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_STEPUP_CODE = "RENAME TABLE daemoxcp_mail.stepup_code TO stepup_code";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_EMAIL_CHANGE_CODE = "RENAME TABLE email_change_code TO daemoxcp_mail.email_change_code";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_EMAIL_CHANGE_CODE = "RENAME TABLE daemoxcp_mail.email_change_code TO email_change_code";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_ROUNDCUBE_TOKENS = "RENAME TABLE roundcube_tokens TO daemoxcp_mail.roundcube_tokens";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_ROUNDCUBE_TOKENS = "RENAME TABLE daemoxcp_mail.roundcube_tokens TO roundcube_tokens";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_AUTO_RESPONDERS = "RENAME TABLE auto_responders TO daemoxcp_mail.auto_responders";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_AUTO_RESPONDERS = "RENAME TABLE daemoxcp_mail.auto_responders TO auto_responders";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_SIEVE_FILTERS = "RENAME TABLE sieve_filters TO daemoxcp_mail.sieve_filters";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_SIEVE_FILTERS = "RENAME TABLE daemoxcp_mail.sieve_filters TO sieve_filters";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_FORWARDING_RULES = "RENAME TABLE forwarding_rules TO daemoxcp_mail.forwarding_rules";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_FORWARDING_RULES = "RENAME TABLE daemoxcp_mail.forwarding_rules TO forwarding_rules";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_EMAIL_STATISTICS = "RENAME TABLE email_statistics TO daemoxcp_mail.email_statistics";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_EMAIL_STATISTICS = "RENAME TABLE daemoxcp_mail.email_statistics TO email_statistics";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_ALIASES = "RENAME TABLE aliases TO daemoxcp_mail.aliases";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_ALIASES = "RENAME TABLE daemoxcp_mail.aliases TO aliases";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_MAILBOXES = "RENAME TABLE mailboxes TO daemoxcp_mail.mailboxes";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_MAILBOXES = "RENAME TABLE daemoxcp_mail.mailboxes TO mailboxes";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_DKIM_ROTATION_HISTORY = "RENAME TABLE dkim_rotation_history TO daemoxcp_mail.dkim_rotation_history";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_DKIM_ROTATION_HISTORY = "RENAME TABLE daemoxcp_mail.dkim_rotation_history TO dkim_rotation_history";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_DOMAINS = "RENAME TABLE domains TO daemoxcp_mail.domains";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_DOMAINS = "RENAME TABLE daemoxcp_mail.domains TO domains";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_CLOUDFLARE_ACCOUNTS = "RENAME TABLE cloudflare_accounts TO daemoxcp_mail.cloudflare_accounts";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_CLOUDFLARE_ACCOUNTS = "RENAME TABLE daemoxcp_mail.cloudflare_accounts TO cloudflare_accounts";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_AUDIT_LOG = "RENAME TABLE audit_log TO daemoxcp_mail.audit_log";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_AUDIT_LOG = "RENAME TABLE daemoxcp_mail.audit_log TO audit_log";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_RATE_LIMITS = "RENAME TABLE rate_limits TO daemoxcp_mail.rate_limits";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_RATE_LIMITS = "RENAME TABLE daemoxcp_mail.rate_limits TO rate_limits";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_PANEL_SETTINGS = "RENAME TABLE panel_settings TO daemoxcp_mail.panel_settings";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_PANEL_SETTINGS = "RENAME TABLE daemoxcp_mail.panel_settings TO panel_settings";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_PANEL_ROLE_PERMISSIONS = "RENAME TABLE panel_role_permissions TO daemoxcp_mail.panel_role_permissions";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_PANEL_ROLE_PERMISSIONS = "RENAME TABLE daemoxcp_mail.panel_role_permissions TO panel_role_permissions";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_INSTALLED_COMPONENTS = "RENAME TABLE installed_components TO daemoxcp_mail.installed_components";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_INSTALLED_COMPONENTS = "RENAME TABLE daemoxcp_mail.installed_components TO installed_components";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_PANEL_ADMIN = "RENAME TABLE panel_admin TO daemoxcp_mail.panel_admin";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_PANEL_ADMIN = "RENAME TABLE daemoxcp_mail.panel_admin TO panel_admin";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_VIRTUAL_ALIASES = "RENAME TABLE virtual_aliases TO daemoxcp_mail.virtual_aliases";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_VIRTUAL_ALIASES = "RENAME TABLE daemoxcp_mail.virtual_aliases TO virtual_aliases";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_VIRTUAL_USERS = "RENAME TABLE virtual_users TO daemoxcp_mail.virtual_users";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_VIRTUAL_USERS = "RENAME TABLE daemoxcp_mail.virtual_users TO virtual_users";
+    /** MysqlRename (connessione sul database di prima) */
+    public static final String RENAME_TABLE_VIRTUAL_DOMAINS = "RENAME TABLE virtual_domains TO daemoxcp_mail.virtual_domains";
+    /** MysqlRename, per tornare indietro (connessione sul database di prima) */
+    public static final String RENAME_BACK_TABLE_VIRTUAL_DOMAINS = "RENAME TABLE daemoxcp_mail.virtual_domains TO virtual_domains";
+    /** MysqlRename */
+    public static final String RENAME_USER_MAILPANEL_LOCALHOST = "RENAME USER 'mailpanel'@'localhost' TO 'daemoxcp_mail'@'localhost'";
+    /** MysqlRename, per tornare indietro */
+    public static final String RENAME_BACK_USER_MAILPANEL_LOCALHOST = "RENAME USER 'daemoxcp_mail'@'localhost' TO 'mailpanel'@'localhost'";
+    /** MysqlRename */
+    public static final String RENAME_USER_MAILPANEL_LOOPBACK = "RENAME USER 'mailpanel'@'127.0.0.1' TO 'daemoxcp_mail'@'127.0.0.1'";
+    /** MysqlRename, per tornare indietro */
+    public static final String RENAME_BACK_USER_MAILPANEL_LOOPBACK = "RENAME USER 'daemoxcp_mail'@'127.0.0.1' TO 'mailpanel'@'127.0.0.1'";
+    /** MysqlRename */
+    public static final String RENAME_USER_MAILPANEL_WEB_LOCALHOST = "RENAME USER 'mailpanel_web'@'localhost' TO 'daemoxcp_mail_web'@'localhost'";
+    /** MysqlRename, per tornare indietro */
+    public static final String RENAME_BACK_USER_MAILPANEL_WEB_LOCALHOST = "RENAME USER 'daemoxcp_mail_web'@'localhost' TO 'mailpanel_web'@'localhost'";
+    /** MysqlRename */
+    public static final String RENAME_USER_MAILPANEL_WEB_LOOPBACK = "RENAME USER 'mailpanel_web'@'127.0.0.1' TO 'daemoxcp_mail_web'@'127.0.0.1'";
+    /** MysqlRename, per tornare indietro */
+    public static final String RENAME_BACK_USER_MAILPANEL_WEB_LOOPBACK = "RENAME USER 'daemoxcp_mail_web'@'127.0.0.1' TO 'mailpanel_web'@'127.0.0.1'";
+    /** MysqlRename */
+    public static final String RENAME_USER_MAILPANEL_ROUTINES_LOCALHOST = "RENAME USER 'mailpanel_routines'@'localhost' TO 'daemoxcp_mail_routines'@'localhost'";
+    /** MysqlRename, per tornare indietro */
+    public static final String RENAME_BACK_USER_MAILPANEL_ROUTINES_LOCALHOST = "RENAME USER 'daemoxcp_mail_routines'@'localhost' TO 'mailpanel_routines'@'localhost'";
+    /** MysqlRename */
+    public static final String RENAME_USER_MAILPANEL_POSTFIX_LOCALHOST = "RENAME USER 'mailpanel_postfix'@'localhost' TO 'daemoxcp_mail_postfix'@'localhost'";
+    /** MysqlRename, per tornare indietro */
+    public static final String RENAME_BACK_USER_MAILPANEL_POSTFIX_LOCALHOST = "RENAME USER 'daemoxcp_mail_postfix'@'localhost' TO 'mailpanel_postfix'@'localhost'";
+    /** MysqlRename */
+    public static final String RENAME_USER_MAILPANEL_POSTFIX_LOOPBACK = "RENAME USER 'mailpanel_postfix'@'127.0.0.1' TO 'daemoxcp_mail_postfix'@'127.0.0.1'";
+    /** MysqlRename, per tornare indietro */
+    public static final String RENAME_BACK_USER_MAILPANEL_POSTFIX_LOOPBACK = "RENAME USER 'daemoxcp_mail_postfix'@'127.0.0.1' TO 'mailpanel_postfix'@'127.0.0.1'";
+    /** MysqlRename */
+    public static final String RENAME_USER_MAILPANEL_DOVECOT_LOCALHOST = "RENAME USER 'mailpanel_dovecot'@'localhost' TO 'daemoxcp_mail_dovecot'@'localhost'";
+    /** MysqlRename, per tornare indietro */
+    public static final String RENAME_BACK_USER_MAILPANEL_DOVECOT_LOCALHOST = "RENAME USER 'daemoxcp_mail_dovecot'@'localhost' TO 'mailpanel_dovecot'@'localhost'";
+    /** MysqlRename */
+    public static final String RENAME_USER_MAILPANEL_DOVECOT_LOOPBACK = "RENAME USER 'mailpanel_dovecot'@'127.0.0.1' TO 'daemoxcp_mail_dovecot'@'127.0.0.1'";
+    /** MysqlRename, per tornare indietro */
+    public static final String RENAME_BACK_USER_MAILPANEL_DOVECOT_LOOPBACK = "RENAME USER 'daemoxcp_mail_dovecot'@'127.0.0.1' TO 'mailpanel_dovecot'@'127.0.0.1'";
+    /** MysqlRename: l'utente del pannello, tutto sul database col nome di adesso (come l'installatore) */
+    public static final String RENAME_GRANT_PANEL_LOCALHOST = "GRANT ALL PRIVILEGES ON daemoxcp_mail.* TO 'daemoxcp_mail'@'localhost'";
+
+    /** MysqlRename */
+    public static final String RENAME_GRANT_PANEL_LOOPBACK = "GRANT ALL PRIVILEGES ON daemoxcp_mail.* TO 'daemoxcp_mail'@'127.0.0.1'";
+
+    /** MysqlRename: i permessi rimasti sul database di prima, col nome dell'installatore */
+    public static final String RENAME_REVOKE_OLD_DEFAULT_LOCALHOST = "REVOKE ALL PRIVILEGES ON mailserver.* FROM 'daemoxcp_mail'@'localhost'";
+
+    /** MysqlRename */
+    public static final String RENAME_REVOKE_OLD_DEFAULT_LOOPBACK = "REVOKE ALL PRIVILEGES ON mailserver.* FROM 'daemoxcp_mail'@'127.0.0.1'";
+
+    /** MysqlRename: i permessi del proprietario delle procedure sulle tabelle di prima (WebDbAccess li ridà su quelle nuove) */
+    public static final String RENAME_REVOKE_ROUTINES = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'daemoxcp_mail_routines'@'localhost'";
 }

@@ -29,7 +29,7 @@ final class TestSessions {
      *
      * <p>It is needed because {@code db.setSetting} does not fail loudly: on a database where
      * {@code panel_settings} does not exist yet it prints "Failed to set setting" and returns, and
-     * the panel keeps writing to the REAL log, {@code /var/log/mail-panel-auth.log}. The test then
+     * the panel keeps writing to the REAL log, {@code /var/log/daemoxcp-mail-auth.log}. The test then
      * counts zero lines in its own file and says "an audit log entry is missing", which is the
      * wrong thing: the log was there, just somewhere else.
      *

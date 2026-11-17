@@ -50,7 +50,7 @@ public final class RspamdController {
     static final Path LOCAL = Path.of("/usr/local/etc/rspamd/local.d/worker-controller.inc");
     /** Le chiavi del controller che il pannello decide: se l'amministratore le ha messe in local.d, sono sue. */
     static final Pattern ADMIN_KEYS = Pattern.compile("(?m)^\\s*(password|enable_password|secure_ip)\\b");
-    static final String MARK = "# mail-panel (reperto 236): il controller di rspamd solo con la password del pannello.\n";
+    static final String MARK = "# daemoxcp-mail (reperto 236): il controller di rspamd solo con la password del pannello.\n";
     static final Pattern HASH = Pattern.compile("\\$2\\$[a-z0-9]{8,64}\\$[a-z0-9]{16,128}");
 
     static String text(String hash) {

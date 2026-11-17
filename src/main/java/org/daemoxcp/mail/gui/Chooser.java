@@ -9,7 +9,7 @@ import java.io.IOException;
 import java.util.Arrays;
 
 /**
- * Main Menu Chooser for FreeBSD Mail Panel
+ * Main Menu Chooser for DaemoxCP Mail
  *
  * Terminal GUI menu using Lanterna library.
  *

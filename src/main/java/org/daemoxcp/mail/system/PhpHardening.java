@@ -87,7 +87,7 @@ public final class PhpHardening {
             session.save_handler = files
             ; NON /tmp, che e' il predefinito: li' i file di sessione di Roundcube sarebbero
             ; leggibili da qualunque utente locale. Questa cartella la crea lo script, 700 e di roundcube.
-            session.save_path = "/var/db/mailpanel/php_sessions"
+            session.save_path = "/var/db/daemoxcp-mail/php_sessions"
             session.use_strict_mode = 1
             ; Nessun avanzamento dei caricamenti nella sessione: Roundcube non lo usa, e sono dati scelti da chi
             ; carica scritti nel file di sessione (reperto 238).

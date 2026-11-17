@@ -184,7 +184,7 @@ public class InstallScriptDriftTest {
     static final String NGINX_PID = "/var/run/nginx.pid";
     /** Where the panel must put the version of before: written out in full here, because the test
      *  also runs against the jar without the fix, where the constant does not exist. */
-    static final String SAVED_DIR = "/var/db/mailpanel/config-before-update";
+    static final String SAVED_DIR = "/var/db/daemoxcp-mail/config-before-update";
     static final String CONF = "/usr/local/etc/drift-probe/drift-probe.conf";
     static final String RESTART = "/usr/local/libexec/drift-probe/restart";
     static final String REPO_CONF = "/usr/local/etc/pkg/repos/zzz-drift-probe.conf";

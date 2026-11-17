@@ -28,7 +28,7 @@ import java.util.Properties;
  * secrets file with -Ddaemoxcp.mail.secrets.dir, package turn, Postfix copy) and a test MySQL user,
  * e2e_pending, with its database; the real panel's user is not touched. For MySQL's root the test
  * writes a credentials file (600) with the password of the real secrets file
- * (/usr/local/etc/mail-panel), or empty if root gets in without (as on the servers installed by the
+ * (/usr/local/etc/daemoxcp-mail), or empty if root gets in without (as on the servers installed by the
  * 11/10 version, measured on the rehearsal-after-pr91 bench): the planted script uses it, as the
  * real script uses its own, to change the password. At the end the test user and database are removed.
  *

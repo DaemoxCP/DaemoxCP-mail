@@ -55,15 +55,15 @@ public final class PanelSeparation {
 
     private static final Logger LOGGER = Logger.getLogger(PanelSeparation.class.getName());
 
-    public static final String USER = "mailpanel";
-    public static final String GROUP = "mailpanel";
+    public static final String USER = Product.ID;
+    public static final String GROUP = Product.ID;
     /** Il commento con cui il pannello crea l'utente: un utente mailpanel con un altro non e' suo. */
-    static final String GECOS = "Mail panel web part";
+    static final String GECOS = Product.NAME + " web part";
     static final String HOME = PanelUser.HOME;
     static final String SHELL = PanelUser.SHELL;
 
     /** La cartella del socket e dei pid; le prove la spostano con -Ddaemoxcp.mail.run.dir. */
-    static Path runDir = Path.of(System.getProperty("daemoxcp.mail.run.dir", "/var/run/mailpanel"));
+    static Path runDir = Path.of(System.getProperty("daemoxcp.mail.run.dir", "/var/run/daemoxcp-mail"));
     static final String TITLE = "daemoxcp-mail-web";
     /** Il titolo e quelli di prima (sezione "webPartTitles"): una web accesa da una versione vecchia si riconosce lo stesso. */
     static java.util.List<String> titles() {
@@ -71,8 +71,8 @@ public final class PanelSeparation {
         t.addAll(LegacyNames.oldNamesOf("webPartTitles", TITLE));
         return t;
     }
-    static Path webLog = Path.of("/var/db/mailpanel/panel-web.log");
-    static Path auditLog = Path.of("/var/log/mail-panel-auth.log");
+    static Path webLog = Path.of("/var/db/daemoxcp-mail/panel-web.log");
+    static Path auditLog = Path.of("/var/log/daemoxcp-mail-auth.log");
     static final long LOG_LIMIT = 10L * 1024 * 1024;
     /** Quanto si aspetta che la web risponda: avvio della JVM, MySQL, le rotte. Sulla VM ci mette pochi secondi. */
     static final long ANSWER_SECONDS = 90;
@@ -83,7 +83,7 @@ public final class PanelSeparation {
      * nessuna copia. La chiave simmetrica di prima resta solo di root.
      */
     static final Set<String> SECRETS_FOR_WEB = Set.of("panel-secrets.properties");
-    static final Set<String> SQLITE_FOR_WEB = Set.of("mail_panel.db");
+    static final Set<String> SQLITE_FOR_WEB = Set.of("daemoxcp-mail.db");
 
     private static volatile boolean active;
     /** Questo processo e' (o e' stato, prima di un ritorno al modo di oggi) la parte root: prepare() e' riuscito. */
@@ -195,6 +195,8 @@ public final class PanelSeparation {
     static String jarPath() {
         try {
             Path p = Path.of(org.daemoxcp.mail.Main.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            // Col nome di adesso se questo processo ha appena spostato il jar (PanelServiceRename).
+            p = Path.of(PanelServiceRename.current(p.toAbsolutePath().toString()));
             return Files.isRegularFile(p) ? p.toAbsolutePath().toString() : null;
         } catch (Exception e) {
             return null;

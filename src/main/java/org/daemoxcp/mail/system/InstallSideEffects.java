@@ -84,7 +84,16 @@ final class InstallSideEffects {
      *    contro uno script che non c'entra, e un allarme ferma i riavvii del guidato.
      * Un loro cambiamento durante l'aggiornamento non dice niente sugli script di installazione.
      */
-    static final List<String> EXCLUDED = List.of("/usr/local/etc/mail-panel", "/etc/resolv.conf");
+    static final List<String> EXCLUDED = excludedPaths();
+
+    /** La cartella dei segreti, col nome di adesso e con quelli di prima (sezione "productFiles"), e resolv.conf. */
+    private static List<String> excludedPaths() {
+        List<String> e = new ArrayList<>(List.of(SECRETS_DIR, "/etc/resolv.conf"));
+        e.addAll(LegacyNames.oldNamesOf("productFiles", SECRETS_DIR));
+        return List.copyOf(e);
+    }
+
+    static final String SECRETS_DIR = "/usr/local/etc/daemoxcp-mail";
 
     /**
      * Gli elenchi di utenti e gruppi. Un pacchetto che ha bisogno di un utente lo crea nel suo
@@ -96,11 +105,11 @@ final class InstallSideEffects {
 
     /**
      * La versione di prima dei file che uno script ha cambiato, per poterla rimettere. Sotto
-     * /var/db/mailpanel, accanto alla nota dei blocchi, e non accanto ai file: in cartelle come
+     * /var/db/daemoxcp-mail, accanto alla nota dei blocchi, e non accanto ai file: in cartelle come
      * /usr/local/etc/newsyslog.conf.d o /usr/local/etc/periodic si legge, o si ESEGUE, ogni
      * file che c'e', e una copia messa li' diventerebbe configurazione anche lei.
      */
-    static final Path BEFORE_UPDATE_DIR = Paths.get("/var/db/mailpanel/config-before-update");
+    static final Path BEFORE_UPDATE_DIR = Paths.get("/var/db/daemoxcp-mail/config-before-update");
 
     /** Quante copie si tengono: le piu' vecchie si tolgono. Contengono anche password, come i file da cui vengono. */
     static final int BEFORE_UPDATE_KEPT = 10;

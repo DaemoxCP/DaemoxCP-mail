@@ -25,7 +25,7 @@ import java.util.List;
  *     writes: it waits and succeeds. Six and not three: sqlite-jdbc already waits 3 seconds on its
  *     own (default busy_timeout), and with three the test did not see the panel's wait removed.
  *
- * Everything in a temporary folder (dataBaseManager works on database/mail_panel.db of the current
+ * Everything in a temporary folder (dataBaseManager works on database/daemoxcp-mail.db of the current
  * folder, the secrets with -Ddaemoxcp.mail.secrets.dir), so the child processes start there.
  *
  * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.sqli.SqliteSharedTest

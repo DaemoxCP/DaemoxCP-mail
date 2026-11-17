@@ -53,7 +53,7 @@ public final class LocalResolverScript {
         # 29/10/2026: ogni login ssh dalla LAN impiegava 30 secondi (sshd fa la ricerca inversa del
         # client), con questo file 0. conf.d si include dopo lan-zones.conf, e il setup non lo tocca.
         mkdir -p /var/unbound/conf.d
-        printf 'server:\\n\\tunblock-lan-zones: no\\n\\tinsecure-lan-zones: no\\n' > /var/unbound/conf.d/mail-panel.conf
+        printf 'server:\\n\\tunblock-lan-zones: no\\n\\tinsecure-lan-zones: no\\n' > /var/unbound/conf.d/daemoxcp-mail.conf
         if service local_unbound status >/dev/null 2>&1; then
             service local_unbound restart
         else

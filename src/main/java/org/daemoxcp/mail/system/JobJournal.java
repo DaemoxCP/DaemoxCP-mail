@@ -22,7 +22,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Il registro su disco dei lavori del pannello (reperto 196): uno per lavoro, in /var/db/mailpanel/jobs.
+ * Il registro su disco dei lavori del pannello (reperto 196): uno per lavoro, in /var/db/daemoxcp-mail/jobs.
  *
  * Il registro che la pagina mostra sta in memoria: un riavvio del pannello o del server lo cancella, proprio quando
  * servirebbe capire cosa e' successo (un passaggio di release attraversa dei riavvii). Qui ogni riga si scrive anche su
@@ -36,7 +36,7 @@ public final class JobJournal {
     private static final Logger LOGGER = Logger.getLogger(JobJournal.class.getName());
 
     /** La cartella; un'altra solo nelle prove (-Ddaemoxcp.mail.jobs.dir). */
-    static Path dir = Paths.get(System.getProperty("daemoxcp.mail.jobs.dir", "/var/db/mailpanel/jobs"));
+    static Path dir = Paths.get(System.getProperty("daemoxcp.mail.jobs.dir", "/var/db/daemoxcp-mail/jobs"));
     /** Quanti registri restano: i piu' vecchi oltre questo numero si tolgono quando ne nasce uno nuovo. */
     static int keep = 200;
     /** Il nome di un registro: data e ora UTC, tipo, "__", id del lavoro. Nient'altro e' leggibile da fuori. */

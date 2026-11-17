@@ -31,8 +31,8 @@ public class MailDatabase {
     private Connection connection;
     private String host = "127.0.0.1";
     private int port = 3306;
-    private String database = "mailpanel";
-    private String username = "mailpanel";
+    private String database = org.daemoxcp.mail.system.Product.ID;
+    private String username = org.daemoxcp.mail.system.Product.ID;
     private String password;
 
     // Flag to track if database is available
@@ -281,7 +281,7 @@ public class MailDatabase {
      * vecchie (virtual_*): le cancella il reset, e nessun'altra del database. Prima le tabelle che
      * puntano ad altre con una chiave esterna, poi quelle a cui si punta.
      */
-    static final List<String> PANEL_TABLES = List.of(
+    public static final List<String> PANEL_TABLES = List.of(
         "admin_passkeys", "rspamd_training", "panel_sessions",                // -> panel_admin
         "login_code_email", "login_code_console", "stepup_code", "email_change_code",
         "roundcube_tokens", "auto_responders", "sieve_filters", "forwarding_rules",

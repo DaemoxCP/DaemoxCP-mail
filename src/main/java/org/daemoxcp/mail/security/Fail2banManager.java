@@ -9,7 +9,7 @@ import java.util.*;
 import java.util.regex.*;
 
 /**
- * Fail2ban Manager for FreeBSD Mail Panel
+ * Fail2ban Manager for DaemoxCP Mail
  *
  * Manages Fail2ban for mail server security:
  * - View banned IPs
@@ -686,7 +686,7 @@ public class Fail2banManager {
                 Files.copy(configPath, bak);
                 Files.writeString(configPath,
                     config + (config.endsWith("\n") ? "" : "\n")
-                        + "\n// === Login logging abilitato dal mail panel per Fail2ban ===\n"
+                        + "\n// === Login logging enabled by DaemoxCP Mail for Fail2ban ===\n"
                         + additions.toString(),
                     java.nio.charset.StandardCharsets.UTF_8);
                 System.out.println("[Fail2banManager] Roundcube config updated (log_logins/log_driver/log_dir)");
@@ -734,7 +734,7 @@ public class Fail2banManager {
 
     private String generateMailJailsConfigImpl(String roundcubeLogpath) {
         return ("" + """
-            # Mail Panel - Fail2ban Mail Jails Configuration
+            # DaemoxCP Mail - Fail2ban mail jails
             # Generated automatically - Do not edit manually
 
             # Dovecot (IMAP/POP3 authentication failures)
@@ -814,7 +814,7 @@ public class Fail2banManager {
 
         // Postfix SASL filter (postfix-sasl.conf)
         String postfixFilter = """
-            # Mail Panel - Postfix SASL Filter
+            # DaemoxCP Mail - Postfix SASL filter
             [Definition]
             failregex = ^.*postfix/smtpd\\[\\d+\\]: warning: .*\\[<HOST>\\]: SASL \\w+ authentication failed.*$
                         ^.*postfix/smtpd\\[\\d+\\]: warning: unknown\\[<HOST>\\]: SASL \\w+ authentication failed.*$
@@ -826,7 +826,7 @@ public class Fail2banManager {
 
         // Rspamd filter
         String rspamdFilter = """
-            # Mail Panel - Rspamd Web UI Filter
+            # DaemoxCP Mail - Rspamd web UI filter
             [Definition]
             failregex = ^.*\\[controller\\].*: <HOST> auth failed.*$
                         ^.*controller:.*password_check.*<HOST>.*auth failure.*$
@@ -841,7 +841,7 @@ public class Fail2banManager {
         // SOVRASCRIVIAMO sempre il filter (anche se esiste con pattern obsoleto)
         Path rcFilter = Paths.get(FILTER_D, "roundcube-auth.conf");
         String roundcubeFilter = """
-            # Mail Panel - Roundcube Authentication Filter
+            # DaemoxCP Mail - Roundcube sign-in filter
             # Cattura tentativi falliti dal file logs/userlogins di Roundcube
             [Definition]
             failregex = ^\\[[^\\]]+\\]:\\s*<[^>]*>\\s+Failed login for .* from <HOST>.*$
@@ -1637,7 +1637,7 @@ public class Fail2banManager {
      * non e' una garanzia sufficiente.
      */
     private Path backupCopy(Path original) throws Exception {
-        Path dir = Paths.get("/var/db/mail-panel/fail2ban-backups");
+        Path dir = Paths.get("/var/db/daemoxcp-mail/fail2ban-backups");
         Files.createDirectories(dir);
         return dir.resolve(original.getFileName().toString() + ".bak."
             + java.time.LocalDateTime.now().format(
@@ -2525,7 +2525,7 @@ public class Fail2banManager {
     // ============== PERMABAN (ban permanente via pf, independent from Fail2ban) ==============
     //
     // Architettura:
-    //   - File: /var/db/mail-panel/permaban.list (lista IP, uno per riga)
+    //   - File: /var/db/daemoxcp-mail/permaban.list (lista IP, uno per riga)
     //   - Tabella pf: <permaban> persist file ".../permaban.list"
     //   - Regola pf:  block in quick from <permaban>
     //
@@ -2534,11 +2534,11 @@ public class Fail2banManager {
     //   - Funziona anche se fail2ban è giù
     //   - Granulare per singolo IP
     //
-    public static final String PERMABAN_DIR  = "/var/db/mail-panel";
+    public static final String PERMABAN_DIR  = "/var/db/daemoxcp-mail";
     public static final String PERMABAN_FILE = PERMABAN_DIR + "/permaban.list";
     public static final String PERMABAN_TABLE = "permaban";
     /** Le righe di commento in testa alla lista, e la riga vuota che le separa dagli IP. */
-    public static final String PERMABAN_HEADER = "# Permaban list — gestito dal mail panel\n"
+    public static final String PERMABAN_HEADER = "# Permaban list — managed by DaemoxCP Mail\n"
             + "# IP qui dentro vengono caricati nella tabella pf <permaban>\n"
             + "# e bloccati con regola: block in quick from <permaban>\n\n";
 

@@ -78,13 +78,13 @@ async function topRow(page) {
         if (OUT) await page.locator('#update-center').screenshot({ path: OUT + '/everything-1-before.png' });
 
         console.log('\n== Cancel leaves the button where it is ==');
-        const jobsBefore = vm('ls /var/db/mailpanel/jobs | grep -c update_everything');
+        const jobsBefore = vm('ls /var/db/daemoxcp-mail/jobs | grep -c update_everything');
         await page.click('#uc-all .uc-head button[data-on-click="ucEverything()"]');
         await page.waitForSelector('#panelAskModal.show', { timeout: 900000 });
         await page.click('#panelAskModal .modal-footer [data-bs-dismiss="modal"]');
         await page.waitForSelector('#panelAskModal', { state: 'hidden' });
         check('after Cancel: the same button, enabled, and nothing started', await page.$$eval('#uc-all .uc-head button[data-on-click="ucEverything()"]',
-            b => b.length === 1 && !b[0].disabled) && vm('ls /var/db/mailpanel/jobs | grep -c update_everything') === jobsBefore);
+            b => b.length === 1 && !b[0].disabled) && vm('ls /var/db/daemoxcp-mail/jobs | grep -c update_everything') === jobsBefore);
 
         console.log('\n== The confirmation, the one job ==');
         await page.click('#uc-all .uc-head button[data-on-click="ucEverything()"]');
@@ -109,13 +109,13 @@ async function topRow(page) {
             outcome = await page.evaluate(() => (document.getElementById('all-run') || {}).innerText || '').catch(() => '');
         }
         console.log('    after ' + Math.round((Date.now() - t0) / 1000) + ' s: ' + outcome.replace(/\s+/g, ' '));
-        const log = vm('ls -t /var/db/mailpanel/jobs | grep update_everything | head -1');
-        check('a new log on disk for the job', Number(vm('ls /var/db/mailpanel/jobs | grep -c update_everything')) === Number(jobsBefore) + 1);
-        const last = vm('tail -1 /var/db/mailpanel/jobs/' + log);
-        console.log('    ' + vm('grep -E "=== Step " /var/db/mailpanel/jobs/' + log + ' | cut -c22-110').replace(/\n/g, '\n    '));
+        const log = vm('ls -t /var/db/daemoxcp-mail/jobs | grep update_everything | head -1');
+        check('a new log on disk for the job', Number(vm('ls /var/db/daemoxcp-mail/jobs | grep -c update_everything')) === Number(jobsBefore) + 1);
+        const last = vm('tail -1 /var/db/daemoxcp-mail/jobs/' + log);
+        console.log('    ' + vm('grep -E "=== Step " /var/db/daemoxcp-mail/jobs/' + log + ' | cut -c22-110').replace(/\n/g, '\n    '));
         const confirmed = (ask.match(/^[0-9]+\. /gm) || []).length;
         check('every step of the confirmation done (' + confirmed + '), and the end is the last line of its log', /steps? done/.test(outcome)
-            && /=== end: completed/.test(last) && confirmed > 0 && Number(vm('grep -c "=== Step " /var/db/mailpanel/jobs/' + log)) === confirmed);
+            && /=== end: completed/.test(last) && confirmed > 0 && Number(vm('grep -c "=== Step " /var/db/daemoxcp-mail/jobs/' + log)) === confirmed);
 
         if (java) {
             // The Java script copies the JDK, stops the panel, updates it and starts it again (two or three minutes on the

@@ -322,7 +322,7 @@ public class SieveFolderOwnerTest {
 
     static void setUp() throws Exception {
         String rootPw = null;
-        for (String f : new String[]{"/usr/local/etc/mail-panel/root-secrets.properties", "/usr/local/etc/mail-panel/panel-secrets.properties"}) {
+        for (String f : new String[]{"/usr/local/etc/daemoxcp-mail/root-secrets.properties", "/usr/local/etc/daemoxcp-mail/panel-secrets.properties"}) {
             Path p = Path.of(f);
             if (!Files.isRegularFile(p)) continue;
             Properties props = new Properties();

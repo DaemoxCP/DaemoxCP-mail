@@ -28,7 +28,7 @@ import java.sql.ResultSet;
 
 /**
  * ╔══════════════════════════════════════════════════════════════════════════════╗
- * ║                     FreeBSD Mail Panel - Main Entry Point                     ║
+ * ║                     DaemoxCP Mail - Main Entry Point                     ║
  * ╠══════════════════════════════════════════════════════════════════════════════╣
  * ║  Native mail server control panel for FreeBSD 15+                            ║
  * ║  Similar to Mailcow but WITHOUT Docker - 100% native FreeBSD services        ║
@@ -104,7 +104,7 @@ import java.sql.ResultSet;
  * ╠══════════════════════════════════════════════════════════════════════════════╣
  * ║                           PANEL CONFIGURATION                                 ║
  * ╠══════════════════════════════════════════════════════════════════════════════╣
- * ║  • SQLite database: ./database/mailpanel.db (panel settings only)            ║
+ * ║  • SQLite database: ./database/daemoxcp-mail.db (panel settings only)          ║
  * ║  • MySQL database: mail data (domains, users, aliases)                        ║
  * ║  • Web panel: HTTPS on port 2096 (configurable)                               ║
  * ║  • Terminal GUI: Lanterna library                                             ║
@@ -115,7 +115,7 @@ import java.sql.ResultSet;
  * ║                                                                               ║
  * ╚══════════════════════════════════════════════════════════════════════════════╝
  *
- * @author FreeBSD Mail Panel Team
+ * @author DaemoxCP Mail Team
  * @version 1.0
  */
 public class Main {
@@ -380,6 +380,10 @@ public class Main {
 
         // Generate all panel HTML content
         org.daemoxcp.mail.system.PathMigration.run();
+        // Il nome del prodotto (DaemoxCP Mail, 17/11/2026) su un server installato prima: cartelle, utente di sistema,
+        // servizio, jar, jail. Solo il servizio o il menu, da root, e prima che qualcuno legga quei nomi.
+        boolean renameApplies = org.daemoxcp.mail.system.ProductRename.applies(args);
+        if (renameApplies) org.daemoxcp.mail.system.ProductRename.atServiceStart();
         // Lo script di avvio scritto dal pannello cita i file che PathMigration ha appena rinominato.
         org.daemoxcp.mail.system.RcScriptRepair.ensureAtBoot();
         // I segreti solo di root (le password di root di MySQL e dell'utente MySQL di Roundcube) escono dal
@@ -417,6 +421,8 @@ public class Main {
         dbManager.ensureSslChainColumn();
         dbManager.ensureRoundcubeColumns();
         dbManager.ensurePostfixColumn();
+        // Il database e gli utenti MySQL col nome del prodotto, prima che qualcuno entri in MySQL.
+        if (renameApplies) org.daemoxcp.mail.system.MysqlRename.ensureAtBoot(dbManager);
 
         Integer count = dbManager.check_tables();
         boolean needsTableCreation = (count < 1);
@@ -631,7 +637,7 @@ public class Main {
                         break;
 
                     case 100:
-                        // Start Mail Panel WebServer
+                        // Start the DaemoxCP Mail web server
                         try {
                             screen.stopScreen();
                             startWebServer();
@@ -901,9 +907,9 @@ public class Main {
         // Read MySQL config (the password from the panel secrets file)
         String mysqlHost = "127.0.0.1";
         String mysqlPort = "3306";
-        String mysqlUser = "mailpanel";
+        String mysqlUser = org.daemoxcp.mail.system.Product.ID;
         String mysqlPassword = "";
-        String mysqlDatabase = "mailserver";
+        String mysqlDatabase = org.daemoxcp.mail.system.Product.ID;
 
         try (ResultSet result = dbManager.get_data_config()) {
             if (result.next()) {
@@ -1138,7 +1144,7 @@ public class Main {
                             certContent,
                             keyContent,
                             "",          // chain (empty for self-signed)
-                            keptPrefix.matches("[a-zA-Z0-9_-]{1,20}") ? keptPrefix : "mailpanel-"
+                            keptPrefix.matches("[a-zA-Z0-9_-]{1,20}") ? keptPrefix : org.daemoxcp.mail.system.Product.SLUG + "-"
                         );
                         System.out.println(ANSI_GREEN + "[AUTO] Self-signed certificate loaded into panel configuration" + ANSI_RESET);
                         System.out.println(ANSI_YELLOW + "The panel uses the mail server's self-signed certificate for now:"

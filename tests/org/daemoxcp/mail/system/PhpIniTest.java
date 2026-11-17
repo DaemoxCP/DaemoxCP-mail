@@ -51,11 +51,11 @@ public class PhpIniTest {
                 script.contains("if [ ! -f /usr/local/etc/php.ini ]"));
         // Roundcube's, no longer www's: the webmail has its own user (RoundcubeUser).
         check("it creates the sessions folder, 700 and roundcube's",
-                script.contains("mkdir -p /var/db/mailpanel/php_sessions")
-                        && script.contains(org.daemoxcp.mail.security.SafeOwnership.shell("/var/db/mailpanel/php_sessions", "roundcube", "roundcube")
-                                + "chmod 700 /var/db/mailpanel/php_sessions; fi")
-                        && !script.contains("chown -R roundcube:roundcube /var/db/mailpanel/php_sessions")
-                        && !script.contains("chown www:www /var/db/mailpanel/php_sessions"));
+                script.contains("mkdir -p /var/db/daemoxcp-mail/php_sessions")
+                        && script.contains(org.daemoxcp.mail.security.SafeOwnership.shell("/var/db/daemoxcp-mail/php_sessions", "roundcube", "roundcube")
+                                + "chmod 700 /var/db/daemoxcp-mail/php_sessions; fi")
+                        && !script.contains("chown -R roundcube:roundcube /var/db/daemoxcp-mail/php_sessions")
+                        && !script.contains("chown www:www /var/db/daemoxcp-mail/php_sessions"));
         check("the error log exists and rotates",
                 script.contains("touch /var/log/php_errors.log")
                         && script.contains("/usr/local/etc/newsyslog.conf.d/php-errors.conf"));

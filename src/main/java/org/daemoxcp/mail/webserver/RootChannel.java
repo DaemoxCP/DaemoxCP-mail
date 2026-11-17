@@ -38,7 +38,7 @@ import java.util.regex.Pattern;
 
 /**
  * Il canale fra le due parti del pannello separato: un socket unix
- * della parte root, {@code /var/run/mailpanel/root.sock}, su cui la parte web (utente mailpanel) le
+ * della parte root, {@code /var/run/daemoxcp-mail/root.sock}, su cui la parte web (utente mailpanel) le
  * passa le API di chi ha fatto l'accesso, dopo i suoi filtri (Host, lingua, permesso, CSRF).
  *
  * <p>Una richiesta per connessione. La web scrive {@code "MPR1"}, la lunghezza dell'intestazione (int),

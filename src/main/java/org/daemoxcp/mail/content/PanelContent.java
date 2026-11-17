@@ -9,7 +9,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
 /**
- * HTML content for FreeBSD Mail Panel
+ * HTML content for DaemoxCP Mail
  * Same styling as Web Panel (Bootstrap 5)
  */
 public class PanelContent {
@@ -5499,7 +5499,7 @@ public class PanelContent {
             const esc = (s) => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
             currentEl.textContent = currentFilter || t('jc.notSet');
 
-            // Jail senza preset (mail-panel-auth, roundcube-auth, ...):
+            // Jail senza preset (daemoxcp-mail-auth, roundcube-auth, ...):
             // niente card, solo un input semplice prefillato col valore corrente.
             if (family === 'other') {
                 container.innerHTML =
@@ -5789,7 +5789,7 @@ public class PanelContent {
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <span><i class="fas fa-cog me-2" aria-hidden="true"></i>{{t:jc.title}}</span>
                             <select class="form-select form-select-sm w-auto" id="cfgJailSelect" aria-label="Jail" data-on-change="loadJailConfig()">
-                                <option value="mail-panel-auth">mail-panel-auth</option>
+                                <option value="daemoxcp-mail-auth">daemoxcp-mail-auth</option>
                             </select>
                         </div>
                         <div class="card-body">
@@ -6290,7 +6290,7 @@ public class PanelContent {
             const url = URL.createObjectURL(new Blob([v + '\\n'], { type: 'text/plain' }));
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'mail-panel-vault-private-key-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+            a.download = 'daemoxcp-mail-vault-private-key-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -7868,7 +7868,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             'all':           { regex: '', catches: t('lg.allDesc'), desc: '' },
             'brute-smtp':    { regex: 'SASL.*authentication failed', catches: t('lg.bruteSmtpCatch'), desc: t('lg.bruteSmtpDesc.html') },
             'brute-imap':    { regex: 'dovecot.*(auth failed|Disconnected.*auth)', catches: t('lg.bruteImapCatch'), desc: t('lg.bruteImapDesc.html') },
-            'brute-panel':   { regex: 'mail-panel-auth|AUTH_FAILED', catches: t('lg.brutePanelCatch'), desc: t('lg.brutePanelDesc.html') },
+            'brute-panel':   { regex: 'daemoxcp-mail-auth|AUTH_FAILED', catches: t('lg.brutePanelCatch'), desc: t('lg.brutePanelDesc.html') },
             'banned':        { regex: 'fail2ban.*(Ban |Found )', catches: t('lg.bannedCatch'), desc: t('lg.bannedDesc.html') },
             'scanners':      { regex: 'SSL_accept error|TLS library problem|lost connection after (STARTTLS|EHLO)|http request', catches: t('lg.scannersCatch'), desc: t('lg.scannersDesc.html') },
             'known-scanners':{ regex: 'censys-scanner|shodan|driftnet|internet-?measurement|securitytrails|binaryedge|shadowserver|stretchoid', catches: t('lg.knownScannersCatch'), desc: t('lg.knownScannersDesc.html') },
@@ -13014,7 +13014,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   + '<tr class="upd-cell"><td><strong>Java</strong></td><td><code>' + updEsc(r.java) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>Jar</strong></td><td><code>' + updEsc(r.jar) + '</code></td></tr>'
                   + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.alreadyInstalled')) + '</strong></td><td>' + escHtml(r.exists ? t('dns.yes') : t('acf.no'))
-                  + (r.enabled ? '  &mdash; mailpanel_enable=' + updEsc(r.enabled) : '') + '</td></tr>'
+                  + (r.enabled ? '  &mdash; daemoxcp_mail_enable=' + updEsc(r.enabled) : '') + '</td></tr>'
                   + '</tbody></table></div>'
                   + '<div class="alert alert-info py-2">' + t('up.rcNotStarted.html') + '</div>'
                   + '<button class="btn btn-warning" data-on-click="rcGo()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.installEnable')) + '</button>'
@@ -13048,7 +13048,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 + '<tr class="upd-cell"><td data-style="width:14rem"><strong>' + escHtml(t('up.rcScript')) + '</strong></td><td>'
                 + (r.installed ? '<code>' + updEsc(r.path) + '</code> &mdash; ' + escHtml(t('up.willBeDeleted'))
                                 : '<span class="text-muted">' + escHtml(t('up.notPresent')) + '</span>') + '</td></tr>'
-                + '<tr class="upd-cell"><td><strong>mailpanel_enable</strong></td><td>'
+                + '<tr class="upd-cell"><td><strong>daemoxcp_mail_enable</strong></td><td>'
                 + (r.variableExists ? '<code>' + updEsc((r.before && r.before.sysrcValue) || '') + '</code> &mdash; ' + escHtml(t('up.willLeaveRcConf'))
                                      : '<span class="text-muted">' + escHtml(t('up.notSetUntouched')) + '</span>') + '</td></tr>'
                 + '<tr class="upd-cell"><td><strong>' + escHtml(t('up.backupCopy')) + '</strong></td><td><code>' + updEsc(r.copy) + '</code>'
@@ -13077,7 +13077,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const r = await updApi('rc_install', { confirm: 'INSTALL RC' });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
             pre.style.display = 'block';
-            pre.textContent = 'service mailpanel rcvar:\\n' + (r.rcvar || '');
+            pre.textContent = 'service daemoxcp_mail rcvar:\\n' + (r.rcvar || '');
             el.innerHTML = '<div class="alert alert-' + (r.loaded ? 'success' : 'warning') + ' py-2 mb-0">'
                 + (r.loaded
                    ? '<strong>' + escHtml(t('up.installed')) + '</strong> ' + escHtml(t('up.rcLoaded', { value: r.enabledNow })) + ' '

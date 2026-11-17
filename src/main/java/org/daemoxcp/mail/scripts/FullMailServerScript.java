@@ -103,7 +103,7 @@ fi
 # tiene aperto non escluderebbe piu' chi ne crea uno nuovo); e "exec 9>>file; lockf 9" fa
 # ereditare il lock a ogni figlio della shell, cioe' anche ai servizi che lo script avvia, che
 # lo terrebbero per sempre. Con "lockf -k file comando" il comando non eredita il descrittore.
-PACKAGE_TURN_LOCK=/var/db/mailpanel/package-turn.lock
+PACKAGE_TURN_LOCK=/var/db/daemoxcp-mail/package-turn.lock
 
 # Vero se qualcuno tiene il turno. lockf esce 75 (EX_TEMPFAIL) se il lock e' gia' preso; se lo
 # prende, lo rilascia subito. Ogni altro codice (il file non si apre) non e' "preso".
@@ -115,7 +115,7 @@ turn_is_held() {
 if [ -n "${DAEMOXCP_MAIL_PACKAGE_TURN:-}" ]; then
     TURN_HOLDER=$(head -n 1 "$PACKAGE_TURN_LOCK" 2>/dev/null)
     if [ "$DAEMOXCP_MAIL_PACKAGE_TURN" != "$PPID" ] || ! turn_is_held || [ "${TURN_HOLDER#pid $PPID,}" = "$TURN_HOLDER" ]; then
-        echo "${RED}STOPPED: started as the mail panel's installation, but the panel does not hold the package turn.${NC}"
+        echo "${RED}STOPPED: started as the installation of DaemoxCP Mail, but the panel does not hold the package turn.${NC}"
         echo "Turn lock $PACKAGE_TURN_LOCK says: ${TURN_HOLDER:-nothing}"
         echo "Nothing was stopped and nothing was changed."
         exit 1
@@ -226,7 +226,7 @@ if true; then
         echo "$LOCKED_PACKAGES" | sed 's/^/  /'
         echo ""
         echo "Nothing was stopped and nothing was changed."
-        echo "The mail panel locks the mail stack packages when it starts. Its menu entry"
+        echo "DaemoxCP Mail locks the mail stack packages when it starts. Its menu entry"
         echo "'Install/Reinstall Complete Mail Server' unlocks them before this script and"
         echo "locks them again after it. Running this script by hand: unlock them first"
         echo "(pkg unlock -a -y); the panel locks the mail stack again at its next start."
@@ -403,7 +403,7 @@ else
 set skip on lo
 
 # La lista dei blocchi permanenti del pannello.
-table <permaban> persist file "/var/db/mail-panel/permaban.list"
+table <permaban> persist file "/var/db/daemoxcp-mail/permaban.list"
 block in quick from <permaban>
 
 # L'anchor di fail2ban: ci mette le sue "block in quick" l'azione pf della jail.
@@ -414,9 +414,9 @@ anchor "f2b/*"
 pass
 PFCONF
         chmod 644 /etc/pf.conf
-        mkdir -p /var/db/mail-panel
-        [ -f /var/db/mail-panel/permaban.list ] || : > /var/db/mail-panel/permaban.list
-        chmod 640 /var/db/mail-panel/permaban.list
+        mkdir -p /var/db/daemoxcp-mail
+        [ -f /var/db/daemoxcp-mail/permaban.list ] || : > /var/db/daemoxcp-mail/permaban.list
+        chmod 640 /var/db/daemoxcp-mail/permaban.list
         # Prova di sintassi prima di accendere: un pf.conf rifiutato lascia pf spento, non
         # a meta'.
         if pfctl -nf /etc/pf.conf 2>&1; then
@@ -731,7 +731,7 @@ mkdir -p /usr/local/etc/ssl/mail
 mkdir -p /usr/local/etc/postfix
 mkdir -p /var/vmail
 mkdir -p /var/run/dovecot
-mkdir -p /var/db/mailpanel
+mkdir -p /var/db/daemoxcp-mail
 
 """
             // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
@@ -791,7 +791,7 @@ sysrc sendmail_msp_queue_enable="NO"
 
 # main.cf
 cat > /usr/local/etc/postfix/main.cf << POSTFIX_MAIN
-# Postfix - FreeBSD Mail Panel
+# Postfix - DaemoxCP Mail
 # Generated automatically
 
 # Basic settings
@@ -1151,11 +1151,11 @@ ROUNDCUBE_CONFIG
 chmod 600 /usr/local/www/roundcube/config/config.inc.php
 
 # Generate SSO key. La legge solo il pannello: il plugin ha il segreto nella sua configurazione.
-if [ ! -f /var/db/mailpanel/roundcube_sso.key ]; then
-    openssl rand 32 > /var/db/mailpanel/roundcube_sso.key
+if [ ! -f /var/db/daemoxcp-mail/roundcube_sso.key ]; then
+    openssl rand 32 > /var/db/daemoxcp-mail/roundcube_sso.key
 fi
-chmod 600 /var/db/mailpanel/roundcube_sso.key
-chown root:wheel /var/db/mailpanel/roundcube_sso.key
+chmod 600 /var/db/daemoxcp-mail/roundcube_sso.key
+chown root:wheel /var/db/daemoxcp-mail/roundcube_sso.key
 
 # php.ini
 #
@@ -1183,8 +1183,8 @@ chmod 644 /usr/local/etc/php.ini
 # La cartella delle sessioni di Roundcube e il registro degli errori di PHP.
 # Sono di roundcube, che ci scrive: proprietario e permessi li mette il pezzo di RoundcubeUser,
 # dopo il pool. (La riga qui sopra resta com'e': CommentRepair la usa come forma giusta.)
-mkdir -p /var/db/mailpanel/php_sessions
-chmod 700 /var/db/mailpanel/php_sessions
+mkdir -p /var/db/daemoxcp-mail/php_sessions
+chmod 700 /var/db/daemoxcp-mail/php_sessions
 touch /var/log/php_errors.log
 chmod 640 /var/log/php_errors.log
 
@@ -1303,11 +1303,11 @@ service nginx start 2>/dev/null || true
 # regola in "actionstart", una volta sola, quando la jail parte. Se quella volta pf non
 # c'era, fail2ban scrive nel suo registro
 #   ERROR stderr: 'pfctl: /dev/pf: No such file or directory'
-#   ERROR Error starting action Jail('mail-panel-auth')/pf
+#   ERROR Error starting action Jail('daemoxcp-mail-auth')/pf
 # e NON la riprova mai: ne' un reload, ne' un "service start" su un servizio gia' in
 # esecuzione. Da li' in avanti "actionban" sembra riuscire -- crea la tabella da se' -- e
 # in pf resta una tabella SENZA la regola che la legge, cioe' niente. Misurato: con
-# l'azione fallita, "pfctl -a f2b/mail-panel-auth -s rules" e' vuoto mentre
+# l'azione fallita, "pfctl -a f2b/daemoxcp-mail-auth -s rules" e' vuoto mentre
 # fail2ban-client dice "Banned IP list: 203.0.113.77"; dopo un restart la regola c'e'.
 # Succede a ogni REINSTALLAZIONE, perche' li' fail2ban e' gia' in esecuzione da prima.
 service fail2ban restart 2>/dev/null || service fail2ban start 2>/dev/null || true

@@ -87,7 +87,7 @@ public class Dovecot24MoveE2ETest {
         check("2 the packages of before, at the same versions", inventory().equals(packagesBefore));
         check("2 the same ones protected", locked().equals(lockedBefore));
         check("3 the configuration of before, file by file", config().equals(configBefore));
-        String copy = sh("ls -d /var/db/mailpanel/dovecot24/* 2>/dev/null | tail -1").trim();
+        String copy = sh("ls -d /var/db/daemoxcp-mail/dovecot24/* 2>/dev/null | tail -1").trim();
         check("3 the refused 2.4 configuration kept in the copy (" + copy + ")",
                 !copy.isEmpty() && ok("grep -q dovecot_config_version " + copy + "/etc-2.4-refused/dovecot.conf")
                 && sh("stat -f %Lp " + copy).trim().equals("700"));

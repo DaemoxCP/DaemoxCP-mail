@@ -74,14 +74,14 @@ public final class RoundcubeUser {
 
     public static final String FPM_DIR = "/usr/local/etc/php-fpm.d";
     public static final String ROUNDCUBE_DIR = "/usr/local/www/roundcube";
-    public static final String SESSIONS_DIR = "/var/db/mailpanel/php_sessions";
+    public static final String SESSIONS_DIR = "/var/db/daemoxcp-mail/php_sessions";
     public static final String PHP_ERRORS_LOG = "/var/log/php_errors.log";
     public static final String NEWSYSLOG_DIR = "/usr/local/etc/newsyslog.conf.d";
-    public static final String SSO_KEY = "/var/db/mailpanel/roundcube_sso.key";
+    public static final String SSO_KEY = "/var/db/daemoxcp-mail/roundcube_sso.key";
     /** La rotazione che installa il pacchetto di Roundcube, e il campione da cui la copia. */
     static final String ROUNDCUBE_ROTATION_SAMPLE = "/usr/local/share/examples/roundcube/newsyslog.conf";
     /** Le copie dei file prima della migrazione, per chi vuole guardarle: fuori da php-fpm.d. */
-    static final String BACKUP_DIR = "/var/db/mailpanel/service-users-backup";
+    static final String BACKUP_DIR = "/var/db/daemoxcp-mail/service-users-backup";
 
     /** Le righe del pool che il pannello sceglie; le altre (pm.*) si portano da quello di prima. */
     private static final Set<String> OWN_KEYS = Set.of("user", "group", "listen",
@@ -238,11 +238,11 @@ public final class RoundcubeUser {
      */
     static List<Ownership> ownershipPlan(Places at) {
         Path rc = at.roundcubeDir();
-        Path sso = rc.resolve("plugins/mailpanel_sso");
+        Path sso = rc.resolve("plugins/daemoxcp_mail_sso");
         List<Ownership> l = new ArrayList<>();
         l.add(new Ownership(rc.resolve("config/config.inc.php"), "root", GROUP, "rw-r-----", false));
         l.add(new Ownership(sso, "root", "wheel", "rwxr-xr-x", false));
-        l.add(new Ownership(sso.resolve("mailpanel_sso.php"), "root", "wheel", "rw-r--r--", false));
+        l.add(new Ownership(sso.resolve("daemoxcp_mail_sso.php"), "root", "wheel", "rw-r--r--", false));
         l.add(new Ownership(sso.resolve("config.inc.php"), "root", GROUP, "rw-r-----", false));
         l.add(new Ownership(rc.resolve("temp"), USER, GROUP, "rwx------", true));
         l.add(new Ownership(rc.resolve("logs"), USER, GROUP, "rwxr-x---", true));

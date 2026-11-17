@@ -69,7 +69,7 @@ public final class DovecotMasterUser {
     public static final String USER = "admin";
     public static final String MASTER_USERS = "/usr/local/etc/dovecot/master-users";
     /** La chiave: lo stesso percorso di RoundcubeSsoManager.MASTER_PASSWORD_FILE (la prova li confronta). */
-    public static final String KEY_FILE = "/var/db/mailpanel/dovecot_master.key";
+    public static final String KEY_FILE = "/var/db/daemoxcp-mail/dovecot_master.key";
     public static final String OWNER = "root";
     /** Il processo auth di Dovecot, che legge master-users, gira con questo utente. */
     public static final String GROUP = "dovecot";

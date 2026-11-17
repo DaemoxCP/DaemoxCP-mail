@@ -259,19 +259,19 @@ public class MailboxPasswordTest {
             String path = WebmailPasswordConfig.PATH;
             String change = form("user", email, "curpass", second, "newpass", "From-Webmail-2026");
             check("without the key: 404", send("POST", path, change, type).statusCode() == 404);
-            check("a wrong key: 404", send("POST", path, change, type, "X-MailPanel-Key", key.substring(1) + "A").statusCode() == 404);
-            check("through a proxy (X-Forwarded-For): 404", send("POST", path, change, type, "X-MailPanel-Key", key,
+            check("a wrong key: 404", send("POST", path, change, type, "X-DaemoxCP-Key", key.substring(1) + "A").statusCode() == 404);
+            check("through a proxy (X-Forwarded-For): 404", send("POST", path, change, type, "X-DaemoxCP-Key", key,
                     "X-Forwarded-For", "203.0.113.9").statusCode() == 404);
-            check("GET with the key: 405", send("GET", path, null, type, "X-MailPanel-Key", key).statusCode() == 405);
+            check("GET with the key: 405", send("GET", path, null, type, "X-DaemoxCP-Key", key).statusCode() == 405);
             check("nothing changed so far", db.mailboxPasswordMatches(id, second));
-            HttpResponse<String> wrong = send("POST", path, form("user", email, "curpass", "Not-This-One-2026", "newpass", "From-Webmail-2026"), type, "X-MailPanel-Key", key);
+            HttpResponse<String> wrong = send("POST", path, form("user", email, "curpass", "Not-This-One-2026", "newpass", "From-Webmail-2026"), type, "X-DaemoxCP-Key", key);
             check("wrong current password: 403, unchanged", wrong.statusCode() == 403 && db.mailboxPasswordMatches(id, second));
-            HttpResponse<String> weak = send("POST", path, form("user", email, "curpass", second, "newpass", "corta"), type, "X-MailPanel-Key", key);
+            HttpResponse<String> weak = send("POST", path, form("user", email, "curpass", second, "newpass", "corta"), type, "X-DaemoxCP-Key", key);
             check("new password outside the rule: 400, unchanged", weak.statusCode() == 400 && db.mailboxPasswordMatches(id, second));
             check("accented letters: 400", send("POST", path, form("user", email, "curpass", second, "newpass", "Password-café-2026"), type,
-                    "X-MailPanel-Key", key).statusCode() == 400);
-            check("a repeated field: 400", send("POST", path, change + "&newpass=Yet-Another-2026", type, "X-MailPanel-Key", key).statusCode() == 400);
-            HttpResponse<String> ok = send("POST", path, change, type, "X-MailPanel-Key", key);
+                    "X-DaemoxCP-Key", key).statusCode() == 400);
+            check("a repeated field: 400", send("POST", path, change + "&newpass=Yet-Another-2026", type, "X-DaemoxCP-Key", key).statusCode() == 400);
+            HttpResponse<String> ok = send("POST", path, change, type, "X-DaemoxCP-Key", key);
             check("the right one: 200 ok (what Roundcube expects)", ok.statusCode() == 200 && ok.body().equals("ok"));
             check("hash and copy are the new password", db.mailboxPasswordMatches(id, "From-Webmail-2026") && "From-Webmail-2026".equals(copyOf(id)));
             r = reveal.apply(id);
@@ -279,8 +279,8 @@ public class MailboxPasswordTest {
             String log = Files.exists(audit) ? Files.readString(audit) : "";
             check("audit: the change is there, no password", log.contains("WEBMAIL_PASSWORD_CHANGED") && log.contains("WEBMAIL_PASSWORD_CHANGE_REFUSED")
                     && !log.contains("From-Webmail-2026") && !log.contains(second) && !log.contains("Not-This-One-2026"));
-            for (int i = 0; i < 6; i++) send("POST", path, form("user", "bob@" + domain, "curpass", "Attempt-" + i + "-2026", "newpass", "Bobs-New-One-2026"), type, "X-MailPanel-Key", key);
-            HttpResponse<String> limited = send("POST", path, form("user", "bob@" + domain, "curpass", "Plain-Text-Again-26", "newpass", "Bobs-New-One-2026"), type, "X-MailPanel-Key", key);
+            for (int i = 0; i < 6; i++) send("POST", path, form("user", "bob@" + domain, "curpass", "Attempt-" + i + "-2026", "newpass", "Bobs-New-One-2026"), type, "X-DaemoxCP-Key", key);
+            HttpResponse<String> limited = send("POST", path, form("user", "bob@" + domain, "curpass", "Plain-Text-Again-26", "newpass", "Bobs-New-One-2026"), type, "X-DaemoxCP-Key", key);
             check("after 5 wrong current passwords: 429 even for the right one", limited.statusCode() == 429 && db.mailboxPasswordMatches(bob, "Plain-Text-Again-26"));
             srv.webmail.resetLimits();
 
@@ -288,11 +288,11 @@ public class MailboxPasswordTest {
             setColumn("password_encrypted", bob, null);
             check("without the key: 404", send("POST", "/api/internal/mailbox-vault", form("user", "bob@" + domain, "pass", "Plain-Text-Again-26"), type).statusCode() == 404);
             check("a wrong password: 200 but no copy", send("POST", "/api/internal/mailbox-vault", form("user", "bob@" + domain, "pass", "Wrong-One-2026-xyz"), type,
-                    "X-MailPanel-Key", key).statusCode() == 200 && column("password_encrypted", bob) == null);
+                    "X-DaemoxCP-Key", key).statusCode() == 200 && column("password_encrypted", bob) == null);
             check("the right password: the copy is stored", send("POST", "/api/internal/mailbox-vault", form("user", "bob@" + domain, "pass", "Plain-Text-Again-26"), type,
-                    "X-MailPanel-Key", key).statusCode() == 200 && "Plain-Text-Again-26".equals(copyOf(bob)));
+                    "X-DaemoxCP-Key", key).statusCode() == 200 && "Plain-Text-Again-26".equals(copyOf(bob)));
             check("an unknown mailbox: 200, nothing to do", send("POST", "/api/internal/mailbox-vault", form("user", "nobody@" + domain, "pass", "Something-2026-xx"), type,
-                    "X-MailPanel-Key", key).statusCode() == 200);
+                    "X-DaemoxCP-Key", key).statusCode() == 200);
             check("audit: copy stored, no password", Files.readString(audit).contains("MAILBOX_PASSWORD_COPY_STORED")
                     && !Files.readString(audit).contains("Plain-Text-Again-26"));
 
@@ -300,11 +300,11 @@ public class MailboxPasswordTest {
             if (rc == null) {
                 System.out.println("\n(Roundcube's real code skipped: -Droundcube.dir=<roundcubemail-1.6.x-complete> and php run it)");
             } else {
-                System.out.println("\n== Roundcube's real code (httpapi driver, mailpanel_sso hook) ==");
+                System.out.println("\n== Roundcube's real code (httpapi driver, daemoxcp_mail_sso hook) ==");
                 int port = https.getAddress().getPort();
                 Path config = dir.resolve("rc-config.inc.php");
                 Files.writeString(config, WebmailPasswordConfig.apply("<?php\n$config['password_driver'] = 'sql';\n", port, key));
-                Path plugin = dir.resolve("mailpanel_sso.php");
+                Path plugin = dir.resolve("daemoxcp_mail_sso.php");
                 Files.writeString(plugin, org.daemoxcp.mail.integration.RoundcubeSsoManager.generatePluginPhp());
                 setColumn("password_encrypted", id, null);
                 Process php = new ProcessBuilder("php", "tests/webmail-roundcube-test.php", rc, config.toString(), plugin.toString(),
@@ -319,7 +319,7 @@ public class MailboxPasswordTest {
                 check("the change: PASSWORD_SUCCESS (0), hash is the new password", out.contains("change:0") && db.mailboxPasswordMatches(id, "Real-Roundcube-2026"));
                 check("the copy too (written by the change, then confirmed by the login hook)", "Real-Roundcube-2026".equals(copyOf(id)));
                 check("panel unreachable: the login goes on, one line in the log without the password",
-                        out.contains("log:mailpanel_sso: the mail panel did not answer") && !out.contains("Real-Roundcube-2026"));
+                        out.contains("log:daemoxcp_mail_sso: the mail panel did not answer") && !out.contains("Real-Roundcube-2026"));
                 setColumn("password_encrypted", id, null);
                 Process again = new ProcessBuilder("php", "tests/webmail-roundcube-test.php", rc, config.toString(), plugin.toString(),
                         email, "Real-Roundcube-2026", "Real-Roundcube-2026", base + "/api/internal/mailbox-vault", key)
@@ -350,7 +350,7 @@ public class MailboxPasswordTest {
                 && !fixed.contains("password_query") && !fixed.contains("password_crypt_hash"));
         check("the rest stays", fixed.contains("db_dsnw") && fixed.contains("'archive', 'password'") && fixed.contains("managesieve_port"));
         check("the httpapi block points to the panel on loopback with the key", fixed.contains("'httpapi'")
-                && fixed.contains("'https://127.0.0.1:2096/api/internal/mailbox-password'") && fixed.contains("'X-MailPanel-Key' => '" + key + "'")
+                && fixed.contains("'https://127.0.0.1:2096/api/internal/mailbox-password'") && fixed.contains("'X-DaemoxCP-Key' => '" + key + "'")
                 && fixed.contains("$config['password_httpapi_expect'] = '/^ok$/';"));
         check("applying again changes nothing (one block)", WebmailPasswordConfig.apply(fixed, 2096, key).equals(fixed)
                 && fixed.split("password_driver", -1).length == 2);

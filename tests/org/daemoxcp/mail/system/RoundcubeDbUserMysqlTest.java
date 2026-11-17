@@ -96,7 +96,7 @@ public class RoundcubeDbUserMysqlTest {
 
     static String config(String user, String password) {
         return "<?php\n$config['db_dsnw'] = 'mysql://" + user + ":" + password + "@127.0.0.1/" + DB + "';\n"
-             + "$config['plugins'] = array('mailpanel_sso');\n";
+             + "$config['plugins'] = array('daemoxcp_mail_sso');\n";
     }
 
     /** MySQL as the panel's root part has it (MysqlRoot's JDBC); php-fpm, nginx and the webmail faked, on the real database. */

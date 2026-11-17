@@ -93,9 +93,9 @@ public class LegacyNamesTest {
         check("  and without it, the last one with the old prefix",
                 (oldBe + "151-20261020-101010").equals(UpdateManager.lastPanelBootEnvironment(
                         "default\tNR\t/\t2G\t2026-10-01 10:00\n" + oldBe + "151-20261020-101010\t-\t-\t1G\t2026-10-20 10:10\n")));
-        String cat = UpdateManager.inventoryCat("/var/db/mailpanel/system/x", "services.txt");
+        String cat = UpdateManager.inventoryCat("/var/db/daemoxcp-mail/system/x", "services.txt");
         check("the inventory is read with today's name and then with the old one: " + cat,
-                cat.startsWith("cat /var/db/mailpanel/system/x/services.txt 2>/dev/null || cat /var/db/mailpanel/system/x/")
+                cat.startsWith("cat /var/db/daemoxcp-mail/system/x/services.txt 2>/dev/null || cat /var/db/daemoxcp-mail/system/x/")
                         && cat.contains(LegacyNames.oldNamesOf("inventoryFiles", "services.txt").get(0)));
 
         // The signatures: whoever reads back recognises today's and the old ones, and the old lines

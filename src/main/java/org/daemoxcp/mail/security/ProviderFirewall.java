@@ -41,7 +41,7 @@ public final class ProviderFirewall {
 
     private ProviderFirewall() {}
 
-    static final Path STATE = Path.of("/var/db/mailpanel/provider-firewall.json");
+    static final Path STATE = Path.of("/var/db/daemoxcp-mail/provider-firewall.json");
     static final String URL_V4 = "https://www.cloudflare.com/ips-v4";
     static final String URL_V6 = "https://www.cloudflare.com/ips-v6";
     /** Come UpdateManager.cloudflareRanges: sotto queste soglie la risposta e' rotta, non una lista nuova. */

@@ -429,7 +429,7 @@ public final class UpdateManager {
      *
      * Questo file e' la risposta a quelle tre domande, e sopravvive al pannello.
      */
-    static final String LOCK_NOTE = "/var/db/mailpanel/locked-packages.txt";
+    static final String LOCK_NOTE = "/var/db/daemoxcp-mail/locked-packages.txt";
 
     /** Dove sta la nota. E' una variabile solo perche' le prove non scrivano in /var/db. */
     static Path lockNotePath = Paths.get(LOCK_NOTE);
@@ -623,6 +623,9 @@ public final class UpdateManager {
             if (!ok(cmd, 20)) continue;
             if (cmd.contains(" -A ")) added++; else if (cmd.contains(" -M ")) rewritten++; else removed++;
         }
+        // I cartelli con la chiave di prima (sezione "pkgMarkKeys"): quello con la chiave di adesso l'ha appena messo
+        // il giro qui sopra sui pacchetti bloccati, quindi quelli vecchi si tolgono e basta.
+        for (String cmd : oldKeyCommands(out)) if (ok(cmd, 20)) rewritten++;
         return new int[]{added, removed, rewritten};
     }
 
@@ -695,10 +698,25 @@ public final class UpdateManager {
     }
 
     /** La chiave dell'annotazione nel database di pkg. */
-    static final String MARK_KEY = "mail_panel_lock";
+    static final String MARK_KEY = Product.ID + "_lock";
+
+    /**
+     * I comandi che tolgono i cartelli con una chiave di prima (sezione "pkgMarkKeys" di legacy-names.json), da
+     * un'uscita di `pkg query -a '%n %At %Av'`. Funzione pura.
+     */
+    static java.util.List<String> oldKeyCommands(String output) {
+        java.util.List<String> r = new ArrayList<>();
+        java.util.List<String> oldKeys = LegacyNames.oldNamesOf("pkgMarkKeys", MARK_KEY);
+        for (String line : output.split("\n")) {
+            String[] c = line.trim().split(" ", 3);
+            if (c.length >= 2 && oldKeys.contains(c[1]) && isValidName(c[0]))
+                r.add("pkg annotate -y -D " + c[0] + " " + c[1]);
+        }
+        return r;
+    }
 
     /** Il valore: rimanda alla nota e al comando che libera tutto. */
-    static final String MARK_VALUE = "locked by the mail panel: see " + LOCK_NOTE
+    static final String MARK_VALUE = "locked by " + Product.NAME + ": see " + LOCK_NOTE
             + " - unlock with " + UNLOCK_ALL_COMMAND;
 
     /**
@@ -1903,8 +1921,8 @@ public final class UpdateManager {
         mainCf = mainCf + "/main.cf";
         if (!ok("test -f " + mainCf, 15))
             return r.put("success", false).put("error", I18n.tr("server.um.raisePostfixCompatibilityLevel.5", java.util.Map.of("mainCf", String.valueOf(mainCf))));
-        String copy = "/var/db/mailpanel/main.cf-" + sh("date '+%Y%m%d-%H%M%S'", 15).trim();
-        sh("mkdir -p /var/db/mailpanel && cp -p " + mainCf + " " + copy, 30);
+        String copy = "/var/db/daemoxcp-mail/main.cf-" + sh("date '+%Y%m%d-%H%M%S'", 15).trim();
+        sh("mkdir -p /var/db/daemoxcp-mail && cp -p " + mainCf + " " + copy, 30);
         boolean copyOk = ok("test -s " + copy, 15);
         r.put("copy", copy).put("copyOk", copyOk);
         log.append(copyOk ? I18n.tr("server.um.raisePostfixCompatibilityLevel.6", java.util.Map.of("copy", String.valueOf(copy)))
@@ -2887,7 +2905,7 @@ public final class UpdateManager {
      * dell'SQL dentro la riga di comando.
      */
     private static String mysqlOut(String sql, Object... params) {
-        String user = "mailpanel", pass = "", db = "mailserver", host = "127.0.0.1", port = "3306";
+        String user = Product.ID, pass = "", db = Product.ID, host = "127.0.0.1", port = "3306";
         try (java.sql.ResultSet rs = org.daemoxcp.mail.Main.dbManager.get_data_config()) {
             if (rs.next()) {
                 String u = rs.getString("mysql_user"), p2 = org.daemoxcp.mail.Main.dbManager.mysqlPassword();
@@ -3823,7 +3841,7 @@ public final class UpdateManager {
                 lockedNames(), UpdateManager::reasonNotToUnlock));
     }
 
-    private static final String MYSQL84_BACKUP = "/var/db/mailpanel/mysql84";
+    private static final String MYSQL84_BACKUP = "/var/db/daemoxcp-mail/mysql84";
 
     /** Inserisce una direttiva subito dopo [mysqld], se non c'e' gia'. Scrittura atomica. */
     private static boolean addMysqldDirective(String line) {
@@ -4306,7 +4324,7 @@ public final class UpdateManager {
      * Dove il passaggio tiene la configurazione e i pacchetti della 2.3 com'erano: la strada per tornare indietro, una
      * cartella per passaggio, solo per root.
      */
-    private static final String DOVECOT24_BACKUP = "/var/db/mailpanel/dovecot24";
+    private static final String DOVECOT24_BACKUP = "/var/db/daemoxcp-mail/dovecot24";
 
     /** I pacchetti di Dovecot installati, per origine (server e Pigeonhole, della 2.3 e della 2.4): {nome, versione}. */
     static Map<String, String[]> dovecotPackages() {
@@ -5375,8 +5393,8 @@ public final class UpdateManager {
      * cominciare: e' quello che e' successo il 31/08/2026, scoperto al passo 2 invece che qui.
      */
     private static JSONObject testCopy() {
-        String tmp = "/var/db/mailpanel/test-dump.sql";
-        ok("mkdir -p /var/db/mailpanel", 20);
+        String tmp = "/var/db/daemoxcp-mail/test-dump.sql";
+        ok("mkdir -p /var/db/daemoxcp-mail", 20);
         JSONObject d = dsnRoundcube();
         if (!d.optBoolean("ok"))
             return new JSONObject().put("ok", false)
@@ -5739,7 +5757,7 @@ public final class UpdateManager {
             String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}"))
                 return r.put("success", false).put("error", I18n.tr("server.um.repairNginxPathInfo.10"));
-            String bk = "/var/db/mailpanel/nginx/" + ts;
+            String bk = "/var/db/daemoxcp-mail/nginx/" + ts;
             ok("mkdir -p " + bk, 30);
             if (!ok("cp -p " + file + " " + bk + "/nginx.conf", 30))
                 return r.put("success", false).put("error", I18n.tr("server.um.repairNginxPathInfo.11", java.util.Map.of("file", String.valueOf(file))));
@@ -5997,7 +6015,7 @@ public final class UpdateManager {
             job.write(I18n.tr("server.um.runRoundcubeUpdate.2", java.util.Map.of("total", String.valueOf(TOT))));
             String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date");
-            backupDir = "/var/db/mailpanel/roundcube/" + ts;
+            backupDir = "/var/db/daemoxcp-mail/roundcube/" + ts;
             if (!ok("mkdir -p " + backupDir, 30)) throw new IllegalStateException("cannot create " + backupDir);
             ok("cp -p " + RC_DIR + "/config/config.inc.php " + backupDir + "/config.inc.php", 30);
             JSONObject cp = rcDump(backupDir + "/roundcube.sql");
@@ -6195,13 +6213,13 @@ public final class UpdateManager {
 
     // ===================== aggiornamento della JVM del pannello =====================
 
-    private static final String JDK_DIR = "/var/db/mailpanel/jdk";
+    private static final String JDK_DIR = "/var/db/daemoxcp-mail/jdk";
     /** Dove finisce cio' che il pannello scrive quando riparte staccato dal terminale. */
-    private static final String PANEL_LOG = "/var/db/mailpanel/panel.log";
+    private static final String PANEL_LOG = "/var/db/daemoxcp-mail/panel.log";
     /** Il servizio del pannello: il suo script e il pidfile che vi scrive daemon -p (RcScriptRepair). */
-    static final String RC_NAME = "mailpanel";
-    static String rcScript = "/usr/local/etc/rc.d/" + RC_NAME;
-    static String rcPidfile = "/var/run/" + RC_NAME + ".pid";
+    static final String RC_NAME = PanelRcScript.NAME;
+    static String rcScript = PanelRcScript.PATH;
+    static String rcPidfile = PanelRcScript.PIDFILE;
 
     /** Vero se questo processo l'ha acceso il servizio: lo script c'e' e il suo pidfile porta il nostro pid. */
     static boolean startedByService(long pid) {
@@ -6239,7 +6257,10 @@ public final class UpdateManager {
         try {
             java.io.File f = new java.io.File(
                     UpdateManager.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            return f.isFile() ? f.getAbsolutePath() : "";
+            // Il jar spostato col nome nuovo da questo processo (PanelServiceRename): la macchina virtuale lo
+            // conosce ancora col nome di prima, il disco col nome di adesso.
+            java.io.File now = new java.io.File(PanelServiceRename.current(f.getAbsolutePath()));
+            return now.isFile() ? now.getAbsolutePath() : "";
         } catch (Exception e) { return ""; }
     }
 
@@ -6286,9 +6307,9 @@ public final class UpdateManager {
      */
     private static JSONObject restartStrategy() {
         String dir = System.getProperty("user.dir", "");
-        // Acceso dal servizio (/usr/local/etc/rc.d/mailpanel, come all'avvio della macchina): si riaccende col
+        // Acceso dal servizio (/usr/local/etc/rc.d/daemoxcp_mail, come all'avvio della macchina): si riaccende col
         // servizio. Con la riga di daemon(8) ricostruita il pannello tornava su senza il pidfile del servizio:
-        // «service mailpanel status» lo dava spento, uno stop non lo fermava e uno start ne accendeva un secondo
+        // «service daemoxcp_mail status» lo dava spento, uno stop non lo fermava e uno start ne accendeva un secondo
         // (reperto 195). Il servizio rifa' la stessa riga di sempre, col suo pidfile e il suo registro.
         if (startedByService(ProcessHandle.current().pid())) {
             String command = "/usr/sbin/service " + RC_NAME + " onestart";
@@ -6304,12 +6325,7 @@ public final class UpdateManager {
                     .put("ok", true);
         }
         String binJava = System.getProperty("java.home", "") + "/bin/java";
-        String jar = "";
-        try {
-            java.net.URL u = UpdateManager.class.getProtectionDomain().getCodeSource().getLocation();
-            java.io.File f = new java.io.File(u.toURI());
-            if (f.isFile()) jar = f.getAbsolutePath();
-        } catch (Exception ignored) { }
+        String jar = jarPath();
 
         String command = startCommand(true);
 
@@ -6325,7 +6341,7 @@ public final class UpdateManager {
                 // /dev/null, poi la redirezione al file. -t da' al processo un nome riconoscibile
                 // in ps, cosi' si trova senza cercare "java" fra tutti i java.
                 .put("log", PANEL_LOG)
-                .put("line", "/usr/sbin/daemon -f -o " + PANEL_LOG + " -t mailpanel"
+                .put("line", "/usr/sbin/daemon -f -o " + PANEL_LOG + " -t " + RC_NAME + ""
                         + " -- /bin/sh -c \"cd '" + dir + "' && exec " + command + "\"")
                 .put("note", jar.isEmpty()
                         ? I18n.tr("server.um.restartStrategy.1")
@@ -6505,7 +6521,7 @@ public final class UpdateManager {
      *                     rimesse dopo, e scritte nell'elenco su disco che il pannello riacceso rilegge
      * @param service      vero se il pannello l'ha acceso il servizio: allora si riaccende col servizio
      * @param port         la porta su cui il pannello risponde adesso (della parte web, se separato); 0 se non si sa
-     * @param listenerUser l'utente che deve tenere quella porta dopo il riavvio (mailpanel se separato), o vuoto
+     * @param listenerUser l'utente che deve tenere quella porta dopo il riavvio (daemoxcp_mail se separato), o vuoto
      * @param webSupervisorPidFile il pidfile del supervisore della parte web, o vuoto se il pannello non e' separato
      * @param panelLog     il registro del pannello (PANEL_LOG; un altro solo nelle prove)
      */
@@ -6543,9 +6559,9 @@ public final class UpdateManager {
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.um.startJavaUpdateNow.2", java.util.Map.of("backup", String.valueOf(bk))));
 
             long pid = ProcessHandle.current().pid();
-            // Separato, la porta la tiene la parte web (utente mailpanel), non questo processo: chiesta a lui, la
+            // Separato, la porta la tiene la parte web (utente daemoxcp_mail), non questo processo: chiesta a lui, la
             // porta era 0 e lo script saltava la verifica, dichiarando riuscito un pannello mai controllato
-            // (reperto 195). E dopo il riavvio la deve tenere ancora mailpanel: se la tenesse root, la separazione
+            // (reperto 195). E dopo il riavvio la deve tenere ancora daemoxcp_mail: se la tenesse root, la separazione
             // non sarebbe tornata.
             int port = listeningPort(pid);
             String listenerUser = "", webSupervisor = "";
@@ -7354,7 +7370,7 @@ public final class UpdateManager {
             job.write(I18n.tr("server.um.runPythonTransition.3", java.util.Map.of("total", String.valueOf(TOT))));
             String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date");
-            String bk = "/var/db/mailpanel/python/" + ts;
+            String bk = "/var/db/daemoxcp-mail/python/" + ts;
             if (!ok("mkdir -p " + bk, 30)) throw new IllegalStateException("cannot create " + bk);
             sh("pkg query '%n %v' > " + bk + "/packages-before.txt 2>/dev/null", 60);
             for (String d : new String[]{"/usr/local/etc/fail2ban", "/usr/local/etc/letsencrypt"}) {
@@ -9280,7 +9296,7 @@ public final class UpdateManager {
         {"/etc",                    "server.um.removalCandidates.5"},
         {"/usr/local/etc",          "server.um.removalCandidates.6"},
         {"/var/cron/tabs",          "server.um.place.userCrontabs"},
-        {"/var/db/mailpanel",       "server.um.removalCandidates.7"},
+        {"/var/db/daemoxcp-mail",       "server.um.removalCandidates.7"},
         {"/root",                   "server.um.place.root"},
         {"/usr/local/bin",          "server.um.removalCandidates.8"},
         {"/usr/local/sbin",         "server.um.removalCandidates.9"},
@@ -10630,9 +10646,9 @@ public final class UpdateManager {
     // ===================== Le patch di FreeBSD, installate dal pannello (reperto 185) =====================
 
     /** L'ultima installazione di patch fatta dal pannello: serve a dire, dopo, se manca il riavvio. */
-    static Path osPatchState = Paths.get("/var/db/mailpanel/system/os-patch.json");
+    static Path osPatchState = Paths.get("/var/db/daemoxcp-mail/system/os-patch.json");
     /** La configurazione di freebsd-update con cui il pannello installa: vedi OsPatch.installConfig. */
-    static Path osPatchConfig = Paths.get("/var/db/mailpanel/system/freebsd-update.conf");
+    static Path osPatchConfig = Paths.get("/var/db/daemoxcp-mail/system/freebsd-update.conf");
 
     /**
      * Installa gli aggiornamenti del sistema di base: prima li scarica (quelli pronti possono essere
@@ -10904,7 +10920,7 @@ public final class UpdateManager {
      *    per il pidfile e -o per il registro.
      *  - procname e' il percorso della java, non /usr/sbin/daemon: rc.subr confronta il pid del
      *    pidfile con procname, e daemon -p scrive il pid del FIGLIO — che dopo l'exec e' java.
-     *    Sbagliando questo, "service mailpanel status" direbbe sempre che non gira.
+     *    Sbagliando questo, "service daemoxcp_mail status" direbbe sempre che non gira.
      *
      * REQUIRE resta LOGIN e basta: il pannello tollera MySQL spento (lo segnala e prosegue),
      * quindi legarlo a mysql lo renderebbe piu' fragile senza guadagnarci niente.
@@ -11028,14 +11044,14 @@ public final class UpdateManager {
                 r.put("noshutdownWarning", I18n.tr("server.um.restartServer.4"));
             if (!run) return r.put("success", true).put("executed", false);
 
-            String msg = "Restart requested by the mail panel";
+            String msg = "Restart requested by " + Product.NAME;
             String shutdown = commandPath("shutdown", "/sbin/shutdown", "/usr/sbin/shutdown");
             String daemon = commandPath("daemon", "/usr/sbin/daemon", "/sbin/daemon");
             if (shutdown.isEmpty() || daemon.isEmpty())
                 return r.put("success", false)
                         .put("error", I18n.tr("server.um.x.noShutdownCmd", java.util.Map.of("cmd", String.valueOf(shutdown.isEmpty() ? "shutdown" : "daemon"))));
-            String logR = "/var/db/mailpanel/reboot.log";
-            ok("mkdir -p /var/db/mailpanel", 20);
+            String logR = "/var/db/daemoxcp-mail/reboot.log";
+            ok("mkdir -p /var/db/daemoxcp-mail", 20);
             ok("rm -f " + logR, 15);
             // Staccato: shutdown con un tempo futuro non torna finche' non e' ora. E con -o
             // invece del solo -f, se rifiuta lo dice a qualcuno: la prima versione mandava la
@@ -11295,11 +11311,11 @@ public final class UpdateManager {
     public static JSONObject autoStart() {
         JSONObject r = new JSONObject();
         try {
-            String path = ok("test -f /usr/local/etc/rc.d/mailpanel", 10)
-                    ? "/usr/local/etc/rc.d/mailpanel"
-                    : (ok("test -f /etc/rc.d/mailpanel", 10) ? "/etc/rc.d/mailpanel" : null);
+            String path = ok("test -f " + PanelRcScript.PATH, 10)
+                    ? PanelRcScript.PATH
+                    : (ok("test -f /etc/rc.d/" + RC_NAME, 10) ? "/etc/rc.d/" + RC_NAME : null);
             boolean installed = path != null;
-            String enabledBy = sh("sysrc -n mailpanel_enable 2>/dev/null", 20).trim();
+            String enabledBy = sh("sysrc -n " + RC_NAME + "_enable 2>/dev/null", 20).trim();
             boolean enabled = "YES".equalsIgnoreCase(enabledBy) || "yes".equalsIgnoreCase(enabledBy)
                     || "true".equalsIgnoreCase(enabledBy) || "1".equals(enabledBy);
             r.put("success", true)
@@ -11322,7 +11338,7 @@ public final class UpdateManager {
     }
 
     /**
-     * Toglie l'avvio automatico: disabilita mailpanel_enable e rimuove lo script rc.d.
+     * Toglie l'avvio automatico: disabilita daemoxcp_mail_enable e rimuove lo script rc.d.
      *
      * NON ferma il pannello. Se stai leggendo queste righe da un pannello avviato dal
      * servizio, quel processo continua a girare: chiudergli la porta in faccia mentre premi
@@ -11353,7 +11369,7 @@ public final class UpdateManager {
             String value = before.optString("sysrcValue", "").trim();
             boolean variableExists = !value.isEmpty();
 
-            String copy = "/var/db/mailpanel/mailpanel.rc.removed";
+            String copy = DataFolderRename.NEW + "/" + RC_NAME + ".rc.removed";
             r.put("path", path).put("copy", copy)
              .put("installed", installed).put("variableExists", variableExists);
 
@@ -11372,7 +11388,7 @@ public final class UpdateManager {
                                 + (variableExists && installed ? " " + I18n.tr("server.um.x.and") + " " : "")
                                 + (installed ? I18n.tr("server.um.x.rcRmFile", java.util.Map.of("file", String.valueOf(path), "copy", String.valueOf(copy))) : "")))), locksWarning));
 
-            ok("mkdir -p /var/db/mailpanel", 20);
+            ok("mkdir -p /var/db/daemoxcp-mail", 20);
 
             // 1. La copia PRIMA di tutto: se non riesce, non si prosegue.
             if (installed) {
@@ -11384,7 +11400,7 @@ public final class UpdateManager {
             }
 
             // 2. La variabile, solo se c'e' davvero.
-            if (variableExists) ok("sysrc -x mailpanel_enable", 30);
+            if (variableExists) ok("sysrc -x " + RC_NAME + "_enable", 30);
 
             // 3. Lo script.
             if (installed) ok("rm -f " + path, 20);
@@ -11423,89 +11439,20 @@ public final class UpdateManager {
                 if (o.startsWith("-agentlib") || o.startsWith("-javaagent") || o.startsWith("-Xdebug")) continue;
                 option.append(' ').append(o);
             }
-            String path = "/usr/local/etc/rc.d/mailpanel";
+            String path = PanelRcScript.PATH;
             r.put("path", path).put("dir", dir).put("jar", jar).put("java", binJava);
-
-            String text =
-                "#!/bin/sh\n"
-              + "#\n"
-              + "# PROVIDE: mailpanel\n"
-              + "# REQUIRE: LOGIN\n"
-              + "# KEYWORD: shutdown\n"
-              + "#\n"
-              + "# " + RcScriptRepair.MARKER + ". Avvia il pannello in\n"
-              + "# modalita' solo-web (--web): niente menu a schermo, nessun terminale richiesto.\n"
-              + "# Per riavere il menu: service mailpanel stop, poi lancialo a mano senza --web.\n"
-              + "#\n"
-              + "# Abilitazione:  sysrc mailpanel_enable=YES\n"
-              + "\n"
-              + ". /etc/rc.subr\n"
-              + "\n"
-              + "# Misurato il 31/08/2026 su questo server: avviato da rc.d il pannello riceveva\n"
-              + "# PATH=/sbin:/bin:/usr/sbin:/usr/bin, cioe' senza /usr/local. Meta' degli strumenti\n"
-              + "# da cui dipende (mysqldump, mysql, doveadm, postmap, rspamadm, fail2ban-client,\n"
-              + "# nginx) sta in /usr/local: risultavano \"non installati\" pur essendoci. Il pannello\n"
-              + "# ora completa da solo il PATH dei sottoprocessi, ma impostarlo anche qui non costa\n"
-              + "# nulla e rende l'ambiente esplicito a chi legge questo file.\n"
-              + "PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin\n"
-              + "export PATH\n"
-              + "\n"
-              + "name=mailpanel\n"
-              + "rcvar=mailpanel_enable\n"
-              + "\n"
-              + "load_rc_config $name\n"
-              + "\n"
-              + ": ${mailpanel_enable:=\"NO\"}\n"
-              + ": ${mailpanel_dir:=\"" + dir + "\"}\n"
-              + ": ${mailpanel_java:=\"" + binJava + "\"}\n"
-              + ": ${mailpanel_jar:=\"" + jar + "\"}\n"
-              + ": ${mailpanel_opts:=\"" + option.toString().trim() + "\"}\n"
-              + ": ${mailpanel_log:=\"" + PANEL_LOG + "\"}\n"
-              + "\n"
-              + "pidfile=\"/var/run/${name}.pid\"\n"
-              + "# rc.subr confronta il pid del pidfile con procname: daemon -p scrive il pid del\n"
-              + "# figlio, che dopo l'exec e' java. Mettendo /usr/sbin/daemon, status direbbe\n"
-              + "# sempre che il pannello non gira.\n"
-              + "procname=\"${mailpanel_java}\"\n"
-              + "\n"
-              + "start_cmd=\"${name}_start\"\n"
-              + "stop_postcmd=\"${name}_poststop\"\n"
-              + "\n"
-              + "mailpanel_start()\n"
-              + "{\n"
-              + "\t# kill -0 invece di pgrep -F: e' POSIX, si comporta uguale ovunque e si puo'\n"
-              + "\t# mettere alla prova. Un controllo che non si riesce a provare non protegge.\n"
-              + "\tif [ -f \"${pidfile}\" ] && kill -0 \"$(cat \"${pidfile}\")\" 2>/dev/null; then\n"
-              + "\t\t" + RcScriptRepair.RUNNING + "\n"
-              + "\t\treturn 1\n"
-              + "\tfi\n"
-              + "\tmkdir -p \"$(dirname \"${mailpanel_log}\")\"\n"
-              + "\t# Il registro si accoda: oltre i 10 MB lo si mette da parte.\n"
-              + "\tif [ -f \"${mailpanel_log}\" ] && [ $(stat -f %z \"${mailpanel_log}\") -gt 10485760 ]; then\n"
-              + "\t\tmv \"${mailpanel_log}\" \"${mailpanel_log}.1\"\n"
-              + "\tfi\n"
-              + "\t" + RcScriptRepair.STARTING + "\n"
-              + "\t/usr/sbin/daemon -f -o \"${mailpanel_log}\" -p \"${pidfile}\" -t \"${name}\" \\\n"
-              + "\t\t/bin/sh -c \"cd '${mailpanel_dir}' && exec '${mailpanel_java}' ${mailpanel_opts} -jar '${mailpanel_jar}' --web\"\n"
-              + "}\n"
-              + "\n"
-              + "mailpanel_poststop()\n"
-              + "{\n"
-              + "\trm -f \"${pidfile}\"\n"
-              + "}\n"
-              + "\n"
-              + "run_rc_command \"$1\"\n";
+            String text = PanelRcScript.text(dir, binJava, jar, option.toString().trim());
             r.put("text", text);
 
             boolean exists = ok("test -f " + path, 10);
-            String enabled = sh("sysrc -n mailpanel_enable 2>/dev/null", 20).trim();
+            String enabled = sh("sysrc -n " + RC_NAME + "_enable 2>/dev/null", 20).trim();
             r.put("exists", exists).put("enabled", enabled);
             if (!run) return r.put("success", true).put("executed", false);
 
             // Verifica la sintassi PRIMA di metterlo dove il sistema lo eseguira' all'avvio:
             // uno script rc.d rotto puo' fermare la sequenza di boot.
-            String tmp = "/var/db/mailpanel/mailpanel.rc.test";
-            ok("mkdir -p /var/db/mailpanel", 20);
+            String tmp = DataFolderRename.NEW + "/" + RC_NAME + ".rc.test";
+            ok("mkdir -p /var/db/daemoxcp-mail", 20);
             Files.writeString(Paths.get(tmp), text);
             String syntaxCheck = sh("sh -n " + tmp + " 2>&1", 30).trim();
             if (!syntaxCheck.isEmpty()) {
@@ -11513,17 +11460,17 @@ public final class UpdateManager {
                 return r.put("success", false)
                         .put("error", I18n.tr("server.um.panelRcScript.3", java.util.Map.of("syntax", String.valueOf(syntaxCheck))));
             }
-            if (exists) ok("cp -p " + path + " /var/db/mailpanel/mailpanel.rc.previous", 20);
+            if (exists) ok("cp -p " + path + " " + DataFolderRename.NEW + "/" + RC_NAME + ".rc.previous", 20);
             Files.writeString(Paths.get(path), text);
             ok("chmod 755 " + path, 15);
             ok("rm -f " + tmp, 15);
-            boolean sysrc = ok("sysrc mailpanel_enable=YES", 30);
+            boolean sysrc = ok("sysrc " + RC_NAME + "_enable=YES", 30);
 
             // La prova che conta: rc.subr lo carica senza errori?
-            String test = sh("service mailpanel rcvar 2>&1", 30).trim();
-            boolean loaded = test.contains("mailpanel_enable");
+            String test = sh("service " + RC_NAME + " rcvar 2>&1", 30).trim();
+            boolean loaded = test.contains(RC_NAME + "_enable");
             return r.put("success", true).put("executed", true)
-                    .put("enabledNow", sysrc ? sh("sysrc -n mailpanel_enable 2>/dev/null", 20).trim() : "?")
+                    .put("enabledNow", sysrc ? sh("sysrc -n " + RC_NAME + "_enable 2>/dev/null", 20).trim() : "?")
                     .put("loaded", loaded).put("rcvar", test)
                     .put("note", I18n.tr("server.um.panelRcScript.4"));
         } catch (Exception e) {
@@ -11688,13 +11635,13 @@ public final class UpdateManager {
             // Il pannello stesso: due riavvii, e lui non torna su da solo.
             // Attenzione a cosa si afferma. Il file c'e' e sysrc dice YES: sono fatti. Che il
             // pannello TORNI SU e' una previsione, e l'unica prova e' averlo avviato una volta
-            // con "service mailpanel start". Dire "tornera' su da solo" perche' esiste un file
+            // con "service daemoxcp_mail start". Dire "tornera' su da solo" perche' esiste un file
             // e' la stessa distanza fra "installato" e "funziona" su cui sbaglio di continuo.
-            boolean rc = ok("test -f /usr/local/etc/rc.d/mailpanel -o -f /etc/rc.d/mailpanel", 10);
-            String enabledBy = sh("sysrc -n mailpanel_enable 2>/dev/null", 20).trim();
+            boolean rc = ok("test -f " + PanelRcScript.PATH + " -o -f /etc/rc.d/" + RC_NAME, 10);
+            String enabledBy = sh("sysrc -n " + RC_NAME + "_enable 2>/dev/null", 20).trim();
             boolean enabled = "YES".equalsIgnoreCase(enabledBy) || "yes".equalsIgnoreCase(enabledBy)
                     || "true".equalsIgnoreCase(enabledBy) || "1".equals(enabledBy);
-            boolean tested = ok("test -f /var/run/mailpanel.pid", 10);
+            boolean tested = ok("test -f " + PanelRcScript.PIDFILE, 10);
             r.put("rcPanel", rc).put("rcEnabled", enabled).put("rcTested", tested);
             addCheck(checks, "panel", I18n.tr("server.um.systemUpgradePreflight.19"),
                     (rc && enabled && tested) ? "ok" : "wait",
@@ -11781,7 +11728,7 @@ public final class UpdateManager {
 
             String ts = sh("date '+%Y%m%d-%H%M%S'", 15);
             if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date");
-            String bk = "/var/db/mailpanel/system/" + ts;
+            String bk = "/var/db/daemoxcp-mail/system/" + ts;
             if (!ok("mkdir -p " + bk, 30)) throw new IllegalStateException("cannot create " + bk);
 
             job.advance(2, TOT);
@@ -11970,7 +11917,7 @@ public final class UpdateManager {
     // ===================== proseguimento guidato del salto di release =====================
 
     /** Dove il pannello ricorda a che punto e' del salto, per ritrovarlo dopo un riavvio. */
-    private static final String VERSION_JUMP_STATE = "/var/db/mailpanel/system/version-jump.json";
+    private static final String VERSION_JUMP_STATE = "/var/db/daemoxcp-mail/system/version-jump.json";
 
     /**
      * Cosa dice di fare freebsd-update, letto da chi lo esegue invece che dall'utente.
@@ -12077,7 +12024,7 @@ public final class UpdateManager {
 
     private static void writeJumpState(JSONObject st) {
         try {
-            ok("mkdir -p /var/db/mailpanel/system", 20);
+            ok("mkdir -p /var/db/daemoxcp-mail/system", 20);
             Files.writeString(Paths.get(VERSION_JUMP_STATE), st.toString(2));
         } catch (Exception ignored) { }
     }
@@ -12395,7 +12342,7 @@ public final class UpdateManager {
         JSONObject r = new JSONObject();
         JSONArray checks = new JSONArray();
         try {
-            String dir = sh("ls -1dt /var/db/mailpanel/system/*/ 2>/dev/null | head -1", 30).trim();
+            String dir = sh("ls -1dt /var/db/daemoxcp-mail/system/*/ 2>/dev/null | head -1", 30).trim();
             if (dir.isEmpty())
                 return r.put("success", false)
                         .put("error", I18n.tr("server.um.verifyAfterUpdate.1"));

@@ -2,7 +2,7 @@
 /*
  * Roundcube's real code against the running mail panel: the httpapi driver of the password
  * plugin (plugins/password/drivers/httpapi.php, with Roundcube's own Guzzle) reading the block the
- * panel writes into config.inc.php, and the login_after hook of the panel's mailpanel_sso plugin.
+ * panel writes into config.inc.php, and the login_after hook of the panel's daemoxcp_mail_sso plugin.
  * Only the few rcube methods they call are stubbed, the same way Roundcube implements them.
  *
  * Run by MailboxPasswordTest when -Droundcube.dir=... points to an unpacked
@@ -75,14 +75,14 @@ echo 'wrong_current:' . $driver->save('Not-The-Current-2026', 'Another-New-2026'
 echo 'change:' . $driver->save($current, $new, $email) . "\n";
 
 require $pluginFile;
-$plugin = new mailpanel_sso();
-rcube::$instance->config->prop['mailpanel_vault_url'] = $vaultUrl;
-rcube::$instance->config->prop['mailpanel_vault_key'] = $vaultKey;
+$plugin = new daemoxcp_mail_sso();
+rcube::$instance->config->prop['daemoxcp_mail_vault_url'] = $vaultUrl;
+rcube::$instance->config->prop['daemoxcp_mail_vault_key'] = $vaultKey;
 rcube::$instance->userName = $email;
 rcube::$instance->userPassword = $new;
 $plugin->login_after(['_task' => 'mail']);
 echo "hook:done\n";
-rcube::$instance->config->prop['mailpanel_vault_url'] = 'https://127.0.0.1:1/api/internal/mailbox-vault';
+rcube::$instance->config->prop['daemoxcp_mail_vault_url'] = 'https://127.0.0.1:1/api/internal/mailbox-vault';
 $plugin->login_after(['_task' => 'mail']);
 echo "hook_unreachable:done\n";
 foreach (rcube::$instance->logs as $line) echo 'log:' . $line . "\n";

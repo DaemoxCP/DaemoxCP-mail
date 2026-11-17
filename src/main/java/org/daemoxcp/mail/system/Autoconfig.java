@@ -144,7 +144,7 @@ public class Autoconfig {
         return null;
     }
 
-    static final String MARKER = "# --- autoconfig Thunderbird (mail panel) ---";
+    static final String MARKER = "# --- autoconfig Thunderbird (" + Product.NAME + ") ---";
 
     /**
      * Il blocco del pannello c'e' gia', col marcatore di adesso o con quello di prima
@@ -219,7 +219,7 @@ public class Autoconfig {
         // Prima era "nomeCoperto && rottaPresente", cioe' il risultato di una ricerca dentro
         // nginx.conf del marcatore che questa classe stessa scrive. Ma la rotta puo' stare
         // altrove — e sta altrove: la scheda della 443 la installa in
-        // conf.d/mailpanel-public.conf, che serve esattamente questi due file, la politica
+        // conf.d/daemoxcp-mail-public.conf, che serve esattamente questi due file, la politica
         // MTA-STS e questo XML. Risultato: il pannello scaricava il file davvero, lo otteneva,
         // e un attimo dopo dichiarava che nginx non lo serve e che i client devono
         // configurarsi a mano. Il commento qui sopra diceva gia' quale delle due misure ha
@@ -399,7 +399,7 @@ public class Autoconfig {
             String text = Files.readString(p);
             r.put("conf", conf);
 
-            Path copy = Path.of("/var/db/mailpanel/nginx-before-autoconfig.conf");
+            Path copy = Path.of("/var/db/daemoxcp-mail/nginx-before-autoconfig.conf");
             Files.createDirectories(copy.getParent());
             Files.writeString(copy, text);
             r.put("copy", copy.toString());

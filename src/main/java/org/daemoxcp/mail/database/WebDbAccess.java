@@ -48,14 +48,14 @@ public final class WebDbAccess {
     private static final Logger LOGGER = Logger.getLogger(WebDbAccess.class.getName());
 
     /** L'utente MySQL della parte web. */
-    public static final String WEB_USER = "mailpanel_web";
+    public static final String WEB_USER = org.daemoxcp.mail.system.Product.ID + "_web";
     /** Chi possiede le procedure: nessuno entra con lui. */
-    static final String ROUTINES_USER = "mailpanel_routines";
+    static final String ROUTINES_USER = org.daemoxcp.mail.system.Product.ID + "_routines";
     /** Come lo scrivono information_schema e mysql.procs_priv. */
     private static final String ROUTINES_DEFINER = ROUTINES_USER + "@localhost";
     private static final List<String> WEB_HOSTS = List.of("localhost", "127.0.0.1");
     /** Il commento di ogni procedura comincia cosi', seguito dall'impronta del testo. */
-    static final String COMMENT_PREFIX = "mailpanel ";
+    static final String COMMENT_PREFIX = org.daemoxcp.mail.system.Product.ID + " ";
 
     /** I permessi di chi possiede le procedure: tutti idempotenti, si danno a ogni avvio. */
     private static final List<String> ROUTINES_GRANTS = List.of(

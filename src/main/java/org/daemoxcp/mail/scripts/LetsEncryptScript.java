@@ -14,7 +14,7 @@ public class LetsEncryptScript {
 
     private final String data = """
         #!/bin/sh
-        # Let's Encrypt SSL Certificate Generation for FreeBSD Mail Panel
+        # Let's Encrypt SSL Certificate Generation for DaemoxCP Mail
 
         HOSTNAME="$1"
 

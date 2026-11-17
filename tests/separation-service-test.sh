@@ -21,8 +21,8 @@ PANEL=${1:?panel folder}
 TESTS=${2:?compiled tests folder, readable by mailpanel}
 JAR=$PANEL/daemoxcp-mail-1.0.jar
 JAVA=/usr/local/openjdk25/bin/java
-LOG=/var/db/mailpanel/panel.log
-RUN=/var/run/mailpanel
+LOG=/var/db/daemoxcp-mail/panel.log
+RUN=/var/run/daemoxcp-mail
 PORT=2096
 BASE=https://127.0.0.1:$PORT
 UA="separation-service-test"
@@ -73,7 +73,7 @@ get() { curl -sk -A "$UA" -b "$JAR_COOKIES" -o /var/tmp/sep-body -w '%{http_code
 # straight into MySQL as its root for the newest session: a test signed in with a console code has neither.
 confirm_session() {
     f=$(mktemp /var/tmp/sep-root.XXXXXX); chmod 600 "$f"
-    printf '[client]\nuser=root\npassword="%s"\n' "$(sed -n 's/^mysql_root_password=//p' /usr/local/etc/mail-panel/root-secrets.properties | sed 's/\\\(.\)/\1/g')" > "$f"
+    printf '[client]\nuser=root\npassword="%s"\n' "$(sed -n 's/^mysql_root_password=//p' /usr/local/etc/daemoxcp-mail/root-secrets.properties | sed 's/\\\(.\)/\1/g')" > "$f"
     db=$(/usr/local/bin/mysql --defaults-extra-file="$f" -N -e "SELECT DISTINCT routine_schema FROM information_schema.routines WHERE routine_name = 'check_session'")
     /usr/local/bin/mysql --defaults-extra-file="$f" -N -e "UPDATE $db.panel_sessions SET reauth_at = UTC_TIMESTAMP() ORDER BY created_at DESC LIMIT 1"
     rm -f "$f"
@@ -107,7 +107,7 @@ echo "== 2. Files =="
 check "$RUN: $(mode $RUN)" "$(is "$(mode $RUN)" "drwxr-x--- root:mailpanel")"
 check "the socket: $(mode $RUN/root.sock)" "$(is "$(mode $RUN/root.sock)" "srw-rw---- root:mailpanel")"
 check "the pid files are the supervisor's: $(mode $RUN/web.pid)" "$(has "$(mode $RUN/web.pid)" "-rw------- root:")"
-E=/usr/local/etc/mail-panel
+E=/usr/local/etc/daemoxcp-mail
 check "$E: $(mode $E)" "$(is "$(mode $E)" "drwxr-x--- root:mailpanel")"
 check "panel-secrets.properties: $(mode $E/panel-secrets.properties)" "$(is "$(mode $E/panel-secrets.properties)" "-rw-r----- root:mailpanel")"
 # The asymmetric vault: the old symmetric key is root's only, the private key
@@ -119,10 +119,10 @@ check "root-secrets.properties: $(mode $E/root-secrets.properties)" "$(is "$(mod
 OTHERS=$(find $E -type f ! -name panel-secrets.properties -perm +077)
 check "nothing else in $E is open to the group ($OTHERS)" "$(is "$OTHERS" "")"
 check "$PANEL/database: $(mode $PANEL/database)" "$(is "$(mode $PANEL/database)" "drwxr-x--- root:mailpanel")"
-check "mail_panel.db: $(mode $PANEL/database/mail_panel.db)" "$(is "$(mode $PANEL/database/mail_panel.db)" "-rw-r----- root:mailpanel")"
-check "the audit log: $(mode /var/log/mail-panel-auth.log)" "$(is "$(mode /var/log/mail-panel-auth.log)" "-rw-r----- mailpanel:wheel")"
-check "newsyslog recreates it as mailpanel" "$(has "$(cat /usr/local/etc/newsyslog.conf.d/mail-panel-auth.conf)" "mailpanel:wheel")"
-check "the web part's log: $(mode /var/db/mailpanel/panel-web.log)" "$(has "$(mode /var/db/mailpanel/panel-web.log)" "-rw------- root:")"
+check "daemoxcp-mail.db: $(mode $PANEL/database/daemoxcp-mail.db)" "$(is "$(mode $PANEL/database/daemoxcp-mail.db)" "-rw-r----- root:mailpanel")"
+check "the audit log: $(mode /var/log/daemoxcp-mail-auth.log)" "$(is "$(mode /var/log/daemoxcp-mail-auth.log)" "-rw-r----- mailpanel:wheel")"
+check "newsyslog recreates it as mailpanel" "$(has "$(cat /usr/local/etc/newsyslog.conf.d/daemoxcp-mail-auth.conf)" "mailpanel:wheel")"
+check "the web part's log: $(mode /var/db/daemoxcp-mail/panel-web.log)" "$(has "$(mode /var/db/daemoxcp-mail/panel-web.log)" "-rw------- root:")"
 A=$PANEL/admin
 check "the pages: $(mode $A)" "$(is "$(mode $A)" "drwxr-x--- root:mailpanel")"
 check "their scripts: $(mode $A/assets/open)" "$(is "$(mode $A/assets/open)" "drwxr-x--- root:mailpanel")"
@@ -131,20 +131,20 @@ check "every page file is readable by the group ($UNREADABLE)" "$(is "$UNREADABL
 NOT_GROUP=$(find $A ! -group mailpanel | head -3)
 check "every page file is in the group mailpanel ($NOT_GROUP)" "$(is "$NOT_GROUP" "")"
 as_web /bin/test -r $E/panel-secrets.properties; check "mailpanel reads its secrets" $?
-as_web /bin/test -r $PANEL/database/mail_panel.db; check "mailpanel reads SQLite" $?
-as_web /bin/test -w /var/log/mail-panel-auth.log; check "mailpanel writes the audit log" $?
-for f in $E/root-secrets.properties $E/master.key $E/firewall.json /var/db/mailpanel/roundcube_sso.key /var/db/mailpanel/dovecot_master.key; do
+as_web /bin/test -r $PANEL/database/daemoxcp-mail.db; check "mailpanel reads SQLite" $?
+as_web /bin/test -w /var/log/daemoxcp-mail-auth.log; check "mailpanel writes the audit log" $?
+for f in $E/root-secrets.properties $E/master.key $E/firewall.json /var/db/daemoxcp-mail/roundcube_sso.key /var/db/daemoxcp-mail/dovecot_master.key; do
     as_web /bin/test -r "$f"; r=$?
     check "mailpanel cannot read $f" "$(is $r 1)"
 done
-for f in $E/panel-secrets.properties $E/master.key $E $PANEL/database/mail_panel.db $PANEL/database $RUN $RUN/web.pid $JAR; do
+for f in $E/panel-secrets.properties $E/master.key $E $PANEL/database/daemoxcp-mail.db $PANEL/database $RUN $RUN/web.pid $JAR; do
     as_web /bin/test -w "$f"; r=$?
     check "mailpanel cannot write $f" "$(is $r 1)"
 done
 
 echo
 echo "== 3. Sign-in and the API through the web part =="
-WEBLOG=/var/db/mailpanel/panel-web.log
+WEBLOG=/var/db/daemoxcp-mail/panel-web.log
 WM3=$(stat -f %z $WEBLOG)
 login
 check "signed in with a console code ($LOGIN)" "$(has "$LOGIN" '"success":true')"
@@ -188,7 +188,7 @@ c=$(post "/api/webmail" "{\"mailbox_id\":$MID}" "$CSRF"); check "POST /api/webma
 # The webmail's two routes: the web part checks who calls (loopback and the webmail's key), the root serves them.
 # The key as Roundcube sends it: base64url without padding.
 WKEY=$(sed -n 's/^webmail_key=//p' $E/panel-secrets.properties | sed 's/\\//g' | tr '+/' '-_' | tr -d '=')
-webmail() { curl -sk -H "X-MailPanel-Key: $1" --data-urlencode "user=probe@$D" --data-urlencode "$3" ${4:+--data-urlencode "$4"} -o /var/tmp/sep-body -w '%{http_code}' "$BASE$2"; }
+webmail() { curl -sk -H "X-DaemoxCP-Key: $1" --data-urlencode "user=probe@$D" --data-urlencode "$3" ${4:+--data-urlencode "$4"} -o /var/tmp/sep-body -w '%{http_code}' "$BASE$2"; }
 c=$(webmail "$WKEY" /api/internal/mailbox-vault "pass=Sep-Test-Password-2026x"); check "the webmail's copy route, through the root: $c $(cat /var/tmp/sep-body)" "$(is "$c" 200)"
 c=$(webmail "not-the-key-$$" /api/internal/mailbox-vault "pass=Sep-Test-Password-2026x"); check "  without the webmail's key: 404 from the web part ($c)" "$(is "$c" 404)"
 c=$(webmail "$WKEY" /api/internal/mailbox-password "curpass=wrong-$$" "newpass=Sep-Test-Password-2026y"); check "the webmail's password change with a wrong current password: 403 ($c)" "$(is "$c" 403)"
