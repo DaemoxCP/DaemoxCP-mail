@@ -28,7 +28,7 @@ import java.util.List;
  * Everything in a temporary folder (dataBaseManager works on database/daemoxcp-mail.db of the current
  * folder, the secrets with -Ddaemoxcp.mail.secrets.dir), so the child processes start there.
  *
- * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.sqli.SqliteSharedTest
+ * Usage: java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.sqli.SqliteSharedTest
  */
 public class SqliteSharedTest {
 

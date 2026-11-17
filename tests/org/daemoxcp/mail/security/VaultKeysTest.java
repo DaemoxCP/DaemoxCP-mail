@@ -34,7 +34,7 @@ import java.util.Properties;
  *
  * Usage (on the VM, as root):
  *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... \
- *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.VaultKeysTest
+ *        -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.VaultKeysTest
  */
 public class VaultKeysTest {
 

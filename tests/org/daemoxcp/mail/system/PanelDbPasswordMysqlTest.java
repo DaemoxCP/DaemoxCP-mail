@@ -21,7 +21,7 @@ import java.util.List;
  * Nothing touches the real MySQL: it refuses to run on port 3306. The state and the panel's store are in memory.
  *
  * Usage (on the VM, with the test MySQL of tests/README.md):
- *   java -Ddaemoxcp.mail.mysql.port=33062 -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelDbPasswordMysqlTest
+ *   java -Ddaemoxcp.mail.mysql.port=33062 -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelDbPasswordMysqlTest
  */
 public class PanelDbPasswordMysqlTest {
 

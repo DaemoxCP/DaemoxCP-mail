@@ -24,7 +24,7 @@ import java.util.List;
  *     another key is said, not overwritten; a zone that cannot be read writes nothing.
  *
  * Usage (from the project root, after mvn package):
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.DnsSafetyTest
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.DnsSafetyTest
  */
 public class DnsSafetyTest {
 

@@ -33,7 +33,7 @@ import java.util.Properties;
  * real script uses its own, to change the password. At the end the test user and database are removed.
  *
  * It runs only with -De2e.vm=yes, as root, on FreeBSD with MySQL on (the test VM):
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PendingDbPasswordE2ETest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PendingDbPasswordE2ETest
  */
 public class PendingDbPasswordE2ETest {
 

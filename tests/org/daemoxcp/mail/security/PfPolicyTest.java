@@ -19,7 +19,7 @@ import java.util.TreeSet;
  *  5. on the VM, as root (-De2e.vm=yes): the real pfctl accepts the file it writes (syntax only, nothing loaded).
  *
  * Usage (on the VM):
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.PfPolicyTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.PfPolicyTest
  */
 public class PfPolicyTest {
 

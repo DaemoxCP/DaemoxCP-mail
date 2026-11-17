@@ -29,7 +29,7 @@ import java.util.Map;
  *
  * It connects to 127.0.0.1 with the panel's name as Host (the panel answers only to its names, and a
  * passkey needs a DNS name). Run on the VM, with the Host header allowed to the HTTP client:
- *   java -Djdk.httpclient.allowRestrictedHeaders=host -cp "tests:daemoxcp-mail-1.0.jar" \
+ *   java -Djdk.httpclient.allowRestrictedHeaders=host -cp "tests:daemoxcp-mail.jar" \
  *        org.daemoxcp.mail.webserver.PasskeysThroughPartsProbe <panel name> <port> "<console code>"
  */
 public class PasskeysThroughPartsProbe {

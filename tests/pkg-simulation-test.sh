@@ -77,7 +77,7 @@ exit 1
 FAKE
 chmod +x "$TMP/bin/pkg"
 FAKE_DB="$TMP/db" PATH="$TMP/bin:$PATH" \
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackagePlanTest simulation
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PackagePlanTest simulation
 
 # The family twin, two cases that need a different fake pkg. Every run starts again from a clean
 # state of the locks: the first unlocks mysql84-client in the COPY, not here, but the third
@@ -86,10 +86,10 @@ touch "$TMP/db/locked/mysql84-client"
 echo
 echo "--- the protected twin, but with a newer catalog ---"
 FAKE_DB="$TMP/db" PATH="$TMP/bin:$PATH" V_CAT="8.4.12" \
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackagePlanTest family-new-catalog
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PackagePlanTest family-new-catalog
 
 echo
 echo "--- the twin installed but NOT protected: a real conflict ---"
 rm -f "$TMP/db/locked/mysql84-client"
 FAKE_DB="$TMP/db" PATH="$TMP/bin:$PATH" MYSQL97="always" \
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackagePlanTest family-real-conflict
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PackagePlanTest family-real-conflict

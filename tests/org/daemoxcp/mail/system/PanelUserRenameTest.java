@@ -15,7 +15,7 @@ import java.util.Map;
  * Seen on the VM on 17/11/2026: /var/mail/mailpanel stayed, the file of a user that no longer exists.
  *
  * It runs anywhere (it calls nothing):
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelUserRenameTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelUserRenameTest
  */
 public class PanelUserRenameTest {
 

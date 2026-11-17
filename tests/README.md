@@ -13,102 +13,102 @@ And the outcome of a test is its **exit code**: `java ... | tail -4` returns tha
 is always zero. A test that does not start at all, read that way, looks passed.
 
     mvn -o -q package -DskipTests
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/system/*.java
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/webserver/*.java
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/database/*.java
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/security/PasswordGeneratorTest.java
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/security/MtaStsRecordTest.java
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MtaStsTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackageCatalogTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.MtaStsRecordTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PropagationWaitTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MtaStsSequenceTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.AutoconfigTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MtaStsOldLogicTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.SrvRecordTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ReportDeliveryTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelMailTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackagePlanTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackageQueueTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallLocksTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PendingDbPasswordTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PendingDbPasswordE2ETest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.sqli.SqliteSharedTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.MysqlReconnectTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallWayBackTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ReinstallWayBackE2ETest
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests/planted tests/planted/org/daemoxcp/mail/scripts/FullMailServerScript.java
-    java -De2e.vm=yes -cp "tests/planted:tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ReinstallJobTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InterruptionWatchTest
-    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.InstallScriptsTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.InstallScriptVersionTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ReinstallReturnE2ETest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.NoBootEnvironmentTest
-    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InterruptionReportTest
-    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.LockMarksTest
+    javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/system/*.java
+    javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/webserver/*.java
+    javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/database/*.java
+    javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/security/PasswordGeneratorTest.java
+    javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/security/MtaStsRecordTest.java
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.MtaStsTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PackageCatalogTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.MtaStsRecordTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PropagationWaitTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.MtaStsSequenceTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.AutoconfigTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.MtaStsOldLogicTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.SrvRecordTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ReportDeliveryTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelMailTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PackagePlanTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PackageQueueTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallLocksTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PendingDbPasswordTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PendingDbPasswordE2ETest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.sqli.SqliteSharedTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.MysqlReconnectTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallWayBackTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ReinstallWayBackE2ETest
+    javac -cp target/daemoxcp-mail.jar -d tests/planted tests/planted/org/daemoxcp/mail/scripts/FullMailServerScript.java
+    java -De2e.vm=yes -cp "tests/planted:tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ReinstallJobTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InterruptionWatchTest
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.scripts.InstallScriptsTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.scripts.InstallScriptVersionTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ReinstallReturnE2ETest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.NoBootEnvironmentTest
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InterruptionReportTest
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.LockMarksTest
     expect tests/menu-way-back.exp <ssh key> <clone host> <panel folder on the clone> <jar>
     expect tests/menu-reinstall-warning.exp <ssh key> <clone host> <panel folder on the clone> <jar>
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackageTurnAcrossProcessesTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.util.ShellShortPathTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.AliasMessagesTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.PasswordGeneratorTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SoftwareVersionsTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.AddressConversionTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PkgBranchTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ChildStdinTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.HeldUpdatesReportTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PlanDivergenceTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PlanAfterFetchTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ServiceFallTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.AuditReportTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.LockTraceTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallSideEffectsTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallScriptDriftTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.EverythingTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PostfixInetProtocolsTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.CloudflareCommentsTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.CloudflareTokensTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RcScriptRepairTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SafeOwnershipTest   (VM, as root)
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.AcmeCloudflareCopyTest   (VM, as root)
-    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.DovecotSocketsTest   (VM, as root: it restarts Dovecot)
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.DovecotMoveTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveStorageTest
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/integration/*.java
-    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.integration.SieveGeneratorTest
-    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveForcedKeepTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveActionsE2ETest   (VM, as root, real deliveries)
-    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveCompilerTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveCompilerE2ETest   (VM, as root, real deliveries)
-    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveFolderOwnerTest   (VM, as root, real deliveries)
-    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveGroupMailTest   (VM, as root, real deliveries)
-    su -m nobody -c 'java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
-    su -m nobody -c 'java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveRulesOwnerTest   (VM, as root)
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.FreshInstallDovecotTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PackageTurnAcrossProcessesTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.util.ShellShortPathTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.AliasMessagesTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.PasswordGeneratorTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SoftwareVersionsTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.AddressConversionTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PkgBranchTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ChildStdinTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.HeldUpdatesReportTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PlanDivergenceTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PlanAfterFetchTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ServiceFallTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.AuditReportTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.LockTraceTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallSideEffectsTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallScriptDriftTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.EverythingTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PostfixInetProtocolsTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.CloudflareCommentsTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.CloudflareTokensTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RcScriptRepairTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SafeOwnershipTest   (VM, as root)
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.AcmeCloudflareCopyTest   (VM, as root)
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.DovecotSocketsTest   (VM, as root: it restarts Dovecot)
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.DovecotMoveTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveStorageTest
+    javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/integration/*.java
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.integration.SieveGeneratorTest
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveForcedKeepTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveActionsE2ETest   (VM, as root, real deliveries)
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveCompilerTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveCompilerE2ETest   (VM, as root, real deliveries)
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveFolderOwnerTest   (VM, as root, real deliveries)
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveGroupMailTest   (VM, as root, real deliveries)
+    su -m nobody -c 'java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.SieveRulesNotWrittenTest'   (VM, test MySQL, unprivileged)
+    su -m nobody -c 'java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.SieveDialogFieldsTest'   (VM, test MySQL, unprivileged)
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveRulesOwnerTest   (VM, as root)
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.FreshInstallDovecotTest
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.DovecotHomeTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.DovecotHomeE2ETest   (VM, Dovecot 2.3, home of before)
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.DovecotHomeTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.DovecotHomeE2ETest   (VM, Dovecot 2.3, home of before)
 
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.AddressTransformLinksTest   (VM, as root, real /var/vmail)
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.AddressTransformLinksTest   (VM, as root, real /var/vmail)
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveRulesRefreshTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveRulesRefreshTest
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.DovecotMasterUserTest   (VM, as root, real doveadm)
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.DovecotMasterUserTest   (VM, as root, real doveadm)
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.FullMailStackCleanupTest   (VM, as root, pw -R on a copy)
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.scripts.FullMailStackCleanupTest   (VM, as root, pw -R on a copy)
     cd /home/panel && java -De2e.vm=yes -cp "<tests>:<jar>" org.daemoxcp.mail.system.Dovecot24MoveE2ETest   (VM, Dovecot 2.3, changes it)
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RunningJobTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RestartServicesTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.ResetDatabaseTest
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/monitoring/*.java
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.monitoring.MailQueueTest
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/sqli/*.java
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.sqli.ConfigSecretsTest
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/scripts/*.java
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.LocalMtaTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RunningJobTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RestartServicesTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.ResetDatabaseTest
+    javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/monitoring/*.java
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.monitoring.MailQueueTest
+    javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/sqli/*.java
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.sqli.ConfigSecretsTest
+    javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/scripts/*.java
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.scripts.LocalMtaTest
     sh tests/pkg-simulation-test.sh
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallPackagesTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallPackagesTest
 
 Every test is in English, comments and messages included. When a check needs an Italian text of the
 panel, it reads it from `src/main/resources/lang/it.json` by key (in Java with `I18n.t("it", key)`,
@@ -142,7 +142,7 @@ the end it checks that packages, protections and repositories are those of befor
 machine. It takes a few minutes: a missing address is waited for sixty seconds before it is called
 lost.
 
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallScriptDriftTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallScriptDriftTest
 
 `UpdaterRobustnessE2ETest` tests the edges of the package update with real jobs on fake packages
 (`nginx-robust-probe`, `robust-probe-other`) from a `file://` catalog, with the real repositories
@@ -156,7 +156,7 @@ environments. M7 (the machine
 switched off abruptly during pkg) comes in two steps: `-Dmeasure=m7`, then `reboot -nq` when it
 prints "M7 IN PKG", then, with the panel started again, the `m7-after` mode. Only on a test machine.
 
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.UpdaterRobustnessE2ETest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.UpdaterRobustnessE2ETest
 
 `SignedJobsE2ETest` runs the three dedicated package jobs end to end under the signed plan: the
 Roundcube update, the Python transition and the MySQL 8.4 migration. For each one: the checks and
@@ -248,7 +248,7 @@ empties `/var/vmail` and changes the panel's MySQL password: only on a clone of 
 and from a COPY of the panel folder if that is in `/home` (outside the boot environments). How it
 was used on the VM, with the concurrency attempts halfway: reperto 154.
 
-    cd <copy of the panel folder> && java -De2e.vm=yes -cp "<compiled tests>:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MenuReinstall
+    cd <copy of the panel folder> && java -De2e.vm=yes -cp "<compiled tests>:daemoxcp-mail.jar" org.daemoxcp.mail.system.MenuReinstall
 
 The four tests that run real jobs (this one, `InstallScriptDriftTest`, `PackageReplacementE2ETest`,
 `PostfixMapsJobsE2ETest`) remove at the end the boot environments their jobs created.
@@ -270,7 +270,7 @@ downloaded into a temporary folder (~180 MB, because pkg sees file conflicts onl
 them), and every requested package must be in the final plan. It installs nothing and does not
 touch the real database; it is turned on with `-De2e.vm=yes`, as root, on FreeBSD.
 
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallPackagesTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallPackagesTest
 
 `PostfixLevelTest` (reperto 251), as root on the VM (part 3 needs Postfix): the three scripts that write main.cf write
 the 3.6 floor and decide every parameter a reviewed level above it changes (smtp_tls_security_level; TLS-RPT is off,
@@ -279,7 +279,7 @@ the real `postconf -d` shows as depending on the level is listed in PostfixLevel
 Postfix asks for is reviewed; the piece with a fake postfix and postconf raises only to a reviewed, higher level (not
 reviewed, no request, lower, the same, a strange answer: unchanged). Falsified with planted copies: 6 FAILED.
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PostfixLevelTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PostfixLevelTest
 
 `CloudflareTokensTest` (with the secrets in a temporary folder it sets itself): the Cloudflare API tokens sealed in
 the database with DataCrypto (AES-256-GCM, a random nonce each time) and read back the same; a token in clear, written
@@ -351,18 +351,18 @@ root add `--user=root` to the two mysqld lines):
         CREATE USER 'daemoxcp_mail'@'127.0.0.1' IDENTIFIED BY 'test-password';
         GRANT ALL ON daemoxcp_mail_test.* TO 'daemoxcp_mail'@'127.0.0.1';"
     P="-Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=test-password -Dmysql.database=daemoxcp_mail_test"
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.AddressConversionTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SoftwareVersionsTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.VersionsApiTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.LanguageRoutesTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.QueueApiTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RateLimitsApiTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.CsrfFilterTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RolesTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.LoginRoutesTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.MailboxPasswordTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.LoginSecurityTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.ResetDatabaseTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.AddressConversionTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SoftwareVersionsTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.VersionsApiTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.LanguageRoutesTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.QueueApiTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.RateLimitsApiTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.CsrfFilterTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.RolesTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.LoginRoutesTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.MailboxPasswordTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.LoginSecurityTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.ResetDatabaseTest
 
 The tests default to the database `daemoxcp_mail_test` when `-Dmysql.database` is not given.
 
@@ -448,8 +448,8 @@ copied to the Mac, and the browser tests run there (also with the installed Chro
 `CHROMIUM=".../Google Chrome"`, and only the Playwright package, without its Chromium):
 
     D=$(mktemp -d)
-    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.content.PageGenerator $D
+    javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.content.PageGenerator $D
     NODE_PATH=$(npm root -g) node tests/address-conversion-browser-test.js $D [screenshot-folder]
     NODE_PATH=$(npm root -g) node tests/software-versions-browser-test.js $D [screenshot-folder]
     NODE_PATH=$(npm root -g) node tests/pkg-branch-browser-test.js $D [screenshot-folder]
@@ -474,7 +474,7 @@ outside the project:
 The passwordless login instead runs on the real server (LoginE2EServer), with the test MySQL, and
 Chromium with a virtual authenticator. The server starts from an empty folder with the jar inside:
 
-    D=$(mktemp -d) && cp target/daemoxcp-mail-1.0.jar $D/
+    D=$(mktemp -d) && cp target/daemoxcp-mail.jar $D/
     MYSQL="$P" NODE_PATH=$(npm root -g) node tests/login-browser-test.js $D [screenshot-folder]
 
 With the server on the test machine and the browser on the Mac (the way it must be done): a folder
@@ -780,8 +780,8 @@ through Postfix arrives through the socket; back to before, then Postfix refusin
 again and a delivery still arrives; the move again. Measured on 16/11/2026 on Dovecot 2.3.21: all OK, and
 mail-login-probe.sh passes afterwards.
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.LmtpSocketTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.LmtpSocketE2ETest   (VM, as root, real deliveries)
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.LmtpSocketTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.LmtpSocketE2ETest   (VM, as root, real deliveries)
 
 **RedisSocketTest** — redis only on its Unix socket, `/var/run/redis/redis.sock`, 0770 of the group redis, with rspamd
 in that group (reperto 235). The package's redis.conf listens on 127.0.0.1:6379 and ::1 without a password: any process
@@ -820,10 +820,10 @@ Then each fault from the state of before on the real services (rspamd not really
 configtest refusing; rspamd not reloaded): ROLLED_BACK and the service as before; the admin's secure_ip in local.d:
 left alone. Measured on 16/11/2026 (redis 8.10.3, ClamAV 1.5.4, rspamd 4.1.0).
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RedisSocketTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ClamdSocketTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RspamdControllerTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RspamdBackendsE2ETest   (VM, as root)
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RedisSocketTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ClamdSocketTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RspamdControllerTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RspamdBackendsE2ETest   (VM, as root)
 
 **PhpHardeningTest** — php.ini written when it is missing, and `security.limit_extensions = .php` in the panel's
 Roundcube pool (reperto 238). The real server had no php.ini (installed before the installer wrote one): PHP ran on its
@@ -846,9 +846,9 @@ appears; PhpHardening: DONE, X-Powered-By gone, the pool with the limit and stil
 refusing: ROLLED_BACK and X-Powered-By again. Roundcube: the probe's real webmail login before (DES), RoundcubeCipher
 DONE, the real login after (AES-256-CBC, folders from IMAP); PHP refusing the cipher: config.inc.php byte for byte.
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PhpHardeningTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RoundcubeCipherTest
-    java -De2e.vm=yes -De2e.probe=tests/mail-login-probe.sh -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PhpRoundcubeE2ETest   (VM, as root)
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PhpHardeningTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RoundcubeCipherTest
+    java -De2e.vm=yes -De2e.probe=tests/mail-login-probe.sh -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PhpRoundcubeE2ETest   (VM, as root)
 
 **DovecotHomeTest** — every mailbox's Dovecot home in its own folder, `home/`, not the mail root (reperto 217): with
 home = the Maildir root, the files Dovecot keeps in the home showed up as mail folders ("dovecot", "dovecot.lda-dupes",
@@ -1034,7 +1034,7 @@ it if it was off); the completion with every fault said in the notice (configura
 files still broken, mail lookups); the complete reinstallation not touched; when it waits (a live job, the list still
 on disk, pkg still working, a restart by design).
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InterruptedJobRecoveryTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InterruptedJobRecoveryTest
 
 **InstallScriptsTest** — the install scripts on disk are always those of the running jar
 (`InstallScripts`, reperto 169): all-or-nothing writing, the old script rewritten, those nobody
@@ -1456,10 +1456,10 @@ routes the web part serves by itself (domains, mailboxes...) never reach the roo
 them on its socket; its one operation, mail-folders, is refused to a viewer, with GET, with a body,
 without a live session, and an operation that is not in the list.
 
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RootChannelTest
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SeparatedPanelTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelSeparationTest
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.SecretsSplitTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.RootChannelTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.SeparatedPanelTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelSeparationTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.SecretsSplitTest
 
 **SqlCatalogTest** — the panel runs only the SQL of its catalog (SqlCatalog):
 every statement is a fixed text; the guard (CatalogGuard) refuses any other text by every way one reaches
@@ -1468,7 +1468,7 @@ constant; the web part's list, and its procedures: one for every MySQL statement
 session first and then the same parameters, bound to the session save the public ones, the idle time of
 WebSessions, no DKIM private key and no password hash or copy out of the database save Show password's two.
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.SqlCatalogTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.SqlCatalogTest
 
 **WebRoutinesTest** — the web part's own MySQL user, on the test MySQL as
 its root. The migration (WebDbAccess): the locked owner of the procedures, the 40 procedures, the web
@@ -1481,7 +1481,7 @@ connection used like the handlers use it: the same answers as the panel user's, 
 a transaction of four procedures, no DKIM private key, a viewer and an operator stopped where their role
 stops, the session check of every request. Planting a procedure that ignores the role makes it fail.
 
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.WebRoutinesTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.WebRoutinesTest
 
 **VaultKeysTest** — the asymmetric vault of the mailbox password copies, as root
 in a test folder: the key pair generated once, the private key only in root's secrets file and the public one in
@@ -1491,7 +1491,7 @@ decrypts nothing and exports no key; a copy of before (master.key) still opens; 
 its own, the copies of before encrypted again at start (the second time nothing) and a rotation that keeps the
 previous private key. A vault that decrypts outside root, or a private key not kept to root's file, makes it fail.
 
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.VaultKeysTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.VaultKeysTest
 
 **MailDbUsersTest** — Postfix and Dovecot with their own MySQL users, without MySQL.
 The connection read from the files exactly as both installers and both Dovecot versions write them, rewritten
@@ -1502,7 +1502,7 @@ reload failing, Dovecot's lookup failing, MySQL not seeing Dovecot's new user, d
 failing each put that service's files back byte for byte; a map that already fails, Dovecot not running, a file of
 someone else and a symbolic link are left alone.
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MailDbUsersTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.MailDbUsersTest
 
 **MailDbUsersMysqlTest** — the same users on the test MySQL, as its root: both host names, only their columns and
 no table, database or global privilege; a second run changes nothing. Each user over its own connection: the lookups
@@ -1511,14 +1511,14 @@ write refused. An extra table or global privilege taken away, a column given aga
 needs the privileges reloaded), a changed password set again. The whole migration with fake services: the user and
 password written in the files really enter MySQL; with MySQL root refused the files stay as they were.
 
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MailDbUsersMysqlTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.MailDbUsersMysqlTest
 
 **UpdateManagerSqlTest** — the update manager's questions to MySQL through JDBC, on
 the test MySQL: every statement it uses answers as the mysql client did (one row per line, the columns separated by a
 tab, "" when MySQL refuses), as the panel's user and as root; an address with a quote is a value and finds nothing;
 the panel's user cannot read MySQL's accounts; a text outside the catalog and a wrong password give "".
 
-    java $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.UpdateManagerSqlTest
+    java $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.UpdateManagerSqlTest
 
 **MysqlRootTest** — MySQL's root password (MysqlRoot), as root on the VM with `-De2e.vm=yes`: a throwaway MySQL of
 its own (root without a password, as on the servers installed before) and a secrets folder of its own, set before
@@ -1527,7 +1527,7 @@ and password as parameters), then root does not get in without it from the socke
 does nothing; a password set by hand is never replaced; two root accounts are fixed; with a secrets file that cannot
 be written MySQL is not touched.
 
-    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.MysqlRootTest
+    java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.MysqlRootTest
 
 **RoundcubeDbUserMysqlTest** — the webmail moved to its own MySQL user (RoundcubeDbUser) against the test MySQL as its
 root: the catalog statements run by MySQL, the privileges read back with SHOW GRANTS,
@@ -1537,7 +1537,7 @@ something still entering as the panel after the revoke go back (the panel gets i
 dropped); the scripts of before get their old password back on a fault; a roundcube account with more, or a panel
 with only part of the database, are left alone. A way back that forgets the panel's privileges makes it fail.
 
-    java -Dmysql.port=33062 -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RoundcubeDbUserMysqlTest
+    java -Dmysql.port=33062 -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RoundcubeDbUserMysqlTest
 
 **PanelDbPasswordTest** — the password of the panel's MySQL user changed once (reperto 232): on old servers it sat for
 years in Roundcube's config.inc.php. Against a fake MySQL with a primary and a secondary password per account (RETAIN
@@ -1556,8 +1556,8 @@ a test user `pdptest` with two local accounts; the change (the new password gets
 password in mysql.user, nothing the second time), RETAIN refused on localhost (back as it was), and killed before the
 panel adopts (settle adopts the new one, the run finishes it). It refuses port 3306 and drops `pdptest` at the end.
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelDbPasswordTest
-    java -Ddaemoxcp.mail.mysql.port=33062 -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelDbPasswordMysqlTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelDbPasswordTest
+    java -Ddaemoxcp.mail.mysql.port=33062 -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelDbPasswordMysqlTest
 
 **RootDistrustsDataTest** — the root part does not trust the names it reads from MySQL, which the
 web part can write. Names planted straight into MySQL, as a
@@ -1567,7 +1567,7 @@ domain with a command in its name and a mailbox "..", the good ones between quot
 (test MySQL); the certificate's DNS challenge check not running a command planted in the saved
 record name (test MySQL, as root). With the jar before the fix both planted commands reached root.
 
-    java -De2e.vm=yes $P -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.RootDistrustsDataTest
+    java -De2e.vm=yes $P -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.RootDistrustsDataTest
 
 **RootGateTest** — the root part's closed list (RootGate), before any handler: routes and methods, the
 shape of every value (control characters, field names, lengths, nesting), the strict shapes of the
@@ -1575,13 +1575,13 @@ fields that end up in commands and configurations (a host name starting with a d
 command after it, jails, ports, packages, services, countries, logs, PEM blocks with something else
 inside); from the project folder, every call the pages make to a root route uses a method in the list.
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RootGateTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.RootGateTest
 
 **WebPartShellTest** — in the web part Shell runs no system command except dig, sendmail, postconf -h
 and hostname: the root part's commands are refused through Shell.run, Shell.runShell and applyPath, the
 web part's own pass.
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.util.WebPartShellTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.util.WebPartShellTest
 
 **HeadRequestTest** — HEAD on the real server, without MySQL. Before, every handler sent the body's
 length and then wrote the body: Java's HTTP server logged a warning for the length and refused the
@@ -1591,7 +1591,7 @@ of it, a Font Awesome file, a protected page (sends to the sign-in like the GET)
 session, a wrong Host; each with the GET's status, no body, the GET's length in Content-Length, and
 nothing logged. With the jar before the fix it fails.
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.HeadRequestTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.HeadRequestTest
 
 **PanelSeparationTest** — the root part's preparation: a user daemoxcp_mail that is not the panel's
 (another comment, home or shell, a password, uid 0, another group, other members in the group) is
@@ -1670,9 +1670,9 @@ local, postfix the rest; the panel's root part and web part; mysqld and mysqld_s
 sievec listed although it runs only when rules are saved, and a sentence in both languages for every user the panel
 installs (none for a user it does not know). It calls nothing.
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RoundcubeUserTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.AcmeUserTest
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ServiceUsersTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RoundcubeUserTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.AcmeUserTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ServiceUsersTest
 
 **ErrorTextTest** — what an exception says to the page (ErrorText, reperto 231). The routes used to put
 `e.getMessage()` of any exception in the answer: a MySQL duplicate showed the table and the key, a missing file its
@@ -1683,7 +1683,7 @@ WARNING line in the log carrying the route's method and the exception; a MySQL d
 already exists" without the key. Then in the sources: no route answer of SSLMailServer and no "success" answer of
 UpdateManager puts `getMessage()` by itself. It calls nothing; run from the project root (it reads `src/`).
 
-    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.util.ErrorTextTest
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.util.ErrorTextTest
 
 ## The panel's emails
 
@@ -1698,4 +1698,4 @@ message as it arrived. Only on a test machine, with `-De2e.vm=yes`:
 
     java -De2e.vm=yes -Dpanelmail.to=alice@rehearsal.test \
          -Dpanelmail.maildir=/var/vmail/rehearsal.test/alice -Dpanelmail.copies=/var/tmp/panel-emails/copies \
-         -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelMailE2ETest
+         -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelMailE2ETest

@@ -1036,7 +1036,7 @@ public class PanelContent {
         </div>
         <p>{{t:su.noAdmin}}</p>
         <p class="mb-2">{{t:su.runOnServer}}</p>
-        <pre class="setup-cmd" id="setupCommand"><code>java -jar daemoxcp-mail-1.0.jar --create-admin <var>{{t:su.argName}}</var> <var>{{t:su.argEmail}}</var></code></pre>
+        <pre class="setup-cmd" id="setupCommand"><code>java -jar daemoxcp-mail.jar --create-admin <var>{{t:su.argName}}</var> <var>{{t:su.argEmail}}</var></code></pre>
         <p class="small text-muted">{{t:su.example.html}}</p>
         <p>{{t:su.thenCode}}</p>
         <a href="/index" class="btn btn-setup w-100" id="setupDone">

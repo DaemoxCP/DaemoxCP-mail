@@ -20,7 +20,7 @@ import java.util.Map;
  *     the one read (mapCloudflareAccount); the boot migration is called by the root part.
  * The secrets go to a temporary folder (-Ddaemoxcp.mail.secrets.dir is set here, before PanelSecrets loads): never the
  * real file of the machine it runs on.
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.CloudflareTokensTest
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.CloudflareTokensTest
  */
 public class CloudflareTokensTest {
 

@@ -19,7 +19,7 @@
 set -u
 PANEL=${1:?panel folder}
 TESTS=${2:?compiled tests folder, readable by daemoxcp_mail}
-JAR=$PANEL/daemoxcp-mail-1.0.jar
+JAR=$PANEL/daemoxcp-mail.jar
 JAVA=/usr/local/openjdk25/bin/java
 LOG=/var/db/daemoxcp-mail/panel.log
 RUN=/var/run/daemoxcp-mail

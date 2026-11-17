@@ -17,7 +17,7 @@ import java.util.List;
  *  - the report text contains it;
  *  - with -De2e.vm=yes (VM): the report's real data (UpdateManager.reportData) contain it.
  * The notice lives in a temporary folder (PackageRecovery.notice).
- *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InterruptionReportTest
+ *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InterruptionReportTest
  */
 public class InterruptionReportTest {
 

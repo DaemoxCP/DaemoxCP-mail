@@ -28,7 +28,7 @@ import java.sql.ResultSet;
  * dataBaseManager works on database/daemoxcp-mail.db in the working directory, so the checks run in
  * a child JVM started in a temporary directory.
  *
- * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.sqli.ConfigSecretsTest
+ * Usage: java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.sqli.ConfigSecretsTest
  */
 public class ConfigSecretsTest {
 

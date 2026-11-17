@@ -19,7 +19,7 @@ import java.util.List;
  *     redirect, redirect :copy, fileinto :copy, discard), a script without rules is just the require line.
  *  2. With -De2e.vm=yes, on the VM: every one of those scripts compiles with the real sievec.
  *
- *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.integration.SieveGeneratorTest
+ *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.integration.SieveGeneratorTest
  */
 public class SieveGeneratorTest {
 

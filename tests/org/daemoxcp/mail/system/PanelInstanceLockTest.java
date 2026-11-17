@@ -12,7 +12,7 @@ import java.time.Duration;
  * because a lock held by the same JVM is not the case that matters.
  *
  * It runs anywhere, in a temporary folder:
- *   java -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelInstanceLockTest
+ *   java -cp "tests:daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelInstanceLockTest
  */
 public class PanelInstanceLockTest {
 

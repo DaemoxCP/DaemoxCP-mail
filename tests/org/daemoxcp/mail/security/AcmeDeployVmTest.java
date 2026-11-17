@@ -21,7 +21,7 @@ import java.time.Duration;
  *   presents the original certificate again.
  *
  * ONLY on a test machine, -De2e.vm=yes, as root, from the panel's folder:
- *   java -De2e.vm=yes -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.AcmeDeployVmTest
+ *   java -De2e.vm=yes -cp "tests:daemoxcp-mail.jar" org.daemoxcp.mail.security.AcmeDeployVmTest
  */
 public class AcmeDeployVmTest {
 

@@ -35,7 +35,7 @@ import java.util.Map;
  *    list of positionals is read from the generated script and compared with what Main passes it.
  *
  * It runs from any folder:
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.MysqlRootPasswordTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.security.MysqlRootPasswordTest
  */
 public class MysqlRootPasswordTest {
 

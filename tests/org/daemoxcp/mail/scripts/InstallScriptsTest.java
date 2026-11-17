@@ -21,7 +21,7 @@ import java.util.List;
  *     it goes through the start and stops on the usage) rewrites the old script and sets aside the retired ones.
  * Everything in a temporary folder as the panel's folder.
  *
- * Usage: java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.InstallScriptsTest
+ * Usage: java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.scripts.InstallScriptsTest
  */
 public class InstallScriptsTest {
 

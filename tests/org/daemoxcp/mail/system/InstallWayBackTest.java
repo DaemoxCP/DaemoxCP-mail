@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *     The real body, in a child process with its own folder, SQLite and secrets; MySQL is not needed
  *     (port 1: the password stays pending, PendingDbPassword).
  *
- * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallWayBackTest
+ * Usage: java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallWayBackTest
  */
 public class InstallWayBackTest {
 

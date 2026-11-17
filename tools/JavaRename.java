@@ -57,9 +57,9 @@ import java.util.stream.Stream;
  *
  * Uso, dalla radice del progetto, con il jar costruito come classpath delle dipendenze:
  *
- *   java tools/JavaRename.java declarations target/daemoxcp-mail-1.0.jar righe.txt
+ *   java tools/JavaRename.java declarations target/daemoxcp-mail.jar righe.txt
  *        elenca le dichiarazioni il cui nome sta su una delle righe (file:riga per riga)
- *   java tools/JavaRename.java rename target/daemoxcp-mail-1.0.jar mappa.txt
+ *   java tools/JavaRename.java rename target/daemoxcp-mail.jar mappa.txt
  *        applica la mappa e controlla; una riga per nome:
  *          member:org.daemoxcp.mail.system.UpdateManager#avviaSulTurno startOnTurn
  *              tutti i membri con quel nome in quella classe (gli overload insieme)

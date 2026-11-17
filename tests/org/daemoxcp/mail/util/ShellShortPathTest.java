@@ -20,7 +20,7 @@ import java.time.Duration;
  *  4. a program that exists nowhere still gives the right error.
  * It needs nginx in /usr/local/sbin (the FreeBSD VM); without it, it says so and skips.
  *
- * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.util.ShellShortPathTest
+ * Usage: java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.util.ShellShortPathTest
  */
 public class ShellShortPathTest {
 

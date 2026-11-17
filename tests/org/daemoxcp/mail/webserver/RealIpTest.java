@@ -11,7 +11,7 @@ import org.daemoxcp.mail.security.TrustedProxy;
  * panel over the loopback), could choose its own address in the logs and in the limit on sign-in attempts.
  *
  * It runs anywhere (it calls nothing):
- *   java -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RealIpTest
+ *   java -cp "tests:daemoxcp-mail.jar" org.daemoxcp.mail.webserver.RealIpTest
  */
 public class RealIpTest {
 

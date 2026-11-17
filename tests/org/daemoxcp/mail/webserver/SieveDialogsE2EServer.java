@@ -26,7 +26,7 @@ import java.util.concurrent.Executors;
  * <p>Usage (as root on the test VM, from an empty folder):
  * <pre>
  *   java -Dmysql.port=... -Dmysql.user=... -Dmysql.password=... -Dmysql.database=... \
- *        -cp "tests:$D/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SieveDialogsE2EServer PORT
+ *        -cp "tests:$D/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.SieveDialogsE2EServer PORT
  * </pre>
  * READY on stderr when it listens. At the end: {@code rm -r /var/mail/sieve/sieve-dialog-fields.test}.
  */

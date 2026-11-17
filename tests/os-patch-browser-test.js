@@ -27,7 +27,7 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
 const text = async (page, sel) => (await page.locator(sel).innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
 
 async function signIn(page) {
-    const code = execSync(VM + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null'")
+    const code = execSync(VM + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null'")
         .toString().match(/([0-9]{4} [0-9]{4})/)[1];
     await page.goto(BASE + '/index');
     await page.click('#linkConsole');

@@ -6,7 +6,7 @@
 
     <groupId>org.daemoxcp.mail</groupId>
     <artifactId>daemoxcp-mail</artifactId>
-    <version>1.0</version>
+    <version>0.9.0</version>
 
     <name>FreeBSD Mail Panel</name>
     <description>Native mail server control panel for FreeBSD 15+</description>
@@ -70,6 +70,9 @@
     </dependencies>
 
     <build>
+        <!-- Il jar si chiama sempre daemoxcp-mail.jar, senza la versione: i comandi da console, lo script di avvio e il
+             README restano uguali da una versione all'altra. La versione e' dentro il jar (build-info). -->
+        <finalName>daemoxcp-mail</finalName>
         <!-- Le risorse si copiano cosi' come sono; solo build-info.properties passa dal filtro
              di Maven, che ci scrive versione, build, commit e data. Il filtro su tutte le risorse
              toccherebbe i ${...} degli script delle pagine e i caratteri dei font. -->

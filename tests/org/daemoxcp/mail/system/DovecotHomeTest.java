@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
  *     away, finish moves what is left in the root, removes the false folder unless it holds mail, never chooses between
  *     two different user scripts, never goes through a link; the second run does nothing.
  *
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.DovecotHomeTest      (on the VM)
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.DovecotHomeTest      (on the VM)
  */
 public class DovecotHomeTest {
 

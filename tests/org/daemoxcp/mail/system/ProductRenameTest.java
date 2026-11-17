@@ -13,7 +13,7 @@ import java.util.List;
  * both become /usr/local/etc/daemoxcp-mail. In temporary folders, with the pairs given by the test.
  *
  * It runs anywhere (it calls nothing):
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ProductRenameTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.ProductRenameTest
  */
 public class ProductRenameTest {
 

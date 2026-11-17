@@ -20,7 +20,7 @@ import java.util.List;
  *     refuses goes back as it was; the second run finds nothing.
  *  3. With -De2e.vm=yes, on the VM: the real sievec through the panel's compileScript, the binary newer than the script.
  *
- *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveForcedKeepTest
+ *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveForcedKeepTest
  */
 public class SieveForcedKeepTest {
 

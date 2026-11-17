@@ -18,7 +18,7 @@ import java.util.Locale;
  * serial read over the wire is compared with the one in the key store and in the PEM file.
  *
  * It needs keytool (any JDK) and runs anywhere:
- *   java -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.AcmeServedCertificateTest
+ *   java -cp "tests:daemoxcp-mail.jar" org.daemoxcp.mail.security.AcmeServedCertificateTest
  */
 public class AcmeServedCertificateTest {
 

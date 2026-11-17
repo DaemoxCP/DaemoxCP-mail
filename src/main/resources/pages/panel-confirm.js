@@ -123,7 +123,7 @@ function ask() {
         document.getElementById('panelConfirmConsoleCode').value = '';
         // Il comando col nome di chi conferma: il codice vale solo per lui.
         document.getElementById('panelConfirmConsoleCommand').textContent =
-            'java -jar daemoxcp-mail-1.0.jar --access-code' + (state.username ? ' ' + state.username : '');
+            'java -jar daemoxcp-mail.jar --access-code' + (state.username ? ' ' + state.username : '');
         say(document.getElementById('panelConfirmMsg'), '', '');
         var before = document.activeElement;
         return new Promise(function (resolve) {

@@ -18,7 +18,7 @@ import java.util.List;
  *     not made (the panel has just written the script) and it stops at its own check.
  * In no case does it reach phase 1. rc.conf is put back as it was. Real script, as root, on the VM:
  * it is switched on with -De2e.vm=yes.
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.InstallScriptVersionTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.scripts.InstallScriptVersionTest
  */
 public class InstallScriptVersionTest {
 

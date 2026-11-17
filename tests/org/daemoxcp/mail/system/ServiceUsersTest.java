@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
  * before the migration (nginx and the www pool with the same user), the one after, and a fault
  * planted for every warning, with the cases that must NOT warn (the Postfix and Dovecot processes
  * that run as root by design). It calls nothing: it runs anywhere.
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ServiceUsersTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.ServiceUsersTest
  */
 public class ServiceUsersTest {
 

@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *     HEAD has no body, a handler that answers nothing gives a 500, the client IP is the remote address.
  *
  * Usage (on the VM):
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RootChannelTest
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.RootChannelTest
  */
 public class RootChannelTest {
 

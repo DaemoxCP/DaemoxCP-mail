@@ -25,7 +25,7 @@ import java.util.List;
  *  4. on the VM (-De2e.vm=yes): the fingerprints are the ones of ssh-keygen -l.
  *
  * Usage (on the VM; the property must be set before the class loads):
- *   java -De2e.vm=yes -Ddaemoxcp.mail.root.ssh.dir=/var/tmp/ssh-keys-test -cp "tests:target/daemoxcp-mail-1.0.jar" \
+ *   java -De2e.vm=yes -Ddaemoxcp.mail.root.ssh.dir=/var/tmp/ssh-keys-test -cp "tests:target/daemoxcp-mail.jar" \
  *        org.daemoxcp.mail.system.RootSshKeysTest
  */
 public class RootSshKeysTest {

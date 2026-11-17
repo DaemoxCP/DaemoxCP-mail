@@ -17,7 +17,7 @@ import java.util.function.Function;
  * Italian after "service mailpanel start" on the clean VM on 16/11/2026). sh -n is the real one: it is
  * on macOS and on FreeBSD.
  *
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RcScriptRepairTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.RcScriptRepairTest
  */
 public class RcScriptRepairTest {
 

@@ -22,7 +22,7 @@ import java.util.Map;
  *  - deleting mail nobody confirmed: only the confirmed IDs that STILL have a permanent error for
  *    every recipient are deleted.
  *
- * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.monitoring.MailQueueTest
+ * Usage: java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.monitoring.MailQueueTest
  */
 public class MailQueueTest {
 

@@ -16,7 +16,7 @@ import java.util.List;
  * every case stops before locking again (the case that really locks again is ReinstallJobTest J4,
  * on the clone). List, job record, turn and notice in a temporary folder.
  *
- * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InterruptionWatchTest
+ * Usage: java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InterruptionWatchTest
  */
 public class InterruptionWatchTest {
 

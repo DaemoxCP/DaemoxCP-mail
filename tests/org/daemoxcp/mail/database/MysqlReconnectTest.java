@@ -36,7 +36,7 @@ import java.util.List;
  *
  * MySQL root: with the password of the real secrets file, or without one if root gets in without
  * (the servers installed by the 11/10 version). It runs only with -De2e.vm=yes, as root, MySQL on:
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.MysqlReconnectTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.MysqlReconnectTest
  */
 public class MysqlReconnectTest {
 
