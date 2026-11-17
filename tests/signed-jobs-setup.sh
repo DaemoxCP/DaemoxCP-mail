@@ -45,7 +45,7 @@ mode="${1:-}"
 root_cnf() {
     umask 077
     # Il file e' nel formato properties: "\!" vale "!", "\\" vale "\".
-    pw=$(sed -n 's/^mysql_root_password=//p' /usr/local/etc/mail-panel/root-secrets.properties | sed 's/\\\(.\)/\1/g')
+    pw=$(sed -n 's/^mysql_root_password=//p' /usr/local/etc/daemoxcp-mail/root-secrets.properties | sed 's/\\\(.\)/\1/g')
     [ -n "$pw" ] || { echo "mysql_root_password is missing"; exit 1; }
     printf '[client]\nuser=root\npassword="%s"\nhost=localhost\n' "$pw" > "$W/root.cnf"
     unset pw

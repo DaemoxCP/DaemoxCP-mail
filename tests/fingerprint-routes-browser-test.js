@@ -24,7 +24,7 @@ const VM = 'ssh -i ' + process.env.HOME + '/.ssh/freebsd_test_vm -o IdentitiesOn
 let failed = 0;
 const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + what); if (!ok) failed++; };
 const vm = cmd => execSync(VM + " '" + cmd + "'").toString().trim();
-const refusals = () => Number(vm('grep -c "forwarded request refused" /var/db/mailpanel/panel.log || true'));
+const refusals = () => Number(vm('grep -c "forwarded request refused" /var/db/daemoxcp-mail/panel.log || true'));
 
 (async () => {
     const browser = await chromium.launch({ headless: true, channel: 'chrome' });
@@ -59,7 +59,7 @@ const refusals = () => Number(vm('grep -c "forwarded request refused" /var/db/ma
         const context = await browser.newContext({ ignoreHTTPSErrors: true, locale: 'en-US' });
         page = await context.newPage();
         page.on('pageerror', e => errors.push(String(e)));
-        const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar --access-code 2>/dev/null')
+        const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null')
             .match(/([0-9]{4} [0-9]{4})/)[1];
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');

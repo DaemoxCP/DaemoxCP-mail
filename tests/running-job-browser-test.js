@@ -5,7 +5,7 @@
 //  1. "Check for updates" started in one tab; in a second tab the Updates page says what is running and since when,
 //     shows what it is doing, and the buttons of the steps and "Check for updates" wait.
 //  2. A job asked meanwhile (the update of the other packages, with a signature of the right shape) is refused, and
-//     leaves no log in /var/db/mailpanel/jobs.
+//     leaves no log in /var/db/daemoxcp-mail/jobs.
 //  3. When the search ends: the line goes, the buttons come back, the card reads itself again.
 // The search only downloads the lists (pkg update, pkg audit -F, freebsd-update fetch): nothing is installed.
 //
@@ -23,7 +23,7 @@ const VM = 'ssh -i ' + process.env.HOME + '/.ssh/freebsd_test_vm -o IdentitiesOn
 let failed = 0;
 const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + what); if (!ok) failed++; };
 const vm = cmd => execSync(VM + " '" + cmd + "'").toString().trim();
-const journals = () => vm('ls /var/db/mailpanel/jobs').split('\n').filter(Boolean);
+const journals = () => vm('ls /var/db/daemoxcp-mail/jobs').split('\n').filter(Boolean);
 
 (async () => {
     const browser = await chromium.launch({ headless: true, channel: 'chrome' });
@@ -36,7 +36,7 @@ const journals = () => vm('ls /var/db/mailpanel/jobs').split('\n').filter(Boolea
             p.on('pageerror', e => errors.push(String(e)));
             p.on('dialog', async d => { dialogs.push(d.message()); await d.dismiss(); });
         }
-        const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar --access-code 2>/dev/null')
+        const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null')
             .match(/([0-9]{4} [0-9]{4})/)[1];
         await one.goto(BASE + '/index');
         await one.click('#linkConsole');
@@ -75,7 +75,7 @@ const journals = () => vm('ls /var/db/mailpanel/jobs').split('\n').filter(Boolea
         await two.waitForSelector('#ucRunning', { state: 'hidden', timeout: 180000 });
         await two.waitForFunction(() => !document.getElementById('ucSearchButton').disabled, null, { timeout: 10000 }).catch(() => {});
         check('the line goes, the buttons are back', await two.$$eval('#ucList .uc-head button, #ucSearchButton', b => b.every(x => !x.disabled)));
-        check('  and the search\'s own log ended well', /=== end: completed/.test(vm('tail -1 /var/db/mailpanel/jobs/$(ls -t /var/db/mailpanel/jobs | grep search__ | head -1)')));
+        check('  and the search\'s own log ended well', /=== end: completed/.test(vm('tail -1 /var/db/daemoxcp-mail/jobs/$(ls -t /var/db/daemoxcp-mail/jobs | grep search__ | head -1)')));
         check('no browser dialog, no page error' + (errors.length + dialogs.length ? ': ' + errors.concat(dialogs).join(' | ') : ''),
             !errors.length && !dialogs.length);
     } catch (e) {

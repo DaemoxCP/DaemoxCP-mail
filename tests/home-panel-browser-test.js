@@ -105,7 +105,7 @@ async function remote() {
         // The session is valid only with the User-Agent it was created with (WebSessions): HomePanelE2EServer's.
         const ctx = await browser.newContext({ viewport: { width, height: 900 }, ignoreHTTPSErrors: true, timezoneId: 'Europe/Rome',
                                                userAgent: 'HomePanelE2EServer' });
-        await ctx.addCookies([{ name: '__Host-MailPanel', value: E.SESSION, url: E.REMOTE, secure: true, httpOnly: true, sameSite: 'Strict' },
+        await ctx.addCookies([{ name: '__Host-DaemoxCPMail', value: E.SESSION, url: E.REMOTE, secure: true, httpOnly: true, sameSite: 'Strict' },
                               { name: '__Host-lang', value: lang, url: E.REMOTE, secure: true, sameSite: 'Strict' }]);
         const page = await ctx.newPage();
         const errors = [];

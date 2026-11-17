@@ -5,8 +5,8 @@
 // token, follows the job to its outcome and says the errors.
 //
 // Usage (from the project root, after mvn package):
-//   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java \
-//     && java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator $D >/dev/null
+//   D=$(mktemp -d) && javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java \
+//     && java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.content.PageGenerator $D >/dev/null
 //   NODE_PATH=$(npm root -g) node tests/pkg-branch-browser-test.js $D [screenshot-folder]
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -72,7 +72,7 @@ async function served(route) {
             fingerprint: stateValue().fingerprint, file: '/usr/local/etc/pkg/repos/zz-panel-branch.conf',
             changes: [{ name: 'FreeBSD-ports', from: 'pkg+https://pkg.FreeBSD.org/FreeBSD:15:amd64/quarterly', to: 'pkg+https://pkg.FreeBSD.org/${ABI}/latest' }],
             warnings: ['No package is updated: it changes where pkg takes them from.', 'On latest the next update can bring new major versions.'],
-            content: '# Written by the mail panel\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', howToReturn: '' });
+            content: '# Written by DaemoxCP Mail\nFreeBSD-ports: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }\n', howToReturn: '' });
         case 'branch_change':
             if (!changeSucceeds) return json(route, { success: false, error: 'A package job is already running (nginx update).' });
             rounds = 0;

@@ -13,7 +13,7 @@
 #   perl -pe "s/\\e\\[[0-9;?]*[A-Za-z]/ /g" menu.log | grep -E "not a known|does not cover|belongs to the certificate|self-signed"
 set timeout 40
 log_file -noappend [lindex $argv 0]
-spawn ssh -tt -i $env(HOME)/.ssh/freebsd_test_vm -o IdentitiesOnly=yes root@192.168.1.20 "stty rows 50 cols 170; cd /var/tmp/menu-test && TERM=xterm /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar"
+spawn ssh -tt -i $env(HOME)/.ssh/freebsd_test_vm -o IdentitiesOnly=yes root@192.168.1.20 "stty rows 50 cols 170; cd /var/tmp/menu-test && TERM=xterm /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar"
 proc drain {secs} { set timeout $secs; expect { -re ".+" { exp_continue } timeout {} eof {} } }
 proc mark {m} { send_log "\n<<<$m>>>\n" }
 proc keys {k} { send -- $k; drain 1 }

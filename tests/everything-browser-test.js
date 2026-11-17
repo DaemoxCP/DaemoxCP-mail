@@ -6,7 +6,7 @@
 //  - every service up, nothing left to update, the protected packages protected again;
 //  - postfix's inet_protocols written in main.cf, and postfix listening on the same addresses as before;
 //  - with the Java: the Java report says it succeeded, the service sees the panel again (its pidfile is the root
-//    part), the web part runs as mailpanel and holds the port, Java is the new one and protected again.
+//    part), the web part runs as daemoxcp_mail and holds the port, Java is the new one and protected again.
 // It takes the place of java-update-browser-test.js: the Java row and its "Prepare" are gone, the Java is the last step.
 // With the Java, the page is reloaded while its script works (reperto 210): it must say the Java is being updated, with
 // the script's log, offer nothing, and still reload by itself when the panel comes back.
@@ -34,7 +34,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const POSTFIX_PORTS = 'sockstat -l -P tcp | awk "\\$2==\\"master\\" {print \\$5, \\$6}" | sort -u | tr "\\n" " "';
 
 async function signIn(page) {
-    const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar --access-code 2>/dev/null').match(/([0-9]{4} [0-9]{4})/)[1];
+    const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null').match(/([0-9]{4} [0-9]{4})/)[1];
     await page.goto(BASE + '/index');
     await page.click('#linkConsole');
     await page.fill('#consoleCode', code);
@@ -78,13 +78,13 @@ async function topRow(page) {
         if (OUT) await page.locator('#update-center').screenshot({ path: OUT + '/everything-1-before.png' });
 
         console.log('\n== Cancel leaves the button where it is ==');
-        const jobsBefore = vm('ls /var/db/mailpanel/jobs | grep -c update_everything');
+        const jobsBefore = vm('ls /var/db/daemoxcp-mail/jobs | grep -c update_everything');
         await page.click('#uc-all .uc-head button[data-on-click="ucEverything()"]');
         await page.waitForSelector('#panelAskModal.show', { timeout: 900000 });
         await page.click('#panelAskModal .modal-footer [data-bs-dismiss="modal"]');
         await page.waitForSelector('#panelAskModal', { state: 'hidden' });
         check('after Cancel: the same button, enabled, and nothing started', await page.$$eval('#uc-all .uc-head button[data-on-click="ucEverything()"]',
-            b => b.length === 1 && !b[0].disabled) && vm('ls /var/db/mailpanel/jobs | grep -c update_everything') === jobsBefore);
+            b => b.length === 1 && !b[0].disabled) && vm('ls /var/db/daemoxcp-mail/jobs | grep -c update_everything') === jobsBefore);
 
         console.log('\n== The confirmation, the one job ==');
         await page.click('#uc-all .uc-head button[data-on-click="ucEverything()"]');
@@ -109,13 +109,13 @@ async function topRow(page) {
             outcome = await page.evaluate(() => (document.getElementById('all-run') || {}).innerText || '').catch(() => '');
         }
         console.log('    after ' + Math.round((Date.now() - t0) / 1000) + ' s: ' + outcome.replace(/\s+/g, ' '));
-        const log = vm('ls -t /var/db/mailpanel/jobs | grep update_everything | head -1');
-        check('a new log on disk for the job', Number(vm('ls /var/db/mailpanel/jobs | grep -c update_everything')) === Number(jobsBefore) + 1);
-        const last = vm('tail -1 /var/db/mailpanel/jobs/' + log);
-        console.log('    ' + vm('grep -E "=== Step " /var/db/mailpanel/jobs/' + log + ' | cut -c22-110').replace(/\n/g, '\n    '));
+        const log = vm('ls -t /var/db/daemoxcp-mail/jobs | grep update_everything | head -1');
+        check('a new log on disk for the job', Number(vm('ls /var/db/daemoxcp-mail/jobs | grep -c update_everything')) === Number(jobsBefore) + 1);
+        const last = vm('tail -1 /var/db/daemoxcp-mail/jobs/' + log);
+        console.log('    ' + vm('grep -E "=== Step " /var/db/daemoxcp-mail/jobs/' + log + ' | cut -c22-110').replace(/\n/g, '\n    '));
         const confirmed = (ask.match(/^[0-9]+\. /gm) || []).length;
         check('every step of the confirmation done (' + confirmed + '), and the end is the last line of its log', /steps? done/.test(outcome)
-            && /=== end: completed/.test(last) && confirmed > 0 && Number(vm('grep -c "=== Step " /var/db/mailpanel/jobs/' + log)) === confirmed);
+            && /=== end: completed/.test(last) && confirmed > 0 && Number(vm('grep -c "=== Step " /var/db/daemoxcp-mail/jobs/' + log)) === confirmed);
 
         if (java) {
             // The Java script copies the JDK, stops the panel, updates it and starts it again (two or three minutes on the
@@ -150,13 +150,13 @@ async function topRow(page) {
             await page.waitForFunction(() => { const p = document.getElementById('jv-log'); return p && p.textContent && !/^Reading/.test(p.textContent); }, null, { timeout: 60000 });
             const report = await page.locator('#jv-log').textContent();
             check('the Java report says it succeeded, with its way back, in UTC', /RESULT: SUCCEEDED/.test(report)
-                && /\/var\/db\/mailpanel\/jdk\/[0-9]{8}-[0-9]{6}/.test(report) && / UTC ===/.test(report) && !/\{[A-Za-z_]+\}/.test(report));
+                && /\/var\/db\/daemoxcp-mail\/jdk\/[0-9]{8}-[0-9]{6}/.test(report) && / UTC ===/.test(report) && !/\{[A-Za-z_]+\}/.test(report));
             const state2 = vm('sh /root/signed/java-update-state.sh');
             console.log('    VM:\n      ' + state2.split('\n').slice(0, 9).join('\n      '));
             const pidfile = (state2.match(/^pidfile: ([0-9]+)/m) || [])[1];
-            check('the service sees the panel again, its pidfile the root part', /^service: mailpanel is running as pid [0-9]+/m.test(state2)
+            check('the service sees the panel again, its pidfile the root part', /^service: daemoxcp_mail is running as pid [0-9]+/m.test(state2)
                 && !!pidfile && new RegExp('^\\s*' + pidfile + '\\s+[0-9]+\\s+root\\s+.*--web$', 'm').test(state2));
-            check('the web part runs as mailpanel and holds the port', /port 2096: mailpanel java/.test(state2));
+            check('the web part runs as daemoxcp_mail and holds the port', /port 2096: daemoxcp_mail java/.test(state2));
             check('Java is the new one, protected again', /openjdk25: ([^,]+), repo \1, locked: 1/.test(state2));
         }
 
@@ -170,7 +170,7 @@ async function topRow(page) {
         await page.waitForSelector('#jr-list table', { timeout: 60000 });
         const rows = await page.$$eval('#jr-list tbody tr', trs => trs.map(tr => tr.innerText.replace(/\s+/g, ' ').trim()));
         check('Operation logs: Update everything, completed (not "without an end")', rows.some(r => /Update everything/.test(r) && /completed/i.test(r) && !/without/i.test(r)));
-        const services = vm('for s in mailpanel dovecot postfix rspamd mysql-server nginx php_fpm redis clamav_clamd fail2ban; do service $s status >/dev/null 2>&1 && printf "%s up, " $s || printf "%s DOWN, " $s; done');
+        const services = vm('for s in daemoxcp_mail dovecot postfix rspamd mysql-server nginx php_fpm redis clamav_clamd fail2ban; do service $s status >/dev/null 2>&1 && printf "%s up, " $s || printf "%s DOWN, " $s; done');
         console.log('    services: ' + services);
         check('every service up', !/DOWN/.test(services));
         check('the protected packages protected again (' + lockedBefore + ')', vm('pkg lock -l 2>/dev/null | tail -n +2 | wc -l').trim() === lockedBefore);

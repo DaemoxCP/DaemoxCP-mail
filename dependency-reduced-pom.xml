@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>org.mail_panel</groupId>
-  <artifactId>freebsd-mail-panel</artifactId>
+  <groupId>org.daemoxcp.mail</groupId>
+  <artifactId>daemoxcp-mail</artifactId>
   <name>FreeBSD Mail Panel</name>
   <version>1.0</version>
   <description>Native mail server control panel for FreeBSD 15+</description>
@@ -27,7 +27,7 @@
             <configuration>
               <transformers>
                 <transformer>
-                  <mainClass>org.mail_panel.Main</mainClass>
+                  <mainClass>org.daemoxcp.mail.Main</mainClass>
                   <manifestEntries>
                     <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
                   </manifestEntries>

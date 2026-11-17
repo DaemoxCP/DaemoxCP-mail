@@ -32,12 +32,12 @@
 # the probe creates and deletes, on a test machine. Do not use it on a server with real users.
 #
 # Usage, as root, on the installed machine:
-#   sh tests/mail-login-probe.sh [database]          (default: mailserver)
+#   sh tests/mail-login-probe.sh [database]          (default: daemoxcp_mail)
 # The MySQL root password is taken from ./installed-mysql-root-password (InstallFromScratch writes
 # it) or, if it is not there, from the panel's secrets file.
 # Exit code: 0 if all four get in (doveadm, IMAP, SMTP, the webmail) and Sieve works, 1 otherwise.
 
-DB="${1:-mailserver}"
+DB="${1:-daemoxcp_mail}"
 DOMAIN="login-probe.test"
 MAILBOX="probe@$DOMAIN"
 
@@ -72,7 +72,7 @@ else
     # dropping the escapes gives the password back.
     # Since the panel split its secrets the root password is in
     # root-secrets.properties; on a server not split yet it is still in panel-secrets.properties.
-    for f in /usr/local/etc/mail-panel/root-secrets.properties /usr/local/etc/mail-panel/panel-secrets.properties; do
+    for f in /usr/local/etc/daemoxcp-mail/root-secrets.properties /usr/local/etc/daemoxcp-mail/panel-secrets.properties; do
         [ -f "$f" ] || continue
         ROOT_PW=$(sed -n 's/^mysql_root_password=//p' "$f" | sed 's/\\\(.\)/\1/g')
         [ -n "$ROOT_PW" ] && break

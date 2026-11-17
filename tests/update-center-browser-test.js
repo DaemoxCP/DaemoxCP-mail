@@ -78,7 +78,7 @@ function replies(o, st) {
                 plan: { measured: true, command: 'pkg upgrade -n', changes: [{ type: 'upgrade', name: 'roundcube-php84', from: '1.6.11', to: '1.7.0' }] } },
         roundcube_update: { success: true, jobId: 'rc-1' },
         // Diagnostics: two to look at (a failed job, a newer standard), one step (patches ready), the rest fine.
-        journal_list: { success: true, dir: '/var/db/mailpanel/jobs', journals: [
+        journal_list: { success: true, dir: '/var/db/daemoxcp-mail/jobs', journals: [
             { name: '20261109-000000-os-patch__osp-1.log', type: 'os-patch', startedUtc: '2026-11-09T00:00:00Z', status: 'error', bytes: 100 },
             { name: '20261108-230000-search__srch-1.log', type: 'search', startedUtc: '2026-11-08T23:00:00Z', status: 'completed', bytes: 90 }] },
         journal_read: { success: true, name: '20261109-000000-os-patch__osp-1.log', truncated: false, text: '=== job osp-1 (os-patch) started ===\n=== end: error ===' },

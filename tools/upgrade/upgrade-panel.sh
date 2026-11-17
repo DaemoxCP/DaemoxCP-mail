@@ -32,7 +32,12 @@ PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 export PATH
 umask 077
 
-RC=/usr/local/etc/rc.d/mailpanel
+# Il servizio del pannello: daemoxcp_mail da DaemoxCP Mail (17/11/2026), mailpanel prima. Il primo avvio del jar
+# nuovo lo rinomina da se' (PanelServiceRename) mentre questo script aspetta, quindi il nome si rilegge ogni volta.
+service_name() {
+    if [ -f /usr/local/etc/rc.d/daemoxcp_mail ]; then echo daemoxcp_mail; else echo mailpanel; fi
+}
+RC=/usr/local/etc/rc.d/$(service_name)
 BOOT_TIMEOUT=900      # secondi: AcmeUser puo' installare acme.sh dalla rete
 STOP_TIMEOUT=60
 MIN_FREE_KB=1048576   # 1 GiB liberi nel pool del boot environment
@@ -95,10 +100,12 @@ SWAPPED=no
 
 say() { printf '%s\n' "$*"; }
 
-# Il valore che lo script di avvio usera': rc.conf se c'e', altrimenti il suo valore di default.
+# Il valore che lo script di avvio usera' (jar, dir, log...): rc.conf se c'e', altrimenti il suo valore di default.
+# Col servizio di adesso, che durante il primo avvio cambia nome.
 rc_setting() {
-    v=$(sysrc -n "$1" 2>/dev/null)
-    [ -n "$v" ] || v=$(sed -n 's/^: \${'"$1"':="\(.*\)"}$/\1/p' "$RC" 2>/dev/null | head -1)
+    s=$(service_name)
+    v=$(sysrc -n "${s}_$1" 2>/dev/null)
+    [ -n "$v" ] || v=$(sed -n 's/^: \${'"${s}_$1"':="\(.*\)"}$/\1/p' "/usr/local/etc/rc.d/$s" 2>/dev/null | head -1)
     printf '%s\n' "$v"
 }
 
@@ -108,7 +115,7 @@ rollback_help() {
     say "To go back:"
     if [ "$SWAPPED" = no ]; then
         say "  the jar was not changed: nothing to put back."
-        say "  If the panel is stopped: service mailpanel start"
+        say "  If the panel is stopped: service $(service_name) start"
         return
     fi
     say "  everything as it was before (recommended if the migrations started):"
@@ -138,12 +145,13 @@ NEW_SHA=$(sha256 -q "$NEW_JAR")
 unzip -tq "$NEW_JAR" >/dev/null 2>&1 || fail "the new jar is not an intact archive"
 
 [ -f "$RC" ] || fail "the start script $RC is missing: the panel is not installed as a service"
-[ "$(sysrc -n mailpanel_enable 2>/dev/null)" = YES ] || fail "mailpanel_enable is not YES in rc.conf"
-service mailpanel status >/dev/null 2>&1 || fail "the panel is not running: this script starts from a running panel"
+SVC=$(service_name)
+[ "$(sysrc -n "${SVC}_enable" 2>/dev/null)" = YES ] || fail "${SVC}_enable is not YES in rc.conf"
+service "$SVC" status >/dev/null 2>&1 || fail "the panel is not running: this script starts from a running panel"
 
-JAR=$(rc_setting mailpanel_jar)
-PANEL_DIR=$(rc_setting mailpanel_dir)
-LOG_BEFORE=$(rc_setting mailpanel_log)
+JAR=$(rc_setting jar)
+PANEL_DIR=$(rc_setting dir)
+LOG_BEFORE=$(rc_setting log)
 [ -f "$JAR" ] || fail "the running jar ($JAR, from $RC) is not there"
 [ -d "$PANEL_DIR" ] || fail "the panel folder ($PANEL_DIR) is not there"
 OLD_SHA=$(sha256 -q "$JAR")
@@ -187,7 +195,8 @@ say "Panel upgrade: everything I see goes into $WORK"
 # contenuti: solo esiti.
 state() {
     # In ordine di nome: service -e segue rcorder, che cambia quando un pacchetto si aggiunge.
-    for s in $(service -e | sed -n 's#^/usr/local/etc/rc.d/##p' | grep -vx mailpanel | sort); do
+    # Il pannello no, con tutti e due i nomi: il primo avvio lo rinomina.
+    for s in $(service -e | sed -n 's#^/usr/local/etc/rc.d/##p' | grep -vxE 'mailpanel|daemoxcp_mail' | sort); do
         printf 'service %s: %s\n' "$s" "$(service "$s" status >/dev/null 2>&1 && echo up || echo DOWN)"
     done
     printf 'mysqld: %s\n' "$(pgrep -q mysqld && echo up || echo DOWN)"
@@ -300,29 +309,36 @@ say "Snapshot: $(wc -l < "$WORK/state-before.txt" | tr -d ' ') lines, all fine; 
 # --- 3. pannello fermo, boot environment, copie -------------------------------------------------
 
 STEP="stopping the panel"
-service mailpanel stop >> "$WORK/service.txt" 2>&1
+service "$SVC" stop >> "$WORK/service.txt" 2>&1
 i=0
 while [ $i -lt $STOP_TIMEOUT ] && pgrep -qf -- "-jar $JAR"; do sleep 1; i=$((i + 1)); done
 pgrep -qf -- "-jar $JAR" && fail "the panel did not stop within $STOP_TIMEOUT s"
 
 STEP="boot environment"
-bectl create "$BE" >> "$WORK/service.txt" 2>&1 || { service mailpanel start >/dev/null 2>&1; fail "bectl create $BE failed (panel started again with the previous jar)"; }
+bectl create "$BE" >> "$WORK/service.txt" 2>&1 || { service "$SVC" start >/dev/null 2>&1; fail "bectl create $BE failed (panel started again with the previous jar)"; }
 say "Boot environment: $BE"
 
 STEP="copy of the panel folder"
 tar -cpf "$WORK/panel-dir.tar" -C "${PANEL_DIR%/*}" "${PANEL_DIR##*/}" 2>> "$WORK/service.txt" \
-    || { service mailpanel start >/dev/null 2>&1; fail "the copy of $PANEL_DIR failed (panel started again with the previous jar)"; }
+    || { service "$SVC" start >/dev/null 2>&1; fail "the copy of $PANEL_DIR failed (panel started again with the previous jar)"; }
 cp -p "$JAR" "$WORK/previous.jar"
 ls -1 /var/log/nginx > "$WORK/nginx-logs-before.txt" 2>/dev/null
 stat -f '%Su:%Sg %N' /var/log/php_errors.log > "$WORK/php-errors-owner-before.txt" 2>/dev/null
-stat -f '%Su:%Sg %N' /var/log/mail-panel-auth.log > "$WORK/auth-log-owner-before.txt" 2>/dev/null
+# Il registro degli accessi al pannello col suo nome di adesso o di prima (AuthJailRename lo rinomina), e cosa c'e'
+# in /var/log: sta fuori dai boot environment, e rollback-panel.sh rimette i nomi di prima.
+for f in /var/log/daemoxcp-mail-auth.log /var/log/mail-panel-auth.log; do
+    # Coi numeri, non coi nomi: il primo avvio rinomina l'utente della parte web, e prima del riavvio nel boot
+    # environment di prima chown non conoscerebbe piu' il nome di prima (visto sulla VM il 17/11/2026).
+    [ -f "$f" ] && stat -f '%u:%g %N' "$f" > "$WORK/auth-log-owner-before.txt" && break
+done
+ls -1 /var/log > "$WORK/var-log-before.txt" 2>/dev/null
 say "Copy of the panel folder: $WORK/panel-dir.tar"
 
 # --- 4. il jar nuovo e il primo avvio -----------------------------------------------------------
 
 STEP="new jar"
 cp "$NEW_JAR" "$JAR.new" && [ "$(sha256 -q "$JAR.new")" = "$NEW_SHA" ] \
-    || { rm -f "$JAR.new"; service mailpanel start >/dev/null 2>&1; fail "the copy of the new jar does not match (panel started again with the previous jar)"; }
+    || { rm -f "$JAR.new"; service "$SVC" start >/dev/null 2>&1; fail "the copy of the new jar does not match (panel started again with the previous jar)"; }
 chown "$(stat -f %Su:%Sg "$JAR")" "$JAR.new"
 chmod "$(stat -f %Lp "$JAR")" "$JAR.new"
 mv -f "$JAR.new" "$JAR"
@@ -334,7 +350,9 @@ say "New jar in place: $NEW_SHA"
 # script di avvio lo sappia, ed e' proprio il difetto che la #89 ha corretto. Se lo script di avvio
 # l'ha messo da parte (.1, oltre 10 MB), il resto sta nel file nuovo.
 segment() {
-    for f in $(find "$LOG_DIR" -maxdepth 1 -type f -inum "$LOG_INODE" 2>/dev/null) "$(rc_setting mailpanel_log)" "$LOG_BEFORE"; do
+    # La cartella del registro di prima, e quella dove la sposta il primo avvio (DataFolderRename): stesso inode.
+    for f in $(find "$LOG_DIR" /var/db/daemoxcp-mail /var/db/mailpanel -maxdepth 1 -type f -inum "$LOG_INODE" 2>/dev/null) \
+             "$(rc_setting log)" "$LOG_BEFORE"; do
         [ -f "$f" ] && grep -qF "$1" "$f" || continue
         awk -v m="$1" 'found {print} index($0, m) {found = 1}' "$f"
         case $f in *.1) [ -f "${f%.1}" ] && cat "${f%.1}" ;; esac
@@ -347,17 +365,17 @@ segment() {
 # separato (PanelSeparation) la riga e' quella della parte root pronta: la porta la tiene la web.
 boot() {
     mark="=== upgrade-panel.sh $STAMP: $1 ==="
-    f=$(rc_setting mailpanel_log)
+    f=$(rc_setting log)
     printf '%s\n' "$mark" >> "$f"
     LOG_DIR=${f%/*}
     LOG_INODE=$(stat -f %i "$f")
-    service mailpanel "$2" >> "$WORK/service.txt" 2>&1
+    service "$(service_name)" "$2" >> "$WORK/service.txt" 2>&1
     i=0
     while [ $i -lt $BOOT_TIMEOUT ]; do
         segment "$mark" > "$WORK/$1.log"
-        grep -qE "Mail Panel server started on port|Mail Panel root part ready" "$WORK/$1.log" \
+        grep -qE "(DaemoxCP Mail|Mail Panel) (server started on port|root part ready)" "$WORK/$1.log" \
             && grep -q "\[ACME\] Checking certificate status at startup" "$WORK/$1.log" && return 0
-        if [ $i -ge 20 ] && ! service mailpanel status >/dev/null 2>&1; then
+        if [ $i -ge 20 ] && ! service "$(service_name)" status >/dev/null 2>&1; then
             fail "the panel stopped during the start: $WORK/$1.log"
         fi
         sleep 5; i=$((i + 5))

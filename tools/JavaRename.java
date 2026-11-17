@@ -57,17 +57,17 @@ import java.util.stream.Stream;
  *
  * Uso, dalla radice del progetto, con il jar costruito come classpath delle dipendenze:
  *
- *   java tools/JavaRename.java declarations target/freebsd-mail-panel-1.0.jar righe.txt
+ *   java tools/JavaRename.java declarations target/daemoxcp-mail-1.0.jar righe.txt
  *        elenca le dichiarazioni il cui nome sta su una delle righe (file:riga per riga)
- *   java tools/JavaRename.java rename target/freebsd-mail-panel-1.0.jar mappa.txt
+ *   java tools/JavaRename.java rename target/daemoxcp-mail-1.0.jar mappa.txt
  *        applica la mappa e controlla; una riga per nome:
- *          member:org.mail_panel.system.UpdateManager#avviaSulTurno startOnTurn
+ *          member:org.daemoxcp.mail.system.UpdateManager#avviaSulTurno startOnTurn
  *              tutti i membri con quel nome in quella classe (gli overload insieme)
- *          local:src/main/java/org/mail_panel/system/UpdateManager.java:2750:lavoro work
+ *          local:src/main/java/org/daemoxcp/mail/system/UpdateManager.java:2750:lavoro work
  *              il parametro o la variabile dichiarata su quella riga
- *          type:org.mail_panel.system.PackageQueue$Turno Turn
+ *          type:org.daemoxcp.mail.system.PackageQueue$Turno Turn
  *              un tipo annidato, con i suoi costruttori (i tipi in un giro a parte)
- *          enum:org.mail_panel.system.SubmissionPort$Outcome#AGGIUNTA ADDED
+ *          enum:org.daemoxcp.mail.system.SubmissionPort$Outcome#AGGIUNTA ADDED
  *              una costante di enum; solo cosi', perche' il suo nome e' un valore che puo' uscire
  *              dal codice (name(), valueOf()) e chi lo legge fuori va cambiato nello stesso passo.
  *        Un componente di record si sceglie come un campo (member:), e porta con se' il suo
@@ -87,17 +87,24 @@ public class JavaRename {
         final Map<String, String> sources = new HashMap<>();
         /** Per ogni metodo del progetto, i metodi di cui fa l'override (per chiave). */
         final Map<String, Set<String>> overrides = new HashMap<>();
+        /** I nomi qualificati scritti come watchQualified (file -> posizioni d'inizio), per il modo package. */
+        final Map<String, TreeSet<Integer>> qualifiedSpans = new HashMap<>();
     }
 
+    /** Il nome qualificato di cui raccogliere le occorrenze scritte per intero (modo package), o null. */
+    static String watchQualified = null;
+
     public static void main(String[] args) throws Exception {
-        if (args.length != 3) {
-            System.err.println("uso: declarations|rename <classpath> <file>");
+        boolean pkg = args.length == 4 && args[0].equals("package");
+        if (args.length != 3 && !pkg) {
+            System.err.println("uso: declarations|rename <classpath> <file>  oppure  package <classpath> <vecchio> <nuovo>");
             System.exit(2);
         }
         Path root = Path.of("").toAbsolutePath();
         switch (args[0]) {
             case "declarations" -> listDeclarations(root, args[1], Path.of(args[2]));
             case "rename" -> System.exit(rename(root, args[1], Path.of(args[2])));
+            case "package" -> System.exit(renamePackage(root, args[1], args[2], args[3]));
             default -> { System.err.println("modo sconosciuto: " + args[0]); System.exit(2); }
         }
     }
@@ -109,8 +116,11 @@ public class JavaRename {
         for (String dir : List.of("src/main/java", "tests")) {
             Path d = root.resolve(dir);
             if (!Files.isDirectory(d)) continue;
+            // tests/planted ha una copia guasta apposta di una classe del pannello (stesso nome, stesso
+            // pacchetto): compilata insieme alle altre sarebbe una classe doppia.
+            Path planted = root.resolve("tests/planted");
             try (Stream<Path> s = Files.walk(d)) {
-                s.filter(p -> p.toString().endsWith(".java")).sorted().forEach(files::add);
+                s.filter(p -> p.toString().endsWith(".java") && !p.startsWith(planted)).sorted().forEach(files::add);
             }
         }
         return files;
@@ -153,6 +163,7 @@ public class JavaRename {
         for (CompilationUnitTree cu : cus) {
             String file = root.relativize(Path.of(cu.getSourceFile().toUri())).toString();
             new ReferenceScanner(t, cu, file, a.sources.get(file), keys, a).scan(cu, null);
+            if (watchQualified != null) new QualifiedScanner(t, cu, file, a.sources.get(file), a).scan(cu, null);
         }
         // Gli override. La risoluzione dei riferimenti non li vede: un metodo rinominato come uno
         // della superclasse lo sostituisce a runtime senza che nessun riferimento cambi bersaglio.
@@ -323,6 +334,172 @@ public class JavaRename {
         }
     }
 
+    /**
+     * I punti in cui il nome qualificato del pacchetto e' scritto per intero: dichiarazione del
+     * pacchetto, import, nomi scritti per intero nel codice. Un nome qualificato scritto come quello cercato che il compilatore
+     * risolve a qualcos'altro che quel pacchetto e' un errore, non si tocca.
+     */
+    static final class QualifiedScanner extends TreePathScanner<Void, Void> {
+        final Trees trees; final CompilationUnitTree cu; final String file, text; final Analysis a; final SourcePositions sp;
+
+        QualifiedScanner(Trees trees, CompilationUnitTree cu, String file, String text, Analysis a) {
+            this.trees = trees; this.cu = cu; this.file = file; this.text = text; this.a = a;
+            this.sp = trees.getSourcePositions();
+        }
+
+        @Override public Void visitMemberSelect(MemberSelectTree node, Void v) {
+            int s = (int) sp.getStartPosition(cu, node), e = (int) sp.getEndPosition(cu, node);
+            if (s >= 0 && e > s && text.substring(s, e).equals(watchQualified)) {
+                Element el = trees.getElement(getCurrentPath());
+                if (el != null && !(el instanceof javax.lang.model.element.PackageElement pe
+                                    && pe.getQualifiedName().contentEquals(watchQualified)))
+                    throw new IllegalStateException(file + "@" + s + ": " + watchQualified + " risolto a " + el.getKind() + " " + el);
+                a.qualifiedSpans.computeIfAbsent(file, k -> new TreeSet<>()).add(s);
+                return null;   // dentro ci sono solo i pezzi del nome stesso
+            }
+            return super.visitMemberSelect(node, v);
+        }
+    }
+
+    // ===================== il pacchetto =====================
+
+    /**
+     * Sposta un pacchetto, con i suoi sottopacchetti, sotto un nome nuovo (il 17/11/2026
+     * org.mail_panel -> org.daemoxcp.mail): si cambiano i nomi qualificati che il compilatore risolve a quel pacchetto
+     * (dichiarazioni, import, nomi scritti per intero) e i file passano nella cartella del pacchetto
+     * nuovo. Il controllo e' quello della rinomina: rianalizzato tutto, ogni occorrenza di ogni nome
+     * deve puntare alla stessa dichiarazione di prima, nel file spostato. I pezzi del nome del
+     * pacchetto stesso ("mail_panel" che diventa "daemoxcp" e "mail") si controllano a parte.
+     */
+    static int renamePackage(Path root, String classpath, String oldPkg, String newPkg) throws IOException {
+        String pkgName = "[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)+";
+        if (!oldPkg.matches(pkgName) || !newPkg.matches(pkgName)) throw new IllegalArgumentException("nomi di pacchetto non validi");
+        watchQualified = oldPkg;
+        Analysis before = analyze(root, classpath);
+        System.out.println("prima: " + before.occurrences.size() + " occorrenze, " + before.declarations.size()
+                + " dichiarazioni, " + before.qualifiedSpans.values().stream().mapToInt(Set::size).sum() + " volte " + oldPkg);
+
+        String oldDir = oldPkg.replace('.', '/') + "/", newDir = newPkg.replace('.', '/') + "/";
+        Map<String, String> moves = new HashMap<>();
+        for (String f : before.sources.keySet()) {
+            for (String base : List.of("src/main/java/", "tests/")) {
+                if (f.startsWith(base + oldDir)) moves.put(f, base + newDir + f.substring((base + oldDir).length()));
+            }
+        }
+        Map<String, TreeMap<Integer, Edit>> byFile = new HashMap<>();
+        for (Map.Entry<String, TreeSet<Integer>> q : before.qualifiedSpans.entrySet())
+            for (int s : q.getValue()) byFile.computeIfAbsent(q.getKey(), k -> new TreeMap<>()).put(s, new Edit(q.getKey(), s, oldPkg, newPkg));
+        System.out.println("nomi qualificati da cambiare in " + byFile.size() + " file, file da spostare: " + moves.size());
+
+        for (String f : before.sources.keySet()) {
+            StringBuilder sb = new StringBuilder(before.sources.get(f));
+            TreeMap<Integer, Edit> ed = byFile.get(f);
+            if (ed != null) for (Edit e : ed.descendingMap().values()) {
+                if (!sb.substring(e.pos(), e.pos() + oldPkg.length()).equals(oldPkg))
+                    throw new IllegalStateException("testo inatteso in " + f + " a " + e.pos());
+                sb.replace(e.pos(), e.pos() + oldPkg.length(), newPkg);
+            }
+            String to = moves.getOrDefault(f, f);
+            if (ed == null && to.equals(f)) continue;
+            Path target = root.resolve(to);
+            Files.createDirectories(target.getParent());
+            Files.writeString(target, sb.toString(), StandardCharsets.UTF_8);
+            if (!to.equals(f)) Files.delete(root.resolve(f));
+        }
+        for (String base : List.of("src/main/java/", "tests/")) deleteEmptyDirs(root.resolve(base + oldDir));
+
+        // --- il controllo ---
+        Analysis after = analyze(root, classpath);
+        Map<String, Occurrence> afterAt = new HashMap<>();
+        for (Occurrence o : after.occurrences) afterAt.put(o.file() + "@" + o.pos(), o);
+        int bad = 0, insideBefore = 0, insideAfter = 0;
+        String[] newParts = newPkg.split("\\.");
+        for (Occurrence o : before.occurrences) {
+            Integer span = spanContaining(before.qualifiedSpans.get(o.file()), o.pos(), oldPkg.length());
+            if (span != null && o.pos() != span) { insideBefore++; continue; }   // i pezzi del nome vecchio
+            String nf = moves.getOrDefault(o.file(), o.file());
+            int np = shift(byFile.get(o.file()), o.pos());
+            Occurrence n = afterAt.get(nf + "@" + np);
+            String expectedTarget = moveKey(o.target(), moves, byFile, oldPkg, newPkg);
+            if (n == null || !n.name().equals(o.name()) || !n.target().equals(expectedTarget)) {
+                if (bad++ < 30) System.out.println("NON TORNA: " + o.file() + "@" + o.pos() + " " + o.name() + " -> "
+                        + (n == null ? "sparita" : n.name() + " punta a " + n.target()) + ", attesa " + expectedTarget);
+            }
+        }
+        // I pezzi del nome nuovo, dove prima c'era il nome vecchio: tutti, nell'ordine, al loro posto. Si contano
+        // TUTTE le occorrenze registrate li' dentro, anche due volte la stessa posizione: il compilatore a volte
+        // visita due volte lo stesso nome (lo faceva anche prima, coi pezzi del nome vecchio), e contarle una sola
+        // volta qui darebbe un totale che non torna senza che niente sia cambiato.
+        Map<String, TreeMap<Integer, String>> expectedParts = new HashMap<>();
+        for (Map.Entry<String, TreeSet<Integer>> q : before.qualifiedSpans.entrySet()) {
+            String nf = moves.getOrDefault(q.getKey(), q.getKey());
+            for (int s : q.getValue()) {
+                int at = shift(byFile.get(q.getKey()), s);
+                for (int i = 0; i < newParts.length; i++) {
+                    if (i > 0) expectedParts.computeIfAbsent(nf, k -> new TreeMap<>()).put(at, newParts[i]);
+                    at += newParts[i].length() + 1;
+                }
+            }
+        }
+        for (Occurrence o : after.occurrences) {
+            TreeMap<Integer, String> parts = expectedParts.get(o.file());
+            if (parts == null) continue;
+            String want = parts.get(o.pos());
+            if (want == null) continue;
+            if (o.name().equals(want)) insideAfter++;
+            else if (bad++ < 30) System.out.println("NON TORNA: " + o.file() + "@" + o.pos() + " atteso " + want + ", c'e' " + o.name());
+        }
+        for (Map.Entry<String, Set<String>> ov : before.overrides.entrySet()) {
+            String nk = moveKey(ov.getKey(), moves, byFile, oldPkg, newPkg);
+            Set<String> expected = new TreeSet<>();
+            for (String k : ov.getValue()) expected.add(moveKey(k, moves, byFile, oldPkg, newPkg));
+            if (!after.overrides.getOrDefault(nk, Set.of()).equals(expected) && bad++ < 30)
+                System.out.println("OVERRIDE CAMBIATO: " + nk);
+        }
+        int expectedCount = before.occurrences.size() - insideBefore + insideAfter;
+        if (after.occurrences.size() != expectedCount) {
+            System.out.println("NON TORNA: occorrenze " + after.occurrences.size() + " dopo, attese " + expectedCount
+                    + " (" + insideBefore + " pezzi del nome vecchio, " + insideAfter + " del nome nuovo)");
+            bad++;
+        }
+        if (after.declarations.size() != before.declarations.size()) {
+            System.out.println("NON TORNA: dichiarazioni " + before.declarations.size() + " prima, " + after.declarations.size() + " dopo");
+            bad++;
+        }
+        System.out.println(bad == 0
+                ? "CONTROLLO: tutte le " + after.occurrences.size() + " occorrenze puntano alla stessa dichiarazione di prima ("
+                  + insideBefore + " pezzi di " + oldPkg + " diventati " + insideAfter + " di " + newPkg + ")"
+                : "CONTROLLO FALLITO: " + bad + " occorrenze non tornano");
+        return bad == 0 ? 0 : 1;
+    }
+
+    /** L'inizio del nome qualificato che contiene pos, se pos sta dentro uno di quelli raccolti. */
+    static Integer spanContaining(TreeSet<Integer> spans, int pos, int len) {
+        if (spans == null) return null;
+        Integer s = spans.floor(pos);
+        return s != null && pos < s + len ? s : null;
+    }
+
+    /** La chiave di una dichiarazione dopo lo spostamento: file nuovo e posizione nuova, o il pacchetto nuovo nel nome. */
+    static String moveKey(String key, Map<String, String> moves, Map<String, TreeMap<Integer, Edit>> byFile, String oldPkg, String newPkg) {
+        if (key.startsWith("src:")) {
+            int at = key.lastIndexOf('@');
+            String file = key.substring(4, at);
+            return "src:" + moves.getOrDefault(file, file) + "@" + shift(byFile.get(file), Integer.parseInt(key.substring(at + 1)));
+        }
+        return key.replaceAll(java.util.regex.Pattern.quote(oldPkg) + "(?=[.\\],>)\\s]|$)", java.util.regex.Matcher.quoteReplacement(newPkg));
+    }
+
+    static void deleteEmptyDirs(Path dir) throws IOException {
+        if (!Files.isDirectory(dir)) return;
+        try (Stream<Path> s = Files.walk(dir)) {
+            for (Path p : s.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                if (!Files.isDirectory(p)) continue;
+                try (Stream<Path> c = Files.list(p)) { if (c.findAny().isEmpty()) Files.delete(p); }
+            }
+        }
+    }
+
     // ===================== elenco delle dichiarazioni =====================
 
     static void listDeclarations(Path root, String classpath, Path linesFile) throws IOException {
@@ -360,6 +537,8 @@ public class JavaRename {
         // Tipi rinominati, per nome canonico: compaiono dentro le chiavi esterne (un accessore
         // implicito, values() di un enum) e vanno riscritti anche li'.
         Map<String, String> typeRenames = new LinkedHashMap<>();
+        // Un tipo di primo livello da' il nome al suo file: rinominato lui, il file si sposta.
+        Map<String, String> moves = new HashMap<>();
         int problems = 0;
         for (Map.Entry<String, String> m : map.entrySet()) {
             List<Declaration> chosen = new ArrayList<>();
@@ -390,6 +569,9 @@ public class JavaRename {
                         chosen.add(d);
                         String canon = bin.replace('$', '.');
                         typeRenames.put(canon, canon.substring(0, canon.lastIndexOf('.') + 1) + m.getValue());
+                        String simple = canon.substring(canon.lastIndexOf('.') + 1);
+                        if (!bin.contains("$") && d.file().endsWith("/" + simple + ".java"))
+                            moves.put(d.file(), d.file().substring(0, d.file().length() - simple.length() - 5) + m.getValue() + ".java");
                     }
                     if (d.owner().equals(bin) && d.kind().equals("ctor")) chosen.add(d);
                 } else if (sel.startsWith("local:")) {
@@ -427,7 +609,11 @@ public class JavaRename {
                     throw new IllegalStateException("testo inatteso in " + e.file() + " a " + e.pos());
                 sb.replace(e.pos(), e.pos() + e.oldName().length(), e.newName());
             }
-            Files.writeString(root.resolve(f.getKey()), sb.toString(), StandardCharsets.UTF_8);
+            String to = moves.getOrDefault(f.getKey(), f.getKey());
+            if (!to.equals(f.getKey()) && Files.exists(root.resolve(to)))
+                throw new IllegalStateException("c'e' gia' " + to + ": il tipo rinominato non ha dove andare");
+            Files.writeString(root.resolve(to), sb.toString(), StandardCharsets.UTF_8);
+            if (!to.equals(f.getKey())) Files.delete(root.resolve(f.getKey()));
         }
 
         // --- il controllo ---
@@ -437,10 +623,10 @@ public class JavaRename {
         int bad = 0;
         for (Occurrence o : before.occurrences) {
             int np = shift(byFile.get(o.file()), o.pos());
-            Occurrence n = afterAt.get(o.file() + "@" + np);
+            Occurrence n = afterAt.get(moves.getOrDefault(o.file(), o.file()) + "@" + np);
             String expectedName = targetToNew.getOrDefault(o.target(), o.name());
             String expectedTarget = externalRenames.containsKey(o.target())
-                    ? externalRenames.get(o.target()) : renameTypesIn(shiftKey(byFile, o.target()), typeRenames);
+                    ? externalRenames.get(o.target()) : renameTypesIn(moveFile(shiftKey(byFile, o.target()), moves), typeRenames);
             if (n == null || !n.name().equals(expectedName) || !n.target().equals(expectedTarget)) {
                 if (bad++ < 30) System.out.println("NON TORNA: " + o.file() + "@" + o.pos() + " " + o.name()
                         + " -> " + (n == null ? "sparita" : n.name() + " punta a " + n.target()) + ", attesa " + expectedTarget);
@@ -448,9 +634,9 @@ public class JavaRename {
         }
         // Gli override devono essere gli stessi: ne' persi ne' guadagnati.
         for (Map.Entry<String, Set<String>> ov : before.overrides.entrySet()) {
-            String nk = shiftKey(byFile, ov.getKey());
+            String nk = moveFile(shiftKey(byFile, ov.getKey()), moves);
             Set<String> expected = new TreeSet<>();
-            for (String k : ov.getValue()) expected.add(renameTypesIn(shiftKey(byFile, k), typeRenames));
+            for (String k : ov.getValue()) expected.add(renameTypesIn(moveFile(shiftKey(byFile, k), moves), typeRenames));
             Set<String> got = after.overrides.getOrDefault(nk, Set.of());
             if (!got.equals(expected)) {
                 if (bad++ < 30) System.out.println("OVERRIDE CAMBIATO: " + nk + " prima " + expected + ", dopo " + got);
@@ -485,6 +671,14 @@ public class JavaRename {
             key = key.replaceAll(java.util.regex.Pattern.quote(r.getKey()) + "(?![A-Za-z0-9_$])",
                                  java.util.regex.Matcher.quoteReplacement(r.getValue()));
         return key;
+    }
+
+    /** Una chiave "src:" del file spostato (tipo di primo livello rinominato), col file nuovo. */
+    static String moveFile(String key, Map<String, String> moves) {
+        if (!key.startsWith("src:") || moves.isEmpty()) return key;
+        int at = key.lastIndexOf('@');
+        String file = key.substring(4, at);
+        return "src:" + moves.getOrDefault(file, file) + key.substring(at);
     }
 
     static String shiftKey(Map<String, TreeMap<Integer, Edit>> byFile, String key) {

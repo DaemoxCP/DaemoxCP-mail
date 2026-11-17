@@ -30,8 +30,8 @@ else
     mvn -o -q package -DskipTests
     DIR=$(mktemp -d)
     OWN_DIR=$DIR
-    javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java
-    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator "$DIR" >/dev/null
+    javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java
+    java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.content.PageGenerator "$DIR" >/dev/null
 fi
 python3 - "$DIR" <<'PY'
 import io, re, glob, sys

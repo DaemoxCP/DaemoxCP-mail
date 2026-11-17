@@ -48,13 +48,13 @@ import re
 import sys
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
-PAGE = os.path.join(root, "src/main/java/org/mail_panel/content/MailPanelContent.java")
-ROUTES = os.path.join(root, "src/main/java/org/mail_panel/webserver/SSLMailServer.java")
+PAGE = os.path.join(root, "src/main/java/org/daemoxcp/mail/content/PanelContent.java")
+ROUTES = os.path.join(root, "src/main/java/org/daemoxcp/mail/webserver/SSLMailServer.java")
 
 page = open(PAGE, encoding="utf-8", errors="replace").read()
 # Also the pages written as separate files (Home, DNS, reports, standards): they call the same
 # routes with their own functions (autoDnsApi, repApi, stsApi...). Before, the net looked only at
-# MailPanelContent, and it did not see a renamed route called by standards-watch.js.
+# PanelContent, and it did not see a renamed route called by standards-watch.js.
 import glob as _glob
 for _f in sorted(_glob.glob(os.path.join(root, "src/main/resources/pages/*.js"))):
     page += "\n" + open(_f, encoding="utf-8", errors="replace").read()

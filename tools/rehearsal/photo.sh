@@ -28,7 +28,7 @@ restore)
     bectl mount "$CLONE" "$MNT" >/dev/null
     cp -p "$MNT$COPIES/home-panel.tar" "$MNT$COPIES/var-log.tar" /var/tmp/
     bectl umount "$CLONE"; rmdir "$MNT"
-    service mailpanel stop >/dev/null 2>&1 || true
+    for svc in daemoxcp_mail mailpanel; do [ -f /usr/local/etc/rc.d/$svc ] && service $svc stop >/dev/null 2>&1; done; true
     rm -rf /home/panel
     tar -xpf /var/tmp/home-panel.tar -C /home
     # /var/log come nella fotografia, anche senza i file nati dopo: un log col nome nuovo rimasto

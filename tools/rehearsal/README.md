@@ -1,5 +1,10 @@
 # La prova del passaggio da una versione vecchia
 
+> Dal 17/11/2026 il pannello si chiama DaemoxCP Mail: servizio `daemoxcp_mail`, cartella `/var/db/daemoxcp-mail`, jar
+> `daemoxcp-mail-1.0.jar`. Questi strumenti provano il passaggio dalle versioni di prima, che hanno ancora i nomi
+> `mailpanel`: `check-state.sh`, `photo.sh` e gli script di Roundcube trovano l'uno o l'altro; `upgrade-phase.sh` resta
+> quello del 31/10, per il pannello dell'11/10. Il passaggio di adesso si prova con `tools/upgrade/upgrade-panel.sh`.
+
 Strumenti per rifare sulla VM quello che succede su un server gia' avviato quando gli si mette
 sopra il pannello nuovo. Usati la prima volta il 31/10/2026, col jar del server di posta vero
 (commit 419b0a2, 11/10/2026): reperti, punto 112.
@@ -136,7 +141,7 @@ dall'11/10 serve rifare il banco.
 Per le prove che non riguardano il passaggio dall'11/10, il «prima» si fa col jar di `main` su una
 VM vergine (reperti, punto 124):
 1. `InstallFromScratch` del commit di `main`, compilato contro il suo jar, in `/root/panel`;
-2. `src/org/mail_panel/RehearsalCurrentSetup.java`, compilato contro lo stesso jar e lanciato da
+2. `src/org/daemoxcp/mail/RehearsalCurrentSetup.java`, compilato contro lo stesso jar e lanciato da
    `/root/panel`: certificato, amministratore, `rehearsal.test` con alice e bob, lo script di avvio
    (punta a `/root/panel`, dentro il boot environment: niente da rimettere in `/home`);
 3. `sysrc mailpanel_enable=YES` e `service mailpanel start`.

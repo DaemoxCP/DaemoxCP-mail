@@ -163,7 +163,7 @@ function unlisted(page, selector, text) {
         args: ['--host-resolver-rules=MAP ' + url.hostname + ' ' + (E.MAP || '127.0.0.1')] });
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, ignoreHTTPSErrors: true, userAgent: 'SieveDialogsE2EServer' });
     if (E.SESSION)
-        await ctx.addCookies([{ name: '__Host-MailPanel', value: E.SESSION, url: E.REMOTE, secure: true, httpOnly: true, sameSite: 'Strict' },
+        await ctx.addCookies([{ name: '__Host-DaemoxCPMail', value: E.SESSION, url: E.REMOTE, secure: true, httpOnly: true, sameSite: 'Strict' },
                               { name: '__Host-lang', value: 'it', url: E.REMOTE, secure: true, sameSite: 'Strict' }]);
     const page = await ctx.newPage();
     const errorList = [];
@@ -174,7 +174,7 @@ function unlisted(page, selector, text) {
 
     if (!E.SESSION) {
         // The real panel: a one-time code from its console, as an administrator who lost access would do.
-        const code = execSync(E.VM_LOGIN + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar --access-code 2>/dev/null'")
+        const code = execSync(E.VM_LOGIN + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null'")
             .toString().match(/([0-9]{4} [0-9]{4})/)[1];
         await page.goto(E.REMOTE + '/index');
         await page.click('#linkConsole');

@@ -40,7 +40,7 @@ async function diagnostics(page) {
     const errors = [], dialogs = [];
     page.on('pageerror', e => errors.push(String(e)));
     page.on('dialog', async d => { dialogs.push(d.message()); await d.dismiss(); });
-    const code = execSync(VM + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar --access-code 2>/dev/null' </dev/null")
+    const code = execSync(VM + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null' </dev/null")
         .toString().match(/([0-9]{4} [0-9]{4})/)[1];
     await page.goto(BASE + '/index');
     await page.click('#linkConsole');
@@ -100,7 +100,7 @@ async function diagnostics(page) {
         oks(firstTests) >= 5 && oks(firstTests) === oks(lastTests) && !/^\[[0-9:]+\]\s+NO\s{2}/m.test(firstTests + lastTests));
     check('  the IMAP login and the LMTP delivery among them', /ok\s+IMAP login on 993/.test(lastTests) && /ok\s+LMTP delivery to/.test(lastTests));
     check('  the password process still not root, the database user still Dovecot\'s',
-        /auth-worker\) runs as dovecot/.test(step7) && /now mailpanel_dovecot/.test(log));
+        /auth-worker\) runs as dovecot/.test(step7) && /now daemoxcp_mail_dovecot/.test(log));
     check('  no way back taken', !/Putting Dovecot 2\.3 back/.test(log));
     if (OUT) await page.locator('#uc-dovecot').screenshot({ path: OUT + '/dovecot24-done-vm.png' });
 

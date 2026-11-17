@@ -1,11 +1,11 @@
 // The separated panel in Chromium, against the real service on the
-// test machine: the web part as mailpanel on 2096, the root part behind the unix socket.
+// test machine: the web part as daemoxcp_mail on 2096, the root part behind the unix socket.
 //
 //   1. sign-in with a one-time console code (--access-code, run over ssh);
 //   2. every page of the menu, and Account: no page sends back to the sign-in, no API call the pages make
 //      answers 5xx (a 502 or 503 is the root part not answering), no script error; and enough API calls
 //      answered 2xx to be sure the forwarding was really used;
-//   3. the service users, as the Updates page asks for them: the panel runs as root and mailpanel, with
+//   3. the service users, as the Updates page asks for them: the panel runs as root and daemoxcp_mail, with
 //      the reason root stays, and no warning that it runs entirely as root.
 //
 // The panel answers to its configured name or to 127.0.0.1 (the port does not count, HostCheck), so the
@@ -64,7 +64,7 @@ function portOpen(port) {
         page.on('pageerror', e => scriptErrors.push(new URL(page.url()).pathname + ': ' + e.message));
 
         console.log('== 1. Sign-in ==');
-        const out = remote('cd ' + PANEL_DIR + ' && /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar --access-code');
+        const out = remote('cd ' + PANEL_DIR + ' && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code');
         const m = out.match(/One-time access code for [^:]*: (\d{4} \d{4})/);
         check('a one-time code from the console', !!m);
         await page.goto(BASE + '/index');
@@ -97,10 +97,10 @@ function portOpen(port) {
                 'X-CSRF-Token': document.getElementById('csrf_token').value }, body: JSON.stringify({ action: 'service_users' }) });
             return { status: r.status, body: await r.json() };
         });
-        const panel = (su.body.services || []).find(s => s.service === 'mail-panel') || {};
-        check('the panel runs as root and mailpanel (' + (panel.users || []).join(', ') + ')',
-            (panel.users || []).includes('mailpanel') && (panel.users || []).includes('root'));
-        check('with the reason root stays', panel.rootWhy === en['server.su.rootWhy.mailPanel']);
+        const panel = (su.body.services || []).find(s => s.service === 'daemoxcp-mail') || {};
+        check('the panel runs as root and daemoxcp_mail (' + (panel.users || []).join(', ') + ')',
+            (panel.users || []).includes('daemoxcp_mail') && (panel.users || []).includes('root'));
+        check('with the reason root stays', panel.rootWhy === en['server.su.rootWhy.daemoxcpMail']);
         check('and no warning that it runs entirely as root', !(su.body.problems || []).some(p => p.code === 'panelLegacy'));
         await context.close();
     } finally {

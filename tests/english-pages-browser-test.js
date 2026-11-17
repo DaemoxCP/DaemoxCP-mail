@@ -9,8 +9,8 @@
 // presets come in Italian, as the real server sends them, and the page must show them in English.
 //
 // Usage (from the project root, after mvn package):
-//   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/content/PageGenerator.java \
-//     && java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.content.PageGenerator $D >/dev/null
+//   D=$(mktemp -d) && javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java \
+//     && java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.content.PageGenerator $D >/dev/null
 //   NODE_PATH=$(npm root -g) node tests/english-pages-browser-test.js $D [screenshot-folder]
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -92,7 +92,7 @@ const API = {
         : { success: true, all_ok: true, unchecked: 1, can_fix_all: false, checks: [
         { ok: true, label: 'Fail2ban installed', status: 'version 1.1.0' },
         { ok: false, unknown: true, label: 'The bans are really in the firewall (pf table and rule)',
-          status: '6 of 7 jails checked and fine | mailpanel-public: not measured: fail2ban did not answer: it is restarting.',
+          status: '6 of 7 jails checked and fine | daemoxcp-mail-public: not measured: fail2ban did not answer: it is restarting.',
           impact: 'This is not a fault found: I could not look, even reading a second time a few seconds later.' }] },
     'GET /api/unbound_health': { success: true, all_ok: true, checks: [{ ok: true, label: 'unbound running', status: 'listening on 127.0.0.1' }] },
     'GET /api/clamav_health': { success: true, all_ok: false, checks: [

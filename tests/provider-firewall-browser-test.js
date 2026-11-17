@@ -7,7 +7,7 @@
 //  2. Diagnostics, "Check everything": the provider firewall fine after the confirmation, and outgoing port 25 with a
 //     verdict (on this VM the Mac's network closes port 25, so: closed).
 //
-// It writes /var/db/mailpanel/provider-firewall.json on the VM (removed before and after).
+// It writes /var/db/daemoxcp-mail/provider-firewall.json on the VM (removed before and after).
 // Through an SSH tunnel to the VM's port 2096 (self-signed certificate: errors ignored, for this test machine only).
 // Sign-in with a console code; the fresh confirmation with the "confirm" mode of tests/signed-jobs-setup.sh, copied to
 // /root/signed on the VM.
@@ -24,14 +24,14 @@ let failed = 0;
 const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + what); if (!ok) failed++; };
 
 (async () => {
-    execSync(VM + " 'rm -f /var/db/mailpanel/provider-firewall.json' </dev/null");
+    execSync(VM + " 'rm -f /var/db/daemoxcp-mail/provider-firewall.json' </dev/null");
     const browser = await chromium.launch({ headless: true, channel: 'chrome' });
     const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1400, height: 1000 }, locale: 'en-US' });
     const page = await context.newPage();
     const errors = [], dialogs = [];
     page.on('pageerror', e => errors.push(String(e)));
     page.on('dialog', async d => { dialogs.push(d.message()); await d.dismiss(); });
-    const code = execSync(VM + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar --access-code 2>/dev/null' </dev/null")
+    const code = execSync(VM + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null' </dev/null")
         .toString().match(/([0-9]{4} [0-9]{4})/)[1];
     await page.goto(BASE + '/index');
     await page.click('#linkConsole');
@@ -65,7 +65,7 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
     await page.waitForFunction(() => /current list/.test(document.getElementById('pfw-state').innerText), null, { timeout: 60000 });
     check('then: the current list, the button off', /current list/.test(await page.innerText('#pfw-state'))
         && await page.isDisabled('#pfw-ack'));
-    const state = execSync(VM + " 'stat -f %Sp /var/db/mailpanel/provider-firewall.json' </dev/null").toString().trim();
+    const state = execSync(VM + " 'stat -f %Sp /var/db/daemoxcp-mail/provider-firewall.json' </dev/null").toString().trim();
     check('the confirmation on disk, root only (' + state + ')', state === '-rw-------');
     if (OUT) await page.locator('#provider-firewall').screenshot({ path: OUT + '/provider-firewall-after.png' });
 
@@ -85,7 +85,7 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
 
     check('no browser dialog, no page error' + (errors.length + dialogs.length ? ': ' + errors.concat(dialogs).join(' | ') : ''), !errors.length && !dialogs.length);
     await browser.close();
-    execSync(VM + " 'sh /root/signed/signed-jobs-setup.sh confirm-stop || true; rm -f /var/db/mailpanel/provider-firewall.json' </dev/null");
+    execSync(VM + " 'sh /root/signed/signed-jobs-setup.sh confirm-stop || true; rm -f /var/db/daemoxcp-mail/provider-firewall.json' </dev/null");
     console.log('\n' + (failed === 0 ? 'ALL OK' : failed + ' CHECKS FAILED'));
     process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

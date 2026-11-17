@@ -46,7 +46,7 @@ resta fermo una decina di secondi; la posta resta sempre accesa.
 
 ```sh
 sh /root/panel-upgrade/upgrade-panel.sh -m upgrade-test@example.com -p /root/panel-upgrade/test.pass \
-    /root/panel-upgrade/freebsd-mail-panel-1.0.jar IMPRONTA
+    /root/panel-upgrade/daemoxcp-mail-1.0.jar IMPRONTA
 ```
 
 | Passo | Cosa fa | Si ferma se |
@@ -60,10 +60,41 @@ sh /root/panel-upgrade/upgrade-panel.sh -m upgrade-test@example.com -p /root/pan
 | 7 | confronta di nuovo lo stato | come al passo 5 |
 
 Lo script considera finito un avvio quando il log ha le due righe che `main` scrive alla fine:
-- «Mail Panel server started on port», dopo le migrazioni del thread principale;
+- «DaemoxCP Mail server started on port» (o «root part ready», col pannello separato; «Mail Panel ...» nei jar di
+  prima), dopo le migrazioni del thread principale;
 - «[ACME] Checking certificate status at startup», dopo `AcmeUser` e `ServiceUsers`.
 
-Il log lo segue per inode: il primo avvio lo rinomina da `pannello.log` a `panel.log`.
+Il log lo segue per inode: il primo avvio lo rinomina da `pannello.log` a `panel.log`, e il passaggio al nome DaemoxCP
+Mail lo sposta da `/var/db/mailpanel` a `/var/db/daemoxcp-mail` (stesso file: lo si cerca in tutte e due le cartelle).
+
+## Il passaggio al nome DaemoxCP Mail (17/11/2026)
+
+Il primo avvio del jar che porta il nome nuovo cambia il servizio sotto i piedi dello script: parte con
+`service mailpanel start` e, a meta' dell'avvio, il servizio diventa `daemoxcp_mail` (`/usr/local/etc/rc.d/daemoxcp_mail`,
+variabili `daemoxcp_mail_*`, `/var/run/daemoxcp_mail.pid`). Lo script rilegge il nome ogni volta (`service_name`), e
+la fotografia lascia fuori il pannello con tutti e due i nomi. Provato sulla VM dal pannello della produzione (build
+666): al primo avvio queste migrazioni, e nient'altro di nuovo; il secondo avvio muto e lo stato uguale.
+
+```
+INFO: [ProductRename] DONE: /usr/local/etc/mail-panel -> /usr/local/etc/daemoxcp-mail
+INFO: [ProductRename] DONE: /var/log/mailpanel -> /var/log/daemoxcp-mail
+INFO: [ProductRename] DONE: /var/run/mailpanel -> /var/run/daemoxcp-mail
+INFO: [ProductRename] DONE: /var/unbound/conf.d/mail-panel.conf -> /var/unbound/conf.d/daemoxcp-mail.conf
+INFO: [ProductRename] DONE: database/mail_panel.db -> database/daemoxcp-mail.db
+INFO: [DataFolderRename] DONE: /var/db/mailpanel -> /var/db/daemoxcp-mail, /var/db/mail-panel -> /var/db/daemoxcp-mail; paths updated in ...; reloaded [PHP, NGINX]
+INFO: [PanelMarker] DONE: the product name updated in the comments of ...
+INFO: [PanelUserRename] DONE: the user and group mailpanel are now daemoxcp_mail (uid ..., gid ..., comment 'DaemoxCP Mail web part')
+INFO: [PanelServiceRename] DONE: /usr/local/etc/rc.d/mailpanel -> /usr/local/etc/rc.d/daemoxcp_mail (...), rc.conf [enable] now daemoxcp_mail_*, pidfile ..., jar also /home/panel/daemoxcp-mail-1.0.jar (the same file: the old name goes at the next start), run.sh updated
+INFO: [AuthJailRename] DONE: mail-panel-auth -> daemoxcp-mail-auth: log /var/log/daemoxcp-mail-auth.log, filter, jail.local, newsyslog; fail2ban reloaded
+INFO: [PublicSurfaceRename] DONE: moved /var/log/nginx/mailpanel-public-access.log -> daemoxcp-mail-public-access.log; ...
+INFO: [MysqlRename] DONE: database mailserver -> daemoxcp_mail (... tables), users [mailpanel@localhost -> daemoxcp_mail@localhost, ...]; ... rewritten, Postfix and Dovecot reloaded and checked, the empty database mailserver removed; ...
+INFO: [WebDbAccess] DONE: all 38 procedures; EXECUTE to daemoxcp_mail_web on ...
+INFO: [Fail2banAutoSetup] DONE: /usr/local/etc/newsyslog.conf.d/daemoxcp-mail-auth.conf recreates the log as daemoxcp_mail:wheel
+```
+
+Sul server vero in piu', probabilmente: i commenti su Cloudflare (`[CloudflareComments]`, i record col commento di
+prima) e la superficie pubblica con la sua jail. Il ritorno indietro rimette anche i nomi di prima in `/var/log`
+(registro degli accessi con le copie, cartella delle reinstallazioni, log di nginx); provato sulla VM il 17/11/2026.
 
 Tutto quello che vede va in `/home/panel-upgrade-<data>/`, che sta fuori dal boot environment e
 quindi resta anche tornando indietro:
@@ -116,13 +147,14 @@ INFO: [AcmeUser] DONE: acme.sh runs as acme from /var/db/acme/.acme.sh: 2 certif
 jar di prima non basta. Provato sulla VM su un server già migrato, il jar dell'11/10 parte senza
 avvisi, ma:
 - **niente più SSO della webmail.** Il suo installatore del plugin riscrive
-  `plugins/mailpanel_sso/config.inc.php` come `www:www 600`, e Roundcube, che adesso gira come
+  `plugins/mailpanel_sso/config.inc.php` (oggi `daemoxcp_mail_sso`) come `www:www 600`, e Roundcube, che adesso gira come
   `roundcube`, non lo legge più: «Failed to load config» a ogni richiesta;
 - **niente più rinnovi.** Cerca acme.sh in `/root/.acme.sh`, che non c'è più, e lo considera non
   installato: i certificati scadrebbero.
 
 Il jar di prima va bene solo se lo script si è fermato ai passi 1-3. Ma in quel caso il jar non è
-stato cambiato, e basta `service mailpanel start` se il pannello è fermo.
+stato cambiato, e basta `service mailpanel start` (o `service daemoxcp_mail start`, sui server gia' passati al nome
+nuovo) se il pannello è fermo.
 
 Il ritorno completo:
 

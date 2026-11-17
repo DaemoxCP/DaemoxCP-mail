@@ -1,0 +1,1320 @@
+package org.daemoxcp.mail.security;
+
+import org.daemoxcp.mail.database.MailDatabase;
+import org.daemoxcp.mail.i18n.I18n;
+
+import java.io.*;
+import java.nio.file.*;
+import java.security.*;
+import java.security.spec.*;
+import java.util.Base64;
+
+/**
+ * DKIM Key Manager for DaemoxCP Mail
+ *
+ * Generates RSA 2048-bit key pairs for DKIM signing.
+ * Stores keys in database and writes to filesystem for Rspamd.
+ *
+ * DKIM (DomainKeys Identified Mail) allows the receiver to check
+ * that an email was indeed sent and authorized by the owner of that domain.
+ */
+public class DkimManager {
+
+    // DKIM key storage paths
+    private static final java.util.logging.Logger LOGGER = java.util.logging.Logger.getLogger(DkimManager.class.getName());
+    private static final String DKIM_KEY_DIR = "/usr/local/etc/mail/dkim";
+    private static final String RSPAMD_DKIM_CONFIG = "/usr/local/etc/rspamd/local.d/dkim_signing.conf";
+
+    // RSA key size (2048 is the minimum recommended, 4096 for higher security)
+    private static final int RSA_KEY_SIZE = 2048;
+
+    /**
+     * Preset di rotazione consigliati (in giorni).
+     * Riferimento NIST SP 800-177 e M3AAWG Email Authentication best practices:
+     *  - aggressivo: ogni mese (alta sicurezza)
+     *  - raccomandato: ogni 3 mesi (best practice industria)
+     *  - equilibrato: ogni 6 mesi
+     *  - minimo: ogni 12 mesi (sotto questo è sconsigliato)
+     */
+    public static final int PRESET_AGGRESSIVE   = 30;
+    public static final int PRESET_RECOMMENDED  = 90;
+    public static final int PRESET_BALANCED     = 180;
+    public static final int PRESET_MINIMAL      = 365;
+
+    private final MailDatabase database;
+    private CloudflareManager cloudflare;
+
+    public DkimManager(MailDatabase database) {
+        this.database = database;
+    }
+
+    /** Opzionale: collega un CloudflareManager per la rotazione automatica. */
+    public void setCloudflareManager(CloudflareManager cf) {
+        this.cloudflare = cf;
+    }
+
+    /**
+     * Trigger context: traccia "chi" ha avviato l'operazione corrente
+     * ("user" = clic UI / API call, "scheduler" = timer automatico).
+     * Si imposta col try-finally pattern dal chiamante (API handler o scheduler).
+     */
+    public static final ThreadLocal<String> CURRENT_TRIGGER = new ThreadLocal<>();
+
+    /** Restituisce il trigger corrente, default "user" se non impostato. */
+    private static String currentTrigger() {
+        String t = CURRENT_TRIGGER.get();
+        return (t == null || t.isEmpty()) ? "user" : t;
+    }
+
+    /**
+     * Eventi che fanno parte della "catena di rotazione" e devono ereditare la modalità
+     * dal {@code dkim_rotation_mode} del dominio (se non specificata esplicitamente).
+     */
+    private static final java.util.Set<String> ROTATION_CHAIN_EVENTS = java.util.Set.of(
+        "dns_published", "dns_propagated", "key_activated",
+        "rotation_completed", "rotation_cancelled"
+    );
+
+    /**
+     * Helper: registra un evento nello storico rotazioni.
+     * Se `mode` è null e l'evento fa parte della catena di rotazione, eredita
+     * la modalità dal campo `dkim_rotation_mode` del dominio.
+     * Cattura silenziosamente eventuali errori (il logging non deve bloccare il workflow).
+     */
+    private void logEvent(MailDatabase.Domain d, String eventType, String selector,
+                          String mode, boolean success, String message) {
+        logEventWithPrevious(d, eventType, selector, null, mode, success, message);
+    }
+
+    /**
+     * Variante di logEvent che registra anche il previous_selector. Da usare per
+     * key_activated, così sappiamo quando un selector è stato disattivato.
+     */
+    private void logEventWithPrevious(MailDatabase.Domain d, String eventType, String selector,
+                                      String previousSelector, String mode, boolean success, String message) {
+        try {
+            String effectiveMode = mode;
+            if (effectiveMode == null && d != null && d.dkimRotationMode != null
+                && ROTATION_CHAIN_EVENTS.contains(eventType)) {
+                effectiveMode = d.dkimRotationMode;
+            }
+            Integer cfId = null;
+            String cfLabel = null;
+            if (cloudflare != null && d != null) {
+                try {
+                    MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(d.id);
+                    if (acct != null) {
+                        cfId = acct.id;
+                        cfLabel = acct.label;
+                    }
+                } catch (Exception ignore) {}
+            }
+            database.logDkimRotationEvent(
+                d == null ? 0 : d.id,
+                d == null ? "" : d.domain,
+                eventType, selector, previousSelector, effectiveMode, currentTrigger(),
+                cfId, cfLabel, success, message);
+        } catch (Exception e) {
+            System.err.println("[DKIM-Rotation] logEvent failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Generate DKIM keys for a domain
+     *
+     * @param domainId Database ID of the domain
+     * @param domain Domain name (e.g., example.com)
+     * @param selector DKIM selector (default: "mail")
+     * @return DkimResult with success status and public key for DNS
+     */
+    public DkimResult generateDkimKeys(int domainId, String domain, String selector) {
+        try {
+            // Generate RSA key pair
+            KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+            keyGen.initialize(RSA_KEY_SIZE, new SecureRandom());
+            KeyPair keyPair = keyGen.generateKeyPair();
+
+            // Get private key in PEM format
+            String privateKeyPem = formatPrivateKeyPem(keyPair.getPrivate());
+
+            // Get public key in DNS format (base64, no headers)
+            String publicKeyDns = formatPublicKeyDns(keyPair.getPublic());
+
+            // Full DNS TXT record value
+            String dnsRecord = buildDkimDnsRecord(publicKeyDns);
+
+            // Save to database
+            database.setDkim(domainId, selector, privateKeyPem, publicKeyDns);
+
+            // Write private key to filesystem for Rspamd
+            writePrivateKeyFile(domain, selector, privateKeyPem);
+
+            // Update Rspamd configuration
+            updateRspamdConfig();
+
+            return new DkimResult(true, selector, publicKeyDns, dnsRecord, null);
+
+        } catch (Exception e) {
+            return new DkimResult(false, selector, null, null, e.getMessage());
+        }
+    }
+
+    /**
+     * Format private key as PEM
+     */
+    private String formatPrivateKeyPem(PrivateKey privateKey) {
+        StringBuilder pem = new StringBuilder();
+        pem.append("-----BEGIN RSA PRIVATE KEY-----\n");
+
+        String base64 = Base64.getEncoder().encodeToString(privateKey.getEncoded());
+        // Split into 64-character lines
+        for (int i = 0; i < base64.length(); i += 64) {
+            pem.append(base64.substring(i, Math.min(i + 64, base64.length())));
+            pem.append("\n");
+        }
+
+        pem.append("-----END RSA PRIVATE KEY-----\n");
+        return pem.toString();
+    }
+
+    /**
+     * Format public key for DNS TXT record (base64, no line breaks)
+     */
+    private String formatPublicKeyDns(PublicKey publicKey) {
+        // Extract the raw RSA public key (SubjectPublicKeyInfo format)
+        return Base64.getEncoder().encodeToString(publicKey.getEncoded());
+    }
+
+    /**
+     * Build the complete DKIM DNS TXT record value
+     */
+    private String buildDkimDnsRecord(String publicKeyBase64) {
+        return "v=DKIM1; k=rsa; p=" + publicKeyBase64;
+    }
+
+    /**
+     * Il file della chiave di un dominio con un selettore. Dominio e selettore vengono da MySQL, che col
+     * pannello separato scrive anche la parte web: qui, dove root ne fa un percorso, devono avere la forma di un
+     * dominio e di un selettore (SafeNames), e il file deve restare nella cartella delle chiavi. Prima un dominio
+     * come {@code ../x} faceva scrivere o cancellare a root un file fuori dalla cartella.
+     *
+     * @throws IllegalArgumentException se uno dei due nomi non passa
+     */
+    static Path keyFile(String domain, String selector) {
+        if (!SafeNames.domain(domain) || !SafeNames.selector(selector))
+            throw new IllegalArgumentException("invalid DKIM domain or selector");
+        return SafeNames.under(Paths.get(DKIM_KEY_DIR), domain + "." + selector + ".key");
+    }
+
+    /**
+     * Write private key to filesystem for Rspamd to use
+     */
+    private void writePrivateKeyFile(String domain, String selector, String privateKeyPem) throws IOException {
+        // Create directory if not exists
+        Path keyDir = Paths.get(DKIM_KEY_DIR);
+        Files.createDirectories(keyDir);
+
+        // Write private key file
+        Path keyFile = keyFile(domain, selector);
+        Files.writeString(keyFile, privateKeyPem);
+
+        // Set secure permissions (readable only by rspamd user)
+        keyFile.toFile().setReadable(false, false);
+        keyFile.toFile().setReadable(true, true);
+        keyFile.toFile().setWritable(false, false);
+        keyFile.toFile().setWritable(true, true);
+
+        // Change ownership to rspamd (requires running as root)
+        try {
+            // TODO: migrate to Shell.run when touched
+            ProcessBuilder pb = new ProcessBuilder("chown", "rspamd:rspamd", keyFile.toString());
+            org.daemoxcp.mail.util.Shell.applyPath(pb);
+            pb.start().waitFor();
+
+            // TODO: migrate to Shell.run when touched
+            pb = new ProcessBuilder("chmod", "600", keyFile.toString());
+            org.daemoxcp.mail.util.Shell.applyPath(pb);
+            pb.start().waitFor();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Update Rspamd DKIM signing configuration with all domains.
+     *
+     * Per ogni dominio viene scritto SOLO il selector attualmente attivo (dkim_*).
+     * La chiave "pending" non è ancora usata per firmare: viene solo pubblicata in DNS.
+     * La chiave "previous" non firma più (le mail in transito vengono validate dai destinatari
+     * con il record TXT che lasciamo in DNS durante il grace period).
+     */
+    public void updateRspamdConfig() throws Exception {
+        StringBuilder config = new StringBuilder();
+        config.append("# DKIM Signing Configuration\n");
+        config.append("# Auto-generated by DaemoxCP Mail\n");
+        config.append("# DO NOT EDIT MANUALLY\n\n");
+        config.append("allow_username_mismatch = true;\n\n");
+        config.append("domain {\n");
+
+        // Get all domains with DKIM configured
+        for (MailDatabase.Domain domain : database.getDomains()) {
+            if (domain.hasDkim && domain.dkimPrivateKey != null) {
+                // Dominio e selettore da MySQL dentro la configurazione di rspamd: solo con la loro forma.
+                if (!SafeNames.domain(domain.domain) || !SafeNames.selector(domain.dkimSelector)) {
+                    LOGGER.warning("[DKIM] domain id " + domain.id + " has an invalid name or selector: left out of the signing configuration");
+                    continue;
+                }
+                String keyPath = keyFile(domain.domain, domain.dkimSelector).toString();
+                config.append("    ").append(domain.domain).append(" {\n");
+                config.append("        path = \"").append(keyPath).append("\";\n");
+                config.append("        selector = \"").append(domain.dkimSelector).append("\";\n");
+                config.append("    }\n");
+            }
+        }
+
+        config.append("}\n");
+
+        // Write configuration
+        Path configPath = Paths.get(RSPAMD_DKIM_CONFIG);
+        Files.createDirectories(configPath.getParent());
+        Files.writeString(configPath, config.toString());
+
+        // Reload Rspamd to apply changes
+        try {
+            // TODO: migrate to Shell.run when touched
+            ProcessBuilder pb = new ProcessBuilder("service", "rspamd", "reload");
+            org.daemoxcp.mail.util.Shell.applyPath(pb);
+            pb.start().waitFor();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Verifica RIGOROSA che la chiave DKIM attualmente attiva sia effettivamente
+     * pubblicata in DNS. Confronta la chiave pubblica salvata nel DB con quella
+     * presente nel record TXT <selector>._domainkey.<domain>.
+     *
+     * Interroga 1.1.1.1 e 8.8.8.8 (resolver pubblici esterni) per evitare cache locali.
+     *
+     * Logga un evento "key_verified" nello storico.
+     */
+    public ActiveKeyVerifyResult verifyActiveKeyInDns(int domainId) {
+        ActiveKeyVerifyResult r = new ActiveKeyVerifyResult();
+        try {
+            MailDatabase.Domain d = database.getDomain(domainId);
+            if (d == null) {
+                r.success = false; r.message = I18n.tr("server.dkimm.domainNotFound"); return r;
+            }
+            r.domain = d.domain;
+            r.selector = d.dkimSelector;
+            r.dnsRecordName = (d.dkimSelector == null ? "mail" : d.dkimSelector) + "._domainkey." + d.domain;
+
+            if (!d.hasDkim || d.dkimPublicKey == null) {
+                r.success = false; r.message = I18n.tr("server.dkimm.noKey");
+                logEvent(d, "key_verified", d.dkimSelector, null, false, r.message);
+                return r;
+            }
+            r.expectedPublicKey = d.dkimPublicKey;
+
+            // Interroga DNS pubblici
+            String[] resolvers = { "@1.1.1.1", "@8.8.8.8" };
+            String lastRaw = "";
+            String foundPublicKey = null;
+            String resolverUsed = null;
+            for (String resolver : resolvers) {
+                // TODO: migrate to Shell.run when touched
+                ProcessBuilder pb = new ProcessBuilder("dig", resolver, "+short", "+time=5", "+tries=2", "TXT", r.dnsRecordName);
+                org.daemoxcp.mail.util.Shell.applyPath(pb);
+                Process proc = pb.start();
+                StringBuilder out = new StringBuilder();
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
+                    String line;
+                    while ((line = br.readLine()) != null) out.append(line).append('\n');
+                }
+                proc.waitFor();
+                String raw = out.toString().trim();
+                if (!raw.isEmpty()) lastRaw = raw;
+                String normalized = raw.replace("\"", "").replace(" ", "").replace("\n", "");
+                // Estrai p=... fino a fine stringa o ;
+                int idx = normalized.indexOf("p=");
+                if (idx >= 0) {
+                    String pVal = normalized.substring(idx + 2);
+                    int semi = pVal.indexOf(';');
+                    if (semi >= 0) pVal = pVal.substring(0, semi);
+                    foundPublicKey = pVal;
+                    resolverUsed = resolver;
+                    break;
+                }
+            }
+
+            r.rawDigOutput = lastRaw;
+            r.actualPublicKey = foundPublicKey;
+
+            if (foundPublicKey == null) {
+                r.success = true;
+                r.match = false;
+                r.message = I18n.tr("server.dkimm.txtNotFound", java.util.Map.of("n", String.valueOf(r.dnsRecordName)));
+                logEvent(d, "key_verified", d.dkimSelector, null, false, r.message);
+                return r;
+            }
+
+            // Confronto
+            String expected = r.expectedPublicKey.replaceAll("\\s+", "");
+            String actual = foundPublicKey.replaceAll("\\s+", "");
+            r.match = expected.equals(actual);
+            r.success = true;
+            if (r.match) {
+                r.message = I18n.tr("server.dkimm.keyMatches", java.util.Map.of("r", String.valueOf(resolverUsed)));
+            } else {
+                r.message = I18n.tr("server.dkimm.keyMismatch");
+            }
+            logEvent(d, "key_verified", d.dkimSelector, null, r.match, r.message);
+            return r;
+
+        } catch (Exception e) {
+            r.success = false;
+            r.message = I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            return r;
+        }
+    }
+
+    /**
+     * Come stanno messi TUTTI i domini, in un colpo solo.
+     *
+     * Perche' esiste: il pannello sapeva rispondere "com'e' messo QUESTO dominio", e per
+     * sapere come stanno tutti bisognava selezionarli uno per uno e ricordarsi i numeri.
+     * Cosi' non si vede la cosa che conta — che uno dei domini abbia la chiave scaduta da
+     * mesi, o non ce l'abbia affatto — perche' quella si vede solo confrontando.
+     *
+     * Non c'e' nessuna logica nuova qui dentro: si chiamano le stesse funzioni che alimentano
+     * la scheda di un dominio solo. Una seconda implementazione della stessa verifica
+     * divergerebbe, e le due risposte finirebbero per contraddirsi.
+     */
+    public org.json.JSONObject allDomainsSummary() {
+        org.json.JSONObject r = new org.json.JSONObject().put("success", true);
+        org.json.JSONArray lines = new org.json.JSONArray();
+        int withoutKey = 0, unverifiable = 0, withoutRotation = 0;
+        try {
+            for (MailDatabase.Domain d : database.getDomains()) {
+                org.json.JSONObject j = new org.json.JSONObject().put("domain", d.domain);
+                try {
+                    DkimInfo info = getDkimInfo(d.id);
+                    boolean hasKey = info != null && info.configured;
+                    j.put("hasKey", hasKey);
+                    j.put("selector", info == null || info.selector == null ? "" : info.selector);
+                    if (!hasKey) {
+                        withoutKey++;
+                        // Niente chiave vuol dire niente firma: e' il caso piu' grave e non
+                        // deve nascondersi in mezzo a righe che parlano di rotazioni.
+                        j.put("state", "absent");
+                        j.put("note", I18n.tr("server.dkimm.noPanelKey"));
+                        lines.put(j);
+                        continue;
+                    }
+
+                    // La verifica vera: la chiave pubblicata coincide con quella del pannello?
+                    ActiveKeyVerifyResult v = verifyActiveKeyInDns(d.id);
+                    j.put("checkSucceeded", v != null && v.success);
+                    j.put("matches", v != null && v.match);
+                    j.put("messageText", v == null ? "" : (v.message == null ? "" : v.message));
+                    if (v == null || !v.success) {
+                        unverifiable++;
+                        j.put("state", "uncertain");
+                    } else if (!v.match) {
+                        j.put("state", "not_matching");
+                    } else {
+                        j.put("state", "ok");
+                    }
+
+                    // Eta' della chiave e rotazione programmata.
+                    ScheduleResult sc = getRotationSchedule(d.id);
+                    if (sc != null) {
+                        j.put("intervalDays", sc.intervalDays);
+                        if (sc.lastRotationAt != null) {
+                            j.put("lastRotation", sc.lastRotationAt.toString());
+                            long days = (System.currentTimeMillis() - sc.lastRotationAt.getTime())
+                                        / 86400000L;
+                            j.put("daysSinceLast", days);
+                        }
+                        if (sc.nextRotationAt != null)
+                            j.put("nextRotation", sc.nextRotationAt.toString());
+                        if (sc.intervalDays <= 0) withoutRotation++;
+                    }
+
+                    RotationInfo ri = getRotationInfo(d.id);
+                    if (ri != null && ri.rotationState != null && !ri.rotationState.isBlank()) {
+                        j.put("rotationInProgress", ri.rotationState);
+                        j.put("previousSelector",
+                                ri.previousSelector == null ? "" : ri.previousSelector);
+                    }
+                } catch (Exception e) {
+                    unverifiable++;
+                    j.put("state", "uncertain").put("messageText", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+                }
+                lines.put(j);
+            }
+        } catch (Exception e) {
+            return new org.json.JSONObject().put("success", false)
+                    .put("error", I18n.tr("server.dkimm.domainsUnreadable", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+        }
+        r.put("domains", lines);
+        r.put("withoutKey", withoutKey).put("unverifiable", unverifiable)
+         .put("withoutRotation", withoutRotation);
+        return r;
+    }
+
+    public static class ActiveKeyVerifyResult {
+        public boolean success;     // verifica eseguita senza errori
+        public boolean match;       // chiave DB == chiave DNS
+        public String domain;
+        public String selector;
+        public String dnsRecordName;
+        public String expectedPublicKey;
+        public String actualPublicKey;
+        public String rawDigOutput;
+        public String message;
+    }
+
+    // ============== ROTATION SCHEDULE ==============
+
+    /** Imposta l'intervallo di rotazione automatica (giorni). 0 = disattiva. */
+    public ScheduleResult setRotationSchedule(int domainId, int intervalDays) {
+        try {
+            MailDatabase.Domain d = database.getDomain(domainId);
+            if (d == null) return new ScheduleResult(false, I18n.tr("server.dkimm.domainNotFound"), 0, null, null);
+            int v = Math.max(0, intervalDays);
+            database.setDkimRotationInterval(domainId, v);
+            logEvent(d, "schedule_changed", d.dkimSelector, null, true,
+                v == 0 ? "Scheduled rotation DISABLED"
+                       : "Scheduled rotation set every " + v + " days");
+            return getRotationSchedule(domainId);
+        } catch (Exception e) {
+            return new ScheduleResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), 0, null, null);
+        }
+    }
+
+    /** Ritorna lo stato corrente dello schedule + computa quando scade. */
+    public ScheduleResult getRotationSchedule(int domainId) {
+        try {
+            MailDatabase.Domain d = database.getDomain(domainId);
+            if (d == null) return new ScheduleResult(false, I18n.tr("server.dkimm.domainNotFound"), 0, null, null);
+            ScheduleResult r = new ScheduleResult(true, "OK", d.dkimRotationIntervalDays, d.dkimLastRotationAt, null);
+            if (d.dkimRotationIntervalDays > 0 && d.dkimLastRotationAt != null) {
+                long nextMs = d.dkimLastRotationAt.getTime() + (long) d.dkimRotationIntervalDays * 24L * 60L * 60L * 1000L;
+                r.nextRotationAt = new java.sql.Timestamp(nextMs);
+            } else if (d.dkimRotationIntervalDays > 0 && d.dkimLastRotationAt == null) {
+                // Mai ruotato ma schedule attivo: dovuta subito al prossimo tick
+                r.nextRotationAt = new java.sql.Timestamp(System.currentTimeMillis());
+            }
+            return r;
+        } catch (Exception e) {
+            return new ScheduleResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), 0, null, null);
+        }
+    }
+
+    public static class ScheduleResult {
+        public boolean success;
+        public String message;
+        public int intervalDays;
+        public java.sql.Timestamp lastRotationAt;
+        public java.sql.Timestamp nextRotationAt;
+        public ScheduleResult(boolean success, String message, int intervalDays,
+                              java.sql.Timestamp lastRotationAt, java.sql.Timestamp nextRotationAt) {
+            this.success = success;
+            this.message = message;
+            this.intervalDays = intervalDays;
+            this.lastRotationAt = lastRotationAt;
+            this.nextRotationAt = nextRotationAt;
+        }
+    }
+
+    // ============== ORPHAN DKIM RECORD CLEANUP ==============
+
+    /**
+     * Trova tutti i record TXT con nome <selector>._domainkey.<dominio> in Cloudflare,
+     * marcando quali sono "attivi" (selector corrente o pending) e quali "orfani".
+     *
+     * Utile per ripulire record vecchi rimasti in DNS dopo rotazioni completate prima
+     * che il pannello avesse l'auto-cleanup tramite find-by-name.
+     */
+    public OrphanScanResult scanDkimRecords(int domainId) {
+        OrphanScanResult result = new OrphanScanResult();
+        try {
+            MailDatabase.Domain d = database.getDomain(domainId);
+            if (d == null) { result.success = false; result.message = I18n.tr("server.dkimm.domainNotFound"); return result; }
+            result.domain = d.domain;
+            result.currentSelector = d.dkimSelector;
+            result.pendingSelector = d.dkimPendingSelector;
+            result.previousSelector = d.dkimPreviousSelector;
+
+            if (cloudflare == null) { result.success = false; result.message = I18n.tr("server.dkimm.noCfManager"); return result; }
+            MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
+            if (acct == null) { result.success = false; result.message = I18n.tr("server.dkimm.noAccount"); return result; }
+            result.cloudflareAccountLabel = acct.label;
+
+            // Trova lo zone_id
+            String zoneId = d.dkimDnsZoneId;
+            if (zoneId == null) {
+                CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
+                if (!zl.found) { result.success = false; result.message = I18n.tr("server.dkimm.zoneNotFound", java.util.Map.of("e", String.valueOf(zl.error))); return result; }
+                zoneId = zl.zoneId;
+            }
+            result.zoneId = zoneId;
+
+            // Lista tutti i record _domainkey nella zona (case-insensitive, senza dipendenza dalla case del dominio).
+            // Usiamo solo "_domainkey" come substring: i record in una zona Cloudflare hanno tutti
+            // come suffisso il nome della zona, quindi filtrare per "_domainkey" è sufficiente.
+            java.util.List<CloudflareManager.TxtRecordInfo> all = cloudflare.listTxtRecordsContaining(acct.apiToken, zoneId, "_domainkey");
+
+            String domainLower = d.domain.toLowerCase();
+            for (CloudflareManager.TxtRecordInfo r : all) {
+                String name = r.name;
+                String nameLower = name.toLowerCase();
+                // Estrai il selector: <selector>._domainkey.<domain>
+                int idx = nameLower.indexOf("._domainkey.");
+                if (idx <= 0) continue;
+                // Verifica che il record appartenga effettivamente al dominio richiesto
+                // (in zone parent come "example.com" potrebbero comparire record di sotto-domini)
+                String afterDomainkey = nameLower.substring(idx + "._domainkey.".length());
+                if (!afterDomainkey.equalsIgnoreCase(domainLower)) continue;
+                String selector = name.substring(0, idx);
+
+                DkimRecordEntry entry = new DkimRecordEntry();
+                entry.recordId = r.id;
+                entry.name = r.name;
+                entry.selector = selector;
+                entry.contentPreview = r.content.length() > 80 ? r.content.substring(0, 80) + "..." : r.content;
+                entry.comment = r.comment;
+                entry.isCurrent  = d.dkimSelector != null && selector.equalsIgnoreCase(d.dkimSelector);
+                entry.isPending  = d.dkimPendingSelector != null && selector.equalsIgnoreCase(d.dkimPendingSelector);
+                entry.isPrevious = d.dkimPreviousSelector != null && selector.equalsIgnoreCase(d.dkimPreviousSelector);
+                entry.isOrphan = !entry.isCurrent && !entry.isPending && !entry.isPrevious;
+
+                // Per gli orfani: verifica se sono ancora in "grace period esteso".
+                // Se il selector è stato disattivato (cioè rimpiazzato da una rotazione) meno di
+                // GRACE_PERIOD_DAYS giorni fa, NON deve essere rimovibile — le mail in transito
+                // firmate con questa chiave potrebbero ancora aver bisogno del record TXT.
+                if (entry.isOrphan) {
+                    try {
+                        java.sql.Timestamp deactivatedAt = database.findSelectorDeactivationTime(d.id, selector);
+                        if (deactivatedAt != null) {
+                            entry.deactivatedAt = deactivatedAt;
+                            long elapsedMs = System.currentTimeMillis() - deactivatedAt.getTime();
+                            long graceMs = DkimRotationScheduler.GRACE_PERIOD_DAYS * 24L * 60L * 60L * 1000L;
+                            if (elapsedMs < graceMs) {
+                                entry.inGracePeriod = true;
+                                entry.gracePeriodEndsAt = new java.sql.Timestamp(deactivatedAt.getTime() + graceMs);
+                            }
+                        }
+                    } catch (Exception ignore) {}
+                }
+
+                result.records.add(entry);
+            }
+
+            result.success = true;
+            return result;
+        } catch (Exception e) {
+            result.success = false;
+            result.message = I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            return result;
+        }
+    }
+
+    /**
+     * Cancella un record DNS per ID (usato per rimuovere singoli record orfani identificati da scanDkimRecords).
+     * Verifica che il record appartenga al dominio specificato (sicurezza).
+     */
+    public RotationActionResult deleteDkimRecordById(int domainId, String recordId) {
+        try {
+            MailDatabase.Domain d = database.getDomain(domainId);
+            if (d == null) return new RotationActionResult(false, I18n.tr("server.dkimm.domainNotFound"));
+            if (cloudflare == null) return new RotationActionResult(false, I18n.tr("server.dkimm.noCfManager"));
+            MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
+            if (acct == null) return new RotationActionResult(false, I18n.tr("server.dkimm.noAccountShort"));
+
+            // ENFORCEMENT GRACE PERIOD per cancellazione manuale di record orfani.
+            // Scansiona prima i record per identificare quello da cancellare e
+            // verificare se è in grace period.
+            OrphanScanResult scan = scanDkimRecords(domainId);
+            if (scan.success) {
+                for (DkimRecordEntry entry : scan.records) {
+                    if (recordId.equals(entry.recordId)) {
+                        // Protezione 1: blocca cancellazione di record current/pending/previous
+                        if (entry.isCurrent || entry.isPending || entry.isPrevious) {
+                            return new RotationActionResult(false, I18n.tr("server.dkimm.blockedActive", java.util.Map.of("s", String.valueOf(entry.selector), "state", String.valueOf(entry.isCurrent ? I18n.tr("server.dkimm.stateActive") : entry.isPending ? "PENDING" : "PREVIOUS"))));
+                        }
+                        // Protezione 2: blocca cancellazione di orfani ancora in grace period
+                        if (entry.inGracePeriod && entry.gracePeriodEndsAt != null) {
+                            long remainingMs = entry.gracePeriodEndsAt.getTime() - System.currentTimeMillis();
+                            long remainingDays = (remainingMs + 24L * 60L * 60L * 1000L - 1) / (24L * 60L * 60L * 1000L);
+                            return new RotationActionResult(false, I18n.tr("server.dkimm.blockedGrace", java.util.Map.of("s", String.valueOf(entry.selector), "g", String.valueOf(DkimRotationScheduler.GRACE_PERIOD_DAYS), "n", String.valueOf(remainingDays))));
+                        }
+                        break;
+                    }
+                }
+            }
+
+            String zoneId = d.dkimDnsZoneId;
+            if (zoneId == null) {
+                CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
+                if (!zl.found) return new RotationActionResult(false, I18n.tr("server.dkimm.zoneNotFound", java.util.Map.of("e", String.valueOf(zl.error))));
+                zoneId = zl.zoneId;
+            }
+            CloudflareManager.RecordOp op = cloudflare.deleteRecord(acct.apiToken, zoneId, recordId);
+            if (!op.success) return new RotationActionResult(false, I18n.tr("server.dkimm.cfError", java.util.Map.of("e", String.valueOf(op.error))));
+            logEvent(d, "orphan_record_deleted", null, null, true,
+                "Orphan DKIM record deleted from Cloudflare (id " + recordId + ", account '" + acct.label + "')");
+            return new RotationActionResult(true, I18n.tr("server.dkimm.recordDeleted"));
+        } catch (Exception e) {
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+        }
+    }
+
+    public static class OrphanScanResult {
+        public boolean success;
+        public String message;
+        public String domain;
+        public String zoneId;
+        public String cloudflareAccountLabel;
+        public String currentSelector;
+        public String pendingSelector;
+        public String previousSelector;
+        public java.util.List<DkimRecordEntry> records = new java.util.ArrayList<>();
+    }
+
+    public static class DkimRecordEntry {
+        public String recordId;
+        public String name;
+        public String selector;
+        public String contentPreview;
+        public String comment;
+        public boolean isCurrent;
+        public boolean isPending;
+        public boolean isPrevious;
+        public boolean isOrphan;
+        // Per gli orfani: se il selector è stato disattivato di recente, è ancora
+        // in "grace period esteso" e va protetto dalla rimozione manuale.
+        public boolean inGracePeriod;
+        public java.sql.Timestamp deactivatedAt;
+        public java.sql.Timestamp gracePeriodEndsAt;
+    }
+
+    // ============== DKIM KEY ROTATION ==============
+
+    /**
+     * Avvia una rotazione DKIM (FASE 1: genera + salva pending + scrive chiave su disco).
+     * NON modifica la config di Rspamd: la chiave attuale continua a firmare.
+     * L'utente deve aggiungere manualmente in DNS:
+     *     <pendingSelector>._domainkey.<domain>  TXT  "v=DKIM1; k=rsa; p=<pub>"
+     *
+     * @return RotationStartResult con il nuovo selector e il record DNS da pubblicare
+     */
+    public RotationStartResult startRotation(int domainId) {
+        return startRotation(domainId, false);
+    }
+
+    /**
+     * Variante con flag {@code automatic}: se true e Cloudflare è configurato,
+     * crea direttamente il record TXT via API e setta lo stato a "propagated"
+     * (salta l'attesa manuale dell'utente per pubblicare il DNS).
+     * Se Cloudflare non è configurato o la zona non viene trovata, esegue
+     * comunque il workflow manuale (stato "pending_dns").
+     */
+    public RotationStartResult startRotation(int domainId, boolean automatic) {
+        try {
+            MailDatabase.Domain d = database.getDomain(domainId);
+            if (d == null) {
+                return new RotationStartResult(false, null, null, null, I18n.tr("server.dkimm.domainNotFound"));
+            }
+            if (!d.hasDkim) {
+                return new RotationStartResult(false, null, null, null,
+                    I18n.tr("server.dkimm.noDkimYet"));
+            }
+            if (d.dkimRotationState != null) {
+                return new RotationStartResult(false, null, null, null,
+                    I18n.tr("server.dkimm.inProgress", java.util.Map.of("s", String.valueOf(d.dkimRotationState))));
+            }
+
+            // Nuovo selector con suffisso "rYYYYMMDD" (univoco, leggibile, ordinato)
+            String dateSuffix = new java.text.SimpleDateFormat("yyyyMMdd").format(new java.util.Date());
+            String baseSelector = "r" + dateSuffix;
+            String newSelector = baseSelector;
+
+            // Se per qualche motivo coincide col selector attuale o con un precedente,
+            // aggiungi un counter (rYYYYMMDD-2, -3, ...)
+            int counter = 1;
+            while (newSelector.equalsIgnoreCase(d.dkimSelector)
+                || newSelector.equalsIgnoreCase(d.dkimPreviousSelector)) {
+                counter++;
+                newSelector = baseSelector + "-" + counter;
+            }
+
+            // Genera la nuova coppia di chiavi
+            KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+            keyGen.initialize(RSA_KEY_SIZE, new SecureRandom());
+            KeyPair keyPair = keyGen.generateKeyPair();
+
+            String privateKeyPem = formatPrivateKeyPem(keyPair.getPrivate());
+            String publicKeyDns = formatPublicKeyDns(keyPair.getPublic());
+            String dnsRecordValue = buildDkimDnsRecord(publicKeyDns);
+
+            // Salva come pending in DB (stato iniziale: pending_dns).
+            // Memorizza anche il "mode" della rotazione, così tutti gli eventi successivi
+            // (dns_propagated, key_activated, rotation_completed) lo ereditano automaticamente.
+            String rotationMode = automatic ? "automatic" : "manual";
+            database.setDkimPending(domainId, newSelector, privateKeyPem, publicKeyDns, "pending_dns", rotationMode);
+
+            // Scrivi la chiave su disco (Rspamd la userà SOLO dopo activatePending)
+            writePrivateKeyFile(d.domain, newSelector, privateKeyPem);
+
+            String dnsRecordName = newSelector + "._domainkey." + d.domain;
+
+            // Log: rotazione avviata
+            logEvent(d, "rotation_started", newSelector, automatic ? "automatic" : "manual", true,
+                "New RSA " + RSA_KEY_SIZE + " key generated. Pending selector: " + newSelector
+                + ". Old active selector: " + d.dkimSelector);
+
+            // FASE B: se richiesto e il dominio ha un account CF assegnato, pubblica subito il record
+            if (automatic && cloudflare != null) {
+                try {
+                    MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
+                    if (acct == null) {
+                        return new RotationStartResult(true, newSelector, dnsRecordName, dnsRecordValue,
+                            I18n.tr("server.dkimm.genNoAccount"));
+                    }
+                    CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
+                    if (!zl.found) {
+                        return new RotationStartResult(true, newSelector, dnsRecordName, dnsRecordValue,
+                            I18n.tr("server.dkimm.genNoZone", java.util.Map.of("a", String.valueOf(acct.label), "e", String.valueOf(zl.error))));
+                    }
+                    CloudflareManager.RecordOp op = cloudflare.createTxtRecord(acct.apiToken, zl.zoneId, dnsRecordName, dnsRecordValue, 300);
+                    if (!op.success) {
+                        return new RotationStartResult(true, newSelector, dnsRecordName, dnsRecordValue,
+                            I18n.tr("server.dkimm.genCfError", java.util.Map.of("a", String.valueOf(acct.label), "e", String.valueOf(op.error))));
+                    }
+                    // Record creato: salva zoneId + recordId e passa a stato "propagated"
+                    database.setDkimPendingCloudflareIds(domainId, zl.zoneId, op.recordId);
+                    database.setDkimRotationState(domainId, "propagated");
+                    logEvent(d, "dns_published", newSelector, "automatic", true,
+                        "TXT record created in Cloudflare (zone " + zl.zoneName + ", record id " + op.recordId + "). State → propagated.");
+                } catch (Exception cfErr) {
+                    return new RotationStartResult(true, newSelector, dnsRecordName, dnsRecordValue,
+                        I18n.tr("server.dkimm.genCfException", java.util.Map.of("e", String.valueOf(cfErr.getMessage()))));
+                }
+            }
+
+            return new RotationStartResult(true, newSelector, dnsRecordName, dnsRecordValue, null);
+
+        } catch (Exception e) {
+            return new RotationStartResult(false, null, null, null, e.getMessage());
+        }
+    }
+
+    /**
+     * Verifica se il record DNS della chiave PENDING è propagato.
+     * Interroga con dig +short TXT <pendingSelector>._domainkey.<domain>
+     * e controlla che la stringa pubblica corrisponda a quella attesa.
+     *
+     * Se propagato e lo stato è ancora "pending_dns", lo aggiorna a "propagated".
+     */
+    public PropagationCheckResult checkPropagation(int domainId) {
+        try {
+            MailDatabase.Domain d = database.getDomain(domainId);
+            if (d == null) {
+                return new PropagationCheckResult(false, false, I18n.tr("server.dkimm.domainNotFound"), null);
+            }
+            if (d.dkimPendingSelector == null || d.dkimPendingPublicKey == null) {
+                return new PropagationCheckResult(false, false, I18n.tr("server.dkimm.noRotation"), null);
+            }
+
+            String recordName = d.dkimPendingSelector + "._domainkey." + d.domain;
+
+            // Interroga prima 1.1.1.1 (autoritativo Cloudflare via resolver pubblico) e poi 8.8.8.8 come fallback.
+            // Questo riduce i falsi negativi durante la propagazione: se almeno uno dei due risponde
+            // con la chiave attesa, consideriamo il record propagato.
+            String[] resolvers = { "@1.1.1.1", "@8.8.8.8" };
+            String lastRaw = "";
+            boolean found = false;
+            for (String resolver : resolvers) {
+                // TODO: migrate to Shell.run when touched
+                ProcessBuilder pb = new ProcessBuilder("dig", resolver, "+short", "+time=5", "+tries=2", "TXT", recordName);
+                org.daemoxcp.mail.util.Shell.applyPath(pb);
+                pb.redirectErrorStream(false);
+                Process proc = pb.start();
+                StringBuilder out = new StringBuilder();
+                try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
+                    String line;
+                    while ((line = r.readLine()) != null) {
+                        out.append(line).append('\n');
+                    }
+                }
+                proc.waitFor();
+                String raw = out.toString().trim();
+                if (!raw.isEmpty()) lastRaw = raw;
+
+                // Pulisci virgolette e concatenazioni (dig restituisce stringhe TXT in "..." separate)
+                String normalized = raw.replace("\"", "").replace(" ", "").replace("\n", "");
+                String expectedTail = "p=" + d.dkimPendingPublicKey.replace(" ", "");
+                if (normalized.contains("v=DKIM1") && normalized.contains(expectedTail)) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found) {
+                // Aggiorna lo stato se ancora pending_dns
+                if ("pending_dns".equals(d.dkimRotationState)) {
+                    database.setDkimRotationState(domainId, "propagated");
+                    logEvent(d, "dns_propagated", d.dkimPendingSelector, null, true,
+                        "Pending TXT record verified in public DNS (1.1.1.1/8.8.8.8). State → propagated.");
+                }
+                return new PropagationCheckResult(true, true,
+                    I18n.tr("server.dkimm.propagated"), lastRaw);
+            } else {
+                return new PropagationCheckResult(true, false,
+                    lastRaw.isEmpty()
+                        ? I18n.tr("server.dkimm.notYetFound")
+                        : I18n.tr("server.dkimm.foundMismatch"),
+                    lastRaw);
+            }
+        } catch (Exception e) {
+            return new PropagationCheckResult(false, false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+        }
+    }
+
+    /**
+     * Attiva la chiave pending come attuale:
+     *  - la pending diventa attiva (db.promotePendingToActive)
+     *  - la chiave attuale diventa "previous" (resta in DNS durante il grace period)
+     *  - Rspamd viene ricaricato così le nuove mail vengono firmate con la nuova chiave
+     *
+     * Pre-requisito: stato == "propagated" (o "pending_dns" se l'utente forza).
+     */
+    public RotationActionResult activatePending(int domainId, boolean force) {
+        try {
+            MailDatabase.Domain d = database.getDomain(domainId);
+            if (d == null) return new RotationActionResult(false, I18n.tr("server.dkimm.domainNotFound"));
+            if (d.dkimPendingSelector == null) {
+                return new RotationActionResult(false, I18n.tr("server.dkimm.noRotation"));
+            }
+            if (!force && !"propagated".equals(d.dkimRotationState)) {
+                return new RotationActionResult(false,
+                    I18n.tr("server.dkimm.notPropagated"));
+            }
+
+            String oldSelector = d.dkimSelector;
+            String newSelector = d.dkimPendingSelector;
+
+            // 1) Promote in DB (atomico)
+            database.promotePendingToActive(domainId);
+
+            // 2) Aggiorna il timestamp dell'ultima rotazione (per lo scheduler)
+            database.markDkimRotationActivated(domainId);
+
+            // 3) Rigenera Rspamd config (ora firmerà col nuovo selector)
+            updateRspamdConfig();
+
+            logEventWithPrevious(d, "key_activated", newSelector, oldSelector, force ? "forced" : null, true,
+                "Key promoted: " + oldSelector + " → " + newSelector + ". Rspamd reloaded. Old key kept for the grace period.");
+
+            return new RotationActionResult(true,
+                I18n.tr("server.dkimm.activated", java.util.Map.of("newer", String.valueOf(newSelector), "old", String.valueOf(oldSelector))));
+        } catch (Exception e) {
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+        }
+    }
+
+    /**
+     * Completa la rotazione: cancella la "previous" key dal DB e azzera lo stato.
+     * L'utente, dopo questa chiamata, può rimuovere il vecchio record _domainkey TXT dal DNS.
+     * Cancella anche il file della chiave precedente da disco.
+     */
+    public RotationActionResult completeRotation(int domainId) {
+        try {
+            MailDatabase.Domain d = database.getDomain(domainId);
+            if (d == null) return new RotationActionResult(false, I18n.tr("server.dkimm.domainNotFound"));
+            if (d.dkimPreviousSelector == null) {
+                return new RotationActionResult(false, I18n.tr("server.dkimm.noPrevious"));
+            }
+
+            // ENFORCEMENT GRACE PERIOD (server-side, non bypassabile dalla UI).
+            // Si può completare la rotazione SOLO se sono passati GRACE_PERIOD_DAYS dall'attivazione.
+            // Questo previene rimozioni premature che causerebbero DKIM-fail su mail già in transito.
+            if (d.dkimRotationActivatedAt != null) {
+                long activatedMs = d.dkimRotationActivatedAt.getTime();
+                long elapsedMs = System.currentTimeMillis() - activatedMs;
+                long graceMs = DkimRotationScheduler.GRACE_PERIOD_DAYS * 24L * 60L * 60L * 1000L;
+                if (elapsedMs < graceMs) {
+                    long remainingMs = graceMs - elapsedMs;
+                    long remainingDays = (remainingMs + 24L * 60L * 60L * 1000L - 1) / (24L * 60L * 60L * 1000L);
+                    long remainingHours = (remainingMs + 60L * 60L * 1000L - 1) / (60L * 60L * 1000L);
+                    String remainingText = remainingDays >= 1
+                        ? (remainingDays == 1 ? I18n.tr("server.dkimm.days.one") : I18n.tr("server.dkimm.days.other", java.util.Map.of("n", String.valueOf(remainingDays))))
+                        : (remainingHours == 1 ? I18n.tr("server.dkimm.hours.one") : I18n.tr("server.dkimm.hours.other", java.util.Map.of("n", String.valueOf(remainingHours))));
+                    return new RotationActionResult(false,
+                        I18n.tr("server.dkimm.graceNotOver", java.util.Map.of("t", String.valueOf(remainingText))));
+                }
+            }
+
+            String prevSelector = d.dkimPreviousSelector;
+            String cfNote = "";
+
+            // Cancella file su disco della chiave previous
+            try {
+                Path prevKey = keyFile(d.domain, prevSelector);
+                Files.deleteIfExists(prevKey);
+            } catch (Exception ignore) {}
+
+            // Prova a cancellare il record DNS della vecchia chiave via Cloudflare.
+            // Strategia in 3 fallback per essere robusti anche se non abbiamo l'ID memorizzato:
+            //   1) Se dkim_previous_dns_record_id è memorizzato → cancellazione diretta
+            //   2) Altrimenti, se abbiamo un account CF assegnato → trova il record per nome
+            //   3) Se anche lo zone_id è ignoto → cerca prima la zona via API
+            String prevRecordName = prevSelector + "._domainkey." + d.domain;
+            if (cloudflare != null) {
+                MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
+                if (acct != null) {
+                    // Trova lo zone_id (memorizzato o via lookup)
+                    String zoneId = d.dkimDnsZoneId;
+                    if (zoneId == null) {
+                        try {
+                            CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
+                            if (zl.found) zoneId = zl.zoneId;
+                        } catch (Exception ignore) {}
+                    }
+                    if (zoneId != null) {
+                        // Trova il record_id da cancellare: memorizzato o via lookup per nome
+                        String recordId = d.dkimPreviousDnsRecordId;
+                        if (recordId == null) {
+                            try {
+                                CloudflareManager.RecordOp findOp = cloudflare.findTxtRecord(acct.apiToken, zoneId, prevRecordName);
+                                if (findOp.success) recordId = findOp.recordId;
+                            } catch (Exception ignore) {}
+                        }
+                        if (recordId != null) {
+                            CloudflareManager.RecordOp op = cloudflare.deleteRecord(acct.apiToken, zoneId, recordId);
+                            cfNote = op.success
+                                ? " " + I18n.tr("server.dkimm.cfRemoved", java.util.Map.of("n", String.valueOf(prevRecordName), "a", String.valueOf(acct.label)))
+                                : " " + I18n.tr("server.dkimm.cfRemoveFailed", java.util.Map.of("e", String.valueOf(op.error)));
+                        } else {
+                            cfNote = " " + I18n.tr("server.dkimm.cfNotFound", java.util.Map.of("n", String.valueOf(prevRecordName)));
+                        }
+                    }
+                }
+            }
+
+            // Pulisci campi previous_* nel DB
+            database.clearDkimPrevious(domainId);
+
+            logEvent(d, "rotation_completed", d.dkimSelector, null, true,
+                "Old key (" + prevSelector + ") removed from the panel." + cfNote);
+
+            return new RotationActionResult(true,
+                I18n.tr("server.dkimm.completed") + (cfNote.isEmpty()
+                    ? " " + I18n.tr("server.dkimm.removeOld", java.util.Map.of("n", String.valueOf(prevRecordName)))
+                    : cfNote));
+        } catch (Exception e) {
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+        }
+    }
+
+    /**
+     * Annulla una rotazione in corso (FASE pre-attivazione).
+     * Funziona SOLO se lo stato è pending_dns / propagated (cioè non ancora attivata).
+     * Cancella la chiave pending dal DB e da disco.
+     */
+    public RotationActionResult cancelRotation(int domainId) {
+        try {
+            MailDatabase.Domain d = database.getDomain(domainId);
+            if (d == null) return new RotationActionResult(false, I18n.tr("server.dkimm.domainNotFound"));
+            if (d.dkimPendingSelector == null) {
+                return new RotationActionResult(false, I18n.tr("server.dkimm.nothingToCancel"));
+            }
+            if ("active_grace".equals(d.dkimRotationState)) {
+                return new RotationActionResult(false,
+                    I18n.tr("server.dkimm.alreadyActivated"));
+            }
+
+            String pendingSelector = d.dkimPendingSelector;
+            String cfNote = "";
+
+            // Cancella file della chiave pending
+            try {
+                Path pendingKey = keyFile(d.domain, pendingSelector);
+                Files.deleteIfExists(pendingKey);
+            } catch (Exception ignore) {}
+
+            // Prova a cancellare il record DNS della chiave pending via Cloudflare.
+            // Stesso pattern in 3 fallback di completeRotation: ID memorizzato, lookup per nome, zone lookup.
+            String pendingRecordName = pendingSelector + "._domainkey." + d.domain;
+            if (cloudflare != null) {
+                MailDatabase.CloudflareAccount acct = cloudflare.getAccountForDomain(domainId);
+                if (acct != null) {
+                    String zoneId = d.dkimDnsZoneId;
+                    if (zoneId == null) {
+                        try {
+                            CloudflareManager.ZoneLookup zl = cloudflare.findZone(acct.apiToken, d.domain);
+                            if (zl.found) zoneId = zl.zoneId;
+                        } catch (Exception ignore) {}
+                    }
+                    if (zoneId != null) {
+                        String recordId = d.dkimPendingDnsRecordId;
+                        if (recordId == null) {
+                            try {
+                                CloudflareManager.RecordOp findOp = cloudflare.findTxtRecord(acct.apiToken, zoneId, pendingRecordName);
+                                if (findOp.success) recordId = findOp.recordId;
+                            } catch (Exception ignore) {}
+                        }
+                        if (recordId != null) {
+                            CloudflareManager.RecordOp op = cloudflare.deleteRecord(acct.apiToken, zoneId, recordId);
+                            cfNote = op.success
+                                ? " " + I18n.tr("server.dkimm.cfRemoved", java.util.Map.of("n", String.valueOf(pendingRecordName), "a", String.valueOf(acct.label)))
+                                : " " + I18n.tr("server.dkimm.cfRemoveFailed", java.util.Map.of("e", String.valueOf(op.error)));
+                        }
+                    }
+                }
+            }
+
+            database.clearDkimPending(domainId);
+
+            logEvent(d, "rotation_cancelled", pendingSelector, null, true,
+                "Pending key deleted before activation." + cfNote);
+
+            return new RotationActionResult(true,
+                I18n.tr("server.dkimm.cancelled") + (cfNote.isEmpty()
+                    ? " " + I18n.tr("server.dkimm.removePending", java.util.Map.of("n", String.valueOf(pendingRecordName)))
+                    : cfNote));
+        } catch (Exception e) {
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+        }
+    }
+
+    /**
+     * Ritorna info dettagliate sulla rotazione (per la UI).
+     */
+    public RotationInfo getRotationInfo(int domainId) throws Exception {
+        MailDatabase.Domain d = database.getDomain(domainId);
+        if (d == null) return null;
+
+        RotationInfo info = new RotationInfo();
+        info.domain = d.domain;
+        info.currentSelector = d.dkimSelector;
+        info.hasDkim = d.hasDkim;
+
+        info.rotationState = d.dkimRotationState;
+        info.startedAt = d.dkimRotationStartedAt;
+        info.activatedAt = d.dkimRotationActivatedAt;
+
+        if (d.dkimPendingSelector != null) {
+            info.pendingSelector = d.dkimPendingSelector;
+            info.pendingDnsName = d.dkimPendingSelector + "._domainkey." + d.domain;
+            info.pendingDnsValue = buildDkimDnsRecord(d.dkimPendingPublicKey);
+        }
+        if (d.dkimPreviousSelector != null) {
+            info.previousSelector = d.dkimPreviousSelector;
+            info.previousDnsName = d.dkimPreviousSelector + "._domainkey." + d.domain;
+        }
+        return info;
+    }
+
+    /**
+     * Get DKIM info for a domain (for display in UI)
+     */
+    public DkimInfo getDkimInfo(int domainId) throws Exception {
+        MailDatabase.Domain domain = database.getDomain(domainId);
+        if (domain == null) {
+            return null;
+        }
+
+        DkimInfo info = new DkimInfo();
+        info.domain = domain.domain;
+        info.selector = domain.dkimSelector != null ? domain.dkimSelector : "mail";
+        info.configured = domain.hasDkim;
+
+        if (domain.hasDkim && domain.dkimPublicKey != null) {
+            info.publicKey = domain.dkimPublicKey;
+            info.dnsRecordName = info.selector + "._domainkey." + domain.domain;
+            info.dnsRecordValue = buildDkimDnsRecord(domain.dkimPublicKey);
+
+            // Check if key file exists
+            try {
+                info.keyFileExists = Files.exists(keyFile(domain.domain, info.selector));
+            } catch (IllegalArgumentException invalid) {
+                info.keyFileExists = false;
+            }
+        }
+
+        return info;
+    }
+
+    /**
+     * Delete DKIM configuration for a domain
+     */
+    public boolean deleteDkim(int domainId) {
+        try {
+            MailDatabase.Domain domain = database.getDomain(domainId);
+            if (domain == null) {
+                return false;
+            }
+
+            // Delete key file
+            String selector = domain.dkimSelector != null ? domain.dkimSelector : "mail";
+            Path keyFile = keyFile(domain.domain, selector);
+            Files.deleteIfExists(keyFile);
+
+            // Clear from database
+            database.setDkim(domainId, "mail", null, null);
+
+            // Update Rspamd config
+            updateRspamdConfig();
+
+            return true;
+        } catch (Exception e) {
+            System.err.println("Error deleting DKIM: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Verify DKIM DNS record is properly configured
+     * Uses dig to check if the record exists and matches
+     */
+    public DkimVerifyResult verifyDkimDns(String domain, String selector) {
+        try {
+            String recordName = selector + "._domainkey." + domain;
+
+            // TODO: migrate to Shell.run when touched
+            ProcessBuilder pb = new ProcessBuilder("dig", "+short", "TXT", recordName);
+            org.daemoxcp.mail.util.Shell.applyPath(pb);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                }
+            }
+
+            process.waitFor();
+
+            String result = output.toString().trim();
+            if (result.isEmpty()) {
+                return new DkimVerifyResult(false, "DNS record not found: " + recordName);
+            }
+
+            // Check if it contains DKIM1
+            if (result.contains("v=DKIM1") && result.contains("k=rsa") && result.contains("p=")) {
+                return new DkimVerifyResult(true, "DKIM DNS record verified successfully");
+            } else {
+                return new DkimVerifyResult(false, "Invalid DKIM record format: " + result);
+            }
+
+        } catch (Exception e) {
+            return new DkimVerifyResult(false, "Error verifying DNS: " + e.getMessage());
+        }
+    }
+
+    // ============== Result Classes ==============
+
+    public static class DkimResult {
+        public final boolean success;
+        public final String selector;
+        public final String publicKey;
+        public final String dnsRecord;
+        public final String error;
+
+        public DkimResult(boolean success, String selector, String publicKey, String dnsRecord, String error) {
+            this.success = success;
+            this.selector = selector;
+            this.publicKey = publicKey;
+            this.dnsRecord = dnsRecord;
+            this.error = error;
+        }
+    }
+
+    public static class DkimInfo {
+        public String domain;
+        public String selector;
+        public boolean configured;
+        public String publicKey;
+        public String dnsRecordName;
+        public String dnsRecordValue;
+        public boolean keyFileExists;
+    }
+
+    public static class DkimVerifyResult {
+        public final boolean valid;
+        public final String message;
+
+        public DkimVerifyResult(boolean valid, String message) {
+            this.valid = valid;
+            this.message = message;
+        }
+    }
+
+    /** Esito di startRotation: contiene il nuovo selector e il record DNS da pubblicare. */
+    public static class RotationStartResult {
+        public final boolean success;
+        public final String pendingSelector;
+        public final String dnsRecordName;
+        public final String dnsRecordValue;
+        public final String error;
+
+        public RotationStartResult(boolean success, String pendingSelector, String dnsRecordName,
+                                    String dnsRecordValue, String error) {
+            this.success = success;
+            this.pendingSelector = pendingSelector;
+            this.dnsRecordName = dnsRecordName;
+            this.dnsRecordValue = dnsRecordValue;
+            this.error = error;
+        }
+    }
+
+    /** Esito di checkPropagation. */
+    public static class PropagationCheckResult {
+        public final boolean success;     // la verifica è stata eseguita senza errori
+        public final boolean propagated;  // il record DNS corrisponde alla chiave pending
+        public final String message;
+        public final String rawDigOutput; // utile per debug nell'UI
+
+        public PropagationCheckResult(boolean success, boolean propagated, String message, String rawDigOutput) {
+            this.success = success;
+            this.propagated = propagated;
+            this.message = message;
+            this.rawDigOutput = rawDigOutput;
+        }
+    }
+
+    /** Esito generico per activatePending / completeRotation / cancelRotation. */
+    public static class RotationActionResult {
+        public final boolean success;
+        public final String message;
+
+        public RotationActionResult(boolean success, String message) {
+            this.success = success;
+            this.message = message;
+        }
+    }
+
+    /** Info aggregate sulla rotazione, per l'UI. */
+    public static class RotationInfo {
+        public String domain;
+        public boolean hasDkim;
+        public String currentSelector;
+
+        public String rotationState;             // null, "pending_dns", "propagated", "active_grace"
+        public java.sql.Timestamp startedAt;
+        public java.sql.Timestamp activatedAt;
+
+        public String pendingSelector;
+        public String pendingDnsName;
+        public String pendingDnsValue;
+
+        public String previousSelector;
+        public String previousDnsName;
+    }
+}
