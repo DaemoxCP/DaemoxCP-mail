@@ -5,7 +5,7 @@ import org.daemoxcp.mail.TestSql;
 import com.sun.net.httpserver.HttpsServer;
 import org.json.JSONObject;
 import org.daemoxcp.mail.Main;
-import org.daemoxcp.mail.content.MailPanelContent;
+import org.daemoxcp.mail.content.PanelContent;
 import org.daemoxcp.mail.database.MailDatabase;
 
 import javax.net.ssl.SSLContext;
@@ -95,10 +95,10 @@ public class LanguageRoutesTest {
         String sessionCookie = "__Host-MailPanel=" + session;
 
         // The pages are read from admin/ next to the jar: written here, removed at the end.
-        Path jarDir = Path.of(MailPanelContent.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParent();
+        Path jarDir = Path.of(PanelContent.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParent();
         Path adminDir = jarDir.resolve("admin");
         boolean adminDirExisted = Files.exists(adminDir);
-        MailPanelContent.generateAllContent();
+        PanelContent.generateAllContent();
 
         Process cert = new ProcessBuilder("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                 "-subj", "/CN=localhost", "-keyout", dir.resolve("k.pem").toString(), "-out", dir.resolve("c.pem").toString())

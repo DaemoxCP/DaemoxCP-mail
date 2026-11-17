@@ -101,20 +101,20 @@ public final class PageAssets {
     public static void writeAll(Path pagesDir) throws IOException {
         Path base = pagesDir.resolve(DIR);
         Files.createDirectories(base.resolve(OPEN));
-        // Come le pagine (MailPanelContent.readableByPanel): le legge la parte web, mai l'umask a deciderlo.
-        MailPanelContent.readableByPanel(base, true);
-        MailPanelContent.readableByPanel(base.resolve(OPEN), true);
+        // Come le pagine (PanelContent.readableByPanel): le legge la parte web, mai l'umask a deciderlo.
+        PanelContent.readableByPanel(base, true);
+        PanelContent.readableByPanel(base.resolve(OPEN), true);
         Set<Path> wanted = new HashSet<>();
         for (Map.Entry<String, byte[]> e : REGISTERED.entrySet()) {
             Path target = base.resolve(e.getKey());
             wanted.add(target);
             if (Files.exists(target) && java.util.Arrays.equals(Files.readAllBytes(target), e.getValue())) {
-                MailPanelContent.readableByPanel(target, false);
+                PanelContent.readableByPanel(target, false);
                 continue;
             }
             Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
             Files.write(tmp, e.getValue());
-            MailPanelContent.readableByPanel(tmp, false);
+            PanelContent.readableByPanel(tmp, false);
             Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         }
         for (Path dir : new Path[]{base, base.resolve(OPEN)}) {

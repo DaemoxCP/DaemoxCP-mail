@@ -3,7 +3,7 @@
 // ogni pagina chiama window.panelConfirmIdentity(), che apre questa finestra e risponde true quando la root ha
 // verificato la passkey o il codice; allora la richiesta si ripete una volta. Chi ha una passkey sceglie fra la
 // passkey e un codice via email; chi non ne ha, solo il codice. La conferma vale 5 minuti.
-// Le funzioni WebAuthn (webauthnGetOptions, webauthnCredentialJson) arrivano da MailPanelContent.getWebAuthnScript,
+// Le funzioni WebAuthn (webauthnGetOptions, webauthnCredentialJson) arrivano da PanelContent.getWebAuthnScript,
 // nello stesso file e nella stessa funzione (Layout.CONFIRM_SCRIPT): niente di globale, salvo panelConfirmIdentity.
 
 var pending = null;

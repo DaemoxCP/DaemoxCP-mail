@@ -12,7 +12,7 @@ import java.nio.file.StandardOpenOption;
  * HTML content for FreeBSD Mail Panel
  * Same styling as Web Panel (Bootstrap 5)
  */
-public class MailPanelContent {
+public class PanelContent {
 
     /**
      * Legge un pezzo di interfaccia dalle risorse del jar.
@@ -28,7 +28,7 @@ public class MailPanelContent {
      * mai dalla rete: qui non c'e' niente da filtrare, a differenza della rotta /fa e /vendor.
      */
     private static String resource(String path) {
-        try (java.io.InputStream in = MailPanelContent.class.getResourceAsStream("/" + path)) {
+        try (java.io.InputStream in = PanelContent.class.getResourceAsStream("/" + path)) {
             if (in == null) {
                 System.err.println("[Content] resource missing from the jar: " + path);
                 return "<!-- missing resource: " + path + " -->";
@@ -52,7 +52,7 @@ public class MailPanelContent {
             + "p{line-height:1.6;margin:0 0 1rem}", true);
 
     private static String getJarDirectory() throws URISyntaxException {
-        String jarPath = MailPanelContent.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
+        String jarPath = PanelContent.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
         return new File(jarPath).getParent();
     }
 

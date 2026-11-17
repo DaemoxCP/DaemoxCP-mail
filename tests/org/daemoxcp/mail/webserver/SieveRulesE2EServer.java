@@ -2,7 +2,7 @@ package org.daemoxcp.mail.webserver;
 
 import com.sun.net.httpserver.HttpsServer;
 import org.daemoxcp.mail.Main;
-import org.daemoxcp.mail.content.MailPanelContent;
+import org.daemoxcp.mail.content.PanelContent;
 import org.daemoxcp.mail.database.MailDatabase;
 import org.daemoxcp.mail.integration.SieveGenerator;
 import org.daemoxcp.mail.sqli.dataBaseManager;
@@ -87,7 +87,7 @@ public class SieveRulesE2EServer {
         Files.createDirectories(oldFilters);
         Files.writeString(oldFilters.resolve(".dovecot.sieve"), "require \"fileinto\";\nfileinto \"INBOX.Old\";\n");
 
-        MailPanelContent.generateAllContent();
+        PanelContent.generateAllContent();
         Process cert = new ProcessBuilder("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=panel.localhost",
                 "-addext", "subjectAltName=DNS:panel.localhost", "-keyout", dir.resolve("k.pem").toString(), "-out", dir.resolve("c.pem").toString())
                 .redirectErrorStream(true).start();

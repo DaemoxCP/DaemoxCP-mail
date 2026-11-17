@@ -86,7 +86,7 @@ public final class Layout {
 
     /**
      * I due script della cornice sono file registrati quando questa classe si carica: chi scrive i
-     * file (MailPanelContent.generateAllContent) la fa caricare prima, chiamando questo metodo.
+     * file (PanelContent.generateAllContent) la fa caricare prima, chiamando questo metodo.
      */
     static void registerAssets() {
         // Basta il riferimento: i campi statici sono gia' inizializzati.
@@ -276,7 +276,7 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
 """;
 
     /** Lo script della finestra, con le funzioni WebAuthn delle pagine d'accesso, chiuso in una funzione sua. */
-    private static final String CONFIRM_SCRIPT = PageAssets.script("(function () {\n" + MailPanelContent.getWebAuthnScript()
+    private static final String CONFIRM_SCRIPT = PageAssets.script("(function () {\n" + PanelContent.getWebAuthnScript()
             + readPage("pages/panel-confirm.js") + "})();\n", false);
 
     /**

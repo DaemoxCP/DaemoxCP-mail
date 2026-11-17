@@ -1,0 +1,8 @@
+# Il nome DaemoxCP Mail ovunque, 17/11/2026 (ramo mac/daemoxcp-mail-everywhere), su main a 0c54a1ab.
+# Ogni giro controllato da tools/JavaRename.java.
+
+# --- giro 1: il pacchetto (modo package)
+package org.mail_panel org.daemoxcp.mail
+
+# --- giro 2: i tipi
+type:org.daemoxcp.mail.content.MailPanelContent PanelContent

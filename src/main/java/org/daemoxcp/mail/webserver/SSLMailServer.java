@@ -633,7 +633,7 @@ public class SSLMailServer {
             // Costruita qui come prima, con gli script in file (PageAssets): sono quelli che
             // generateAllContent ha gia' scritto all'avvio (scrive anche forbidden.html).
             byte[] html = renderPage(exchange, withTheme(exchange, org.daemoxcp.mail.content.PageAssets.externalize(
-                    org.daemoxcp.mail.content.MailPanelContent.getForbiddenHtml(), false)), getCsrfToken(exchange)).getBytes(StandardCharsets.UTF_8);
+                    org.daemoxcp.mail.content.PanelContent.getForbiddenHtml(), false)), getCsrfToken(exchange)).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
             exchange.sendResponseHeaders(403, html.length);
             try (OutputStream os = exchange.getResponseBody()) { os.write(html); }
@@ -1738,7 +1738,7 @@ public class SSLMailServer {
         String html = "<!doctype html><html lang=\"" + lang + "\"><head><meta charset=\"utf-8\">"
                 + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
                 + "<title>" + I18n.escapeHtml(I18n.tr("server.unavailable.title")) + "</title>"
-                + org.daemoxcp.mail.content.MailPanelContent.UNAVAILABLE_STYLE
+                + org.daemoxcp.mail.content.PanelContent.UNAVAILABLE_STYLE
                 + "</head><body><main class=\"c\">"
                 + "<h1>" + I18n.escapeHtml(I18n.tr("server.unavailable.title")) + "</h1>"
                 + "<p>" + I18n.escapeHtml(I18n.tr("server.unavailable.mysql")) + "</p>"

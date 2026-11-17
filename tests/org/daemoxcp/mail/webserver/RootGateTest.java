@@ -118,7 +118,7 @@ public class RootGateTest {
             System.out.println("\n== 4. The pages' calls to the root routes ==");
             List<Path> files = new ArrayList<>();
             try (Stream<Path> s = Files.list(pages)) { s.filter(p -> p.toString().endsWith(".js")).forEach(files::add); }
-            files.add(Path.of("src/main/java/org/daemoxcp/mail/content/MailPanelContent.java"));
+            files.add(Path.of("src/main/java/org/daemoxcp/mail/content/PanelContent.java"));
             Pattern call = Pattern.compile("fetch\\(['\"`](/api/[a-z_/-]+)");
             Pattern method = Pattern.compile("method:\\s*['\"](GET|POST|PUT|DELETE|PATCH)['\"]");
             int calls = 0;

@@ -1288,7 +1288,7 @@ DaemoxCP Mail (Java 25)
 │   ├── LetsEncryptScript.java     # SSL certificates
 │   └── SetTimeOnSystemScript.java # Timezone/DNS
 └── content/
-    └── MailPanelContent.java # HTML/CSS/JS generator
+    └── PanelContent.java     # HTML/CSS/JS generator
 ```
 
 ---

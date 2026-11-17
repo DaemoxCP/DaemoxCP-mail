@@ -22,7 +22,7 @@ import java.lang.reflect.Method;
  * per-request values are left, for the browser tests to fill in. i18n/ holds the two script
  * dictionaries, to be served as /i18n/it.js and /i18n/en.js.
  *
- * Like the panel (MailPanelContent.generateAllContent), every inline script and style block becomes a
+ * Like the panel (PanelContent.generateAllContent), every inline script and style block becomes a
  * file (PageAssets): assets/ holds them, to be served as /assets/..., and csp.txt holds the
  * Content-Security-Policy the panel sends, for the browser tests to send it too.
  *
@@ -41,7 +41,7 @@ public class PageGenerator {
         new File(dir, "i18n").mkdirs();
         for (String lang : I18n.LANGUAGES) write(new File(dir, "i18n/" + lang + ".js"), I18n.script(lang));
         int done = 0, skipped = 0;
-        for (Method m : MailPanelContent.class.getDeclaredMethods()) {
+        for (Method m : PanelContent.class.getDeclaredMethods()) {
             String n = m.getName();
             if (!n.startsWith("get") || !n.endsWith("Html")) continue;
             if (m.getParameterCount() != 0) continue;

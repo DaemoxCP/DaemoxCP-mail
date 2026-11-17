@@ -271,7 +271,7 @@ public final class PanelSeparation {
     }
 
     /**
-     * Le pagine del pannello e i loro script e stili (MailPanelContent, PageAssets): la web li serve, quindi
+     * Le pagine del pannello e i loro script e stili (PanelContent, PageAssets): la web li serve, quindi
      * cartelle 0750 e file 0640 root:mailpanel, in sola lettura. Solo cartelle e file veri, mai collegamenti.
      */
     static String openPagesToWeb(Path admin) throws IOException {

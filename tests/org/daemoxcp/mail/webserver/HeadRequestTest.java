@@ -70,7 +70,7 @@ public class HeadRequestTest {
         cert.getInputStream().readAllBytes();
         check("test certificate", cert.waitFor() == 0);
         // The pages and their scripts next to the jar, as the panel writes them at start.
-        org.daemoxcp.mail.content.MailPanelContent.generateAllContent();
+        org.daemoxcp.mail.content.PanelContent.generateAllContent();
         Main.mysqlAvailable = false;
         Main.setupRequired = false;
         SSLMailServer srv = new SSLMailServer(0, Files.readString(dir.resolve("c.pem")), Files.readString(dir.resolve("k.pem")));

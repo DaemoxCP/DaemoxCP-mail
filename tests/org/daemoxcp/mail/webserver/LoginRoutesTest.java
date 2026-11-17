@@ -6,7 +6,7 @@ import com.sun.net.httpserver.HttpsServer;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.daemoxcp.mail.Main;
-import org.daemoxcp.mail.content.MailPanelContent;
+import org.daemoxcp.mail.content.PanelContent;
 import org.daemoxcp.mail.database.MailDatabase;
 import org.daemoxcp.mail.security.AuthStore;
 import org.daemoxcp.mail.security.DataCrypto;
@@ -143,10 +143,10 @@ public class LoginRoutesTest {
         check("two test administrators", boss.id() > 0 && plain.id() > 0);
         String bossEmail = "boss" + suffix + "@example.org";
 
-        Path jarDir = Path.of(MailPanelContent.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParent();
+        Path jarDir = Path.of(PanelContent.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParent();
         Path adminDir = jarDir.resolve("admin");
         boolean adminDirExisted = Files.exists(adminDir);
-        MailPanelContent.generateAllContent();
+        PanelContent.generateAllContent();
 
         Process cert = new ProcessBuilder("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                 "-subj", "/CN=localhost", "-keyout", dir.resolve("k.pem").toString(), "-out", dir.resolve("c.pem").toString())

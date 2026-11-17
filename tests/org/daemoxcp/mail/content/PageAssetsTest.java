@@ -23,7 +23,7 @@ import java.util.stream.Stream;
  *  4. The policy: no 'unsafe-inline' nor 'unsafe-eval', no sources from outside.
  *  5. Every page of the panel, generated as the server generates it: no inline script, style,
  *     on...= handler or style attribute.
- *  6. The pages' sources (MailPanelContent, Layout, resources/pages, DnsRecordsGenerator): no on...=
+ *  6. The pages' sources (PanelContent, Layout, resources/pages, DnsRecordsGenerator): no on...=
  *     nor style= even in the HTML the scripts build later, which check 5 does not see.
  * Check 6 reads the sources: it must be started from the project root.
  *
@@ -109,7 +109,7 @@ public class PageAssetsTest {
         System.out.println("\n== 5. Every page, as the server generates it ==");
         int pages = 0;
         List<String> dirty = new ArrayList<>();
-        for (Method m : MailPanelContent.class.getDeclaredMethods()) {
+        for (Method m : PanelContent.class.getDeclaredMethods()) {
             String n = m.getName();
             if (!n.startsWith("get") || !n.endsWith("Html") || m.getParameterCount() != 0) continue;
             m.setAccessible(true);
@@ -127,7 +127,7 @@ public class PageAssetsTest {
 
         System.out.println("\n== 6. The pages' sources ==");
         Path root = Path.of("src/main");
-        List<Path> sources = new ArrayList<>(List.of(root.resolve("java/org/daemoxcp/mail/content/MailPanelContent.java"),
+        List<Path> sources = new ArrayList<>(List.of(root.resolve("java/org/daemoxcp/mail/content/PanelContent.java"),
                 root.resolve("java/org/daemoxcp/mail/content/Layout.java"),
                 root.resolve("java/org/daemoxcp/mail/security/DnsRecordsGenerator.java")));
         if (Files.isDirectory(root.resolve("resources/pages"))) {

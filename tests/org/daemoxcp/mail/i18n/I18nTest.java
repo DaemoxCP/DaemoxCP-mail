@@ -1,7 +1,7 @@
 package org.daemoxcp.mail.i18n;
 
 import org.daemoxcp.mail.content.Layout;
-import org.daemoxcp.mail.content.MailPanelContent;
+import org.daemoxcp.mail.content.PanelContent;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -104,7 +104,7 @@ public class I18nTest {
         List<String> missing = new ArrayList<>(), inScripts = new ArrayList<>(), leftovers = new ArrayList<>();
         int pageCount = 0;
         List<String> sources = new ArrayList<>();
-        for (Method m : MailPanelContent.class.getDeclaredMethods()) {
+        for (Method m : PanelContent.class.getDeclaredMethods()) {
             if (!m.getName().startsWith("get") || !m.getName().endsWith("Html") || m.getParameterCount() != 0
                     || !Modifier.isStatic(m.getModifiers())) continue;
             m.setAccessible(true);
@@ -153,7 +153,7 @@ public class I18nTest {
         // halfway. That is how the Kafka page showed the function's code instead of the topics.
         Pattern asValue = Pattern.compile("(?<![A-Za-z0-9_$.'\"#-])t(?![A-Za-z0-9_$'\"(:-])");
         List<String> shadows = new ArrayList<>(), asValues = new ArrayList<>();
-        for (Method m : MailPanelContent.class.getDeclaredMethods()) {
+        for (Method m : PanelContent.class.getDeclaredMethods()) {
             if (!m.getName().startsWith("get") || !m.getName().endsWith("Html") || m.getParameterCount() != 0
                     || !Modifier.isStatic(m.getModifiers())) continue;
             m.setAccessible(true);

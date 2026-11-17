@@ -7,7 +7,7 @@ import com.googlecode.lanterna.screen.Screen;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.gui2.dialogs.MessageDialogButton;
 
-import org.daemoxcp.mail.content.MailPanelContent;
+import org.daemoxcp.mail.content.PanelContent;
 import org.daemoxcp.mail.database.MailDatabase;
 import org.daemoxcp.mail.gui.Chooser;
 import org.daemoxcp.mail.gui.ModifyData;
@@ -398,7 +398,7 @@ public class Main {
                         + e.getMessage());
             }
         }
-        MailPanelContent.generateAllContent();
+        PanelContent.generateAllContent();
 
         // Se una manutenzione dei pacchetti non e' arrivata in fondo (pannello ucciso, crash,
         // riavvio a meta'), i pacchetti sono rimasti SBLOCCATI e nessuno se ne accorgerebbe

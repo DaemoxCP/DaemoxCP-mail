@@ -29,7 +29,7 @@ import re
 import sys
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
-PAGE = os.path.join(root, "src/main/java/org/daemoxcp/mail/content/MailPanelContent.java")
+PAGE = os.path.join(root, "src/main/java/org/daemoxcp/mail/content/PanelContent.java")
 ROUTES = os.path.join(root, "src/main/java/org/daemoxcp/mail/webserver/SSLMailServer.java")
 # All the project's classes outside the page: the routes also call Autoconfig, AppleProfile,
 # PeriodicReport, AutoDns. With only the five classes of before, an action of those showed as
