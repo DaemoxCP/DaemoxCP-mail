@@ -33,6 +33,7 @@ Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx �
 - [The mail stack](#the-mail-stack)
 - [Security model: who runs as root, and why](#security-model-who-runs-as-root-and-why)
 - [Installation](#installation)
+- [Not there yet](#not-there-yet)
 - [Daily use](#daily-use)
 - [Keeping it up to date](#keeping-it-up-to-date)
 - [Coming from FreeBSD Mail Panel](#coming-from-freebsd-mail-panel)
@@ -66,12 +67,12 @@ It is **careful**. The panel never changes something it cannot check, and it say
 ## What it does
 
 **Mail**
-- Domains, mailboxes with quotas, aliases and forwarding, catch-all.
+- Domains, mailboxes, aliases and forwarding, address transforms.
 - Mailbox passwords as BLF-CRYPT hashes, and an encrypted copy the administrator can reveal. The copy is
   encrypted with a public key, and only the root part of the panel can read it.
 - Sieve filters and vacation replies, compiled and checked server side.
-- Sending limits per mailbox, per hour and per day; a mail queue you can inspect and act on.
-- Statistics: mail sent, received, delivered and bounced, per domain; spam, ham and spam training from Rspamd.
+- A mail queue you can inspect and act on; the maximum message size.
+- Statistics from Rspamd: spam, ham and spam training.
 - Optional POP3 (off by default).
 
 **DNS and certificates**
@@ -170,7 +171,7 @@ All from FreeBSD packages, configured by the panel, started by `rc.d`.
 | **Redis** | Rspamd's cache and statistics | Unix socket |
 | **MySQL 8.4** | domains, mailboxes, aliases, the panel's data | 127.0.0.1:3306 |
 | **nginx + PHP-FPM** | Roundcube webmail on 8443, MTA-STS policy on 443 | 8443, 443, 80 |
-| **Roundcube** | webmail, with single sign-on from the panel and password changes through it | (behind nginx) |
+| **Roundcube** | webmail, with single sign-on from the panel | (behind nginx) |
 | **local-unbound** | the server's own DNS resolver, recursive, so DNSBL lookups work | 127.0.0.1:53 |
 | **fail2ban** | bans from the mail and panel logs, into pf | — |
 | **pf** | the firewall | — |
@@ -523,15 +524,29 @@ first, with *Cancel* selected: press Tab to reach *OK*. Go through the options i
 
 ---
 
+## Not there yet
+
+What the panel shows but does not do yet. It is said on the pages too, so nobody counts on it:
+
+- **Quotas** are saved with each mailbox, but Dovecot does not enforce them.
+- **Hourly and daily sending limits** are saved, but neither Postfix nor Rspamd reads them: only the maximum
+  message size is applied.
+- **Sent and received counts** are not collected: the statistics page shows Rspamd's figures only.
+- **Changing the password from the webmail** goes through the panel when Roundcube's `password` plugin is on, but a
+  new installation does not turn it on.
+- **Catch-all addresses** cannot be created from the panel.
+
+---
+
 ## Daily use
 
 | Page | What you do there |
 |---|---|
 | **Dashboard** | the state of the server at a glance, and the DNS still to set up |
-| **Domains**, **Mailboxes**, **Aliases** | the mail itself; from a mailbox: password, quota, Sieve filters, vacation reply, Apple profile, webmail sign-in |
+| **Domains**, **Mailboxes**, **Aliases** | the mail itself; from a mailbox: password, Sieve filters, vacation reply, Apple profile, webmail sign-in |
 | **Mail queue** | what is waiting, why, and what to do with it |
-| **Sending limits** | how much each mailbox may send, per hour and per day |
-| **Statistics** | sent, received, delivered, bounced, per domain; spam and ham |
+| **Sending limits** | the maximum message size |
+| **Statistics** | spam, ham and spam training, from Rspamd |
 | **DNS** | the records of each domain, *Set up everything*, MTA-STS, DKIM rotation |
 | **SSL certificates** | Let's Encrypt, the panel's and the webmail's certificates, their expiry |
 | **Cloudflare** | accounts and tokens, which zones each one sees |
