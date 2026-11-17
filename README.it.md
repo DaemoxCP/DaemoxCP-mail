@@ -8,6 +8,9 @@ Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx �
 
 `solo FreeBSD 15.0+` · `amd64 / arm64` · `Java 25` · `AGPL-3.0` · `niente Docker, niente strato Linux` · `accesso senza password`
 
+<a href="https://buymeacoffee.com/pietrogdamico"><img alt="Offrimi un caffè" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black" /></a>
+<a href="https://www.paypal.com/paypalme/pietrogdamico28"><img alt="Dona con PayPal" src="https://img.shields.io/badge/PayPal-donate-00457C?logo=paypal&logoColor=white" /></a>
+
 [English](README.md) · **Italiano**
 
 <img src="docs/screenshots/it/home.png" alt="La dashboard di DaemoxCP Mail: i record DNS che servono al server di posta, col valore attuale e quello atteso" width="900">
@@ -35,6 +38,7 @@ Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx �
 - [Da FreeBSD Mail Panel](#da-freebsd-mail-panel)
 - [Riferimento](#riferimento)
 - [Se qualcosa non va](#se-qualcosa-non-va)
+- [Sostieni il progetto](#sostieni-il-progetto)
 - [Autore e licenza](#autore-e-licenza)
 
 ---
@@ -683,6 +687,19 @@ importanza. Poi:
 | il pannello non risponde | `service daemoxcp_mail status`, poi `/var/db/daemoxcp-mail/panel.log` |
 | `421 Misdirected Request` | il pannello è stato chiamato per IP o con un altro nome: usa il suo nome |
 | nessun amministratore riesce a entrare | `java -jar daemoxcp-mail-1.0.jar --access-code` da `/home/panel` |
+
+---
+
+## Sostieni il progetto
+
+DaemoxCP Mail è software libero, senza pubblicità e senza versioni a pagamento. Le donazioni pagano
+i server FreeBSD e le macchine di prova su cui viene sviluppato e provato, e il tempo per tenerlo curato.
+
+- [Offrimi un caffè](https://buymeacoffee.com/pietrogdamico)
+- [PayPal](https://www.paypal.com/paypalme/pietrogdamico28)
+
+In ogni caso, una stella aiuta chi arriva dopo a fidarsi. **Bug e richieste** vanno nelle
+[Issues](../../issues) di questo repository.
 
 ---
 
