@@ -234,7 +234,7 @@ public final class PanelMarker {
         }
     }
 
-    private static boolean rewrite(Path p, String section, List<String> done, List<String> problems) {
+    static boolean rewrite(Path p, String section, List<String> done, List<String> problems) {
         try {
             // Un collegamento si segue: il file del pannello e' quello a cui punta.
             Path real = p.toRealPath();
@@ -260,6 +260,11 @@ public final class PanelMarker {
         // leggerebbero, se restasse li'.
         Path tmp = p.resolveSibling("." + p.getFileName() + ".daemoxcp-mail.tmp");
         Files.deleteIfExists(tmp);
+        // Un file immutabile (chflags schg) non si sostituisce: si toglie il flag, si scrive, e il flag torna sul
+        // file nuovo. Il pannello stesso lo mette su /var/unbound/forward.conf, perche' local-unbound-setup non lo
+        // riscriva: sul server vero, il 17/11/2026, il commento li' non era cambiato ("Operation not permitted").
+        List<String> flags = immutableFlags(p);
+        for (String f : flags) chflags("no" + f, p);
         try {
             Files.writeString(tmp, content, StandardCharsets.UTF_8);
             try {
@@ -277,6 +282,28 @@ public final class PanelMarker {
             Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } finally {
             Files.deleteIfExists(tmp);
+            if (!flags.isEmpty()) {
+                for (String f : flags) chflags(f, p);
+                if (!immutableFlags(p).containsAll(flags))
+                    throw new IOException(p + " is no longer " + String.join(",", flags) + ": put it back with chflags");
+            }
         }
+    }
+
+    /** I flag che rendono un file immutabile anche per root (con securelevel -1 root li toglie e li rimette). */
+    static final List<String> IMMUTABLE_FLAGS = List.of("schg", "uchg");
+
+    /** I flag immutabili del file, da stat -f %Sf (FreeBSD); nessuno se stat non risponde. */
+    static List<String> immutableFlags(Path p) {
+        Shell.Result r = Shell.run(Duration.ofSeconds(5), "/usr/bin/stat", "-f", "%Sf", p.toString());
+        List<String> out = new ArrayList<>();
+        if (!r.success()) return out;
+        for (String f : r.outputTrim().split(",")) if (IMMUTABLE_FLAGS.contains(f.trim())) out.add(f.trim());
+        return out;
+    }
+
+    private static void chflags(String flag, Path p) throws IOException {
+        Shell.Result r = Shell.run(Duration.ofSeconds(5), "/bin/chflags", flag, p.toString());
+        if (!r.success()) throw new IOException("chflags " + flag + " " + p + ": " + r.outputTrim());
     }
 }

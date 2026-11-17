@@ -28,8 +28,14 @@ public class RcScriptRepairTest {
         if (!ok) failed++;
     }
 
-    static final String NEW_LOG = "/var/db/daemoxcp-mail/panel.log";
-    static final String OLD_LOG = LegacyNames.oldNamesOf("files", NEW_LOG).get(0);
+    /**
+     * The log as the scripts of before cited it, and the name RcScriptRepair gives it, from the data file ("files"):
+     * the folder is still the one of before, DataFolderRename moves it afterwards.
+     */
+    static final String[] LOG_PAIR = LegacyNames.pairs("files").stream()
+            .filter(p -> p[0].endsWith("/pannello.log")).findFirst().orElse(new String[] {"", ""});
+    static final String NEW_LOG = LOG_PAIR[1];
+    static final String OLD_LOG = LOG_PAIR[0];
 
     /**
      * The server's script, with @LOG@ in place of the log path and @MARKER@ in place of the signature.
@@ -187,15 +193,15 @@ public class RcScriptRepairTest {
         r = RcScriptRepair.repair(dir.resolve("missing"), pairs, SH_N);
         check("no script: NOTHING", r.outcome() == RcScriptRepair.Outcome.NOTHING);
 
-        System.out.println("\n== The script the panel writes today ==");
-        String generator = Files.readString(Path.of("src/main/java/org/daemoxcp/mail/system/UpdateManager.java"));
-        check("it has the signature RcScriptRepair recognises, at the start of its comment",
-                generator.contains("+ \"# \" + RcScriptRepair.MARKER + \". "));
-        check("it writes today's two messages, from RcScriptRepair",
-                generator.contains("+ \"\\t\" + RcScriptRepair.STARTING + \"\\n\"")
-                && generator.contains("+ \"\\t\\t\" + RcScriptRepair.RUNNING + \"\\n\""));
-        check("and none of the old ones", RcScriptRepair.MESSAGES.stream().noneMatch(m -> generator.contains(
-                m[0].replace("\\", "\\\\").replace("\"", "\\\""))));
+        System.out.println("\n== The script the panel writes today (PanelRcScript) ==");
+        String today = PanelRcScript.text("/home/panel", "/usr/local/openjdk25/bin/java", "/home/panel/daemoxcp-mail-1.0.jar", "");
+        check("it has a signature RcScriptRepair recognises", RcScriptRepair.writtenByPanel(today));
+        check("it writes today's two messages", today.contains("\t" + PanelRcScript.STARTING + "\n")
+                && today.contains("\t\t" + PanelRcScript.RUNNING + "\n"));
+        check("and none of the old ones: the repair finds nothing to change in it",
+                RcScriptRepair.currentMessages(today).equals(today)
+                        && RcScriptRepair.MESSAGES.stream().noneMatch(m -> today.contains(m[0])));
+        check("it passes sh -n", SH_N.apply(write(today)).success());
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);
