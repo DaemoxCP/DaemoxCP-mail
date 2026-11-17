@@ -73,6 +73,12 @@ if [ -d "$VMAIL" ]; then
         || { bectl umount "$BE"; restart_mail; fail "copying the mail into the boot environment failed: nothing was activated"; }
     echo "Current mail copied into the previous boot environment (the previous mail: $VMAIL.before-rollback-$STAMP)"
 fi
+# La casella di sistema della parte web: PanelUserRename l'ha portata col nome nuovo, e nel boot environment
+# di prima l'utente ha ancora quello vecchio. Stesso uid: torna col suo nome di prima.
+if [ -f /var/mail/daemoxcp_mail ] && [ ! -e /var/mail/mailpanel ] && grep -q "^mailpanel:" "$MNT/etc/passwd" \
+        && ! grep -q "^daemoxcp_mail:" "$MNT/etc/passwd"; then
+    mv /var/mail/daemoxcp_mail /var/mail/mailpanel && echo "the system mailbox of the web part has its previous name again: /var/mail/mailpanel"
+fi
 # Le caselle di sistema vuote che pw useradd crea in /var/mail (fuori dai boot environment) per gli
 # utenti nati col passaggio (roundcube, acme): nel boot environment di prima quegli utenti non ci sono.
 for f in /var/mail/*; do

@@ -49,6 +49,8 @@ public final class PanelUserRename {
         List<String> groups();
         /** La cartella dei crontab degli utenti. */
         Path cronTabs();
+        /** La cartella delle caselle di sistema (/var/mail), dove pw useradd crea quella vuota dell'utente. */
+        Path mailSpool();
     }
 
     private PanelUserRename() {}
@@ -137,8 +139,20 @@ public final class PanelUserRename {
         } catch (IOException e) {
             cron = ", its crontab NOT moved (" + e.getMessage() + ")";
         }
+        // La casella di sistema: pw usermod -l non la sposta, e col nome di prima resterebbe in /var/mail (fuori dai
+        // boot environment) un file di un utente che non c'e' piu'. Il contenuto e' dello stesso uid: si sposta e basta.
+        Path oldBox = sv.mailSpool().resolve(oldName), newBox = sv.mailSpool().resolve(newName);
+        String box = "";
+        try {
+            if (Files.isRegularFile(oldBox, LinkOption.NOFOLLOW_LINKS) && !Files.exists(newBox, LinkOption.NOFOLLOW_LINKS)) {
+                Files.move(oldBox, newBox, StandardCopyOption.ATOMIC_MOVE);
+                box = ", its system mailbox moved";
+            }
+        } catch (IOException e) {
+            box = ", its system mailbox NOT moved (" + e.getMessage() + ")";
+        }
         return new Report(Outcome.DONE, "the user and group " + oldName + " are now " + newName + " (uid " + uid
-                + ", gid " + gid + ", comment '" + gecos + "')" + cron);
+                + ", gid " + gid + ", comment '" + gecos + "')" + cron + box);
     }
 
     /** Il commento di un utente del pannello che non cambia nome: se e' uno di prima, diventa quello di adesso. */
@@ -185,5 +199,6 @@ public final class PanelUserRename {
             }
         }
         @Override public Path cronTabs() { return Path.of("/var/cron/tabs"); }
+        @Override public Path mailSpool() { return Path.of("/var/mail"); }
     }
 }
