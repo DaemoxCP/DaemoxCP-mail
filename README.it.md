@@ -90,6 +90,9 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 
 **Sicurezza**
 - Accesso senza password: **passkey** (WebAuthn), codici monouso via email, o un codice dalla console del server.
+- Le operazioni delicate (impostazioni, chiavi, la cassaforte) chiedono una conferma recente, valida 5 minuti: la
+  passkey, un codice via email o un codice dalla console del server (`--access-code`), così un amministratore senza
+  passkey su un server che non riesce ancora a spedire posta non resta mai bloccato.
 - Amministratori con ruoli, e un registro di ogni azione.
 - Jail di **fail2ban** per Postfix, Dovecot, Roundcube, Rspamd e il pannello stesso, con ban permanenti e la jail
   recidive.

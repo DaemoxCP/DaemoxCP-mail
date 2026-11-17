@@ -90,6 +90,9 @@ It is **careful**. The panel never changes something it cannot check, and it say
 **Security**
 - Sign-in without passwords: **passkeys** (WebAuthn), one-time codes by email, or a code from the server
   console.
+- Sensitive operations (settings, keys, the vault) ask for a fresh confirmation, valid 5 minutes: the passkey, a
+  code by email, or a code from the server console (`--access-code`), so an administrator without a passkey on a
+  server that cannot send mail yet is never stuck.
 - Administrators with roles and an audit log of every action.
 - **fail2ban** jails for Postfix, Dovecot, Roundcube, Rspamd and the panel itself, with permanent bans and a
   recidive jail.
