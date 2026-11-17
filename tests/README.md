@@ -242,7 +242,7 @@ empties `/var/vmail` and changes the panel's MySQL password: only on a clone of 
 and from a COPY of the panel folder if that is in `/home` (outside the boot environments). How it
 was used on the VM, with the concurrency attempts halfway: reperto 154.
 
-    cd <copy of the panel folder> && java -cp "<compiled tests>:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MenuReinstall
+    cd <copy of the panel folder> && java -De2e.vm=yes -cp "<compiled tests>:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MenuReinstall
 
 The four tests that run real jobs (this one, `InstallScriptDriftTest`, `PackageReplacementE2ETest`,
 `PostfixMapsJobsE2ETest`) remove at the end the boot environments their jobs created.
@@ -1047,7 +1047,9 @@ cells that change: it waits for a line that arrives whole, not just any line.
 `ReinstallJobTest` wants the shadow class of `FullMailServerScript` (`tests/planted`) in front of
 the jar: the reinstallation always rewrites the script from its jar, and without the shadow it
 would run the real one (the test checks it and refuses). `MenuGoBack` is the driver of the menu's
-entry 6, like `MenuReinstall`.
+entry 6, like `MenuReinstall`. The three drivers (`MenuReinstall`, `MenuGoBack`, `MakeReinstallWayBack`)
+do nothing without `-De2e.vm=yes`: on 17/11/2026 a run of every class with a main on the VM went back to
+a reinstallation's way back (the next boot's system, mail stopped) because `MenuGoBack` had no guard.
 
 **AliasMessagesTest** — what the panel says after creating, editing, disabling or deleting an
 alias. Postfix reads only the active aliases and applies them before the mailboxes: a mailbox with
