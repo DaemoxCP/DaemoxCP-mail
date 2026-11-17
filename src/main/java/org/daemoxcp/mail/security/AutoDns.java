@@ -875,9 +875,18 @@ public class AutoDns {
 
     /** null quando l'IP non si conosce: meglio nessun record che uno invalido. */
     private String spfValue() {
-        String ip = serverIp();
-        if (ip == null || ip.isBlank()) return null;
-        return "v=spf1 ip4:" + ip + " mx -all";
+        org.daemoxcp.mail.system.IpFamily.Family family = org.daemoxcp.mail.system.IpFamily.effective();
+        return DnsRecordsGenerator.spfValue(family.v4() ? serverIp() : "", family.v6() ? serverIpv6() : "", family);
+    }
+
+    /** L'IPv6 pubblico del server, o "" se non lo si conosce. */
+    private String serverIpv6() {
+        try {
+            String ip = new DnsRecordsGenerator(database).detectServerIpv6();
+            return ip == null ? "" : ip.trim();
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private String dmarcValue(String domain, String policy) {

@@ -17,12 +17,18 @@ import org.daemoxcp.mail.sqli.dataBaseManager;
  * if that is outside the boot environment (/home).
  *
  * Usage (from the panel's folder, as root):
- *   java -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MenuReinstall [hostname]
+ *   java -De2e.vm=yes -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MenuReinstall [hostname]
  * Without a hostname it uses the saved one, like the menu window that proposes it.
  */
 public class MenuReinstall {
 
     public static void main(String[] args) throws Exception {
+        // A driver, not a test: it changes the machine. Without -De2e.vm=yes it stops, like the E2E tests, so that running
+        // every class that has a main (the suite on the VM) never goes back, reinstalls or creates a boot environment.
+        if (!"yes".equals(System.getProperty("e2e.vm"))) {
+            System.out.println("SKIPPED: a driver that changes the machine: it needs -De2e.vm=yes (a test clone on the FreeBSD VM, as root).");
+            return;
+        }
         // The same preparations Main does at start before the menu.
         Main.createDirectoryIfNotExists("./install_scripts/");
         Main.dbManager = new dataBaseManager();

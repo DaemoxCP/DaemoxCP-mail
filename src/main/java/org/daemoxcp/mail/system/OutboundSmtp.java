@@ -36,9 +36,28 @@ public final class OutboundSmtp {
         String banner(String host) throws IOException;
     }
 
+    /**
+     * Ci si collega con gli indirizzi della famiglia che usa Postfix (IpFamily): con solo IPv6 un collegamento in IPv4
+     * riuscirebbe lo stesso (il sistema esce in IPv4), e direbbe aperta una porta che Postfix non usa.
+     */
     static Dialer dialer = host -> {
+        IpFamily.Family f = IpFamily.effective();
+        IOException last = null;
+        for (java.net.InetAddress a : java.net.InetAddress.getAllByName(host)) {
+            boolean six = a instanceof java.net.Inet6Address;
+            if (six ? !f.v6() : !f.v4()) continue;
+            try {
+                return bannerAt(a);
+            } catch (IOException e) {
+                last = e;
+            }
+        }
+        throw last != null ? last : new IOException(host + " has no " + f.key + " address");
+    };
+
+    private static String bannerAt(java.net.InetAddress address) throws IOException {
         try (Socket s = new Socket()) {
-            s.connect(new InetSocketAddress(host, 25), TIMEOUT_MS);
+            s.connect(new InetSocketAddress(address, 25), TIMEOUT_MS);
             s.setSoTimeout(TIMEOUT_MS);
             BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.US_ASCII));
             String line;
@@ -52,7 +71,7 @@ public final class OutboundSmtp {
             out.flush();
             return line == null ? "" : line;
         }
-    };
+    }
 
     /** open (almeno una connessione riuscita), blocked (nomi risolti, nessuna connessione), unknown (nessun nome risolto). */
     public static JSONObject check() {

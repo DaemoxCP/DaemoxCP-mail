@@ -460,6 +460,7 @@ public class Main {
         // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
         //   java -jar daemoxcp-mail-1.0.jar --create-admin <nome> <email>   il primo amministratore
         //   java -jar daemoxcp-mail-1.0.jar --access-code [nome]            un codice di accesso monouso
+        //   java -jar daemoxcp-mail-1.0.jar --ip-family both|ipv4|ipv6      IPv4, IPv6 o tutte e due (da root)
         // Il primo amministratore non si crea dal pannello web: chi raggiungesse per primo la
         // pagina diventerebbe amministratore.
         for (int i = 0; i < args.length; i++) {
@@ -477,6 +478,9 @@ public class Main {
             }
             if ("--access-code".equals(args[i])) {
                 System.exit(printAccessCode(i + 1 < args.length ? args[i + 1] : null));
+            }
+            if ("--ip-family".equals(args[i])) {
+                System.exit(setIpFamily(i + 1 < args.length ? args[i + 1] : null));
             }
             // La reinstallazione completa staccata dal menu (ReinstallJob): la lancia la voce del
             // menu con daemon(8), in una sessione sua, e la segue. Chi chiude il terminale o uccide
@@ -1836,6 +1840,48 @@ public class Main {
         ConsoleResult r = accessCode(username);
         (r.ok() ? System.out : System.err).println(r.text());
         return r.ok() ? 0 : 2;
+    }
+
+    /**
+     * --ip-family: IPv4, IPv6 o tutte e due, dalla console, come la scheda delle Impostazioni ma senza avvisi da
+     * confermare: e' la strada di chi ha scelto una famiglia sola e da li' non raggiunge piu' il pannello. Gli stessi
+     * controlli (indirizzo e rotta nella famiglia che resta) e lo stesso ritorno a com'era se un servizio non regge.
+     * Da root: riscrive le configurazioni di Postfix, Dovecot e nginx e ricarica pf.
+     */
+    static int setIpFamily(String value) {
+        org.daemoxcp.mail.system.IpFamily.Family f = org.daemoxcp.mail.system.IpFamily.Family.of(value);
+        if (f == null) {
+            System.err.println("Usage: java -jar daemoxcp-mail-1.0.jar --ip-family both|ipv4|ipv6");
+            return 2;
+        }
+        if (!"root".equals(System.getProperty("user.name"))) {
+            System.err.println("Run it as root: it changes the configuration of Postfix, Dovecot, nginx and pf.");
+            return 2;
+        }
+        // In console le righe INFO dei servizi toccati sono rumore: restano avvisi ed errori, e l'esito qui sotto.
+        java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");
+        rootLogger.setLevel(java.util.logging.Level.WARNING);
+        for (java.util.logging.Handler h : rootLogger.getHandlers()) h.setLevel(java.util.logging.Level.WARNING);
+        String notConnected = connectFromConfig();
+        if (notConnected != null) {
+            System.err.println(notConnected);
+            return 2;
+        }
+        org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+        try {
+            org.daemoxcp.mail.system.IpFamily.Outcome o = org.daemoxcp.mail.system.IpFamily.choose(f, true, null);
+            if (!o.done()) {
+                System.err.println(o.error());
+                return 1;
+            }
+            mailDatabase.logAuditEvent("IP_FAMILY_CHANGED", "127.0.0.1", f.key + " (console)", "console");
+            System.out.println("Done: Postfix, Dovecot, nginx and pf now answer on "
+                    + (f == org.daemoxcp.mail.system.IpFamily.Family.BOTH ? "IPv4 and IPv6" : f == org.daemoxcp.mail.system.IpFamily.Family.IPV4 ? "IPv4 only" : "IPv6 only") + ".");
+            for (String w : o.warnings()) System.out.println("  " + w);
+            return 0;
+        } finally {
+            org.daemoxcp.mail.i18n.I18n.clearCurrent();
+        }
     }
 
     /** All'avvio: se nessun amministratore puo' entrare, come si fa. */

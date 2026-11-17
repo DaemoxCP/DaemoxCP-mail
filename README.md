@@ -95,8 +95,12 @@ It is **careful**. The panel never changes something it cannot check, and it say
   recidive jail.
 - **pf** firewall:
   - a default-deny policy;
-  - blocking by country;
+  - blocking by country, over IPv4 and IPv6;
   - a card that keeps your provider's firewall in step with Cloudflare's address list.
+- **IPv4, IPv6 or both**: one choice in *Settings* that Postfix, Dovecot, the webmail, the 443 surface and pf
+  follow; SSH never changes. Before anything changes the panel checks that the server has an address and a
+  default route in the family that stays, and says what would stop working: DNS records, Cloudflare, mail with
+  servers that have only IPv4, your own connection to the panel. Until you choose, nothing is touched.
 - Privilege separation: the part that answers on the network runs as an unprivileged user (see
   [Security model](#security-model-who-runs-as-root-and-why)).
 
@@ -150,7 +154,7 @@ documentation (`203.0.113.0/24`, `2001:db8::/32`).</sub>
 | File system | **ZFS**, for boot environments: the installation, updates and the panel's own upgrades keep a way back with `bectl`. |
 | Memory | **4 GB of RAM**. Measured on a running server: ClamAV 1–1.3 GB, the panel's two Java processes about 0.5 GB, MySQL 0.1–0.5 GB; 2.5–3 GB in all. |
 | Disk | at least 20 GB, plus the mail. |
-| Network | a public IPv4 address (IPv6 is a plus), with a reverse DNS you can set, and outgoing port 25 open (many providers close it on new accounts). |
+| Network | a public IPv4 address, a public IPv6 one, or both (with IPv6 only, mail to and from the many servers that still have only IPv4 does not get through), with a reverse DNS you can set, and outgoing port 25 open (many providers close it on new accounts). |
 | Access | root over SSH with a key. **The panel never touches the SSH configuration.** |
 | DNS | your mail domains on **Cloudflare**, and an API token limited to their zones. |
 | Java | OpenJDK 25 (`pkg install openjdk25`). |
@@ -286,8 +290,8 @@ back by itself after a reboot. Do the steps in this order: each relies on the on
 
 ### What you need before you start
 
-- **A server** with FreeBSD 15.0 or later (amd64 or arm64) on **ZFS**, a public IPv4 address (IPv6 is a plus),
-  **4 GB of RAM** and at least 20 GB of disk.
+- **A server** with FreeBSD 15.0 or later (amd64 or arm64) on **ZFS**, a public IPv4 address, a public IPv6 one or
+  both, **4 GB of RAM** and at least 20 GB of disk.
 - **Root access over SSH with a key.**
 - **Your domains on Cloudflare** (their DNS is managed by Cloudflare).
 - **Three host names**, each with a precise role:
@@ -555,7 +559,7 @@ What the panel shows but does not do yet. It is said on the pages too, so nobody
 | **Diagnostics** | *Check everything*, with the next step for each finding |
 | **Logs**, **System paths** | what the services write, and where everything is |
 | **Administrators** | who can sign in, with which role; the audit log |
-| **Settings**, **Account** | the panel's options; your passkeys and sessions |
+| **Settings**, **Account** | the panel's options, among them IPv4, IPv6 or both; your passkeys and sessions |
 
 ---
 
@@ -623,6 +627,7 @@ in the services' files are updated along the way, and each service is checked an
 | `java -jar daemoxcp-mail-1.0.jar --web` | only the web server, no menu (what the service runs) |
 | `java -jar daemoxcp-mail-1.0.jar --access-code [name]` | a one-time 8-digit sign-in code for an administrator |
 | `java -jar daemoxcp-mail-1.0.jar --create-admin <name> <email>` | the first administrator, when there is none |
+| `java -jar daemoxcp-mail-1.0.jar --ip-family both\|ipv4\|ipv6` | IPv4, IPv6 or both, as in *Settings*, as root: the way back when a choice cut you off from the panel |
 | `service daemoxcp_mail start\|stop\|restart\|status` | the panel as a service |
 
 The console commands must run from `/home/panel`: the panel's database is in `database/` next to the jar.
@@ -689,6 +694,7 @@ next, in order of importance. Then:
 | the panel does not answer | `service daemoxcp_mail status`, then `/var/db/daemoxcp-mail/panel.log` |
 | `421 Misdirected Request` | the panel was reached by IP or by another name: use its own name |
 | no administrator can sign in | `java -jar daemoxcp-mail-1.0.jar --access-code` from `/home/panel` |
+| the panel stopped answering after choosing IPv4 only or IPv6 only | as root, from `/home/panel`: `java -jar daemoxcp-mail-1.0.jar --ip-family both` |
 
 ---
 

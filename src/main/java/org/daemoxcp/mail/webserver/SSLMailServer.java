@@ -354,6 +354,8 @@ public class SSLMailServer {
         context("/api/ssh-keys", Access.api(SSH_KEYS), this::handleApiSshKeys);
         // POP3 acceso o spento: Dovecot, le porte di pf e delle regole dei paesi (Pop3, PfPolicy).
         context("/api/pop3", Access.api(SETTINGS), this::handleApiPop3);
+        // IPv4, IPv6 o tutte e due: Postfix, Dovecot, nginx e pf (IpFamily). SSH non segue mai la scelta.
+        context("/api/ip-family", Access.api(SETTINGS), this::handleApiIpFamily);
     }
 
     /**
@@ -897,6 +899,8 @@ public class SSLMailServer {
             // inet_protocols scritto in chiaro col valore in uso: senza, lo script di ogni aggiornamento di postfix
             // scrive ipv4 e al riavvio IPv6 sparisce (reperti 42, 207). Non cambia niente di quello che Postfix fa.
             org.daemoxcp.mail.system.PostfixInetProtocols.ensureAtBoot();
+            // La famiglia di indirizzi scelta nelle Impostazioni (IpFamily): Postfix, Dovecot, nginx. Senza scelta non fa niente.
+            org.daemoxcp.mail.system.IpFamily.ensureAtBoot();
 
             // Roundcube col suo utente e il suo pool di php-fpm, non piu' con l'utente di nginx: sui
             // server installati prima. Prima del plugin SSO, che da' la sua configurazione al gruppo
@@ -11780,6 +11784,55 @@ public class SSLMailServer {
     }
 
     /**
+     * GET: la famiglia scelta (o null) e quella in uso. POST {"family": "both"|"ipv4"|"ipv6", "confirmed": bool}: la
+     * applica (IpFamily.choose). Senza conferma, se ci sono avvisi, li restituisce e non cambia niente.
+     */
+    private void handleApiIpFamily(HttpExchange exchange) throws IOException {
+        JSONObject response = new JSONObject();
+        try {
+            String method = exchange.getRequestMethod();
+            if ("GET".equals(method)) {
+                org.daemoxcp.mail.system.IpFamily.Family c = org.daemoxcp.mail.system.IpFamily.chosen();
+                response.put("success", true).put("chosen", c == null ? JSONObject.NULL : c.key)
+                        .put("effective", org.daemoxcp.mail.system.IpFamily.effective().key);
+            } else if ("POST".equals(method)) {
+                JSONObject req = new JSONObject(readRequestBodyWithLimit(exchange));
+                org.daemoxcp.mail.system.IpFamily.Family f = org.daemoxcp.mail.system.IpFamily.Family.of(req.optString("family", ""));
+                if (f == null) {
+                    sendJsonError(exchange, 400, I18n.tr("server.badRequest"));
+                    return;
+                }
+                // Il tratto che arriva qui (il browser, o Cloudflare): e' quello che una famiglia sola puo' chiudere.
+                String via = exchange.getRemoteAddress() == null || exchange.getRemoteAddress().getAddress() == null
+                        ? null : exchange.getRemoteAddress().getAddress().getHostAddress();
+                org.daemoxcp.mail.system.IpFamily.Outcome o = org.daemoxcp.mail.system.IpFamily.choose(f, req.optBoolean("confirmed", false), via);
+                if (o.done()) {
+                    if (firewallManager != null) {
+                        org.daemoxcp.mail.security.PfFirewallManager.FirewallState fw = firewallManager.getState();
+                        if (fw.enabled && fw.mode != org.daemoxcp.mail.security.PfFirewallManager.Mode.DISABLED) firewallManager.applyConfiguration();
+                    }
+                    logAudit("IP_FAMILY_CHANGED", getClientIp(exchange), f.key);
+                }
+                else if (!o.confirm()) {
+                    LOGGER.warning("[IpFamily] the administrator's choice was not applied: " + o.error());
+                    logAudit("IP_FAMILY_CHANGE_FAILED", getClientIp(exchange), f.key);
+                }
+                response.put("success", o.done()).put("confirm", o.confirm()).put("warnings", new JSONArray(o.warnings()))
+                        .put("effective", org.daemoxcp.mail.system.IpFamily.effective().key);
+                if (o.error() != null) response.put("error", o.error());
+            } else {
+                exchange.getResponseHeaders().set("Allow", "GET, POST");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
+                return;
+            }
+        } catch (Exception e) {
+            LOGGER.warning("[IpFamily] request failed: " + e.getMessage());
+            response = new JSONObject().put("success", false).put("error", I18n.tr("server.requestFailed"));
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    /**
      * /api/ssh-keys: le chiavi SSH di root (RootSshKeys), permesso ssh.manage. Aggiungere e togliere vogliono
      * anche una conferma recente con passkey o con un codice (REAUTH_SECONDS), come il vault: una chiave di
      * root e' l'accesso completo al server. Solo il file authorized_keys di root: sshd_config, la porta 22 e
@@ -12072,15 +12125,31 @@ public class SSLMailServer {
 
                     JSONArray checks = new JSONArray();
 
-                    // Check A record
-                    String aResult = digRecord(hostname, "A");
-                    String serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
-                    boolean aOk = !aResult.isEmpty() && aResult.contains(serverIp) && !serverIp.isEmpty();
-                    checks.put(new JSONObject()
-                            .put("type", "A").put("name", hostname)
-                            .put("passed", aOk)
-                            .put("current", aResult.isEmpty() ? I18n.tr("server.dns.notFound") : aResult)
-                            .put("expected", serverIp.isEmpty() ? I18n.tr("server.dns.serverIp") : serverIp));
+                    // A e AAAA secondo la famiglia scelta nelle Impostazioni (IpFamily): con solo IPv6 l'A non serve; con
+                    // tutte e due l'AAAA si controlla quando il server ha un IPv6 pubblico, con solo IPv6 sempre.
+                    org.daemoxcp.mail.system.IpFamily.Family family = org.daemoxcp.mail.system.IpFamily.effective();
+                    boolean aOk = true, aaaaOk = true;
+                    String serverIp = "";
+                    if (family.v4()) {
+                        String aResult = digRecord(hostname, "A");
+                        serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
+                        aOk = !serverIp.isEmpty() && DnsRecordsGenerator.containsAddress(aResult, serverIp);
+                        checks.put(new JSONObject()
+                                .put("type", "A").put("name", hostname)
+                                .put("passed", aOk)
+                                .put("current", aResult.isEmpty() ? I18n.tr("server.dns.notFound") : aResult)
+                                .put("expected", serverIp.isEmpty() ? I18n.tr("server.dns.serverIp") : serverIp));
+                    }
+                    String serverIp6 = family.v6() && dnsGenerator != null ? dnsGenerator.detectServerIpv6() : "";
+                    if (family == org.daemoxcp.mail.system.IpFamily.Family.IPV6 || !serverIp6.isEmpty()) {
+                        String aaaaResult = digRecord(hostname, "AAAA");
+                        aaaaOk = !serverIp6.isEmpty() && DnsRecordsGenerator.containsAddress(aaaaResult, serverIp6);
+                        checks.put(new JSONObject()
+                                .put("type", "AAAA").put("name", hostname)
+                                .put("passed", aaaaOk)
+                                .put("current", aaaaResult.isEmpty() ? I18n.tr("server.dns.notFound") : aaaaResult)
+                                .put("expected", serverIp6.isEmpty() ? I18n.tr("server.dns.serverIp") : serverIp6));
+                    }
 
                     // Check MX record
                     String domain = hostname.contains(".") ? hostname.substring(hostname.indexOf('.') + 1) : hostname;
@@ -12092,22 +12161,26 @@ public class SSLMailServer {
                             .put("current", mxResult.isEmpty() ? I18n.tr("server.dns.notFound") : mxResult)
                             .put("expected", "10 " + hostname + "."));
 
-                    // Check PTR record
-                    String ptrResult = "";
-                    if (!serverIp.isEmpty()) {
-                        ptrResult = digPtrRecord(serverIp);
+                    // Il DNS inverso di ogni indirizzo che il server usa: IPv4 e/o IPv6, come sopra.
+                    boolean ptrOk = true;
+                    java.util.List<String> ptrIps = new java.util.ArrayList<>();
+                    if (family.v4()) ptrIps.add(serverIp);
+                    if (family == org.daemoxcp.mail.system.IpFamily.Family.IPV6 || !serverIp6.isEmpty()) ptrIps.add(serverIp6);
+                    for (String ip : ptrIps) {
+                        String ptrResult = ip.isEmpty() ? "" : digPtrRecord(ip);
+                        boolean ok = !ptrResult.isEmpty() && ptrResult.toLowerCase().contains(hostname.toLowerCase());
+                        ptrOk &= ok;
+                        checks.put(new JSONObject()
+                                .put("type", "PTR").put("name", ip.isEmpty() ? I18n.tr("server.dns.serverIp") : ip)
+                                .put("passed", ok)
+                                .put("current", ptrResult.isEmpty() ? I18n.tr("server.dns.notFound") : ptrResult)
+                                .put("expected", hostname + "."));
                     }
-                    boolean ptrOk = !ptrResult.isEmpty() && ptrResult.toLowerCase().contains(hostname.toLowerCase());
-                    checks.put(new JSONObject()
-                            .put("type", "PTR").put("name", serverIp.isEmpty() ? I18n.tr("server.dns.serverIp") : serverIp)
-                            .put("passed", ptrOk)
-                            .put("current", ptrResult.isEmpty() ? I18n.tr("server.dns.notFound") : ptrResult)
-                            .put("expected", hostname + "."));
 
                     response.put("success", true);
                     response.put("hostname", hostname);
                     response.put("checks", checks);
-                    response.put("all_passed", aOk && mxOk && ptrOk);
+                    response.put("all_passed", aOk && aaaaOk && mxOk && ptrOk);
 
                 } else {
                     response.put("success", false);
@@ -12607,6 +12680,10 @@ http {
 """.formatted(port, sslCert, sslKey, port, domain, rcRoot, sslCert, sslKey,
                     // Il pool di Roundcube: il suo socket, o quello di prima se la migrazione non c'e' ancora.
                     org.daemoxcp.mail.system.RoundcubeUser.fastcgiPass());
+            // Le righe listen della famiglia scelta nelle Impostazioni (IpFamily); senza scelta restano come sono.
+            if (port.trim().matches("[0-9]{1,5}"))
+                config = org.daemoxcp.mail.system.IpFamily.withNginxListen(config, Integer.parseInt(port.trim()),
+                        org.daemoxcp.mail.system.IpFamily.chosen());
 
             Path nginxConf = Path.of("/usr/local/etc/nginx/nginx.conf");
             Files.writeString(nginxConf, config);

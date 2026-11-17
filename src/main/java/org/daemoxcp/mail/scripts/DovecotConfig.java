@@ -239,8 +239,9 @@ public final class DovecotConfig {
             // I blocchi NON vanno rientrati: la shell riconosce il terminatore di un
             // heredoc solo se sta a inizio riga. Rientrarli per leggibilita' lascerebbe
             // ogni heredoc senza chiusura, e il file verrebbe scritto a meta' o per niente.
-            .replace("__CONFIG_23__", config23())
-            .replace("__CONFIG_24__", config24());
+            // La riga listen come la famiglia scelta nelle Impostazioni (IpFamily); senza scelta, tutte e due come sempre.
+            .replace("__CONFIG_23__", config23().replace("listen = *, ::", "listen = " + org.daemoxcp.mail.system.IpFamily.dovecotListen()))
+            .replace("__CONFIG_24__", config24().replace("listen = *, ::", "listen = " + org.daemoxcp.mail.system.IpFamily.dovecotListen()));
     }
 
 

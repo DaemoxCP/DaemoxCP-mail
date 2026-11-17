@@ -381,8 +381,13 @@ public class PfFirewallManager {
     }
 
     /**
-     * Scarica il file zone GeoIP per un singolo paese da ipdeny.com.
-     * Source: https://www.ipdeny.com/ipblocks/data/aggregated/{cc}-aggregated.zone
+     * Scarica gli indirizzi di un paese da ipdeny.com, IPv4 e IPv6, nello stesso file: una tabella di pf tiene tutte e
+     * due le famiglie. Prima c'era solo la lista IPv4: con la whitelist ogni client IPv6 restava fuori dalle porte di
+     * accesso, con la blacklist nessun IPv6 del paese veniva bloccato.
+     * Sorgenti: https://www.ipdeny.com/ipblocks/data/aggregated/{cc}-aggregated.zone (IPv4) e
+     * https://www.ipdeny.com/ipv6/ipaddresses/aggregated/{cc}-aggregated.zone (IPv6).
+     * Senza la lista IPv4 non si scrive niente; senza quella IPv6 (un paese senza indirizzi IPv6, o ipdeny che non
+     * risponde) si scrive la sola IPv4 e lo si dice.
      */
     public SyncResult syncCountry(String cc) {
         SyncResult res = new SyncResult();
@@ -394,47 +399,59 @@ public class PfFirewallManager {
         try {
             Files.createDirectories(Paths.get(GEOIP_DIR));
             Path target = Paths.get(GEOIP_DIR, cc.toLowerCase() + ".zone");
-            String url = "https://www.ipdeny.com/ipblocks/data/aggregated/" + cc.toLowerCase() + "-aggregated.zone";
-
-            // Usa fetch tramite java.net (no shell)
-            java.net.URI uri = java.net.URI.create(url);
-            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(15))
-                .build();
-            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder(uri)
-                .timeout(Duration.ofSeconds(30))
-                .header("User-Agent", "DaemoxCP-Mail-Firewall/1.0")
-                .GET().build();
-            java.net.http.HttpResponse<String> resp = client.send(req,
-                java.net.http.HttpResponse.BodyHandlers.ofString());
-
-            if (resp.statusCode() != 200) {
-                res.error = I18n.tr("server.pffw.httpFrom", java.util.Map.of("c", String.valueOf(resp.statusCode())));
+            String code = cc.toLowerCase();
+            String[] v4 = fetchZone("https://www.ipdeny.com/ipblocks/data/aggregated/" + code + "-aggregated.zone");
+            if (v4[0] == null) {
+                res.error = v4[1];
                 return res;
             }
-            String body = resp.body();
-            // Validazione minima: contiene almeno una riga CIDR
-            int cidrLines = 0;
-            for (String line : body.split("\n")) {
-                String t = line.trim();
-                if (!t.isEmpty() && !t.startsWith("#") && t.matches("^[0-9a-fA-F:.]+/\\d+\\s*$")) cidrLines++;
-            }
-            if (cidrLines == 0) {
-                res.error = I18n.tr("server.pffw.emptyAnswer");
-                return res;
-            }
+            String[] v6 = fetchZone("https://www.ipdeny.com/ipv6/ipaddresses/aggregated/" + code + "-aggregated.zone");
+            int lines4 = countCidr(v4[0]), lines6 = v6[0] == null ? 0 : countCidr(v6[0]);
+            String body = v4[0].endsWith("\n") ? v4[0] : v4[0] + "\n";
+            if (v6[0] != null) body += "# IPv6\n" + v6[0];
             Files.writeString(target, body, StandardCharsets.UTF_8);
             synchronized (this) {
-                state.geoLastSync.put(cc.toLowerCase(), System.currentTimeMillis());
+                state.geoLastSync.put(code, System.currentTimeMillis());
                 saveState();
             }
             res.success = true;
-            res.cidrCount = cidrLines;
-            res.message = I18n.tr("server.pffw.downloaded", java.util.Map.of("n", String.valueOf(cidrLines), "cc", String.valueOf(cc)));
+            res.cidrCount = lines4 + lines6;
+            res.message = I18n.tr("server.pffw.downloaded", java.util.Map.of("n", String.valueOf(lines4 + lines6), "cc", String.valueOf(cc)))
+                    + (v6[0] == null ? " " + I18n.tr("server.pffw.noIpv6List", java.util.Map.of("e", String.valueOf(v6[1]))) : "");
         } catch (Exception e) {
             res.error = e.getMessage();
         }
         return res;
+    }
+
+    /** Le righe CIDR (IPv4 o IPv6) di una lista. */
+    public static int countCidr(String body) {
+        int n = 0;
+        for (String line : body.split("\n")) {
+            String t = line.trim();
+            if (!t.isEmpty() && !t.startsWith("#") && t.matches("^[0-9a-fA-F:.]+/\\d+\\s*$")) n++;
+        }
+        return n;
+    }
+
+    /** {testo, null} se la lista e' arrivata e ha almeno una riga CIDR; altrimenti {null, motivo}. */
+    private static String[] fetchZone(String url) {
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(15))
+                .build();
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+                .timeout(Duration.ofSeconds(30))
+                .header("User-Agent", "DaemoxCP-Mail-Firewall/1.0")
+                .GET().build();
+            java.net.http.HttpResponse<String> resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200)
+                return new String[]{null, I18n.tr("server.pffw.httpFrom", java.util.Map.of("c", String.valueOf(resp.statusCode())))};
+            if (countCidr(resp.body()) == 0) return new String[]{null, I18n.tr("server.pffw.emptyAnswer")};
+            return new String[]{resp.body(), null};
+        } catch (Exception e) {
+            return new String[]{null, String.valueOf(e.getMessage())};
+        }
     }
 
     /** Sync di tutti i paesi attualmente selezionati. */

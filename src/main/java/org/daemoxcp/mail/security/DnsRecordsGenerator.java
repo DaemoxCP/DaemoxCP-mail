@@ -50,7 +50,8 @@ public class DnsRecordsGenerator {
         // NON qui nella lista DNS per evitare duplicazioni.
 
         // 2. SPF Record
-        records.records.add(generateSpfRecord(domain, serverIp));
+        org.daemoxcp.mail.system.IpFamily.Family family = org.daemoxcp.mail.system.IpFamily.effective();
+        records.records.add(generateSpfRecord(domain, family.v4() ? serverIp : "", family.v6() ? detectServerIpv6() : "", family));
 
         // 4. DKIM Record (if configured)
         MailDatabase.Domain dbDomain = database.getDomainByName(domain);
@@ -141,11 +142,14 @@ public class DnsRecordsGenerator {
      * Generate SPF Record
      * SPF specifies which servers are allowed to send email for the domain
      */
-    private DnsRecord generateSpfRecord(String domain, String serverIp) {
+    private DnsRecord generateSpfRecord(String domain, String serverIp, String serverIp6,
+                                        org.daemoxcp.mail.system.IpFamily.Family family) {
         DnsRecord record = new DnsRecord();
         record.type = "TXT";
         record.name = "@";
-        String spfValue = "v=spf1 ip4:" + serverIp + " mx -all";
+        // Da mostrare: con IPv4 il segnaposto si vede anche se l'indirizzo non si conosce; IPv6 solo se si conosce.
+        String spfValue = "v=spf1" + (family.v4() ? " ip4:" + serverIp : "")
+                + (serverIp6 != null && !serverIp6.isEmpty() ? " ip6:" + serverIp6 : "") + " mx -all";
         record.value = spfValue;
         record.ttl = DEFAULT_TTL;
         record.dnsZone = domain;
@@ -156,7 +160,8 @@ public class DnsRecordsGenerator {
             + table(row("Type:", "TXT"), row("Name:", "<code>@</code>"), row("Content:", code(spfValue)), row("TTL:", "Auto"))
             + "<hr>\n<strong>" + tx("meaning") + "</strong>\n<ul class=\"mb-0 small\">\n"
             + li("<code>v=spf1</code> = " + tx("spf.v"))
-            + li(code("ip4:" + serverIp) + " = " + tx("spf.ip"))
+            + (family.v4() ? li(code("ip4:" + serverIp) + " = " + tx("spf.ip")) : "")
+            + (serverIp6 != null && !serverIp6.isEmpty() ? li(code("ip6:" + serverIp6) + " = " + tx("spf.ip")) : "")
             + li("<code>mx</code> = " + tx("spf.mx"))
             + li("<code>-all</code> = " + tx("spf.all"))
             + "</ul>\n";
@@ -494,8 +499,31 @@ public class DnsRecordsGenerator {
             // rimedi opposti, e chi legge va a cercare nel posto sbagliato.
             aCheck.message = I18n.tr("server.dnsg.noA", java.util.Map.of("h", String.valueOf(mailHostname)));
         }
+        // Con solo IPv6 il record A non serve: il controllo resta da vedere, ma non conta.
+        org.daemoxcp.mail.system.IpFamily.Family family = org.daemoxcp.mail.system.IpFamily.effective();
         result.checks.add(aCheck);
-        if (!aCheck.passed) result.allPassed = false;
+        if (!aCheck.passed && family.v4()) result.allPassed = false;
+
+        // 1-bis. AAAA, quando il server parla IPv6 e ha un indirizzo IPv6 pubblico (con solo IPv6, sempre).
+        String serverIp6 = family.v6() ? detectServerIpv6() : "";
+        if (family == org.daemoxcp.mail.system.IpFamily.Family.IPV6 || !serverIp6.isEmpty()) {
+            DnsCheck aaaa = verifyRecord(mailHostname, "AAAA");
+            aaaa.recordType = "AAAA";
+            aaaa.expectedValue = serverIp6;
+            if (aaaa.passed && aaaa.currentValue != null) {
+                if (!serverIp6.isEmpty() && containsAddress(aaaa.currentValue, serverIp6)) {
+                    aaaa.message = "OK: " + mailHostname + " → " + serverIp6;
+                } else {
+                    aaaa.passed = false;
+                    aaaa.message = I18n.tr("server.dnsg.wrongIp", java.util.Map.of("found", String.valueOf(aaaa.currentValue.trim().split("\\n")[0]),
+                            "expected", String.valueOf(serverIp6)));
+                }
+            } else if (aaaa.message == null || aaaa.message.equals(I18n.tr("server.dnsg.notFound"))) {
+                aaaa.message = I18n.tr("server.dnsg.noAaaa", java.util.Map.of("h", String.valueOf(mailHostname)));
+            }
+            result.checks.add(aaaa);
+            if (!aaaa.passed) result.allPassed = false;
+        }
 
         // 2. Check MX - verify it points to our mail server
         DnsCheck mxCheck = verifyRecord(domain, "MX");
@@ -1074,6 +1102,88 @@ public class DnsRecordsGenerator {
         if (a == 198 && b == 51 && c == 100) return false;
         if (a == 203 && b == 0 && c == 113) return false;
         return true;
+    }
+
+    /**
+     * L'IPv6 pubblico del server, o "" se non lo si conosce. Prima chiede a un servizio raggiungibile solo in IPv6
+     * (quindi risponde solo se il server esce davvero in IPv6), poi guarda le schede di rete. Solo indirizzi globali
+     * (2000::/3), mai quelli di documentazione, locali o link-local.
+     */
+    public String detectServerIpv6() {
+        try {
+            HttpURLConnection conn = (HttpURLConnection) new URL("https://api6.ipify.org").openConnection();
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+                String line = reader.readLine();
+                String ip = line == null ? "" : line.trim();
+                if (isPublicIpv6(ip)) return ip;
+            }
+        } catch (Exception e) {
+            // le schede di rete
+        }
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+                if (iface.isLoopback() || !iface.isUp()) continue;
+                Enumeration<InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (addr instanceof java.net.Inet6Address) {
+                        String ip = addr.getHostAddress().replaceAll("%.*$", "");
+                        if (isPublicIpv6(ip)) return ip;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return "";
+    }
+
+    /** Vero solo per un IPv6 globale: 2000::/3, tranne la documentazione (2001:db8::/32). Puro. */
+    public static boolean isPublicIpv6(String ip) {
+        if (ip == null || !ip.matches("[0-9a-fA-F:]{2,39}") || !ip.contains(":")) return false;
+        try {
+            byte[] b = InetAddress.getByName(ip).getAddress();
+            if (b.length != 16) return false;
+            if ((b[0] & 0xE0) != 0x20) return false;
+            return !(b[0] == 0x20 && b[1] == 0x01 && b[2] == 0x0d && (b[3] & 0xff) == 0xb8);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Vero se fra gli indirizzi di un'uscita di dig c'e' quello (confronto da indirizzo, non da testo). Puro. */
+    public static boolean containsAddress(String digOutput, String ip) {
+        if (digOutput == null || ip == null || ip.isEmpty()) return false;
+        try {
+            InetAddress want = InetAddress.getByName(ip);
+            for (String tok : digOutput.trim().split("\\s+")) {
+                if (!tok.matches("[0-9a-fA-F:.]{2,45}")) continue;
+                try {
+                    if (InetAddress.getByName(tok).equals(want)) return true;
+                } catch (Exception ignore) {
+                    // non e' un indirizzo
+                }
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        return false;
+    }
+
+    /**
+     * Il valore SPF del server per quella famiglia: ip4 e/o ip6 con gli indirizzi che si conoscono, poi mx e -all. Null
+     * se non se ne conosce nessuno della famiglia: meglio nessun record che uno sbagliato. Puro.
+     */
+    public static String spfValue(String ip4, String ip6, org.daemoxcp.mail.system.IpFamily.Family family) {
+        StringBuilder b = new StringBuilder("v=spf1");
+        boolean any = false;
+        if (family.v4() && isPublicIpv4(ip4)) { b.append(" ip4:").append(ip4); any = true; }
+        if (family.v6() && isPublicIpv6(ip6)) { b.append(" ip6:").append(ip6); any = true; }
+        return any ? b.append(" mx -all").toString() : null;
     }
 
     // ============== Model Classes ==============
