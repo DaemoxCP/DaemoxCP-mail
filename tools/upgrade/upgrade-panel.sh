@@ -4,13 +4,13 @@
 # storto, e da quel momento non tocca piu' niente: dice cosa ha visto e come tornare indietro.
 #
 # Uso, da root:
-#   upgrade-panel.sh [-m CASELLA -p FILE] JAR_NUOVO SHA256_DEL_JAR
+#   upgrade-panel.sh [-m MAILBOX -p PASSWORD_FILE] NEW_JAR JAR_SHA256
 #
-#   JAR_NUOVO       il jar da mettere al posto di quello che gira; non si tocca niente finche' la
+#   NEW_JAR         il jar da mettere al posto di quello che gira; non si tocca niente finche' la
 #                   sua impronta non e' quella attesa
-#   SHA256_DEL_JAR  l'impronta attesa, presa da dove il jar e' stato costruito, non dal jar stesso
-#   -m CASELLA      una casella su cui provare, prima e dopo, accesso IMAP, consegna e webmail
-#   -p FILE         il file con la sua password, una riga, solo per root (0600 o 0400)
+#   JAR_SHA256      l'impronta attesa, presa da dove il jar e' stato costruito, non dal jar stesso
+#   -m MAILBOX      una casella su cui provare, prima e dopo, accesso IMAP, consegna e webmail
+#   -p PASSWORD_FILE il file con la sua password, una riga, solo per root (0600 o 0400)
 #
 # Cosa fa, in ordine:
 #   1. i controlli: root, impronta, pannello acceso come servizio, boot environment, spazio, nessun
@@ -38,8 +38,8 @@ STOP_TIMEOUT=60
 MIN_FREE_KB=1048576   # 1 GiB liberi nel pool del boot environment
 
 usage() {
-    echo "uso: $0 [-m CASELLA -p FILE_PASSWORD] JAR_NUOVO SHA256_DEL_JAR" >&2
-    echo "     $0 --check-log FILE first|second" >&2
+    echo "usage: $0 [-m MAILBOX -p PASSWORD_FILE] NEW_JAR JAR_SHA256" >&2
+    echo "       $0 --check-log FILE first|second" >&2
     exit 64
 }
 
@@ -68,10 +68,10 @@ if [ "${1:-}" = "--check-log" ]; then
     [ $# -eq 3 ] && [ -f "$2" ] || usage
     case $3 in first|second) ;; *) usage ;; esac
     m=$(migration_lines "$2"); b=$(bad_lines "$2")
-    [ -n "$m" ] && printf 'migrazioni:\n%s\n' "$m"
-    [ -n "$b" ] && printf 'righe che fermano:\n%s\n' "$b"
-    [ -z "$b" ] && { [ "$3" = first ] || [ -z "$m" ]; } && { echo "esito: va"; exit 0; }
-    echo "esito: FERMO"; exit 1
+    [ -n "$m" ] && printf 'migrations:\n%s\n' "$m"
+    [ -n "$b" ] && printf 'lines that stop:\n%s\n' "$b"
+    [ -z "$b" ] && { [ "$3" = first ] || [ -z "$m" ]; } && { echo "outcome: go"; exit 0; }
+    echo "outcome: STOPPED"; exit 1
 fi
 
 MAILBOX=
@@ -90,7 +90,7 @@ EXPECTED=$(printf '%s' "$2" | tr 'A-F' 'a-f')
 
 STAMP=$(date -u +%Y-%m-%d-%H%M%S)
 BE=before-panel-upgrade-$STAMP
-STEP="controlli"
+STEP="checks"
 SWAPPED=no
 
 say() { printf '%s\n' "$*"; }
@@ -105,81 +105,81 @@ rc_setting() {
 # Come tornare indietro, detto con i nomi veri di questo passaggio.
 rollback_help() {
     say ""
-    say "Per tornare indietro:"
+    say "To go back:"
     if [ "$SWAPPED" = no ]; then
-        say "  il jar non e' stato cambiato: niente da rimettere."
-        say "  Se il pannello e' fermo: service mailpanel start"
+        say "  the jar was not changed: nothing to put back."
+        say "  If the panel is stopped: service mailpanel start"
         return
     fi
-    say "  tutto com'era prima (consigliato se le migrazioni sono partite):"
+    say "  everything as it was before (recommended if the migrations started):"
     say "    sh $(dirname "$0")/rollback-panel.sh $WORK"
-    say "    poi: shutdown -r now"
-    say "  Rimette il boot environment $BE, la cartella del pannello"
-    say "  com'era ($PANEL_DIR) e i nomi dei log fuori dal boot environment. I dati del server"
-    say "  scritti dopo $STAMP (UTC) in MySQL tornano a quel momento; la posta in arrivo no."
+    say "    then: shutdown -r now"
+    say "  It puts back the boot environment $BE, the panel folder as it was"
+    say "  ($PANEL_DIR) and the names of the logs outside the boot environment. What the server"
+    say "  wrote in MySQL after $STAMP (UTC) goes back to that moment; incoming mail does not."
 }
 
 fail() {
     say ""
-    say "FERMO ($STEP): $*"
-    [ -n "${WORK:-}" ] && [ -d "${WORK:-}" ] && { say "FERMO ($STEP): $*" >> "$WORK/summary.txt"; say "Quello che ho visto: $WORK"; }
+    say "STOPPED ($STEP): $*"
+    [ -n "${WORK:-}" ] && [ -d "${WORK:-}" ] && { say "STOPPED ($STEP): $*" >> "$WORK/summary.txt"; say "What I saw: $WORK"; }
     rollback_help
     exit 1
 }
 
 # --- 1. i controlli -----------------------------------------------------------------------------
 
-[ "$(id -u)" = 0 ] || fail "va lanciato da root"
-[ "$(uname -s)" = FreeBSD ] || fail "non e' FreeBSD"
-[ -f "$NEW_JAR" ] || fail "il jar nuovo non c'e': $NEW_JAR"
-printf '%s' "$EXPECTED" | grep -Eq '^[0-9a-f]{64}$' || fail "l'impronta attesa non e' uno sha256: $EXPECTED"
+[ "$(id -u)" = 0 ] || fail "it must be run as root"
+[ "$(uname -s)" = FreeBSD ] || fail "this is not FreeBSD"
+[ -f "$NEW_JAR" ] || fail "the new jar is not there: $NEW_JAR"
+printf '%s' "$EXPECTED" | grep -Eq '^[0-9a-f]{64}$' || fail "the expected fingerprint is not a sha256: $EXPECTED"
 NEW_SHA=$(sha256 -q "$NEW_JAR")
-[ "$NEW_SHA" = "$EXPECTED" ] || fail "l'impronta del jar nuovo e' $NEW_SHA, non $EXPECTED"
-unzip -tq "$NEW_JAR" >/dev/null 2>&1 || fail "il jar nuovo non e' un archivio integro"
+[ "$NEW_SHA" = "$EXPECTED" ] || fail "the new jar's fingerprint is $NEW_SHA, not $EXPECTED"
+unzip -tq "$NEW_JAR" >/dev/null 2>&1 || fail "the new jar is not an intact archive"
 
-[ -f "$RC" ] || fail "manca lo script di avvio $RC: il pannello non e' installato come servizio"
-[ "$(sysrc -n mailpanel_enable 2>/dev/null)" = YES ] || fail "mailpanel_enable non e' YES in rc.conf"
-service mailpanel status >/dev/null 2>&1 || fail "il pannello non e' acceso: questo script passa da un pannello che gira"
+[ -f "$RC" ] || fail "the start script $RC is missing: the panel is not installed as a service"
+[ "$(sysrc -n mailpanel_enable 2>/dev/null)" = YES ] || fail "mailpanel_enable is not YES in rc.conf"
+service mailpanel status >/dev/null 2>&1 || fail "the panel is not running: this script starts from a running panel"
 
 JAR=$(rc_setting mailpanel_jar)
 PANEL_DIR=$(rc_setting mailpanel_dir)
 LOG_BEFORE=$(rc_setting mailpanel_log)
-[ -f "$JAR" ] || fail "il jar che gira ($JAR, da $RC) non c'e'"
-[ -d "$PANEL_DIR" ] || fail "la cartella del pannello ($PANEL_DIR) non c'e'"
+[ -f "$JAR" ] || fail "the running jar ($JAR, from $RC) is not there"
+[ -d "$PANEL_DIR" ] || fail "the panel folder ($PANEL_DIR) is not there"
 OLD_SHA=$(sha256 -q "$JAR")
-[ "$OLD_SHA" = "$NEW_SHA" ] && fail "gira gia' questo jar ($NEW_SHA)"
+[ "$OLD_SHA" = "$NEW_SHA" ] && fail "this jar is already running ($NEW_SHA)"
 
 if [ -n "$MAILBOX$PASSFILE" ]; then
-    [ -n "$MAILBOX" ] && [ -n "$PASSFILE" ] || fail "-m e -p vanno insieme"
-    [ -f "$PASSFILE" ] || fail "il file della password non c'e': $PASSFILE"
-    case $(stat -f %Lp "$PASSFILE") in 600|400) ;; *) fail "il file della password deve essere 0600 o 0400" ;; esac
-    [ "$(stat -f %Su "$PASSFILE")" = root ] || fail "il file della password deve essere di root"
+    [ -n "$MAILBOX" ] && [ -n "$PASSFILE" ] || fail "-m and -p go together"
+    [ -f "$PASSFILE" ] || fail "the password file is not there: $PASSFILE"
+    case $(stat -f %Lp "$PASSFILE") in 600|400) ;; *) fail "the password file must be 0600 or 0400" ;; esac
+    [ "$(stat -f %Su "$PASSFILE")" = root ] || fail "the password file must belong to root"
 fi
 
-command -v bectl >/dev/null 2>&1 || fail "manca bectl: senza boot environment non c'e' un ritorno indietro completo"
-bectl check >/dev/null 2>&1 || fail "bectl check: il sistema non e' su un boot environment ZFS"
-bectl list -H | awk '{print $1}' | grep -qxF "$BE" && fail "il boot environment $BE esiste gia'"
+command -v bectl >/dev/null 2>&1 || fail "bectl is missing: without a boot environment there is no complete way back"
+bectl check >/dev/null 2>&1 || fail "bectl check: the system is not on a ZFS boot environment"
+bectl list -H | awk '{print $1}' | grep -qxF "$BE" && fail "the boot environment $BE already exists"
 ROOT_DS=$(mount -p | awk '$2 == "/" {print $1}')
 POOL=${ROOT_DS%%/*}
 FREE_KB=$(( $(zfs get -Hp -o value available "$POOL") / 1024 ))
-[ "$FREE_KB" -ge "$MIN_FREE_KB" ] || fail "nel pool $POOL restano $FREE_KB KiB, ne servono almeno $MIN_FREE_KB"
-pgrep -x pkg >/dev/null 2>&1 && fail "c'e' un pkg in corso: aspettare che finisca"
-pgrep -x pkg-static >/dev/null 2>&1 && fail "c'e' un pkg-static in corso: aspettare che finisca"
+[ "$FREE_KB" -ge "$MIN_FREE_KB" ] || fail "the pool $POOL has $FREE_KB KiB left, at least $MIN_FREE_KB are needed"
+pgrep -x pkg >/dev/null 2>&1 && fail "a pkg is running: wait for it to finish"
+pgrep -x pkg-static >/dev/null 2>&1 && fail "a pkg-static is running: wait for it to finish"
 
 # La cartella del lavoro accanto a quella del pannello: sullo stesso dataset, fuori dal boot
 # environment se il pannello sta in /home come sul server.
 WORK=${PANEL_DIR%/*}/panel-upgrade-$STAMP
-mkdir -m 700 "$WORK" || fail "non riesco a creare $WORK"
+mkdir -m 700 "$WORK" || fail "cannot create $WORK"
 {
-    say "passaggio del pannello $STAMP (UTC)"
+    say "panel upgrade $STAMP (UTC)"
     say "jar: $JAR"
-    say "di prima: $OLD_SHA"
-    say "nuovo:    $NEW_SHA"
+    say "before: $OLD_SHA"
+    say "new:    $NEW_SHA"
     say "boot environment: $BE"
-    say "cartella del pannello: $PANEL_DIR"
-    say "log del pannello prima: $LOG_BEFORE"
+    say "panel folder: $PANEL_DIR"
+    say "panel log before: $LOG_BEFORE"
 } > "$WORK/summary.txt"
-say "Passaggio del pannello: tutto quello che vedo va in $WORK"
+say "Panel upgrade: everything I see goes into $WORK"
 
 # --- 2. la fotografia ---------------------------------------------------------------------------
 
@@ -188,9 +188,9 @@ say "Passaggio del pannello: tutto quello che vedo va in $WORK"
 state() {
     # In ordine di nome: service -e segue rcorder, che cambia quando un pacchetto si aggiunge.
     for s in $(service -e | sed -n 's#^/usr/local/etc/rc.d/##p' | grep -vx mailpanel | sort); do
-        printf 'servizio %s: %s\n' "$s" "$(service "$s" status >/dev/null 2>&1 && echo acceso || echo SPENTO)"
+        printf 'service %s: %s\n' "$s" "$(service "$s" status >/dev/null 2>&1 && echo up || echo DOWN)"
     done
-    printf 'mysqld: %s\n' "$(pgrep -q mysqld && echo acceso || echo SPENTO)"
+    printf 'mysqld: %s\n' "$(pgrep -q mysqld && echo up || echo DOWN)"
     # Le porte di MySQL: la 33060 (protocollo X) e l'indirizzo della 3306 li chiude il pannello stesso
     # al primo avvio (MysqlListen, che lo verifica e se non va rimette com'era). Qui contano come una
     # riga sola, cosi' chiuderle non sembra un guasto; che MySQL sia acceso lo dice la riga mysqld.
@@ -200,31 +200,31 @@ state() {
     # E la 24 e la 6379, su 127.0.0.1 e ::1: le chiude il pannello al primo avvio, quando Postfix consegna a Dovecot dal
     # socket nella sua coda (LmtpSocket, reperto 234) e rspamd parla con redis dal socket (RedisSocket, 235). Tutti e due
     # provano una consegna e una scansione prima e dopo, e se non va rimettono la porta.
-    sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:(33060|110|995)$/) next; if (a ~ /^(127\.0\.0\.1|\[::1\]):(24|6379)$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; print "porta in ascolto: " a}' | sort -u
-    printf 'nginx -t: %s\n' "$(nginx -t >/dev/null 2>&1 && echo ok || echo ERRORE)"
-    printf 'postfix check: %s\n' "$(postfix check >/dev/null 2>&1 && echo ok || echo ERRORE)"
-    printf 'doveconf: %s\n' "$(doveconf -n >/dev/null 2>&1 && echo ok || echo ERRORE)"
-    printf 'fail2ban: %s\n' "$(timeout -f 20 fail2ban-client ping >/dev/null 2>&1 && echo risponde || echo NON RISPONDE)"
-    printf 'pannello sulla 2096: %s\n' "$(curl -sk -m 15 -o /dev/null -w '%{http_code}' https://127.0.0.1:2096/)"
+    sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:(33060|110|995)$/) next; if (a ~ /^(127\.0\.0\.1|\[::1\]):(24|6379)$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; print "listening port: " a}' | sort -u
+    printf 'nginx -t: %s\n' "$(nginx -t >/dev/null 2>&1 && echo ok || echo ERROR)"
+    printf 'postfix check: %s\n' "$(postfix check >/dev/null 2>&1 && echo ok || echo ERROR)"
+    printf 'doveconf: %s\n' "$(doveconf -n >/dev/null 2>&1 && echo ok || echo ERROR)"
+    printf 'fail2ban: %s\n' "$(timeout -f 20 fail2ban-client ping >/dev/null 2>&1 && echo answers || echo NOT ANSWERING)"
+    printf 'panel on 2096: %s\n' "$(curl -sk -m 15 -o /dev/null -w '%{http_code}' https://127.0.0.1:2096/)"
     # MTA-STS: dai file di nginx che servono la politica, chiesta a ogni loro nome. Sul server (e sul
     # banco) la 443 e' il sito predefinito, "server_name _": risponde a qualunque nome, quindi si
     # chiede all'indirizzo locale. Senza nessun file lo si dice, cosi' anche una sparizione cambia
     # lo stato (la prima versione cercava "mta-sts." fra i nomi e non controllava niente).
     confs=$(grep -l 'mta-sts\.txt' /usr/local/etc/nginx/conf.d/*.conf 2>/dev/null)
-    [ -n "$confs" ] || say "MTA-STS sulla 443: nessun file di nginx la serve"
+    [ -n "$confs" ] || say "MTA-STS on 443: no nginx file serves it"
     for c in $confs; do
         for h in $(awk '/^[[:space:]]*server_name/ {for (i = 2; i <= NF; i++) {gsub(";", "", $i); print $i}}' "$c" | sort -u); do
             [ "$h" = "_" ] && h=127.0.0.1
             t=$(mktemp /var/tmp/panel-upgrade-mta-sts.XXXXXX)
             code=$(curl -sk -m 15 --resolve "$h:443:127.0.0.1" -o "$t" -w '%{http_code}' "https://$h/.well-known/mta-sts.txt")
-            printf 'MTA-STS sulla 443 (%s): %s %s\n' "$h" "$code" "$(head -1 "$t" | tr -cd '[:print:]')"
+            printf 'MTA-STS on 443 (%s): %s %s\n' "$h" "$code" "$(head -1 "$t" | tr -cd '[:print:]')"
             rm -f "$t"
         done
     done
     wn=$(awk '/server_name/ && !/_;/ {gsub(";", "", $2); print $2; exit}' /usr/local/etc/nginx/nginx.conf 2>/dev/null)
     wp=$(awk '/listen/ && !/default_server/ {gsub(";", "", $2); print $2; exit}' /usr/local/etc/nginx/nginx.conf 2>/dev/null)
     if [ -n "$wn" ] && [ -n "$wp" ]; then
-        printf 'pagina di accesso della webmail (%s:%s): %s\n' "$wn" "$wp" \
+        printf 'webmail login page (%s:%s): %s\n' "$wn" "$wp" \
             "$(curl -sk -m 15 --resolve "$wn:$wp:127.0.0.1" "https://$wn:$wp/" | grep -c rcmloginuser)"
     fi
     [ -n "$MAILBOX" ] && mailbox_state "$wn" "$wp"
@@ -244,34 +244,34 @@ compare() {
     locked > "$WORK/locked-after-$1.txt"
     if ! diff -u "$WORK/state-before.txt" "$WORK/state-after-$1.txt" > "$WORK/state-diff-$1.txt"; then
         cat "$WORK/state-diff-$1.txt"
-        fail "lo stato e' cambiato rispetto alla fotografia (sopra)"
+        fail "the state changed from the snapshot (above)"
     fi
     comm -23 "$WORK/locked-before.txt" "$WORK/locked-after-$1.txt" > "$WORK/locked-lost-$1.txt"
     if [ -s "$WORK/locked-lost-$1.txt" ]; then
         cat "$WORK/locked-lost-$1.txt"
-        fail "questi pacchetti erano protetti e non lo sono piu'"
+        fail "these packages were locked and are not any more"
     fi
     comm -13 "$WORK/locked-before.txt" "$WORK/locked-after-$1.txt" > "$WORK/locked-new-$1.txt"
-    [ -s "$WORK/locked-new-$1.txt" ] && say "Protetti in piu': $(tr '\n' ' ' < "$WORK/locked-new-$1.txt")"
+    [ -s "$WORK/locked-new-$1.txt" ] && say "Newly locked: $(tr '\n' ' ' < "$WORK/locked-new-$1.txt")"
     return 0
 }
 
 # Accesso IMAP, consegna e webmail con la casella data: la password non esce mai dal suo file.
 mailbox_state() {
-    printf 'accesso alla casella: %s\n' "$(timeout -f 20 doveadm auth test "$MAILBOX" < "$PASSFILE" >/dev/null 2>&1 && echo ok || echo RIFIUTATO)"
+    printf 'mailbox login: %s\n' "$(timeout -f 20 doveadm auth test "$MAILBOX" < "$PASSFILE" >/dev/null 2>&1 && echo ok || echo REFUSED)"
     token="panel-upgrade-$STAMP-$(date +%s)"
     # Il sendmail di Postfix, non /usr/sbin/sendmail: prima del passaggio quello puo' ancora andare a
     # dma (mailer.conf), che consegna fuori invece che in casella.
-    printf 'Subject: %s\n\nprova del passaggio del pannello\n' "$token" | timeout -f 20 "$(postconf -h sendmail_path)" "$MAILBOX"
+    printf 'Subject: %s\n\npanel upgrade test\n' "$token" | timeout -f 20 "$(postconf -h sendmail_path)" "$MAILBOX"
     i=0
     while [ $i -lt 60 ] && ! timeout -f 5 doveadm search -u "$MAILBOX" mailbox INBOX subject "$token" 2>/dev/null | grep -q .; do
         sleep 1; i=$((i + 1))
     done
     if timeout -f 5 doveadm search -u "$MAILBOX" mailbox INBOX subject "$token" 2>/dev/null | grep -q .; then
-        say "consegna alla casella: ok"
+        say "delivery to the mailbox: ok"
         timeout -f 10 doveadm expunge -u "$MAILBOX" mailbox INBOX subject "$token" >/dev/null 2>&1
     else
-        say "consegna alla casella: NON ARRIVATA in 60 s"
+        say "delivery to the mailbox: NOT ARRIVED within 60 s"
     fi
     [ -n "$1" ] || return 0
     t=$(mktemp -d /var/tmp/panel-upgrade.XXXXXX)
@@ -282,51 +282,52 @@ mailbox_state() {
         --data-urlencode "_task=login" --data-urlencode "_action=login" --data-urlencode "_timezone=UTC" \
         --data-urlencode "_token=$tok" --data-urlencode "_user=$MAILBOX" --data-urlencode "_pass@$t/pass" \
         "https://$1:$2/?_task=login"
-    printf 'accesso alla webmail con mail e password: %s\n' "$(grep -q '_task=logout' "$t/after.html" && echo ok || echo RIFIUTATO)"
+    printf 'webmail login with address and password: %s\n' "$(grep -q '_task=logout' "$t/after.html" && echo ok || echo REFUSED)"
     rm -rf "$t"
 }
 
-STEP="fotografia"
+STEP="snapshot"
 state > "$WORK/state-before.txt" 2>&1
 locked > "$WORK/locked-before.txt"
-grep -E 'SPENTO|ERRORE|NON RISPONDE|RIFIUTATO|NON ARRIVATA' "$WORK/state-before.txt" > "$WORK/already-wrong.txt"
+# Solo in fondo alla riga: la prima riga di una pagina (MTA-STS) puo' contenere qualunque parola.
+grep -E ': (DOWN|ERROR|NOT ANSWERING|REFUSED)$|: NOT ARRIVED within' "$WORK/state-before.txt" > "$WORK/already-wrong.txt"
 if [ -s "$WORK/already-wrong.txt" ]; then
     cat "$WORK/already-wrong.txt"
-    fail "qualcosa non va gia' prima del passaggio (sopra): prima si sistema quello"
+    fail "something is already wrong before the upgrade (above): fix that first"
 fi
-say "Fotografia: $(wc -l < "$WORK/state-before.txt" | tr -d ' ') righe, tutto a posto; $(wc -l < "$WORK/locked-before.txt" | tr -d ' ') pacchetti protetti"
+say "Snapshot: $(wc -l < "$WORK/state-before.txt" | tr -d ' ') lines, all fine; $(wc -l < "$WORK/locked-before.txt" | tr -d ' ') locked packages"
 
 # --- 3. pannello fermo, boot environment, copie -------------------------------------------------
 
-STEP="arresto del pannello"
+STEP="stopping the panel"
 service mailpanel stop >> "$WORK/service.txt" 2>&1
 i=0
 while [ $i -lt $STOP_TIMEOUT ] && pgrep -qf -- "-jar $JAR"; do sleep 1; i=$((i + 1)); done
-pgrep -qf -- "-jar $JAR" && fail "il pannello non si e' fermato in $STOP_TIMEOUT s"
+pgrep -qf -- "-jar $JAR" && fail "the panel did not stop within $STOP_TIMEOUT s"
 
 STEP="boot environment"
-bectl create "$BE" >> "$WORK/service.txt" 2>&1 || { service mailpanel start >/dev/null 2>&1; fail "bectl create $BE non e' riuscito (pannello riacceso col jar di prima)"; }
+bectl create "$BE" >> "$WORK/service.txt" 2>&1 || { service mailpanel start >/dev/null 2>&1; fail "bectl create $BE failed (panel started again with the previous jar)"; }
 say "Boot environment: $BE"
 
-STEP="copia della cartella del pannello"
+STEP="copy of the panel folder"
 tar -cpf "$WORK/panel-dir.tar" -C "${PANEL_DIR%/*}" "${PANEL_DIR##*/}" 2>> "$WORK/service.txt" \
-    || { service mailpanel start >/dev/null 2>&1; fail "la copia di $PANEL_DIR non e' riuscita (pannello riacceso col jar di prima)"; }
+    || { service mailpanel start >/dev/null 2>&1; fail "the copy of $PANEL_DIR failed (panel started again with the previous jar)"; }
 cp -p "$JAR" "$WORK/previous.jar"
 ls -1 /var/log/nginx > "$WORK/nginx-logs-before.txt" 2>/dev/null
 stat -f '%Su:%Sg %N' /var/log/php_errors.log > "$WORK/php-errors-owner-before.txt" 2>/dev/null
 stat -f '%Su:%Sg %N' /var/log/mail-panel-auth.log > "$WORK/auth-log-owner-before.txt" 2>/dev/null
-say "Copia della cartella del pannello: $WORK/panel-dir.tar"
+say "Copy of the panel folder: $WORK/panel-dir.tar"
 
 # --- 4. il jar nuovo e il primo avvio -----------------------------------------------------------
 
-STEP="jar nuovo"
+STEP="new jar"
 cp "$NEW_JAR" "$JAR.new" && [ "$(sha256 -q "$JAR.new")" = "$NEW_SHA" ] \
-    || { rm -f "$JAR.new"; service mailpanel start >/dev/null 2>&1; fail "la copia del jar nuovo non coincide (pannello riacceso col jar di prima)"; }
+    || { rm -f "$JAR.new"; service mailpanel start >/dev/null 2>&1; fail "the copy of the new jar does not match (panel started again with the previous jar)"; }
 chown "$(stat -f %Su:%Sg "$JAR")" "$JAR.new"
 chmod "$(stat -f %Lp "$JAR")" "$JAR.new"
 mv -f "$JAR.new" "$JAR"
 SWAPPED=yes
-say "Jar nuovo al suo posto: $NEW_SHA"
+say "New jar in place: $NEW_SHA"
 
 # Il log dal segno in poi. Il file si cerca prima per inode, perche' daemon(8) scrive sempre lo
 # stesso file anche se cambia nome: il pannello nuovo puo' rinominarlo (PathMigration) senza che lo
@@ -357,53 +358,53 @@ boot() {
         grep -qE "Mail Panel server started on port|Mail Panel root part ready" "$WORK/$1.log" \
             && grep -q "\[ACME\] Checking certificate status at startup" "$WORK/$1.log" && return 0
         if [ $i -ge 20 ] && ! service mailpanel status >/dev/null 2>&1; then
-            fail "il pannello si e' spento durante l'avvio: $WORK/$1.log"
+            fail "the panel stopped during the start: $WORK/$1.log"
         fi
         sleep 5; i=$((i + 5))
     done
-    fail "l'avvio non e' finito in $BOOT_TIMEOUT s: $WORK/$1.log"
+    fail "the start did not finish within $BOOT_TIMEOUT s: $WORK/$1.log"
 }
 
-STEP="primo avvio"
+STEP="first start"
 boot first-start start
 migration_lines "$WORK/first-start.log" > "$WORK/first-start-migrations.txt"
-say "Primo avvio finito. Le migrazioni:"
+say "First start finished. The migrations:"
 sed 's/^/  /' "$WORK/first-start-migrations.txt"
 bad_lines "$WORK/first-start.log" > "$WORK/first-start-bad.txt"
 if [ -s "$WORK/first-start-bad.txt" ]; then
     cat "$WORK/first-start-bad.txt"
-    fail "il primo avvio ha scritto le righe qui sopra"
+    fail "the first start wrote the lines above"
 fi
 
 # --- 5. lo stato dopo il primo avvio ------------------------------------------------------------
 
-STEP="stato dopo il primo avvio"
+STEP="state after the first start"
 compare first-start
-say "Stato dopo il primo avvio: uguale alla fotografia"
+say "State after the first start: same as the snapshot"
 
 # --- 6. il secondo avvio ------------------------------------------------------------------------
 
-STEP="secondo avvio"
+STEP="second start"
 boot second-start restart
 migration_lines "$WORK/second-start.log" > "$WORK/second-start-migrations.txt"
 bad_lines "$WORK/second-start.log" > "$WORK/second-start-bad.txt"
 if [ -s "$WORK/second-start-migrations.txt" ] || [ -s "$WORK/second-start-bad.txt" ]; then
     cat "$WORK/second-start-migrations.txt" "$WORK/second-start-bad.txt"
-    fail "il secondo avvio doveva essere muto, e ha scritto le righe qui sopra"
+    fail "the second start had to be silent, and wrote the lines above"
 fi
 
 # --- 7. di nuovo lo stato -----------------------------------------------------------------------
 
-STEP="stato dopo il secondo avvio"
+STEP="state after the second start"
 compare second-start
 
 {
-    say "FATTO: primo avvio con le migrazioni qui sotto, secondo avvio muto, stato uguale alla fotografia."
+    say "DONE: first start with the migrations below, silent second start, state same as the snapshot."
     cat "$WORK/first-start-migrations.txt"
 } >> "$WORK/summary.txt"
 say ""
-say "FATTO. Secondo avvio senza niente da fare, stato uguale alla fotografia."
-say "Restano, per tornare indietro finche' servono:"
-say "  il boot environment $BE (bectl destroy -o $BE quando non serve piu')"
-say "  $WORK (la cartella del pannello di prima e quello che ho visto)"
+say "DONE. Second start with nothing to do, state same as the snapshot."
+say "Left, to go back while they are needed:"
+say "  the boot environment $BE (bectl destroy -o $BE when it is no longer needed)"
+say "  $WORK (the panel folder from before, and what I saw)"
 exit 0
