@@ -679,7 +679,7 @@ next, in order of importance. Then:
 
 Copyright © 2025–2026 Pietro Giuseppe D'Amico.
 
-DaemoxCP Mail is free software, licensed under the **GNU Affero General Public License, version 3 or later**
+DaemoxCP Mail is free software, licensed under the **GNU Affero General Public License, version 3 only**
 ([LICENSE](LICENSE)). You may use, study, modify and share it. If you distribute a modified version, or let others
 use it over a network, you must give them its source under the same license, with this copyright notice.
 
