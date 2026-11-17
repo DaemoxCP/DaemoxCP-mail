@@ -777,6 +777,10 @@ public class SSLMailServer {
             // Le colonne delle versioni successive (le tabelle dell'accesso le sistema Main prima dell'avvio)
             ensureSchemaUpgrades();
 
+            // I token di Cloudflare scritti in chiaro dalle versioni di prima: cifrati, una riga alla volta, solo se
+            // nessuno l'ha cambiata intanto (CloudflareTokens). Dopo le colonne, che creano la tabella.
+            org.mail_panel.security.CloudflareTokens.ensureAtBoot(Main.mailDatabase);
+
             // Auto-setup Fail2ban: log file + filter + jail + log rotation + reload
             // Idempotente, fail-safe: salta tutto se Fail2ban non è installato.
             org.mail_panel.security.Fail2banAutoSetup.run();

@@ -67,6 +67,8 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.EverythingTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PostfixInetProtocolsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.CloudflareCommentsTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.CloudflareTokensTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RcScriptRepairTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMoveTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveStorageTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/integration/*.java
@@ -269,6 +271,16 @@ Postfix asks for is reviewed; the piece with a fake postfix and postconf raises 
 reviewed, no request, lower, the same, a strange answer: unchanged). Falsified with planted copies: 6 FAILED.
 
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.PostfixLevelTest
+
+`CloudflareTokensTest` (with the secrets in a temporary folder it sets itself): the Cloudflare API tokens sealed in
+the database with DataCrypto (AES-256-GCM, a random nonce each time) and read back the same; a token in clear, written
+before the migration, read as it is; a sealed value that does not decrypt gives "", never the sealed text; the boot
+migration seals the tokens in clear row by row, only where the row still has the value read (a row changed meanwhile
+stays, PARTIAL), and a second start has nothing to do; MailDatabase seals on every write and opens on the one read.
+
+`RcScriptRepairTest` (from the project root, it reads UpdateManager.java): the start script the panel wrote, with the
+old file names and the old Italian messages, repaired at boot (whole lines only, sh -n, same owner and mode, atomic
+rename; a script without the panel's signature left alone); the script the panel writes today has today's messages.
 
 After an installation from scratch (`InstallFromScratch`), `mail-login-probe.sh` does a real login:
 it creates a test mailbox in `login-probe.test`, tries `doveadm auth test`, an IMAP LOGIN on 993 and

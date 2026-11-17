@@ -403,6 +403,12 @@ public final class SqlCatalog {
     /** MailDatabase.updateCloudflareAccountToken */
     public static final String MAIL_UPDATE_CLOUDFLARE_ACCOUNT_TOKEN = "UPDATE cloudflare_accounts SET api_token = ?, verified_at = CURRENT_TIMESTAMP WHERE id = ?";
 
+    /** MailDatabase.cloudflareStoredTokens */
+    public static final String MAIL_LIST_CLOUDFLARE_STORED_TOKENS = "SELECT id, api_token FROM cloudflare_accounts ORDER BY id";
+
+    /** MailDatabase.replaceCloudflareStoredToken */
+    public static final String MAIL_REPLACE_CLOUDFLARE_STORED_TOKEN = "UPDATE cloudflare_accounts SET api_token = ? WHERE id = ? AND api_token = ?";
+
     /** MailDatabase.deleteCloudflareAccount */
     public static final String MAIL_DELETE_CLOUDFLARE_ACCOUNT = "UPDATE domains SET cloudflare_account_id = NULL WHERE cloudflare_account_id = ?";
 
