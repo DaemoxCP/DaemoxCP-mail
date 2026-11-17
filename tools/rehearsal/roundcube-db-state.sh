@@ -3,8 +3,10 @@
 # db_dsnw, gli account MySQL coi privilegi, chi legge cosa, la pagina d'accesso e un accesso vero
 # con una casella di prova. Nessuna password esce: per ognuna si dice solo di chi e'.
 # Uso: roundcube-db-state.sh   (da root, dopo RehearsalCurrentSetup)
-F=/usr/local/etc/mail-panel/panel-secrets.properties
-R=/usr/local/etc/mail-panel/root-secrets.properties
+# La cartella dei segreti col nome di DaemoxCP Mail (17/11/2026) o con quello di prima.
+S=/usr/local/etc/daemoxcp-mail; [ -d "$S" ] || S=/usr/local/etc/mail-panel
+F=$S/panel-secrets.properties
+R=$S/root-secrets.properties
 C=/usr/local/www/roundcube/config/config.inc.php
 # La password di root sta nel file di root dal passo 1 della separazione; prima stava nel file del pannello.
 secret() { for x in "$R" "$F"; do [ -f "$x" ] && v=$(grep "^$1=" "$x" | cut -d= -f2- | sed 's/\\//g') && [ -n "$v" ] && { echo "$v"; return; }; done; }
