@@ -8,7 +8,7 @@ import java.util.TreeSet;
 /**
  * IPv4, IPv6 or both (IpFamily), the pure parts: what Postfix, Dovecot, nginx and pf are told for each family, how the
  * listening sockets are read, and the DNS side (public IPv6, SPF with ip4 and/or ip6, addresses compared as addresses).
- * The effect on the real services is measured by tests/ip-family-vm-test.sh on the test VM.
+ * The effect on the real services is measured by tests/ip-family-browser-test.js on the test machine.
  *
  * It runs anywhere (it calls nothing):
  *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.IpFamilyTest
@@ -72,6 +72,23 @@ public class IpFamilyTest {
                 && !IpFamily.listensAs(sock, 143, IpFamily.Family.IPV6) && !IpFamily.listensAs(sock, 143, IpFamily.Family.BOTH));
         check("default route read from netstat", IpFamily.hasDefaultRoute("Routing tables\n\nInternet6:\nDestination Gateway Flags\ndefault fe80::1%vtnet0 UG vtnet0\n")
                 && !IpFamily.hasDefaultRoute("Internet6:\n::1 link#2 UHS lo0\n"));
+
+        System.out.println("\n== The administrator's own connection ==");
+        check("the family of the connection a choice comes from", IpFamily.connectionFamily("203.0.113.7") == IpFamily.Family.IPV4
+                && IpFamily.connectionFamily("::ffff:203.0.113.7") == IpFamily.Family.IPV4
+                && IpFamily.connectionFamily("2001:db8::7") == IpFamily.Family.IPV6
+                && IpFamily.connectionFamily("fe80:0:0:0:0:0:0:1%vtnet0") == IpFamily.Family.IPV6
+                && IpFamily.connectionFamily("127.0.0.1") == null && IpFamily.connectionFamily("0:0:0:0:0:0:0:1") == null
+                && IpFamily.connectionFamily(null) == null && IpFamily.connectionFamily("not an address") == null);
+        List<String> cut = IpFamily.warnings(IpFamily.Family.IPV6, "203.0.113.7");
+        check("IPv6 only, chosen over IPv4: one more warning, first, with the way back from the console",
+                cut.size() == IpFamily.warnings(IpFamily.Family.IPV6, null).size() + 1 && cut.get(0).contains("--ip-family both"));
+        List<String> cut4 = IpFamily.warnings(IpFamily.Family.IPV4, "2001:db8::7");
+        check("IPv4 only, chosen over IPv6: the same warning", cut4.size() == 1 && cut4.get(0).contains("--ip-family both"));
+        check("no warning when the connection stays: the same family, both, or a tunnel on the loopback",
+                IpFamily.warnings(IpFamily.Family.IPV4, "203.0.113.7").isEmpty() && IpFamily.warnings(IpFamily.Family.BOTH, "2001:db8::7").isEmpty()
+                        && IpFamily.warnings(IpFamily.Family.IPV4, "127.0.0.1").isEmpty()
+                        && IpFamily.warnings(IpFamily.Family.IPV6, "::1").size() == IpFamily.warnings(IpFamily.Family.IPV6, null).size());
 
         System.out.println("\n== DNS ==");
         check("public IPv6: global unicast only", DnsRecordsGenerator.isPublicIpv6("2a01:4f8:c17:1234::1")

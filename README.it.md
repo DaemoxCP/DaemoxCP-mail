@@ -95,8 +95,13 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   recidive.
 - Firewall **pf**:
   - tutto chiuso tranne quello che serve;
-  - blocco per paese;
+  - blocco per paese, in IPv4 e in IPv6;
   - una scheda che tiene il firewall del fornitore al passo con gli indirizzi di Cloudflare.
+- **IPv4, IPv6 o tutte e due**: una scelta in *Impostazioni* che Postfix, Dovecot, la webmail, la superficie sulla
+  443 e pf seguono; SSH non cambia mai. Prima di cambiare qualcosa il pannello controlla che il server abbia un
+  indirizzo e una rotta predefinita nella famiglia che resta, e dice cosa smetterebbe di funzionare: record DNS,
+  Cloudflare, la posta con i server che hanno solo IPv4, la tua stessa connessione al pannello. Finché non scegli,
+  non tocca niente.
 - Separazione dei privilegi: la parte che risponde in rete gira con un utente senza privilegi (vedi
   [Sicurezza](#sicurezza-chi-gira-da-root-e-perché)).
 
@@ -149,7 +154,7 @@ documentazione (`203.0.113.0/24`, `2001:db8::/32`).</sub>
 | File system | **ZFS**, per i boot environment: installazione, aggiornamenti e passaggi del pannello tengono una strada per tornare indietro con `bectl`. |
 | Memoria | **4 GB di RAM**. Misurato su un server in uso: ClamAV 1–1,3 GB, i due processi Java del pannello circa 0,5 GB, MySQL 0,1–0,5 GB; 2,5–3 GB in tutto. |
 | Disco | almeno 20 GB, più la posta. |
-| Rete | un indirizzo IPv4 pubblico (IPv6 è un di più), con un DNS inverso che puoi impostare, e la porta 25 in uscita aperta (molti fornitori la chiudono sugli account nuovi). |
+| Rete | un indirizzo IPv4 pubblico, uno IPv6 pubblico, o tutti e due (con solo IPv6 la posta con i tanti server che hanno ancora solo IPv4 non passa), con un DNS inverso che puoi impostare, e la porta 25 in uscita aperta (molti fornitori la chiudono sugli account nuovi). |
 | Accesso | root via SSH con una chiave. **Il pannello non tocca mai la configurazione di SSH.** |
 | DNS | i domini di posta su **Cloudflare**, e un token API limitato alle loro zone. |
 | Java | OpenJDK 25 (`pkg install openjdk25`). |
@@ -290,8 +295,8 @@ un riavvio. Fai i passi in quest'ordine: ognuno si appoggia ai precedenti. Gli e
 
 ### Cosa serve prima di cominciare
 
-- **Un server** con FreeBSD 15.0 o successivo (amd64 o arm64) su **ZFS**, un indirizzo IPv4 pubblico (IPv6 è un
-  di più), **4 GB di RAM** e almeno 20 GB di disco.
+- **Un server** con FreeBSD 15.0 o successivo (amd64 o arm64) su **ZFS**, un indirizzo IPv4 pubblico, uno IPv6
+  pubblico o tutti e due, **4 GB di RAM** e almeno 20 GB di disco.
 - **Accesso root via SSH con una chiave.**
 - **I tuoi domini su Cloudflare** (il loro DNS è gestito da Cloudflare).
 - **Tre nomi**, ognuno con un ruolo preciso:
@@ -564,7 +569,7 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
 | **Diagnostica** | *Controlla tutto*, col passo successivo per ogni cosa trovata |
 | **Registri**, **Percorsi di sistema** | cosa scrivono i servizi, e dove sta ogni cosa |
 | **Amministratori** | chi può entrare e con quale ruolo; il registro delle azioni |
-| **Impostazioni**, **Account** | le opzioni del pannello; le tue passkey e le tue sessioni |
+| **Impostazioni**, **Account** | le opzioni del pannello, fra cui IPv4, IPv6 o tutte e due; le tue passkey e le tue sessioni |
 
 ---
 
@@ -637,6 +642,7 @@ Ogni servizio viene controllato e ricaricato.
 | `java -jar daemoxcp-mail-1.0.jar --web` | solo il server web, senza menu (quello che esegue il servizio) |
 | `java -jar daemoxcp-mail-1.0.jar --access-code [nome]` | un codice di accesso monouso di 8 cifre per un amministratore |
 | `java -jar daemoxcp-mail-1.0.jar --create-admin <nome> <email>` | il primo amministratore, quando non ce n'è nessuno |
+| `java -jar daemoxcp-mail-1.0.jar --ip-family both\|ipv4\|ipv6` | IPv4, IPv6 o tutte e due, come in *Impostazioni*, da root: la strada per tornare indietro quando una scelta ti ha chiuso fuori dal pannello |
 | `service daemoxcp_mail start\|stop\|restart\|status` | il pannello come servizio |
 
 I comandi da console vanno lanciati da `/home/panel`: il database del pannello è in `database/` accanto al jar.
@@ -703,6 +709,7 @@ importanza. Poi:
 | il pannello non risponde | `service daemoxcp_mail status`, poi `/var/db/daemoxcp-mail/panel.log` |
 | `421 Misdirected Request` | il pannello è stato chiamato per IP o con un altro nome: usa il suo nome |
 | nessun amministratore riesce a entrare | `java -jar daemoxcp-mail-1.0.jar --access-code` da `/home/panel` |
+| il pannello non risponde più dopo aver scelto solo IPv4 o solo IPv6 | da root, da `/home/panel`: `java -jar daemoxcp-mail-1.0.jar --ip-family both` |
 
 ---
 

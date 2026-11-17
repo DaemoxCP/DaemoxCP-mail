@@ -11802,7 +11802,10 @@ public class SSLMailServer {
                     sendJsonError(exchange, 400, I18n.tr("server.badRequest"));
                     return;
                 }
-                org.daemoxcp.mail.system.IpFamily.Outcome o = org.daemoxcp.mail.system.IpFamily.choose(f, req.optBoolean("confirmed", false));
+                // Il tratto che arriva qui (il browser, o Cloudflare): e' quello che una famiglia sola puo' chiudere.
+                String via = exchange.getRemoteAddress() == null || exchange.getRemoteAddress().getAddress() == null
+                        ? null : exchange.getRemoteAddress().getAddress().getHostAddress();
+                org.daemoxcp.mail.system.IpFamily.Outcome o = org.daemoxcp.mail.system.IpFamily.choose(f, req.optBoolean("confirmed", false), via);
                 if (o.done()) {
                     if (firewallManager != null) {
                         org.daemoxcp.mail.security.PfFirewallManager.FirewallState fw = firewallManager.getState();

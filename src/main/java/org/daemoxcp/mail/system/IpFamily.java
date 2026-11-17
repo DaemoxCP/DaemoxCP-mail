@@ -226,15 +226,17 @@ public final class IpFamily {
     /**
      * La scelta dell'amministratore. Prima di cambiare qualcosa: il server deve avere un indirizzo e una rotta nella
      * famiglia che resta (solo IPv4 o solo IPv6); poi gli avvisi, che chiedono una conferma. Confermata, la si applica
-     * servizio per servizio; se uno non torna, tutto com'era e la scelta di prima resta.
+     * servizio per servizio; se uno non torna, tutto com'era e la scelta di prima resta. via e' l'indirizzo della
+     * connessione TCP che porta la scelta al pannello (Cloudflare compreso, perche' e' quel tratto che si chiude), null
+     * dalla console: se la scelta chiude proprio quella famiglia, un avviso lo dice prima.
      */
-    public static synchronized Outcome choose(Family f, boolean confirmed) {
+    public static synchronized Outcome choose(Family f, boolean confirmed, String via) {
         org.daemoxcp.mail.database.MailDatabase db = org.daemoxcp.mail.Main.mailDatabase;
         if (db == null) return Outcome.no(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noDatabase"));
         if (f == null) return Outcome.no(org.daemoxcp.mail.i18n.I18n.tr("server.badRequest"));
         String missing = missingNetwork(f);
         if (missing != null) return Outcome.no(missing);
-        List<String> warnings = warnings(f);
+        List<String> warnings = warnings(f, via);
         if (!confirmed && !warnings.isEmpty()) return Outcome.ask(warnings);
 
         String problem = align(f);
@@ -280,8 +282,11 @@ public final class IpFamily {
     }
 
     /** Quello che chi sceglie deve sapere prima: cosa smette di funzionare con quella famiglia. */
-    static List<String> warnings(Family f) {
+    static List<String> warnings(Family f, String via) {
         List<String> w = new ArrayList<>();
+        Family reachedBy = connectionFamily(via);
+        if (reachedBy != null && f != Family.BOTH && reachedBy != f)
+            w.add(org.daemoxcp.mail.i18n.I18n.tr(reachedBy == Family.IPV4 ? "server.ipf.warnYouV4" : "server.ipf.warnYouV6"));
         org.daemoxcp.mail.database.MailDatabase db = org.daemoxcp.mail.Main.mailDatabase;
         String host = db == null ? "" : db.getSetting("mail_hostname", "");
         boolean hostOk = host != null && host.matches("[a-zA-Z0-9.-]{1,253}");
@@ -294,6 +299,22 @@ public final class IpFamily {
             w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnCloudflare"));
         }
         return w;
+    }
+
+    /**
+     * La famiglia di una connessione, dal suo indirizzo: IPV4 o IPV6, null se e' il loopback (un tunnel SSH, che pf
+     * non filtra e che resta comunque) o se non si sa. Un indirizzo IPv4 visto da un socket IPv6 (::ffff:a.b.c.d) e'
+     * IPv4: e' quella la famiglia che la scelta chiude.
+     */
+    static Family connectionFamily(String address) {
+        if (address == null || address.isBlank()) return null;
+        try {
+            InetAddress a = InetAddress.ofLiteral(address.trim().replaceFirst("%.*$", ""));   // senza la zona (%vtnet0)
+            if (a.isLoopbackAddress() || a.isAnyLocalAddress()) return null;
+            return a instanceof Inet4Address ? Family.IPV4 : Family.IPV6;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String dig(String type, String host) {
