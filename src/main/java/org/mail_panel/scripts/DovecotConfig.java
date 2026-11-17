@@ -651,6 +651,9 @@ public final class DovecotConfig {
             """.replace("__SIEVE24__\n", SIEVE24), false));
 
         f.add(new FileConf("conf.d/10-auth-worker.conf", AUTH_WORKER_FILE + "\n", false));
+        // I socket aperti a tutti che il pannello non usa, chiusi: lo stesso file della riparazione all'avvio (DovecotSockets)
+        f.add(new FileConf("conf.d/" + org.mail_panel.system.DovecotSockets.FILE_NAME,
+                org.mail_panel.system.DovecotSockets.fileContent(), false));
 
         f.add(new FileConf("conf.d/auth-master.conf.ext", """
             # Il nome del blocco e' obbligatorio nella 2.4, e "args" e' diventato

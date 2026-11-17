@@ -107,6 +107,8 @@ public class AcmeManager {
             // acme. Qui e non nel resto dell'avvio, perche' puo' installare il pacchetto (minuti,
             // se la rete e' lenta), e prima del controllo, che altrimenti rinnoverebbe con quello vecchio.
             AcmeUser.ensureAtBoot();
+            // La copia in chiaro del token di Cloudflare che acme.sh si era salvato: tolta (AcmeCloudflareCopy)
+            AcmeCloudflareCopy.ensureAtBoot();
             // Con quale utente gira ogni servizio, e gli avvisi nel log. Qui, dopo la migrazione
             // di acme.sh: prima avviserebbe che acme.sh gira da root mentre lo si sta spostando
             // (visto sulla VM il 31/10/2026, un avviso falso al primo avvio).
@@ -166,7 +168,12 @@ public class AcmeManager {
     private String acme(String args, Map<String, String> env) throws Exception {
         AcmeUser.Layout l = layout();
         if (l == null) throw new IllegalStateException(I18n.tr("server.acme.notInstalled"));
-        return AcmeUser.run(l, args, env);
+        try {
+            return AcmeUser.run(l, args, env);
+        } finally {
+            // Il token glielo passa il pannello ogni volta: la copia che acme.sh se ne salva non serve (AcmeCloudflareCopy)
+            if (env != null && env.containsKey("CF_Token")) AcmeCloudflareCopy.afterRun(l);
+        }
     }
 
     /**

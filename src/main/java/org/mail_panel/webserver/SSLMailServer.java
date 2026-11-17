@@ -815,6 +815,10 @@ public class SSLMailServer {
             // root non gli serve. Si verifica con una ricerca vera, e se non va si rimette com'era.
             org.mail_panel.system.DovecotAuthWorker.ensureAtBoot();
 
+            // I socket di Dovecot aperti a tutti (0666) che il pannello non usa: indexer, imap-urlauth, auth-token. Solo
+            // nella 2.4; serve un riavvio, verificato, e se Dovecot non riparte si toglie il file (DovecotSockets).
+            org.mail_panel.system.DovecotSockets.ensureAtBoot();
+
             // POP3 come l'ha scelto l'amministratore, spento se non ha scelto: nessuno lo usava, e le sue porte
             // erano solo bersagli (Pop3 verifica e torna indietro).
             org.mail_panel.system.Pop3.ensureAtBoot();
@@ -3233,7 +3237,11 @@ public class SSLMailServer {
         try {
             if (Main.mailDatabase != null && Main.mysqlAvailable) {
                 String script = new ConfigRegeneratorScript(Main.mailDatabase).getScriptContent();
-                executeScript(script, "config_regen");
+                // Gli avvisi dello script nel registro: prima l'uscita si buttava, e un file con piu' nomi lasciato
+                // com'era (SafeOwnership, reperto 252) o una casella col nome sbagliato non li vedeva nessuno.
+                for (String line : executeScript(script, "config_regen").split("\n"))
+                    if (line.startsWith("WARNING") || line.startsWith("[WARNING]") || line.startsWith("[ERROR]"))
+                        LOGGER.warning("[ConfigRegenerator] " + line);
             }
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Failed to regenerate mail configs", e);

@@ -19,6 +19,9 @@ public class ConfigRegeneratorScript {
 
     private final MailDatabase mailDb;
 
+    /** Un comando come vmail, con l'ambiente vuoto: come AddressTransform.asVmail. */
+    static final String AS_VMAIL = "env -i /usr/sbin/chroot -u vmail -g vmail -G vmail / /bin/";
+
     public ConfigRegeneratorScript(MailDatabase mailDb) {
         this.mailDb = mailDb;
     }
@@ -54,7 +57,8 @@ public class ConfigRegeneratorScript {
                     script.append("echo '[WARNING] a domain with an invalid name was skipped (see the panel log)'\n");
                     continue;
                 }
-                script.append("mkdir -p '/var/vmail/").append(domain.domain).append("'\n");
+                // Le crea vmail, non root: un collegamento messo da vmail porta solo dove vmail scrive gia' (reperto 252)
+                script.append(AS_VMAIL).append("mkdir -p '/var/vmail/").append(domain.domain).append("'\n");
                 List<MailDatabase.Mailbox> mailboxes = mailDb.getMailboxes(domain.id);
                 for (MailDatabase.Mailbox mb : mailboxes) {
                     String user = mb.email == null ? null : mb.email.split("@")[0];
@@ -64,11 +68,13 @@ public class ConfigRegeneratorScript {
                         continue;
                     }
                     String maildir = "/var/vmail/" + domain.domain + "/" + user + "/Maildir/";
-                    script.append("mkdir -p '").append(maildir).append("cur' '").append(maildir).append("new' '")
+                    script.append(AS_VMAIL).append("mkdir -p '").append(maildir).append("cur' '").append(maildir).append("new' '")
                           .append(maildir).append("tmp'\n");
                 }
             }
-            script.append("chown -R vmail:vmail /var/vmail\n");
+            // Quello che le versioni di prima avevano creato da root torna a vmail: solo cartelle e file con un solo nome.
+            // «chown -R» dava a vmail anche un file di root collegato li' dentro con un hard link (reperto 252).
+            script.append(org.mail_panel.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail"));
             // Le cartelle le crea root (umask 022, quindi 0755) e Dovecot copia i permessi della
             // cartella radice nelle cose nuove: solo vmail, come fa VmailPermissions all'avvio.
             script.append(org.mail_panel.system.VmailPermissions.SHELL).append("\n");

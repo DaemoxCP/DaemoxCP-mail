@@ -69,6 +69,9 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.CloudflareCommentsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.CloudflareTokensTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RcScriptRepairTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SafeOwnershipTest   (VM, as root)
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeCloudflareCopyTest   (VM, as root)
+    java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotSocketsTest   (VM, as root: it restarts Dovecot)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMoveTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveStorageTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/integration/*.java
@@ -277,6 +280,27 @@ the database with DataCrypto (AES-256-GCM, a random nonce each time) and read ba
 before the migration, read as it is; a sealed value that does not decrypt gives "", never the sealed text; the boot
 migration seals the tokens in clear row by row, only where the row still has the value read (a row changed meanwhile
 stays, PARTIAL), and a second start has nothing to do; MailDatabase seals on every write and opens on the one read.
+
+`SafeOwnershipTest` (as root on the VM, from the project root): root giving a folder to a user without giving it
+other people's files (reperto 252). On FreeBSD anyone can hard-link another user's file on the same file system, and
+/var/vmail is on the file system of /etc: "chown -R vmail:vmail /var/vmail" gave vmail a root file linked in there.
+What is safe to change (a folder, a file with one name; not a file with two names, a link, a FIFO); the script piece
+on a real tree with a root file hard-linked and one behind a link (both stay root's, the hard link is said); names
+that are not a panel folder refused; the installation scripts, the mail folders' regeneration (created as vmail),
+Roundcube's folders and acme.sh's walk use it; RoundcubeUser.apply on a tree with a hard link. Falsified with the old
+SafeOwnership: 10 FAILED.
+
+`AcmeCloudflareCopyTest` (as root on the VM, from the project root): the clear copy of the Cloudflare token that
+acme.sh saves in its account.conf (SAVED_CF_Token, SAVED_CF_Account_ID) removed after every run the panel gives the
+token to, and at boot: only those lines go, the rest stays byte for byte with owner and permissions; a link or a file
+with two names is left; a second run has nothing to do. Falsified with a version that removes nothing: 4 FAILED.
+
+`DovecotSocketsTest`: the three Dovecot sockets open to anyone that the panel does not use, closed (indexer 0660
+root:vmail, imap-urlauth and auth-token 0600; dns-client stays). The decision (only on 2.4; write, restart or nothing),
+the file (each listener in its own service: imap-urlauth belongs to imap-urlauth-login, and in imap-urlauth Dovecot does
+not start), the installer and the move to 2.4 write it. With -De2e.vm=yes, before the panel applied it: the wrong file
+written by the migration, accepted by doveconf and refused at the restart, is taken away and Dovecot brought back with
+authentication, LMTP and IMAP answering. Falsified with a decision that always writes: 3 FAILED.
 
 `RcScriptRepairTest` (from the project root, it reads UpdateManager.java): the start script the panel wrote, with the
 old file names and the old Italian messages, repaired at boot (whole lines only, sh -n, same owner and mode, atomic

@@ -158,9 +158,16 @@ public final class RoundcubeUser {
         StringBuilder b = new StringBuilder("\n# I file di Roundcube: suoi, e di nessun altro.\n");
         for (Ownership o : ownershipPlan(Places.real())) {
             String p = o.path().toString();
+            // Il contenuto senza i file con piu' nomi: logs, temp e le sessioni li scrive roundcube, e «chown -R» gli dava
+            // anche un file di root collegato li' dentro con un hard link (reperto 252).
+            if (o.contents()) {
+                b.append("if [ -d ").append(p).append(" ] && [ ! -L ").append(p).append(" ]; then\n")
+                 .append(org.mail_panel.security.SafeOwnership.shell(p, o.user(), o.group()))
+                 .append("chmod ").append(octal(o.mode())).append(' ').append(p).append("; fi\n");
+                continue;
+            }
             b.append("if [ -e ").append(p).append(" ]; then ");
-            if (o.contents()) b.append("chown -R ");
-            else b.append("chown ");
+            b.append("chown ");
             b.append(o.user()).append(':').append(o.group()).append(' ').append(p)
              .append("; chmod ").append(octal(o.mode())).append(' ').append(p).append("; fi\n");
         }
@@ -263,7 +270,7 @@ public final class RoundcubeUser {
     static List<String> apply(List<Ownership> plan, Deque<Snapshot> undo) throws IOException {
         List<String> changed = new ArrayList<>();
         for (Ownership o : plan) {
-            if (!Files.exists(o.path(), LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(o.path())) continue;
+            if (!Files.exists(o.path(), LinkOption.NOFOLLOW_LINKS) || !org.mail_panel.security.SafeOwnership.safeToChange(o.path())) continue;
             if (set(o.path(), o.user(), o.group(), PosixFilePermissions.fromString(o.mode()), undo))
                 changed.add(o.path().toString());
             if (!o.contents() || !Files.isDirectory(o.path(), LinkOption.NOFOLLOW_LINKS)) continue;
@@ -272,7 +279,8 @@ public final class RoundcubeUser {
                 inside = s.filter(p -> !p.equals(o.path())).toList();
             }
             for (Path p : inside) {
-                if (Files.isSymbolicLink(p)) continue;
+                // Ne' collegamenti ne' file con piu' nomi: un hard link a un file di root e' quel file (reperto 252)
+                if (!org.mail_panel.security.SafeOwnership.safeToChange(p)) continue;
                 Set<PosixFilePermission> perms = Files.readAttributes(p, PosixFileAttributes.class,
                         LinkOption.NOFOLLOW_LINKS).permissions();
                 perms.remove(PosixFilePermission.OTHERS_READ);
