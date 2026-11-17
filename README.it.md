@@ -33,6 +33,7 @@ Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx �
 - [I programmi della posta](#i-programmi-della-posta)
 - [Sicurezza: chi gira da root, e perché](#sicurezza-chi-gira-da-root-e-perché)
 - [Installazione](#installazione)
+- [Cosa non c'è ancora](#cosa-non-cè-ancora)
 - [L'uso di tutti i giorni](#luso-di-tutti-i-giorni)
 - [Tenerlo aggiornato](#tenerlo-aggiornato)
 - [Da FreeBSD Mail Panel](#da-freebsd-mail-panel)
@@ -66,12 +67,12 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 ## Che cosa fa
 
 **Posta**
-- Domini, caselle con quota, alias e inoltri, catch-all.
+- Domini, caselle, alias e inoltri, trasformazioni degli indirizzi.
 - Password delle caselle salvate come hash BLF-CRYPT, più una copia cifrata che l'amministratore può mostrare.
   La copia è cifrata con una chiave pubblica: la legge solo la parte root del pannello.
 - Filtri Sieve e risposte automatiche, compilati e controllati sul server.
-- Limiti d'invio per casella, all'ora e al giorno; coda di posta da guardare e da gestire.
-- Statistiche: posta inviata, ricevuta, consegnata e respinta, per dominio; spam, ham e addestramento da Rspamd.
+- Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
+- Statistiche da Rspamd: spam, ham e addestramento.
 - POP3 a scelta (spento all'inizio).
 
 **DNS e certificati**
@@ -169,7 +170,7 @@ Tutti dai pacchetti di FreeBSD, configurati dal pannello, avviati da `rc.d`.
 | **Redis** | cache e statistiche di Rspamd | socket Unix |
 | **MySQL 8.4** | domini, caselle, alias, i dati del pannello | 127.0.0.1:3306 |
 | **nginx + PHP-FPM** | la webmail Roundcube sulla 8443, la politica MTA-STS sulla 443 | 8443, 443, 80 |
-| **Roundcube** | webmail, con accesso diretto dal pannello e cambio password tramite il pannello | (dietro nginx) |
+| **Roundcube** | webmail, con accesso diretto dal pannello | (dietro nginx) |
 | **local-unbound** | il risolutore DNS del server, ricorsivo, perché funzionino le liste DNSBL | 127.0.0.1:53 |
 | **fail2ban** | ban dai registri della posta e del pannello, dentro pf | — |
 | **pf** | il firewall | — |
@@ -531,15 +532,30 @@ quest'ordine:
 
 ---
 
+## Cosa non c'è ancora
+
+Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, così nessuno ci conta:
+
+- **Le quote** si salvano con ogni casella, ma Dovecot non le applica.
+- **I limiti d'invio all'ora e al giorno** si salvano, ma né Postfix né Rspamd li leggono: si applica solo la
+  dimensione massima dei messaggi.
+- **I conteggi di posta inviata e ricevuta** non vengono raccolti: la pagina delle statistiche mostra solo i numeri
+  di Rspamd.
+- **Il cambio password dalla webmail** passa dal pannello quando il plugin `password` di Roundcube è acceso, ma
+  un'installazione nuova non lo accende.
+- **Gli indirizzi catch-all** non si possono creare dal pannello.
+
+---
+
 ## L'uso di tutti i giorni
 
 | Pagina | Cosa ci fai |
 |---|---|
 | **Dashboard** | lo stato del server a colpo d'occhio, e il DNS ancora da configurare |
-| **Domini**, **Caselle**, **Alias** | la posta; da una casella: password, quota, filtri Sieve, risposta automatica, profilo Apple, accesso alla webmail |
+| **Domini**, **Caselle**, **Alias** | la posta; da una casella: password, filtri Sieve, risposta automatica, profilo Apple, accesso alla webmail |
 | **Coda di posta** | cosa aspetta, perché, e cosa farne |
-| **Limiti di invio** | quanto può mandare ogni casella, all'ora e al giorno |
-| **Statistiche** | inviata, ricevuta, consegnata, respinta, per dominio; spam e ham |
+| **Limiti di invio** | la dimensione massima dei messaggi |
+| **Statistiche** | spam, ham e addestramento, da Rspamd |
 | **DNS** | i record di ogni dominio, *Configura tutto*, MTA-STS, rotazione DKIM |
 | **Certificati SSL** | Let's Encrypt, i certificati del pannello e della webmail, le scadenze |
 | **Cloudflare** | account e token, quali zone vede ognuno |
