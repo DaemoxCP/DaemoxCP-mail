@@ -542,7 +542,7 @@ public class Main {
         }
 
         MultiWindowTextGUI gui = new MultiWindowTextGUI(screen, new DefaultWindowManager(), new EmptySpace(TextColor.ANSI.BLUE));
-        Welcome simpleBox = new Welcome("Information", "Welcome to FreeBSD Mail Panel");
+        Welcome simpleBox = new Welcome("Information", "Welcome to " + org.mail_panel.i18n.I18n.tr("brand.name"));
         simpleBox.show(gui);
 
         if (needsTableCreation) {

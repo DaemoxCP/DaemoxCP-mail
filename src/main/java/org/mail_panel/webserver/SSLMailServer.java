@@ -9048,7 +9048,7 @@ public class SSLMailServer {
             // Il pannello separato (PanelSeparation): il registro della parte web e il socket della root.
             panelEntries.put(pathEntry(I18n.tr("server.paths.panelWebLog"), "/var/db/mailpanel/panel-web.log", I18n.tr("server.paths.panelWebLogDesc")));
             panelEntries.put(pathEntry(I18n.tr("server.paths.rootSocket"), org.mail_panel.system.PanelSeparation.socket().toString(), I18n.tr("server.paths.rootSocketDesc")));
-            categories.put(new JSONObject().put("name", "Mail Panel").put("entries", panelEntries));
+            categories.put(new JSONObject().put("name", I18n.tr("brand.name")).put("entries", panelEntries));
 
             // === pf (firewall) ===
             JSONArray pfEntries = new JSONArray();
