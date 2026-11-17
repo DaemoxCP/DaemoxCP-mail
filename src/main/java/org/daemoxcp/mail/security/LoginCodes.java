@@ -231,6 +231,26 @@ public final class LoginCodes {
         return Optional.empty();
     }
 
+    /**
+     * La conferma di un'operazione delicata con un codice della console (--access-code): chi lo legge ha la shell di
+     * root, che vale piu' di qualunque conferma. Solo i codici dell'amministratore collegato: quello di un altro non
+     * passa e non si consuma. Stesso limite per indirizzo e stessi tentativi dell'accesso con quel codice.
+     */
+    public static boolean verifyConsoleStepUp(AuthStore.Admin admin, String code, String ip) {
+        String c = clean(code, 8);
+        if (!allow("console-verify-ip:" + ip, 10, 15 * MIN) || c == null) return false;
+        List<AuthStore.CodeRow> rows = AuthStore.activeCodes(AuthStore.CodeFlow.CONSOLE_LOGIN, admin.id());
+        for (AuthStore.CodeRow row : rows) {
+            if (row.attempts() >= MAX_ATTEMPTS) continue;
+            if (DataCrypto.sameHash(row.codeHash(), DataCrypto.codeHash("console_login", row.adminId(), c))) {
+                AuthStore.codeAttempt(AuthStore.CodeFlow.CONSOLE_LOGIN, row.id());
+                return AuthStore.consumeCode(AuthStore.CodeFlow.CONSOLE_LOGIN, row.id(), MAX_ATTEMPTS);
+            }
+        }
+        for (AuthStore.CodeRow row : rows) AuthStore.codeAttempt(AuthStore.CodeFlow.CONSOLE_LOGIN, row.id());
+        return false;
+    }
+
     // ----- conferma di un'operazione delicata (chi non ha una passkey) -----
 
     /** Manda un codice all'email dell'amministratore collegato. Falso se non ha un'email o e' oltre il limite. */

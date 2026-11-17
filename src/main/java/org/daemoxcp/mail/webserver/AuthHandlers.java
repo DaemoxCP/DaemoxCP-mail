@@ -334,6 +334,21 @@ final class AuthHandlers {
                     Main.sessions.markReauthenticated(s.id());
                     send(ex, 200, new JSONObject().put("success", true));
                 }
+                case "stepup_console_verify" -> {
+                    // La strada di chi non ha una passkey e non riceve l'email (porta 25 chiusa, nessuna email):
+                    // un codice di --access-code per se stesso, come all'accesso, con la stessa attesa costante.
+                    long start = System.currentTimeMillis();
+                    boolean ok = LoginCodes.verifyConsoleStepUp(me, req.optString("code", ""), ip);
+                    padTo(start);
+                    if (!ok) {
+                        server.logAudit("LOGIN_FAILURE", ip, "step-up console code refused user=" + me.username());
+                        send(ex, 401, error("server.login.codeWrong"));
+                        return;
+                    }
+                    Main.sessions.markReauthenticated(s.id());
+                    server.logAudit("STEP_UP_CONSOLE_CODE", ip, "user=" + me.username());
+                    send(ex, 200, new JSONObject().put("success", true));
+                }
                 default -> send(ex, 400, error("server.unknownAction"));
             }
         } catch (Exception e) {

@@ -252,10 +252,19 @@ document.querySelectorAll('[data-set-lang]').forEach(function (button) {
                 <p class="text-muted" data-confirm="choose">{{t:acc.stepUpIntro}}</p>
                 <p class="text-muted" data-confirm="passkey-only" hidden>{{t:confirm.passkeyOnly}}</p>
                 <p class="text-muted" data-confirm="email-only" hidden>{{t:confirm.emailOnly}}</p>
-                <p class="text-danger" data-confirm="none" hidden>{{t:confirm.noMethod}}</p>
+                <p class="text-muted" data-confirm="none" hidden>{{t:confirm.noMethod}}</p>
                 <div class="d-grid gap-2">
                     <button type="button" class="btn btn-primary touch-target" data-confirm="passkey"><i class="fas fa-fingerprint me-2" aria-hidden="true"></i>{{t:acc.stepUpPasskey}}</button>
                     <button type="button" class="btn btn-outline-secondary touch-target" data-confirm="email"><i class="fas fa-paper-plane me-2" aria-hidden="true"></i>{{t:acc.stepUpEmail}}</button>
+                    <button type="button" class="btn btn-outline-secondary touch-target" data-confirm="console" aria-expanded="false" aria-controls="panelConfirmConsoleBox"><i class="fas fa-terminal me-2" aria-hidden="true"></i>{{t:confirm.consoleButton}}</button>
+                </div>
+                <div class="mt-3" id="panelConfirmConsoleBox" data-confirm="console-code" hidden>
+                    <label class="form-label" for="panelConfirmConsoleCode">{{t:login.consoleLabel}}</label>
+                    <p class="small text-muted mb-2" id="panelConfirmConsoleHint">{{t:confirm.consoleHint}} <code id="panelConfirmConsoleCommand"></code></p>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="panelConfirmConsoleCode" maxlength="9" minlength="8" inputmode="numeric" autocomplete="off" placeholder="0000 0000" required aria-describedby="panelConfirmConsoleHint">
+                        <button type="button" class="btn btn-primary touch-target" data-confirm="console-verify">{{t:login.verify}}</button>
+                    </div>
                 </div>
                 <div class="mt-3" data-confirm="code" hidden>
                     <label class="form-label" for="panelConfirmCode">{{t:login.codeLabel}}</label>

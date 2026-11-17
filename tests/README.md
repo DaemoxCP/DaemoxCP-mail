@@ -234,6 +234,12 @@ route of the web part, on one of the root and on one that asks for a recent conf
 first); reads that pass; "Cancel the restart" (with the session's fresh confirmation from `signed-jobs-setup.sh
 confirm`) ends the stand-in, and the same change is no longer refused. The stand-in is ended by its exact PID anyway.
 
+`console-confirmation-browser-test.js` (Playwright, VM): the confirmation of a sensitive operation with a code from
+the server console, for an administrator without a passkey on a server that cannot send mail yet. Signed in with a
+console code and no passkey, a harmless change in Settings opens the confirmation window; it offers the console way with
+the command and the administrator's name; a wrong code is refused and the window stays; the command shown, run on the
+server, gives the code that confirms, and the change goes through; the same code again gets 401.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the

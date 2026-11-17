@@ -2,7 +2,8 @@
 // Il server la chiede con un 403 e l'intestazione X-Panel-Confirmation: needed; l'involucro di fetch nella testa di
 // ogni pagina chiama window.panelConfirmIdentity(), che apre questa finestra e risponde true quando la root ha
 // verificato la passkey o il codice; allora la richiesta si ripete una volta. Chi ha una passkey sceglie fra la
-// passkey e un codice via email; chi non ne ha, solo il codice. La conferma vale 5 minuti.
+// passkey e un codice via email; chi non ne ha, solo il codice. Sempre, anche un codice della console del server
+// (--access-code), per chi non ha passkey e non riceve l'email. La conferma vale 5 minuti.
 // Le funzioni WebAuthn (webauthnGetOptions, webauthnCredentialJson) arrivano da PanelContent.getWebAuthnScript,
 // nello stesso file e nella stessa funzione (Layout.CONFIRM_SCRIPT): niente di globale, salvo panelConfirmIdentity.
 
@@ -75,6 +76,24 @@ function dialog() {
     };
     part('verify').addEventListener('click', verify);
     code.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); verify(); } });
+    // Il codice della console (--access-code): sempre possibile, anche senza passkey e senza email. Chi lo legge ha la
+    // shell di root sul server.
+    var consoleCode = document.getElementById('panelConfirmConsoleCode');
+    part('console').addEventListener('click', function () {
+        say(msg, '', '');
+        part('console-code').hidden = false;
+        part('console').setAttribute('aria-expanded', 'true');
+        consoleCode.focus();
+    });
+    var verifyConsole = function () {
+        var value = consoleCode.value.replace(/[ -]/g, '');
+        if (!/^[0-9]{8}$/.test(value)) { say(msg, 'danger', tr('login.consoleEnterValid')); consoleCode.focus(); return; }
+        confirmPost('stepup_console_verify', { code: value }).then(function (r) {
+            if (r.success) done(); else say(msg, 'danger', r.error || tr('common.failed'));
+        }).catch(function (e) { say(msg, 'danger', tr('common.networkError', { message: e.message })); });
+    };
+    part('console-verify').addEventListener('click', verifyConsole);
+    consoleCode.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); verifyConsole(); } });
     modal.addEventListener('hidden.bs.modal', function () {
         var f = finish;
         finish = null;
@@ -98,7 +117,13 @@ function ask() {
         part('passkey').hidden = !passkey;
         part('email').hidden = !email;
         part('code').hidden = true;
+        part('console-code').hidden = true;
+        part('console').setAttribute('aria-expanded', 'false');
         document.getElementById('panelConfirmCode').value = '';
+        document.getElementById('panelConfirmConsoleCode').value = '';
+        // Il comando col nome di chi conferma: il codice vale solo per lui.
+        document.getElementById('panelConfirmConsoleCommand').textContent =
+            'java -jar daemoxcp-mail-1.0.jar --access-code' + (state.username ? ' ' + state.username : '');
         say(document.getElementById('panelConfirmMsg'), '', '');
         var before = document.activeElement;
         return new Promise(function (resolve) {
