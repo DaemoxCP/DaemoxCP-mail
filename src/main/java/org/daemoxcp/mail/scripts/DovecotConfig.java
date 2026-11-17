@@ -13,7 +13,7 @@ import java.sql.ResultSet;
  * FullMailStackScript, FullMailServerScript) che nel tempo sono divergiti. A seconda di
  * quale si eseguiva si otteneva un server diverso — userdb static contro userdb sql,
  * Sieve presente o assente, elenco protocols diverso — e due dei tre scrivevano un nome
- * di database CABLATO e sbagliato (`mailpanel` invece di quello configurato), il che
+ * di database CABLATO e sbagliato (`daemoxcp_mail` invece di quello configurato), il che
  * significava togliere l'autenticazione a tutte le caselle con un clic.
  *
  * Il contenuto canonico qui sotto e' la configurazione VIVA del server, quella che
@@ -50,7 +50,7 @@ public final class DovecotConfig {
 
     /**
      * Valori presi dalla configurazione del pannello. Se non sono leggibili si usano i
-     * valori predefiniti del pannello stesso (mailserver/mailpanel), NON quelli cablati
+     * valori predefiniti del pannello stesso (daemoxcp_mail, database e utente), NON quelli cablati
      * negli script vecchi: e' proprio quella differenza ad aver rotto dovecot-sql.conf.
      */
     public static DovecotConfig fromPanelConfig() {

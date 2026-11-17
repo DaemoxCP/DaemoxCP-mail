@@ -13,7 +13,7 @@ import java.util.UUID;
  * Unified MySQL database for Mail Panel
  * Handles both panel state (admin, settings, components) and mail data (domains, mailboxes, aliases)
  *
- * Database: mailpanel
+ * Database: daemoxcp_mail
  *
  * Tables:
  * - panel_admin: Admin user authentication
@@ -240,7 +240,7 @@ public class MailDatabase {
     }
 
     /**
-     * Create the mailpanel database and user (run as root)
+     * Create the daemoxcp_mail database and user (run as root)
      */
     public void createDatabaseAndUser(String panelPassword) throws SQLException {
         try (Statement stmt = getConnection().createStatement()) {
@@ -251,10 +251,8 @@ public class MailDatabase {
             createUser(SqlCatalog.MAIL_CREATE_PANEL_USER, panelPassword);
             stmt.execute(SqlCatalog.MAIL_GRANT_PANEL_USER);
 
-            // Create mailserver database for Dovecot
-            stmt.execute(SqlCatalog.MAIL_CREATE_MAILSERVER_DATABASE);
-            createUser(SqlCatalog.MAIL_CREATE_MAILSERVER_USER, panelPassword);
-            stmt.execute(SqlCatalog.MAIL_GRANT_MAILSERVER_USER);
+            // Il database di Dovecot e' questo: il secondo, mailserver, col suo utente, non c'e' piu' (17/11/2026:
+            // MysqlRename ne ha spostato le tabelle qui sui server installati prima).
 
             stmt.execute(SqlCatalog.MAIL_FLUSH_PRIVILEGES);
         }

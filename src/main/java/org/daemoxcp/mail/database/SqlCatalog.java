@@ -16,12 +16,6 @@ public final class SqlCatalog {
     /** MailDatabase.createDatabaseAndUser */
     public static final String MAIL_GRANT_PANEL_USER = "GRANT ALL PRIVILEGES ON daemoxcp_mail.* TO 'daemoxcp_mail'@'127.0.0.1'";
 
-    /** MailDatabase.createDatabaseAndUser */
-    public static final String MAIL_CREATE_MAILSERVER_DATABASE = "CREATE DATABASE IF NOT EXISTS mailserver CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
-
-    /** MailDatabase.createDatabaseAndUser */
-    public static final String MAIL_GRANT_MAILSERVER_USER = "GRANT ALL PRIVILEGES ON mailserver.* TO 'mailserver'@'127.0.0.1'";
-
     /**
      * MailDatabase.createDatabaseAndUser; MailDbUsers, dopo aver cambiato i permessi per colonna. Misurato sulla VM
      * l'08/11/2026 col MySQL 8.4.11 dei pacchetti: una colonna tolta e ridata a un utente che ha ancora le altre della
@@ -910,8 +904,6 @@ public final class SqlCatalog {
     /** MailDatabase.createDatabaseAndUser: la password e' un parametro, che il driver mette fra apici con l'escape giusto */
     public static final String MAIL_CREATE_PANEL_USER = "CREATE USER IF NOT EXISTS 'daemoxcp_mail'@'127.0.0.1' IDENTIFIED BY ?";
 
-    /** MailDatabase.createDatabaseAndUser */
-    public static final String MAIL_CREATE_MAILSERVER_USER = "CREATE USER IF NOT EXISTS 'mailserver'@'127.0.0.1' IDENTIFIED BY ?";
 
     /** MailDatabase.dropAllTables: le tabelle di MailDatabase.PANEL_TABLES, nello stesso ordine (lo controlla SqlCatalogTest) */
     public static final String MAIL_DROP_PANEL_TABLES = "DROP TABLE IF EXISTS admin_passkeys, rspamd_training, panel_sessions, login_code_email, login_code_console, stepup_code, email_change_code, roundcube_tokens, auto_responders, sieve_filters, forwarding_rules, email_statistics, aliases, mailboxes, dkim_rotation_history, domains, cloudflare_accounts, audit_log, rate_limits, panel_settings, panel_role_permissions, installed_components, panel_admin, virtual_aliases, virtual_users, virtual_domains";
@@ -2547,9 +2539,6 @@ public final class SqlCatalog {
     public static final String RENAME_BACK_USER_MAILPANEL_DOVECOT_LOOPBACK = "RENAME USER 'daemoxcp_mail_dovecot'@'127.0.0.1' TO 'mailpanel_dovecot'@'127.0.0.1'";
     /** MysqlRename: l'utente del pannello, tutto sul database col nome di adesso (come l'installatore) */
     public static final String RENAME_GRANT_PANEL_LOCALHOST = "GRANT ALL PRIVILEGES ON daemoxcp_mail.* TO 'daemoxcp_mail'@'localhost'";
-
-    /** MysqlRename */
-    public static final String RENAME_GRANT_PANEL_LOOPBACK = "GRANT ALL PRIVILEGES ON daemoxcp_mail.* TO 'daemoxcp_mail'@'127.0.0.1'";
 
     /** MysqlRename: i permessi rimasti sul database di prima, col nome dell'installatore */
     public static final String RENAME_REVOKE_OLD_DEFAULT_LOCALHOST = "REVOKE ALL PRIVILEGES ON mailserver.* FROM 'daemoxcp_mail'@'localhost'";

@@ -120,9 +120,9 @@ public class PanelContent {
     /**
      * Le pagine e i loro file li legge solo il pannello: cartelle 0750, file 0640, col gruppo della cartella.
      * Permessi scritti e non lasciati all'umask: il servizio gira con 077, e i file nati cosi' (0600) la
-     * parte web del pannello separato, che gira con l'utente mailpanel e il suo gruppo, non li leggeva
+     * parte web del pannello separato, che gira con l'utente daemoxcp_mail e il suo gruppo, non li leggeva
      * (misurato sulla VM il 07/11/2026: la pagina di accesso senza i suoi script). Su FreeBSD un file nuovo
-     * prende il gruppo della cartella, che col pannello separato e' mailpanel (PanelSeparation).
+     * prende il gruppo della cartella, che col pannello separato e' daemoxcp_mail (PanelSeparation).
      */
     public static void readableByPanel(Path p, boolean dir) {
         try {

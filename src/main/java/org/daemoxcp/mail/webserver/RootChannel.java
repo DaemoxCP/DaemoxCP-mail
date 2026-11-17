@@ -38,7 +38,7 @@ import java.util.regex.Pattern;
 
 /**
  * Il canale fra le due parti del pannello separato: un socket unix
- * della parte root, {@code /var/run/daemoxcp-mail/root.sock}, su cui la parte web (utente mailpanel) le
+ * della parte root, {@code /var/run/daemoxcp-mail/root.sock}, su cui la parte web (utente daemoxcp_mail) le
  * passa le API di chi ha fatto l'accesso, dopo i suoi filtri (Host, lingua, permesso, CSRF).
  *
  * <p>Una richiesta per connessione. La web scrive {@code "MPR1"}, la lunghezza dell'intestazione (int),
@@ -56,7 +56,7 @@ import java.util.regex.Pattern;
  * decide la root, e la chiave delle sessioni, che la web chiede
  * all'avvio.
  *
- * <p>Il socket sta in una cartella 0750 root:mailpanel e il socket e' 0660 root:mailpanel; in piu' la
+ * <p>Il socket sta in una cartella 0750 root:daemoxcp_mail e il socket e' 0660 root:daemoxcp_mail; in piu' la
  * root accetta solo connessioni il cui processo e' dell'utente della web (SO_PEERCRED, che Java 25 su
  * FreeBSD restituisce: misurato sulla VM il 07/11/2026).
  */

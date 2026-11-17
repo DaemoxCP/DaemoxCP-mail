@@ -62,7 +62,7 @@ public final class PanelSecrets {
     /** La chiave privata TLS (PEM) del pannello (prima stava nel database SQLite di configurazione). */
     public static final String PANEL_TLS_KEY = "panel_tls_key";
     /**
-     * La password dell'utente MySQL della parte web (mailpanel_web), che puo' solo chiamare le procedure della web.
+     * La password dell'utente MySQL della parte web (daemoxcp_mail_web), che puo' solo chiamare le procedure della web.
      * La scrive la root quando l'utente e' pronto e provato.
      */
     public static final String MYSQL_WEB_PASSWORD = "mysql_web_password";
@@ -86,7 +86,7 @@ public final class PanelSecrets {
 
     /**
      * I segreti che restano solo di root. La parte web del pannello
-     * gira con l'utente mailpanel e legge il suo file; questi due li usano soltanto installatori e
+     * gira con l'utente daemoxcp_mail e legge il suo file; questi due li usano soltanto installatori e
      * migrazioni, che girano da root, e con la password di root di MySQL chi bucasse la parte web avrebbe
      * tutto il database. Stanno in un file a parte, 0600 di root, nella stessa cartella.
      */
@@ -105,7 +105,7 @@ public final class PanelSecrets {
 
     /**
      * Il gruppo della parte web del pannello separato. Col pannello separato (PanelSeparation) la cartella
-     * e' 0750 root:mailpanel e il file della web 0640 root:mailpanel: la web lo legge, non lo scrive mai (le
+     * e' 0750 root:daemoxcp_mail e il file della web 0640 root:daemoxcp_mail: la web lo legge, non lo scrive mai (le
      * chiavi le genera la root all'avvio, prima di avviarla). Ogni riscrittura da root crea un file nuovo
      * (un rename): prende il gruppo e i permessi di quello che sostituisce, cosi' chiunque scriva (la root,
      * il menu, un comando da console) lascia la web in grado di leggere. Il file di root resta 0600.

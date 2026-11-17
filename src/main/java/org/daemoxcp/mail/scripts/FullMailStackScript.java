@@ -212,7 +212,7 @@ public class FullMailStackScript {
                 echo "Error: MYSQL_ROOT_PASSWORD not in the environment"
                 exit 1
             fi
-            MYSQL_WORK=$(mktemp -d /var/tmp/mailpanel-all.XXXXXXXX) || exit 1
+            MYSQL_WORK=$(mktemp -d /var/tmp/daemoxcp-mail-all.XXXXXXXX) || exit 1
             trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
             if mysql --no-defaults -u root --password= -e "SELECT 1" >/dev/null 2>&1; then
                 echo "Fresh MySQL: setting the root password"
@@ -239,13 +239,13 @@ public class FullMailStackScript {
             MAILSERVER_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
 
             mysql_root << SQLEOF
-            CREATE DATABASE IF NOT EXISTS mailpanel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-            CREATE USER IF NOT EXISTS 'mailpanel'@'localhost' IDENTIFIED BY '${MAILSERVER_PASS}';
-            CREATE USER IF NOT EXISTS 'mailpanel'@'127.0.0.1' IDENTIFIED BY '${MAILSERVER_PASS}';
-            GRANT ALL PRIVILEGES ON mailpanel.* TO 'mailpanel'@'localhost';
-            GRANT ALL PRIVILEGES ON mailpanel.* TO 'mailpanel'@'127.0.0.1';
+            CREATE DATABASE IF NOT EXISTS daemoxcp_mail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            CREATE USER IF NOT EXISTS 'daemoxcp_mail'@'localhost' IDENTIFIED BY '${MAILSERVER_PASS}';
+            CREATE USER IF NOT EXISTS 'daemoxcp_mail'@'127.0.0.1' IDENTIFIED BY '${MAILSERVER_PASS}';
+            GRANT ALL PRIVILEGES ON daemoxcp_mail.* TO 'daemoxcp_mail'@'localhost';
+            GRANT ALL PRIVILEGES ON daemoxcp_mail.* TO 'daemoxcp_mail'@'127.0.0.1';
 
-            USE mailpanel;
+            USE daemoxcp_mail;
 
             -- Domains with DKIM support
             CREATE TABLE IF NOT EXISTS domains (
@@ -331,7 +331,7 @@ public class FullMailStackScript {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
             CREATE DATABASE IF NOT EXISTS roundcubemail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-            """ + org.daemoxcp.mail.scripts.RoundcubeDbAccountScript.sql("${ROUNDCUBE_DB_PASSWORD}", "mailpanel") + """
+            """ + org.daemoxcp.mail.scripts.RoundcubeDbAccountScript.sql("${ROUNDCUBE_DB_PASSWORD}", "daemoxcp_mail") + """
 
             FLUSH PRIVILEGES;
             SQLEOF
@@ -447,26 +447,26 @@ virtual_mailbox_limit = 2147483648
 POSTFIXCONF
 
             cat > /usr/local/etc/postfix/mysql-virtual-domains.cf << MYSQLCONF
-user = mailpanel
+user = daemoxcp_mail
 password = ${MAILSERVER_PASS}
 hosts = 127.0.0.1
-dbname = mailpanel
+dbname = daemoxcp_mail
 query = SELECT domain FROM domains WHERE domain='%s' AND active=1
 MYSQLCONF
 
             cat > /usr/local/etc/postfix/mysql-virtual-mailboxes.cf << MYSQLCONF
-user = mailpanel
+user = daemoxcp_mail
 password = ${MAILSERVER_PASS}
 hosts = 127.0.0.1
-dbname = mailpanel
+dbname = daemoxcp_mail
 query = SELECT CONCAT(SUBSTRING_INDEX(email,'@',-1),'/',SUBSTRING_INDEX(email,'@',1),'/') FROM mailboxes WHERE email='%s' AND active=1 AND receive_enabled=1
 MYSQLCONF
 
             cat > /usr/local/etc/postfix/mysql-virtual-aliases.cf << MYSQLCONF
-user = mailpanel
+user = daemoxcp_mail
 password = ${MAILSERVER_PASS}
 hosts = 127.0.0.1
-dbname = mailpanel
+dbname = daemoxcp_mail
 query = SELECT destination FROM aliases WHERE source='%s' AND active=1
 MYSQLCONF
 
@@ -537,7 +537,7 @@ MASTERCONF
             pkg install -y $DOVECOT_PACKAGES
 
             """
-            // Sorgente UNICA della configurazione Dovecot. Prima scriveva dbname=mailpanel, cablato e diverso da quello configurato.
+            // Sorgente UNICA della configurazione Dovecot. Prima scriveva dbname=daemoxcp_mail, cablato e diverso da quello configurato.
             + DovecotConfig.fromPanelConfig().scriptFragment() + """
 
             # Generate master user password for SSO
@@ -716,7 +716,7 @@ NGINXCONF
 \\$config['language'] = 'it_IT';
 
 // Password plugin (change password from webmail): the settings are added by DaemoxCP Mail at
-// startup, in the "mail-panel: webmail password changes" block at the end of this file. The change
+// startup, in the "daemoxcp-mail: webmail password changes" block at the end of this file. The change
 // goes through the panel, which writes the bcrypt hash and the encrypted copy it can show again.
 
 // Managesieve plugin (Dovecot Sieve filters)

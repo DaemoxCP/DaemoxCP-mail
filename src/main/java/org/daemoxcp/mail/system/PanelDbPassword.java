@@ -28,7 +28,7 @@ import java.util.stream.Stream;
  *
  * <p>Sui server installati prima della PR #91 quella password e' stata per tutta la loro vita in config.inc.php di
  * Roundcube, leggibile dalla webmail. Adesso la webmail entra con un utente suo (RoundcubeDbUser), Postfix e Dovecot
- * coi loro (MailDbUsers), la parte web con mailpanel_web: la password del pannello la usa solo il pannello. Ma chi
+ * coi loro (MailDbUsers), la parte web con daemoxcp_mail_web: la password del pannello la usa solo il pannello. Ma chi
  * l'avesse presa la ha ancora, e con lei legge e scrive tutto il database della posta. Toglierla dalla webmail non
  * bastava: va cambiata.
  *
@@ -259,14 +259,15 @@ public final class PanelDbPassword {
 
     /** Dove la webmail, Postfix e Dovecot scrivono come entrano in MySQL. */
     static final List<Path> SERVICE_DIRS = List.of(Path.of("/usr/local/etc/postfix"), Path.of("/usr/local/etc/dovecot"),
-            Path.of(RoundcubeDbUser.ROUNDCUBE_DIR, "config"), Path.of("/usr/local/etc/mail"), Path.of("/usr/local/etc/mailpanel"));
+            Path.of(RoundcubeDbUser.ROUNDCUBE_DIR, "config"), Path.of("/usr/local/etc/mail"));
     /**
      * Le copie lasciate dagli script per componente: /usr/local/etc/mail/mysql_password (FullMailStackScript, da cui
-     * DovecotConfig la rilegge se non la riceve) e /usr/local/etc/mailpanel/mysql.json (MySQLMailScript). Se hanno la
+     * DovecotConfig la rilegge se non la riceve) e /usr/local/etc/daemoxcp-mail/mysql.json (MySQLMailScript; prima /usr/local/etc/mailpanel, spostato da
+     * ProductRename). Se hanno la
      * vecchia ricevono la nuova; se hanno altro restano come sono.
      */
     static final List<Path> COPIES = List.of(Path.of("/usr/local/etc/mail/mysql_password"),
-            Path.of("/usr/local/etc/mailpanel/mysql.json"));
+            Path.of("/usr/local/etc/daemoxcp-mail/mysql.json"));
 
     static final long MAX_FILE = 2L * 1024 * 1024;
 

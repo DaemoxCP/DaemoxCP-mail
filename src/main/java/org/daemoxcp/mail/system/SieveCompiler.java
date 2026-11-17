@@ -77,7 +77,7 @@ public final class SieveCompiler {
     static final Path DOVECOT_CONF = Path.of("/usr/local/etc/dovecot/dovecot.conf");
     /**
      * Dove nasce la cartella di lavoro: /tmp, non java.io.tmpdir. sievec deve poterci passare, e una java.io.tmpdir
-     * spostata con mailpanel_opts in una cartella chiusa fermerebbe ogni compilazione senza dire perche'.
+     * spostata con daemoxcp_mail_opts in una cartella chiusa fermerebbe ogni compilazione senza dire perche'.
      */
     static final Path WORK_BASE = Path.of("/tmp");
 
@@ -305,7 +305,7 @@ public final class SieveCompiler {
 
     /**
      * Un comando come sievec: chroot(8) con radice /, senza shell ne' PAM, e solo il gruppo sievec (-G: senza, il
-     * comando terrebbe i gruppi aggiuntivi di root, wheel e operator; misurato per mailpanel il 07/11/2026). Pura.
+     * comando terrebbe i gruppi aggiuntivi di root, wheel e operator; misurato per daemoxcp_mail il 07/11/2026). Pura.
      */
     static List<String> asCompiler(String... cmd) {
         List<String> c = new ArrayList<>(List.of(CHROOT, "-u", USER, "-g", USER, "-G", USER, "/"));

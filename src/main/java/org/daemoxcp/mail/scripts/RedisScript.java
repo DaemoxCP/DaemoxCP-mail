@@ -66,7 +66,7 @@ public class RedisScript {
             # Configure Redis
             echo "[2/3] Configuring Redis..."
             cat > /usr/local/etc/redis.conf << 'REDISCONF'
-# Redis Configuration for Mail Panel
+# Redis Configuration for DaemoxCP Mail
 # Managed by DaemoxCP Mail
 
 bind 127.0.0.1

@@ -185,7 +185,7 @@ public final class PhpHardening {
                 sv.create(ini, INI);
                 if (rot == null) {
                     rotationNew = true;
-                    sv.create(rotation, "# Registro degli errori di PHP (scritto dal pannello mail, reperto 238)\n"
+                    sv.create(rotation, "# Registro degli errori di PHP (scritto da " + Product.NAME + ", reperto 238)\n"
                             + RoundcubeUser.phpErrorsRotationLine() + "\n");
                 }
             }

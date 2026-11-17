@@ -5,7 +5,9 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 /**
  * All'avvio del servizio, da root e prima di tutto il resto: il pannello passa dal nome di prima (FreeBSD Mail Panel,
@@ -15,7 +17,8 @@ import java.util.logging.Logger;
  * indietro. Qui c'e' solo l'ordine, che conta:
  * <ol>
  *   <li>i file e le cartelle che legge soltanto il pannello (sezione "productFiles"): i segreti, i registri delle
- *       reinstallazioni, il database SQLite, la nota della manutenzione. Si spostano e basta;</li>
+ *       reinstallazioni, il database SQLite, la nota della manutenzione. Si spostano e basta; e i file delle cartelle
+ *       di prima che finiscono in una di adesso gia' presente (sezione "mergedFolders", mergeFolders);</li>
  *   <li>le cartelle dei dati, che leggono anche php-fpm, nginx e pf (DataFolderRename);</li>
  *   <li>le righe di commento col nome di prima nei file di configurazione (PanelMarker.productComments): dopo, il
  *       codice che riconosce i suoi blocchi dal commento trova quello di adesso;</li>
@@ -65,7 +68,12 @@ public final class ProductRename {
 
     /** I file del solo pannello: spostati se c'e' il nome di prima e non quello di adesso. Non segue i collegamenti. */
     static void files() {
-        for (String[] p : LegacyNames.pairs("productFiles")) {
+        moveFiles(LegacyNames.pairs("productFiles"));
+        mergeFolders(LegacyNames.pairs("mergedFolders"));
+    }
+
+    static void moveFiles(List<String[]> pairs) {
+        for (String[] p : pairs) {
             if (p[0].equals(p[1])) continue;
             Path from = Path.of(p[0]), to = Path.of(p[1]);
             if (!Files.exists(from, LinkOption.NOFOLLOW_LINKS)) continue;
@@ -79,6 +87,55 @@ public final class ProductRename {
                 LOGGER.info("[ProductRename] DONE: " + from + " -> " + to);
             } catch (IOException e) {
                 LOGGER.warning("[ProductRename] LEFT: " + from + " could not be moved to " + to + ": " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Le cartelle di prima il cui nome di adesso e' gia' di un'altra (sezione "mergedFolders"): /usr/local/etc/mailpanel,
+     * dove lo script del solo MySQL lasciava mysql.json, e /usr/local/etc/mail-panel, i segreti, diventano entrambe
+     * /usr/local/etc/daemoxcp-mail. Ogni file passa nella cartella di adesso col suo nome, proprietario e permessi; uno
+     * che li' c'e' gia' resta dov'e', e allora resta anche la cartella. Vuota, la cartella di prima si toglie.
+     * Una cartella di adesso che manca non si crea: chi deve crearla (PanelSecrets) le da' i permessi giusti.
+     */
+    static void mergeFolders(List<String[]> pairs) {
+        for (String[] p : pairs) {
+            if (p[0].equals(p[1])) continue;
+            Path from = Path.of(p[0]), to = Path.of(p[1]);
+            if (!Files.isDirectory(from, LinkOption.NOFOLLOW_LINKS)) continue;
+            if (!Files.isDirectory(to, LinkOption.NOFOLLOW_LINKS)) {
+                LOGGER.warning("[ProductRename] LEFT: " + from + " stays: " + to + " is not there yet");
+                continue;
+            }
+            List<Path> children;
+            try (Stream<Path> s = Files.list(from)) {
+                children = s.toList();
+            } catch (IOException e) {
+                LOGGER.warning("[ProductRename] LEFT: " + from + " cannot be read: " + e.getMessage());
+                continue;
+            }
+            boolean left = false;
+            for (Path child : children) {
+                Path target = to.resolve(child.getFileName().toString());
+                if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                    LOGGER.warning("[ProductRename] LEFT: both " + child + " and " + target + " exist: the old one left in place");
+                    left = true;
+                    continue;
+                }
+                try {
+                    Files.move(child, target, StandardCopyOption.ATOMIC_MOVE);
+                    LOGGER.info("[ProductRename] DONE: " + child + " -> " + target);
+                } catch (IOException e) {
+                    LOGGER.warning("[ProductRename] LEFT: " + child + " could not be moved to " + target + ": " + e.getMessage());
+                    left = true;
+                }
+            }
+            if (left) continue;
+            try {
+                Files.delete(from);
+                LOGGER.info("[ProductRename] DONE: " + from + " removed, its files are in " + to);
+            } catch (IOException e) {
+                LOGGER.warning("[ProductRename] LEFT: " + from + " could not be removed: " + e.getMessage());
             }
         }
     }

@@ -81,7 +81,7 @@ import java.sql.ResultSet;
  * ║  │  DATABASE: MySQL 8.0                                                    │ ║
  * ║  │  ─────────────────────                                                  │ ║
  * ║  │  • Port 3306                                                            │ ║
- * ║  │  • Database: mailserver (configurable)                                  │ ║
+ * ║  │  • Database: daemoxcp_mail (configurable)                               │ ║
  * ║  │  • Tables: domains, mailboxes, aliases,                                 │ ║
  * ║  │            panel_admins, settings, rate_limits, etc.                    │ ║
  * ║  └─────────────────────────────────────────────────────────────────────────┘ ║
@@ -357,7 +357,7 @@ public class Main {
 
     public static void main(String[] args) throws InterruptedException, IOException {
         // La parte web del pannello separato: la avvia la parte root con
-        // daemon(8) e l'utente mailpanel (PanelSeparation). Niente di quello che segue: migrazioni, script,
+        // daemon(8) e l'utente daemoxcp_mail (PanelSeparation). Niente di quello che segue: migrazioni, script,
         // contenuti e SQLite in scrittura sono lavoro della root, che li ha gia' fatti.
         for (String a : args) {
             if ("--web-part".equals(a)) {
@@ -387,7 +387,7 @@ public class Main {
         // Lo script di avvio scritto dal pannello cita i file che PathMigration ha appena rinominato.
         org.daemoxcp.mail.system.RcScriptRepair.ensureAtBoot();
         // I segreti solo di root (le password di root di MySQL e dell'utente MySQL di Roundcube) escono dal
-        // file del pannello e vanno in quello di root: la parte web, che gira con l'utente mailpanel, non li
+        // file del pannello e vanno in quello di root: la parte web, che gira con l'utente daemoxcp_mail, non li
         // deve poter leggere. Solo da root; al secondo avvio non c'e'
         // niente da spostare.
         if ("root".equals(System.getProperty("user.name"))) {
@@ -1118,7 +1118,7 @@ public class Main {
                 }
 
                 // Only load self-signed if no certificate is configured. Il nome, la porta e il prefisso scritti con la
-                // voce 2 restano (reperto 244): prima diventavano sempre 0.0.0.0, 2096 e mailpanel-.
+                // voce 2 restano (reperto 244): prima diventavano sempre 0.0.0.0, 2096 e daemoxcp-mail-.
                 String keptHost = "", keptPort = "", keptPrefix = "";
                 try (ResultSet configResult = dbManager.get_data_config()) {
                     if (configResult.next()) {
@@ -1289,7 +1289,7 @@ public class Main {
                 // gia' acceso. Da quando puo' riaccendersi da solo dopo l'aggiornamento della
                 // JVM, capita di lanciarlo credendolo spento — e una traccia di stack Java non
                 // e' una risposta a "che e' successo?". Qui si dice chi occupa la porta.
-                // Il pannello separato: la parte web con l'utente mailpanel sulla porta, questa parte root
+                // Il pannello separato: la parte web con l'utente daemoxcp_mail sulla porta, questa parte root
                 // senza porte. Se una condizione manca si resta come oggi, e lo si dice (PanelSeparation).
                 SSLMailServer.Mode mode = SSLMailServer.Mode.LEGACY;
                 String notSeparated = org.daemoxcp.mail.system.PanelSeparation.prepare(port, setupRequired, mysqlAvailable);
@@ -1413,7 +1413,7 @@ public class Main {
     }
 
     /**
-     * La parte web del pannello separato, con l'utente mailpanel: la porta del pannello, i filtri, l'accesso,
+     * La parte web del pannello separato, con l'utente daemoxcp_mail: la porta del pannello, i filtri, l'accesso,
      * le pagine e le rotte pubbliche; le API di chi ha fatto l'accesso le passa alla parte root
      * (SSLMailServer in modo WEB_PART). SQLite in sola lettura: la configurazione la scrive solo root.
      *

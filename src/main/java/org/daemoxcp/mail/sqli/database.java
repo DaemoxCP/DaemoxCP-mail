@@ -25,8 +25,8 @@ public class database {
     }
 
     /**
-     * @param readOnly la parte web del pannello separato (utente mailpanel): legge la configurazione e non
-     *                 la scrive mai. La cartella e il file sono di root (0750/0640 root:mailpanel): con
+     * @param readOnly la parte web del pannello separato (utente daemoxcp_mail): legge la configurazione e non
+     *                 la scrive mai. La cartella e il file sono di root (0750/0640 root:daemoxcp_mail): con
      *                 SQLITE_OPEN_READONLY SQLite non prova nemmeno a creare un journal.
      */
     public database(boolean readOnly) {

@@ -25,31 +25,31 @@ import java.util.logging.Logger;
 
 /**
  * Il pannello in due processi: la parte root, il processo che rc.d
- * avvia con --web, non apre porte; la parte web (--web-part) gira con l'utente mailpanel, risponde sulla
+ * avvia con --web, non apre porte; la parte web (--web-part) gira con l'utente daemoxcp_mail, risponde sulla
  * porta del pannello e passa alla root, su un socket unix, le API di chi ha fatto l'accesso.
  *
  * <p>Qui c'e' quello che fa la parte root:
  * <ul>
- *   <li>l'utente e il gruppo mailpanel: si creano se mancano, e se ci sono devono essere quelli che crea il
+ *   <li>l'utente e il gruppo daemoxcp_mail: si creano se mancano, e se ci sono devono essere quelli che crea il
  *       pannello (commento, cartella, shell, nessun altro membro nel gruppo): altrimenti l'utente e' di
  *       qualcun altro e non lo si usa;</li>
  *   <li>i file che la web deve leggere: la cartella dei segreti e quella di SQLite diventano 0750
- *       root:mailpanel, il file dei segreti della web, master.key e il database SQLite 0640 root:mailpanel.
+ *       root:daemoxcp_mail, il file dei segreti della web, master.key e il database SQLite 0640 root:daemoxcp_mail.
  *       La web li legge e non li cambia: SQLite lo apre in sola lettura (dataBaseManager.readOnly), e
  *       quello che vi scrive root (nomi, porte, percorsi) la web non lo puo' toccare. Tutto il resto in
  *       quelle cartelle resta solo di root. Il registro di autenticazione, che la web scrive per fail2ban,
- *       diventa di mailpanel;</li>
- *   <li>il socket e l'avvio della web con daemon(8): {@code -u mailpanel} fa girare la web con quell'utente,
+ *       diventa di daemoxcp_mail;</li>
+ *   <li>il socket e l'avvio della web con daemon(8): {@code -u daemoxcp_mail} fa girare la web con quell'utente,
  *       mentre il supervisore resta root e scrive lui i file pid e il registro (misurato sulla VM il
  *       07/11/2026: pid 0600 root, registro 0600 root:wheel), quindi la web non li puo' cambiare;
  *       {@code -r} la riavvia se muore;</li>
  *   <li>se una condizione manca, o la web non risponde entro {@link #ANSWER_SECONDS}, si ferma quello che
  *       si e' avviato e il pannello serve tutto da root come prima, con un avviso. Non si disfa niente:
- *       root legge comunque i file di mailpanel.</li>
+ *       root legge comunque i file di daemoxcp_mail.</li>
  * </ul>
  *
- * <p>Per spegnere la separazione a mano: {@code sysrc mailpanel_opts="-Ddaemoxcp.mail.separation=off"} e
- * {@code service mailpanel restart}.
+ * <p>Per spegnere la separazione a mano: {@code sysrc daemoxcp_mail_opts="-Ddaemoxcp.mail.separation=off"} e
+ * {@code service daemoxcp_mail restart}.
  */
 public final class PanelSeparation {
 
@@ -57,7 +57,7 @@ public final class PanelSeparation {
 
     public static final String USER = Product.ID;
     public static final String GROUP = Product.ID;
-    /** Il commento con cui il pannello crea l'utente: un utente mailpanel con un altro non e' suo. */
+    /** Il commento con cui il pannello crea l'utente: un utente daemoxcp_mail con un altro non e' suo. */
     static final String GECOS = Product.NAME + " web part";
     static final String HOME = PanelUser.HOME;
     static final String SHELL = PanelUser.SHELL;
@@ -105,7 +105,7 @@ public final class PanelSeparation {
 
     /**
      * Vero da quando questo processo si e' preparato a fare la parte root, anche se poi e' tornato al modo
-     * di oggi: da quel momento c'e' (o c'e' stato) un processo mailpanel che scrive nel database, e la root
+     * di oggi: da quel momento c'e' (o c'e' stato) un processo daemoxcp_mail che scrive nel database, e la root
      * non prende piu' dal database quello che decide dove scrive (SSLMailServer.getAuditLogPath).
      */
     public static boolean rootPart() { return rootPart; }
@@ -113,7 +113,7 @@ public final class PanelSeparation {
     /** Perche' il pannello gira tutto da root, per la pagina degli utenti dei servizi; null se e' separato. */
     public static String notSeparatedReason() { return active ? null : notSeparated; }
 
-    /** Spenta a mano (mailpanel_opts) o per le prove. */
+    /** Spenta a mano (daemoxcp_mail_opts) o per le prove. */
     static boolean switchedOff() {
         return "off".equalsIgnoreCase(System.getProperty("daemoxcp.mail.separation", ""));
     }
@@ -178,7 +178,7 @@ public final class PanelSeparation {
     /** L'utente della web come lo crea il pannello: i controlli stanno in PanelUser, uguali per ogni utente suo. */
     static final PanelUser WEB_USER = new PanelUser(USER, GECOS);
 
-    /** L'utente mailpanel, creato se manca. Null se c'e' ed e' quello del pannello; altrimenti il motivo. */
+    /** L'utente daemoxcp_mail, creato se manca. Null se c'e' ed e' quello del pannello; altrimenti il motivo. */
     static String ensureUser() {
         PanelUser.Ensured e = WEB_USER.ensure();
         if (e.problem() != null) return e.problem();
@@ -246,7 +246,7 @@ public final class PanelSeparation {
     }
 
     /**
-     * Una cartella 0750 root:mailpanel con i file dati 0640 root:mailpanel; gli altri file della cartella
+     * Una cartella 0750 root:daemoxcp_mail con i file dati 0640 root:daemoxcp_mail; gli altri file della cartella
      * perdono ogni permesso di gruppo e degli altri, cosi' aprire la cartella al gruppo non apre loro.
      */
     static String openToWeb(Path dir, Set<String> forWeb) throws IOException {
@@ -280,7 +280,7 @@ public final class PanelSeparation {
 
     /**
      * Le pagine del pannello e i loro script e stili (PanelContent, PageAssets): la web li serve, quindi
-     * cartelle 0750 e file 0640 root:mailpanel, in sola lettura. Solo cartelle e file veri, mai collegamenti.
+     * cartelle 0750 e file 0640 root:daemoxcp_mail, in sola lettura. Solo cartelle e file veri, mai collegamenti.
      */
     static String openPagesToWeb(Path admin) throws IOException {
         if (!Files.isDirectory(admin, LinkOption.NOFOLLOW_LINKS)) return admin + " is missing";
@@ -368,7 +368,7 @@ public final class PanelSeparation {
 
     /**
      * La riga di daemon(8). Della JVM della root passano solo la memoria e le proprieta' del pannello
-     * (-Xm*, -Dmailpanel.*), non daemoxcp.mail.separation: la web non ne fa niente.
+     * (-Xm*, -Ddaemoxcp_mail.*), non daemoxcp.mail.separation: la web non ne fa niente.
      */
     static List<String> command(String javaBin, String jar) {
         List<String> cmd = new ArrayList<>(List.of("/usr/sbin/daemon", "-r", "-R", "5", "-u", USER,
@@ -444,7 +444,7 @@ public final class PanelSeparation {
         LOGGER.warning("[PanelSeparation] the web part did not stop within 15 seconds: killed");
     }
 
-    /** Vero se il pid e' vivo ed e' la web (java ... --web-part di mailpanel). */
+    /** Vero se il pid e' vivo ed e' la web (java ... --web-part di daemoxcp_mail). */
     static boolean alive(int pid) {
         if (pid <= 1) return false;
         String l = Shell.run(Duration.ofSeconds(10), "ps", "-o", "user=", "-o", "command=", "-p", String.valueOf(pid)).outputTrim();

@@ -114,7 +114,7 @@ public class WebProtection {
 
     public static String configuration(String cert, String key) {
         return """
-            # Superficie pubblica del pannello di posta sulla porta 443.
+            # Superficie pubblica di DaemoxCP Mail sulla porta 443.
             # Written by DaemoxCP Mail: non modificare a mano, verrebbe sovrascritto.
             #
             # Qui si servono DUE file e nient'altro:
@@ -358,7 +358,7 @@ public class WebProtection {
             if (!opensHttp) continue;
             StringBuilder sb = new StringBuilder();
             for (int j = 0; j <= i; j++) sb.append(lines[j]).append("\n");
-            sb.append("\n    # Aggiunto dal pannello di posta: senza questa riga i file di\n");
+            sb.append("\n    # Aggiunto da " + Product.NAME + ": senza questa riga i file di\n");
             sb.append("    # configurazione aggiuntivi non verrebbero letti da nginx.\n");
             sb.append("    include ").append(folder).append("/*.conf;\n");
             for (int j = i + 1; j < lines.length; j++) {

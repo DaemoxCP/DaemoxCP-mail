@@ -36,7 +36,7 @@ import java.util.stream.Stream;
  * Roundcube entra in MySQL col suo utente, "roundcube", che puo' toccare solo il database della
  * webmail, e non piu' con quello del pannello.
  *
- * <p>Prima db_dsnw in config.inc.php usava l'utente del pannello (mailpanel), che ha tutti i
+ * <p>Prima db_dsnw in config.inc.php usava l'utente del pannello (daemoxcp_mail), che ha tutti i
  * privilegi anche sul database della posta: caselle e hash delle loro password, domini,
  * amministratori, passkey, sessioni del pannello. Chi prendeva la webmail -- un difetto nel PHP di
  * Roundcube o in un suo plugin -- leggeva la password nella configurazione e con quella leggeva e

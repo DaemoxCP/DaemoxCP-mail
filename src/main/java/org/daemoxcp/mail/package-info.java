@@ -53,7 +53,7 @@
  * ║  │                        Database: MySQL 8.0                             │   ║
  * ║  │  ═══════════════════════════════════════════════════════════════════  │   ║
  * ║  │  • Port: 3306                                                         │   ║
- * ║  │  • Database: mailpanel                                                │   ║
+ * ║  │  • Database: daemoxcp_mail                                                │   ║
  * ║  │  • Tables: domains, mailboxes, aliases                                │   ║
  * ║  │  • Postfix uses MySQL directly (no file sync needed)                  │   ║
  * ║  └───────────────────────────────────────────────────────────────────────┘   ║
@@ -76,7 +76,7 @@
  * ╠══════════════════════════════════════════════════════════════════════════════╣
  * ║                           PANEL CONFIGURATION                                 ║
  * ╠══════════════════════════════════════════════════════════════════════════════╣
- * ║  • SQLite: ./database/mailpanel.db - Panel settings only                     ║
+ * ║  • SQLite: ./database/daemoxcp-mail.db - Panel settings only                     ║
  * ║  • MySQL: Mail data (domains, users, aliases)                                ║
  * ║  • Web panel: HTTPS on port 2096 (configurable)                              ║
  * ║  • Terminal GUI: Lanterna library                                            ║

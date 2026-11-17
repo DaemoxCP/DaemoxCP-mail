@@ -390,7 +390,7 @@ else
         # nessuno. L'unico blocco arriva dall'anchor, cioe' dagli indirizzi che fail2ban
         # mette in tabella, e dalla tabella <permaban> del pannello.
         cat > /etc/pf.conf << 'PFCONF'
-# /etc/pf.conf, scritto dall'installazione del pannello mail.
+# /etc/pf.conf, scritto dall'installazione di DaemoxCP Mail.
 #
 # Configurazione MINIMA e SICURA per fail2ban + pf:
 #  - nessun servizio viene bloccato, quindi accendere pf non chiude fuori nessuno;
@@ -1192,7 +1192,7 @@ chmod 640 /var/log/php_errors.log
 # FreeBSD appena installata non c'e', ma /etc/newsyslog.conf la include gia'.
 mkdir -p /usr/local/etc/newsyslog.conf.d
 cat > /usr/local/etc/newsyslog.conf.d/php-errors.conf << 'PHPLOGEOF'
-# Registro degli errori di PHP (scritto dall'installazione del pannello mail)
+# Registro degli errori di PHP (scritto dall'installazione di DaemoxCP Mail)
 /var/log/php_errors.log    roundcube:roundcube    640    7    1024    *    JC
 PHPLOGEOF
 

@@ -9,7 +9,7 @@ import java.time.Duration;
  * /nonexistent, un gruppo suo con lo stesso nome e nessun altro membro. Se esiste gia' con un'altra forma non e' del
  * pannello, e non lo si usa.
  *
- * Il controllo era in PanelSeparation per mailpanel; e' qui perche' ne serve un secondo, sievec (SieveCompiler,
+ * Il controllo era in PanelSeparation per daemoxcp_mail; e' qui perche' ne serve un secondo, sievec (SieveCompiler,
  * reperto 218), e i due devono essere controllati allo stesso modo.
  *
  * @param name  il nome dell'utente, e del suo gruppo

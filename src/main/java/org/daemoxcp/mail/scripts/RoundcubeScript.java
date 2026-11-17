@@ -43,7 +43,7 @@ public class RoundcubeScript {
             # MySQL da root: con la password che il pannello passa nell'ambiente (MYSQL_ROOT_PASSWORD,
             # quando MySQL l'ha installato lui) in un file di opzioni in una cartella 700, mai
             # sulla riga di comando; senza, dal socket come un MySQL appena installato.
-            MYSQL_WORK=$(mktemp -d /var/tmp/mailpanel-roundcube.XXXXXXXX) || exit 1
+            MYSQL_WORK=$(mktemp -d /var/tmp/daemoxcp-mail-roundcube.XXXXXXXX) || exit 1
             trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
             if [ -n "${MYSQL_ROOT_PASSWORD}" ]; then
                 cat > "$MYSQL_WORK/root.cnf" << EOCNF
@@ -125,7 +125,7 @@ PHPINI
             # aveva "IDENTIFIED BY", che MySQL 8 rifiuta: l'utente non nasceva affatto.
             if ! mysql_root << SQLEOF
 CREATE DATABASE IF NOT EXISTS roundcubemail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-""" + org.daemoxcp.mail.scripts.RoundcubeDbAccountScript.sql("${ROUNDCUBE_DB_PASSWORD}", "mailpanel") + """
+""" + org.daemoxcp.mail.scripts.RoundcubeDbAccountScript.sql("${ROUNDCUBE_DB_PASSWORD}", "daemoxcp_mail") + """
 FLUSH PRIVILEGES;
 SQLEOF
             then
@@ -198,7 +198,7 @@ SQLEOF
 ];
 
 // Password plugin (change password from webmail): the settings are added by DaemoxCP Mail at
-// startup, in the "mail-panel: webmail password changes" block at the end of this file. The change
+// startup, in the "daemoxcp-mail: webmail password changes" block at the end of this file. The change
 // goes through the panel, which writes the bcrypt hash and the encrypted copy it can show again.
 
 // Managesieve (Dovecot Sieve)

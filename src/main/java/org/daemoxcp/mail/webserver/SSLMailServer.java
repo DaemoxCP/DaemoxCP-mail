@@ -50,7 +50,7 @@ public class SSLMailServer {
      *   <li>LEGACY: il modo di oggi, un processo root che serve tutto;</li>
      *   <li>ROOT_PART: la parte root del pannello separato. Nessuna porta: serve solo le API che la web le
      *       passa sul socket (serveForwarded), e fa riparazioni e lavori in background come oggi;</li>
-     *   <li>WEB_PART: la parte web, con l'utente mailpanel. La porta del pannello, i filtri, l'accesso, le
+     *   <li>WEB_PART: la parte web, con l'utente daemoxcp_mail. La porta del pannello, i filtri, l'accesso, le
      *       pagine e le rotte pubbliche; le API di chi ha fatto l'accesso le passa alla root
      *       (forwardToRoot). Nessuna riparazione ne' lavoro in background.</li>
      * </ul>
@@ -58,7 +58,7 @@ public class SSLMailServer {
     public enum Mode { LEGACY, ROOT_PART, WEB_PART }
 
     /**
-     * Le API che la parte web serve da se', con l'utente mailpanel: non
+     * Le API che la parte web serve da se', con l'utente daemoxcp_mail: non
      * hanno bisogno di root (MySQL, SQLite in lettura, la chiave del vault in lettura, la rete). Domini e
      * caselle chiedono alla root una sola cosa, l'operazione chiusa «mail-folders» (rootOperations), senza
      * parametri. Tutte le altre API vanno alla root, anche /api/account: amministratori, passkey, codici e
@@ -10054,7 +10054,7 @@ public class SSLMailServer {
 
         // Step 3: setup daemoxcp-mail-auth jail (filter, log, jail entry)
         org.daemoxcp.mail.security.Fail2banAutoSetup.run();
-        steps.put(buildStep("setup_mail_panel_jail", I18n.tr("server.f2bfix.panelJail"),
+        steps.put(buildStep("setup_panel_jail", I18n.tr("server.f2bfix.panelJail"),
             new JSONObject().put("success", true).put("message", I18n.tr("server.f2bfix.doneIdempotent"))));
 
         // Step 4: install mail jails (verifica file + runtime)

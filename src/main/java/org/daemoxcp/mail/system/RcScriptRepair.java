@@ -63,7 +63,7 @@ public final class RcScriptRepair {
         return script.contains(MARKER) || PanelMarker.writtenByPanel(script);
     }
 
-    /** I due messaggi dello script (UpdateManager li scrive da qui). */
+    /** I due messaggi come li ripara negli script di prima (la loro variabile e' mailpanel_log); quello di adesso li scrive PanelRcScript. */
     static final String STARTING = "echo \"Starting ${name} (web only). Log: ${mailpanel_log}\"";
     static final String RUNNING = "echo \"${name}: already running (pid $(cat ${pidfile}))\"";
 

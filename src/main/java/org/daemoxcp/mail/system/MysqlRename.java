@@ -224,7 +224,7 @@ public final class MysqlRename {
             for (String[] r : rows(sv.sql(null, SqlCatalog.RENAME_USERS))) after.add(r[0] + "@" + r[1]);
             step = "granting the panel's user";
             if (after.contains(Product.ID + "@localhost")) need(sv.sql(null, SqlCatalog.RENAME_GRANT_PANEL_LOCALHOST), step);
-            if (after.contains(Product.ID + "@127.0.0.1")) need(sv.sql(null, SqlCatalog.RENAME_GRANT_PANEL_LOOPBACK), step);
+            if (after.contains(Product.ID + "@127.0.0.1")) need(sv.sql(null, SqlCatalog.MAIL_GRANT_PANEL_USER), step);
             if (oldDb.equals(OLD_DEFAULT_DB)) {
                 if (after.contains(Product.ID + "@localhost")) sv.sql(null, SqlCatalog.RENAME_REVOKE_OLD_DEFAULT_LOCALHOST);
                 if (after.contains(Product.ID + "@127.0.0.1")) sv.sql(null, SqlCatalog.RENAME_REVOKE_OLD_DEFAULT_LOOPBACK);

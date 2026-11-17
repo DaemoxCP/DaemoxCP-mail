@@ -491,7 +491,7 @@ public final class Fail2banAutoSetup {
             String content = newsyslogText(logOwner());
             if (Files.exists(conf)) {
                 // Gia' presente. Si riscrive solo il file scritto dal pannello, e solo se il proprietario del
-                // registro e' cambiato: col pannello separato lo scrive la parte web (mailpanel), e il file
+                // registro e' cambiato: col pannello separato lo scrive la parte web (daemoxcp_mail), e il file
                 // che newsyslog ricrea a ogni rotazione deve restare suo, se no la web non scrive piu' e
                 // fail2ban non vede piu' i tentativi.
                 String now = Files.readString(conf, StandardCharsets.UTF_8);
@@ -522,7 +522,7 @@ public final class Fail2banAutoSetup {
         return NEWSYSLOG_HEADER + LOG_FILE + "    " + owner + "    640    7    1024    *    JC\n";
     }
 
-    /** Il proprietario del registro: mailpanel:wheel col pannello separato (PanelSeparation), se no root:wheel. */
+    /** Il proprietario del registro: daemoxcp_mail:wheel col pannello separato (PanelSeparation), se no root:wheel. */
     static String logOwner() {
         try {
             String owner = Files.getOwner(Paths.get(LOG_FILE), java.nio.file.LinkOption.NOFOLLOW_LINKS).getName();
