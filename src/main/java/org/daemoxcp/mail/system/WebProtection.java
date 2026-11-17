@@ -113,7 +113,7 @@ public class WebProtection {
     }
 
     public static String configuration(String cert, String key) {
-        return """
+        String text = """
             # Superficie pubblica di DaemoxCP Mail sulla porta 443.
             # Written by DaemoxCP Mail: non modificare a mano, verrebbe sovrascritto.
             #
@@ -172,6 +172,8 @@ public class WebProtection {
                 location / { return 404; }
             }
             """.formatted(cert, key, ACCESS_LOG, POLICY_FILE);
+        // Le righe listen della famiglia scelta nelle Impostazioni (IpFamily); senza scelta, IPv4 e IPv6 come sempre.
+        return IpFamily.withNginxListen(text, 443, IpFamily.chosen());
     }
 
     /* ===================================================================

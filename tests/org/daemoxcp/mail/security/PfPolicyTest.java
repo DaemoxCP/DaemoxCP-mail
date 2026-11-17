@@ -96,6 +96,15 @@ public class PfPolicyTest {
 
         System.out.println("== 1. The panel's pf.conf files become the new one ==");
         String fromServer = PfPolicy.transform(SERVER, today);
+
+        // IPv4, IPv6 or both (IpFamily): only the services rule takes the family; SSH never does.
+        String v6only = PfPolicy.transform(SERVER, today, "inet6 ");
+        check("IPv6 only: the services rule is \"pass in inet6 proto tcp\", SSH's has no family",
+                v6only != null && v6only.contains("\npass in inet6 proto tcp to port { 25,") && v6only.contains("\npass in proto tcp to port { 22 } keep state\n"));
+        String back = PfPolicy.transform(v6only, today, "inet ");
+        check("  and a pf.conf with the family is still the panel's: it becomes IPv4 only, then both again",
+                back != null && back.contains("\npass in inet proto tcp to port { 25,") && fromServer != null
+                        && fromServer.equals(PfPolicy.transform(back, today, "")) && fromServer.equals(PfPolicy.transform(back, today)));
         check("the real server's file is the panel's and is transformed", fromServer != null && fromServer.startsWith(PfPolicy.HEADER));
         // The panel's own file with the first line it had before the product name (DaemoxCP Mail, 17/11/2026):
         // only that line changes, the rules stay exactly the same.

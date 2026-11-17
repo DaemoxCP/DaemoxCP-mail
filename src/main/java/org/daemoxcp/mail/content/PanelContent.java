@@ -8081,6 +8081,37 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         </div>
                     </div>
 
+                    <!-- IPv4 e IPv6 (IpFamily) -->
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="fas fa-network-wired me-2" aria-hidden="true"></i>{{t:set.ipfTitle}}</div>
+                        <div class="card-body">
+                            <fieldset class="mb-2" aria-describedby="ipfStatus ipfHint">
+                                <legend class="fs-6">{{t:set.ipfLegend}}</legend>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="ipFamily" id="ipfBoth" value="both" disabled>
+                                    <label class="form-check-label" for="ipfBoth">{{t:set.ipfBoth}}</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="ipFamily" id="ipfV4" value="ipv4" disabled>
+                                    <label class="form-check-label" for="ipfV4">{{t:set.ipfV4}}</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="ipFamily" id="ipfV6" value="ipv6" disabled>
+                                    <label class="form-check-label" for="ipfV6">{{t:set.ipfV6}}</label>
+                                </div>
+                            </fieldset>
+                            <button type="button" class="btn btn-primary btn-sm mb-2" id="ipfApply" data-on-click="ipfApply(false)" disabled>{{t:set.ipfApply}}</button>
+                            <div id="ipfStatus" class="small mb-2" aria-live="polite"></div>
+                            <div id="ipfWarnings" class="alert alert-warning d-none" role="alert">
+                                <p class="fw-semibold mb-2">{{t:set.ipfConfirmTitle}}</p>
+                                <ul id="ipfWarningList" class="mb-3"></ul>
+                                <button type="button" class="btn btn-warning btn-sm me-2" data-on-click="ipfApply(true)">{{t:set.ipfConfirm}}</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-on-click="ipfCancel()">{{t:set.ipfCancel}}</button>
+                            </div>
+                            <small class="text-muted" id="ipfHint"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{t:set.ipfHint}}</small>
+                        </div>
+                    </div>
+
                     <!-- System Info -->
                     <div class="card">
                         <div class="card-header"><i class="fas fa-info-circle me-2" aria-hidden="true"></i>{{t:set.sysInfo}}</div>
@@ -8265,6 +8296,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         checkRcDomainDnsStatus();
         repLoad();
         pop3Load();
+        ipfLoad();
         sshLoad();
 
         let csrfToken = document.getElementById('csrf_token').value;
@@ -8282,6 +8314,67 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
      */
     private static String getSettingsHostnameJs() {
         return """
+        // ========== IPv4 e IPv6 (IpFamily) ==========
+
+        function ipfName(k) { return t(k === 'ipv4' ? 'set.ipfV4' : k === 'ipv6' ? 'set.ipfV6' : 'set.ipfBoth'); }
+
+        function ipfSay(text, kind) {
+            const el = document.getElementById('ipfStatus');
+            el.className = 'small mb-2 text-' + kind;
+            el.textContent = text;
+        }
+
+        function ipfLock(locked) {
+            document.querySelectorAll('input[name="ipFamily"]').forEach(r => { r.disabled = locked; });
+            document.getElementById('ipfApply').disabled = locked;
+        }
+
+        function ipfShow(d) {
+            const current = d.chosen || d.effective;
+            document.querySelectorAll('input[name="ipFamily"]').forEach(r => { r.checked = r.value === current; });
+        }
+
+        function ipfLoad() {
+            fetch('/api/ip-family').then(r => r.json()).then(d => {
+                if (!d.success) { ipfSay(d.error || t('set.ipfFailed', { e: '' }), 'danger'); return; }
+                ipfShow(d);
+                ipfLock(false);
+                ipfSay(d.chosen ? t('set.ipfChosen', { f: ipfName(d.chosen) }) : t('set.ipfNotChosen', { f: ipfName(d.effective) }), 'muted');
+            }).catch(() => ipfSay(t('set.ipfFailed', { e: '' }), 'danger'));
+        }
+
+        function ipfCancel() {
+            document.getElementById('ipfWarnings').classList.add('d-none');
+            ipfLock(false);
+            ipfLoad();
+        }
+
+        function ipfApply(confirmed) {
+            const r = document.querySelector('input[name="ipFamily"]:checked');
+            if (!r) return;
+            const want = r.value;
+            ipfLock(true);
+            document.getElementById('ipfWarnings').classList.add('d-none');
+            ipfSay(t('set.ipfApplying'), 'muted');
+            fetch('/api/ip-family', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ family: want, confirmed: confirmed, csrf_token: csrfToken })
+            }).then(r => r.json()).then(d => {
+                if (d.confirm) {
+                    const list = document.getElementById('ipfWarningList');
+                    list.replaceChildren();
+                    (d.warnings || []).forEach(w => { const li = document.createElement('li'); li.textContent = w; list.appendChild(li); });
+                    document.getElementById('ipfWarnings').classList.remove('d-none');
+                    ipfSay('', 'muted');
+                    return;
+                }
+                ipfLock(false);
+                if (d.success) { ipfShow({ chosen: want }); ipfSay(t('set.ipfDone', { f: ipfName(want) }), 'success'); }
+                else { ipfShow({ effective: d.effective }); ipfSay(t('set.ipfFailed', { e: d.error || '' }), 'danger'); }
+            }).catch(() => { ipfLock(false); ipfSay(t('set.ipfFailed', { e: '' }), 'danger'); });
+        }
+
         // ========== POP3 ==========
 
         function pop3Say(text, kind) {

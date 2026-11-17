@@ -83,7 +83,7 @@ public final class PfPolicy {
     /** Le regole che scrive questa classe: in un file col suo HEADER si riconoscono e si riscrivono. */
     private static final List<String> POLICY_PREFIXES = List.of("block in all", "pass out all keep state",
             "pass in inet proto icmp ", "pass in inet6 proto icmp6", "pass in inet proto udp from port 67 to port 68",
-            "pass in proto tcp to port {");
+            "pass in proto tcp to port {", "pass in inet proto tcp to port {", "pass in inet6 proto tcp to port {");
 
     /** La posta e il web: sempre. */
     static final SortedSet<Integer> FIXED = new TreeSet<>(List.of(25, 80, 143, 443, 465, 587, 993));
@@ -109,6 +109,14 @@ public final class PfPolicy {
 
     /** Il pf.conf del pannello. tableLimit: il valore di «set limit table-entries» da tenere, o null. */
     static String render(Ports p, String tableLimit) {
+        return render(p, tableLimit, "");
+    }
+
+    /**
+     * Come sopra, con la famiglia dei servizi: family e' "", "inet " o "inet6 " (IpFamily.pfKeyword). Vale per la posta,
+     * il web, la webmail e il pannello; SSH resta senza famiglia, sempre (la regola su SSH non la cambia il pannello).
+     */
+    static String render(Ports p, String tableLimit, String family) {
         StringBuilder b = new StringBuilder();
         b.append(HEADER).append('\n');
         b.append("#\n");
@@ -132,7 +140,7 @@ public final class PfPolicy {
         b.append("# SSH: le porte di sshd, aperte a tutti come prima.\n");
         b.append("pass in proto tcp to port ").append(list(p.ssh())).append(" keep state\n\n");
         b.append("# Posta, web (sfida HTTP dei certificati, MTA-STS), webmail, pannello.\n");
-        b.append("pass in proto tcp to port ").append(list(p.services())).append(" keep state\n");
+        b.append("pass in ").append(family == null ? "" : family).append("proto tcp to port ").append(list(p.services())).append(" keep state\n");
         return b.toString();
     }
 
@@ -141,6 +149,11 @@ public final class PfPolicy {
      * c'e' una regola che il pannello non scrive. Gli altri commenti non contano (si riscrivono).
      */
     static String transform(String current, Ports p) {
+        return transform(current, p, "");
+    }
+
+    /** Come sopra, con la famiglia dei servizi (IpFamily.pfKeyword). */
+    static String transform(String current, Ports p, String family) {
         if (current == null) return null;
         String first = current.lines().filter(l -> !l.isBlank()).findFirst().orElse("").trim();
         boolean ours = first.equals(HEADER) || first.equals(PREVIOUS_HEADER);
@@ -158,12 +171,12 @@ public final class PfPolicy {
             if (ours && POLICY_PREFIXES.stream().anyMatch(t::startsWith)) continue;
             return null;
         }
-        return render(p, tableLimit);
+        return render(p, tableLimit, family);
     }
 
     /** Il pf.conf del pannello con le porte di adesso (il pulsante che crea un pf.conf che manca). */
     public static String renderNow() {
-        return render(currentPorts(), null);
+        return render(currentPorts(), null, org.daemoxcp.mail.system.IpFamily.pfKeyword());
     }
 
     /** Le porte TCP su cui sshd ascolta adesso, dall'uscita di sockstat -46l -P tcp. */
@@ -243,7 +256,7 @@ public final class PfPolicy {
             if (!Shell.run(Duration.ofSeconds(15), PFCTL, "-s", "info").output().contains("Status: Enabled")) return;
             String current = Files.readString(conf, StandardCharsets.UTF_8);
             Ports ports = currentPorts();
-            String next = transform(current, ports);
+            String next = transform(current, ports, org.daemoxcp.mail.system.IpFamily.pfKeyword());
             if (next == null) {
                 LOGGER.info("[PfPolicy] /etc/pf.conf has rules the panel does not write: left as it is, every port it lets in stays open");
                 return;
