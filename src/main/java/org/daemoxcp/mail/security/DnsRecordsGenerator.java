@@ -998,7 +998,12 @@ public class DnsRecordsGenerator {
     }
 
     /**
-     * Get server's public IP address
+     * L'IPv4 pubblico del server, o "" se non lo si conosce.
+     *
+     * Prima, quando non lo trovava, restituiva il testo "YOUR_SERVER_IP": chi controlla "vuoto = non so" lo prendeva
+     * per un indirizzo, e "Configura tutto" poteva pubblicare "v=spf1 ip4:YOUR_SERVER_IP mx -all". E dalla scheda di
+     * rete accettava anche un 100.64.x.x (NAT del fornitore) o un 172.32.x.x scartato per sbaglio. Adesso: un
+     * indirizzo che non e' pubblico non vale, da nessuna delle due strade.
      */
     public String detectServerIp() {
         // Try multiple services for reliability
@@ -1016,8 +1021,9 @@ public class DnsRecordsGenerator {
                 conn.setReadTimeout(5000);
 
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
-                    String ip = reader.readLine().trim();
-                    if (isValidIp(ip)) {
+                    String line = reader.readLine();
+                    String ip = line == null ? "" : line.trim();
+                    if (isPublicIpv4(ip)) {
                         return ip;
                     }
                 }
@@ -1036,12 +1042,8 @@ public class DnsRecordsGenerator {
                 Enumeration<InetAddress> addresses = iface.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     InetAddress addr = addresses.nextElement();
-                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
-                        String ip = addr.getHostAddress();
-                        // Skip private IPs
-                        if (!ip.startsWith("10.") && !ip.startsWith("192.168.") && !ip.startsWith("172.")) {
-                            return ip;
-                        }
+                    if (addr instanceof Inet4Address && isPublicIpv4(addr.getHostAddress())) {
+                        return addr.getHostAddress();
                     }
                 }
             }
@@ -1049,22 +1051,29 @@ public class DnsRecordsGenerator {
             // ignore
         }
 
-        return "YOUR_SERVER_IP";
+        return "";
     }
 
-    private boolean isValidIp(String ip) {
-        if (ip == null || ip.isEmpty()) return false;
-        String[] parts = ip.split("\\.");
-        if (parts.length != 4) return false;
-        try {
-            for (String part : parts) {
-                int num = Integer.parseInt(part);
-                if (num < 0 || num > 255) return false;
-            }
-            return true;
-        } catch (NumberFormatException e) {
+    /**
+     * Vero solo per un IPv4 pubblico, scritto in forma decimale con quattro parti. Fuori: 0/8, 10/8, 100.64/10 (NAT del
+     * fornitore), 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.0.2/24, 192.168/16, 198.18/15, 198.51.100/24,
+     * 203.0.113/24 (documentazione) e da 224 in su (multicast e riservati). Puro.
+     */
+    public static boolean isPublicIpv4(String ip) {
+        if (ip == null || !ip.matches("(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}"))
             return false;
-        }
+        String[] p = ip.split("\\.");
+        int a = Integer.parseInt(p[0]), b = Integer.parseInt(p[1]), c = Integer.parseInt(p[2]);
+        if (a == 0 || a == 10 || a == 127 || a >= 224) return false;
+        if (a == 100 && b >= 64 && b <= 127) return false;
+        if (a == 169 && b == 254) return false;
+        if (a == 172 && b >= 16 && b <= 31) return false;
+        if (a == 192 && b == 0 && (c == 0 || c == 2)) return false;
+        if (a == 192 && b == 168) return false;
+        if (a == 198 && (b == 18 || b == 19)) return false;
+        if (a == 198 && b == 51 && c == 100) return false;
+        if (a == 203 && b == 0 && c == 113) return false;
+        return true;
     }
 
     // ============== Model Classes ==============

@@ -4350,7 +4350,10 @@ public class SSLMailServer {
                     String serverIp = dnsGenerator.detectServerIp();
                     String mailHostname = Main.mailDatabase.getSetting("mail_hostname", "mail." + domain);
 
-                    DnsRecordsGenerator.DnsRecordSet records = dnsGenerator.generateAllRecords(domain, mailHostname, serverIp);
+                    // Solo da mostrare, per chi scrive i record a mano: un segnaposto che si vede, non "ip4:" vuoto.
+                    // Niente di questo va su Cloudflare (AutoDns calcola l'SPF per conto suo e senza IP non lo scrive).
+                    DnsRecordsGenerator.DnsRecordSet records = dnsGenerator.generateAllRecords(domain, mailHostname,
+                            serverIp.isEmpty() ? "YOUR_SERVER_IP" : serverIp);
 
                     response.put("success", true);
                     response.put("domain", records.domain);

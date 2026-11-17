@@ -201,21 +201,10 @@ public class DomainSetup {
      * I singoli passi
      * =================================================================== */
 
+    /** La chiave DKIM e il suo record, firmando solo con una chiave pubblicata: DkimManager.ensurePublished. */
     private static JSONObject dkim(MailDatabase.Domain d) {
         try {
-            if (d.dkimSelector != null && !d.dkimSelector.isBlank()
-                    && d.dkimPublicKey != null && !d.dkimPublicKey.isBlank())
-                return entry("DKIM", true, I18n.tr("server.cfgdom.dkimPresent", java.util.Map.of("s", String.valueOf(d.dkimSelector))));
-
-            DkimManager dk = new DkimManager(Main.mailDatabase);
             CloudflareManager cf = new CloudflareManager(Main.mailDatabase);
-            dk.setCloudflareManager(cf);
-            DkimManager.DkimResult res = dk.generateDkimKeys(d.id, d.domain, "mail");
-            if (!res.success)
-                return entry("DKIM", false, I18n.tr("server.cfgdom.dkimGenFailed", java.util.Map.of("err", String.valueOf(res.error))));
-
-            // La chiave senza il record in DNS non serve a niente: chi riceve non puo'
-            // verificare la firma, e la posta parte firmata da nessuno.
             MailDatabase.CloudflareAccount acct = cf.getAccountForDomain(d.id);
             if (acct == null)
                 return entry("DKIM", false, I18n.tr("server.cfgdom.dkimNoCf", java.util.Map.of("d", String.valueOf(d.domain))));
@@ -223,17 +212,12 @@ public class DomainSetup {
             if (!zl.found)
                 return entry("DKIM", false, I18n.tr("server.cfgdom.dkimNoZone", java.util.Map.of("err", String.valueOf(zl.error))));
 
-            String name = res.selector + "._domainkey." + d.domain;
-            for (CloudflareManager.TxtRecordInfo t :
-                    cf.listTxtRecordsContaining(acct.apiToken, zl.zoneId, name))
-                if (t.name != null && t.name.equalsIgnoreCase(name))
-                    return entry("DKIM", false, I18n.tr("server.cfgdom.dkimExists", java.util.Map.of("name", String.valueOf(name))));
-
-            CloudflareManager.RecordOp op = cf.createTxtRecord(acct.apiToken, zl.zoneId, name,
-                    "v=DKIM1; k=rsa; p=" + res.publicKey, 3600);
-            return op != null && op.success
-                    ? entry("DKIM", true, I18n.tr("server.cfgdom.dkimPublished", java.util.Map.of("name", String.valueOf(name))))
-                    : entry("DKIM", false, I18n.tr("server.cfgdom.dkimRejected", java.util.Map.of("err", String.valueOf(op == null ? I18n.tr("server.cfgdom.noAnswer") : op.error))));
+            DkimManager dk = new DkimManager(Main.mailDatabase);
+            dk.setCloudflareManager(cf);
+            // Una zona che non si legge lancia ZoneReadException: finisce nel catch, e non si crea niente.
+            DkimManager.RecordStep st = DkimManager.ensurePublished(cf, acct.apiToken, zl.zoneId, d.domain,
+                    d.dkimSelector, d.dkimPublicKey, dk::newKey, k -> dk.install(d.id, d.domain, k));
+            return entry("DKIM", st.ok(), st.message());
         } catch (Exception e) {
             return entry("DKIM", false, I18n.tr("server.cfgdom.dkimError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }

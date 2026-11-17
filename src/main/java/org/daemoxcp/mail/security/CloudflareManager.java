@@ -212,7 +212,7 @@ public class CloudflareManager {
             // mostra avvisi di quoting e il record è esplicitamente conforme.
             payload.put("content", formatTxtRecordContent(value));
             payload.put("ttl", ttl <= 0 ? 1 : ttl);
-            payload.put("comment", "DKIM rotation - auto-managed by " + org.daemoxcp.mail.system.Product.NAME);
+            payload.put("comment", txtComment(name));
 
             HttpResponse<String> resp = call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString());
             JSONObject body = new JSONObject(resp.body());
@@ -225,6 +225,27 @@ public class CloudflareManager {
             return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
         }
     }
+
+    /** Il commento di un TXT del pannello: quello della rotazione sui record DKIM (DkimManager lo rilegge), altrimenti
+     * quello di tutti gli altri record. Prima ogni TXT, anche SPF, DMARC e _mta-sts, diceva "DKIM rotation". */
+    static final String DKIM_COMMENT = "DKIM rotation - auto-managed by " + org.daemoxcp.mail.system.Product.NAME;
+
+    static String txtComment(String name) {
+        return name != null && name.toLowerCase(java.util.Locale.ROOT).contains("._domainkey.") ? DKIM_COMMENT : RECORD_COMMENT;
+    }
+
+    /**
+     * Una lettura dei record della zona che non e' riuscita: Cloudflare ha risposto con un errore, non ha risposto, o la
+     * zona ha piu' record di quanti se ne leggono. Non e' una zona vuota. Prima le due letture restituivano una lista
+     * vuota anche in questi casi, e chi le usa per sapere "c'e' gia'?" avrebbe creato un secondo SPF, DMARC o DKIM
+     * accanto al primo, rompendo il dominio. Il messaggio e' gia' nella lingua di chi guarda.
+     */
+    public static final class ZoneReadException extends RuntimeException {
+        public ZoneReadException(String message) { super(message); }
+    }
+
+    /** Le pagine da 100 record che si leggono al massimo: oltre, la zona non si puo' dire letta tutta. */
+    static final int MAX_PAGES = 10;
 
     /**
      * Formatta il contenuto di un record TXT secondo lo standard DNS:
@@ -290,17 +311,19 @@ public class CloudflareManager {
      * tutti i record DKIM (sia attivi che orfani) di un dominio.
      * Itera con paginazione fino a 1000 record.
      * Se {@code nameSubstring} è null o vuoto, ritorna TUTTI i record TXT della zona.
+     *
+     * @throws ZoneReadException se la zona non si e' potuta leggere tutta: mai una lista vuota al posto di un errore
      */
     public java.util.List<TxtRecordInfo> listTxtRecordsContaining(String token, String zoneId, String nameSubstring) {
         java.util.List<TxtRecordInfo> result = new java.util.ArrayList<>();
         String needle = (nameSubstring == null) ? null : nameSubstring.toLowerCase();
         try {
             int page = 1;
-            while (page <= 10) { // max 10 pagine × 100 = 1000 record (più che abbastanza)
+            while (true) {
                 String path = "/zones/" + zoneId + "/dns_records?type=TXT&per_page=100&page=" + page;
                 HttpResponse<String> resp = call("GET", path, token, null);
                 JSONObject body = new JSONObject(resp.body());
-                if (!body.optBoolean("success", false)) break;
+                if (!body.optBoolean("success", false)) throw unreadable(extractErrorMessage(body));
                 JSONArray arr = body.optJSONArray("result");
                 if (arr == null || arr.length() == 0) break;
                 for (int i = 0; i < arr.length(); i++) {
@@ -321,10 +344,19 @@ public class CloudflareManager {
                 JSONObject ri = body.optJSONObject("result_info");
                 int totalPages = ri == null ? 1 : ri.optInt("total_pages", 1);
                 if (page >= totalPages) break;
+                if (page >= MAX_PAGES) throw new ZoneReadException(I18n.tr("server.cfm.zoneTooBig"));
                 page++;
             }
-        } catch (Exception ignore) {}
+        } catch (ZoneReadException e) {
+            throw e;
+        } catch (Exception e) {
+            throw unreadable(String.valueOf(e.getMessage()));
+        }
         return result;
+    }
+
+    private static ZoneReadException unreadable(String why) {
+        return new ZoneReadException(I18n.tr("server.cfm.zoneUnreadable", java.util.Map.of("e", String.valueOf(why))));
     }
 
     public static class TxtRecordInfo {
@@ -520,16 +552,18 @@ public class CloudflareManager {
      * ammette un CNAME accanto ad altri dati sullo stesso nome, quindi un record A su
      * "autoconfig" fa rifiutare il CNAME da Cloudflare. Meglio dirlo prima, spiegando
      * perche', che mostrare l'errore grezzo dell'API.
+     *
+     * @throws ZoneReadException se la zona non si e' potuta leggere tutta: mai una lista vuota al posto di un errore
      */
     public java.util.List<DnsRecordInfo> listRecords(String token, String zoneId) {
         java.util.List<DnsRecordInfo> result = new java.util.ArrayList<>();
         try {
             int page = 1;
-            while (page <= 10) {
+            while (true) {
                 String path = "/zones/" + zoneId + "/dns_records?per_page=100&page=" + page;
                 HttpResponse<String> resp = call("GET", path, token, null);
                 JSONObject body = new JSONObject(resp.body());
-                if (!body.optBoolean("success", false)) break;
+                if (!body.optBoolean("success", false)) throw unreadable(extractErrorMessage(body));
                 JSONArray arr = body.optJSONArray("result");
                 if (arr == null || arr.length() == 0) break;
                 for (int i = 0; i < arr.length(); i++) {
@@ -557,9 +591,14 @@ public class CloudflareManager {
                 JSONObject ri = body.optJSONObject("result_info");
                 int totalPages = ri == null ? 1 : ri.optInt("total_pages", 1);
                 if (page >= totalPages) break;
+                if (page >= MAX_PAGES) throw new ZoneReadException(I18n.tr("server.cfm.zoneTooBig"));
                 page++;
             }
-        } catch (Exception ignore) {}
+        } catch (ZoneReadException e) {
+            throw e;
+        } catch (Exception e) {
+            throw unreadable(String.valueOf(e.getMessage()));
+        }
         return result;
     }
 
