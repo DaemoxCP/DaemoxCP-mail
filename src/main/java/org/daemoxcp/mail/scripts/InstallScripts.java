@@ -49,7 +49,7 @@ public final class InstallScripts {
             "install_clamav.sh", "install_dovecot.sh", "generate_letsencrypt.sh");
 
     /** La variabile che il pannello mette nell'ambiente di ogni script che lancia lui. */
-    public static final String FROM_PANEL = "MAIL_PANEL_FROM_PANEL";
+    public static final String FROM_PANEL = "DAEMOXCP_MAIL_FROM_PANEL";
 
     private static volatile String jarSha;
 
@@ -97,12 +97,12 @@ public final class InstallScripts {
                 # L'impronta del jar che ha scritto questo script. Lanciato a mano (non dal pannello), lo
                 # script la confronta col jar che il servizio del pannello usa: se sono diversi, lo script e'
                 # di un'altra versione del pannello e si ferma prima di cambiare qualunque cosa.
-                MAIL_PANEL_WRITTEN_BY_JAR="%s"
-                if [ -z "${MAIL_PANEL_FROM_PANEL:-}" ] && [ -n "$MAIL_PANEL_WRITTEN_BY_JAR" ]; then
-                    mail_panel_jar=$(sysrc -n mailpanel_jar 2>/dev/null) || mail_panel_jar=""
-                    [ -n "$mail_panel_jar" ] || mail_panel_jar=$(sed -n 's/^: \\${mailpanel_jar:="\\(.*\\)"}$/\\1/p' /usr/local/etc/rc.d/mailpanel 2>/dev/null)
-                    if [ -n "$mail_panel_jar" ] && [ -f "$mail_panel_jar" ] && [ "$(sha256 -q "$mail_panel_jar" 2>/dev/null)" != "$MAIL_PANEL_WRITTEN_BY_JAR" ]; then
-                        echo "STOPPED: this script was written by another version of the mail panel than the one the panel service runs ($mail_panel_jar)."
+                DAEMOXCP_MAIL_WRITTEN_BY_JAR="%s"
+                if [ -z "${DAEMOXCP_MAIL_FROM_PANEL:-}" ] && [ -n "$DAEMOXCP_MAIL_WRITTEN_BY_JAR" ]; then
+                    daemoxcp_mail_jar=$(sysrc -n mailpanel_jar 2>/dev/null) || daemoxcp_mail_jar=""
+                    [ -n "$daemoxcp_mail_jar" ] || daemoxcp_mail_jar=$(sed -n 's/^: \\${mailpanel_jar:="\\(.*\\)"}$/\\1/p' /usr/local/etc/rc.d/mailpanel 2>/dev/null)
+                    if [ -n "$daemoxcp_mail_jar" ] && [ -f "$daemoxcp_mail_jar" ] && [ "$(sha256 -q "$daemoxcp_mail_jar" 2>/dev/null)" != "$DAEMOXCP_MAIL_WRITTEN_BY_JAR" ]; then
+                        echo "STOPPED: this script was written by another version of the mail panel than the one the panel service runs ($daemoxcp_mail_jar)."
                         echo "Open the panel menu (it writes its scripts again at every start) and run it from there."
                         echo "Nothing was stopped and nothing was changed."
                         exit 1

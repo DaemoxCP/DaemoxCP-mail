@@ -50,7 +50,7 @@ import java.util.stream.Stream;
  *        rule is root's again, and the next delivery still follows it.
  *     At the end dovecot.conf and the mode of /var/mail go back as they were: the VM is shared.
  *
- *   java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.SieveGroupMailTest [database]
+ *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveGroupMailTest [database]
  */
 public class SieveGroupMailTest {
 

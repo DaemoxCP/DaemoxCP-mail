@@ -23,7 +23,7 @@ import java.util.stream.Stream;
  * code: in the tests the same word may serve another purpose (english-pages-browser-test.js has a
  * list of Italian words on purpose, to catch them).
  *
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.LegacyNamesTest &lt;source root&gt;
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.LegacyNamesTest &lt;source root&gt;
  */
 public class LegacyNamesTest {
 

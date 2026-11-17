@@ -20,7 +20,7 @@ import java.util.Set;
  *  4. a fault (configtest refuses, the reload does not take it, the file cannot be written): the file gone, the old
  *     secret back, the controller as before;
  *  5. the panel's file but the secret lost, or a wrong one: a new password, DONE; ::1 not listening: DONE.
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.RspamdControllerTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RspamdControllerTest
  */
 public class RspamdControllerTest {
 

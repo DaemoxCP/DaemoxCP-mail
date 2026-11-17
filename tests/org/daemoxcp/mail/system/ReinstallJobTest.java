@@ -37,7 +37,7 @@ import java.util.List;
  * SQLite, secrets and logs; MySQL is not needed (port 1). ONLY on a test clone: it is switched on
  * with -De2e.vm=yes, as root, and it refuses to start if there are already real ways back (the
  * pruning would remove some) or packages unlocked by an interrupted job.
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.ReinstallJobTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ReinstallJobTest
  */
 public class ReinstallJobTest {
 
@@ -272,7 +272,7 @@ public class ReinstallJobTest {
 
     static List<String> menuCommand() {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-        return List.of(java, "-Dmailpanel.secrets.dir=" + base.resolve("secrets"), "-Dmailpanel.reinstall.dir=" + logs,
+        return List.of(java, "-Ddaemoxcp.mail.secrets.dir=" + base.resolve("secrets"), "-Ddaemoxcp.mail.reinstall.dir=" + logs,
                 "-cp", absolute(System.getProperty("java.class.path")),
                 ReinstallJobTest.class.getName(), "child", "menu", HOST);
     }
@@ -284,7 +284,7 @@ public class ReinstallJobTest {
 
     static String run(Path dir, String... step) throws Exception {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-        List<String> cmd = new ArrayList<>(List.of(java, "-Dmailpanel.secrets.dir=" + base.resolve("secrets"),
+        List<String> cmd = new ArrayList<>(List.of(java, "-Ddaemoxcp.mail.secrets.dir=" + base.resolve("secrets"),
                 "-cp", absolute(System.getProperty("java.class.path")), ReinstallJobTest.class.getName(), "child"));
         cmd.addAll(List.of(step));
         Process p = new ProcessBuilder(cmd).directory(dir.toFile()).redirectErrorStream(true).start();

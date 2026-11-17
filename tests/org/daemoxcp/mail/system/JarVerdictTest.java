@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
  * does not see it. Here: the verdicts the guard accepts are exactly the intended ones, and each is
  * one that panelUsage really produces (read from the source).
  *
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.JarVerdictTest &lt;source root&gt;
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.JarVerdictTest &lt;source root&gt;
  */
 public class JarVerdictTest {
 

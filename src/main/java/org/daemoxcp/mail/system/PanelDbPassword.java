@@ -276,9 +276,13 @@ public final class PanelDbPassword {
      */
     static boolean backupName(String name) {
         return name.endsWith(".bak") || name.endsWith(".orig") || name.endsWith(".old") || name.endsWith("~")
-                || name.endsWith(".sample") || name.endsWith(".save") || name.endsWith(".mailpanel.tmp")
+                || name.endsWith(".sample") || name.endsWith(".save") || name.endsWith(TEMP_SUFFIX)
+                || LegacyNames.pairs("tempSuffixes").stream().anyMatch(p -> name.endsWith(p[0]))
                 || name.matches(".*[.-][0-9]{8,}$");
     }
+
+    /** Il file temporaneo che il pannello scrive accanto a quello vero prima di rinominarlo al suo posto. */
+    static final String TEMP_SUFFIX = ".daemoxcp-mail.tmp";
 
     /**
      * I file sotto dirs (fino a tre livelli, senza seguire collegamenti) che contengono la password, tranne le copie e i

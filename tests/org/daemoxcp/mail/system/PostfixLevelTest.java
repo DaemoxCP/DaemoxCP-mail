@@ -28,7 +28,7 @@ import java.util.regex.Pattern;
  *  4. the piece itself, with a fake postfix and postconf: it raises to the level Postfix asks for only if reviewed and
  *     higher; a level not reviewed, no request, a lower level or a strange answer change nothing.
  * As root on the TEST VM (section 3 needs Postfix installed):
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PostfixLevelTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PostfixLevelTest
  */
 public class PostfixLevelTest {
 

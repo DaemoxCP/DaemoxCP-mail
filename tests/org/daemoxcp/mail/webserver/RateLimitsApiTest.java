@@ -39,7 +39,7 @@ import java.util.concurrent.Executors;
  *
  * Usage (with the test MySQL of README.md):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.RateLimitsApiTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RateLimitsApiTest
  */
 public class RateLimitsApiTest {
 
@@ -121,7 +121,7 @@ public class RateLimitsApiTest {
         String[] login = TestSessions.open(db, "ratelimits-test", UA);
         String session = login[0];
         String csrf = login[1];
-        String en = "__Host-MailPanel=" + session + "; __Host-lang=en";
+        String en = "__Host-DaemoxCPMail=" + session + "; __Host-lang=en";
         String tok = ",\"csrf_token\":\"" + csrf + "\"}";
 
         Process cert = new ProcessBuilder("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",

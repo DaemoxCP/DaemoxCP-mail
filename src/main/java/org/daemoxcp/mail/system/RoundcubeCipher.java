@@ -125,8 +125,8 @@ public final class RoundcubeCipher {
     /** Cifra e decifra una parola col metodo e la chiave del file; stampa ok solo se torna uguale e il metodo e' AES-256-CBC. */
     static final String PHP_PROBE = "include $argv[1]; $m = $config['cipher_method'] ?? ''; $k = $config['des_key'] ?? '';"
             + " $iv = random_bytes(openssl_cipher_iv_length($m) ?: 16);"
-            + " $c = $m === '" + METHOD + "' && strlen($k) === 32 ? openssl_encrypt('mailpanel-probe', $m, $k, OPENSSL_RAW_DATA, $iv) : false;"
-            + " echo $c !== false && openssl_decrypt($c, $m, $k, OPENSSL_RAW_DATA, $iv) === 'mailpanel-probe' ? 'ok' : 'no';";
+            + " $c = $m === '" + METHOD + "' && strlen($k) === 32 ? openssl_encrypt('daemoxcp-mail-probe', $m, $k, OPENSSL_RAW_DATA, $iv) : false;"
+            + " echo $c !== false && openssl_decrypt($c, $m, $k, OPENSSL_RAW_DATA, $iv) === 'daemoxcp-mail-probe' ? 'ok' : 'no';";
 
     static Services real(RoundcubeSsoManager sso) {
         return new Services() {

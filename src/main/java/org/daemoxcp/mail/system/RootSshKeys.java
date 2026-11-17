@@ -40,8 +40,8 @@ public final class RootSshKeys {
 
     private RootSshKeys() {}
 
-    /** /root/.ssh; le prove la spostano in una cartella loro (mailpanel.root.ssh.dir), mai quella vera. */
-    static final Path DIR = Path.of(System.getProperty("mailpanel.root.ssh.dir", "/root/.ssh"));
+    /** /root/.ssh; le prove la spostano in una cartella loro (daemoxcp.mail.root.ssh.dir), mai quella vera. */
+    static final Path DIR = Path.of(System.getProperty("daemoxcp.mail.root.ssh.dir", "/root/.ssh"));
     static final Path FILE = DIR.resolve("authorized_keys");
     static final Path PREVIOUS = DIR.resolve("authorized_keys.panel-previous");
 

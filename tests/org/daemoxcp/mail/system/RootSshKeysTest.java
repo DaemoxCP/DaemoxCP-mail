@@ -20,12 +20,12 @@ import java.util.List;
  *     a type that is not the key's, a comment with other characters, garbage, nothing are refused;
  *  2. the file: comments and keys with options written by hand are listed or kept as they are; a key is
  *     added at the end, not twice; removing takes only that key's line;
- *  3. in a test folder (mailpanel.root.ssh.dir), never root's real one: the file is written 0600, the
+ *  3. in a test folder (daemoxcp.mail.root.ssh.dir), never root's real one: the file is written 0600, the
  *     previous one kept; the last key cannot be removed; a symbolic link is not followed;
  *  4. on the VM (-De2e.vm=yes): the fingerprints are the ones of ssh-keygen -l.
  *
  * Usage (on the VM; the property must be set before the class loads):
- *   java -De2e.vm=yes -Dmailpanel.root.ssh.dir=/var/tmp/ssh-keys-test -cp "tests:target/freebsd-mail-panel-1.0.jar" \
+ *   java -De2e.vm=yes -Ddaemoxcp.mail.root.ssh.dir=/var/tmp/ssh-keys-test -cp "tests:target/daemoxcp-mail-1.0.jar" \
  *        org.daemoxcp.mail.system.RootSshKeysTest
  */
 public class RootSshKeysTest {
@@ -136,7 +136,7 @@ public class RootSshKeysTest {
         System.out.println("\n== 3. In a test folder ==");
         Path dir = RootSshKeys.DIR;
         if (dir.toString().equals("/root/.ssh")) {
-            System.out.println("  (part 3 skipped: -Dmailpanel.root.ssh.dir is not set, and root's real keys are never touched)");
+            System.out.println("  (part 3 skipped: -Ddaemoxcp.mail.root.ssh.dir is not set, and root's real keys are never touched)");
         } else {
             org.daemoxcp.mail.util.Shell.run("rm", "-rf", dir.toString());
             check("no folder: no keys", RootSshKeys.list().isEmpty());

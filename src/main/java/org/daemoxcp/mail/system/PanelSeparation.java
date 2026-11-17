@@ -48,7 +48,7 @@ import java.util.logging.Logger;
  *       root legge comunque i file di mailpanel.</li>
  * </ul>
  *
- * <p>Per spegnere la separazione a mano: {@code sysrc mailpanel_opts="-Dmailpanel.separation=off"} e
+ * <p>Per spegnere la separazione a mano: {@code sysrc mailpanel_opts="-Ddaemoxcp.mail.separation=off"} e
  * {@code service mailpanel restart}.
  */
 public final class PanelSeparation {
@@ -62,9 +62,15 @@ public final class PanelSeparation {
     static final String HOME = PanelUser.HOME;
     static final String SHELL = PanelUser.SHELL;
 
-    /** La cartella del socket e dei pid; le prove la spostano con -Dmailpanel.run.dir. */
-    static Path runDir = Path.of(System.getProperty("mailpanel.run.dir", "/var/run/mailpanel"));
-    static final String TITLE = "mailpanel-web";
+    /** La cartella del socket e dei pid; le prove la spostano con -Ddaemoxcp.mail.run.dir. */
+    static Path runDir = Path.of(System.getProperty("daemoxcp.mail.run.dir", "/var/run/mailpanel"));
+    static final String TITLE = "daemoxcp-mail-web";
+    /** Il titolo e quelli di prima (sezione "webPartTitles"): una web accesa da una versione vecchia si riconosce lo stesso. */
+    static java.util.List<String> titles() {
+        java.util.List<String> t = new java.util.ArrayList<>(java.util.List.of(TITLE));
+        t.addAll(LegacyNames.oldNamesOf("webPartTitles", TITLE));
+        return t;
+    }
     static Path webLog = Path.of("/var/db/mailpanel/panel-web.log");
     static Path auditLog = Path.of("/var/log/mail-panel-auth.log");
     static final long LOG_LIMIT = 10L * 1024 * 1024;
@@ -109,7 +115,7 @@ public final class PanelSeparation {
 
     /** Spenta a mano (mailpanel_opts) o per le prove. */
     static boolean switchedOff() {
-        return "off".equalsIgnoreCase(System.getProperty("mailpanel.separation", ""));
+        return "off".equalsIgnoreCase(System.getProperty("daemoxcp.mail.separation", ""));
     }
 
     // ===================== Le condizioni =====================
@@ -127,7 +133,7 @@ public final class PanelSeparation {
 
     private static String prepareOrReason(int port, boolean setupRequired, boolean mysqlAvailable) {
         if (!"root".equals(System.getProperty("user.name"))) return "the panel is not running as root";
-        if (switchedOff()) return "switched off with -Dmailpanel.separation=off";
+        if (switchedOff()) return "switched off with -Ddaemoxcp.mail.separation=off";
         if (setupRequired) return "the first installation is not finished (/setup runs as root)";
         if (!mysqlAvailable) return "MySQL does not answer";
         if (!Files.isExecutable(Path.of("/usr/sbin/daemon"))) return "/usr/sbin/daemon is missing";
@@ -360,13 +366,13 @@ public final class PanelSeparation {
 
     /**
      * La riga di daemon(8). Della JVM della root passano solo la memoria e le proprieta' del pannello
-     * (-Xm*, -Dmailpanel.*), non mailpanel.separation: la web non ne fa niente.
+     * (-Xm*, -Dmailpanel.*), non daemoxcp.mail.separation: la web non ne fa niente.
      */
     static List<String> command(String javaBin, String jar) {
         List<String> cmd = new ArrayList<>(List.of("/usr/sbin/daemon", "-r", "-R", "5", "-u", USER,
                 "-P", supervisorPid().toString(), "-p", webPid().toString(), "-o", webLog.toString(), "-H", "-t", TITLE, javaBin));
         for (String a : java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()) {
-            if (a.startsWith("-Xm") || (a.startsWith("-Dmailpanel.") && !a.startsWith("-Dmailpanel.separation"))) cmd.add(a);
+            if (a.startsWith("-Xm") || (a.startsWith("-Ddaemoxcp.mail.") && !a.startsWith("-Ddaemoxcp.mail.separation"))) cmd.add(a);
         }
         cmd.addAll(List.of("-jar", jar, "--web-part"));
         return cmd;
@@ -401,7 +407,8 @@ public final class PanelSeparation {
         int pid = readPid(supervisorPid());
         if (pid <= 1) return -1;
         String cmd = Shell.run(Duration.ofSeconds(10), "ps", "-o", "command=", "-p", String.valueOf(pid)).outputTrim();
-        return cmd.startsWith("daemon: " + TITLE + "[") ? pid : -1;
+        for (String t : titles()) if (cmd.startsWith("daemon: " + t + "[")) return pid;
+        return -1;
     }
 
     /** Una web rimasta da un avvio di prima (la root uccisa senza potersi fermare): si ferma. */

@@ -52,7 +52,7 @@ import java.util.concurrent.Executors;
  * <p>Usage (with the test MySQL of README.md):
  * <pre>
  *   su -m nobody -c 'java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.SieveDialogFieldsTest'
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SieveDialogFieldsTest'
  * </pre>
  */
 public class SieveDialogFieldsTest {
@@ -143,8 +143,8 @@ public class SieveDialogFieldsTest {
                         && !I18n.t("it", "server.forward.notFound").equals(forwardNotFound));
 
         Path dir = Files.createTempDirectory("sieve-dialog-fields");
-        if (System.getProperty("mailpanel.secrets.dir") == null)
-            System.setProperty("mailpanel.secrets.dir", Files.createDirectories(dir.resolve("secrets")).toString());
+        if (System.getProperty("daemoxcp.mail.secrets.dir") == null)
+            System.setProperty("daemoxcp.mail.secrets.dir", Files.createDirectories(dir.resolve("secrets")).toString());
         if (!isRoot() && PanelSecrets.text(PanelSecrets.VAULT_PUBLIC_KEY).isEmpty()) {
             // Mailbox passwords are encrypted with the vault's public key, which root writes at start.
             KeyPairGenerator pair = KeyPairGenerator.getInstance("RSA");
@@ -170,8 +170,8 @@ public class SieveDialogFieldsTest {
         Main.setupRequired = false;
         String[] login = TestSessions.open(db, "sieve-dialog-fields-test", UA);
         csrf = login[1];
-        String en = "__Host-MailPanel=" + login[0] + "; __Host-lang=en";
-        String it = "__Host-MailPanel=" + login[0] + "; __Host-lang=it";
+        String en = "__Host-DaemoxCPMail=" + login[0] + "; __Host-lang=en";
+        String it = "__Host-DaemoxCPMail=" + login[0] + "; __Host-lang=it";
 
         Process cert = new ProcessBuilder("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                 "-subj", "/CN=localhost", "-keyout", dir.resolve("k.pem").toString(), "-out", dir.resolve("c.pem").toString())

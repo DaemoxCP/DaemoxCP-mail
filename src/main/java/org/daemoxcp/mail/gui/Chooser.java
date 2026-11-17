@@ -85,7 +85,7 @@ public class Chooser {
         });
 
         actionListBox.addItem("2) Edit Panel Configuration", () -> {
-            if (confirmAction("Confirm", "Edit Mail Panel configuration?\n\n(Port, Host, SSL settings)")) {
+            if (confirmAction("Confirm", "Edit " + org.daemoxcp.mail.system.Product.NAME + " configuration?\n\n(Port, Host, SSL settings)")) {
                 setOptionAndClose(2);
             }
         });
@@ -129,8 +129,8 @@ public class Chooser {
         });
 
         // ============== START SERVER ==============
-        actionListBox.addItem(">>> Start Mail Panel WebServer <<<", () -> {
-            if (confirmAction("Start WebServer", "Start the Mail Panel web server?")) {
+        actionListBox.addItem(">>> Start " + org.daemoxcp.mail.system.Product.NAME + " web server <<<", () -> {
+            if (confirmAction("Start WebServer", "Start the " + org.daemoxcp.mail.system.Product.NAME + " web server?")) {
                 setOptionAndClose(100);
             }
         });

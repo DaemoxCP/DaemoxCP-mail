@@ -21,7 +21,7 @@ import java.util.Set;
  *  5. a fault in the last step: INCOMPLETE, port 6379 open again with the socket (the middle state), and the next
  *     run finishes;
  *  6. the middle state written but redis never restarted (a start cut in half): the next run finishes.
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.RedisSocketTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RedisSocketTest
  */
 public class RedisSocketTest {
 

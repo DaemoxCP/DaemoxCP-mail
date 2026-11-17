@@ -12,7 +12,7 @@ import org.daemoxcp.mail.i18n.I18n;
  * The jobs' log on disk (JobJournal, reperto 196): a log per job that survives a restart of the panel or of the
  * server, read from Diagnostics.
  *
- * In a temporary folder (mailpanel.jobs.dir is set before the class loads): a job writes its start, its lines with
+ * In a temporary folder (daemoxcp.mail.jobs.dir is set before the class loads): a job writes its start, its lines with
  * the UTC time, its end with status, error and duration, once only; the folder is 0700 and the files 0600; only the
  * newest KEEP stay; the list comes newest first with the type and the status read from the end; a job that never
  * ended says so; reading takes only a well formed name inside the folder (no "..", no absolute path, no other file).

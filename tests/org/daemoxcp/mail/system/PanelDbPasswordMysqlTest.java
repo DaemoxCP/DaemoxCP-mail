@@ -21,7 +21,7 @@ import java.util.List;
  * Nothing touches the real MySQL: it refuses to run on port 3306. The state and the panel's store are in memory.
  *
  * Usage (on the VM, with the test MySQL of tests/README.md):
- *   java -Dmailpanel.mysql.port=33062 -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PanelDbPasswordMysqlTest
+ *   java -Ddaemoxcp.mail.mysql.port=33062 -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelDbPasswordMysqlTest
  */
 public class PanelDbPasswordMysqlTest {
 
@@ -95,9 +95,9 @@ public class PanelDbPasswordMysqlTest {
     };
 
     public static void main(String[] args) throws Exception {
-        port = System.getProperty("mailpanel.mysql.port");
+        port = System.getProperty("daemoxcp.mail.mysql.port");
         if (port == null || port.equals("3306")) {
-            System.out.println("Give the test MySQL's port with -Dmailpanel.mysql.port (never 3306, the real one).");
+            System.out.println("Give the test MySQL's port with -Ddaemoxcp.mail.mysql.port (never 3306, the real one).");
             System.exit(2);
         }
         PendingDbPassword.Probe probe = PendingDbPassword.mysqlProbe("127.0.0.1", port, USER);

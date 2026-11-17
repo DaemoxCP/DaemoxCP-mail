@@ -14,7 +14,7 @@ import org.daemoxcp.mail.webserver.Access;
  *  3. the time of the restart from ps ("seconds command"): "+N" minutes and "now"; any other form: unknown (0);
  *  4. the time the panel records when it schedules the restart, and that cancelling removes it.
  *
- * Usage: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.RestartLockTest
+ * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RestartLockTest
  */
 public class RestartLockTest {
 

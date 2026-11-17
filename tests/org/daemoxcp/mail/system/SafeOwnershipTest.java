@@ -27,7 +27,7 @@ import java.util.List;
  *  4. RoundcubeUser.apply (the boot migration that gives Roundcube its folders) on a tree with a hard link: the
  *     linked file stays as it was.
  * As root on the TEST VM (chown needs root; the tree is in a temporary folder, owner nobody):
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.SafeOwnershipTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SafeOwnershipTest
  */
 public class SafeOwnershipTest {
 

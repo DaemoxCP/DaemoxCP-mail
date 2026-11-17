@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
  *     a map that already fails, Dovecot not running and a file of someone else are left alone.
  *
  * Usage:
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.MailDbUsersTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MailDbUsersTest
  */
 public class MailDbUsersTest {
 

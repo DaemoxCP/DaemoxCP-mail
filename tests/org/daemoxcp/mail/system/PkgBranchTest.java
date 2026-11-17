@@ -28,7 +28,7 @@ import java.util.regex.Pattern;
  *
  * The panel's messages are read in English (I18n.setCurrent): outside a request it writes Italian.
  *
- * Uso: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PkgBranchTest
+ * Uso: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PkgBranchTest
  */
 public class PkgBranchTest {
 

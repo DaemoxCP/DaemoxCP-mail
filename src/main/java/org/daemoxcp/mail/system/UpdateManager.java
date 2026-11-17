@@ -3843,7 +3843,7 @@ public final class UpdateManager {
                 }
             }
             if (!put) return false;
-            java.nio.file.Path tmp = Paths.get("/tmp/my.cnf.mailpanel-84");
+            java.nio.file.Path tmp = Paths.get("/tmp/my.cnf.daemoxcp-mail-84");
             Files.write(tmp, fresh);
             return ok("mv " + tmp + " /usr/local/etc/mysql/my.cnf", 30)
                 && ok("chmod 644 /usr/local/etc/mysql/my.cnf", 15);
@@ -6640,7 +6640,8 @@ public final class UpdateManager {
      * di questo script (echo): JavaUpdateScriptTest controlla che ognuna sia assegnata qui.
      */
     static String javaUpdateScript(JavaScriptPlan p) {
-        String title = PanelSeparation.TITLE;
+        // Il titolo del supervisore della web, e quelli di prima: la web l'ha accesa la versione che sta girando.
+        String title = "(" + String.join("|", PanelSeparation.titles()) + ")";
         StringBuilder s = new StringBuilder();
         java.util.function.Consumer<String> line = l -> s.append(l).append('\n');
         line.accept("#!/bin/sh");
@@ -6707,7 +6708,7 @@ public final class UpdateManager {
         line.accept("# running would keep the port and the old JVM. Its supervisor is recognised by its title.");
         line.accept("if [ -n \"$WEB_SUPERVISOR_PIDFILE\" ]; then");
         line.accept("  WEB_SUPERVISOR=$(cat \"$WEB_SUPERVISOR_PIDFILE\" 2>/dev/null)");
-        line.accept("  if [ -n \"$WEB_SUPERVISOR\" ] && ps -o command= -p \"$WEB_SUPERVISOR\" 2>/dev/null | grep -q '^daemon: "
+        line.accept("  if [ -n \"$WEB_SUPERVISOR\" ] && ps -o command= -p \"$WEB_SUPERVISOR\" 2>/dev/null | grep -qE '^daemon: "
                 + title + "\\['; then");
         line.accept("    kill \"$WEB_SUPERVISOR\" 2>/dev/null");
         line.accept("    k=0; while kill -0 \"$WEB_SUPERVISOR\" 2>/dev/null && [ $k -lt 30 ]; do k=$((k+1)); sleep 1; done");

@@ -17,7 +17,7 @@ import java.util.List;
  *     without a name of its own is a warning, not a stop;
  *  3. outbound port 25: open as soon as one big mail server answers, blocked when the names resolve and nobody
  *     answers, unknown when no name resolves.
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.GuidedInstallTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.GuidedInstallTest
  */
 public class GuidedInstallTest {
 

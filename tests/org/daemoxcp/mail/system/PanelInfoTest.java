@@ -26,8 +26,8 @@ import java.util.HexFormat;
  *     the jar's, computed again here on its own.
  *
  * Usage (on the VM, from the project root, after tools/build-jar.sh):
- *   javac --release 25 -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/daemoxcp/mail/system/PanelInfoTest.java
- *   java -Dbuild.script=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PanelInfoTest
+ *   javac --release 25 -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/system/PanelInfoTest.java
+ *   java -Dbuild.script=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelInfoTest
  */
 public class PanelInfoTest {
 

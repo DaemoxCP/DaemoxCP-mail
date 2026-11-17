@@ -19,8 +19,8 @@ import java.util.Map;
  *    plan included lmdb, which the other packages update first: with the signature alone the step would stop.
  *
  * Usage (from the project root, after mvn package):
- *   javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/daemoxcp/mail/system/EverythingTest.java
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.EverythingTest
+ *   javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/system/EverythingTest.java
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.EverythingTest
  */
 public class EverythingTest {
 

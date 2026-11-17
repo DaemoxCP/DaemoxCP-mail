@@ -41,7 +41,7 @@ import java.util.logging.Logger;
  *
  * Usage (on the VM, with the test MySQL of tests/README.md, as root):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.database.WebRoutinesTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.WebRoutinesTest
  */
 public class WebRoutinesTest {
 
@@ -124,8 +124,8 @@ public class WebRoutinesTest {
             System.exit(1);
         }
         Path dir = Files.createTempDirectory("web-routines");
-        System.setProperty("mailpanel.secrets.dir", dir.toString());
-        System.setProperty("mailpanel.vault.key", dir.resolve("master.key").toString());
+        System.setProperty("daemoxcp.mail.secrets.dir", dir.toString());
+        System.setProperty("daemoxcp.mail.vault.key", dir.resolve("master.key").toString());
         Logger.getLogger(WebDbAccess.class.getName()).addHandler(new Handler() {
             @Override public void publish(LogRecord r) { LOG.add(r.getMessage()); }
             @Override public void flush() { }

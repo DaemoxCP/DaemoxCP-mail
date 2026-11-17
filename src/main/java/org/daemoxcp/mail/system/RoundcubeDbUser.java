@@ -631,7 +631,7 @@ public final class RoundcubeDbUser {
      * che abbia i permessi giusti.
      */
     static void write(Path p, String content, FileState like) throws IOException {
-        Path tmp = p.resolveSibling(p.getFileName() + ".mailpanel.tmp");
+        Path tmp = p.resolveSibling(p.getFileName() + ".daemoxcp-mail.tmp");
         Files.deleteIfExists(tmp);
         Files.createFile(tmp, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
         try {

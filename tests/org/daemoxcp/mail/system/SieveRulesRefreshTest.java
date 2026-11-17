@@ -23,7 +23,7 @@ import java.util.Map;
  *   <li>a write that fails: counted by the mailbox's number, the others still written.</li>
  * </ul>
  * It calls nothing on the machine.
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.SieveRulesRefreshTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveRulesRefreshTest
  */
 public class SieveRulesRefreshTest {
 

@@ -34,7 +34,7 @@ import java.util.Map;
  * List, job record, notice and lock live in a test folder. The restore asks pkg about two packages
  * that do not exist (pkg info -e), so it changes nothing on the machine; it must be run on the VM
  * like the others, as root (the script checks it):
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PackageTurnAcrossProcessesTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackageTurnAcrossProcessesTest
  */
 public class PackageTurnAcrossProcessesTest {
 
@@ -154,31 +154,31 @@ public class PackageTurnAcrossProcessesTest {
 
         // From the menu: the panel (us) holds the turn and tells the script.
         PackageQueue.take("menu", "complete mail server installation");
-        Run s = Run.script(part, Map.of("MAIL_PANEL_PACKAGE_TURN", String.valueOf(me)));
+        Run s = Run.script(part, Map.of("DAEMOXCP_MAIL_PACKAGE_TURN", String.valueOf(me)));
         check("from the menu, with the turn held by the panel: the script passes", s.rc == 0 && s.out.contains("TURN-OK"));
         // Started by hand while the panel works.
         s = Run.script(part, Map.of());
         check("by hand, with the turn held by the panel: the script stops before anything", s.rc != 0 && !s.out.contains("TURN-OK"));
         check("and it says who holds it", s.out.contains("another job is working on the packages") && s.out.contains("pid " + me + ","));
         // A pid that is not the parent.
-        s = Run.script(part, Map.of("MAIL_PANEL_PACKAGE_TURN", "1"));
+        s = Run.script(part, Map.of("DAEMOXCP_MAIL_PACKAGE_TURN", "1"));
         check("with another process's pid: it stops", s.rc != 0 && !s.out.contains("TURN-OK"));
         // The restart under a fake lockf while the panel works: the lock is taken (by the panel), so
         // only the check that the parent is lockf stops it.
-        s = Run.script(part, Map.of("MAIL_PANEL_TURN_BY_LOCKF", "1"));
-        check("by hand with MAIL_PANEL_TURN_BY_LOCKF, with the turn held by the panel: it stops", s.rc != 0 && !s.out.contains("TURN-OK"));
+        s = Run.script(part, Map.of("DAEMOXCP_MAIL_TURN_BY_LOCKF", "1"));
+        check("by hand with DAEMOXCP_MAIL_TURN_BY_LOCKF, with the turn held by the panel: it stops", s.rc != 0 && !s.out.contains("TURN-OK"));
         PackageQueue.release("menu");
         // The panel says it holds it, but it does not.
-        s = Run.script(part, Map.of("MAIL_PANEL_PACKAGE_TURN", String.valueOf(me)));
+        s = Run.script(part, Map.of("DAEMOXCP_MAIL_PACKAGE_TURN", String.valueOf(me)));
         check("with the right pid but the turn free: it stops", s.rc != 0 && !s.out.contains("TURN-OK") && s.out.contains("does not hold"));
         // The turn is taken, but by another process: its pid is written inside, not ours.
         Holder h = Holder.start(PackageQueue.list, "test maintenance");
-        s = Run.script(part, Map.of("MAIL_PANEL_PACKAGE_TURN", String.valueOf(me)));
+        s = Run.script(part, Map.of("DAEMOXCP_MAIL_PACKAGE_TURN", String.valueOf(me)));
         check("with the turn taken by another panel process: it stops", s.rc != 0 && !s.out.contains("TURN-OK"));
         h.release();
         // The restart under a fake lockf: the variable set by hand.
-        s = Run.script(part, Map.of("MAIL_PANEL_TURN_BY_LOCKF", "1"));
-        check("with MAIL_PANEL_TURN_BY_LOCKF set by hand, without lockf: it stops", s.rc != 0 && !s.out.contains("TURN-OK"));
+        s = Run.script(part, Map.of("DAEMOXCP_MAIL_TURN_BY_LOCKF", "1"));
+        check("with DAEMOXCP_MAIL_TURN_BY_LOCKF set by hand, without lockf: it stops", s.rc != 0 && !s.out.contains("TURN-OK"));
 
         // By hand, with the turn free: it restarts itself under lockf and holds it while it works.
         Files.writeString(stop, "");
@@ -218,8 +218,8 @@ public class PackageTurnAcrossProcessesTest {
             cmd.addAll(ARGS);
             ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true)
                     .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
-            pb.environment().remove("MAIL_PANEL_PACKAGE_TURN");
-            pb.environment().remove("MAIL_PANEL_TURN_BY_LOCKF");
+            pb.environment().remove("DAEMOXCP_MAIL_PACKAGE_TURN");
+            pb.environment().remove("DAEMOXCP_MAIL_TURN_BY_LOCKF");
             pb.environment().put("MYSQL_PASSWORD", "turn-test");
             pb.environment().put("MYSQL_ROOT_PASSWORD", "turn-test");
             // The script of #91 (the webmail with its own MySQL user) also wants this one, and stops

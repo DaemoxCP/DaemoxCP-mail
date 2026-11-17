@@ -19,7 +19,7 @@ import java.util.Map;
  *  2. rules that cannot be listed: nothing compiled, the reason given;
  *  3. which files are the panel's rules: domain/name/.dovecot.sieve starting with the panel's require lines; a script
  *     written by hand, a link to a folder or to a file, a file too big, a missing root: left out.
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.SieveBinariesTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveBinariesTest
  */
 public class SieveBinariesTest {
 

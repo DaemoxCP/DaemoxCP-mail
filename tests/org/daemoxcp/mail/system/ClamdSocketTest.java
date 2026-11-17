@@ -20,7 +20,7 @@ import java.util.Set;
  *  4. a fault (the group not really taken, clamd not coming back, rspamd not scanning after joining): everything back,
  *     byte for byte, the socket 0666 again, rspamd out of the group and finding EICAR;
  *  5. rspamd without the antivirus: DONE all the same, and said.
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.ClamdSocketTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ClamdSocketTest
  */
 public class ClamdSocketTest {
 

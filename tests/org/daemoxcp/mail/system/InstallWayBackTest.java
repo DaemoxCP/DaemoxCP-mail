@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *     The real body, in a child process with its own folder, SQLite and secrets; MySQL is not needed
  *     (port 1: the password stays pending, PendingDbPassword).
  *
- * Usage: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.InstallWayBackTest
+ * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallWayBackTest
  */
 public class InstallWayBackTest {
 
@@ -118,7 +118,7 @@ public class InstallWayBackTest {
     static String run(Path dir, String kind) throws Exception {
         Files.createDirectories(dir);
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-        List<String> cmd = new ArrayList<>(List.of(java, "-Dmailpanel.secrets.dir=" + dir.resolve("secrets"),
+        List<String> cmd = new ArrayList<>(List.of(java, "-Ddaemoxcp.mail.secrets.dir=" + dir.resolve("secrets"),
                 "-cp", absolute(System.getProperty("java.class.path")), InstallWayBackTest.class.getName(), "child", kind));
         Process p = new ProcessBuilder(cmd).directory(dir.toFile()).redirectErrorStream(true)
                 .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null"))).start();

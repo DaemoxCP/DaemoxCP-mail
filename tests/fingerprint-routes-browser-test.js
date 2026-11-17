@@ -59,7 +59,7 @@ const refusals = () => Number(vm('grep -c "forwarded request refused" /var/db/ma
         const context = await browser.newContext({ ignoreHTTPSErrors: true, locale: 'en-US' });
         page = await context.newPage();
         page.on('pageerror', e => errors.push(String(e)));
-        const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar --access-code 2>/dev/null')
+        const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null')
             .match(/([0-9]{4} [0-9]{4})/)[1];
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');

@@ -38,7 +38,7 @@ import java.util.logging.Logger;
  *  - and nothing logged at WARNING or above about it.
  *
  * Usage (on the VM):
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.HeadRequestTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.HeadRequestTest
  */
 public class HeadRequestTest {
 

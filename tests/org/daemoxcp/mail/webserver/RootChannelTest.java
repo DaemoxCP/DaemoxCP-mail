@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *     HEAD has no body, a handler that answers nothing gives a 500, the client IP is the remote address.
  *
  * Usage (on the VM):
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.RootChannelTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RootChannelTest
  */
 public class RootChannelTest {
 
@@ -99,7 +99,7 @@ public class RootChannelTest {
                 && "application/json".equals(out.headers().get("Content-type")));
 
         org.json.JSONObject liar = new org.json.JSONObject(head("/api/domains", "GET", "/api/domains", "203.0.113.7", "en", 4, 17));
-        liar.put("headers", new org.json.JSONObject().put("Cookie", "__Host-MailPanel=abc").put("X-CSRF-Token", "t")
+        liar.put("headers", new org.json.JSONObject().put("Cookie", "__Host-DaemoxCPMail=abc").put("X-CSRF-Token", "t")
                 .put("Authorization", "Bearer x").put("Host", "evil.example").put("CF-Connecting-IP", "1.2.3.4")
                 .put("User-Agent", "UA"));
         liar.put("token", "the-session-token");

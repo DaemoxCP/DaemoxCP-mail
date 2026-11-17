@@ -12,7 +12,7 @@ import java.util.Set;
  * dynamicmaps.cf are written here, taken from the real ones of the VM (31/10/2026). What Postfix
  * really does with the regenerated maps is measured by PostfixMapsE2ETest on the VM.
  *
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PostfixMapsTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PostfixMapsTest
  */
 public class PostfixMapsTest {
 

@@ -49,8 +49,8 @@ public final class ReinstallJob {
 
     private ReinstallJob() {}
 
-    /** La cartella dei registri. Le prove la spostano con -Dmailpanel.reinstall.dir. */
-    static Path dir = Path.of(System.getProperty("mailpanel.reinstall.dir", "/var/log/mailpanel"));
+    /** La cartella dei registri. Le prove la spostano con -Ddaemoxcp.mail.reinstall.dir. */
+    static Path dir = Path.of(System.getProperty("daemoxcp.mail.reinstall.dir", "/var/log/mailpanel"));
 
     /** daemon(8) della base di FreeBSD. */
     static String daemon = "/usr/sbin/daemon";
@@ -131,10 +131,10 @@ public final class ReinstallJob {
         setPermissions(r.log(), "rw-------");
 
         List<String> cmd = new ArrayList<>(List.of(daemon, "-f", "-o", r.log().toString(),
-                "-p", r.pid().toString(), "-t", "mailpanel-reinstall", java()));
+                "-p", r.pid().toString(), "-t", "daemoxcp-mail-reinstall", java()));
         // Le impostazioni del pannello (cartella dei segreti, dei registri) valgono anche per lui.
         for (String k : System.getProperties().stringPropertyNames())
-            if (k.startsWith("mailpanel.")) cmd.add("-D" + k + "=" + System.getProperty(k));
+            if (k.startsWith("daemoxcp.mail.")) cmd.add("-D" + k + "=" + System.getProperty(k));
         cmd.addAll(List.of("-cp", System.getProperty("java.class.path"), "org.daemoxcp.mail.Main",
                 "--reinstall", host, r.exit().toString()));
         ProcessBuilder pb = new ProcessBuilder(cmd).directory(new File(System.getProperty("user.dir")));

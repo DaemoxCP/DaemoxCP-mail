@@ -34,7 +34,7 @@ import java.util.Properties;
  *
  * Usage (on the VM, as root):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.security.VaultKeysTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.VaultKeysTest
  */
 public class VaultKeysTest {
 
@@ -87,11 +87,11 @@ public class VaultKeysTest {
             System.exit(1);
         }
         Path dir = Files.createTempDirectory("vault-keys");
-        System.setProperty("mailpanel.secrets.dir", dir.toString());
+        System.setProperty("daemoxcp.mail.secrets.dir", dir.toString());
         byte[] masterKey = new byte[32];
         new SecureRandom().nextBytes(masterKey);
         Files.writeString(dir.resolve("master.key"), Base64.getEncoder().encodeToString(masterKey));
-        System.setProperty("mailpanel.vault.key", dir.resolve("master.key").toString());
+        System.setProperty("daemoxcp.mail.vault.key", dir.resolve("master.key").toString());
         PasswordVault vault = PasswordVault.getInstance();
 
         System.out.println("== 1. The key pair ==");

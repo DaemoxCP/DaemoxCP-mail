@@ -17,7 +17,7 @@ import java.util.stream.Stream;
  * byte to the one today's code writes from scratch, with the same permissions; a second pass must
  * find nothing. The effect on the real services is measured by the test on the VM (reperti).
  *
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PanelMarkerTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelMarkerTest
  */
 public class PanelMarkerTest {
 
@@ -86,7 +86,7 @@ public class PanelMarkerTest {
 
         boolean leftovers() throws Exception {
             try (Stream<Path> s = Files.walk(root)) {
-                return s.anyMatch(p -> p.getFileName().toString().endsWith(".mailpanel.tmp"));
+                return s.anyMatch(p -> p.getFileName().toString().endsWith(".daemoxcp-mail.tmp"));
             }
         }
 
@@ -177,7 +177,7 @@ public class PanelMarkerTest {
         s = new Server();
         s.writeOld(true, true, false);
         // nginx's temporary file cannot be created: in its place there is a full folder.
-        Path blocker = s.defaultFolder.resolve("." + WebProtection.FILE_NAME + ".mailpanel.tmp");
+        Path blocker = s.defaultFolder.resolve("." + WebProtection.FILE_NAME + ".daemoxcp-mail.tmp");
         Files.createDirectories(blocker);
         Files.writeString(blocker.resolve("x"), "x");
         r = s.run();

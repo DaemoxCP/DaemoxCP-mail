@@ -33,11 +33,11 @@ public final class LocalResolverScript {
         # --- Risolutore DNS ricorsivo locale per rspamd (LocalResolverScript.java) ---
         # Prima di toccare il DNS se ne tiene una copia: se il risolutore locale non risponde si
         # torna esattamente com'era, perche' un server di posta senza DNS non consegna niente.
-        RESOLV_SAVED=$(mktemp /tmp/mail-panel-resolv.XXXXXX)
+        RESOLV_SAVED=$(mktemp /tmp/daemoxcp-mail-resolv.XXXXXX)
         cp -p /etc/resolv.conf "$RESOLV_SAVED"
         RESOLVCONF_SAVED=""
         if [ -f /etc/resolvconf.conf ]; then
-            RESOLVCONF_SAVED=$(mktemp /tmp/mail-panel-resolvconf.XXXXXX)
+            RESOLVCONF_SAVED=$(mktemp /tmp/daemoxcp-mail-resolvconf.XXXXXX)
             cp -p /etc/resolvconf.conf "$RESOLVCONF_SAVED"
         fi
         LOCAL_UNBOUND_WAS=$(sysrc -n local_unbound_enable 2>/dev/null)

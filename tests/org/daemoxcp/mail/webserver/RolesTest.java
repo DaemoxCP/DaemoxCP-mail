@@ -35,7 +35,7 @@ import java.util.concurrent.Executors;
  *
  * Usage (with the test MySQL of README.md):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.RolesTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RolesTest
  */
 public class RolesTest {
 
@@ -64,12 +64,12 @@ public class RolesTest {
         AuthStore.Created c = AuthStore.createAdmin(name, name + "@example.test", role);
         long id = c.id() > 0 ? c.id() : AuthStore.adminByUsername(name).orElseThrow().id();
         String token = Main.sessions.create(id, UA, "127.0.0.1");
-        return new Who("__Host-MailPanel=" + token + "; __Host-lang=en", WebSessions.csrfToken(token));
+        return new Who("__Host-DaemoxCPMail=" + token + "; __Host-lang=en", WebSessions.csrfToken(token));
     }
 
     /** The session of that administrator confirmed now, as the root part writes it after a passkey or a code. */
     static void confirm(Who who) throws Exception {
-        String token = who.cookie().replaceAll("^__Host-MailPanel=([^;]+).*$", "$1");
+        String token = who.cookie().replaceAll("^__Host-DaemoxCPMail=([^;]+).*$", "$1");
         Main.sessions.markReauthenticated(Main.sessions.check(token, UA).orElseThrow().id());
     }
 

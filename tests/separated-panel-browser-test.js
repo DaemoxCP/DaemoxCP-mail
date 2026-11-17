@@ -64,7 +64,7 @@ function portOpen(port) {
         page.on('pageerror', e => scriptErrors.push(new URL(page.url()).pathname + ': ' + e.message));
 
         console.log('== 1. Sign-in ==');
-        const out = remote('cd ' + PANEL_DIR + ' && /usr/local/openjdk25/bin/java -jar freebsd-mail-panel-1.0.jar --access-code');
+        const out = remote('cd ' + PANEL_DIR + ' && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code');
         const m = out.match(/One-time access code for [^:]*: (\d{4} \d{4})/);
         check('a one-time code from the console', !!m);
         await page.goto(BASE + '/index');
@@ -100,7 +100,7 @@ function portOpen(port) {
         const panel = (su.body.services || []).find(s => s.service === 'mail-panel') || {};
         check('the panel runs as root and mailpanel (' + (panel.users || []).join(', ') + ')',
             (panel.users || []).includes('mailpanel') && (panel.users || []).includes('root'));
-        check('with the reason root stays', panel.rootWhy === en['server.su.rootWhy.mailPanel']);
+        check('with the reason root stays', panel.rootWhy === en['server.su.rootWhy.daemoxcpMail']);
         check('and no warning that it runs entirely as root', !(su.body.problems || []).some(p => p.code === 'panelLegacy'));
         await context.close();
     } finally {

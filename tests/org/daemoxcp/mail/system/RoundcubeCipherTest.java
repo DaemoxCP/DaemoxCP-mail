@@ -16,7 +16,7 @@ import java.util.Map;
  *     the webmail not answering;
  *  4. a fault after the change (PHP not encrypting, the webmail not answering, the real login failing): the file byte
  *     for byte as before; no real login possible before (no SSO): DONE, saying so.
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.RoundcubeCipherTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RoundcubeCipherTest
  */
 public class RoundcubeCipherTest {
 

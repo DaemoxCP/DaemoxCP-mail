@@ -19,7 +19,7 @@
 set -u
 PANEL=${1:?panel folder}
 TESTS=${2:?compiled tests folder, readable by mailpanel}
-JAR=$PANEL/freebsd-mail-panel-1.0.jar
+JAR=$PANEL/daemoxcp-mail-1.0.jar
 JAVA=/usr/local/openjdk25/bin/java
 LOG=/var/db/mailpanel/panel.log
 RUN=/var/run/mailpanel
@@ -244,13 +244,13 @@ for m in mysql-virtual-domains.cf mysql-virtual-mailboxes.cf mysql-virtual-alias
     check "$m enters as mailpanel_postfix ($(grep '^user' $PF/$m))" "$(is "$(grep '^user' $PF/$m)" "user = mailpanel_postfix")"
     check "  the panel's password is not in it" "$(is "$(grep -cF -- "$PANELPW" $PF/$m)" 0)"
     check "  still root:postfix 0640 ($(mode $PF/$m))" "$(is "$(mode $PF/$m)" "-rw-r----- root:postfix")"
-    R=$(/usr/local/sbin/postmap -q mailpanel-probe@invalid mysql:$PF/$m 2>&1; echo "exit $?")
+    R=$(/usr/local/sbin/postmap -q daemoxcp-mail-probe@invalid mysql:$PF/$m 2>&1; echo "exit $?")
     check "  postmap -q asks MySQL without an error ($R)" "$(is "$R" "exit 1")"
 done
 check "dovecot-sql.conf enters as mailpanel_dovecot ($(grep -o 'user=[^ ]*' $DSQL))" "$(is "$(grep -o 'user=[^ ]*' $DSQL)" "user=mailpanel_dovecot")"
 check "  the panel's password is not in it" "$(is "$(grep -cF -- "$PANELPW" $DSQL)" 0)"
 check "  still root:dovecot 0600 ($(mode $DSQL))" "$(is "$(mode $DSQL)" "-rw------- root:dovecot")"
-R=$(/usr/local/bin/doveadm auth lookup mailpanel-auth-probe@invalid >/dev/null 2>&1; echo $?)
+R=$(/usr/local/bin/doveadm auth lookup daemoxcp-mail-auth-probe@invalid >/dev/null 2>&1; echo $?)
 check "doveadm auth lookup answers (exit $R, 67 = no such user)" "$(is "$R" 67)"
 ROOTOPT=$(mktemp /var/tmp/sep-root.XXXXXX); chmod 600 "$ROOTOPT"
 printf '[client]\nuser=root\npassword="%s"\n' "$(sed -n 's/^mysql_root_password=//p' $E/root-secrets.properties | unescape)" > "$ROOTOPT"

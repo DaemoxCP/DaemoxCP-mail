@@ -37,7 +37,7 @@ import java.util.concurrent.Executors;
  *
  * Usage (with the test MySQL of README.md; it prepares the schema by itself):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.VersionsApiTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.VersionsApiTest
  */
 public class VersionsApiTest {
 
@@ -58,7 +58,7 @@ public class VersionsApiTest {
 
     static HttpResponse<String> ask(HttpClient client, String method, String path, String body, boolean withSession) throws Exception {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path)).header("User-Agent", UA);
-        if (withSession) b.header("Cookie", "__Host-MailPanel=" + code);
+        if (withSession) b.header("Cookie", "__Host-DaemoxCPMail=" + code);
         if (body != null) b.header("Content-Type", "application/json");
         b.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
         return client.send(b.build(), HttpResponse.BodyHandlers.ofString());

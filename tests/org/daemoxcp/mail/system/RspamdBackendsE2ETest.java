@@ -26,7 +26,7 @@ import org.daemoxcp.mail.util.Shell;
  *     clamd), configtest refusing, rspamd not reloaded: each ROLLED_BACK and the service as before; the admin's own
  *     secure_ip in local.d: LEFT;
  *  6. all three again: DONE (the VM stays as an upgraded server would be).
- *   java -De2e.vm=yes -cp "tests:freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.RspamdBackendsE2ETest
+ *   java -De2e.vm=yes -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RspamdBackendsE2ETest
  */
 public class RspamdBackendsE2ETest {
 

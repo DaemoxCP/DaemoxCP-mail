@@ -25,7 +25,7 @@ import java.util.Set;
  * Il file sta in /usr/local/etc/mail-panel/panel-secrets.properties, accanto a master.key del
  * vault. La cartella e' 700 e il file 600; le chiavi si generano al primo uso con SecureRandom.
  * Chi copia il database senza questo file non legge le email cifrate e non puo' fabbricare un
- * codice valido. I test spostano la cartella con -Dmailpanel.secrets.dir=...
+ * codice valido. I test spostano la cartella con -Ddaemoxcp.mail.secrets.dir=...
  */
 public final class PanelSecrets {
 
@@ -81,7 +81,7 @@ public final class PanelSecrets {
     public static final String RSPAMD_CONTROLLER_PASSWORD = "rspamd_controller_password";
 
     /** La cartella dei file; i test la spostano in una cartella temporanea. */
-    static Path dir = Paths.get(System.getProperty("mailpanel.secrets.dir", "/usr/local/etc/mail-panel"));
+    static Path dir = Paths.get(System.getProperty("daemoxcp.mail.secrets.dir", "/usr/local/etc/mail-panel"));
     private static final SecureRandom RANDOM = new SecureRandom();
 
     /**

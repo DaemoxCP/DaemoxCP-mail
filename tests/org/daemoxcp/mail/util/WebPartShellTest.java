@@ -17,7 +17,7 @@ import java.util.List;
  *     point).
  *
  * Usage (on the VM; it turns the check on for this JVM only):
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.util.WebPartShellTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.util.WebPartShellTest
  */
 public class WebPartShellTest {
 

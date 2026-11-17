@@ -92,7 +92,7 @@ fi
 # blocchi a un suo avvio), i due si tolgono le protezioni a vicenda e pkg si ferma a meta'. Il
 # pannello lo evita col turno: chi lavora sui pacchetti tiene un lock su PACKAGE_TURN_LOCK
 # (PackageQueue.TURN_LOCK_PATH), e dentro scrive chi e'.
-#  - Lanciato dal menu del pannello (MAIL_PANEL_PACKAGE_TURN = pid del pannello): il turno lo
+#  - Lanciato dal menu del pannello (DAEMOXCP_MAIL_PACKAGE_TURN = pid del pannello): il turno lo
 #    tiene gia' il pannello, che e' il processo padre. Non lo si crede: si controlla che il lock
 #    sia preso e che dentro ci sia scritto quel pid.
 #  - Lanciato a mano: si prende il turno rilanciandosi sotto lockf(1). Se lo tiene qualcun
@@ -112,18 +112,18 @@ turn_is_held() {
     [ $? -eq 75 ]
 }
 
-if [ -n "${MAIL_PANEL_PACKAGE_TURN:-}" ]; then
+if [ -n "${DAEMOXCP_MAIL_PACKAGE_TURN:-}" ]; then
     TURN_HOLDER=$(head -n 1 "$PACKAGE_TURN_LOCK" 2>/dev/null)
-    if [ "$MAIL_PANEL_PACKAGE_TURN" != "$PPID" ] || ! turn_is_held || [ "${TURN_HOLDER#pid $PPID,}" = "$TURN_HOLDER" ]; then
+    if [ "$DAEMOXCP_MAIL_PACKAGE_TURN" != "$PPID" ] || ! turn_is_held || [ "${TURN_HOLDER#pid $PPID,}" = "$TURN_HOLDER" ]; then
         echo "${RED}STOPPED: started as the mail panel's installation, but the panel does not hold the package turn.${NC}"
         echo "Turn lock $PACKAGE_TURN_LOCK says: ${TURN_HOLDER:-nothing}"
         echo "Nothing was stopped and nothing was changed."
         exit 1
     fi
-elif [ "${MAIL_PANEL_TURN_BY_LOCKF:-}" = "1" ]; then
+elif [ "${DAEMOXCP_MAIL_TURN_BY_LOCKF:-}" = "1" ]; then
     # Il rilancio sotto lockf: il turno lo tiene lockf, il processo padre.
     if [ "$(ps -o comm= -p "$PPID")" != "lockf" ] || ! turn_is_held; then
-        echo "${RED}STOPPED: MAIL_PANEL_TURN_BY_LOCKF is set, but this script is not running under lockf holding the package turn.${NC}"
+        echo "${RED}STOPPED: DAEMOXCP_MAIL_TURN_BY_LOCKF is set, but this script is not running under lockf holding the package turn.${NC}"
         echo "Nothing was stopped and nothing was changed."
         exit 1
     fi
@@ -140,7 +140,7 @@ else
         echo "Nothing was stopped and nothing was changed. Wait for it to finish, then run this script again."
         exit 1
     fi
-    export MAIL_PANEL_TURN_BY_LOCKF=1
+    export DAEMOXCP_MAIL_TURN_BY_LOCKF=1
     exec lockf -k -t 0 "$PACKAGE_TURN_LOCK" /bin/sh "$0" "$@"
     echo "${RED}Error: cannot start lockf.${NC}"
     exit 1
@@ -469,7 +469,7 @@ fi
 # stava in /tmp e veniva portato a 600 DOPO essere stato scritto: in mezzo c'era una finestra
 # in cui chiunque poteva leggerlo. Non si tocca la maschera globale: piu' avanti lo script
 # scrive file che devono restare leggibili da roundcube e da postfix.
-MYSQL_WORK=$(mktemp -d /var/tmp/mailpanel-mysql.XXXXXXXX) || {
+MYSQL_WORK=$(mktemp -d /var/tmp/daemoxcp-mail-mysql.XXXXXXXX) || {
     echo "${RED}Error: cannot create the temporary folder${NC}"; exit 1; }
 trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
 MYSQL_ROOT_CNF="$MYSQL_WORK/root.cnf"

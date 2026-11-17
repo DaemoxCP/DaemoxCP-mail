@@ -61,11 +61,21 @@ public final class ServiceUsers {
         Rule(String service, String regex, boolean rootNeeded) { this(service, Pattern.compile(regex), rootNeeded); }
     }
 
+    /** Il jar del pannello nella riga di comando, col nome di adesso o con uno di prima. */
+    static final String JAR = "(" + String.join("|", jarNames()) + ")[^ /]*\\.jar";
+
+    private static List<String> jarNames() {
+        List<String> n = new java.util.ArrayList<>(List.of(Product.SLUG));
+        n.addAll(LegacyNames.oldNamesOf("jarNames", Product.SLUG));
+        return n;
+    }
+
     /** Nell'ordine: vince la prima che riconosce il processo. */
     static final List<Rule> RULES = List.of(
-            // La parte web del pannello separato (PanelSeparation) gira con mailpanel: da root e' un avviso.
-            new Rule("mail-panel", "freebsd-mail-panel[^ /]*\\.jar.* --web-part( |$)", false),
-            new Rule("mail-panel", "freebsd-mail-panel[^ /]*\\.jar", true),
+            // La parte web del pannello separato (PanelSeparation) gira col suo utente: da root e' un avviso. Il jar si
+            // riconosce anche col nome di prima (sezione "jarNames"): fino al riavvio il processo lo mostra ancora.
+            new Rule(Product.SLUG, JAR + ".* --web-part( |$)", false),
+            new Rule(Product.SLUG, JAR, true),
             new Rule("fail2ban", "fail2ban-server", true),
             new Rule("nginx", "^nginx: master process", true),
             new Rule("nginx", "^nginx: ", false),
@@ -93,7 +103,7 @@ public final class ServiceUsers {
      * root serve davvero per come sono fatti. Chi lo guarda deve poter capire che non e' una svista.
      */
     static final Map<String, String> ROOT_WHY = Map.of("postfix", "postfix", "dovecot", "dovecot", "nginx", "nginx",
-            "php-fpm", "phpFpm", "fail2ban", "fail2ban", "mail-panel", "mailPanel");
+            "php-fpm", "phpFpm", "fail2ban", "fail2ban", Product.SLUG, "daemoxcpMail");
 
     /** I processi di Postfix che consegnano per conto di utenti diversi: root per come e' fatto. */
     private static final Set<String> POSTFIX_PRIVILEGED = Set.of("local", "virtual", "pipe", "spawn");
@@ -109,7 +119,7 @@ public final class ServiceUsers {
      */
     static String processName(String service, String command) {
         String c = command == null ? "" : command.trim();
-        if ("mail-panel".equals(service))
+        if (Product.SLUG.equals(service))
             return c.matches(".*--web-part( .*|$)") ? "--web-part" : c.matches(".*--web( .*|$)") ? "--web" : "java";
         if (c.startsWith("nginx: ")) return c.replaceFirst("^nginx: (\\S+).*$", "$1");
         if (c.startsWith("php-fpm: master")) return "master";
@@ -131,12 +141,12 @@ public final class ServiceUsers {
 
     /**
      * La chiave dei file di lingua per cosa fa un utente di un servizio: server.su.purpose.SERVIZIO.UTENTE, col nome del
-     * servizio come lo vogliono le chiavi (mail-panel -> mailPanel, php-fpm -> phpFpm, "php-fpm pool X" -> pool.X,
+     * servizio come lo vogliono le chiavi (daemoxcp-mail -> daemoxcpMail, php-fpm -> phpFpm, "php-fpm pool X" -> pool.X,
      * acme.sh -> acme). Pura.
      */
     static String purposeKey(String service, String user) {
         String s = switch (service) {
-            case "mail-panel" -> "mailPanel";
+            case Product.SLUG -> "daemoxcpMail";
             case "php-fpm" -> "phpFpm";
             case "acme.sh" -> "acme";
             default -> service.startsWith("php-fpm pool ") ? "pool." + service.substring("php-fpm pool ".length()) : service;
@@ -383,8 +393,8 @@ public final class ServiceUsers {
         // Il pannello non separato: la pagina lo dice, col motivo. Solo qui e non nel registro all'avvio, dove
         // l'ha gia' detto PanelSeparation.
         String notSeparated = PanelSeparation.notSeparatedReason();
-        if (notSeparated != null && f.services().containsKey("mail-panel"))
-            f.problems().add(new Problem("panelLegacy", "mail-panel", "root", notSeparated));
+        if (notSeparated != null && f.services().containsKey(Product.SLUG))
+            f.problems().add(new Problem("panelLegacy", Product.SLUG, "root", notSeparated));
         JSONArray services = new JSONArray();
         for (Service s : f.services().values()) {
             boolean warned = false;

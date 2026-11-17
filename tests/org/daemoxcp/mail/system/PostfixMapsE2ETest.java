@@ -34,7 +34,7 @@ import java.util.TreeMap;
  * It touches Postfix's configuration and puts it back as it was, and checks it: it runs only with
  * -De2e.vm=yes, as root, on FreeBSD.
  *
- *   java -De2e.vm=yes -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PostfixMapsE2ETest
+ *   java -De2e.vm=yes -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PostfixMapsE2ETest
  */
 public class PostfixMapsE2ETest {
 

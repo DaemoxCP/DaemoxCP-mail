@@ -27,7 +27,7 @@ import java.util.stream.Stream;
  *     nor style= even in the HTML the scripts build later, which check 5 does not see.
  * Check 6 reads the sources: it must be started from the project root.
  *
- * Usage: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.content.PageAssetsTest
+ * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.content.PageAssetsTest
  */
 public class PageAssetsTest {
 

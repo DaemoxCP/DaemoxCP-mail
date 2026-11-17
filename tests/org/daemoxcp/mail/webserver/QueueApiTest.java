@@ -39,7 +39,7 @@ import java.util.concurrent.Executors;
  *
  * Usage (with the test MySQL of README.md):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.QueueApiTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.QueueApiTest
  */
 public class QueueApiTest {
 
@@ -124,8 +124,8 @@ public class QueueApiTest {
         String[] login = TestSessions.open(db, "queue-test", UA);
         session = login[0];
         String csrf = login[1];
-        String it = "__Host-MailPanel=" + session + "; __Host-lang=it";
-        String en = "__Host-MailPanel=" + session + "; __Host-lang=en";
+        String it = "__Host-DaemoxCPMail=" + session + "; __Host-lang=it";
+        String en = "__Host-DaemoxCPMail=" + session + "; __Host-lang=en";
 
         Process cert = new ProcessBuilder("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                 "-subj", "/CN=localhost", "-keyout", dir.resolve("k.pem").toString(), "-out", dir.resolve("c.pem").toString())

@@ -17,7 +17,7 @@ import java.util.List;
  *     that stopped Dovecot on the VM (the imap-urlauth listener in the imap-urlauth service) written by the migration:
  *     doveconf accepts it, the restart does not, and the migration must take the file away and bring Dovecot back, with
  *     authentication, LMTP and IMAP answering and the sockets as before.
- *   java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.DovecotSocketsTest
+ *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.DovecotSocketsTest
  */
 public class DovecotSocketsTest {
 

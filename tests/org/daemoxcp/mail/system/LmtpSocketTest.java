@@ -24,7 +24,7 @@ import java.util.Map;
  *  7. a reload that takes effect a few seconds late, as Dovecot's does (reperto 240): the run waits for the listeners
  *     and ends DONE, instead of probing in the middle of the change; listeners that never come within the wait still
  *     put everything back.
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.LmtpSocketTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.LmtpSocketTest
  */
 public class LmtpSocketTest {
 

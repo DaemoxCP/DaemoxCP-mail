@@ -451,14 +451,14 @@ public class Main {
         }
 
         // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
-        //   java -jar freebsd-mail-panel-1.0.jar --create-admin <nome> <email>   il primo amministratore
-        //   java -jar freebsd-mail-panel-1.0.jar --access-code [nome]            un codice di accesso monouso
+        //   java -jar daemoxcp-mail-1.0.jar --create-admin <nome> <email>   il primo amministratore
+        //   java -jar daemoxcp-mail-1.0.jar --access-code [nome]            un codice di accesso monouso
         // Il primo amministratore non si crea dal pannello web: chi raggiungesse per primo la
         // pagina diventerebbe amministratore.
         for (int i = 0; i < args.length; i++) {
             if ("--create-admin".equals(args[i])) {
                 if (i + 2 >= args.length) {
-                    System.err.println("Usage: java -jar freebsd-mail-panel-1.0.jar --create-admin <name> <email>");
+                    System.err.println("Usage: java -jar daemoxcp-mail-1.0.jar --create-admin <name> <email>");
                     System.exit(2);
                 }
                 String notConnected = connectFromConfig();
@@ -479,7 +479,7 @@ public class Main {
                 String host = i + 1 < args.length ? args[i + 1].trim() : "";
                 Path exitFile = i + 2 < args.length ? Path.of(args[i + 2]) : null;
                 if (!org.daemoxcp.mail.system.ReinstallJob.validHostname(host)) {
-                    System.err.println("Usage: java -jar freebsd-mail-panel-1.0.jar --reinstall <mail hostname> [result file]");
+                    System.err.println("Usage: java -jar daemoxcp-mail-1.0.jar --reinstall <mail hostname> [result file]");
                     if (exitFile != null) org.daemoxcp.mail.system.ReinstallJob.writeExit(exitFile, false);
                     System.exit(2);
                 }
@@ -1014,7 +1014,7 @@ public class Main {
         // Execute the unified mail server installation script. Le password viaggiano
         // nell'ambiente e non fra gli argomenti: un argomento lo legge chiunque con "ps".
         // Senza l'attesa di un tasto alla fine: la fa installMailServer, dopo la riprotezione.
-        // MAIL_PANEL_PACKAGE_TURN dice allo script che il turno dei pacchetti lo tiene questo
+        // DAEMOXCP_MAIL_PACKAGE_TURN dice allo script che il turno dei pacchetti lo tiene questo
         // processo, suo padre: senza, lo script prenderebbe il turno da se' con lockf, lo
         // troverebbe preso da noi e si fermerebbe. Lo script non ci crede sulla parola: controlla
         // che il lock sia preso e che dentro ci sia questo pid (FullMailServerScript).
@@ -1023,7 +1023,7 @@ public class Main {
                 java.util.Map.of("MYSQL_PASSWORD", mysqlPassword,
                                  "MYSQL_ROOT_PASSWORD", mysqlRootPassword,
                                  "ROUNDCUBE_DB_PASSWORD", roundcubeDbPassword,
-                                 "MAIL_PANEL_PACKAGE_TURN", String.valueOf(ProcessHandle.current().pid())),
+                                 "DAEMOXCP_MAIL_PACKAGE_TURN", String.valueOf(ProcessHandle.current().pid())),
                 false,
                 line -> { if (line.contains("[PHASE 1/10]")) systemTouched.set(true); },
                 mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname.trim(),
@@ -1271,7 +1271,7 @@ public class Main {
                     setupRequired = !mailDatabase.hasAdminUser();
                     if (setupRequired)
                         System.out.println(ANSI_YELLOW + "No administrator yet. Create the first one from the console:\n"
-                                + "  java -jar freebsd-mail-panel-1.0.jar --create-admin <name> <email>" + ANSI_RESET);
+                                + "  java -jar daemoxcp-mail-1.0.jar --create-admin <name> <email>" + ANSI_RESET);
                     System.out.println(ANSI_GREEN + "Connected to MySQL database" + ANSI_RESET);
                 } else {
                     System.out.println(ANSI_YELLOW + "[WARNING] Could not connect to MySQL database" + ANSI_RESET);
@@ -1341,10 +1341,10 @@ public class Main {
                 }
 
                 if (server.mode() == SSLMailServer.Mode.ROOT_PART)
-                    System.out.println(ANSI_GREEN + "Mail Panel started: the web part answers on port " + port + " as "
+                    System.out.println(ANSI_GREEN + org.daemoxcp.mail.system.Product.NAME + " started: the web part answers on port " + port + " as "
                             + org.daemoxcp.mail.system.PanelSeparation.USER + ", this root part on no port" + ANSI_RESET);
                 else
-                    System.out.println(ANSI_GREEN + "Mail Panel Server started on port " + port + ANSI_RESET);
+                    System.out.println(ANSI_GREEN + org.daemoxcp.mail.system.Product.NAME + " server started on port " + port + ANSI_RESET);
                 System.out.println(ANSI_GREEN + "Open your browser: https://" + host + ":" + port + ANSI_RESET);
                 System.out.println();
                 System.out.println("Press ENTER to stop the server.");
@@ -1644,7 +1644,7 @@ public class Main {
     }
 
     /**
-     * java -jar freebsd-mail-panel-1.0.jar --create-admin <nome> <email>: il primo amministratore,
+     * java -jar daemoxcp-mail-1.0.jar --create-admin <nome> <email>: il primo amministratore,
      * superadmin, senza password. Solo se non ce n'e' nessuno attivo: gli altri si aggiungono
      * dalla pagina Amministratori, e chi ha perso l'accesso usa --access-code. Stampa un codice
      * di accesso monouso, perche' l'email del server potrebbe non partire ancora (DNS da fare).
@@ -1816,7 +1816,7 @@ public class Main {
     }
 
     /**
-     * java -jar freebsd-mail-panel-1.0.jar --access-code [nome]: un codice monouso di otto cifre
+     * java -jar daemoxcp-mail-1.0.jar --access-code [nome]: un codice monouso di otto cifre
      * per entrare senza email ne' passkey (primo accesso, email persa). Lo genera solo chi ha una
      * shell sul server; vale 15 minuti, una volta. Restituisce il codice di uscita del processo.
      */
@@ -1837,6 +1837,6 @@ public class Main {
                 && (a.hasEmail() || !org.daemoxcp.mail.security.AuthStore.passkeysOf(a.id()).isEmpty()));
         if (!someoneCanLogIn)
             System.out.println(ANSI_YELLOW + "No administrator has a login email or a passkey yet. Get a one-time code with:\n"
-                    + "  java -jar freebsd-mail-panel-1.0.jar --access-code" + ANSI_RESET);
+                    + "  java -jar daemoxcp-mail-1.0.jar --access-code" + ANSI_RESET);
     }
 }

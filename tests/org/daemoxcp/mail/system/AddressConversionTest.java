@@ -94,10 +94,10 @@ public class AddressConversionTest {
         Path root = Files.createTempDirectory("transform-test");
         // The panel's secrets and the vault's keys in the test folder, never the machine's: the mailboxes this test
         // creates encrypt their password copy, and as root the vault would write its keys in /usr/local/etc/mail-panel.
-        if (System.getProperty("mailpanel.secrets.dir") == null)
-            System.setProperty("mailpanel.secrets.dir", root.resolve("secrets").toString());
-        if (System.getProperty("mailpanel.vault.key") == null)
-            System.setProperty("mailpanel.vault.key", root.resolve("master.key").toString());
+        if (System.getProperty("daemoxcp.mail.secrets.dir") == null)
+            System.setProperty("daemoxcp.mail.secrets.dir", root.resolve("secrets").toString());
+        if (System.getProperty("daemoxcp.mail.vault.key") == null)
+            System.setProperty("daemoxcp.mail.vault.key", root.resolve("master.key").toString());
         try {
             AddressTransform.vmail = root.resolve("vmail");
             AddressTransform.sieve = root.resolve("sieve");

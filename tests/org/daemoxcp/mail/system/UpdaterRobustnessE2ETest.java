@@ -43,7 +43,7 @@ import java.util.TreeSet;
  * environments, turns off the real repositories for the duration, unlocks and locks again. Only on
  * a test machine, as root, with
  * -De2e.vm=yes:
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.UpdaterRobustnessE2ETest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.UpdaterRobustnessE2ETest
  * With -Dmeasure=m1,m4 only those. At the end it checks that packages, protections, repositories
  * and boot environments are those of before.
  */

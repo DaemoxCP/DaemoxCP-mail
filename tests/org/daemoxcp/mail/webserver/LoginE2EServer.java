@@ -25,8 +25,8 @@ import java.util.concurrent.Executors;
  *
  * Usage (from an empty working directory with the jar inside; prints READY on stderr):
  *   java -Dmysql.port=... -Dmysql.user=... -Dmysql.password=... -Dmysql.database=... \
- *        -Dmailpanel.secrets.dir=$D/secrets -Dmailpanel.vault.key=$D/master.key \
- *        -cp "tests:$D/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.LoginE2EServer PORT
+ *        -Ddaemoxcp.mail.secrets.dir=$D/secrets -Ddaemoxcp.mail.vault.key=$D/master.key \
+ *        -cp "tests:$D/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.LoginE2EServer PORT
  */
 public class LoginE2EServer {
 

@@ -33,8 +33,8 @@ import java.util.regex.Pattern;
  *    mailer.conf is set aside, dma's queue is reported.
  *
  * It runs on the VM, where postconf and sysrc are:
- *   javac -cp &lt;dir&gt;/freebsd-mail-panel-1.0.jar -d tests tests/org/daemoxcp/mail/scripts/LocalMtaTest.java
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.scripts.LocalMtaTest
+ *   javac -cp &lt;dir&gt;/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/scripts/LocalMtaTest.java
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.LocalMtaTest
  */
 public class LocalMtaTest {
 

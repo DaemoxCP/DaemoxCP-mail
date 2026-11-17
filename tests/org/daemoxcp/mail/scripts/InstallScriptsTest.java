@@ -21,7 +21,7 @@ import java.util.List;
  *     it goes through the start and stops on the usage) rewrites the old script and sets aside the retired ones.
  * Everything in a temporary folder as the panel's folder.
  *
- * Usage: java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.scripts.InstallScriptsTest
+ * Usage: java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.InstallScriptsTest
  */
 public class InstallScriptsTest {
 
@@ -100,7 +100,7 @@ public class InstallScriptsTest {
         System.out.println("\n== 4. The fingerprint and the check after the #! ==");
         String s = InstallScripts.stamped("#!/bin/sh\necho x\n");
         check("the #! line stays the first", s.startsWith("#!/bin/sh\n# --- Written by the mail panel"));
-        check("the fingerprint is the running jar's", s.contains("MAIL_PANEL_WRITTEN_BY_JAR=\"" + InstallScripts.jarSha256() + "\"")
+        check("the fingerprint is the running jar's", s.contains("DAEMOXCP_MAIL_WRITTEN_BY_JAR=\"" + InstallScripts.jarSha256() + "\"")
                 && InstallScripts.jarSha256().matches("[0-9a-f]{64}"));
         check("an indented #! goes back to the start of the file", Files.readString(tz).startsWith("#!/bin/sh\n# --- Written by the mail panel"));
         System.exit(failed == 0 ? 0 : 1);
@@ -115,7 +115,7 @@ public class InstallScriptsTest {
         Files.writeString(dir.resolve("install_mail_server.sh"), "#!/bin/sh\nexit 42\n");
         Files.writeString(dir.resolve("install_dovecot.sh"), "#!/bin/sh\n# old\n");
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-        Process p = new ProcessBuilder(java, "-Dmailpanel.secrets.dir=" + d.resolve("secrets"), "-cp",
+        Process p = new ProcessBuilder(java, "-Ddaemoxcp.mail.secrets.dir=" + d.resolve("secrets"), "-cp",
                 absolute(System.getProperty("java.class.path")), "org.daemoxcp.mail.Main", "--create-admin")
                 .directory(panel.toFile()).redirectErrorStream(true)
                 .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null"))).start();

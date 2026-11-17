@@ -16,7 +16,7 @@ import java.util.Map;
  * The starting case is the real one of late October 2026: postfix-mysql 3.11.7_3,1 moves from lmdb
  * to lmdb0, which installs the same files, and pkg removes lmdb.
  *
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PackageReplacementTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackageReplacementTest
  */
 public class PackageReplacementTest {
 

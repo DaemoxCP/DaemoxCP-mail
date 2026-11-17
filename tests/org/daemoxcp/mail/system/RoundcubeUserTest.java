@@ -36,7 +36,7 @@ import java.util.stream.Stream;
  *
  * <p>It touches real owners: it must be run as root on the FreeBSD VM, where www and wheel exist,
  * and it creates the roundcube user if missing (like the real migration).
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.RoundcubeUserTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RoundcubeUserTest
  */
 public class RoundcubeUserTest {
 

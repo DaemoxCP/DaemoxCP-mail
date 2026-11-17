@@ -25,7 +25,7 @@ import java.nio.file.Path;
  *
  * Usage (on the VM):
  *   java -De2e.vm=yes -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=... \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.security.RootDistrustsDataTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.RootDistrustsDataTest
  */
 public class RootDistrustsDataTest {
 
@@ -85,8 +85,8 @@ public class RootDistrustsDataTest {
             System.out.println("\n  (parts 4 and 5 skipped: they need the test MySQL, -Dmysql.port=...)");
         } else {
             Path dir = Files.createTempDirectory("root-distrust");
-            System.setProperty("mailpanel.secrets.dir", dir.resolve("secrets").toString());
-            System.setProperty("mailpanel.vault.key", dir.resolve("master.key").toString());
+            System.setProperty("daemoxcp.mail.secrets.dir", dir.resolve("secrets").toString());
+            System.setProperty("daemoxcp.mail.vault.key", dir.resolve("master.key").toString());
             MailDatabase db = new MailDatabase();
             db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));
             db.setConnection("127.0.0.1", Integer.parseInt(port), System.getProperty("mysql.database", "mailpanel_test"));

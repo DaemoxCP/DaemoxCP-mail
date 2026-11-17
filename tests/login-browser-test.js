@@ -21,7 +21,7 @@
 // machine's firewall lets the panel's 2096 through).
 //
 // Usage (from the project root, after mvn package, with the test MySQL of README.md):
-//   D=$(mktemp -d) && cp target/freebsd-mail-panel-1.0.jar $D/
+//   D=$(mktemp -d) && cp target/daemoxcp-mail-1.0.jar $D/
 //   MYSQL="-Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test" \
 //     NODE_PATH=$(npm root -g) node tests/login-browser-test.js $D [screenshots-dir]
 const { chromium } = require('playwright');
@@ -45,9 +45,9 @@ const CLIENT_IP_OF = () => REMOTE ? remote('echo "${SSH_CLIENT%% *}"').trim() : 
 let CLIENT_IP = '127.0.0.1';
 function remote(cmd, opts) { return execFileSync('ssh', SSH.concat([REMOTE, cmd]), Object.assign({ encoding: 'utf8' }, opts || {})); }
 const BASE = 'https://panel.localhost:' + PORT;
-const JAR = path.join(dir, 'freebsd-mail-panel-1.0.jar');
+const JAR = path.join(dir, 'daemoxcp-mail-1.0.jar');
 const PROPS = (process.env.MYSQL || '').split(' ').filter(Boolean)
-    .concat(['-Dmailpanel.secrets.dir=' + path.join(dir, 'secrets'), '-Dmailpanel.vault.key=' + path.join(dir, 'master.key')]);
+    .concat(['-Ddaemoxcp.mail.secrets.dir=' + path.join(dir, 'secrets'), '-Ddaemoxcp.mail.vault.key=' + path.join(dir, 'master.key')]);
 let failures = 0;
 function check(what, ok) {
     console.log((ok ? '  OK     ' : '  FAILED ') + what);
@@ -161,7 +161,7 @@ async function shot(page, name) {
         await Promise.all([page.waitForURL('**/account?setup=passkey'), page.click('#btnConsole')]);
         check('the right code: signed in, sent to Account to create a passkey', new URL(page.url()).pathname === '/account');
         // The cookie as the server sets it at sign-in (reperto 184): Strict, and a browser-session cookie.
-        const sessionCookie = (await context.cookies()).find(c => c.name === '__Host-MailPanel');
+        const sessionCookie = (await context.cookies()).find(c => c.name === '__Host-DaemoxCPMail');
         check('the session cookie the server set: SameSite=Strict, HttpOnly, Secure, gone when the browser closes ('
             + (sessionCookie ? sessionCookie.sameSite + ' ' + sessionCookie.expires : 'none') + ')', !!sessionCookie
             && sessionCookie.sameSite === 'Strict' && sessionCookie.httpOnly && sessionCookie.secure && sessionCookie.expires === -1);

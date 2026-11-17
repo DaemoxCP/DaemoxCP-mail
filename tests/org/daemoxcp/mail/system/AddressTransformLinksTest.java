@@ -41,7 +41,7 @@ import java.util.stream.Stream;
  *     /var/mail gets the sticky bit for the duration if it does not have it (as MailSpoolSticky does at boot: RootOnlyPath
  *     wants it), and goes back as it was: the VM is shared.
  *
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.AddressTransformLinksTest [database]
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.AddressTransformLinksTest [database]
  */
 public class AddressTransformLinksTest {
 

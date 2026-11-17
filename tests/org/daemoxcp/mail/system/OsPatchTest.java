@@ -14,7 +14,7 @@ import java.time.Instant;
  *     installed after the last boot), none (and what was done before the last boot).
  *  4. installConfig: the system configuration with CreateBootEnv no, exactly once.
  *
- * Usage: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.OsPatchTest
+ * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.OsPatchTest
  */
 public class OsPatchTest {
 

@@ -489,7 +489,7 @@ public class SSLMailServer {
      * dal corpo JSON, che si rimette al suo posto per il gestore.
      */
     /** Dove accessAllowed lascia l'azione della richiesta che ha letto (dal corpo, per una POST). */
-    private static final String ACTION_ATTRIBUTE = "mailpanel.action";
+    private static final String ACTION_ATTRIBUTE = "daemoxcp.mail.action";
 
     /**
      * Un'operazione pericolosa senza una conferma recente (Access.needsConfirmation): vero, e la risposta e' gia'
@@ -651,7 +651,7 @@ public class SSLMailServer {
     /**
      * Le rotte che si usano PRIMA di entrare: non c'e' ancora una sessione a cui legare il token.
      * Il token lo controllano da se': quello della pagina, legato al browser dal cookie
-     * __Host-MailPanelPre (/api/language anche quello della sessione).
+     * __Host-DaemoxCPMailPre (/api/language anche quello della sessione).
      */
     private static final java.util.Set<String> CSRF_EXEMPT = java.util.Set.of(
         "/api/login", "/api/language",
@@ -1029,7 +1029,7 @@ public class SSLMailServer {
                 if (closed > 0) LOGGER.info("Closed " + closed + " panel session(s) of the previous start: every administrator signs in again");
             }
             initializeManagers();
-            LOGGER.info("Mail Panel root part ready: no network port, the web part forwards the API on "
+            LOGGER.info(org.daemoxcp.mail.system.Product.NAME + " root part ready: no network port, the web part forwards the API on "
                     + org.daemoxcp.mail.system.PanelSeparation.socket());
             return;
         }
@@ -1046,12 +1046,12 @@ public class SSLMailServer {
         if (mode == Mode.WEB_PART) {
             // I gestori della web che lo usano (il controllo delle blacklist): MySQL e rete, niente root.
             if (Main.mailDatabase != null && Main.mysqlAvailable) this.dnsGenerator = new DnsRecordsGenerator(Main.mailDatabase);
-            LOGGER.info("Mail Panel web part started on port " + port + " as " + System.getProperty("user.name")
+            LOGGER.info(org.daemoxcp.mail.system.Product.NAME + " web part started on port " + port + " as " + System.getProperty("user.name")
                     + ": the signed-in API go to the root part");
             return;
         }
         initializeManagers();
-        LOGGER.info("Mail Panel server started on port " + port + " (virtual threads enabled)");
+        LOGGER.info(org.daemoxcp.mail.system.Product.NAME + " server started on port " + port + " (virtual threads enabled)");
     }
 
     public Mode mode() { return mode; }
@@ -1068,7 +1068,7 @@ public class SSLMailServer {
     }
 
     public void stop() {
-        LOGGER.info("Stopping Mail Panel server...");
+        LOGGER.info("Stopping " + org.daemoxcp.mail.system.Product.NAME + " server...");
 
         // Stop ACME auto-renewal scheduler first
         if (acmeManager != null) {
@@ -1086,7 +1086,7 @@ public class SSLMailServer {
             // Ignore
         }
 
-        LOGGER.info("Mail Panel server stopped");
+        LOGGER.info(org.daemoxcp.mail.system.Product.NAME + " server stopped");
 
         // Force exit after a short delay if still hanging
         new Thread(() -> {
@@ -1257,7 +1257,7 @@ public class SSLMailServer {
     private static final ThreadLocal<Object[]> CURRENT_SESSION = new ThreadLocal<>();
 
     /**
-     * La sessione valida di questa richiesta (cookie __Host-MailPanel, nel database). La si cerca
+     * La sessione valida di questa richiesta (cookie __Host-DaemoxCPMail, nel database). La si cerca
      * una volta: filtro CSRF, gestore e pagina la chiedono tutti. Il filtro di ogni rotta la
      * dimentica a fine richiesta.
      */
@@ -1360,7 +1360,7 @@ public class SSLMailServer {
 
     /**
      * La parte root: l'accesso (POST /api/login), che la web le passa senza amministratore (A). La web ha gia'
-     * controllato Host e il token CSRF della pagina di accesso, che e' legato al suo cookie __Host-MailPanelPre:
+     * controllato Host e il token CSRF della pagina di accesso, che e' legato al suo cookie __Host-DaemoxCPMailPre:
      * quel cookie qui non arriva. Il resto lo decide la root: passkey e codici con le sfide nella sua memoria,
      * la sessione nel database, il cookie nella risposta, che la web lascia passare solo da qui.
      */
@@ -1564,7 +1564,7 @@ public class SSLMailServer {
 
     /**
      * La parte web: l'accesso (POST /api/login) lo decide la root (A). Qui solo quello che la root non puo'
-     * vedere: il token CSRF della pagina di accesso, legato al cookie __Host-MailPanelPre di questo browser.
+     * vedere: il token CSRF della pagina di accesso, legato al cookie __Host-DaemoxCPMailPre di questo browser.
      * Poi la richiesta va alla root senza amministratore, e dalla sua risposta passa un solo cookie, quello
      * della sessione che la root ha creato.
      */
@@ -1717,7 +1717,7 @@ public class SSLMailServer {
 
     /**
      * Il token CSRF delle pagine di prima del login (accesso, installazione): l'HMAC del cookie
-     * __Host-MailPanelPre, che si crea qui se manca. Niente sul server: prima ogni visita alla
+     * __Host-DaemoxCPMailPre, che si crea qui se manca. Niente sul server: prima ogni visita alla
      * pagina di accesso apriva una sessione in memoria.
      */
     private String preLoginToken(HttpExchange exchange) {
@@ -2015,8 +2015,10 @@ public class SSLMailServer {
         // r14: all'uscita il browser dimentica anche cache e dati delle pagine del pannello. Non
         // "cookies": varrebbe per tutto il dominio, anche per la webmail sui nomi vicini.
         exchange.getResponseHeaders().add("Clear-Site-Data", "\"cache\", \"storage\"");
-        // Il cookie col nome di prima di __Host-, se un browser lo ha ancora
-        exchange.getResponseHeaders().add("Set-Cookie", "MailPanel=; Path=/; HttpOnly; Secure; Max-Age=0");
+        // I cookie coi nomi di prima (prima di __Host-, poi del nome vecchio del pannello), se un browser li ha ancora:
+        // i nomi stanno nel file di dati, sezione "sessionCookies"
+        for (String[] old : org.daemoxcp.mail.system.LegacyNames.pairs("sessionCookies"))
+            exchange.getResponseHeaders().add("Set-Cookie", old[0] + "=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0");
         sendJsonResponse(exchange, new JSONObject().put("success", true));
     }
 

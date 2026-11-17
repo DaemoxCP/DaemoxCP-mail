@@ -33,7 +33,7 @@ import java.util.Set;
  *
  * The panel's texts are read in English (I18n.setCurrent): outside a request it writes Italian.
  *
- * Uso: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.SoftwareVersionsTest
+ * Uso: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SoftwareVersionsTest
  * With a test MySQL it also reads the version from the real server (reads only):
  *   -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test
  */

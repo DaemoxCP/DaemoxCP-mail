@@ -198,7 +198,7 @@ public final class PanelMarker {
     static void replaceKeeping(Path p, String content) throws IOException {
         // Il temporaneo comincia con un punto e non finisce in .conf: ne' nginx ne' fail2ban lo
         // leggerebbero, se restasse li'.
-        Path tmp = p.resolveSibling("." + p.getFileName() + ".mailpanel.tmp");
+        Path tmp = p.resolveSibling("." + p.getFileName() + ".daemoxcp-mail.tmp");
         Files.deleteIfExists(tmp);
         try {
             Files.writeString(tmp, content, StandardCharsets.UTF_8);

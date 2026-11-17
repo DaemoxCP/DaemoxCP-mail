@@ -50,7 +50,7 @@ public final class DovecotAuthWorker {
     static final Set<String> NEED_ROOT = Set.of("pam", "passwd", "shadow", "bsdauth", "checkpassword", "vpopmail");
 
     /** Un indirizzo che non esiste: la ricerca passa da auth-worker e da MySQL senza trovare nessuno. */
-    static final String PROBE = "mailpanel-auth-probe@invalid";
+    static final String PROBE = "daemoxcp-mail-auth-probe@invalid";
 
     /** Uscite di `doveadm auth lookup`: trovato, oppure l'utente non c'e' (EX_NOUSER). Il resto e' un guasto. */
     static final Set<Integer> LOOKUP_OK = Set.of(0, 67);

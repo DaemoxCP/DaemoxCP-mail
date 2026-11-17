@@ -103,7 +103,7 @@ public final class SyslogNetwork {
 
     /** Nessuna porta di syslogd, e un messaggio locale che arriva. */
     static String verify() throws Exception {
-        String probe = "mailpanel syslog probe " + UUID.randomUUID();
+        String probe = "daemoxcp-mail syslog probe " + UUID.randomUUID();
         for (int i = 0; i < 10; i++) {
             Thread.sleep(500);
             boolean open = false;
@@ -112,7 +112,7 @@ public final class SyslogNetwork {
                 if (f.length >= 2 && f[1].startsWith("syslogd")) open = true;
             }
             if (open) { if (i == 9) return "syslogd still has a network socket"; continue; }
-            Shell.run(Duration.ofSeconds(10), "logger", "-p", "user.notice", "-t", "mailpanel", probe);
+            Shell.run(Duration.ofSeconds(10), "logger", "-p", "user.notice", "-t", "daemoxcp-mail", probe);
             for (int j = 0; j < 10; j++) {
                 Thread.sleep(500);
                 if (Shell.run(Duration.ofSeconds(10), "tail", "-n", "200", MESSAGES).output().contains(probe)) return null;

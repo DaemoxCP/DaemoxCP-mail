@@ -43,7 +43,7 @@ import java.util.stream.Stream;
  *
  * <p>It touches real owners and needs doveadm: run it as root on the FreeBSD VM with the mail panel installed (group
  * dovecot).
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.DovecotMasterUserTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.DovecotMasterUserTest
  */
 public class DovecotMasterUserTest {
 

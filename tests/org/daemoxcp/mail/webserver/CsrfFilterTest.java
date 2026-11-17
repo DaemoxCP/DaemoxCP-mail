@@ -32,7 +32,7 @@ import java.util.concurrent.Executors;
  *
  * Usage (with the test MySQL of README.md):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.CsrfFilterTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.CsrfFilterTest
  */
 public class CsrfFilterTest {
 
@@ -94,7 +94,7 @@ public class CsrfFilterTest {
         String session = login[0];
         String csrf = login[1];
         AuthHandlers.codeRequestMinMs = 50;
-        String cookie = "__Host-MailPanel=" + session + "; __Host-lang=en";
+        String cookie = "__Host-DaemoxCPMail=" + session + "; __Host-lang=en";
 
         Process cert = new ProcessBuilder("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                 "-subj", "/CN=localhost", "-keyout", dir.resolve("k.pem").toString(), "-out", dir.resolve("c.pem").toString())
@@ -146,7 +146,7 @@ public class CsrfFilterTest {
             // The login route checks the token of the login page itself, tied to the pre-login cookie.
             String pre = "p".repeat(43);
             HttpResponse<String> codeRequest = send("POST", "/api/login", "{\"action\":\"code_request\",\"email\":\"nobody@example.test\",\"csrf_token\":\""
-                    + WebSessions.preLoginCsrf(pre) + "\"}", "__Host-MailPanelPre=" + pre + "; __Host-lang=en", null);
+                    + WebSessions.preLoginCsrf(pre) + "\"}", "__Host-DaemoxCPMailPre=" + pre + "; __Host-lang=en", null);
             check("a route used before logging in is not blocked by the filter (" + codeRequest.statusCode() + ")", codeRequest.statusCode() == 200);
             Thread.sleep(300);
             int after = Files.exists(audit) ? Files.readString(audit).split("CSRF_FAILURE", -1).length - 1 : 0;

@@ -28,7 +28,7 @@ import java.util.stream.Stream;
  *     stays; a script sievec cannot read, a folder others can write and a link are not compiled and nothing is
  *     installed; validate() says the same as root's sievec on three texts; no working folder is left behind.
  *
- *   java [-De2e.vm=yes] -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.SieveCompilerTest
+ *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveCompilerTest
  */
 public class SieveCompilerTest {
 

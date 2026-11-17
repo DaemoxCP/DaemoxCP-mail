@@ -25,7 +25,7 @@ import java.util.List;
  *    the mail stays up.
  * Then everything put back: the current boot environment again for the next start, the way back
  * removed, the test mailbox removed, mail on again. ONLY on a test clone, -De2e.vm=yes, root.
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.ReinstallReturnE2ETest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ReinstallReturnE2ETest
  */
 public class ReinstallReturnE2ETest {
 

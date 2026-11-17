@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
  *  - a SUCCESSFUL sign-in line makes nobody be blocked.
  *
  * It runs on the VM, where fail2ban is:
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.security.Fail2banFilterTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.Fail2banFilterTest
  */
 public class Fail2banFilterTest {
 

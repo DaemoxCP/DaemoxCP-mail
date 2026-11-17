@@ -38,7 +38,7 @@ import java.util.stream.Stream;
  *
  * <p>Usage (on the VM, as root):
  * <pre>
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.SieveRulesOwnerTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveRulesOwnerTest
  * </pre>
  */
 public class SieveRulesOwnerTest {

@@ -154,12 +154,12 @@ public final class ClamdSocket {
 
     static String eicarMessage() {
         long id = RANDOM.nextLong() & Long.MAX_VALUE;
-        return "From: probe@mailpanel.invalid\nTo: probe@mailpanel.invalid\nSubject: mailpanel antivirus probe\n"
-                + "Message-ID: <clamd-probe-" + id + "@mailpanel.invalid>\nMIME-Version: 1.0\n"
-                + "Content-Type: multipart/mixed; boundary=\"mailpanel-probe\"\n\n"
-                + "--mailpanel-probe\nContent-Type: text/plain\n\nThis message only checks that rspamd reaches clamd.\n"
-                + "--mailpanel-probe\nContent-Type: application/octet-stream\nContent-Disposition: attachment; filename=\"probe.com\"\n\n"
-                + eicar() + "\n--mailpanel-probe--\n";
+        return "From: probe@daemoxcp-mail.invalid\nTo: probe@daemoxcp-mail.invalid\nSubject: daemoxcp-mail antivirus probe\n"
+                + "Message-ID: <clamd-probe-" + id + "@daemoxcp-mail.invalid>\nMIME-Version: 1.0\n"
+                + "Content-Type: multipart/mixed; boundary=\"daemoxcp-mail-probe\"\n\n"
+                + "--daemoxcp-mail-probe\nContent-Type: text/plain\n\nThis message only checks that rspamd reaches clamd.\n"
+                + "--daemoxcp-mail-probe\nContent-Type: application/octet-stream\nContent-Disposition: attachment; filename=\"probe.com\"\n\n"
+                + eicar() + "\n--daemoxcp-mail-probe--\n";
     }
 
     static Services real() {

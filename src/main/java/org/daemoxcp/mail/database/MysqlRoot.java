@@ -47,11 +47,11 @@ public final class MysqlRoot {
     private static final Logger LOGGER = Logger.getLogger(MysqlRoot.class.getName());
 
     /** Il socket di MySQL; vuoto = quello predefinito del client. Le prove lo cambiano. */
-    static String socket = System.getProperty("mailpanel.mysql.socket", "");
+    static String socket = System.getProperty("daemoxcp.mail.mysql.socket", "");
     /** La porta TCP su 127.0.0.1, per controllare che root non entri senza password nemmeno da li'. */
-    static String port = System.getProperty("mailpanel.mysql.port", "3306");
+    static String port = System.getProperty("daemoxcp.mail.mysql.port", "3306");
     /** Dove nascono le cartelle temporanee dei comandi. */
-    static String workDir = System.getProperty("mailpanel.mysql.workdir", "/var/tmp");
+    static String workDir = System.getProperty("daemoxcp.mail.mysql.workdir", "/var/tmp");
 
     private static final Pattern HOST = Pattern.compile("[A-Za-z0-9._:%-]{1,255}");
     private static final long TIMEOUT_SECONDS = 30;

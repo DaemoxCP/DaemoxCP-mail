@@ -33,8 +33,8 @@ public final class RspamdUser {
     static final List<String> PORTS = List.of("127.0.0.1:11332", "127.0.0.1:11333", "127.0.0.1:11334");
 
     /** Un messaggio qualunque da far analizzare: deve tornare un'azione, qualunque sia. */
-    static final String PROBE = "From: probe@mailpanel.invalid\nTo: probe@mailpanel.invalid\nSubject: mailpanel rspamd probe\n"
-            + "Message-ID: <rspamd-probe@mailpanel.invalid>\n\nThis message only checks that rspamd answers.\n";
+    static final String PROBE = "From: probe@daemoxcp-mail.invalid\nTo: probe@daemoxcp-mail.invalid\nSubject: daemoxcp-mail rspamd probe\n"
+            + "Message-ID: <rspamd-probe@daemoxcp-mail.invalid>\n\nThis message only checks that rspamd answers.\n";
 
     private RspamdUser() {}
 

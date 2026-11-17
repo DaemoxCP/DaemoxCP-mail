@@ -26,7 +26,7 @@ import java.util.stream.Stream;
  * it, says which user it runs as, which HOME it sees and which variables it gets; then real acme.sh
  * (--version). The acme user is needed, that is the security/acme.sh package: without it, that part
  * is skipped saying so. It must be run as root on the FreeBSD VM.
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.security.AcmeUserTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.AcmeUserTest
  */
 public class AcmeUserTest {
 

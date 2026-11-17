@@ -11,7 +11,7 @@ package org.daemoxcp.mail.system;
  * The real switch runs at the panel's start and from Settings; on the VM it is tried through the panel
  * (ports 110 and 995 open and closed, also from outside).
  *
- * Usage: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.Pop3Test
+ * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.Pop3Test
  */
 public class Pop3Test {
 

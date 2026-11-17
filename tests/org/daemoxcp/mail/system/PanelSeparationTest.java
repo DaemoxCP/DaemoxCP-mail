@@ -21,7 +21,7 @@ import java.util.Set;
  *     removed after.
  *
  * Usage (on the VM):
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PanelSeparationTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelSeparationTest
  */
 public class PanelSeparationTest {
 
@@ -62,7 +62,7 @@ public class PanelSeparationTest {
         }
 
         System.out.println("\n== 2. The daemon(8) line ==");
-        List<String> cmd = PanelSeparation.command("/usr/local/openjdk25/bin/java", "/home/panel/freebsd-mail-panel-1.0.jar");
+        List<String> cmd = PanelSeparation.command("/usr/local/openjdk25/bin/java", "/home/panel/daemoxcp-mail-1.0.jar");
         String line = String.join(" ", cmd);
         check("daemon runs the web part as mailpanel (" + line + ")", cmd.get(0).equals("/usr/sbin/daemon")
                 && line.contains(" -u mailpanel ") && line.contains(" -r ") && line.contains(" -H "));
@@ -70,8 +70,8 @@ public class PanelSeparationTest {
                 && line.contains(" -p " + PanelSeparation.webPid()) && line.contains(" -o " + PanelSeparation.webLog));
         check("its title is the one stop() looks for", line.contains(" -t " + PanelSeparation.TITLE + " "));
         check("--web-part last, after the jar", cmd.get(cmd.size() - 1).equals("--web-part")
-                && cmd.get(cmd.size() - 2).equals("/home/panel/freebsd-mail-panel-1.0.jar") && cmd.get(cmd.size() - 3).equals("-jar"));
-        check("the switch that turns the separation off is never passed on", cmd.stream().noneMatch(a -> a.startsWith("-Dmailpanel.separation")));
+                && cmd.get(cmd.size() - 2).equals("/home/panel/daemoxcp-mail-1.0.jar") && cmd.get(cmd.size() - 3).equals("-jar"));
+        check("the switch that turns the separation off is never passed on", cmd.stream().noneMatch(a -> a.startsWith("-Ddaemoxcp.mail.separation")));
 
         if ("yes".equals(System.getProperty("e2e.vm")) && "root".equals(System.getProperty("user.name"))) {
             System.out.println("\n== 3. A folder opened to the web part, as root ==");

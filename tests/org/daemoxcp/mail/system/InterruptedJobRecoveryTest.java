@@ -29,7 +29,7 @@ import java.util.TreeMap;
  *     restart by design; otherwise it takes the turn, completes and removes the trace.
  *
  * Usage:
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.InterruptedJobRecoveryTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InterruptedJobRecoveryTest
  */
 public class InterruptedJobRecoveryTest {
 

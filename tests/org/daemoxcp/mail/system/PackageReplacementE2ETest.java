@@ -34,7 +34,7 @@ import java.util.TreeSet;
  * that the plan touches only the fake packages. At the end the machine is as it was, and it is
  * checked. It touches the system: it runs only with -De2e.vm=yes, as root, on FreeBSD.
  *
- *   java -De2e.vm=yes -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PackageReplacementE2ETest
+ *   java -De2e.vm=yes -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackageReplacementE2ETest
  */
 public class PackageReplacementE2ETest {
 

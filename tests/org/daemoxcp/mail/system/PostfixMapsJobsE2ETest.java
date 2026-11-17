@@ -45,7 +45,7 @@ import java.util.TreeSet;
  * touches the system: it runs only with -De2e.vm=yes, as root, on FreeBSD.
  *
  *   env LD_LIBRARY_PATH=/usr/local/lib/e2e-maps-shadow java -De2e.vm=yes \
- *       -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PostfixMapsJobsE2ETest
+ *       -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PostfixMapsJobsE2ETest
  */
 public class PostfixMapsJobsE2ETest {
 

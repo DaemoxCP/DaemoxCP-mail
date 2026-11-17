@@ -9,8 +9,8 @@
 // presets come in Italian, as the real server sends them, and the page must show them in English.
 //
 // Usage (from the project root, after mvn package):
-//   D=$(mktemp -d) && javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java \
-//     && java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.content.PageGenerator $D >/dev/null
+//   D=$(mktemp -d) && javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java \
+//     && java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.content.PageGenerator $D >/dev/null
 //   NODE_PATH=$(npm root -g) node tests/english-pages-browser-test.js $D [screenshot-folder]
 const { chromium } = require('playwright');
 const fs = require('fs');

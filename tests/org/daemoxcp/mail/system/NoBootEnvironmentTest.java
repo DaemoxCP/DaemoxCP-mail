@@ -19,7 +19,7 @@ import java.util.List;
  *  - after the installation nothing is touched;
  *  - going back: no way back, and any name is refused;
  *  - the boot environments card says there are none.
- * Usage: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.NoBootEnvironmentTest
+ * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.NoBootEnvironmentTest
  */
 public class NoBootEnvironmentTest {
 

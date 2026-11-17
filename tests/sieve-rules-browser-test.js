@@ -78,7 +78,7 @@ async function menuOf(page, address, item) {
     const browser = await chromium.launch({ executablePath: E.CHROMIUM || '/opt/pw-browsers/chromium',
         args: ['--host-resolver-rules=MAP ' + url.hostname + ' ' + (E.MAP || '127.0.0.1')] });
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, ignoreHTTPSErrors: true, userAgent: 'SieveRulesE2EServer' });
-    await ctx.addCookies([{ name: '__Host-MailPanel', value: E.SESSION, url: E.REMOTE, secure: true, httpOnly: true, sameSite: 'Strict' },
+    await ctx.addCookies([{ name: '__Host-DaemoxCPMail', value: E.SESSION, url: E.REMOTE, secure: true, httpOnly: true, sameSite: 'Strict' },
                           { name: '__Host-lang', value: 'it', url: E.REMOTE, secure: true, sameSite: 'Strict' }]);
     const page = await ctx.newPage();
     const errorList = [];

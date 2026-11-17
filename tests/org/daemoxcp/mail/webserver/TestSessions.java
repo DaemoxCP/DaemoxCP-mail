@@ -9,7 +9,7 @@ import java.nio.file.Files;
 /**
  * A session like the login one, for the tests that drive the real server: an administrator in the
  * test MySQL and a session in panel_sessions. The panel keys go to a temporary folder unless
- * -Dmailpanel.secrets.dir says where.
+ * -Ddaemoxcp.mail.secrets.dir says where.
  */
 final class TestSessions {
 
@@ -17,8 +17,8 @@ final class TestSessions {
 
     /** The login tables ready (schema and migration) for the database the test already connected. */
     static void prepare(MailDatabase db) throws Exception {
-        if (System.getProperty("mailpanel.secrets.dir") == null)
-            System.setProperty("mailpanel.secrets.dir", Files.createTempDirectory("mailpanel-secrets").toString());
+        if (System.getProperty("daemoxcp.mail.secrets.dir") == null)
+            System.setProperty("daemoxcp.mail.secrets.dir", Files.createTempDirectory("mailpanel-secrets").toString());
         Main.mailDatabase = db;
         db.createSchema();
         AuthStore.migrate();

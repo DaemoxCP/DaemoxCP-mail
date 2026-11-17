@@ -5,7 +5,7 @@ import org.daemoxcp.mail.i18n.I18n;
 /**
  * For the on-screen menu tests: creates a reinstallation's way back (as the reinstallation creates
  * it, PackageWayBack.beforeInstallation) and prints its name. Only on a test clone.
- *   java -cp "tests:freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.MakeReinstallWayBack
+ *   java -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MakeReinstallWayBack
  */
 public class MakeReinstallWayBack {
     public static void main(String[] args) {

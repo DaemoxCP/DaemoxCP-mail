@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
  * before the migration (nginx and the www pool with the same user), the one after, and a fault
  * planted for every warning, with the cases that must NOT warn (the Postfix and Dovecot processes
  * that run as root by design). It calls nothing: it runs anywhere.
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.ServiceUsersTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ServiceUsersTest
  */
 public class ServiceUsersTest {
 
@@ -46,7 +46,7 @@ public class ServiceUsersTest {
             postfix 64955 64913 pickup -l -t unix -u
             postfix 65038 64913 qmgr -l -t unix -u
             mysql   67863     1 /bin/sh /usr/local/bin/mysqld_safe --basedir=/usr/local --user=mysql
-            root    70001     1 /usr/local/openjdk25/bin/java -jar /home/panel/freebsd-mail-panel-1.0.jar --web
+            root    70001     1 /usr/local/openjdk25/bin/java -jar /home/panel/daemoxcp-mail-1.0.jar --web
             root    72566 72455 sshd-session: root@notty (sshd-session)
             """;
     static final String AFTER = BEFORE.replace("www     33079 32645 php-fpm: pool www", "roundcube 33079 32645 php-fpm: pool roundcube")
@@ -137,9 +137,9 @@ public class ServiceUsersTest {
 
         OUT.println("\n== What every user of a service does (reperto 228)");
         // A separated panel, Dovecot with its four users, Postfix's daemons: as on the VM after the upgrades.
-        String full = AFTER.replace("root    70001     1 /usr/local/openjdk25/bin/java -jar /home/panel/freebsd-mail-panel-1.0.jar --web",
-                        "root    70001     1 /usr/local/openjdk25/bin/java -jar /home/panel/freebsd-mail-panel-1.0.jar --web\n"
-                        + "mailpanel 70002 70001 /usr/local/openjdk25/bin/java -jar /home/panel/freebsd-mail-panel-1.0.jar --web-part")
+        String full = AFTER.replace("root    70001     1 /usr/local/openjdk25/bin/java -jar /home/panel/daemoxcp-mail-1.0.jar --web",
+                        "root    70001     1 /usr/local/openjdk25/bin/java -jar /home/panel/daemoxcp-mail-1.0.jar --web\n"
+                        + "daemoxcp_mail 70002 70001 /usr/local/openjdk25/bin/java -jar /home/panel/daemoxcp-mail-1.0.jar --web-part")
                 + "dovecot 65001 59971 dovecot/auth\ndovecot 65002 59971 dovecot/auth -w\n"
                 + "dovenull 65010 59971 dovecot/imap-login\nvmail 65011 59971 dovecot/imap\nroot    65012 59971 dovecot/lmtp\n"
                 + "postfix 65020 64913 smtpd -n smtp -t inet -u -o stress=\nroot    65021 64913 local -t unix\n";
@@ -156,13 +156,16 @@ public class ServiceUsersTest {
         check("Postfix: root runs master and local, postfix pickup, qmgr, smtpd (" + postfix + ")",
                 postfix.get("root").equals(java.util.Set.of("master", "local"))
                         && postfix.get("postfix").equals(java.util.Set.of("pickup", "qmgr", "smtpd")));
-        Map<String, java.util.Set<String>> panel = f.services().get("mail-panel").roles;
+        Map<String, java.util.Set<String>> panel = f.services().get("daemoxcp-mail").roles;
         // Technical names, as ps shows them (the option each java runs with), not words: words belong to the language
         // files, and "root part" in English was shown on the Italian page.
-        check("the panel: --web as root, --web-part as mailpanel (" + panel + ")", panel.get("root").equals(java.util.Set.of("--web"))
-                && panel.get("mailpanel").equals(java.util.Set.of("--web-part")));
-        check("  the panel from the menu, without --web: java", ServiceUsers.processName("mail-panel",
-                "/usr/local/openjdk25/bin/java -jar /home/panel/freebsd-mail-panel-1.0.jar").equals("java"));
+        check("the panel: --web as root, --web-part as daemoxcp_mail (" + panel + ")", panel.get("root").equals(java.util.Set.of("--web"))
+                && panel.get("daemoxcp_mail").equals(java.util.Set.of("--web-part")));
+        check("  the panel from the menu, without --web: java", ServiceUsers.processName("daemoxcp-mail",
+                "/usr/local/openjdk25/bin/java -jar /home/panel/daemoxcp-mail-1.0.jar").equals("java"));
+        check("  the jar with the name it had before the rename (until the restart) is still the panel",
+                java.util.regex.Pattern.compile(ServiceUsers.JAR).matcher("java -jar /home/panel/freebsd-mail-panel-1.0.jar --web").find()
+                && !java.util.regex.Pattern.compile(ServiceUsers.JAR).matcher("java -jar /home/panel/other-1.0.jar --web").find());
         check("mysql: mysqld and mysqld_safe, not sh (" + f.services().get("mysql").roles + ")",
                 f.services().get("mysql").roles.get("mysql").equals(java.util.Set.of("mysqld", "mysqld_safe")));
         check("fail2ban: fail2ban-server, not python3.12; redis: redis-server; unbound: local-unbound",
@@ -208,7 +211,7 @@ public class ServiceUsersTest {
         check("the page gets the sentence of every user in roles() (" + withoutSentence.toString().trim() + ")", withoutSentence.length() == 0);
         check("the keys of the acme user and of the pools", ServiceUsers.purposeKey("acme.sh", "acme").equals("server.su.purpose.acme.acme")
                 && ServiceUsers.purposeKey("php-fpm pool www", "www").equals("server.su.purpose.pool.www.www")
-                && ServiceUsers.purposeKey("mail-panel", "mailpanel").equals("server.su.purpose.mailPanel.mailpanel"));
+                && ServiceUsers.purposeKey("daemoxcp-mail", "daemoxcp_mail").equals("server.su.purpose.daemoxcpMail.daemoxcp_mail"));
         check("a user the panel does not know gets no sentence, only its processes",
                 ServiceUsers.roles(ex(AFTER.replace("clamav  43258", "nobody  43258"), POOL_AFTER, "", false).services().get("clamav"))
                         .toString().contains("\"user\":\"nobody\"")

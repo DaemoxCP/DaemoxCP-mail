@@ -94,7 +94,7 @@ public final class WebmailPasswordConfig {
             restrict(configFile);
             return false;
         }
-        Path tmp = configFile.resolveSibling(configFile.getFileName() + ".mailpanel.tmp");
+        Path tmp = configFile.resolveSibling(configFile.getFileName() + ".daemoxcp-mail.tmp");
         Files.deleteIfExists(tmp);
         Files.createFile(tmp);
         try {

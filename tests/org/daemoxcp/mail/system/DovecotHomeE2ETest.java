@@ -42,7 +42,7 @@ import java.util.stream.Stream;
  * in the root, and the test domain (dovecot-home.test: .test is reserved) is removed.
  *
  * Only as root with -De2e.vm=yes, on the VM:
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.DovecotHomeE2ETest [database]
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.DovecotHomeE2ETest [database]
  */
 public class DovecotHomeE2ETest {
 

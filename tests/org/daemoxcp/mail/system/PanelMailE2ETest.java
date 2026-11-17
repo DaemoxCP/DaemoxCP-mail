@@ -30,7 +30,7 @@ import java.util.stream.Stream;
  * It touches the system (it sends real mail), so it only runs with -De2e.vm=yes:
  *   java -De2e.vm=yes -Dpanelmail.to=alice@rehearsal.test \
  *        -Dpanelmail.maildir=/var/vmail/rehearsal.test/alice -Dpanelmail.copies=/var/tmp/panel-emails/copies \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PanelMailE2ETest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelMailE2ETest
  * The report gathers the real data (pkg, services, space): it takes a couple of minutes.
  */
 public class PanelMailE2ETest {

@@ -24,7 +24,7 @@ import java.util.logging.Logger;
  * the check after the restart must see, syslogd still listening, a folder vmail cannot enter.
  *
  * Usage (on the VM):
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.QuickHardeningTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.QuickHardeningTest
  */
 public class QuickHardeningTest {
 
@@ -277,9 +277,9 @@ public class QuickHardeningTest {
 
     /** A real message through Postfix (and rspamd's milter) to the VM's test mailbox: delivered, no milter error. */
     static String delivery(String to) throws Exception {
-        String id = "rspamd-probe-" + java.util.UUID.randomUUID() + "@mailpanel.invalid";
+        String id = "rspamd-probe-" + java.util.UUID.randomUUID() + "@daemoxcp-mail.invalid";
         Path m = Files.createTempFile(Path.of("/var/tmp"), "probe-", ".eml");
-        Files.writeString(m, "From: root@localhost\nTo: " + to + "\nSubject: mailpanel rspamd probe\nMessage-ID: <" + id
+        Files.writeString(m, "From: root@localhost\nTo: " + to + "\nSubject: daemoxcp-mail rspamd probe\nMessage-ID: <" + id
                 + ">\n\nThis message checks that Postfix and rspamd still deliver.\n");
         Shell.runShell(Duration.ofSeconds(30), "/usr/local/sbin/sendmail -t < " + m);
         Files.deleteIfExists(m);

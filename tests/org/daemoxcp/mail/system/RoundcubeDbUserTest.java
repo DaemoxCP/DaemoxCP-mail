@@ -41,7 +41,7 @@ import java.util.regex.Pattern;
  * panel's password) and that of a start stopped before the revoke.
  *
  * <p>It changes real owners: it must be run as root on the FreeBSD VM, where www and wheel exist.
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.RoundcubeDbUserTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RoundcubeDbUserTest
  */
 public class RoundcubeDbUserTest {
 
@@ -381,7 +381,7 @@ public class RoundcubeDbUserTest {
             check("MySQL saw roundcube come in", f.rcConnections > c0);
             check("also verified with a real login", r.detail().contains("real login through the panel's SSO") && f.realLogins >= 3);
             check("no unknown statement", f.unknown.isEmpty());
-            check("no temporary file left", !Files.exists(f.config.resolveSibling("config.inc.php.mailpanel.tmp")));
+            check("no temporary file left", !Files.exists(f.config.resolveSibling("config.inc.php.daemoxcp-mail.tmp")));
 
             f.rootLog.clear();
             String st = f.state();

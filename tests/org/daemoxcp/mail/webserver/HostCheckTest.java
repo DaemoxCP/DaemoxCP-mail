@@ -40,7 +40,7 @@ import java.util.concurrent.Executors;
  *    be written right and connected to nothing.
  *
  * It runs from an empty folder (it creates its own database/ there):
- *   java -cp "tests:&lt;dir&gt;/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.HostCheckTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.HostCheckTest
  */
 public class HostCheckTest {
 

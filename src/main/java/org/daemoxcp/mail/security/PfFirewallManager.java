@@ -403,7 +403,7 @@ public class PfFirewallManager {
                 .build();
             java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofSeconds(30))
-                .header("User-Agent", "FreeBSD-Mail-Panel-Firewall/1.0")
+                .header("User-Agent", "DaemoxCP-Mail-Firewall/1.0")
                 .GET().build();
             java.net.http.HttpResponse<String> resp = client.send(req,
                 java.net.http.HttpResponse.BodyHandlers.ofString());

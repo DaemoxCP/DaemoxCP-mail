@@ -1443,7 +1443,7 @@ public class Fail2banManager {
             conn.setConnectTimeout(3000);
             conn.setReadTimeout(3000);
             conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", "FreeBSD-Mail-Panel/1.0");
+            conn.setRequestProperty("User-Agent", "DaemoxCP-Mail/1.0");
             conn.setRequestProperty("Accept", "application/json");
             int code = conn.getResponseCode();
             // ipapi.co usa 200 anche per errori di lookup (campo "error: true" nel body),

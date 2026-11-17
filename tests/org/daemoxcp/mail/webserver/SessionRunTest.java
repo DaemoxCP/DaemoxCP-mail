@@ -50,7 +50,7 @@ import java.util.concurrent.Executors;
  *
  * Usage (with the test MySQL of README.md, on the test VM):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.SessionRunTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SessionRunTest
  */
 public class SessionRunTest {
 
@@ -78,7 +78,7 @@ public class SessionRunTest {
         if (args.length > 0 && args[0].equals("restarted")) { restarted(args[1], args[2], args[3]); return; }
         Path dir = Files.createTempDirectory("session-run");
         Path secrets = Files.createDirectories(dir.resolve("secrets"));
-        System.setProperty("mailpanel.secrets.dir", secrets.toString());
+        System.setProperty("daemoxcp.mail.secrets.dir", secrets.toString());
         MailDatabase db = connect();
         TestSessions.auditLogTo(db, dir.resolve("audit.log"));
         Main.mailDatabase = db;
@@ -102,10 +102,10 @@ public class SessionRunTest {
 
         System.out.println("== 1. The cookies ==");
         check("the session: __Host-, Path=/, HttpOnly, Secure, SameSite=Strict, no expiry in the browser",
-                WebSessions.cookieHeader(token).equals("__Host-MailPanel=" + token + "; Path=/; HttpOnly; Secure; SameSite=Strict"));
-        check("removing it: Strict and Max-Age=0", WebSessions.clearCookieHeader().equals("__Host-MailPanel=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0"));
+                WebSessions.cookieHeader(token).equals("__Host-DaemoxCPMail=" + token + "; Path=/; HttpOnly; Secure; SameSite=Strict"));
+        check("removing it: Strict and Max-Age=0", WebSessions.clearCookieHeader().equals("__Host-DaemoxCPMail=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0"));
         check("the pre-login cookie: Strict, a browser-session cookie",
-                WebSessions.preCookieHeader(token).equals("__Host-MailPanelPre=" + token + "; Path=/; HttpOnly; Secure; SameSite=Strict"));
+                WebSessions.preCookieHeader(token).equals("__Host-DaemoxCPMailPre=" + token + "; Path=/; HttpOnly; Secure; SameSite=Strict"));
         check("the language one: Strict", I18n.cookieHeader("en").endsWith("; SameSite=Strict"));
 
         System.out.println("\n== 2. The fingerprint in the database ==");
@@ -152,7 +152,7 @@ public class SessionRunTest {
         }}, new SecureRandom());
         HttpClient http = HttpClient.newBuilder().sslContext(trustAll).build();
         try {
-            String dead = "__Host-MailPanel=" + token;
+            String dead = "__Host-DaemoxCPMail=" + token;
             HttpResponse<String> page = send(http, base, "GET", "/home", null, dead, null);
             check("a cookie no longer valid on a page: 302 to /index?session=ended (" + page.statusCode() + " "
                     + page.headers().firstValue("Location").orElse("") + ")", page.statusCode() == 302
@@ -190,7 +190,7 @@ public class SessionRunTest {
                 org.daemoxcp.mail.security.AuthStore.connection = real;
             }
             String fresh = Main.sessions.create(admin, UA, "127.0.0.1");
-            String live = "__Host-MailPanel=" + fresh;
+            String live = "__Host-DaemoxCPMail=" + fresh;
             check("a session of this start opens the page", send(http, base, "GET", "/home", null, live, null).statusCode() == 200);
             HttpResponse<String> wrong = send(http, base, "POST", "/api/account", "{\"action\":\"stepup_code_verify\",\"code\":\"000000\"}",
                     live, WebSessions.csrfToken(fresh));
@@ -221,7 +221,7 @@ public class SessionRunTest {
     static Map<String, String> restart(String token, String pre, String begin) throws Exception {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         List<String> cmd = new ArrayList<>(List.of(java));
-        for (String k : List.of("mysql.port", "mysql.user", "mysql.password", "mysql.database", "mailpanel.secrets.dir"))
+        for (String k : List.of("mysql.port", "mysql.user", "mysql.password", "mysql.database", "daemoxcp.mail.secrets.dir"))
             if (System.getProperty(k) != null) cmd.add("-D" + k + "=" + System.getProperty(k));
         cmd.addAll(List.of("-cp", System.getProperty("java.class.path"), SessionRunTest.class.getName(), "restarted", token, pre, begin));
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();

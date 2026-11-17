@@ -847,7 +847,7 @@ java -version
    tools/build-jar.sh
    ```
 
-   It writes `target/freebsd-mail-panel-1.0.jar` with the build number and the commit inside, and
+   It writes `target/daemoxcp-mail-1.0.jar` with the build number and the commit inside, and
    prints the jar's SHA-256. (On the server itself: `pkg install git maven`, clone the repository,
    then the same command.)
 2. **Put it in `/home/panel`**, not in `/root`. The panel's web part runs as its own user,
@@ -861,7 +861,7 @@ java -version
    Then, from your computer:
 
    ```bash
-   scp target/freebsd-mail-panel-1.0.jar root@203.0.113.10:/home/panel/
+   scp target/daemoxcp-mail-1.0.jar root@203.0.113.10:/home/panel/
    ```
 3. **Copy the origin certificates.** The panel's pair can go anywhere: the panel reads it once and
    keeps it. The webmail's pair must stay where you put it, because nginx reads it from there: use
@@ -894,7 +894,7 @@ computer: `ssh -t root@203.0.113.10`):
 
 ```bash
 cd /home/panel
-java -jar freebsd-mail-panel-1.0.jar
+java -jar daemoxcp-mail-1.0.jar
 ```
 
 Use the arrows to move, Enter to choose, Tab to go from a field to the next. Every option asks for
@@ -989,10 +989,10 @@ the options in this order:
 
 | Command, from `/home/panel` | What it does |
 |---|---|
-| `java -jar freebsd-mail-panel-1.0.jar` | the terminal menu; the web server starts from its last entry |
-| `java -jar freebsd-mail-panel-1.0.jar --web` | **only** the web server: no menu, no terminal needed (what the service runs) |
-| `java -jar freebsd-mail-panel-1.0.jar --access-code [name]` | a one-time 8-digit sign-in code for an administrator |
-| `java -jar freebsd-mail-panel-1.0.jar --create-admin <name> <email>` | the first administrator, when there is none |
+| `java -jar daemoxcp-mail-1.0.jar` | the terminal menu; the web server starts from its last entry |
+| `java -jar daemoxcp-mail-1.0.jar --web` | **only** the web server: no menu, no terminal needed (what the service runs) |
+| `java -jar daemoxcp-mail-1.0.jar --access-code [name]` | a one-time 8-digit sign-in code for an administrator |
+| `java -jar daemoxcp-mail-1.0.jar --create-admin <name> <email>` | the first administrator, when there is none |
 
 With the service running, use `service mailpanel stop|start|restart|status`. The console commands
 must be run from `/home/panel`: the panel's database is in `database/` next to the jar. At its first
@@ -1039,7 +1039,7 @@ become the administrator. Until there is one, the panel shows `/setup` with the 
 on the server, from the panel folder:
 
 ```bash
-java -jar freebsd-mail-panel-1.0.jar --create-admin <name> <email>
+java -jar daemoxcp-mail-1.0.jar --create-admin <name> <email>
 ```
 
 It creates a superadmin with no password and prints a one-time 8-digit code, valid for 15
@@ -1056,7 +1056,7 @@ There are no passwords. An administrator signs in with:
 - an **8-digit code** from the server console, when the email does not arrive:
 
 ```bash
-java -jar freebsd-mail-panel-1.0.jar --access-code [name]
+java -jar daemoxcp-mail-1.0.jar --access-code [name]
 ```
 
 The same one-time code comes from the terminal menu, option **5) Emergency access code**: it is
@@ -1126,7 +1126,7 @@ ports; the mail name is "DNS only", because mail does not go through the proxy. 
 "Full (strict)" mode and checks the origin certificates. Behind the proxy the panel reads the visitor's address from
 `CF-Connecting-IP`, and only when the request really comes from one of Cloudflare's address ranges (the list the panel
 trusts is on the *Diagnostics* page, with a comparison against Cloudflare's official one). Its session cookie is
-`__Host-MailPanel`, `Secure`, `HttpOnly`, `SameSite=Strict`.
+`__Host-DaemoxCPMail`, `Secure`, `HttpOnly`, `SameSite=Strict`.
 
 ### The API token
 

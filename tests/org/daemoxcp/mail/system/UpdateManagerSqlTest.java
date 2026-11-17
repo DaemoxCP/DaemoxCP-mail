@@ -19,7 +19,7 @@ import java.util.List;
  *
  * Usage (on the VM, with the test MySQL of tests/README.md, as root):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.UpdateManagerSqlTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.UpdateManagerSqlTest
  */
 public class UpdateManagerSqlTest {
 

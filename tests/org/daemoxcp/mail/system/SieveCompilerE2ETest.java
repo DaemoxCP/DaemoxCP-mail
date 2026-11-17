@@ -39,7 +39,7 @@ import java.util.regex.Pattern;
  * It creates a domain nobody can own (sieve-compile.test: .test is reserved) with two mailboxes in the mail database,
  * and removes all of it at the end. It turns process accounting on into a file of its own and off at the end (only if it
  * was off). It touches the mail system, so only as root with -De2e.vm=yes, on the VM:
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.SieveCompilerE2ETest [database]
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveCompilerE2ETest [database]
  */
 public class SieveCompilerE2ETest {
 

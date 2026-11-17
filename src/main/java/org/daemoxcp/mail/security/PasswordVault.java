@@ -43,8 +43,8 @@ import java.util.logging.Logger;
 public class PasswordVault {
     private static final Logger LOGGER = Logger.getLogger(PasswordVault.class.getName());
 
-    /** La chiave simmetrica delle copie di prima (i test la spostano con -Dmailpanel.vault.key=...). */
-    private static final String KEY_FILE = System.getProperty("mailpanel.vault.key", "/usr/local/etc/mail-panel/master.key");
+    /** La chiave simmetrica delle copie di prima (i test la spostano con -Ddaemoxcp.mail.vault.key=...). */
+    private static final String KEY_FILE = System.getProperty("daemoxcp.mail.vault.key", "/usr/local/etc/mail-panel/master.key");
 
     /** Il segno delle copie a chiave asimmetrica. Il base64 non contiene ':', quindi nessuna copia v1 comincia cosi'. */
     static final String V2_PREFIX = "v2:";

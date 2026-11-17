@@ -39,7 +39,7 @@ function start() {
 
 async function context(browser, token) {
     const ctx = await browser.newContext({ ignoreHTTPSErrors: true, userAgent: UA, timezoneId: 'Europe/Rome', locale: 'en-GB', viewport: { width: 1280, height: 900 } });
-    if (token) await ctx.addCookies([{ name: '__Host-MailPanel', value: token, url: E.REMOTE, secure: true, httpOnly: true, sameSite: 'Strict' }]);
+    if (token) await ctx.addCookies([{ name: '__Host-DaemoxCPMail', value: token, url: E.REMOTE, secure: true, httpOnly: true, sameSite: 'Strict' }]);
     return ctx;
 }
 
@@ -65,7 +65,7 @@ const ended = page => page.waitForFunction(() => {
     let page = await watched(anon, errors);
     await page.goto(E.REMOTE + '/index');
     let jar = await anon.cookies();
-    const pre = jar.find(c => c.name === '__Host-MailPanelPre');
+    const pre = jar.find(c => c.name === '__Host-DaemoxCPMailPre');
     check('the pre-login cookie: Strict, HttpOnly, Secure, no expiry (' + (pre && pre.sameSite + ' ' + pre.expires) + ')',
         pre && pre.sameSite === 'Strict' && pre.httpOnly && pre.secure && pre.expires === -1);
     // The language that is not the page's: clicking the current one does nothing.
@@ -106,7 +106,7 @@ const ended = page => page.waitForFunction(() => {
     page = await watched(old, errors);
     await page.goto(E.REMOTE + '/home');
     check('the old cookie on a new page: to the sign-in page, with the message', new URL(page.url()).pathname === '/index' && await ended(page));
-    check('  and the browser no longer has that cookie', !(await old.cookies()).some(c => c.name === '__Host-MailPanel'));
+    check('  and the browser no longer has that cookie', !(await old.cookies()).some(c => c.name === '__Host-DaemoxCPMail'));
     await old.close();
 
     const fresh = await context(browser, second.session);

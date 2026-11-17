@@ -30,7 +30,7 @@ import java.util.logging.Logger;
  *    primo accesso o quando l'email non arriva.
  *
  * Prima del login il token CSRF e' quello della pagina, legato al browser dal cookie
- * __Host-MailPanelPre. Chiedere un codice per un'email risponde sempre allo stesso modo e nello
+ * __Host-DaemoxCPMailPre. Chiedere un codice per un'email risponde sempre allo stesso modo e nello
  * stesso tempo, che l'indirizzo sia di qualcuno o no; anche la verifica di un codice sbagliato. Dopo il
  * login valgono la sessione nel database e il suo token CSRF, controllato dal filtro di ogni rotta.
  *

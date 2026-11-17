@@ -87,8 +87,8 @@ public final class ReinstallReturn {
         List<String> stopped = new ArrayList<>();
         boolean activated = false;
         try {
-            mntDir = run("mktemp -d /var/tmp/mailpanel-way-back.XXXXXX", 30).outputTrim();
-            if (!mntDir.matches("/var/tmp/mailpanel-way-back\\.[A-Za-z0-9]+")) {
+            mntDir = run("mktemp -d /var/tmp/daemoxcp-mail-way-back.XXXXXX", 30).outputTrim();
+            if (!mntDir.matches("/var/tmp/daemoxcp-mail-way-back\\.[A-Za-z0-9]+")) {
                 String err = mntDir;
                 mntDir = "";
                 return r.put("success", false).put("error", I18n.tr("server.wayBack.cannotMount", Map.of("name", name, "err", err)));

@@ -30,7 +30,7 @@ import java.util.UUID;
  *  5. refusals that change nothing: a roundcube account with more than its database, a panel with only part of it.
  *
  * Usage (on the VM, with the test MySQL of tests/README.md, as root):
- *   java -Dmysql.port=33062 -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.RoundcubeDbUserMysqlTest
+ *   java -Dmysql.port=33062 -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RoundcubeDbUserMysqlTest
  */
 public class RoundcubeDbUserMysqlTest {
 
@@ -176,8 +176,8 @@ public class RoundcubeDbUserMysqlTest {
         }
         // Prima di tutto: i segreti della prova (root senza password) e la porta del MySQL di prova per MysqlRoot.
         folder = Files.createTempDirectory("roundcube-db-user-mysql");
-        System.setProperty("mailpanel.secrets.dir", Files.createDirectories(folder.resolve("secrets")).toString());
-        System.setProperty("mailpanel.mysql.port", port);
+        System.setProperty("daemoxcp.mail.secrets.dir", Files.createDirectories(folder.resolve("secrets")).toString());
+        System.setProperty("daemoxcp.mail.mysql.port", port);
 
         System.out.println("== 1. It succeeds, on the real MySQL");
         fresh();

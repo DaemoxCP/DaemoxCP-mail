@@ -46,7 +46,7 @@ resta fermo una decina di secondi; la posta resta sempre accesa.
 
 ```sh
 sh /root/panel-upgrade/upgrade-panel.sh -m upgrade-test@example.com -p /root/panel-upgrade/test.pass \
-    /root/panel-upgrade/freebsd-mail-panel-1.0.jar IMPRONTA
+    /root/panel-upgrade/daemoxcp-mail-1.0.jar IMPRONTA
 ```
 
 | Passo | Cosa fa | Si ferma se |

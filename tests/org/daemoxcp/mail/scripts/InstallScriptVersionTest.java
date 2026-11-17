@@ -14,11 +14,11 @@ import java.util.List;
  *  A. written by this jar, and the panel service uses another jar: it stops at once, saying so;
  *  B. the service uses this same jar (rc.conf mailpanel_jar): it passes the check and stops later,
  *     at its own first check (MYSQL_PASSWORD missing), still before phase 1;
- *  C. started by the panel (MAIL_PANEL_FROM_PANEL=1) with another jar in the service: the check is
+ *  C. started by the panel (DAEMOXCP_MAIL_FROM_PANEL=1) with another jar in the service: the check is
  *     not made (the panel has just written the script) and it stops at its own check.
  * In no case does it reach phase 1. rc.conf is put back as it was. Real script, as root, on the VM:
  * it is switched on with -De2e.vm=yes.
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.scripts.InstallScriptVersionTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.InstallScriptVersionTest
  */
 public class InstallScriptVersionTest {
 
@@ -55,20 +55,20 @@ public class InstallScriptVersionTest {
             }
 
             System.out.println("== A. The service uses another jar ==");
-            Shell.Result a = sh("cd " + d + " && env -u MAIL_PANEL_FROM_PANEL sh " + script + " 2>&1");
+            Shell.Result a = sh("cd " + d + " && env -u DAEMOXCP_MAIL_FROM_PANEL sh " + script + " 2>&1");
             check("it stops at once, saying why", !a.success() && a.outputTrim().contains("written by another version of the mail panel"));
             check("before any other check and before phase 1", !a.outputTrim().contains("MYSQL_PASSWORD") && !a.outputTrim().contains("PHASE 1/10"));
 
             System.out.println("\n== B. The service uses this jar ==");
             sh("sysrc -q mailpanel_jar=" + jar);
-            Shell.Result b = sh("cd " + d + " && env -u MAIL_PANEL_FROM_PANEL sh " + script + " 2>&1");
+            Shell.Result b = sh("cd " + d + " && env -u DAEMOXCP_MAIL_FROM_PANEL sh " + script + " 2>&1");
             check("it passes the version check", !b.outputTrim().contains("written by another version"));
             check("and it stops at its first check, before phase 1", !b.success()
                     && b.outputTrim().contains("MYSQL_PASSWORD not in the environment") && !b.outputTrim().contains("PHASE 1/10"));
 
             System.out.println("\n== C. Started by the panel, with the service on another jar ==");
             restore(rcBefore);
-            Shell.Result c = sh("cd " + d + " && env MAIL_PANEL_FROM_PANEL=1 sh " + script + " 2>&1");
+            Shell.Result c = sh("cd " + d + " && env DAEMOXCP_MAIL_FROM_PANEL=1 sh " + script + " 2>&1");
             check("the version check is not made", !c.outputTrim().contains("written by another version"));
             check("and it stops at its first check, before phase 1", !c.success()
                     && c.outputTrim().contains("MYSQL_PASSWORD not in the environment") && !c.outputTrim().contains("PHASE 1/10"));

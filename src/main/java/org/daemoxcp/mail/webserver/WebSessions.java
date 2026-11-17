@@ -22,7 +22,7 @@ import java.util.logging.Logger;
 /**
  * Le sessioni del pannello, nel database (tabella panel_sessions), legate all'avvio del jar.
  *
- *  - il token sta solo nel cookie __Host-MailPanel: nel database c'e' la sua impronta, un HMAC
+ *  - il token sta solo nel cookie __Host-DaemoxCPMail: nel database c'e' la sua impronta, un HMAC
  *    con la chiave di QUESTO avvio (reperto 184). La chiave e' di 32 byte casuali, nasce col
  *    processo e sta solo nella sua memoria: mai su disco, mai nel database. Riavviato il jar, la
  *    chiave e' un'altra e nessun token di prima trova piu' la sua riga, nemmeno con una copia del
@@ -35,7 +35,7 @@ import java.util.logging.Logger;
  *  - vale solo con lo stesso browser (impronta dello User-Agent); l'IP non si confronta, perche'
  *    dietro Cloudflare cambia, ma si conserva cifrato per l'elenco delle sessioni;
  *  - il token CSRF non si salva: e' l'HMAC del token di sessione con la chiave di questo avvio.
- *    Prima di entrare vale lo stesso schema con un cookie a parte (__Host-MailPanelPre), che lega
+ *    Prima di entrare vale lo stesso schema con un cookie a parte (__Host-DaemoxCPMailPre), che lega
  *    il token della pagina di accesso a quel browser senza creare niente sul server: anche quello
  *    vale solo fino al riavvio;
  *  - si revoca: all'uscita, dall'elenco delle sessioni, e togliendo l'amministratore (ON DELETE
@@ -47,8 +47,8 @@ public final class WebSessions {
     private static final Logger LOGGER = Logger.getLogger(WebSessions.class.getName());
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    public static final String COOKIE = "__Host-MailPanel";
-    public static final String PRE_COOKIE = "__Host-MailPanelPre";
+    public static final String COOKIE = "__Host-DaemoxCPMail";
+    public static final String PRE_COOKIE = "__Host-DaemoxCPMailPre";
     public static final long IDLE_SECONDS = 30 * 60;
     public static final long ABSOLUTE_SECONDS = 12 * 3600;
     /** L'ultima attivita' si riscrive al massimo una volta al minuto, non a ogni richiesta. */

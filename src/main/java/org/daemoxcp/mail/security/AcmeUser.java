@@ -504,7 +504,7 @@ public final class AcmeUser {
 
         @Override public boolean writeRootCrontab(String content) {
             try {
-                Path tmp = Files.createTempFile("mailpanel-crontab", "");
+                Path tmp = Files.createTempFile("daemoxcp-mail-crontab", "");
                 try {
                     Files.writeString(tmp, content.endsWith("\n") || content.isEmpty() ? content : content + "\n", StandardCharsets.UTF_8);
                     return Shell.run(SHORT, "crontab", "-u", "root", tmp.toString()).success();

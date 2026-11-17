@@ -18,7 +18,7 @@ import java.time.Duration;
  *     no account.conf: nothing to do;
  *  3. the panel's code: after every acme.sh run that was given CF_Token, and at boot after AcmeUser.
  * As root on the TEST VM (owner nobody, in a temporary folder):
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.security.AcmeCloudflareCopyTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.AcmeCloudflareCopyTest
  */
 public class AcmeCloudflareCopyTest {
 

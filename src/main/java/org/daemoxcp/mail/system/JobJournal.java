@@ -35,8 +35,8 @@ public final class JobJournal {
 
     private static final Logger LOGGER = Logger.getLogger(JobJournal.class.getName());
 
-    /** La cartella; un'altra solo nelle prove (-Dmailpanel.jobs.dir). */
-    static Path dir = Paths.get(System.getProperty("mailpanel.jobs.dir", "/var/db/mailpanel/jobs"));
+    /** La cartella; un'altra solo nelle prove (-Ddaemoxcp.mail.jobs.dir). */
+    static Path dir = Paths.get(System.getProperty("daemoxcp.mail.jobs.dir", "/var/db/mailpanel/jobs"));
     /** Quanti registri restano: i piu' vecchi oltre questo numero si tolgono quando ne nasce uno nuovo. */
     static int keep = 200;
     /** Il nome di un registro: data e ora UTC, tipo, "__", id del lavoro. Nient'altro e' leggibile da fuori. */

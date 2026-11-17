@@ -31,7 +31,7 @@ import java.util.concurrent.Executors;
  * <p>Usage (as root on the test VM, from an empty folder with a copy of the jar and that file):
  * <pre>
  *   java -Dmysql.port=... -Dmysql.user=... -Dmysql.password=... -Dmysql.database=... \
- *        -cp "tests:$D/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.SieveRulesE2EServer PORT
+ *        -cp "tests:$D/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SieveRulesE2EServer PORT
  * </pre>
  * READY on stderr when it listens. At the end: {@code rm -r /var/mail/sieve/sieve-rules-shown.test}.
  */
@@ -46,10 +46,10 @@ public class SieveRulesE2EServer {
         // PasswordVault use /usr/local/etc/mail-panel, and update_mysql_config and update_panel_config below would
         // overwrite the RUNNING panel's MySQL password and TLS key on the test machine. Measured on 10/11/2026: the
         // VM's panel kept working until its next start, then could not reach MySQL and stopped separating.
-        if (System.getProperty("mailpanel.secrets.dir") == null)
-            System.setProperty("mailpanel.secrets.dir", Files.createDirectories(dir.resolve("secrets")).toString());
-        if (System.getProperty("mailpanel.vault.key") == null)
-            System.setProperty("mailpanel.vault.key", dir.resolve("secrets").resolve("master.key").toString());
+        if (System.getProperty("daemoxcp.mail.secrets.dir") == null)
+            System.setProperty("daemoxcp.mail.secrets.dir", Files.createDirectories(dir.resolve("secrets")).toString());
+        if (System.getProperty("daemoxcp.mail.vault.key") == null)
+            System.setProperty("daemoxcp.mail.vault.key", dir.resolve("secrets").resolve("master.key").toString());
         Path jarDir = Path.of(SSLMailServer.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParent();
         if (!Files.isRegularFile(jarDir.resolve("install_scripts"), LinkOption.NOFOLLOW_LINKS))
             throw new IllegalStateException(jarDir.resolve("install_scripts") + " must be a plain file: otherwise the"

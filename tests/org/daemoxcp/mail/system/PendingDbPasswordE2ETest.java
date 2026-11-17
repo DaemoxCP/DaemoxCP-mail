@@ -25,7 +25,7 @@ import java.util.Properties;
  * early exit left it with a password MySQL refuses.
  *
  * It does not touch the real panel's configuration: every round has a folder of its own (SQLite,
- * secrets file with -Dmailpanel.secrets.dir, package turn, Postfix copy) and a test MySQL user,
+ * secrets file with -Ddaemoxcp.mail.secrets.dir, package turn, Postfix copy) and a test MySQL user,
  * e2e_pending, with its database; the real panel's user is not touched. For MySQL's root the test
  * writes a credentials file (600) with the password of the real secrets file
  * (/usr/local/etc/mail-panel), or empty if root gets in without (as on the servers installed by the
@@ -33,7 +33,7 @@ import java.util.Properties;
  * real script uses its own, to change the password. At the end the test user and database are removed.
  *
  * It runs only with -De2e.vm=yes, as root, on FreeBSD with MySQL on (the test VM):
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PendingDbPasswordE2ETest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PendingDbPasswordE2ETest
  */
 public class PendingDbPasswordE2ETest {
 
@@ -274,7 +274,7 @@ public class PendingDbPasswordE2ETest {
 
     static Run child(Path d, String... step) throws Exception {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-        List<String> cmd = new ArrayList<>(List.of(java, "-Dmailpanel.secrets.dir=" + d.resolve("secrets"),
+        List<String> cmd = new ArrayList<>(List.of(java, "-Ddaemoxcp.mail.secrets.dir=" + d.resolve("secrets"),
                 "-cp", absolute(System.getProperty("java.class.path")),
                 PendingDbPasswordE2ETest.class.getName(), "child"));
         cmd.addAll(List.of(step));

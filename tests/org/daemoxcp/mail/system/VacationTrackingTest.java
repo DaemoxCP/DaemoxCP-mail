@@ -24,7 +24,7 @@ import java.util.List;
  *     reported; the second run finds nothing.
  * The real deliveries, the binary left alone and Dovecot not restarted are in VacationTrackingE2ETest.
  *
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.VacationTrackingTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.VacationTrackingTest
  */
 public class VacationTrackingTest {
 

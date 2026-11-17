@@ -26,7 +26,7 @@ import java.util.Properties;
  *     lock everybody out).
  *
  * Usage (on the VM):
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.database.MysqlRootTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.MysqlRootTest
  */
 public class MysqlRootTest {
 
@@ -42,7 +42,7 @@ public class MysqlRootTest {
         // si carica, e una prova da root che la carica con quella vera scrive nei segreti veri della macchina.
         base = Files.createTempDirectory(Path.of("/var/tmp"), "mysql-root-test");
         secrets = Files.createDirectories(base.resolve("secrets"));
-        System.setProperty("mailpanel.secrets.dir", secrets.toString());
+        System.setProperty("daemoxcp.mail.secrets.dir", secrets.toString());
         check("the secrets of the test are in its own folder, not in the machine's",
                 PanelSecrets.location(PanelSecrets.MYSQL_ROOT_PASSWORD).startsWith(secrets.toString()));
         System.out.println("== 1. Option files and statements ==");

@@ -25,7 +25,7 @@ import java.util.concurrent.Executors;
  *
  * Usage (from an empty folder with the jar inside; READY on stderr when it listens):
  *   java -Dmysql.port=... -Dmysql.user=... -Dmysql.password=... -Dmysql.database=... \
- *        -cp "tests:$D/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.HomePanelE2EServer PORT
+ *        -cp "tests:$D/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.HomePanelE2EServer PORT
  */
 public class HomePanelE2EServer {
 
@@ -36,10 +36,10 @@ public class HomePanelE2EServer {
         // PasswordVault use /usr/local/etc/mail-panel, and update_mysql_config and update_panel_config below would
         // overwrite the RUNNING panel's MySQL password and TLS key on the test machine. Measured on 10/11/2026: the
         // VM's panel kept working until its next start, then could not reach MySQL and stopped separating.
-        if (System.getProperty("mailpanel.secrets.dir") == null)
-            System.setProperty("mailpanel.secrets.dir", Files.createDirectories(dir.resolve("secrets")).toString());
-        if (System.getProperty("mailpanel.vault.key") == null)
-            System.setProperty("mailpanel.vault.key", dir.resolve("secrets").resolve("master.key").toString());
+        if (System.getProperty("daemoxcp.mail.secrets.dir") == null)
+            System.setProperty("daemoxcp.mail.secrets.dir", Files.createDirectories(dir.resolve("secrets")).toString());
+        if (System.getProperty("daemoxcp.mail.vault.key") == null)
+            System.setProperty("daemoxcp.mail.vault.key", dir.resolve("secrets").resolve("master.key").toString());
         String mysqlPort = System.getProperty("mysql.port");
         String user = System.getProperty("mysql.user", "mailpanel");
         String password = System.getProperty("mysql.password", "");

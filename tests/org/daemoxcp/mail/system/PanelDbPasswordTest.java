@@ -31,7 +31,7 @@ import java.util.function.Supplier;
  *     a copy with the old password gets the new one with its mode (minus others), one without it is untouched; the
  *     MySQL error is reduced to its code.
  * It calls nothing on the machine besides temporary files.
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PanelDbPasswordTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelDbPasswordTest
  */
 public class PanelDbPasswordTest {
 

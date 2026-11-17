@@ -48,7 +48,7 @@ import java.util.regex.Pattern;
  *
  * Usage (with the test MySQL of README.md):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.LoginRoutesTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.LoginRoutesTest
  */
 public class LoginRoutesTest {
 
@@ -119,7 +119,7 @@ public class LoginRoutesTest {
         // administrators with one key and looking for them with another: the email's blind index no
         // longer matches, adminByEmail finds nobody, and the test falls on "only the real one gets
         // an email" without anything saying why.
-        System.setProperty("mailpanel.secrets.dir", dir.resolve("secrets").toString());
+        System.setProperty("daemoxcp.mail.secrets.dir", dir.resolve("secrets").toString());
 
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "mailpanel"), System.getProperty("mysql.password", ""));

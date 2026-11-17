@@ -38,7 +38,7 @@ import java.util.TreeSet;
  *
  * It touches the system. Only on a test machine, as root, with -De2e.vm=yes, from the panel's folder (it
  * reads the panel's configuration read-only, like the jobs in the service):
- *   cd /home/panel && java -De2e.vm=yes -cp "/root/signed/tests:/root/signed/target/freebsd-mail-panel-1.0.jar" \
+ *   cd /home/panel && java -De2e.vm=yes -cp "/root/signed/tests:/root/signed/target/daemoxcp-mail-1.0.jar" \
  *       org.daemoxcp.mail.system.SignedJobsE2ETest roundcube
  * With -Doutside=<package> (a small one, not installed: tree) the real run also gets a change outside its plan,
  * a real package installed between the inventory photo and pkg, and must end in error naming it; with

@@ -18,9 +18,9 @@ import java.util.Map;
  *     nothing to do;
  *  3. the panel's own code: MailDatabase seals on every write (new account, new token, the legacy token) and opens on
  *     the one read (mapCloudflareAccount); the boot migration is called by the root part.
- * The secrets go to a temporary folder (-Dmailpanel.secrets.dir is set here, before PanelSecrets loads): never the
+ * The secrets go to a temporary folder (-Ddaemoxcp.mail.secrets.dir is set here, before PanelSecrets loads): never the
  * real file of the machine it runs on.
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.security.CloudflareTokensTest
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.CloudflareTokensTest
  */
 public class CloudflareTokensTest {
 
@@ -54,7 +54,7 @@ public class CloudflareTokensTest {
 
     public static void main(String[] args) throws Exception {
         Path secrets = Files.createTempDirectory("cloudflare-tokens-test");
-        System.setProperty("mailpanel.secrets.dir", secrets.toString());
+        System.setProperty("daemoxcp.mail.secrets.dir", secrets.toString());
         check("the secrets in a temporary folder, not the machine's (" + PanelSecrets.dir + ")",
                 PanelSecrets.dir.equals(secrets));
 

@@ -43,7 +43,7 @@ import java.util.concurrent.Executors;
  *
  * Usage (on the VM, with the test MySQL of tests/README.md):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.SeparatedPanelTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SeparatedPanelTest
  */
 public class SeparatedPanelTest {
 
@@ -112,8 +112,8 @@ public class SeparatedPanelTest {
         Path dir = Files.createTempDirectory("separated");
         // Before anything touches PanelSeparation: the socket goes in the test folder; and root's SSH keys
         // (RootSshKeys) too, never the real ones.
-        System.setProperty("mailpanel.run.dir", dir.toString());
-        System.setProperty("mailpanel.root.ssh.dir", dir.resolve("ssh").toString());
+        System.setProperty("daemoxcp.mail.run.dir", dir.toString());
+        System.setProperty("daemoxcp.mail.root.ssh.dir", dir.resolve("ssh").toString());
         System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
         Path audit = dir.resolve("audit.log");
         MailDatabase db = new MailDatabase();

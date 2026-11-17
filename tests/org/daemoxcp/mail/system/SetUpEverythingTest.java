@@ -22,7 +22,7 @@ import java.util.Map;
  *     account of the panel that sees it (then assigned); no account, none that sees it, or several: refused, with
  *     what to do.
  * Run it with the service's umask, as root on the TEST VM:
- *   sh -c 'umask 077; java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.SetUpEverythingTest'
+ *   sh -c 'umask 077; java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SetUpEverythingTest'
  */
 public class SetUpEverythingTest {
 

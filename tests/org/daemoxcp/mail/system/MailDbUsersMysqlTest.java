@@ -31,7 +31,7 @@ import java.util.logging.Logger;
  *
  * Usage (on the VM, with the test MySQL of tests/README.md, as root):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.MailDbUsersMysqlTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MailDbUsersMysqlTest
  */
 public class MailDbUsersMysqlTest {
 
@@ -118,7 +118,7 @@ public class MailDbUsersMysqlTest {
         url = "jdbc:mysql://127.0.0.1:" + port + "/" + database
                 + "?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
         Path dir = Files.createTempDirectory("mail-db-users");
-        System.setProperty("mailpanel.secrets.dir", dir.toString());
+        System.setProperty("daemoxcp.mail.secrets.dir", dir.toString());
         Logger.getLogger(MailDbUsers.class.getName()).addHandler(new Handler() {
             @Override public void publish(LogRecord r) { LOG.add(r.getMessage()); }
             @Override public void flush() { }

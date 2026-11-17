@@ -59,6 +59,20 @@
   "reportFrequencies": [
     ["giornaliero", "daily"], ["settimanale", "weekly"], ["mensile", "monthly"]
   ],
+  "sessionCookies": [
+    ["MailPanel", "__Host-DaemoxCPMail"],
+    ["__Host-MailPanel", "__Host-DaemoxCPMail"],
+    ["__Host-MailPanelPre", "__Host-DaemoxCPMailPre"]
+  ],
+  "tempSuffixes": [
+    [".mailpanel.tmp", ".daemoxcp-mail.tmp"]
+  ],
+  "webPartTitles": [
+    ["mailpanel-web", "daemoxcp-mail-web"]
+  ],
+  "jarNames": [
+    ["freebsd-mail-panel", "daemoxcp-mail"]
+  ],
   "reportFailedPrefix": [
     ["fallito: ", "failed: "]
   ],

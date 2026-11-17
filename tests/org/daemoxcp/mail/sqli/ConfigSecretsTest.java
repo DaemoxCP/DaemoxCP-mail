@@ -28,7 +28,7 @@ import java.sql.ResultSet;
  * dataBaseManager works on database/mail_panel.db in the working directory, so the checks run in
  * a child JVM started in a temporary directory.
  *
- * Usage: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.sqli.ConfigSecretsTest
+ * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.sqli.ConfigSecretsTest
  */
 public class ConfigSecretsTest {
 
@@ -43,7 +43,7 @@ public class ConfigSecretsTest {
         if (args.length == 0) {
             Path dir = Files.createTempDirectory("config-secrets");
             String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-            Process child = new ProcessBuilder(java, "-Dmailpanel.secrets.dir=" + dir.resolve("secrets"),
+            Process child = new ProcessBuilder(java, "-Ddaemoxcp.mail.secrets.dir=" + dir.resolve("secrets"),
                     "-cp", absolute(System.getProperty("java.class.path")),
                     ConfigSecretsTest.class.getName(), "child")
                     .directory(dir.toFile()).inheritIO().start();
@@ -57,7 +57,7 @@ public class ConfigSecretsTest {
         }
 
         String key = "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\nBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----\n";
-        Path secrets = Path.of(System.getProperty("mailpanel.secrets.dir"));
+        Path secrets = Path.of(System.getProperty("daemoxcp.mail.secrets.dir"));
 
         System.out.println("\n== A server that is already running: the values are still in SQLite ==");
         dataBaseManager old = new dataBaseManager();

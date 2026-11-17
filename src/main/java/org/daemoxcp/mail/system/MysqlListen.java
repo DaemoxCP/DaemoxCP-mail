@@ -185,7 +185,7 @@ public final class MysqlListen {
 
     private static void write(String text) throws Exception {
         if (myCnf.getParent() != null) Files.createDirectories(myCnf.getParent());
-        Path tmp = myCnf.resolveSibling("." + myCnf.getFileName() + ".mailpanel.tmp");
+        Path tmp = myCnf.resolveSibling("." + myCnf.getFileName() + ".daemoxcp-mail.tmp");
         Files.writeString(tmp, text);
         Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString("rw-r--r--"));
         Files.move(tmp, myCnf, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);

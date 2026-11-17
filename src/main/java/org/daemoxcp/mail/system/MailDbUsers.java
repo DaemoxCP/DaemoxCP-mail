@@ -72,7 +72,7 @@ public final class MailDbUsers {
     static final List<String> POSTFIX_MAPS = List.of("mysql-virtual-domains.cf", "mysql-virtual-mailboxes.cf",
             "mysql-virtual-aliases.cf");
     /** Una chiave che non c'e' mai (.invalid e' riservato): la domanda gira, MySQL risponde vuoto. */
-    static final String PROBE = "mailpanel-probe@invalid";
+    static final String PROBE = "daemoxcp-mail-probe@invalid";
 
     private static final Pattern LOCAL_HOST = Pattern.compile("(inet:)?(127\\.0\\.0\\.1|localhost)(:[0-9]{1,5})?");
     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_]{1,64}");

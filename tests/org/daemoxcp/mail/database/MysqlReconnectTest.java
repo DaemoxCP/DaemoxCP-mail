@@ -36,7 +36,7 @@ import java.util.List;
  *
  * MySQL root: with the password of the real secrets file, or without one if root gets in without
  * (the servers installed by the 11/10 version). It runs only with -De2e.vm=yes, as root, MySQL on:
- *   java -De2e.vm=yes -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.database.MysqlReconnectTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.MysqlReconnectTest
  */
 public class MysqlReconnectTest {
 
@@ -161,7 +161,7 @@ public class MysqlReconnectTest {
 
     static Process start(String... step) throws Exception {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-        List<String> cmd = new ArrayList<>(List.of(java, "-Dmailpanel.secrets.dir=" + base.resolve("secrets"),
+        List<String> cmd = new ArrayList<>(List.of(java, "-Ddaemoxcp.mail.secrets.dir=" + base.resolve("secrets"),
                 "-cp", absolute(System.getProperty("java.class.path")), MysqlReconnectTest.class.getName()));
         cmd.addAll(List.of(step));
         return new ProcessBuilder(cmd).directory(base.toFile()).redirectErrorStream(true).start();

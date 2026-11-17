@@ -33,7 +33,7 @@ import java.util.regex.Pattern;
  *
  * Usage (with the test MySQL of README.md, tables already created by AddressConversionTest):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.LanguageRoutesTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.LanguageRoutesTest
  */
 public class LanguageRoutesTest {
 
@@ -92,7 +92,7 @@ public class LanguageRoutesTest {
         Main.setupRequired = false;
         String session = Main.sessions.create(adminId, UA, "127.0.0.1");
         String csrf = WebSessions.csrfToken(session);
-        String sessionCookie = "__Host-MailPanel=" + session;
+        String sessionCookie = "__Host-DaemoxCPMail=" + session;
 
         // The pages are read from admin/ next to the jar: written here, removed at the end.
         Path jarDir = Path.of(PanelContent.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParent();
@@ -142,8 +142,8 @@ public class LanguageRoutesTest {
             Matcher token = Pattern.compile("id=\"csrf_token\" value=\"([^\"]+)\"").matcher(login.body());
             String loginToken = token.find() ? token.group(1) : "";
             check("the login page carries a CSRF token", loginToken.length() >= 16);
-            Matcher preCookie = Pattern.compile("__Host-MailPanelPre=([A-Za-z0-9_-]{43}); Path=/; HttpOnly; Secure; SameSite=Strict").matcher(setCookie(login));
-            String pre = preCookie.find() ? "__Host-MailPanelPre=" + preCookie.group(1) : "";
+            Matcher preCookie = Pattern.compile("__Host-DaemoxCPMailPre=([A-Za-z0-9_-]{43}); Path=/; HttpOnly; Secure; SameSite=Strict").matcher(setCookie(login));
+            String pre = preCookie.find() ? "__Host-DaemoxCPMailPre=" + preCookie.group(1) : "";
             check("and the pre-login cookie the token is tied to (no session on the server)", !pre.isEmpty());
 
             System.out.println("\n== /api/language before logging in ==");
@@ -181,7 +181,7 @@ public class LanguageRoutesTest {
             HttpResponse<String> aligned = ask("GET", "/home", null, "Cookie", sessionCookie + "; __Host-lang=it", "Accept-Language", "en");
             check("a cookie already aligned is not sent again", !setCookie(aligned).contains("__Host-lang"));
             check("a session that does not exist does not save anything", ask("POST", "/api/language",
-                    "{\"language\":\"en\",\"csrf_token\":\"" + csrf + "\"}", "Cookie", "__Host-MailPanel=nope").statusCode() == 403
+                    "{\"language\":\"en\",\"csrf_token\":\"" + csrf + "\"}", "Cookie", "__Host-DaemoxCPMail=nope").statusCode() == 403
                     && "it".equals(db.getAdminLanguage(admin)));
             check("the database refuses a language that is not ours", !db.setAdminLanguage(admin, "fr") && "it".equals(db.getAdminLanguage(admin)));
         } finally {

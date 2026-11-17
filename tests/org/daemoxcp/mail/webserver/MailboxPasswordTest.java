@@ -50,7 +50,7 @@ import java.util.concurrent.Executors;
  *
  * Usage (with the test MySQL of README.md):
  *   java -Dmysql.port=33062 -Dmysql.user=mailpanel -Dmysql.password=... -Dmysql.database=mailpanel_test \
- *        -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.webserver.MailboxPasswordTest
+ *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.MailboxPasswordTest
  */
 public class MailboxPasswordTest {
 
@@ -114,7 +114,7 @@ public class MailboxPasswordTest {
         }
         System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
         Path dir = Files.createTempDirectory("mailbox-password");
-        if (System.getProperty("mailpanel.vault.key") == null) System.setProperty("mailpanel.vault.key", dir.resolve("master.key").toString());
+        if (System.getProperty("daemoxcp.mail.vault.key") == null) System.setProperty("daemoxcp.mail.vault.key", dir.resolve("master.key").toString());
         Path audit = dir.resolve("audit.log");
 
         MailDatabase db = new MailDatabase();
@@ -132,7 +132,7 @@ public class MailboxPasswordTest {
         // RolesTest and SeparatedPanelTest).
         TestSessions.confirm(login[0], UA);
         db.ensureMailboxPasswordVaultColumns();
-        String session = "__Host-MailPanel=" + login[0] + "; __Host-lang=en";
+        String session = "__Host-DaemoxCPMail=" + login[0] + "; __Host-lang=en";
         String csrf = login[1];
 
         String suffix = Long.toString(System.nanoTime() % 1_000_000);

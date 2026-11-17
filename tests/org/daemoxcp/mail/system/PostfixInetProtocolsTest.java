@@ -15,8 +15,8 @@ import java.util.regex.Pattern;
  *  - the three install scripts write it.
  *
  * Usage (from the project root, after mvn package):
- *   javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/daemoxcp/mail/system/PostfixInetProtocolsTest.java
- *   java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PostfixInetProtocolsTest
+ *   javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/system/PostfixInetProtocolsTest.java
+ *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PostfixInetProtocolsTest
  */
 public class PostfixInetProtocolsTest {
 

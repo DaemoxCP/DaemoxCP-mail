@@ -27,8 +27,8 @@ import java.lang.reflect.Method;
  * Content-Security-Policy the panel sends, for the browser tests to send it too.
  *
  * Usage:
- *   javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java
- *   java  -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.content.PageGenerator /tmp/pages
+ *   javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java
+ *   java  -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.content.PageGenerator /tmp/pages
  *   then the script blocks are extracted and passed to "node --check" (see README.md).
  */
 public class PageGenerator {

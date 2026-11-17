@@ -20,7 +20,7 @@ import org.daemoxcp.mail.util.Shell;
  *     login inside): DONE, AES-256-CBC and a 32-character key, PHP encrypts and decrypts with them, and the probe's real
  *     login opens the mailbox with its folders from IMAP; the second run does nothing;
  *  4. a fault (PHP refusing the cipher): ROLLED_BACK, config.inc.php byte for byte; then DONE again.
- *   java -De2e.vm=yes -De2e.probe=/var/tmp/x/mail-login-probe.sh -cp "tests:freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.system.PhpRoundcubeE2ETest
+ *   java -De2e.vm=yes -De2e.probe=/var/tmp/x/mail-login-probe.sh -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PhpRoundcubeE2ETest
  */
 public class PhpRoundcubeE2ETest {
 

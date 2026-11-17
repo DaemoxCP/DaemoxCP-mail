@@ -26,9 +26,9 @@ import java.util.List;
  *     own (default busy_timeout), and with three the test did not see the panel's wait removed.
  *
  * Everything in a temporary folder (dataBaseManager works on database/mail_panel.db of the current
- * folder, the secrets with -Dmailpanel.secrets.dir), so the child processes start there.
+ * folder, the secrets with -Ddaemoxcp.mail.secrets.dir), so the child processes start there.
  *
- * Usage: java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.daemoxcp.mail.sqli.SqliteSharedTest
+ * Usage: java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.sqli.SqliteSharedTest
  */
 public class SqliteSharedTest {
 
@@ -162,7 +162,7 @@ public class SqliteSharedTest {
 
     static Process start(Path d, String... step) throws Exception {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
-        List<String> cmd = new ArrayList<>(List.of(java, "-Dmailpanel.secrets.dir=" + d.resolve("secrets"),
+        List<String> cmd = new ArrayList<>(List.of(java, "-Ddaemoxcp.mail.secrets.dir=" + d.resolve("secrets"),
                 "-cp", absolute(System.getProperty("java.class.path")), SqliteSharedTest.class.getName()));
         cmd.addAll(List.of(step));
         return new ProcessBuilder(cmd).directory(d.toFile()).redirectErrorStream(true).start();
