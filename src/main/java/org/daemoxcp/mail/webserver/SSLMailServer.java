@@ -692,10 +692,10 @@ public class SSLMailServer {
      * L'Host della richiesta raggiunge questo pannello? Vedi {@link HostCheck} per il perche'
      * del confronto esatto, della porta fuori dal confronto e del DNS mai interrogato.
      *
-     * <p>Eccezione: si accetta qualunque Host se la richiesta arriva <em>davvero</em> da
-     * Cloudflare. La presenza delle intestazioni non basta a dimostrarlo — sono testo, e
-     * chiunque parli direttamente con l'origine puo' scriverle — quindi conta l'indirizzo TCP,
-     * che non si puo' inventare.
+     * <p>Anche da Cloudflare: Cloudflare passa l'Host com'e', quindi chi apre il pannello col suo
+     * nome passa. Prima qualunque Host era accettato se la richiesta arrivava da Cloudflare (o da
+     * una rete privata con le intestazioni di Cloudflare): bastava una zona Cloudflare qualsiasi
+     * fatta puntare a questo server per raggiungere il pannello con un altro nome.
      */
     private boolean hostAllowed(HttpExchange exchange) {
         String host = exchange.getRequestHeaders().getFirst("Host");
@@ -711,14 +711,6 @@ public class SSLMailServer {
                     || "0:0:0:0:0:0:0:1".equals(HostCheck.literalIp(name));
         }
         if (HostCheck.allowed(host, configured)) return true;
-
-        String tcp = exchange.getRemoteAddress() == null || exchange.getRemoteAddress().getAddress() == null
-                ? null : exchange.getRemoteAddress().getAddress().getHostAddress();
-        if (org.daemoxcp.mail.security.TrustedProxy.isTrustedProxy(tcp)
-                && (exchange.getRequestHeaders().containsKey("CF-Connecting-IP")
-                    || exchange.getRequestHeaders().containsKey("CF-RAY"))) {
-            return true;
-        }
         LOGGER.warning(HostCheck.why(host, configured));
         return false;
     }
@@ -11802,7 +11794,8 @@ public class SSLMailServer {
                     sendJsonError(exchange, 400, I18n.tr("server.badRequest"));
                     return;
                 }
-                // Il tratto che arriva qui (il browser, o Cloudflare): e' quello che una famiglia sola puo' chiudere.
+                // Chi sceglie, come lo vede il pannello: col pannello separato e' l'IP che la parte web ha ricavato
+                // (r18, dietro Cloudflare quello del browser).
                 String via = exchange.getRemoteAddress() == null || exchange.getRemoteAddress().getAddress() == null
                         ? null : exchange.getRemoteAddress().getAddress().getHostAddress();
                 org.daemoxcp.mail.system.IpFamily.Outcome o = org.daemoxcp.mail.system.IpFamily.choose(f, req.optBoolean("confirmed", false), via);
@@ -12998,69 +12991,11 @@ http {
     }
 
     String getClientIp(HttpExchange exchange) {
-        // SECURITY: l'IP TCP della connessione è sempre affidabile.
-        // Gli header forwarding (CF-Connecting-IP, X-Forwarded-For, X-Real-IP)
-        // sono affidabili SOLO se la connessione arriva da un proxy fidato
-        // (Cloudflare o reverse proxy locale). Altrimenti un attaccante
-        // potrebbe falsificare l'IP nei log e bypassare il rate limit.
-        String tcpIp = exchange.getRemoteAddress().getAddress().getHostAddress();
-
-        if (!org.daemoxcp.mail.security.TrustedProxy.isTrustedProxy(tcpIp)) {
-            // Connessione diretta non da proxy fidato → ignora gli header forwarding
-            return tcpIp;
-        }
-
-        // Connessione da proxy fidato → ci possiamo fidare degli header
-        String cfIp = exchange.getRequestHeaders().getFirst("CF-Connecting-IP");
-        if (cfIp != null && !cfIp.isEmpty()) {
-            String trimmed = cfIp.trim();
-            if (org.daemoxcp.mail.security.InputValidator.isValidIp(trimmed)) {
-                return trimmed;
-            }
-        }
-        String fromXff = ipFromForwardedFor(exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
-        if (fromXff != null) return fromXff;
-        String realIp = exchange.getRequestHeaders().getFirst("X-Real-IP");
-        if (realIp != null && !realIp.isEmpty()) {
-            String trimmed = realIp.trim();
-            if (org.daemoxcp.mail.security.InputValidator.isValidIp(trimmed)) {
-                return trimmed;
-            }
-        }
-        // Fallback all'IP TCP se nessun header valido (improbabile passando da CF)
-        return tcpIp;
-    }
-
-    /**
-     * L'indirizzo di chi bussa, letto da X-Forwarded-For DA DESTRA. null se non si ricava.
-     *
-     * La forma dell'intestazione e' "client, proxy1, proxy2": a sinistra c'e' il client
-     * originale, ed e' per questo che prima si prendeva il primo pezzo. Ma quel pezzo e'
-     * l'unico che il client puo' SCRIVERSI DA SOLO: chi manda una richiesta con gia' dentro
-     * "X-Forwarded-For: 1.2.3.4" se la vede accodare dal proxy, che aggiunge il proprio
-     * mittente in coda. Il primo valore e' quindi il piu' facile da falsificare, non il piu'
-     * attendibile — e usandolo per il limite dei tentativi bastava cambiarlo a ogni prova per
-     * non essere mai bloccati.
-     *
-     * Si scorre da destra saltando gli indirizzi che sono a loro volta proxy fidati (una
-     * catena vera ne ha piu' d'uno) e ci si ferma al primo che non lo e': quello l'ha scritto
-     * un proxy di cui ci fidiamo, non chi bussa. Se sono tutti fidati non si inventa niente:
-     * si torna null e chi chiama usa l'indirizzo TCP.
-     *
-     * Sta in un metodo suo per poter essere provato: dentro getClientIp servirebbe un
-     * HttpExchange vero, e una logica che nessun test raggiunge e' una logica che nessuno
-     * controlla.
-     */
-    static String ipFromForwardedFor(String header) {
-        if (header == null || header.isEmpty()) return null;
-        String[] pieces = header.split(",");
-        for (int i = pieces.length - 1; i >= 0; i--) {
-            String cand = pieces[i].trim();
-            if (!org.daemoxcp.mail.security.InputValidator.isValidIp(cand)) continue;
-            if (org.daemoxcp.mail.security.TrustedProxy.isTrustedProxy(cand)) continue;
-            return cand;
-        }
-        return null;
+        // L'indirizzo TCP non si puo' inventare; CF-Connecting-IP si', e conta solo se la connessione arriva
+        // davvero da Cloudflare (r18, TrustedProxy.clientAddress). X-Forwarded-For e X-Real-IP mai.
+        return org.daemoxcp.mail.security.TrustedProxy.clientAddress(
+                exchange.getRemoteAddress().getAddress().getHostAddress(),
+                exchange.getRequestHeaders().getFirst("CF-Connecting-IP"));
     }
 
     private String getSessionUsername() {

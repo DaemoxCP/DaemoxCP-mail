@@ -11123,7 +11123,6 @@ public final class UpdateManager {
         // fallisce e' proprio quando serve poter guardare cosa c'e' scritto.
         r.put("listV4", new JSONArray(org.daemoxcp.mail.security.TrustedProxy.cloudflareV4()));
         r.put("listV6", new JSONArray(org.daemoxcp.mail.security.TrustedProxy.cloudflareV6()));
-        r.put("localList", new JSONArray(org.daemoxcp.mail.security.TrustedProxy.localIntervals()));
         try {
             java.util.List<String> v4 = downloadIntervals("https://www.cloudflare.com/ips-v4", true);
             java.util.List<String> v6 = downloadIntervals("https://www.cloudflare.com/ips-v6", false);

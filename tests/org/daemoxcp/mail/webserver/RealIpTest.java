@@ -1,10 +1,17 @@
 package org.daemoxcp.mail.webserver;
 
+import org.daemoxcp.mail.security.TrustedProxy;
+
 /**
- * Which piece of X-Forwarded-For gives the address of whoever is knocking.
+ * The address of whoever is knocking (r18): CF-Connecting-IP only when the connection really comes from
+ * Cloudflare, otherwise the TCP address. Never X-Forwarded-For or X-Real-IP, from anyone.
  *
- * It is the line that, read from the left, made the limit on sign-in attempts useless: changing
- * the header at every try was enough never to be blocked.
+ * Before, the loopback and the private networks were trusted like Cloudflare: another machine in the
+ * provider's private network, or a request to the 443 surface (nginx passes the client's headers on to the
+ * panel over the loopback), could choose its own address in the logs and in the limit on sign-in attempts.
+ *
+ * It runs anywhere (it calls nothing):
+ *   java -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RealIpTest
  */
 public class RealIpTest {
 
@@ -13,56 +20,54 @@ public class RealIpTest {
         System.out.println((ok ? "  OK   " : "  FAILED ") + what);
         if (!ok) failed++;
     }
-    static void expected(String header, String wanted) {
-        String got = SSLMailServer.ipFromForwardedFor(header);
-        boolean ok = (wanted == null) ? (got == null) : wanted.equals(got);
+    static void expected(String tcp, String header, String wanted) {
+        String got = TrustedProxy.clientAddress(tcp, header);
+        boolean ok = wanted.equals(got);
         System.out.println((ok ? "  OK   " : "  FAILED ")
-                + String.format("%-46s -> %s", "\"" + header + "\"", got)
+                + String.format("%-24s CF-Connecting-IP %-22s -> %s", tcp, header == null ? "(none)" : "\"" + header + "\"", got)
                 + (ok ? "" : "   (expected " + wanted + ")"));
         if (!ok) failed++;
     }
 
     public static void main(String[] a) {
-        System.out.println("\n== the normal case behind Cloudflare ==");
-        // Cloudflare appends the real sender after whatever the client sent.
-        expected("203.0.113.9", "203.0.113.9");
-        expected("9.9.9.9, 203.0.113.9", "203.0.113.9");
+        System.out.println("\n== from Cloudflare: the address Cloudflare writes ==");
+        expected("172.68.1.1", "203.0.113.9", "203.0.113.9");
+        expected("2606:4700::6812:1", "2001:db8::9", "2001:db8::9");
+        // The form the TCP address has in Java (getHostAddress): uncompressed.
+        expected("2606:4700:0:0:0:0:6812:1", "203.0.113.9", "203.0.113.9");
+        expected("172.68.1.1", "  203.0.113.9  ", "203.0.113.9");
 
-        System.out.println("\n== the forgery that used to pass ==");
-        // Before, the FIRST piece was taken: here it would have returned 1.2.3.4, that is an address
-        // chosen by whoever knocks. Changing it at every try, no block would ever have fired.
-        require("an address put by the client does not win over the value added by the proxy",
-                !"1.2.3.4".equals(SSLMailServer.ipFromForwardedFor("1.2.3.4, 203.0.113.9")));
-        expected("1.2.3.4, 203.0.113.9", "203.0.113.9");
+        System.out.println("\n== from Cloudflare without a usable header: the TCP address, nothing made up ==");
+        expected("172.68.1.1", null, "172.68.1.1");
+        expected("172.68.1.1", "", "172.68.1.1");
+        expected("172.68.1.1", "not-an-address", "172.68.1.1");
+        expected("172.68.1.1", "203.0.113.9, 198.51.100.7", "172.68.1.1");
 
-        System.out.println("\n== chains with more trusted proxies at the end ==");
-        expected("203.0.113.9, 172.68.1.1", "203.0.113.9");
-        expected("203.0.113.9, 172.68.1.1, 104.16.0.5", "203.0.113.9");
+        System.out.println("\n== from anyone else the header is only text: the TCP address ==");
+        expected("198.51.100.7", "203.0.113.9", "198.51.100.7");
+        expected("127.0.0.1", "203.0.113.9", "127.0.0.1");
+        expected("0:0:0:0:0:0:0:1", "203.0.113.9", "0:0:0:0:0:0:0:1");
+        expected("10.1.2.3", "203.0.113.9", "10.1.2.3");
+        expected("172.16.5.5", "203.0.113.9", "172.16.5.5");
+        expected("192.168.1.1", "203.0.113.9", "192.168.1.1");
+        expected("fd12:3456:789a:1::1", "203.0.113.9", "fd12:3456:789a:1::1");
 
-        System.out.println("\n== invalid values: skipped, not accepted ==");
-        expected("foo, 203.0.113.9", "203.0.113.9");
-        expected("203.0.113.9, foo", "203.0.113.9");
-        expected("foo", null);
-        expected("", null);
-        expected(null, null);
-
-        System.out.println("\n== if they are ALL trusted nothing is made up ==");
-        // The caller falls back on the TCP address: better a real and useless address than a
-        // plausible and false one.
-        expected("127.0.0.1", null);
-        expected("172.68.1.1, 104.16.0.5", null);
-
-        System.out.println("\n== spaces and sloppy forms ==");
-        expected("  203.0.113.9  ,  172.68.1.1  ", "203.0.113.9");
-        expected("203.0.113.9,172.68.1.1", "203.0.113.9");
-
-        System.out.println("\n== and the CIDR comparison is on bits, not on strings ==");
+        System.out.println("\n== who is Cloudflare: the published ranges only, compared on bits ==");
         require("104.23.255.255 is inside 104.16.0.0/13 (a text comparison would miss it)",
-                org.daemoxcp.mail.security.TrustedProxy.isTrustedProxy("104.23.255.255"));
+                TrustedProxy.isCloudflare("104.23.255.255"));
         require("173.245.64.1 is NOT inside 173.245.48.0/20 (a text comparison would accept it)",
-                !org.daemoxcp.mail.security.TrustedProxy.isTrustedProxy("173.245.64.1"));
+                !TrustedProxy.isCloudflare("173.245.64.1"));
         require("188.114.97.7 is recognised: it is the address the two panels answer on",
-                org.daemoxcp.mail.security.TrustedProxy.isTrustedProxy("188.114.97.7"));
+                TrustedProxy.isCloudflare("188.114.97.7"));
+        require("2606:4700::1 is inside 2606:4700::/32, 2606:4701::1 is not",
+                TrustedProxy.isCloudflare("2606:4700::1") && !TrustedProxy.isCloudflare("2606:4701::1"));
+        require("the loopback and the private networks are not Cloudflare any more",
+                !TrustedProxy.isCloudflare("127.0.0.1") && !TrustedProxy.isCloudflare("::1")
+                        && !TrustedProxy.isCloudflare("10.0.0.1") && !TrustedProxy.isCloudflare("172.16.0.1")
+                        && !TrustedProxy.isCloudflare("192.168.1.1") && !TrustedProxy.isCloudflare("fd00::1"));
+        require("a name is never an address: no DNS lookup, not Cloudflare",
+                !TrustedProxy.isCloudflare("cloudflare.com") && !TrustedProxy.isCloudflare("localhost")
+                        && !TrustedProxy.isCloudflare(null) && !TrustedProxy.isCloudflare(""));
 
         System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         if (failed > 0) System.exit(1);

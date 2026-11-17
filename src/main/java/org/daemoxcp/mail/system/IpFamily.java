@@ -226,9 +226,10 @@ public final class IpFamily {
     /**
      * La scelta dell'amministratore. Prima di cambiare qualcosa: il server deve avere un indirizzo e una rotta nella
      * famiglia che resta (solo IPv4 o solo IPv6); poi gli avvisi, che chiedono una conferma. Confermata, la si applica
-     * servizio per servizio; se uno non torna, tutto com'era e la scelta di prima resta. via e' l'indirizzo della
-     * connessione TCP che porta la scelta al pannello (Cloudflare compreso, perche' e' quel tratto che si chiude), null
-     * dalla console: se la scelta chiude proprio quella famiglia, un avviso lo dice prima.
+     * servizio per servizio; se uno non torna, tutto com'era e la scelta di prima resta. via e' l'indirizzo di chi
+     * sceglie come lo vede il pannello (r18: dietro Cloudflare quello del browser, non del nodo di Cloudflare; il
+     * tratto Cloudflare-server lo dice warnCloudflare), null dalla console: se la scelta chiude proprio quella
+     * famiglia, un avviso lo dice prima.
      */
     public static synchronized Outcome choose(Family f, boolean confirmed, String via) {
         org.daemoxcp.mail.database.MailDatabase db = org.daemoxcp.mail.Main.mailDatabase;
