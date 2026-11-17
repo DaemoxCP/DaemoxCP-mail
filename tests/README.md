@@ -70,6 +70,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.CloudflareTokensTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RcScriptRepairTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SafeOwnershipTest   (VM, as root)
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.AcmeCloudflareCopyTest   (VM, as root)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMoveTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveStorageTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/integration/*.java
@@ -287,6 +288,11 @@ on a real tree with a root file hard-linked and one behind a link (both stay roo
 that are not a panel folder refused; the installation scripts, the mail folders' regeneration (created as vmail),
 Roundcube's folders and acme.sh's walk use it; RoundcubeUser.apply on a tree with a hard link. Falsified with the old
 SafeOwnership: 10 FAILED.
+
+`AcmeCloudflareCopyTest` (as root on the VM, from the project root): the clear copy of the Cloudflare token that
+acme.sh saves in its account.conf (SAVED_CF_Token, SAVED_CF_Account_ID) removed after every run the panel gives the
+token to, and at boot: only those lines go, the rest stays byte for byte with owner and permissions; a link or a file
+with two names is left; a second run has nothing to do. Falsified with a version that removes nothing: 4 FAILED.
 
 `RcScriptRepairTest` (from the project root, it reads UpdateManager.java): the start script the panel wrote, with the
 old file names and the old Italian messages, repaired at boot (whole lines only, sh -n, same owner and mode, atomic
