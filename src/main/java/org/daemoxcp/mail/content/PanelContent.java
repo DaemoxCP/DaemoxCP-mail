@@ -339,6 +339,14 @@ public class PanelContent {
         /* Gli avvisi del pannello al posto di panelSay('info', ) (reperto 198): in alto, sopra la pagina, chiudibili. */
         .panel-notices { position: fixed; top: 4.5rem; left: 1rem; right: 1rem; z-index: 2000; max-width: 34rem; margin-left: auto; }
         .panel-notices .alert p:last-of-type { margin-bottom: 0; }
+        /* Gli avvisi stanno SOPRA la pagina: nel tema scuro le tinte trasparenti degli alert lasciavano vedere quello
+           che c'e' sotto (testo chiaro su una barra azzurra, illeggibile; 17/11/2026, pagina SSL). Sotto la tinta, il
+           fondo pieno della scheda: lo stesso colore di un alert dentro una scheda, ma opaco. */
+        [data-theme="dark"] .panel-notices .alert { background: linear-gradient(var(--alert-bg), var(--alert-bg)), var(--bg-card); }
+        [data-theme="dark"] .panel-notices .alert-info { background: linear-gradient(rgba(13, 202, 240, 0.15), rgba(13, 202, 240, 0.15)), var(--bg-card); }
+        [data-theme="dark"] .panel-notices .alert-warning { background: linear-gradient(rgba(255, 193, 7, 0.15), rgba(255, 193, 7, 0.15)), var(--bg-card); }
+        [data-theme="dark"] .panel-notices .alert-success { background: linear-gradient(rgba(25, 135, 84, 0.15), rgba(25, 135, 84, 0.15)), var(--bg-card); }
+        [data-theme="dark"] .panel-notices .alert-danger { background: linear-gradient(rgba(220, 53, 69, 0.15), rgba(220, 53, 69, 0.15)), var(--bg-card); }
         /* Riavvio programmato: la pagina in sola lettura (panel-reboot.js). Lo dicono anche la striscia e l'avviso. */
         body.panel-restart-locked #main .btn:not(.btn-close):not([data-bs-toggle]):not([data-bs-dismiss]) { opacity: .55; cursor: not-allowed; }
         body.panel-restart-locked #panelRebootBanner .btn { opacity: 1; cursor: pointer; }
@@ -6905,9 +6913,10 @@ public class PanelContent {
                                     <tr><td><strong>{{t:ssl.nextCheck}}</strong></td><td id="autoRenewNextCheck" class="text-muted">-</td></tr>
                                 </tbody>
                             </table>
-                            <button class="btn btn-outline-info btn-sm" data-on-click="triggerManualCheck()">
+                            <button class="btn btn-outline-info btn-sm" id="autoRenewCheckNow" data-on-click="triggerManualCheck()">
                                 <i class="fas fa-play me-1" aria-hidden="true"></i>{{t:ssl.checkNow}}
                             </button>
+                            <p class="small mt-2 mb-0" id="autoRenewProgress" role="status" aria-live="polite"></p>
                             <div class="card mt-3 border-0" data-style="background: rgba(246,130,31,0.08)">
                                 <div class="card-body py-3">
                                     <h6 class="mb-2"><i class="fas fa-cloud me-1" data-style="color:#f6821f"></i>{{t:ssl.autoViaCf}}</h6>
@@ -7651,11 +7660,23 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
         }
 
+        // Il rinnovo dura minuti (Let's Encrypt controlla i record DNS di ogni nome): lo si dice subito, e l'esito resta
+        // scritto sotto il pulsante, non solo nell'avviso in alto che dopo dieci secondi se ne va.
+        function autoRenewSay(kind, text) {
+            const el = document.getElementById('autoRenewProgress');
+            if (!el) return;
+            el.className = 'small mt-2 mb-0' + (kind ? ' text-' + kind : '');
+            el.textContent = text || '';
+        }
+
         function triggerManualCheck() {
-            const btn = event.currentTarget;
+            // Il pulsante per id: le azioni data-on-click passano da un solo ascoltatore su document, quindi
+            // event.currentTarget era il documento, non il pulsante, e lo spinner non compariva mai (17/11/2026).
+            const btn = document.getElementById('autoRenewCheckNow');
             const originalHtml = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>' + escHtml(t('dns.checkingRecord'));
+            autoRenewSay('', t('ssl.checkRunning'));
             fetch('/api/ssl', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -7664,15 +7685,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;
                 if (data.success) {
+                    autoRenewSay('success', data.message || t('ssl.checkDone'));
                     panelSay('success', data.message || t('ssl.checkDone'));
                     loadAutoRenewSettings();
                     loadSslStatus();
                 } else {
-                    panelSay('danger', t('common.error', { message: data.message || data.error || t('common.unknownError') }));
+                    const text = t('common.error', { message: data.message || data.error || t('common.unknownError') });
+                    autoRenewSay('danger', text);
+                    panelSay('danger', text);
                 }
             }).catch(e => {
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;
+                autoRenewSay('danger', t('common.error', { message: e.message }));
                 panelSay('danger', t('common.error', { message: e.message }));
             });
         }

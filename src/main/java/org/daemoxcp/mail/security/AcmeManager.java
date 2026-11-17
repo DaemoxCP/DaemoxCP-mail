@@ -436,6 +436,156 @@ public class AcmeManager {
     }
 
     /**
+     * I servizi che presentano il certificato della posta, dopo che i file sono cambiati: ognuno controllato e
+     * ricaricato da solo, poi guardato dal vivo. Torna i problemi (vuoto se e' tutto a posto); in out cosa e' successo.
+     *
+     * Prima il deploy riscriveva conf.d/10-ssl.conf con la sintassi di Dovecot 2.3 e ricaricava tutto con
+     * "service X reload 2>/dev/null || echo". Il 17/11/2026, al primo rinnovo vero sul server con Dovecot 2.4, la
+     * configurazione di Dovecot e' diventata invalida (ssl_cert: Unknown setting), il reload e' stato rifiutato senza
+     * che nessuno lo sapesse, la 993 ha continuato a presentare il certificato vecchio e al primo riavvio Dovecot non
+     * sarebbe ripartito. Le configurazioni le scrive l'installazione, e puntano gia' a questi file: qui non si toccano.
+     */
+    java.util.List<String> reloadAndVerify(StringBuilder out) {
+        java.util.List<String> problems = new java.util.ArrayList<>();
+        java.time.Duration t = java.time.Duration.ofSeconds(60);
+        java.util.List<int[]> ports = new java.util.ArrayList<>();
+        java.util.List<String> portNames = new java.util.ArrayList<>();
+
+        // Prima il controllo della configurazione e il reload; solo con una configurazione buona ha senso chiedere quale
+        // file usa (rotta, doveconf non risponde e sembrerebbe "non usa il certificato").
+        if (org.daemoxcp.mail.util.Shell.run(t, "service", "dovecot", "status").success()) {
+            if (reloadChecked("Dovecot", "doveconf -n", "service dovecot reload", problems, out)) {
+                String file = org.daemoxcp.mail.util.Shell.runShell(t,
+                        "doveconf -h ssl_server_cert_file 2>/dev/null || doveconf -h ssl_cert 2>/dev/null").outputTrim();
+                if (!CERT_FILE.equals(file.replaceFirst("^<", "").trim()))
+                    problems.add(I18n.tr("server.acme.notUsing", java.util.Map.of("s", "Dovecot", "f", CERT_FILE)));
+            }
+            ports.add(new int[]{993});
+            portNames.add("Dovecot");
+        }
+        if (org.daemoxcp.mail.util.Shell.run(t, "service", "postfix", "status").success()) {
+            if (reloadChecked("Postfix", "postfix check", "service postfix reload", problems, out)) {
+                String files = org.daemoxcp.mail.util.Shell.runShell(t,
+                        "postconf -h smtpd_tls_chain_files smtpd_tls_cert_file 2>/dev/null").output();
+                if (files == null || !files.contains(CERT_FILE))
+                    problems.add(I18n.tr("server.acme.notUsing", java.util.Map.of("s", "Postfix", "f", CERT_FILE)));
+            }
+            ports.add(new int[]{465});
+            portNames.add("Postfix");
+        }
+        String sni443 = null;
+        if (org.daemoxcp.mail.util.Shell.run(t, "service", "nginx", "status").success()) {
+            reloadChecked("nginx", "nginx -t", "service nginx reload", problems, out);
+            sni443 = sniFor443(installedCertificateNames());
+            if (sni443 != null) {
+                ports.add(new int[]{443});
+                portNames.add("nginx");
+            }
+        }
+        if (!problems.isEmpty()) return problems;
+
+        // Lo sguardo che conta: che cosa presenta davvero chi si collega. Dovecot ricarica in un momento suo, quindi
+        // si riprova per qualche secondo prima di dire che ha ancora il certificato di prima.
+        String expected = serialOf(Paths.get(CERT_FILE));
+        if (expected == null) {
+            problems.add(I18n.tr("server.acme.unreadable", java.util.Map.of("f", CERT_FILE)));
+            return problems;
+        }
+        for (int i = 0; i < ports.size(); i++) {
+            int port = ports.get(i)[0];
+            String sni = port == 443 ? sni443 : null;
+            String seen = null;
+            for (int attempt = 0; attempt < 15; attempt++) {
+                seen = servedSerial("127.0.0.1", port, sni, 5000);
+                if (expected.equals(seen)) break;
+                try { Thread.sleep(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+            }
+            out.append(portNames.get(i)).append(" on ").append(port).append(": ")
+                    .append(expected.equals(seen) ? "the new certificate" : "certificate " + seen).append('\n');
+            if (!expected.equals(seen))
+                problems.add(I18n.tr("server.acme.stillOld", java.util.Map.of("s", portNames.get(i), "p", String.valueOf(port))));
+        }
+        return problems;
+    }
+
+    /**
+     * Il controllo della configurazione, poi il reload; un rifiuto diventa un problema detto, mai un "ricaricato".
+     * Vero se il servizio e' stato ricaricato. Del controllo si tiene l'errore (stderr), non quello che stampa quando
+     * va bene (doveconf -n stampa tutta la configurazione).
+     */
+    private static boolean reloadChecked(String name, String check, String reload, java.util.List<String> problems, StringBuilder out) {
+        java.time.Duration t = java.time.Duration.ofSeconds(60);
+        org.daemoxcp.mail.util.Shell.Result c = org.daemoxcp.mail.util.Shell.runShell(t, check + " 2>&1 >/dev/null");
+        if (!c.success()) {
+            String why = lastLine(c.outputTrim());
+            out.append(name).append(": configuration refused, not reloaded: ").append(why).append('\n');
+            problems.add(I18n.tr("server.acme.serviceRefused", java.util.Map.of("s", name, "e", why)));
+            return false;
+        }
+        org.daemoxcp.mail.util.Shell.Result r = org.daemoxcp.mail.util.Shell.runShell(t, reload + " 2>&1");
+        out.append(name).append(": ").append(r.success() ? "reloaded" : "reload failed: " + lastLine(r.outputTrim())).append('\n');
+        if (!r.success())
+            problems.add(I18n.tr("server.acme.reloadFailed", java.util.Map.of("s", name, "e", lastLine(r.outputTrim()))));
+        return r.success();
+    }
+
+    private static String lastLine(String text) {
+        if (text == null || text.isBlank()) return "?";
+        String[] lines = text.trim().split("\n");
+        String l = lines[lines.length - 1].trim();
+        return l.length() > 300 ? l.substring(0, 300) : l;
+    }
+
+    /** Il nome con cui chiedere a nginx sulla 443 il certificato della posta: un mta-sts.* che il certificato copre. */
+    static String sniFor443(java.util.List<String> names) {
+        if (names == null) return null;
+        for (String n : names) if (n != null && n.toLowerCase(java.util.Locale.ROOT).startsWith("mta-sts.")) return n;
+        return null;
+    }
+
+    /** Il numero di serie (esadecimale, maiuscolo) del primo certificato del file, o null. */
+    static String serialOf(Path pem) {
+        try (java.io.InputStream in = Files.newInputStream(pem)) {
+            java.security.cert.X509Certificate c = (java.security.cert.X509Certificate)
+                    java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(in);
+            return c.getSerialNumber().toString(16).toUpperCase(java.util.Locale.ROOT);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Il numero di serie del certificato che presenta chi ascolta su host:porta (TLS subito, come 993, 465 e 443), o
+     * null. Si legge e basta: nessuna fiducia serve per guardare un certificato, e non si manda niente.
+     */
+    static String servedSerial(String host, int port, String sni, int timeoutMs) {
+        try {
+            javax.net.ssl.SSLContext ctx = javax.net.ssl.SSLContext.getInstance("TLS");
+            ctx.init(null, new javax.net.ssl.TrustManager[]{new javax.net.ssl.X509TrustManager() {
+                public void checkClientTrusted(java.security.cert.X509Certificate[] c, String a) { }
+                public void checkServerTrusted(java.security.cert.X509Certificate[] c, String a) { }
+                public java.security.cert.X509Certificate[] getAcceptedIssuers() { return new java.security.cert.X509Certificate[0]; }
+            }}, null);
+            try (java.net.Socket raw = new java.net.Socket()) {
+                raw.connect(new java.net.InetSocketAddress(host, port), timeoutMs);
+                raw.setSoTimeout(timeoutMs);
+                try (javax.net.ssl.SSLSocket s = (javax.net.ssl.SSLSocket) ctx.getSocketFactory().createSocket(raw, host, port, false)) {
+                    if (sni != null) {
+                        javax.net.ssl.SSLParameters p = s.getSSLParameters();
+                        p.setServerNames(java.util.List.of(new javax.net.ssl.SNIHostName(sni)));
+                        s.setSSLParameters(p);
+                    }
+                    s.startHandshake();
+                    java.security.cert.Certificate[] chain = s.getSession().getPeerCertificates();
+                    return ((java.security.cert.X509Certificate) chain[0]).getSerialNumber().toString(16).toUpperCase(java.util.Locale.ROOT);
+                }
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * Estrae dall'uscita di acme.sh la cartella in cui ha DAVVERO scritto.
      * acme.sh la dichiara sempre: "Your cert is in: /percorso/host.cer".
      * Leggerla invece di ricostruirla e' l'unico modo per non ricopiare un file
@@ -548,82 +698,18 @@ public class AcmeManager {
 
             executeScript(permScript);
 
-            // Update Dovecot configuration
-            updateDovecotSsl();
-
-            // Update Postfix configuration
-            updatePostfixSsl();
-
-            // Reload services
-            String reloadOutput = executeScript("""
-                service dovecot reload 2>/dev/null || echo "Dovecot not running"
-                service postfix reload 2>/dev/null || echo "Postfix not running"
-                service nginx reload 2>/dev/null || echo "Nginx not running"
-                echo "Services reloaded"
-                """);
-
-            return new DeployResult(true, I18n.tr("server.acme.deployed"), reloadOutput);
+            // Le configurazioni dei servizi non si riscrivono: puntano gia' a questi file. I servizi si ricaricano uno
+            // per uno dopo il loro controllo, e poi si guarda dal vivo che cosa presentano (reloadAndVerify).
+            StringBuilder reloadOutput = new StringBuilder();
+            java.util.List<String> problems = reloadAndVerify(reloadOutput);
+            if (!problems.isEmpty())
+                return new DeployResult(false, I18n.tr("server.acme.deployIncomplete",
+                        java.util.Map.of("list", String.join(" ", problems))), reloadOutput.toString());
+            return new DeployResult(true, I18n.tr("server.acme.deployed"), reloadOutput.toString());
 
         } catch (Exception e) {
             return new DeployResult(false, I18n.tr("server.acme.deployError", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
         }
-    }
-
-    /**
-     * Update Dovecot SSL configuration
-     */
-    private void updateDovecotSsl() throws IOException {
-        String dovecotSslConf = """
-            # SSL configuration - managed by DaemoxCP Mail
-            ssl = required
-            ssl_cert = <%s
-            ssl_key = <%s
-            ssl_min_protocol = TLSv1.2
-            ssl_cipher_list = ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
-            ssl_prefer_server_ciphers = yes
-            """.formatted(FULLCHAIN_FILE, KEY_FILE);
-
-        Path sslConf = Paths.get("/usr/local/etc/dovecot/conf.d/10-ssl.conf");
-        Files.createDirectories(sslConf.getParent());
-        Files.writeString(sslConf, dovecotSslConf);
-    }
-
-    /**
-     * Update Postfix SSL configuration
-     */
-    private void updatePostfixSsl() throws IOException {
-        // Read current config
-        Path postfixConf = Paths.get("/usr/local/etc/postfix/main.cf");
-        if (!Files.exists(postfixConf)) {
-            return;
-        }
-
-        String config = Files.readString(postfixConf);
-
-        // Update TLS settings in main.cf
-        // Replace or add smtpd_tls_cert_file and smtpd_tls_key_file
-        if (config.contains("smtpd_tls_cert_file")) {
-            config = config.replaceAll("smtpd_tls_cert_file\\s*=.*", "smtpd_tls_cert_file = " + FULLCHAIN_FILE);
-        } else {
-            config += "\nsmtpd_tls_cert_file = " + FULLCHAIN_FILE;
-        }
-
-        if (config.contains("smtpd_tls_key_file")) {
-            config = config.replaceAll("smtpd_tls_key_file\\s*=.*", "smtpd_tls_key_file = " + KEY_FILE);
-        } else {
-            config += "\nsmtpd_tls_key_file = " + KEY_FILE;
-        }
-
-        // Ensure TLS is enabled (use smtpd_tls_security_level instead of deprecated smtpd_use_tls)
-        if (!config.contains("smtpd_tls_security_level")) {
-            config += "\nsmtpd_tls_security_level = may";
-        } else {
-            config = config.replaceAll("smtpd_tls_security_level\\s*=\\s*none", "smtpd_tls_security_level = may");
-        }
-        // Remove deprecated smtpd_use_tls if present
-        config = config.replaceAll("(?m)^smtpd_use_tls\\s*=.*\\n?", "");
-
-        Files.writeString(postfixConf, config);
     }
 
     /**
@@ -672,7 +758,7 @@ public class AcmeManager {
                 // Redeploy
                 DeployResult deployResult = deployCertificate(mailHostname);
                 return new CertificateResult(deployResult.success,
-                    deployResult.success ? I18n.tr("server.acme.renewed") : I18n.tr("server.acme.renewedDeployFailed"),
+                    deployResult.success ? I18n.tr("server.acme.renewed") : I18n.tr("server.acme.renewedDeployFailed") + " " + deployResult.message,
                     output + "\n" + (deployResult.output != null ? deployResult.output : ""));
             }
 
@@ -812,7 +898,7 @@ public class AcmeManager {
                 DeployResult deployResult = deployCertificate(mailHostname, output);
                 return new CertificateResult(deployResult.success,
                     deployResult.success ? I18n.tr("server.acme.renewedCf")
-                                         : I18n.tr("server.acme.renewedCfDeployFailed"),
+                                         : I18n.tr("server.acme.renewedCfDeployFailed") + " " + deployResult.message,
                     output + "\n" + (deployResult.output != null ? deployResult.output : ""));
             }
 
@@ -1306,19 +1392,13 @@ public class AcmeManager {
                 """.formatted(CERT_FILE, KEY_FILE, FULLCHAIN_FILE, SSL_DIR);
             executeScript(permScript);
 
-            // Update Dovecot configuration
-            updateDovecotSsl();
-
-            // Update Postfix configuration
-            updatePostfixSsl();
-
-            // Reload services
-            String reloadOutput = executeScript("""
-                service dovecot reload 2>/dev/null || echo "Dovecot not running"
-                service postfix reload 2>/dev/null || echo "Postfix not running"
-                service nginx reload 2>/dev/null || echo "Nginx not running"
-                echo "Services reloaded"
-                """);
+            // Come nel deploy di Let's Encrypt: niente configurazioni riscritte, ricarica controllata e sguardo dal vivo.
+            StringBuilder reloadLog = new StringBuilder();
+            java.util.List<String> problems = reloadAndVerify(reloadLog);
+            String reloadOutput = reloadLog.toString();
+            if (!problems.isEmpty())
+                return new CertificateResult(false, I18n.tr("server.acme.deployIncomplete",
+                        java.util.Map.of("list", String.join(" ", problems))), reloadOutput);
 
             // Save info to database
             database.setSetting("ssl_type", "manual");
