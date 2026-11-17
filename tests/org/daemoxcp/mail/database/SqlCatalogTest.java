@@ -232,26 +232,25 @@ public class SqlCatalogTest {
             String url = "jdbc:mysql://127.0.0.1:" + port + "/?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
             try (Connection own = java.sql.DriverManager.getConnection(url, "root", System.getProperty("mysql.root.password", ""));
                  Statement s = own.createStatement()) {
-                s.execute("DROP USER IF EXISTS 'mailserver'@'127.0.0.1'");
+                s.execute("DROP USER IF EXISTS 'daemoxcp_mail'@'127.0.0.1'");
                 // Quotes, a backslash, a dollar: before, only the quotes were doubled into the text.
                 String password = "Pa'ss\\wo\"rd $x " + System.nanoTime();
                 root.createDatabaseAndUser(password);
                 boolean in;
-                try (Connection c = java.sql.DriverManager.getConnection(url, "mailserver", password)) {
+                try (Connection c = java.sql.DriverManager.getConnection(url, "daemoxcp_mail", password)) {
                     in = c.isValid(5);
                 } catch (SQLException e) {
                     in = false;
                 }
                 check("the user created with that password gets in with exactly that password", in);
                 boolean wrong;
-                try (Connection c = java.sql.DriverManager.getConnection(url, "mailserver", password.replace("\\", ""))) {
+                try (Connection c = java.sql.DriverManager.getConnection(url, "daemoxcp_mail", password.replace("\\", ""))) {
                     wrong = true;
                 } catch (SQLException e) {
                     wrong = false;
                 }
                 check("  and not with the password without the backslash", !wrong);
-                s.execute("DROP USER IF EXISTS 'mailserver'@'127.0.0.1'");
-                s.execute("DROP DATABASE IF EXISTS mailserver");
+                s.execute("DROP USER IF EXISTS 'daemoxcp_mail'@'127.0.0.1'");
                 s.execute("DROP DATABASE IF EXISTS daemoxcp_mail");
             }
         } else {

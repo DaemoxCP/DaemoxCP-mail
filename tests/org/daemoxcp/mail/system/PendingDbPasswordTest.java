@@ -58,7 +58,7 @@ public class PendingDbPasswordTest {
 
     static void postfix(String user, String password) throws Exception {
         Files.writeString(map, "# written by the script\nuser = " + user + "\npassword = " + password
-                + "\nhosts = 127.0.0.1\ndbname = mailserver\nquery = SELECT domain FROM domains WHERE domain='%s' AND active=1\n");
+                + "\nhosts = 127.0.0.1\ndbname = daemoxcp_mail\nquery = SELECT domain FROM domains WHERE domain='%s' AND active=1\n");
     }
 
     static void noPostfix() throws Exception {

@@ -76,7 +76,7 @@ public class LoginE2EServer {
         // (the passkeys' name). Without this line every page answered 421 and the test no longer
         // passed; found by running it against the test machine (reperto 178).
         Main.dbManager.update_panel_config("panel.localhost", "0", Files.readString(dir.resolve("c.pem")),
-                Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
+                Files.readString(dir.resolve("k.pem")), "", "daemoxcp-mail-");
         SSLMailServer srv = new SSLMailServer(port, Files.readString(dir.resolve("c.pem")), Files.readString(dir.resolve("k.pem")));
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);

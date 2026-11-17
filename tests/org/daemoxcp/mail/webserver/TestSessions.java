@@ -18,7 +18,7 @@ final class TestSessions {
     /** The login tables ready (schema and migration) for the database the test already connected. */
     static void prepare(MailDatabase db) throws Exception {
         if (System.getProperty("daemoxcp.mail.secrets.dir") == null)
-            System.setProperty("daemoxcp.mail.secrets.dir", Files.createTempDirectory("mailpanel-secrets").toString());
+            System.setProperty("daemoxcp.mail.secrets.dir", Files.createTempDirectory("daemoxcp-mail-secrets").toString());
         Main.mailDatabase = db;
         db.createSchema();
         AuthStore.migrate();

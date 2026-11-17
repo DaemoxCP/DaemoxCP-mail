@@ -160,7 +160,7 @@ PASSET=$(curl -sk -A "$UA" -b "$JAR_COOKIES" "$BASE/home" | grep -o '/assets/[0-
 c=$(get "$PASSET"); check "a script of a signed-in page ($PASSET): $c" "$(is "$c" 200)"
 c=$(post "/api/updates" '{"action":"service_users"}' "$CSRF"); B=$(cat /var/tmp/sep-body)
 check "POST service_users with the CSRF token: $c" "$(is "$c" 200)"
-PANEL_ROW=$(printf '%s' "$B" | tr '{' '\n' | grep '"mail-panel"' | head -1)
+PANEL_ROW=$(printf '%s' "$B" | tr '{' '\n' | grep '"daemoxcp-mail"' | head -1)
 check "  the panel runs as daemoxcp_mail and root ($PANEL_ROW)" "$(has "$PANEL_ROW" '"daemoxcp_mail"')"
 check "  root for the part that manages the machine" "$(has "$PANEL_ROW" '"root"')"
 check "  and the page does not say it runs entirely as root" "$(is "$(has "$B" panelLegacy)" 1)"
@@ -266,7 +266,7 @@ fi
 for u in daemoxcp_mail_postfix daemoxcp_mail_dovecot; do
     O=$(mktemp /var/tmp/sep-my.XXXXXX); chmod 600 "$O"
     printf '[client]\nuser=%s\npassword=%s\nhost=127.0.0.1\nport=3306\n' "$u" \
-        "$(sed -n "s/^${u#mailpanel_}_db_password=//p" $E/root-secrets.properties | unescape)" > "$O"
+        "$(sed -n "s/^${u#daemoxcp_mail_}_db_password=//p" $E/root-secrets.properties | unescape)" > "$O"
     asuser() { /usr/local/bin/mysql --defaults-extra-file="$O" -N -e "$1" 2>&1; }
     R=$(asuser "SELECT COUNT(*) FROM $MDB.panel_admin"); check "$u: the administrators refused ($R)" "$(has "$R" "ERROR 1142")"
     R=$(asuser "UPDATE $MDB.mailboxes SET active = active"); check "$u: writing the mailboxes refused ($R)" "$(has "$R" "ERROR 1142")"

@@ -319,7 +319,7 @@ public class MailboxPasswordTest {
                 check("the change: PASSWORD_SUCCESS (0), hash is the new password", out.contains("change:0") && db.mailboxPasswordMatches(id, "Real-Roundcube-2026"));
                 check("the copy too (written by the change, then confirmed by the login hook)", "Real-Roundcube-2026".equals(copyOf(id)));
                 check("panel unreachable: the login goes on, one line in the log without the password",
-                        out.contains("log:daemoxcp_mail_sso: the mail panel did not answer") && !out.contains("Real-Roundcube-2026"));
+                        out.contains("log:daemoxcp_mail_sso: DaemoxCP Mail did not answer") && !out.contains("Real-Roundcube-2026"));
                 setColumn("password_encrypted", id, null);
                 Process again = new ProcessBuilder("php", "tests/webmail-roundcube-test.php", rc, config.toString(), plugin.toString(),
                         email, "Real-Roundcube-2026", "Real-Roundcube-2026", base + "/api/internal/mailbox-vault", key)

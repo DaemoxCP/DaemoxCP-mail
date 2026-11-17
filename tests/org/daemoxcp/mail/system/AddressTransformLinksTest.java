@@ -62,7 +62,7 @@ public class AddressTransformLinksTest {
                     + " vmail and writes in the real /var/vmail.");
             return;
         }
-        db = args.length > 0 ? args[0] : "mailserver";
+        db = args.length > 0 ? args[0] : "daemoxcp_mail";
         if (!db.matches("[A-Za-z0-9_]+")) throw new IllegalArgumentException("database name not valid: " + db);
         work = Files.createTempDirectory(Path.of("/var/tmp"), "address-transform");
         // Born 0700: vmail must reach the bench, or every "cannot" passes for the wrong reason.

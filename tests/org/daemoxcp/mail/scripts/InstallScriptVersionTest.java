@@ -56,7 +56,7 @@ public class InstallScriptVersionTest {
 
             System.out.println("== A. The service uses another jar ==");
             Shell.Result a = sh("cd " + d + " && env -u DAEMOXCP_MAIL_FROM_PANEL sh " + script + " 2>&1");
-            check("it stops at once, saying why", !a.success() && a.outputTrim().contains("written by another version of the mail panel"));
+            check("it stops at once, saying why", !a.success() && a.outputTrim().contains("written by another version of DaemoxCP Mail"));
             check("before any other check and before phase 1", !a.outputTrim().contains("MYSQL_PASSWORD") && !a.outputTrim().contains("PHASE 1/10"));
 
             System.out.println("\n== B. The service uses this jar ==");

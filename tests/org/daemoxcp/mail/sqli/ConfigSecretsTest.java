@@ -78,13 +78,13 @@ public class ConfigSecretsTest {
         check("a second start moves nothing", db.migrateSecrets() == 0);
 
         System.out.println("\n== What the panel saves goes to the file ==");
-        db.update_mysql_config("127.0.0.1", "3306", "daemoxcp_mail", "New-Mysql-Password", "mailserver");
+        db.update_mysql_config("127.0.0.1", "3306", "daemoxcp_mail", "New-Mysql-Password", "daemoxcp_mail");
         check("installation: the new MySQL password in the file, not in SQLite", "New-Mysql-Password".equals(db.mysqlPassword())
                 && column(db, "mysql_password").isEmpty() && "daemoxcp_mail".equals(column(db, "mysql_user")));
         db.updateMySQLPassword("Cambiata-Password-Mysql");
         check("password change: the same", "Cambiata-Password-Mysql".equals(db.mysqlPassword()) && column(db, "mysql_password").isEmpty());
         String key2 = key.replace("BKcw", "ZZzz");
-        db.update_panel_config("127.0.0.1", "2096", "-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----\n", key2, "", "mailpanel-");
+        db.update_panel_config("127.0.0.1", "2096", "-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----\n", key2, "", "daemoxcp-mail-");
         check("Edit Panel Configuration: the key in the file, the certificate in SQLite", key2.equals(db.panelTlsKey())
                 && column(db, "panel_ssl_cert_key").isEmpty() && column(db, "panel_ssl_cert").contains("BEGIN CERTIFICATE"));
 

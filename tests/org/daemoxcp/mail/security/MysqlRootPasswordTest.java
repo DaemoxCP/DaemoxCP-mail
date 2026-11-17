@@ -113,7 +113,7 @@ public class MysqlRootPasswordTest {
         for (int i = 0; i < 500; i++) {
             String password = PanelSecrets.newAlphanumericPassword(24);
             try {
-                URI dsn = new URI("mysql://mailpanel:" + password + "@127.0.0.1/roundcubemail");
+                URI dsn = new URI("mysql://daemoxcp_mail:" + password + "@127.0.0.1/roundcubemail");
                 boolean same = ("daemoxcp_mail:" + password).equals(dsn.getUserInfo())
                         && "127.0.0.1".equals(dsn.getHost())
                         && "/roundcubemail".equals(dsn.getPath());
@@ -130,7 +130,7 @@ public class MysqlRootPasswordTest {
         for (int i = 0; i < 500; i++) {
             String password = PanelSecrets.newPassword(24);
             try {
-                URI dsn = new URI("mysql://mailpanel:" + password + "@127.0.0.1/roundcubemail");
+                URI dsn = new URI("mysql://daemoxcp_mail:" + password + "@127.0.0.1/roundcubemail");
                 if (!("daemoxcp_mail:" + password).equals(dsn.getUserInfo())
                         || !"127.0.0.1".equals(dsn.getHost())) richBroken++;
             } catch (Exception e) {

@@ -75,7 +75,7 @@ public class SieveGroupMailTest {
             System.out.println("\nWithout -De2e.vm=yes, as root, parts 2 and 3 do not run: they change owners, modes and"
                     + " Dovecot's configuration, and deliver real mail.");
         } else {
-            db = args.length > 0 ? args[0] : "mailserver";
+            db = args.length > 0 ? args[0] : "daemoxcp_mail";
             if (!db.matches("[A-Za-z0-9_]+")) throw new IllegalArgumentException("database name not valid: " + db);
             work = Files.createTempDirectory(Path.of("/var/tmp"), "sieve-group-mail");
             // Born 0700: vmail must reach the bench, or every "cannot" passes for the wrong reason.

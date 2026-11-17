@@ -35,6 +35,10 @@ public class CloudflareCommentsTest {
     }
 
     static final String ITALIAN = "Creato dal pannello di posta";
+    /** The comments of before the product name (DaemoxCP Mail, 17/11/2026), and today's DKIM one. */
+    static final String OLD_ENGLISH = "Created by the mail panel";
+    static final String OLD_DKIM = "DKIM rotation - auto-managed by FreeBSD Mail Panel";
+    static final String DKIM = "DKIM rotation - auto-managed by DaemoxCP Mail";
     static final String ZONE = "0123456789abcdef0123456789abcdef";
 
     /** The fake zone: id -> record. */
@@ -93,7 +97,7 @@ public class CloudflareCommentsTest {
             check("three records created: " + writes.size(), writes.size() == 3);
             check("each with an English comment", writes.stream().allMatch(w -> {
                 String c = new JSONObject(w.substring(w.indexOf('{'))).optString("comment");
-                return c.equals(CloudflareManager.RECORD_COMMENT) || c.equals("DKIM rotation - auto-managed by FreeBSD Mail Panel");
+                return c.equals(CloudflareManager.RECORD_COMMENT) || c.equals(DKIM);
             }));
             check("  and no Italian in what is sent", writes.stream().noneMatch(w -> w.contains("Creato") || w.contains("pannello") || w.contains("posta")));
 
@@ -102,19 +106,22 @@ public class CloudflareCommentsTest {
             records.add(record(1, "CNAME", "autoconfig.example.org", ITALIAN));
             records.add(record(2, "SRV", "_imaps._tcp.example.org", ITALIAN));
             records.add(record(3, "CNAME", "mta-sts.example.org", ITALIAN));
-            records.add(record(4, "TXT", "mail._domainkey.example.org", "DKIM rotation - auto-managed by FreeBSD Mail Panel"));
+            records.add(record(4, "TXT", "mail._domainkey.example.org", OLD_DKIM));
             records.add(record(5, "A", "www.example.org", "mine, written by hand"));
             records.add(record(6, "A", "shop.example.org", null));
             records.add(record(7, "CNAME", "old.example.org", ITALIAN + " (copy)"));
             records.add(record(8, "CNAME", "done.example.org", CloudflareManager.RECORD_COMMENT));
+            records.add(record(11, "CNAME", "renamed.example.org", OLD_ENGLISH));
             int n = cf.renameLegacyComments("test-token", ZONE);
-            check("3 renamed (" + n + ")", n == 3);
-            check("  only those three, with a PATCH that names only the comment, in English", writes.size() == 3 && writes.stream().allMatch(w ->
+            check("5 renamed: the three Italian ones, the English one and the DKIM one with the name of before (" + n + ")", n == 5);
+            check("  only those five, with a PATCH that names only the comment, with today's text", writes.size() == 5 && writes.stream().allMatch(w ->
                     w.startsWith("PATCH /zones/" + ZONE + "/dns_records/") && new JSONObject(w.substring(w.indexOf('{'))).keySet().equals(java.util.Set.of("comment"))
-                    && new JSONObject(w.substring(w.indexOf('{'))).getString("comment").equals(CloudflareManager.RECORD_COMMENT)));
+                    && java.util.Set.of(CloudflareManager.RECORD_COMMENT, DKIM).contains(new JSONObject(w.substring(w.indexOf('{'))).getString("comment"))));
+            check("  the DKIM one with today's DKIM text", records.get(3).getString("comment").equals(DKIM));
+            check("  the English one of before with today's", records.get(8).getString("comment").equals(CloudflareManager.RECORD_COMMENT));
             check("  name, content, TTL and proxy as they were", records.get(0).getString("name").equals("autoconfig.example.org")
                     && records.get(0).getString("content").equals("target-1") && records.get(0).getInt("ttl") == 300 && !records.get(0).getBoolean("proxied"));
-            check("  a comment written by hand, the DKIM one, none, and one that only starts like it: untouched",
+            check("  a comment written by hand, none, and one that only starts like it: untouched",
                     records.get(4).getString("comment").equals("mine, written by hand") && !records.get(5).has("comment")
                     && records.get(6).getString("comment").equals(ITALIAN + " (copy)")
                     && records.get(3).getString("comment").startsWith("DKIM rotation"));

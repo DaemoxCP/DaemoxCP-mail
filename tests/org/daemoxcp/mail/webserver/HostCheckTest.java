@@ -136,7 +136,7 @@ public class HostCheckTest {
         Main.dbManager.create_tables();
         Main.dbManager.insert_data_default();
         int port = freePort();
-        Main.dbManager.update_panel_config(name, String.valueOf(port), cert.certificate(), cert.key(), "", "mailpanel-");
+        Main.dbManager.update_panel_config(name, String.valueOf(port), cert.certificate(), cert.key(), "", "daemoxcp-mail-");
 
         SSLMailServer panel = new SSLMailServer(port, cert.certificate(), cert.key());
         // The HttpsServer underneath is started, not SSLMailServer.start(): that one also sets up
@@ -171,7 +171,7 @@ public class HostCheckTest {
                     status(base, port, "/api/internal/mailbox-vault", "127.0.0.1:" + port) != 421);
 
             OUT.println("\n== The same panel with the address at 0.0.0.0 ==");
-            Main.dbManager.update_panel_config("0.0.0.0", String.valueOf(port), cert.certificate(), cert.key(), "", "mailpanel-");
+            Main.dbManager.update_panel_config("0.0.0.0", String.valueOf(port), cert.certificate(), cert.key(), "", "daemoxcp-mail-");
             check("127.0.0.1 is served again",
                     status(base, port, "/index", "127.0.0.1:" + port) != 421);
             check("localhost too", status(base, port, "/index", "localhost:" + port) != 421);

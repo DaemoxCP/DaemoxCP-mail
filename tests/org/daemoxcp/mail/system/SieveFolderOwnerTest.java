@@ -68,7 +68,7 @@ public class SieveFolderOwnerTest {
         if (!"yes".equals(System.getProperty("e2e.vm")) || !"root".equals(System.getProperty("user.name"))) {
             System.out.println("\nWithout -De2e.vm=yes, as root, parts 2 and 3 do not run: they change owners and deliver real mail.");
         } else {
-            db = args.length > 0 ? args[0] : "mailserver";
+            db = args.length > 0 ? args[0] : "daemoxcp_mail";
             if (!db.matches("[A-Za-z0-9_]+")) throw new IllegalArgumentException("database name not valid: " + db);
             work = Files.createTempDirectory(Path.of("/var/tmp"), "sieve-owner");
             // Born 0700: vmail must reach the bench, or every "vmail cannot" passes for the wrong reason.

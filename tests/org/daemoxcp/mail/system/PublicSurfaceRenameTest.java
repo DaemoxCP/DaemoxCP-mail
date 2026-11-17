@@ -14,8 +14,8 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * The public surface moves from "mailpanel-pubblico" to "mailpanel-public" on the servers already
- * installed (PublicSurfaceRename.migrate), in temporary folders and with a fake nginx and fail2ban.
+ * The public surface moves from "mailpanel-pubblico" (and from "mailpanel-public", its name before DaemoxCP
+ * Mail) to "daemoxcp-mail-public" on the servers already installed (PublicSurfaceRename.migrate), in temporary folders and with a fake nginx and fail2ban.
  * The fake fail2ban does what the real one does: it keeps the bans in a database by jail name, and at
  * every reload it activates the jails it finds in jail.d taking back each one's bans from the
  * database. A jail with the new name finds its bans again only if the state in the database moved
@@ -37,9 +37,9 @@ public class PublicSurfaceRenameTest {
         if (!ok) failed++;
     }
 
-    /** The old name, from the data file: the test does not write it. */
-    static final String OLD = LegacyNames.single("publicSurface");
-    static final String NEW = "mailpanel-public";
+    /** The old name, from the data file: the test does not write it. The last part moves to the next old name. */
+    static String OLD = LegacyNames.single("publicSurface");
+    static final String NEW = "daemoxcp-mail-public";
     static final String CERT = "/usr/local/etc/ssl/mail/fullchain.pem";
     static final String KEY = "/usr/local/etc/ssl/mail/privkey.pem";
 
@@ -206,7 +206,7 @@ public class PublicSurfaceRenameTest {
                         "Current database file is:\n`- /var/db/fail2ban/fail2ban.sqlite3\n"))
                         && PublicSurfaceRename.fail2banDatabase("Database currently disabled") == null);
         check("main's three files have the old signature, and the panel recognises it",
-                OLD_SIGNATURES.size() == 2 && !oldConf(Path.of("/x")).contains(PanelMarker.WRITTEN) && !oldJail().contains(PanelMarker.WRITTEN)
+                OLD_SIGNATURES.size() == 3 && !oldConf(Path.of("/x")).contains(PanelMarker.WRITTEN) && !oldJail().contains(PanelMarker.WRITTEN)
                         && !oldFilter().contains(PanelMarker.WRITTEN) && PanelMarker.writtenByPanel(oldConf(Path.of("/x")))
                         && PanelMarker.writtenByPanel(oldFilter()) && PanelMarker.writtenByPanel(oldJail()));
         check("the fail2ban-client status line is read",
@@ -404,6 +404,34 @@ public class PublicSurfaceRenameTest {
                         .contains("/d/" + OLD_FOLDER + "-bis/x;")
                         && PublicSurfaceRename.renamed("alias /d/" + OLD_FOLDER + "/x;\n", Path.of("/d/" + OLD_FOLDER), Path.of("/d/public"))
                         .contains("/d/public/x;"));
+
+        OUT.println("\n== A server already at the name before DaemoxCP Mail: it moves to today's too ==");
+        List<String[]> chain = LegacyNames.pairs("publicSurface");
+        check("the data file has the Italian name, then the one before DaemoxCP Mail, both to today's",
+                chain.size() == 2 && chain.get(0)[0].equals(OLD) && chain.stream().allMatch(p -> p[1].equals(NEW)));
+        java.lang.reflect.Field oldNameField = PublicSurfaceRename.class.getDeclaredField("OLD_NAME");
+        oldNameField.setAccessible(true);
+        String italian = OLD;
+        OLD = chain.get(chain.size() - 1)[0];
+        oldNameField.set(null, OLD);
+        try {
+            s = new Server(true, true, true);
+            r = s.run();
+            check("outcome DONE (" + OLD + " -> " + NEW + ")", r.outcome() == PublicSurfaceRename.Outcome.DONE);
+            check("nginx, jail and filter are today's, with the new name, and the old files are gone",
+                    conf(s.newFolder).equals(s.read(s.confD.resolve(NEW + ".conf")))
+                            && WebProtection.jail().equals(s.read(s.jailD.resolve(NEW + ".conf")))
+                            && WebProtection.filter().equals(s.read(s.filterD.resolve(NEW + ".conf")))
+                            && !Files.exists(s.confD.resolve(OLD + ".conf")) && !Files.exists(s.jailD.resolve(OLD + ".conf"))
+                            && !Files.exists(s.filterD.resolve(OLD + ".conf")));
+            check("the log moves, and the two bans go to the new jail from the database, none given by hand",
+                    "1.2.3.4 - - \"GET /x\" 404\n".equals(s.read(s.logs.resolve(NEW + "-access.log")))
+                            && s.sv.jails.containsKey(NEW) && s.sv.jails.get(NEW).equals(List.of("203.0.113.7", "198.51.100.9"))
+                            && !s.sv.jails.containsKey(OLD) && s.sv.stateMoves == 1 && s.sv.manualBans == 0);
+        } finally {
+            OLD = italian;
+            oldNameField.set(null, italian);
+        }
 
         OUT.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);

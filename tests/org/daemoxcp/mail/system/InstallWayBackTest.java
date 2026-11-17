@@ -40,7 +40,7 @@ public class InstallWayBackTest {
     public static void main(String[] args) throws Exception {
         if (args.length > 0) { child(args); return; }
         Path d = Files.createTempDirectory("install-way-back");
-        PackageQueue.list = d.resolve("mail-panel-maintenance-locks");
+        PackageQueue.list = d.resolve("daemoxcp-mail-maintenance-locks");
         PackageQueue.turnLock = d.resolve("package-turn.lock");
         try {
             System.out.println("== The way-back step: with the turn, before the unlock ==");

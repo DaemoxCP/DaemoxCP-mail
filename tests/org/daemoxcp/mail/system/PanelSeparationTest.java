@@ -43,13 +43,13 @@ public class PanelSeparationTest {
 
     public static void main(String[] args) throws Exception {
         System.out.println("== 1. The user ==");
-        String good = "daemoxcp_mail:*:1003:1003::0:0:Mail panel web part:/nonexistent:/usr/sbin/nologin";
+        String good = "daemoxcp_mail:*:1003:1003::0:0:DaemoxCP Mail web part:/nonexistent:/usr/sbin/nologin";
         String group = "daemoxcp_mail:*:1003:";
         check("the panel's own user is accepted", PanelSeparation.userProblem(good, group) == null);
         check("a locked account is accepted too", PanelSeparation.userProblem(good.replace(":*:", ":*LOCKED**:"), group) == null);
         String[][] bad = {
-                {good.replace("Mail panel web part", "Someone"), group, "comment"},
-                {good.replace("/nonexistent", "/home/mailpanel"), group, "home"},
+                {good.replace("DaemoxCP Mail web part", "Someone"), group, "comment"},
+                {good.replace("/nonexistent", "/home/daemoxcp_mail"), group, "home"},
                 {good.replace("/usr/sbin/nologin", "/bin/sh"), group, "shell"},
                 {good.replace(":*:", ":$6$abc$def:"), group, "password"},
                 {good.replace(":1003:1003:", ":0:1003:"), group, "uid 0"},

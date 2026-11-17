@@ -78,7 +78,7 @@ public class DovecotHomeE2ETest {
             System.out.println("Without -De2e.vm=yes, as root, this test does nothing: it changes Dovecot's configuration.");
             return;
         }
-        db = args.length > 0 ? args[0] : "mailserver";
+        db = args.length > 0 ? args[0] : "daemoxcp_mail";
         if (!db.matches("[A-Za-z0-9_]+")) throw new IllegalArgumentException("database name not valid: " + db);
         savedConf = Files.readString(DovecotHome.authSql);
         // Read here, not with DovecotHome: the code under test does not decide where the test starts from.

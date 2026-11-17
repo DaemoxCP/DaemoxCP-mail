@@ -50,7 +50,7 @@ public class SecretsSplitTest {
     }
 
     public static void main(String[] args) throws Exception {
-        Path dir = Files.createTempDirectory("secrets-split").resolve("mail-panel");
+        Path dir = Files.createTempDirectory("secrets-split").resolve("daemoxcp-mail");
         PanelSecrets.dir = dir;
         PanelSecrets.reset();
         Path web = dir.resolve("panel-secrets.properties"), root = dir.resolve("root-secrets.properties");

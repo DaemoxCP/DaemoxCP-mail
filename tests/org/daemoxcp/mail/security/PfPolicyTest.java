@@ -97,6 +97,16 @@ public class PfPolicyTest {
         System.out.println("== 1. The panel's pf.conf files become the new one ==");
         String fromServer = PfPolicy.transform(SERVER, today);
         check("the real server's file is the panel's and is transformed", fromServer != null && fromServer.startsWith(PfPolicy.HEADER));
+        // The panel's own file with the first line it had before the product name (DaemoxCP Mail, 17/11/2026):
+        // only that line changes, the rules stay exactly the same.
+        String previous = fromServer == null ? null : fromServer.replace(PfPolicy.HEADER, PfPolicy.PREVIOUS_HEADER);
+        check("the panel's file with the header of before the product name: only the first line changes",
+                previous != null && !previous.equals(fromServer) && fromServer.equals(PfPolicy.transform(previous, today))
+                        && PfPolicy.HEADER.contains(org.daemoxcp.mail.system.Product.NAME));
+        check("  and the installer's header of today is recognised as the panel's",
+                PfPolicy.OLD_HEADERS.contains("# /etc/pf.conf, scritto dall'installazione di DaemoxCP Mail.")
+                        && PfPolicy.transform(INSTALLER.replace("scritto dall'installazione del pannello mail.",
+                                "scritto dall'installazione di DaemoxCP Mail."), today) != null);
         List<String> r = fromServer == null ? List.of() : rules(fromServer);
         check("  the table limit stays", r.contains("set limit table-entries 2000000"));
         check("  the fail2ban anchor, the permaban table and the panel's anchor stay", r.contains("anchor \"f2b/*\"")

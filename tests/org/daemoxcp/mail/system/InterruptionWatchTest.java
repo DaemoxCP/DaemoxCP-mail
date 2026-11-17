@@ -49,7 +49,7 @@ public class InterruptionWatchTest {
     public static void main(String[] args) throws Exception {
         I18n.setCurrent("en");
         Path d = Files.createTempDirectory("interruption-watch");
-        PackageQueue.list = d.resolve("mail-panel-maintenance-locks");
+        PackageQueue.list = d.resolve("daemoxcp-mail-maintenance-locks");
         PackageQueue.turnLock = d.resolve("package-turn.lock");
         PackageRecovery.notice = d.resolve("package-job-interrupted.json");
         try {

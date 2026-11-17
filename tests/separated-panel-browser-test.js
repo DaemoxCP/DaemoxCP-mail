@@ -97,7 +97,7 @@ function portOpen(port) {
                 'X-CSRF-Token': document.getElementById('csrf_token').value }, body: JSON.stringify({ action: 'service_users' }) });
             return { status: r.status, body: await r.json() };
         });
-        const panel = (su.body.services || []).find(s => s.service === 'mail-panel') || {};
+        const panel = (su.body.services || []).find(s => s.service === 'daemoxcp-mail') || {};
         check('the panel runs as root and daemoxcp_mail (' + (panel.users || []).join(', ') + ')',
             (panel.users || []).includes('daemoxcp_mail') && (panel.users || []).includes('root'));
         check('with the reason root stays', panel.rootWhy === en['server.su.rootWhy.daemoxcpMail']);

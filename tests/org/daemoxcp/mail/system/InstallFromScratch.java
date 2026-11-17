@@ -50,7 +50,7 @@ public class InstallFromScratch {
         Main.dbManager.updateRoundcubeConfig(roundcubeDomain, roundcubePort, "", "", "");
 
         String mysqlHost = "127.0.0.1", mysqlPort = "3306";
-        String mysqlUser = "daemoxcp_mail", mysqlDatabase = "mailserver";
+        String mysqlUser = "daemoxcp_mail", mysqlDatabase = "daemoxcp_mail";
 
         String mysqlPassword = PanelSecrets.newAlphanumericPassword(24);
         Main.dbManager.update_mysql_config(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);

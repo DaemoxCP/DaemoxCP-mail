@@ -57,7 +57,7 @@ public class RestartLockTest {
         System.out.println("\n== 3. the time from ps ==");
         long now = 1_800_000_000_000L;
         check("the panel's command: started 300 s ago, +5 minutes -> now", RestartLock.atFromPs(
-                "300 /sbin/shutdown -r +5 Restart requested by the mail panel", now) == now);
+                "300 /sbin/shutdown -r +5 Restart requested by DaemoxCP Mail", now) == now);
         check("+15, started 60 s ago", RestartLock.atFromPs("60 shutdown -r +15 msg", now) == now - 60_000 + 15 * 60_000);
         check("now: when it started", RestartLock.atFromPs("2 shutdown -r now", now) == now - 2_000);
         check("an absolute time (2330) or no time: unknown", RestartLock.atFromPs("10 shutdown -r 2330", now) == 0

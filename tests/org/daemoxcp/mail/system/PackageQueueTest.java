@@ -26,7 +26,7 @@ public class PackageQueueTest {
         org.daemoxcp.mail.i18n.I18n.setCurrent("en");
         // The list in a test folder, not in /var/db.
         Path d = Files.createTempDirectory("turn-test");
-        Path f = d.resolve("mail-panel-maintenance-locks");
+        Path f = d.resolve("daemoxcp-mail-maintenance-locks");
         PackageQueue.list = f;
         // And the turn's lock between processes: without it, the test would take the real one, and
         // on a machine with the panel running it would find it taken (or hold it from its jobs).
@@ -88,7 +88,7 @@ public class PackageQueueTest {
         String e = PackageQueue.writeState(f, List.of("nginx"));
         real("list already there: refused", e != null && e.contains("already exists"));
         real("list already there: NOT overwritten", "kafka\nlibrdkafka\n".equals(Files.readString(f)));
-        Path withoutFolder = d.resolve("does-not-exist").resolve("mail-panel-maintenance-locks");
+        Path withoutFolder = d.resolve("does-not-exist").resolve("daemoxcp-mail-maintenance-locks");
         e = PackageQueue.writeState(withoutFolder, List.of("nginx"));
         real("folder that is not there: refused, and it says why", e != null && e.startsWith("I cannot write"));
         real("folder that is not there: no file left", !Files.exists(withoutFolder));

@@ -125,7 +125,7 @@ skipped, saying so**, because a test skipped in silence counts as green without 
 anything.
 
 Two of them touch the system and put everything back as it was: `LockTraceTest` writes the
-`mail_panel_lock` annotation on a package and removes it, and writes the locks note in a temporary
+`daemoxcp_mail_lock` annotation on a package and removes it, and writes the locks note in a temporary
 folder (not in `/var/db`, like `PackageQueueTest` with its list). `AuditReportTest` asks `pkg audit`
 about the installed packages and changes nothing. They are fine on a test machine, not on a real
 mail server.

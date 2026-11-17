@@ -29,17 +29,22 @@ public class LockMarksTest {
                 "alsa-lib FreeBSD_version",
                 "nginx cpe",
                 "nginx repository",
-                "redis mail_panel_lock",
+                "redis " + UpdateManager.MARK_KEY,
                 "redis cpe",
-                "postfix-mysql mail_panel_lock",
+                "postfix-mysql " + UpdateManager.MARK_KEY,
                 "pkg: warning: something on stderr",
-                "rm;-rf mail_panel_lock",
+                "rm;-rf " + UpdateManager.MARK_KEY,
+                "dovecot mail_panel_lock",
                 "");
         Set<String> marked = UpdateManager.markedIn(output);
         check("from pkg's output: redis and postfix-mysql", marked.equals(Set.of("redis", "postfix-mysql")));
         check("  a stderr line is not a package", !marked.contains("pkg:"));
         check("  a name that does not pass the filter does not get in", marked.stream().noneMatch(n -> n.contains(";")));
         check("empty output: no mark", UpdateManager.markedIn("").isEmpty());
+        // The key of before the product name (DaemoxCP Mail, 17/11/2026): it is not today's mark, it is removed.
+        check("the key of before is not today's mark", !marked.contains("dovecot"));
+        check("  and it goes away: one command, for that package and that key",
+                UpdateManager.oldKeyCommands(output).equals(java.util.List.of("pkg annotate -y -D dovecot mail_panel_lock")));
 
         // --- 1-bis. The mark's text, from pkg query -a '%n %At %Av' ---
         // On the servers installed before the value is the Italian one: there is no need to
@@ -62,7 +67,7 @@ public class LockMarksTest {
              rw.size() == 3 && rw.contains(UpdateManager.rewriteMarkCommand("postfix-mysql"))
                      && rw.contains(UpdateManager.rewriteMarkCommand("dovecot")) && rw.contains(UpdateManager.removeMarkCommand("lmdb")));
         check("the value is in English and points to the note and to the unlock command",
-             UpdateManager.MARK_VALUE.startsWith("locked by the mail panel")
+             UpdateManager.MARK_VALUE.startsWith("locked by DaemoxCP Mail: see ")
                      && UpdateManager.MARK_VALUE.contains(UpdateManager.LOCK_NOTE) && UpdateManager.MARK_VALUE.contains(UpdateManager.UNLOCK_ALL_COMMAND));
         check("the rewriting command uses -M with the same value as the one that sets it",
              ("pkg annotate -y -M nginx " + UpdateManager.MARK_KEY + " '" + UpdateManager.MARK_VALUE + "'").equals(UpdateManager.rewriteMarkCommand("nginx"))
@@ -79,7 +84,7 @@ public class LockMarksTest {
         check("  it removes lmdb's, which is no longer locked",
              c.contains(UpdateManager.removeMarkCommand("lmdb")));
         check("  and the removing command names the key and the package",
-             "pkg annotate -y -D lmdb mail_panel_lock".equals(UpdateManager.removeMarkCommand("lmdb")));
+             "pkg annotate -y -D lmdb daemoxcp_mail_lock".equals(UpdateManager.removeMarkCommand("lmdb")));
         check("everything even: no command",
              UpdateManager.lockMarkCommands(Set.of("nginx"), Set.of("nginx")).isEmpty());
         check("a name that does not pass the filter produces no command",

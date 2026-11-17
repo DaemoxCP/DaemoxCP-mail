@@ -78,7 +78,7 @@ public class InstallLocksTest {
 
     public static void main(String[] args) throws Exception {
         Path d = Files.createTempDirectory("install-locks");
-        PackageQueue.list = d.resolve("mail-panel-maintenance-locks");
+        PackageQueue.list = d.resolve("daemoxcp-mail-maintenance-locks");
         PackageQueue.turnLock = d.resolve("package-turn.lock");
         Path list = PackageQueue.list;
 

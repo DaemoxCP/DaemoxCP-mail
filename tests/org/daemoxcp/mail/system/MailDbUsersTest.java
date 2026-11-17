@@ -53,7 +53,7 @@ public class MailDbUsersTest {
         return null;
     }
 
-    static final String PANEL = "daemoxcp_mail", DB = "mailserver", PANEL_PW = "PanelPasswordPanelPassword123456";
+    static final String PANEL = "daemoxcp_mail", DB = "daemoxcp_mail", PANEL_PW = "PanelPasswordPanelPassword123456";
     static final String POSTFIX_PW = "PostfixPostfixPostfixPostfix0001", DOVECOT_PW = "DovecotDovecotDovecotDovecot0001";
 
     /** Fake Postfix, Dovecot and MySQL: answers set by each case, calls counted. */

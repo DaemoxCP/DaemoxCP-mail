@@ -164,7 +164,7 @@ public class LoginRoutesTest {
         Main.dbManager.create_tables();
         Main.dbManager.insert_data_default();
         Main.dbManager.update_panel_config(HOST, "0", Files.readString(dir.resolve("c.pem")),
-                Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
+                Files.readString(dir.resolve("k.pem")), "", "daemoxcp-mail-");
 
         SSLMailServer srv = new SSLMailServer(0, Files.readString(dir.resolve("c.pem")), Files.readString(dir.resolve("k.pem")));
         Field f = SSLMailServer.class.getDeclaredField("server");
@@ -349,7 +349,7 @@ public class LoginRoutesTest {
             //    it needs a name. It is the property this line always checked, and it must be
             //    checked in the condition where it still exists.
             Main.dbManager.update_panel_config("0.0.0.0", "0", Files.readString(dir.resolve("c.pem")),
-                    Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
+                    Files.readString(dir.resolve("k.pem")), "", "daemoxcp-mail-");
             try {
                 JSONObject ipOpt = new JSONObject(ask("POST", "/api/login", body,
                         "Cookie", preCookie, "Host", "127.0.0.1:" + port).body());
@@ -357,7 +357,7 @@ public class LoginRoutesTest {
                         + " (the server says so)", !ipOpt.optBoolean("success"));
             } finally {
                 Main.dbManager.update_panel_config(HOST, "0", Files.readString(dir.resolve("c.pem")),
-                        Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
+                        Files.readString(dir.resolve("k.pem")), "", "daemoxcp-mail-");
             }
 
             System.out.println("\n== /api/login with the console code ==");

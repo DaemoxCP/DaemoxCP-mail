@@ -86,11 +86,11 @@ public class SieveCompilerTest {
                 && SieveCompiler.ENVIRONMENT.get("USER").equals("sievec") && SieveCompiler.ENVIRONMENT.get("HOME").equals("/nonexistent")
                 && SieveCompiler.ENVIRONMENT.values().stream().noneMatch(v -> v.contains("root")));
 
-        String good = "sievec:*:1005:1005::0:0:Mail panel Sieve compiler:/nonexistent:/usr/sbin/nologin";
+        String good = "sievec:*:1005:1005::0:0:DaemoxCP Mail Sieve compiler:/nonexistent:/usr/sbin/nologin";
         String group = "sievec:*:1005:";
         check("the user sievec as the panel creates it: accepted", SieveCompiler.COMPILER_USER.problem(good, group) == null);
         String[][] bad = {
-                {good.replace("Mail panel Sieve compiler", "Someone"), group, "comment"},
+                {good.replace("DaemoxCP Mail Sieve compiler", "Someone"), group, "comment"},
                 {good.replace("/usr/sbin/nologin", "/bin/sh"), group, "shell"},
                 {good.replace(":1005:1005:", ":0:1005:"), group, "uid 0"},
                 {good, "sievec:*:1005:vmail", "other members"},

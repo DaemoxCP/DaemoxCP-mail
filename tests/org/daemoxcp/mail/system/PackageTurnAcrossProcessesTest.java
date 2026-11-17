@@ -43,7 +43,7 @@ public class PackageTurnAcrossProcessesTest {
 
     public static void main(String[] args) throws Exception {
         d = Files.createTempDirectory(Path.of("/var/tmp"), "turn-across");
-        PackageQueue.list = d.resolve("mail-panel-maintenance-locks");
+        PackageQueue.list = d.resolve("daemoxcp-mail-maintenance-locks");
         PackageQueue.turnLock = d.resolve("package-turn.lock");
         PackageRecovery.notice = d.resolve("package-job-interrupted.json");
         Path list = PackageQueue.list;
@@ -98,8 +98,8 @@ public class PackageTurnAcrossProcessesTest {
         lockfAgainstThePanel();
         scriptTurn();
 
-        for (String f : new String[]{"package-turn.lock", "mail-panel-maintenance-locks",
-                "mail-panel-maintenance-locks.job.json", "package-job-interrupted.json", "stop", "turn-part.sh"})
+        for (String f : new String[]{"package-turn.lock", "daemoxcp-mail-maintenance-locks",
+                "daemoxcp-mail-maintenance-locks.job.json", "package-job-interrupted.json", "stop", "turn-part.sh"})
             Files.deleteIfExists(d.resolve(f));
         Files.delete(d);
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
@@ -210,7 +210,7 @@ public class PackageTurnAcrossProcessesTest {
         int rc;
         String out;
 
-        static final List<String> ARGS = List.of("127.0.0.1", "3306", "daemoxcp_mail", "mailserver", "mail.turn.test",
+        static final List<String> ARGS = List.of("127.0.0.1", "3306", "daemoxcp_mail", "daemoxcp_mail", "mail.turn.test",
                 "webmail.turn.test", "8443", "", "", "");
 
         static Process start(Path script, Map<String, String> env) throws Exception {

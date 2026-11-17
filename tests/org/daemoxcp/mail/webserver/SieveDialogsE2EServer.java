@@ -83,7 +83,7 @@ public class SieveDialogsE2EServer {
         if (cert.waitFor() != 0) throw new IllegalStateException("openssl failed");
         // The panel's name: HostCheck accepts only that (and localhost), and the browser comes as panel.localhost.
         Main.dbManager.update_panel_config("panel.localhost", "0", Files.readString(dir.resolve("c.pem")),
-                Files.readString(dir.resolve("k.pem")), "", "mailpanel-");
+                Files.readString(dir.resolve("k.pem")), "", "daemoxcp-mail-");
         SSLMailServer srv = new SSLMailServer(port, Files.readString(dir.resolve("c.pem")), Files.readString(dir.resolve("k.pem")));
         // What initializeManagers (not run here: it also starts the repairs of a real start) gives the server.
         Field g = SSLMailServer.class.getDeclaredField("sieveGenerator");

@@ -99,8 +99,8 @@ public class PanelMarkerTest {
 
     public static void main(String[] args) throws Exception {
         OUT.println("\n== The signatures ==");
-        check("two old signatures in the data file, today's different from both",
-                OLD.size() == 2 && !OLD.contains(PanelMarker.WRITTEN));
+        check("three old signatures in the data file (two Italian, the English one before DaemoxCP Mail), today's different from all",
+                OLD.size() == 3 && !OLD.contains(PanelMarker.WRITTEN));
         check("today's code signs the three files of the 443",
                 CONF.contains(PanelMarker.WRITTEN) && WebProtection.filter().contains(PanelMarker.WRITTEN)
                         && WebProtection.jail().contains(PanelMarker.WRITTEN));
@@ -183,7 +183,7 @@ public class PanelMarkerTest {
         r = s.run();
         check("the nginx file cannot be written: PARTIAL, and filter and jail keep the old signature",
                 r.outcome() == PanelMarker.Outcome.PARTIAL && s.read(s.filter).contains(OLD.get(0)) && s.read(s.jail).contains(OLD.get(0)));
-        check("  (so at the next start everything is tried again: " + r.detail() + ")", s.read(s.defaultFolder.resolve(WebProtection.FILE_NAME)).contains(OLD.get(1)));
+        check("  (so at the next start everything is tried again: " + r.detail() + ")", s.read(s.defaultFolder.resolve(WebProtection.FILE_NAME)).contains(OLD.get(OLD.size() - 1)));
         Files.delete(blocker.resolve("x"));
         Files.delete(blocker);
         r = s.run();

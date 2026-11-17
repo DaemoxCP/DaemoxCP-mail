@@ -138,10 +138,10 @@ public class SqliteSharedTest {
                 List<String> bad = new ArrayList<>();
                 if (!db.setMailHostname("mail-" + tag + ".e2e.test")) bad.add("setMailHostname");
                 if (!db.resetAllServices()) bad.add("resetAllServices");
-                if (!db.update_mysql_config("127.0.0.1", "3306", "daemoxcp_mail", "Password" + tag, "mailserver")) bad.add("update_mysql_config");
+                if (!db.update_mysql_config("127.0.0.1", "3306", "daemoxcp_mail", "Password" + tag, "daemoxcp_mail")) bad.add("update_mysql_config");
                 if (!db.setServiceInstalled("postfix", true)) bad.add("setServiceInstalled");
                 if (!db.updateRoundcubeConfig("webmail-" + tag + ".e2e.test", "8443", "", "", "")) bad.add("updateRoundcubeConfig");
-                if (!db.update_panel_config("0.0.0.0", "2096", "", "", "", "mailpanel-")) bad.add("update_panel_config");
+                if (!db.update_panel_config("0.0.0.0", "2096", "", "", "", "daemoxcp-mail-")) bad.add("update_panel_config");
                 System.out.println(bad.isEmpty() ? "ALL WRITES OK" : "FAILED WRITES " + bad);
                 System.exit(bad.isEmpty() ? 0 : 1);
             }

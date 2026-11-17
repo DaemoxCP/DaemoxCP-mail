@@ -63,9 +63,9 @@ public class RoundcubeDbUserTest {
              + "$config['imap_host'] = 'ssl://127.0.0.1:993';\n"
              + "$config['des_key'] = 'abcdefghijklmnopqrstuvwx';\n"
              + "$config['plugins'] = array('daemoxcp_mail_sso', 'archive', 'zipdownload');\n"
-             + "\n// BEGIN mail-panel: webmail password changes (rewritten by the panel at startup)\n"
+             + "\n// BEGIN daemoxcp-mail: webmail password changes (rewritten by the panel at startup)\n"
              + "$config['password_driver'] = 'httpapi';\n"
-             + "// END mail-panel: webmail password changes\n";
+             + "// END daemoxcp-mail: webmail password changes\n";
     }
 
     // ===================== Fake MySQL =====================
@@ -98,8 +98,8 @@ public class RoundcubeDbUserTest {
 
         Fake(Path config) throws Exception {
             this.config = config;
-            accounts.put("daemoxcp_mail@localhost", new Account(PANEL_PASS, "mailserver", "roundcubemail"));
-            accounts.put("daemoxcp_mail@127.0.0.1", new Account(PANEL_PASS, "mailserver", "roundcubemail"));
+            accounts.put("daemoxcp_mail@localhost", new Account(PANEL_PASS, "daemoxcp_mail", "roundcubemail"));
+            accounts.put("daemoxcp_mail@127.0.0.1", new Account(PANEL_PASS, "daemoxcp_mail", "roundcubemail"));
             reload();
         }
 
@@ -299,7 +299,7 @@ public class RoundcubeDbUserTest {
             String c = "<?php\n// $config['db_dsnw'] = 'mysql://old:x@127.0.0.1/old';\n"
                      + "$config['db_dsnw'] = 'mysql://first:p1@127.0.0.1/roundcubemail';\n"
                      + "#$config['db_dsnw'] = 'mysql://hash:p2@127.0.0.1/x';\n"
-                     + "  $config[\"db_dsnw\"] = \"mysql://mailpanel:p3@127.0.0.1:3306/roundcubemail\"; // the last one wins\n"
+                     + "  $config[\"db_dsnw\"] = \"mysql://daemoxcp_mail:p3@127.0.0.1:3306/roundcubemail\"; // the last one wins\n"
                      + " * $config['db_dsnw'] = 'mysql://doc:p4@127.0.0.1/doc';\n";
             RoundcubeDbUser.Dsn d = RoundcubeDbUser.activeDsn(c);
             check("the last active assignment wins, not the commented ones", d != null && d.user().equals("daemoxcp_mail")
@@ -369,14 +369,14 @@ public class RoundcubeDbUserTest {
             String after = Files.readString(f.config);
             check("DONE: " + r.detail(), r.outcome() == RoundcubeDbUser.Outcome.DONE);
             check("db_dsnw uses roundcube with the password from the secrets file",
-                    after.equals(before.replace("mysql://mailpanel:" + PANEL_PASS + "@", "mysql://roundcube:" + SECRET + "@")));
+                    after.equals(before.replace("mysql://daemoxcp_mail:" + PANEL_PASS + "@", "mysql://roundcube:" + SECRET + "@")));
             check("owner and group of before, no read for others", attrs(f.config).equals("www:wheel rw-r-----"));
             check("the roundcube account has roundcubemail only", f.accounts.get("roundcube@127.0.0.1") != null
                     && f.accounts.get("roundcube@127.0.0.1").password.equals(SECRET)
                     && f.accounts.get("roundcube@127.0.0.1").dbs.equals(Set.of("roundcubemail")));
-            check("the panel has mailserver only, from both hosts",
-                    f.accounts.get("daemoxcp_mail@localhost").dbs.equals(Set.of("mailserver"))
-                    && f.accounts.get("daemoxcp_mail@127.0.0.1").dbs.equals(Set.of("mailserver")));
+            check("the panel has daemoxcp_mail only, from both hosts",
+                    f.accounts.get("daemoxcp_mail@localhost").dbs.equals(Set.of("daemoxcp_mail"))
+                    && f.accounts.get("daemoxcp_mail@127.0.0.1").dbs.equals(Set.of("daemoxcp_mail")));
             check("php-fpm loaded the new configuration, and the webmail answers", f.loaded.equals(after) && f.webmailDb());
             check("MySQL saw roundcube come in", f.rcConnections > c0);
             check("also verified with a real login", r.detail().contains("real login through the panel's SSO") && f.realLogins >= 3);
@@ -446,7 +446,7 @@ public class RoundcubeDbUserTest {
             {"another server", config("daemoxcp_mail", PANEL_PASS).replace("127.0.0.1/roundcubemail", "db.example.test/roundcubemail"), "NOT_OURS", "not to the panel's MySQL"},
             {"another engine", config("daemoxcp_mail", PANEL_PASS).replace("'mysql://", "'pgsql://"), "NOT_OURS", "not to the panel's MySQL"},
             {"no db_dsnw", "<?php\n$config['imap_host'] = 'x';\n", "NOT_OURS", "no active db_dsnw"},
-            {"db_dsnr as the panel", config("daemoxcp_mail", PANEL_PASS) + "$config['db_dsnr'] = 'mysql://mailpanel:" + PANEL_PASS + "@127.0.0.1/roundcubemail';\n",
+            {"db_dsnr as the panel", config("daemoxcp_mail", PANEL_PASS) + "$config['db_dsnr'] = 'mysql://daemoxcp_mail:" + PANEL_PASS + "@127.0.0.1/roundcubemail';\n",
                     "NOT_OURS", "config.inc.php line 10"},
         };
         for (Object[] c : refusals) {
@@ -460,14 +460,14 @@ public class RoundcubeDbUserTest {
             Fake f = bench("refuse-plugin", config("daemoxcp_mail", PANEL_PASS), "root", "www", "rw-r-----");
             Path pc = f.config.getParent().getParent().resolve("plugins/password");
             Files.createDirectories(pc);
-            Files.writeString(pc.resolve("config.inc.php"), "<?php\n// $config['password_db_dsn'] = 'mysql://mailpanel:x@127.0.0.1/mailserver';\n"
-                    + "$config['password_db_dsn'] = 'mysql://mailpanel:" + PANEL_PASS + "@127.0.0.1/mailserver';\n");
+            Files.writeString(pc.resolve("config.inc.php"), "<?php\n// $config['password_db_dsn'] = 'mysql://daemoxcp_mail:x@127.0.0.1/daemoxcp_mail';\n"
+                    + "$config['password_db_dsn'] = 'mysql://daemoxcp_mail:" + PANEL_PASS + "@127.0.0.1/daemoxcp_mail';\n");
             RoundcubeDbUser.Report r = run(f);
             check("a plugin that enters as the panel: NOT_OURS with the file and the line (" + r.detail() + ")",
                     r.outcome() == RoundcubeDbUser.Outcome.NOT_OURS && r.detail().contains("plugins/password/config.inc.php line 3") && noWrites(f));
         }
         {
-            Fake f = bench("commented-other", config("daemoxcp_mail", PANEL_PASS) + "// $config['db_dsnr'] = 'mysql://mailpanel:x@127.0.0.1/roundcubemail';\n",
+            Fake f = bench("commented-other", config("daemoxcp_mail", PANEL_PASS) + "// $config['db_dsnr'] = 'mysql://daemoxcp_mail:x@127.0.0.1/roundcubemail';\n",
                     "root", "www", "rw-r-----");
             check("a commented line stops nothing", run(f).outcome() == RoundcubeDbUser.Outcome.DONE);
         }
@@ -481,12 +481,12 @@ public class RoundcubeDbUserTest {
         }
         {
             Fake f = bench("refuse-beyond", config("roundcube", "OldPassword123456789"), "root", "www", "rw-r-----");
-            f.accounts.put("roundcube@127.0.0.1", new Account("OldPassword123456789", "roundcubemail", "mailserver"));
+            f.accounts.put("roundcube@127.0.0.1", new Account("OldPassword123456789", "roundcubemail", "daemoxcp_mail"));
             String st = f.state();
             RoundcubeDbUser.Report r = run(f);
             check("a roundcube account with other privileges: NOT_OURS (" + r.detail() + ")",
                     r.outcome() == RoundcubeDbUser.Outcome.NOT_OURS && r.detail().contains("privileges beyond roundcubemail")
-                    && r.detail().contains("`mailserver`") && f.state().equals(st) && noWrites(f));
+                    && r.detail().contains("`daemoxcp_mail`") && f.state().equals(st) && noWrites(f));
         }
         Object[][] blocked = {
             {"webmailDown", "a webmail that already does not answer", "NOT_ANSWERING"},
@@ -541,7 +541,7 @@ public class RoundcubeDbUserTest {
                     r.outcome() == RoundcubeDbUser.Outcome.ROLLED_BACK && acc.toString().equals(f.accounts.toString()));
             r = run(f);
             check("FINISHED: the panel loses roundcubemail (" + r.detail() + ")", r.outcome() == RoundcubeDbUser.Outcome.FINISHED
-                    && f.accounts.get("daemoxcp_mail@localhost").dbs.equals(Set.of("mailserver")) && f.webmailDb());
+                    && f.accounts.get("daemoxcp_mail@localhost").dbs.equals(Set.of("daemoxcp_mail")) && f.webmailDb());
             check("then it does nothing any more", run(f).outcome() == RoundcubeDbUser.Outcome.NOTHING);
         }
 

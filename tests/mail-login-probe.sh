@@ -32,12 +32,12 @@
 # the probe creates and deletes, on a test machine. Do not use it on a server with real users.
 #
 # Usage, as root, on the installed machine:
-#   sh tests/mail-login-probe.sh [database]          (default: mailserver)
+#   sh tests/mail-login-probe.sh [database]          (default: daemoxcp_mail)
 # The MySQL root password is taken from ./installed-mysql-root-password (InstallFromScratch writes
 # it) or, if it is not there, from the panel's secrets file.
 # Exit code: 0 if all four get in (doveadm, IMAP, SMTP, the webmail) and Sieve works, 1 otherwise.
 
-DB="${1:-mailserver}"
+DB="${1:-daemoxcp_mail}"
 DOMAIN="login-probe.test"
 MAILBOX="probe@$DOMAIN"
 

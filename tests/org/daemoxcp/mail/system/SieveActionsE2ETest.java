@@ -59,7 +59,7 @@ public class SieveActionsE2ETest {
             System.out.println("Without -De2e.vm=yes, as root, this test does nothing: it delivers real mail.");
             return;
         }
-        db = args.length > 0 ? args[0] : "mailserver";
+        db = args.length > 0 ? args[0] : "daemoxcp_mail";
         if (!db.matches("[A-Za-z0-9_]+")) throw new IllegalArgumentException("database name not valid: " + db);
         work = Files.createTempDirectory(Path.of("/var/tmp"), "sieve-actions-e2e");
         try {

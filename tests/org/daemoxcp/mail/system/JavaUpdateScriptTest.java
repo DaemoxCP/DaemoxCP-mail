@@ -86,7 +86,7 @@ public class JavaUpdateScriptTest {
 
     static void serviceDetection(Path root) throws Exception {
         System.out.println("\n== started by the service? ==");
-        Path rc = root.resolve("rc-mailpanel"), pidfile = root.resolve("mailpanel.pid");
+        Path rc = root.resolve("rc-daemoxcp_mail"), pidfile = root.resolve("daemoxcp_mail.pid");
         String rcBefore = UpdateManager.rcScript, pidBefore = UpdateManager.rcPidfile;
         UpdateManager.rcScript = rc.toString();
         UpdateManager.rcPidfile = pidfile.toString();
