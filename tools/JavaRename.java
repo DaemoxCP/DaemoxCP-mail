@@ -426,20 +426,28 @@ public class JavaRename {
                         + (n == null ? "sparita" : n.name() + " punta a " + n.target()) + ", attesa " + expectedTarget);
             }
         }
-        // I pezzi del nome nuovo, dove prima c'era il nome vecchio: tutti, nell'ordine, al loro posto.
+        // I pezzi del nome nuovo, dove prima c'era il nome vecchio: tutti, nell'ordine, al loro posto. Si contano
+        // TUTTE le occorrenze registrate li' dentro, anche due volte la stessa posizione: il compilatore a volte
+        // visita due volte lo stesso nome (lo faceva anche prima, coi pezzi del nome vecchio), e contarle una sola
+        // volta qui darebbe un totale che non torna senza che niente sia cambiato.
+        Map<String, TreeMap<Integer, String>> expectedParts = new HashMap<>();
         for (Map.Entry<String, TreeSet<Integer>> q : before.qualifiedSpans.entrySet()) {
             String nf = moves.getOrDefault(q.getKey(), q.getKey());
             for (int s : q.getValue()) {
-                int ns = shift(byFile.get(q.getKey()), s), at = ns;
+                int at = shift(byFile.get(q.getKey()), s);
                 for (int i = 0; i < newParts.length; i++) {
-                    Occurrence n = afterAt.get(nf + "@" + at);
-                    if (i > 0) {
-                        if (n != null && n.name().equals(newParts[i])) insideAfter++;
-                        else if (n != null && bad++ < 30) System.out.println("NON TORNA: " + nf + "@" + at + " atteso " + newParts[i] + ", c'e' " + n.name());
-                    }
+                    if (i > 0) expectedParts.computeIfAbsent(nf, k -> new TreeMap<>()).put(at, newParts[i]);
                     at += newParts[i].length() + 1;
                 }
             }
+        }
+        for (Occurrence o : after.occurrences) {
+            TreeMap<Integer, String> parts = expectedParts.get(o.file());
+            if (parts == null) continue;
+            String want = parts.get(o.pos());
+            if (want == null) continue;
+            if (o.name().equals(want)) insideAfter++;
+            else if (bad++ < 30) System.out.println("NON TORNA: " + o.file() + "@" + o.pos() + " atteso " + want + ", c'e' " + o.name());
         }
         for (Map.Entry<String, Set<String>> ov : before.overrides.entrySet()) {
             String nk = moveKey(ov.getKey(), moves, byFile, oldPkg, newPkg);
