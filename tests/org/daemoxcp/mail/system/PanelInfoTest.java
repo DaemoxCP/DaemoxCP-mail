@@ -65,7 +65,14 @@ public class PanelInfoTest {
 
         System.out.println("\n== 3. build() from the jar ==");
         PanelInfo.Build jar = PanelInfo.build();
-        check("version 1.0 (" + jar.version() + ")", jar.version().equals("1.0"));
+        // The version Maven wrote is the project's own (pom.xml, when the test runs from the source root): not a number
+        // written here, which went stale at 0.9.0.
+        java.util.regex.Matcher pom = Files.exists(Path.of("pom.xml"))
+                ? java.util.regex.Pattern.compile("<artifactId>daemoxcp-mail</artifactId>\\s*<version>([^<]+)</version>").matcher(Files.readString(Path.of("pom.xml")))
+                : null;
+        String expected = pom != null && pom.find() ? pom.group(1) : null;
+        check("version " + (expected == null ? "x.y.z" : expected) + " (" + jar.version() + ")",
+                expected == null ? jar.version().matches("\\d+\\.\\d+\\.\\d+") : jar.version().equals(expected));
         check("build date ISO 8601 UTC (" + jar.builtAt() + ")", !jar.builtAt().isEmpty() && jar.builtAt().endsWith("Z"));
         if ("yes".equals(System.getProperty("build.script"))) {
             check("build number (" + jar.number() + ")", jar.number().matches("[1-9][0-9]*"));
