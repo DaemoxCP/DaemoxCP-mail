@@ -69,6 +69,7 @@ is always zero. A test that does not start at all, read that way, looks passed.
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.CloudflareCommentsTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.security.CloudflareTokensTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.RcScriptRepairTest
+    java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SafeOwnershipTest   (VM, as root)
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.DovecotMoveTest
     java -cp "tests:target/freebsd-mail-panel-1.0.jar" org.mail_panel.system.SieveStorageTest
     javac -cp target/freebsd-mail-panel-1.0.jar -d tests tests/org/mail_panel/integration/*.java
@@ -277,6 +278,15 @@ the database with DataCrypto (AES-256-GCM, a random nonce each time) and read ba
 before the migration, read as it is; a sealed value that does not decrypt gives "", never the sealed text; the boot
 migration seals the tokens in clear row by row, only where the row still has the value read (a row changed meanwhile
 stays, PARTIAL), and a second start has nothing to do; MailDatabase seals on every write and opens on the one read.
+
+`SafeOwnershipTest` (as root on the VM, from the project root): root giving a folder to a user without giving it
+other people's files (reperto 252). On FreeBSD anyone can hard-link another user's file on the same file system, and
+/var/vmail is on the file system of /etc: "chown -R vmail:vmail /var/vmail" gave vmail a root file linked in there.
+What is safe to change (a folder, a file with one name; not a file with two names, a link, a FIFO); the script piece
+on a real tree with a root file hard-linked and one behind a link (both stay root's, the hard link is said); names
+that are not a panel folder refused; the installation scripts, the mail folders' regeneration (created as vmail),
+Roundcube's folders and acme.sh's walk use it; RoundcubeUser.apply on a tree with a hard link. Falsified with the old
+SafeOwnership: 10 FAILED.
 
 `RcScriptRepairTest` (from the project root, it reads UpdateManager.java): the start script the panel wrote, with the
 old file names and the old Italian messages, repaired at boot (whole lines only, sh -n, same owner and mode, atomic
