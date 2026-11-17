@@ -53,7 +53,9 @@ function status(hostHeader, extra) {
         await page.goto('https://' + HOST + ':' + PORT + '/index');
         await page.click('#linkConsole');
         await page.fill('#consoleCode', m ? m[1] : '');
-        await Promise.all([page.waitForURL('**/account**', { timeout: 30000 }), page.click('#btnConsole')]);
+        await Promise.all([page.waitForURL(u => !u.pathname.endsWith('/index'), { timeout: 30000 }), page.click('#btnConsole')]);
+        // The panel sends to Account only an administrator without a passkey; with one, to the home page.
+        await page.goto('https://' + HOST + ':' + PORT + '/account');
         await page.waitForFunction(() => /this one/.test(document.getElementById('sessionsList').innerText), null, { timeout: 15000 });
         const line = (await page.locator('#sessionsList').innerText()).split('\n').filter(l => l.trim()).join(' | ');
         const mine = remote("echo $SSH_CLIENT | cut -d' ' -f1").trim();

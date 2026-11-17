@@ -39,7 +39,7 @@ function portOpen(port) {
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');
         await page.fill('#consoleCode', code(remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null')));
-        await Promise.all([page.waitForURL('**/account**', { timeout: 30000 }), page.click('#btnConsole')]);
+        await Promise.all([page.waitForURL(u => !u.pathname.endsWith('/index'), { timeout: 30000 }), page.click('#btnConsole')]);
         const account = await page.evaluate(() => fetch('/api/account').then(r => r.json()));
         check('signed in with a console code (' + account.username + ', ' + (account.passkeys || []).length + ' passkeys)', account.success === true);
 

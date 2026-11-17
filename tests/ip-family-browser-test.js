@@ -76,7 +76,9 @@ function families(sock, port) {
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');
         await page.fill('#consoleCode', m[1]);
-        await Promise.all([page.waitForURL('**/account**', { timeout: 30000 }), page.click('#btnConsole')]);
+        await Promise.all([page.waitForURL(u => !u.pathname.endsWith('/index'), { timeout: 30000 }), page.click('#btnConsole')]);
+        // The panel sends to Account only an administrator without a passkey; with one, to the home page.
+        await page.goto(BASE + '/account');
         await page.waitForSelector('#addPasskeyBtn:not([disabled])');
         await page.click('#addPasskeyBtn');
         await page.waitForSelector('#passkeyNameModal.show');

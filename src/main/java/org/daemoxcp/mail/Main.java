@@ -1197,6 +1197,18 @@ public class Main {
      *         Sul percorso di successo non torna: o resta in ascolto, o aspetta ENTER.
      */
     private static boolean startWebServer() {
+        // Un pannello alla volta (PanelInstanceLock): prima di qualunque riparazione all'avvio e prima di prendere il
+        // posto della parte web, che se c'e' gia' un pannello acceso e' la sua.
+        String running = org.daemoxcp.mail.system.PanelInstanceLock.acquire(java.time.Duration.ofSeconds(30));
+        if (running != null) {
+            System.out.println();
+            System.out.println(ANSI_YELLOW + org.daemoxcp.mail.system.Product.NAME + " is ALREADY RUNNING (pid " + running
+                    + "): nothing was started, and the running panel was not touched." + ANSI_RESET);
+            System.out.println("If it was started from the menu, press Enter in that terminal; if it is the service: "
+                    + "service " + org.daemoxcp.mail.system.PanelRcScript.NAME + " stop");
+            waitForEnter();
+            return false;
+        }
         try (ResultSet result = dbManager.get_data_config()) {
             if (result.next()) {
                 String certContent = result.getString("panel_ssl_cert");
