@@ -7115,5 +7115,12 @@
   "server.cfgdom.cfSeveral": "Più di un account Cloudflare vede la zona di {d} ({list}): scegli quale nella pagina DNS (Account Cloudflare, Assegnazione domini → account), poi premi di nuovo. Non è stato cambiato niente.",
   "server.cfgdom.partial": "Configurazione finita, ma solo {ok} passi su {tot} sono in ordine: le righe con FALLITA nel registro qui sotto dicono cosa serve a ognuno.",
   "server.cfm.tokenRefused": "Cloudflare non accetta questo token ({m}). Copialo di nuovo da Cloudflare, My Profile, API Tokens: tutto, senza spazi prima o dopo.",
-  "brand.name": "DaemoxCP Mail"
+  "brand.name": "DaemoxCP Mail",
+  "server.acme.deployIncomplete": "Il certificato nuovo è al suo posto, ma non dappertutto: {list}",
+  "server.acme.notUsing": "{s} non usa {f}: tiene un certificato suo.",
+  "server.acme.unreadable": "{f} non si legge come certificato.",
+  "server.acme.stillOld": "{s} presenta ancora il certificato di prima sulla porta {p}.",
+  "server.acme.serviceRefused": "{s}: la sua configurazione non passa il suo controllo, quindi non è stato ricaricato e tiene il certificato di prima ({e}).",
+  "server.acme.reloadFailed": "{s}: il ricaricamento non è riuscito ({e}).",
+  "ssl.checkRunning": "Verifica in corso. Se il certificato è entro la soglia viene rinnovato adesso: Let's Encrypt controlla i record DNS di ogni nome, e ci vogliono alcuni minuti. Lascia aperta questa pagina."
 }
