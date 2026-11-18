@@ -482,12 +482,15 @@ MYSQL_SETUP_SQL="$MYSQL_WORK/setup.sql"
 #
 # Se si entra senza password, questo MySQL e' nuovo e la password si imposta adesso. Se non
 # si entra, una password c'e' gia' e deve essere quella del pannello: non si va a indovinare.
-if mysql -u root --password= -e "SELECT 1" >/dev/null 2>&1; then
+# Senza nessuna opzione di password e senza file di opzioni (--no-defaults): cosi' si prova
+# davvero "root senza password", e MySQL non stampa "Using a password on the command line
+# interface can be insecure", che con --password= vuoto compariva nel registro dell'installazione.
+if mysql --no-defaults -u root -e "SELECT 1" >/dev/null 2>&1; then
     echo "  Fresh MySQL: setting the root password"
     # Here-document NON quotato: $MYSQL_ROOT_PASSWORD si espande una volta sola, quindi un
     # dollaro DENTRO la password non viene riespanso. L'alfabeto del generatore non ha
     # apice, virgolette, barra rovescia ne' accento grave, che qui spezzerebbero la riga.
-    if ! mysql -u root --password= << EOROOT
+    if ! mysql --no-defaults -u root << EOROOT
 ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASSWORD';
 FLUSH PRIVILEGES;
 EOROOT
@@ -809,7 +812,9 @@ inet_protocols = all
 # Virtual mailbox settings
 virtual_mailbox_domains = mysql:/usr/local/etc/postfix/mysql-virtual-domains.cf
 virtual_mailbox_maps = mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf
-virtual_alias_maps = mysql:/usr/local/etc/postfix/mysql-virtual-aliases.cf
+# Gli alias, poi ogni casella che punta a se stessa: un catch-all (alias @dominio) prende solo gli indirizzi che
+# non sono ne' alias ne' caselle (MailboxAddressMap)
+virtual_alias_maps = mysql:/usr/local/etc/postfix/mysql-virtual-aliases.cf, mysql:/usr/local/etc/postfix/""" + PostfixMaps.MAILBOX_ADDRESSES_FILE + "\n" + """
 virtual_transport = lmtp:unix:private/dovecot-lmtp
 
 # TLS settings
@@ -955,6 +960,15 @@ hosts = 127.0.0.1
 dbname = $MYSQL_DATABASE
 query = SELECT destination FROM aliases WHERE source='%s' AND active=1
 MYSQL_ALIASES
+
+# Ogni casella, attiva o no, punta a se stessa (dopo gli alias in virtual_alias_maps)
+cat > /usr/local/etc/postfix/""" + PostfixMaps.MAILBOX_ADDRESSES_FILE + " << MYSQL_MAILBOX_ADDRESSES\n" + """
+user = $MYSQL_USER
+password = $MYSQL_PASSWORD
+hosts = 127.0.0.1
+dbname = $MYSQL_DATABASE
+""" + "query = " + PostfixMaps.MAILBOX_ADDRESSES_QUERY + "\n" + """
+MYSQL_MAILBOX_ADDRESSES
 
 # Set permissions
 chmod 640 /usr/local/etc/postfix/mysql-*.cf

@@ -225,6 +225,8 @@ public final class PeriodicReport {
             if (toDo == null) toDo = new JSONArray();
             JSONObject cert = certificateWarning();
             if (cert != null) toDo.put(cert);
+            JSONObject release = releaseWarning();
+            if (release != null) toDo.put(release);
             data.put("toDo", sortedByUrgency(toDo)).put("certificate", certificateState());
             String server = PanelMail.serverName();
             String sender = setting("report_from", "no-reply@" + panelDomain());
@@ -517,6 +519,9 @@ public final class PeriodicReport {
         // essere scoperte per caso mentre si sta facendo altro. E' il motivo per cui la
         // sorveglianza esiste: un avviso che nessuno va a cercare non e' un avviso.
         for (JSONObject x : watchWarnings()) df.put(x);
+        // Una versione nuova del pannello su GitHub: dall'ultimo controllo salvato, senza rete.
+        JSONObject release = releaseWarning();
+        if (release != null) df.put(release);
         data.put("toDo", sortedByUrgency(df)).put("certificate", certificateState());
 
         String server = PanelMail.serverName();
@@ -1030,6 +1035,24 @@ public final class PeriodicReport {
     }
 
     /** Il certificato entra anche fra le cose da fare, se sta per scadere o e' scaduto. */
+    /**
+     * Una versione nuova del pannello fra le release di GitHub (ReleaseCheck), dall'ultimo esito salvato: chi non apre
+     * mai il pannello la legge qui. Urgenza bassa: il pannello che gira non ha niente che non va.
+     */
+    static JSONObject releaseWarning() {
+        try {
+            JSONObject n = ReleaseCheck.available();
+            if (n == null) return null;
+            return new JSONObject().put("urgency", 3)
+                    .put("title", I18n.tr("mail.report.title.newRelease", java.util.Map.of("version", n.optString("version"))))
+                    .put("what", I18n.tr("server.rp.c.newRelease", java.util.Map.of("version", n.optString("version"),
+                            "current", n.optString("current"), "url", n.optString("url"))))
+                    .put("where", I18n.tr("mail.report.where.updates"));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     static JSONObject certificateWarning() {
         if (acme == null) return null;
         try {

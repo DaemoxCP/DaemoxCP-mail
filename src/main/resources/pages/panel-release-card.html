@@ -1,0 +1,25 @@
+            <!-- La versione del pannello e le release di GitHub (ReleaseCheck): l'ultimo esito, «Controlla adesso», e il
+                 controllo di ogni giorno acceso o spento. Niente si scarica: il link porta alla pagina della release, e
+                 l'aggiornamento resta upgrade-panel.sh sul server. -->
+            <section class="card mb-4" id="panelRelease" aria-labelledby="relTitle">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h3 class="h5 mb-0" id="relTitle"><i class="fas fa-tag me-2" aria-hidden="true"></i>{{t:rel.title}}</h3>
+                    <button type="button" class="btn btn-sm btn-outline-primary touch-target" id="relCheckButton" data-on-click="relCheckNow()">
+                        <i class="fas fa-magnifying-glass me-1" aria-hidden="true" id="relCheckIcon"></i>{{t:rel.checkNow}}
+                    </button>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2" id="relRunning"></p>
+                    <div id="relOutcome" role="status" aria-live="polite">
+                        <p class="small text-muted mb-2">{{t:rel.reading}}</p>
+                    </div>
+                    <p class="small text-muted">{{t:rel.how}}</p>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="relAuto" aria-describedby="relAutoHint relAutoState"
+                               data-on-change="relSetAuto(this)" disabled>
+                        <label class="form-check-label" for="relAuto">{{t:rel.auto}}</label>
+                        <small class="d-block text-muted" id="relAutoHint"></small>
+                        <small class="d-block" id="relAutoState" role="status" aria-live="polite"></small>
+                    </div>
+                </div>
+            </section>

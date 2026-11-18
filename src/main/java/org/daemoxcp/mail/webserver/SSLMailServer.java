@@ -219,6 +219,7 @@ public class SSLMailServer {
         "rc_remove_preview", "rc_preview", "os_upgrade_targets", "os_upgrade_preflight", "os_upgrade_instructions",
         "os_upgrade_verify", "jump_state", "be_list", "ssl_usage", "removal_candidates", "panel_uses", "deep_scan",
         "panel_env", "dovecot24_preview", "rspamd_timeout", "web_diagnosis", "web443_status", "web443_config",
+        "panel_release", "panel_release_check",
         "mtasts_plan", "watch", "watch_changes", "openssl_expiry", "port465_status",
         "python_preflight", "python_leftovers", "java_preflight", "java_status", "roundcube_preflight",
         "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status", "interruption_status",
@@ -861,6 +862,9 @@ public class SSLMailServer {
             // Postfix e Dovecot in MySQL coi loro utenti, che leggono solo le colonne che usano, e non piu' con
             // quello del pannello: dopo MysqlRoot (serve la root di MySQL) e MysqlListen (MySQL com'e' davvero).
             org.daemoxcp.mail.system.MailDbUsers.ensureAtBoot();
+            // Ogni casella punta a se stessa dopo gli alias (MailboxAddressMap): un catch-all prende solo gli indirizzi
+            // che non sono ne' alias ne' caselle. Dopo MailDbUsers: la mappa copia la connessione di quella degli alias.
+            org.daemoxcp.mail.system.MailboxAddressMap.ensureAtBoot();
             org.daemoxcp.mail.system.SyslogNetwork.ensureAtBoot();
             org.daemoxcp.mail.system.VmailPermissions.ensureAtBoot();
             // rspamd tutto col suo utente, anche il processo principale: le sue porte sono sopra la 1023 e
@@ -921,6 +925,10 @@ public class SSLMailServer {
             org.daemoxcp.mail.system.PeriodicReport.link(this.acmeManager);
             this.periodicReport = new org.daemoxcp.mail.system.PeriodicReport();
             this.periodicReport.start();
+
+            // Una versione nuova del pannello fra le release di GitHub, una volta al giorno (ReleaseCheck): la dicono
+            // la dashboard, la pagina Aggiornamenti e il rapporto periodico. Niente si scarica e niente si installa.
+            org.daemoxcp.mail.system.ReleaseCheck.start();
 
             // Auto-install/update Roundcube SSO plugin if Roundcube is installed
             // (e il cambio password della webmail che passa dal pannello)
@@ -2696,6 +2704,37 @@ public class SSLMailServer {
         return I18n.tr("server.alias.nowRejected", Map.of("address", address));
     }
 
+    /** La sorgente di un catch-all: @ e un nome di dominio valido, 254 caratteri in tutto. */
+    static boolean validCatchAllSource(String source) {
+        return source != null && source.length() <= 254 && source.startsWith("@") && SecurityUtils.isValidDomain(source.substring(1));
+    }
+
+    /**
+     * Perche' un catch-all non si puo' creare o puntare li', o null se si puo'.
+     * <ul>
+     *   <li>Postfix deve avere la mappa delle caselle dopo gli alias (MailboxAddressMap): senza, il catch-all prenderebbe
+     *       anche la posta delle caselle;</li>
+     *   <li>una destinazione nello stesso dominio deve essere una casella attiva che riceve: un indirizzo che non esiste,
+     *       o una casella spenta o che non riceve, tornerebbe al catch-all stesso, e Postfix fermerebbe la posta per il
+     *       giro senza fine.</li>
+     * </ul>
+     */
+    private static String catchAllRefused(String source, String destination) throws java.sql.SQLException {
+        String notReady = org.daemoxcp.mail.system.MailboxAddressMap.notReady();
+        if (notReady != null) return I18n.tr("server.alias.catchAllNotReady", Map.of("reason", notReady));
+        MailDatabase.Mailbox m = Main.mailDatabase.getMailboxByEmail(destination);
+        return catchAllLoop(source, destination, m != null && m.active && m.receiveEnabled);
+    }
+
+    /** La seconda regola di {@link #catchAllRefused}, senza database: la esercita CatchAllTest. */
+    static String catchAllLoop(String source, String destination, boolean destinationIsMailbox) {
+        String domain = source.substring(1);
+        int at = destination.lastIndexOf('@');
+        if (at >= 0 && destination.substring(at + 1).equals(domain) && !destinationIsMailbox)
+            return I18n.tr("server.alias.catchAllLoop", Map.of("domain", domain, "destination", destination));
+        return null;
+    }
+
     /** Un indirizzo per un alias: i caratteri ammessi da isValidEmail e i limiti della RFC 5321 (254 in tutto, 64 prima della @). */
     private static boolean validAliasAddress(String email) {
         return email != null && email.length() <= 254 && SecurityUtils.isValidEmail(email) && email.indexOf('@') <= 64;
@@ -2725,6 +2764,10 @@ public class SSLMailServer {
             return r.put("success", false).put("error", I18n.tr("server.badEmail"));
         if (changeDestination && destination.equals(alias.source) && Main.mailDatabase.getMailboxByEmail(alias.source) == null)
             return r.put("success", false).put("error", aliasOnItself(alias.source));
+        if (changeDestination && alias.source.startsWith("@")) {
+            String refused = catchAllRefused(alias.source, destination);
+            if (refused != null) return r.put("success", false).put("error", refused);
+        }
 
         boolean newDestination = !destination.equals(alias.destination);
         if (newDestination) {
@@ -2812,10 +2855,17 @@ public class SSLMailServer {
 
                     String source = req.optString("source", "").toLowerCase().trim();
                     String destination = req.optString("destination", "").toLowerCase().trim();
+                    // Un catch-all e' un alias con sorgente @dominio: la posta di ogni indirizzo del dominio che non e'
+                    // ne' alias ne' casella (MailboxAddressMap).
+                    boolean catchAll = source.startsWith("@");
+                    String catchAllRefused = null;
 
-                    if (!validAliasAddress(source) || !validAliasAddress(destination)) {
+                    if (!(catchAll ? validCatchAllSource(source) : validAliasAddress(source)) || !validAliasAddress(destination)) {
                         response.put("success", false);
                         response.put("error", I18n.tr("server.badEmail"));
+                    } else if (catchAll && (catchAllRefused = catchAllRefused(source, destination)) != null) {
+                        response.put("success", false);
+                        response.put("error", catchAllRefused);
                     } else if (source.equals(destination) && Main.mailDatabase.getMailboxByEmail(source) == null) {
                         // "casella -> se stessa" e' il modo di tenerne una copia quando la posta e'
                         // inoltrata altrove; su un indirizzo che non e' una casella non porta da nessuna parte.
@@ -2844,6 +2894,9 @@ public class SSLMailServer {
                                 // Se la sorgente e' anche una casella, da ora la sua posta va solo alle destinazioni.
                                 String note = afterAliases(source, domain.id);
                                 if (note != null) response.put("note", I18n.tr("server.alias.created") + " " + note);
+                                // Un catch-all raccoglie anche lo spam verso indirizzi inventati: lo si dice subito.
+                                if (catchAll) response.put("note", I18n.tr("server.alias.catchAllCreated",
+                                        Map.of("domain", domainName, "destination", destination)));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.alias.alreadyExists"));
@@ -7775,6 +7828,15 @@ public class SSLMailServer {
                     logAudit("PKG_BRANCH_CHANGE", ip, "to " + target + (response.optBoolean("success")
                             ? " (started, job " + response.optString("jobId") + ")" : " (not started: " + response.optString("error") + ")"));
                 }
+                // La versione del pannello e le release di GitHub (ReleaseCheck): leggere, controllare adesso, il
+                // controllo di ogni giorno acceso o spento.
+                case "panel_release" -> response = org.daemoxcp.mail.system.ReleaseCheck.status();
+                case "panel_release_check" -> response = org.daemoxcp.mail.system.ReleaseCheck.checkNow();
+                case "panel_release_auto" -> {
+                    boolean on = req.optBoolean("enabled", true);
+                    response = org.daemoxcp.mail.system.ReleaseCheck.setEnabled(on);
+                    logAudit(on ? "RELEASE_CHECK_ON" : "RELEASE_CHECK_OFF", ip, "daily check of " + org.daemoxcp.mail.system.ReleaseCheck.REPOSITORY + " releases");
+                }
                 case "system_report" -> response = UpdateManager.systemReport();
                 case "os_status" -> response = UpdateManager.operatingSystem();
                 case "reboot_preview" -> response = UpdateManager.restartServer(false, 1);
@@ -8992,8 +9054,14 @@ public class SSLMailServer {
         }
         String action = extractParamFromQuery(exchange.getRequestURI().getQuery(), "action");
         switch (action == null ? "" : action) {
-            case "uptime" -> sendJsonResponse(exchange, org.daemoxcp.mail.system.PanelInfo.uptime(java.time.Instant.now(),
-                    currentSession(exchange).map(s -> AuthStore.may(s.admin(), SYSTEM_VIEW)).orElse(false)));
+            case "uptime" -> {
+                boolean details = currentSession(exchange).map(s -> AuthStore.may(s.admin(), SYSTEM_VIEW)).orElse(false);
+                JSONObject r = org.daemoxcp.mail.system.PanelInfo.uptime(java.time.Instant.now(), details);
+                // Una versione nuova su GitHub (ReleaseCheck), a chi vede le pagine del sistema: l'ultimo esito salvato,
+                // senza rete.
+                if (details) r.put("release", org.daemoxcp.mail.system.ReleaseCheck.available());
+                sendJsonResponse(exchange, r);
+            }
             case "details" -> sendJsonResponse(exchange, org.daemoxcp.mail.system.PanelInfo.details(port));
             default -> sendJsonError(exchange, 400, I18n.tr("server.unknownAction"));
         }
