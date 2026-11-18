@@ -33,11 +33,11 @@ public class MtaStsSequenceTest {
         require("null means all", MtaStsSetup.filter(allItems, null).size() == 3);
         require("an exact name leaves one", MtaStsSetup.filter(allItems, "domain-d.test").size() == 1);
         require("upper case does not matter",
-                MtaStsSetup.filter(allItems, "DoMaIn-D.TeSt").size() == 1);
-        // If the comparison were "contains", "ake.net" would catch domain-d.test and the sequence
+                MtaStsSetup.filter(allItems, "DoMaIn-D.TeST").size() == 1);
+        // If the comparison were "contains", "in-d.test" would catch domain-d.test and the sequence
         // would work on a domain nobody asked for.
         require("the comparison is exact, not 'contains'",
-                MtaStsSetup.filter(allItems, "ake.net").isEmpty());
+                MtaStsSetup.filter(allItems, "in-d.test").isEmpty());
         require("a domain that does not exist gives an EMPTY list (it is the guard against a false success)",
                 MtaStsSetup.filter(allItems, "doesnotexist.invalid").isEmpty());
         require("a null list blows nothing up",

@@ -240,6 +240,58 @@ console code and no passkey, a harmless change in Settings opens the confirmatio
 the command and the administrator's name; a wrong code is refused and the window stays; the command shown, run on the
 server, gives the code that confirms, and the change goes through; the same code again gets 401.
 
+`ReleaseCheckTest` (anywhere, no network) is the new-version notice: which GitHub release is newer than the running
+panel (semver order, drafts never, pre-releases only for a 0.x or suffixed panel, the link built from the tag and never
+taken from the answer), when the panel asks again (once a day, "Check now" at most once a minute, a date in the future
+does not stop it), and what it does with each of GitHub's answers, given by a local HTTP server: a list, an empty list,
+404, the rate limit, 500, a page instead of JSON, an answer over 2 MB, nobody answering.
+
+`release-notice-browser-test.js` (Playwright, VM): the same notice in the pages. The *Updates* card with the running
+version and the daily check on; "Check now" asking GitHub for real (until the repository is public it answers 404,
+and the card says so in words) and not asking again within a minute; the daily check off (the recent confirmation:
+cancelled, the switch goes back; confirmed with a console code, it goes off) and on, with a reload and the audit log;
+a newer release (the page's API answer replaced in the browser) on the card and on the *Dashboard*, with the link, a
+link that is not a GitHub release page left out, and the contrast of the link in both themes; at 375 px the card
+fits.
+
+`MailboxAddressMapTest` and `CatchAllTest` (anywhere) are the catch-all's decisions without Postfix: when the start
+adds Postfix's mailbox map after the aliases, rewrites a map that says something else, or leaves a hand-written
+`virtual_alias_maps` alone; the map's text made from the aliases' map (only the mailboxes that receive); when a
+catch-all can be created; that both installers write the map; what a catch-all source is, and a destination that
+would come back to the catch-all itself.
+
+`catch-all-browser-test.js` (Playwright, VM) is the catch-all with real mail, on a domain of its own that it removes
+at the end. Before the catch-all, from outside (the machine's own address, not in mynetworks), Postfix refuses an
+invented address and a mailbox that does not receive, and accepts a mailbox: the map changes nothing without a
+catch-all. The catch-all made from the Aliases page; then, over SMTP and checked with `doveadm search`, an invented
+address and the mailbox that does not receive land in the catch-all, the mailbox and an alias keep their mail. The
+control: with `virtual_alias_maps` put back to the aliases alone (and restored), the mailbox's mail goes to the
+catch-all, and the panel refuses to create one.
+
+`WebmailPasswordPluginTest` (where `php` is, the test machine) runs the config the panel writes into Roundcube's
+`config.inc.php` with the real PHP: the `password` plugin added to the list when it is missing, never twice, and no
+list created when the list is in another file; the current password asked for; and the SSO plugin the panel writes
+sends the webmail's key under the panel's header name and parses.
+
+`webmail-password-browser-test.js` (Playwright, VM; the webmail on 8443) changes a mailbox's password from Roundcube
+on a domain of its own: after the sign-in Roundcube's log has no new "did not answer the password copy request" (it
+had one after every sign-in from 17/11 to 18/11/2026); Settings has *Password*, with the current password; a password
+under 12 characters is refused; a good one is saved, and IMAP takes the new one and refuses the old one.
+`MailboxPasswordTest` with `-Droundcube.dir` does not see a broken sign-in hook: its second run also changes the
+password, which writes the copy by itself.
+
+`DovecotQuotaTest` (anywhere; the doveconf part where doveconf is) is the mailbox quotas without Dovecot: the quota
+userdb right before userdb static in `auth-sql.conf.ext`, once, and a file the panel did not write left alone; what the
+start does on 2.3, on 2.4 with and without the quota pieces; the question to quota-status right after
+`reject_unauth_destination`; the lines of `doveadm -f tab quota get -A`; and the installer's whole 2.4 configuration,
+with the quota pieces, parsed by the real doveconf.
+
+`quota-browser-test.js` (Playwright, VM) is the quotas with real mail, on a domain of its own: Dovecot gives a 1 MB
+mailbox its limit; empty, Postfix accepts it from outside; a 2 MB message fills it (Dovecot's grace lets that one
+through); then from outside 452 4.2.2, a mailbox without a limit 250; one more message from the machine is refused by
+LMTP and the bounce says the quota; IMAP's GETQUOTAROOT gives 1024 KB; the Mailboxes page says "Full" with a bar at
+100 %; the limit taken away from the panel, the recipient is accepted again at once.
+
 `SendingLimitsTest` (anywhere) is the panel as Postfix's policy service for the sending limits, without Postfix: which
 limit applies (the mailbox's own if active, else the global one, else none); what is not counted (another request,
 another stage, incoming mail without sasl_username); recipients per message (550), per hour and per day (450), with
@@ -923,7 +975,7 @@ verifies the three properties that must hold: no waiting if the domains already 
 soon as they answer, and it leaves anyway at the deadline instead of running forever.
 
 **MtaStsSequenceTest** — the pieces born from merging the two sequences: `filter()`, the filter by
-domain (exact comparison, case-insensitive: "ake.net" must not catch "domain-d.test", and a nonexistent
+domain (exact comparison, case-insensitive: "in-d.test" must not catch "domain-d.test", and a nonexistent
 domain must give an empty list, which is the guard against the false success), and `asEntries()`,
 which turns the outcome into the DNS page's rows without losing the red rows.
 
@@ -1482,6 +1534,10 @@ session first and then the same parameters, bound to the session save the public
 WebSessions, no DKIM private key and no password hash or copy out of the database save Show password's two.
 
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.SqlCatalogTest
+
+With the test MySQL and `-Dmysql.root=yes` its part 5 ends by dropping `'daemoxcp_mail'@'127.0.0.1'`, the user the
+other MySQL tests sign in with: in a series, run it last (on 18/11/2026 the tests after it all said "connected to
+MySQL as the panel user: FAILED").
 
 **WebRoutinesTest** — the web part's own MySQL user, on the test MySQL as
 its root. The migration (WebDbAccess): the locked owner of the procedures, the 40 procedures, the web

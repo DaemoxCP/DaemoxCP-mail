@@ -441,6 +441,9 @@ public class RoundcubeSsoManager {
      * Uses master user authentication for admin SSO access
      */
     public static String generatePluginPhp() {
+        // Il nome dell'intestazione con la chiave si mette dopo: dentro un blocco di testo un " + ... + " resta scritto
+        // cosi' com'e', ed e' successo col cambio di nome del 17/11/2026 (b287bcbd): Guzzle rifiutava l'intestazione e
+        // la copia nel vault dopo un accesso alla webmail non partiva piu'.
         return """
 <?php
 /**
@@ -485,7 +488,7 @@ class daemoxcp_mail_sso extends rcube_plugin
             $client = $rcmail->get_http_client(array('verify' => false, 'timeout' => 5, 'http_errors' => false));
             $client->request('POST', $url, array(
                 'form_params' => array('user' => $user, 'pass' => $pass),
-                'headers' => array('" + WebmailPasswordConfig.KEY_HEADER + "' => $key),
+                'headers' => array('@KEY_HEADER@' => $key),
             ));
         } catch (Exception $e) {
             rcube::write_log('errors', 'daemoxcp_mail_sso: DaemoxCP Mail did not answer the password copy request');
@@ -642,7 +645,7 @@ class daemoxcp_mail_sso extends rcube_plugin
         }
     }
 }
-""";
+""".replace("@KEY_HEADER@", WebmailPasswordConfig.KEY_HEADER);
     }
 
     /**

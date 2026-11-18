@@ -21,6 +21,15 @@
                         </div>
                     </div>
                     <p class="small text-muted mb-0 mt-2" id="panelInfoState" role="status">{{t:hp.reading}}</p>
+                    <!-- Una versione nuova su GitHub (ReleaseCheck): solo a chi vede le pagine del sistema, con il link alla
+                         pagina della release. Niente si scarica da qui. Il riquadro esterno porta hidden: d-flex di
+                         Bootstrap e' !important e, sullo stesso elemento, lo mostrerebbe vuoto. -->
+                    <div id="panelReleaseNotice" hidden>
+                        <div class="alert alert-info d-flex align-items-start gap-2 mt-3 mb-0">
+                            <i class="fas fa-gift mt-1" aria-hidden="true"></i>
+                            <div><span id="panelReleaseText"></span> <a id="panelReleaseLink" class="alert-link" href="/updates#panelRelease" rel="noopener noreferrer">{{t:hp.newReleaseLink}}</a></div>
+                        </div>
+                    </div>
                     <div id="panelInfoDetails" class="mt-3 pt-3 border-top" hidden>
                         <h4 class="visually-hidden">{{t:hp.detailsTitle}}</h4>
                         <dl class="row mb-0 small" id="panelInfoList"></dl>

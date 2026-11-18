@@ -68,8 +68,19 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 
 **Posta**
 - Domini, caselle, alias e inoltri, trasformazioni degli indirizzi.
+- Indirizzi catch-all, dalla pagina *Alias*. Il catch-all di un dominio prende la posta di ogni indirizzo che non è
+  un alias o una casella che riceve, così caselle e alias tengono la loro. Ci arriva anche lo spam mandato a
+  indirizzi inventati, e la posta di una casella spenta o che non riceve.
 - Password delle caselle salvate come hash BLF-CRYPT, più una copia cifrata che l'amministratore può mostrare.
   La copia è cifrata con una chiave pubblica: la legge solo la parte root del pannello.
+- Chi usa la posta cambia la sua password dalla webmail (*Impostazioni* → *Password*), con quella attuale. Il cambio
+  passa dal pannello, che la controlla e scrive insieme l'hash e la copia cifrata. Il plugin `password` di Roundcube
+  lo accende il pannello da solo.
+
+- Quote delle caselle, applicate da Dovecot 2.4. Prima di accettare un messaggio Postfix chiede a Dovecot: una casella
+  piena risponde `452 4.2.2`, così chi manda tiene il messaggio e riprova per qualche giorno, e non si perde niente se
+  intanto si libera spazio. La pagina *Caselle* mostra quanto usa ogni casella. Con Dovecot 2.3 non si applicano, e la
+  pagina lo dice: la pagina *Aggiornamenti* porta il server alla 2.4.
 - Filtri Sieve e risposte automatiche, compilati e controllati sul server.
 - Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
 - Limiti d'invio per casella: messaggi all'ora, al giorno e destinatari per messaggio, globali o di una casella. Prima
@@ -90,7 +101,8 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 - Certificati Let's Encrypt con `acme.sh` (il pacchetto di FreeBSD, che gira col suo utente `acme`), con la
   verifica DNS su Cloudflare.
 - Profili di configurazione di Apple Mail (Mac, iPhone, iPad) e autoconfig di Thunderbird: i programmi di posta
-  si configurano da soli.
+  si configurano da soli. Provati con Apple Mail su macOS sul server vero: il profilo configura l'account, e la
+  posta parte e arriva. iPhone, iPad e Thunderbird non sono ancora stati provati con un programma di posta vero.
 
 **Sicurezza**
 - Accesso senza password: **passkey** (WebAuthn), codici monouso via email, o un codice dalla console del server.
@@ -548,12 +560,8 @@ quest'ordine:
 
 Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, così nessuno ci conta:
 
-- **Le quote** si salvano con ogni casella, ma Dovecot non le applica.
 - **I conteggi di posta inviata e ricevuta** non vengono raccolti: la pagina delle statistiche mostra solo i numeri
   di Rspamd.
-- **Il cambio password dalla webmail** passa dal pannello quando il plugin `password` di Roundcube è acceso, ma
-  un'installazione nuova non lo accende.
-- **Gli indirizzi catch-all** non si possono creare dal pannello.
 
 ---
 
@@ -562,7 +570,7 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
 | Pagina | Cosa ci fai |
 |---|---|
 | **Dashboard** | lo stato del server a colpo d'occhio, e il DNS ancora da configurare |
-| **Domini**, **Caselle**, **Alias** | la posta; da una casella: password, filtri Sieve, risposta automatica, profilo Apple, accesso alla webmail |
+| **Domini**, **Caselle**, **Alias** | la posta, compresi gli indirizzi catch-all; da una casella: password, filtri Sieve, risposta automatica, profilo Apple, accesso alla webmail |
 | **Coda di posta** | cosa aspetta, perché, e cosa farne |
 | **Limiti di invio** | messaggi all'ora e al giorno per casella, destinatari per messaggio, la dimensione massima dei messaggi |
 | **Statistiche** | spam, ham e addestramento, da Rspamd |
@@ -594,11 +602,27 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
   - il secondo non deve avere più niente da fare.
 
   `rollback-panel.sh` rimette tutto com'era senza perdere la posta.
+
+  Quando esce una versione nuova, il pannello te lo dice. Una volta al giorno legge l'elenco delle release di
+  [DaemoxCP/mail](https://github.com/DaemoxCP/mail/releases) su GitHub. Se una è più nuova del pannello, lo dice,
+  col link alla pagina della release:
+  - nella *Dashboard*;
+  - nella pagina *Aggiornamenti*, che ha anche *Controlla adesso*;
+  - nel rapporto periodico.
+
+  Non scarica e non installa niente: l'aggiornamento resta il passo qui sopra. Il controllo non manda a GitHub
+  nient'altro che la richiesta stessa (GitHub vede l'indirizzo del server). Si spegne dalla pagina *Aggiornamenti*.
+  Un pannello in beta (0.x) sente anche delle pre-release; uno 1.x solo delle release.
 - **Gli indirizzi di Cloudflare**: quando la *Diagnostica* dice che Cloudflare ha cambiato il suo elenco, aggiorna
   la regola di pannello e webmail nel firewall del fornitore e confermalo nella pagina *Firewall*.
 
 > [!NOTE]
-> Sono previsti gli aggiornamenti del pannello dalle release di GitHub, verificati e installati dal pannello stesso.
+> È prevista l'installazione di una release dal pannello stesso, con gli stessi controlli di `upgrade-panel.sh`.
+
+### I test
+
+`tests/` contiene i test del pannello, una classe Java ciascuno, più le prove nel browser con Playwright. Si lanciano a
+mano su una macchina FreeBSD di prova prima di ogni release: come, in [`tests/README.md`](tests/README.md).
 
 ---
 
