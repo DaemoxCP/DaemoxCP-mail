@@ -106,8 +106,14 @@ function said(text, key) {
         check('the table has a caption and column headers', await page.$eval('#addrCard table', t => !!t.caption && t.querySelectorAll('thead th[scope=col]').length === 5));
         check('three goals, "both" chosen first', await page.$$eval('input[name=addrGoal]', rs => rs.length === 3 && rs.find(r => r.checked).value === 'both'));
         let s = await steps();
-        check('the steps towards both: ' + s.join(' '), s.length === 7 && s.filter(x => /\/(now|blocked)$/.test(x)).length === 1
-            && (await page.$$('#addrSteps li[aria-current=step]')).length === 1);
+        check('the steps towards both: ' + s.join(' '), s.length === 8 && s.filter(x => /\/(now|blocked)$/.test(x)).length === 1
+            && (await page.$$('#addrSteps li[aria-current=step]')).length === 1 && s.includes('v6Firewall/next'));
+        // On the test machine the IPv4 reverse DNS is not the mail name: that is the step now, the administrator's.
+        if (s.includes('v4Ptr/now')) {
+            const copies = await page.$$eval('#addrSteps li[data-status=now] button[data-copy]', bs => bs.map(b => b.dataset.copy));
+            check('the reverse DNS step: the address and the name ready to copy (' + copies.length + ' values), what it gives now, the automatic check',
+                copies.length >= 2 && await page.$eval('#addrSteps li[data-status=now]', li => li.querySelectorAll('p').length >= 3));
+        }
 
         console.log('\n== 1. Goal IPv6 only ==');
         await page.check('#addrGoalV6');
@@ -148,8 +154,8 @@ function said(text, key) {
         s = await steps();
         check('towards IPv4 only: ' + s.join(' '), s.length === 7 && s[0].startsWith('v4Address/') && s.includes('v6AddressRemove/done'));
         await page.check('#addrGoalBoth');
-        await until(() => document.querySelectorAll('#addrSteps li').length === 7 && !!document.querySelector('#addrSteps li[data-step="mailBoth"]'), null, 60000);
-        check('towards both again', (await steps()).length === 7);
+        await until(() => document.querySelectorAll('#addrSteps li').length === 8 && !!document.querySelector('#addrSteps li[data-step="mailBoth"]'), null, 60000);
+        check('towards both again', (await steps()).length === 8);
         check('  nothing changed by looking', live() === before && rcSha() === rcBefore);
 
         console.log('\n== 5. The console ==');

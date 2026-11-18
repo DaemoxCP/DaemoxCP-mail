@@ -125,6 +125,11 @@ public class ServerAddressesTest {
         } catch (Exception e) {
             check("rc.conf reading: " + e, false);
         }
+        check("the part after the block, what Hetzner's console asks for the reverse DNS: ::1 in a /64",
+                "::1".equals(ServerAddresses.hostPart("2a01:4f8:c012:abcd::1", 64))
+                        && "::1:2:3:4".equals(ServerAddresses.hostPart("2a01:4f8:c012:abcd:1:2:3:4", 64))
+                        && "::cd:0:0:0:1".equals(ServerAddresses.hostPart("2a01:4f8:c012:abcd::1", 56))
+                        && ServerAddresses.hostPart("192.0.2.1", 64) == null && ServerAddresses.hostPart("2a01:4f8::1", 128) == null);
         check("the address of an rc.conf line", "2a01:4f8::1".equals(ServerAddresses.fromRcLine("inet6 2a01:4f8::1 prefixlen 64"))
                 && "2a01:4f8::1".equals(ServerAddresses.fromRcLine("inet6 2a01:4f8::1/64")) && ServerAddresses.fromRcLine("inet6 accept_rtadv") == null);
     }

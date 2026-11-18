@@ -22,6 +22,7 @@
                 case 'v4Ptr': return t('guide.step.v4Ptr');
                 case 'v4Dns': return t('guide.step.v4Dns');
                 case 'v6Address': return t('guide.step.v6Address');
+                case 'v6Firewall': return t('guide.step.v6Firewall');
                 case 'v6Ptr': return t('guide.step.v6Ptr');
                 case 'v6Dns': return t('guide.step.v6Dns');
                 case 'webAaaa': return t('guide.step.webAaaa');
@@ -44,6 +45,7 @@
                 case 'v4Ptr': return t('guide.how.v4Ptr', p);
                 case 'v4Dns': return t('guide.how.v4Dns', p);
                 case 'v6Address': return t('guide.how.v6Address', p);
+                case 'v6Firewall': return t('guide.how.v6Firewall', p);
                 case 'v6Ptr': return t('guide.how.v6Ptr', p);
                 case 'v6Dns': return t('guide.how.v6Dns', p);
                 case 'webAaaa': return t('guide.how.webAaaa', p);
@@ -72,6 +74,15 @@
             }
         }
 
+
+        // I passi dal provider, quando il provider e' riconosciuto (oggi Hetzner Cloud).
+        function addrHowHetzner(id, p) {
+            switch (id) {
+                case 'v4Ptr': return t('guide.howHetzner.v4Ptr', p);
+                case 'v6Ptr': return t('guide.howHetzner.v6Ptr', p);
+                default: return '';
+            }
+        }
 
         function addrGoal() {
             const r = document.querySelector('input[name="addrGoal"]:checked');
@@ -144,6 +155,26 @@
         }
 
         // Il pannello del passo di adesso: la spiegazione e UN pulsante.
+        // Un valore da scrivere altrove (la console del provider): l'etichetta, il valore, e «Copia».
+        function addrCopyRow(label, value) {
+            const row = addrEl('div', 'd-flex flex-wrap align-items-center gap-2 mb-2');
+            const code = addrEl('code', 'text-break', value);
+            const b = addrEl('button', 'btn btn-outline-secondary btn-sm touch-target', t('addr.copy'));
+            b.type = 'button';
+            b.dataset.copy = value;
+            b.setAttribute('aria-label', t('addr.copy') + ': ' + label);
+            b.setAttribute('data-on-click', 'addrCopy(this)');
+            row.append(addrEl('span', 'small', label), code, b);
+            return row;
+        }
+
+        function addrCopy(btn) {
+            const value = btn.dataset.copy || '';
+            const done = () => { btn.textContent = t('addr.copied'); setTimeout(() => { btn.textContent = t('addr.copy'); }, 2000); };
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(value).then(done).catch(() => {});
+        }
+
+        // Il pannello del passo di adesso: la spiegazione e UN pulsante.
         function addrNowPanel(step) {
             const d = addrData;
             const box = addrEl('div', 'border rounded p-2 mt-2');
@@ -153,21 +184,55 @@
                 box.append(w);
                 return box;
             }
+            const params = addrParams(step.id);
             const manual = !d.dns.cloudflare && ['v4Dns', 'v6Dns', 'webAaaa', 'webA', 'v6DnsRemove', 'v4DnsRemove'].includes(step.id);
-            box.append(addrEl('p', 'small mb-2', manual ? addrHowManual(step.id, addrParams(step.id)) : addrHow(step.id, addrParams(step.id))));
+            const hetzner = d.provider === 'hetzner' && (step.id === 'v4Ptr' || step.id === 'v6Ptr');
+            box.append(addrEl('p', 'small mb-2', manual ? addrHowManual(step.id, params) : hetzner ? addrHowHetzner(step.id, params) : addrHow(step.id, params)));
+
+            // Il DNS inverso: i valori da scrivere nella console del provider, con «Copia», e cosa da' adesso.
+            if (step.id === 'v4Ptr' || step.id === 'v6Ptr') {
+                const v6 = step.id === 'v6Ptr';
+                if (v6 && hetzner && d.state.v6.hostPart) box.append(addrCopyRow(t('addr.copyAddressField'), d.state.v6.hostPart));
+                box.append(addrCopyRow(t('addr.copyFullAddress'), params.ip));
+                box.append(addrCopyRow(t('addr.copyNameField'), params.h));
+                const found = v6 ? d.dns.ptr6Found : d.dns.ptr4Found;
+                box.append(addrEl('p', 'small mb-2', found ? t('addr.ptrNow', { name: found }) : t('addr.ptrNone')));
+                box.append(addrEl('p', 'small text-muted mb-2', t('addr.waitMinutes')));
+            }
+            if (step.id === 'v6Firewall') {
+                const a = addrEl('a', 'd-inline-block mb-2 small', t('addr.openFirewall'));
+                a.href = '/firewall#provider-firewall';
+                box.append(a);
+                box.append(addrEl('div', 'mb-2'));
+                box.append(addrButton(t('guide.do.v6Firewall'), "addrDo('confirm-firewall')", false));
+                return box;
+            }
             if (step.who === 'you' || manual) {
+                box.append(addrEl('p', 'small text-muted mb-2', t('addr.recheck')));
                 box.append(addrButton(t('addr.checkAgain'), 'addrLoad()', false));
                 return box;
             }
             switch (step.id) {
                 case 'v6Address': {
                     const sg = d.suggestion;
-                    const hint = addrEl('p', 'small text-muted mb-2', sg ? t('addr.fromProvider', { source: sg.source }) : t('addr.fieldHint'));
+                    const hint = addrEl('p', 'small text-muted mb-2', t('addr.fieldHint'));
                     hint.id = 'addrFieldHint';
-                    box.append(addrField('addrV6Address', t('addr.fieldAddress'), sg ? sg.address : '', 'addrFieldHint'));
-                    box.append(addrField('addrV6Prefix', t('addr.fieldPrefix'), sg ? String(sg.prefix) : '64', 'addrFieldHint'));
-                    box.append(addrField('addrV6Gateway', t('addr.fieldGateway'), sg ? sg.gateway.replace(/%.*$/, '') : 'fe80::1', 'addrFieldHint'));
-                    box.append(hint, addrButton(t('guide.do.v6Address'), "addrDo('add-ipv6')", false));
+                    const fields = [
+                        addrField('addrV6Address', t('addr.fieldAddress'), sg ? sg.address : '', 'addrFieldHint'),
+                        addrField('addrV6Prefix', t('addr.fieldPrefix'), sg ? String(sg.prefix) : '64', 'addrFieldHint'),
+                        addrField('addrV6Gateway', t('addr.fieldGateway'), sg ? sg.gateway.replace(/%.*$/, '') : 'fe80::1', 'addrFieldHint'),
+                        hint];
+                    if (sg) {
+                        // Il provider l'ha gia' detto: una frase e il pulsante; i campi solo dietro «Cambia».
+                        box.append(addrEl('p', 'small mb-2', t('addr.suggested', { ip: sg.address, p: sg.prefix, gw: sg.gateway.replace(/%.*$/, '') })));
+                        const det = addrEl('details', 'mb-2');
+                        det.append(addrEl('summary', 'small', t('addr.change')));
+                        fields.forEach(f => det.append(f));
+                        box.append(det);
+                    } else {
+                        fields.forEach(f => box.append(f));
+                    }
+                    box.append(addrButton(t('guide.do.v6Address'), "addrDo('add-ipv6')", false));
                     break;
                 }
                 case 'v4Address': box.append(addrButton(t('guide.do.v4Address'), "addrDo('add-ipv4')", false)); break;
@@ -186,8 +251,29 @@
             return box;
         }
 
+        // Quando il passo di adesso e' dell'amministratore (fuori dal pannello), il pannello ricontrolla da solo ogni 30
+        // secondi, per 10 minuti; ridisegna solo se qualcosa e' cambiato, cosi' non toglie il fuoco a chi sta leggendo.
+        let addrTimer = null, addrRechecks = 0, addrShown = '';
+
+        function addrSchedule(d) {
+            clearTimeout(addrTimer);
+            const now = (d.steps || []).find(s => s.status === 'now');
+            const waiting = now && (now.who === 'you' || (!d.dns.cloudflare && ['v4Dns', 'v6Dns', 'webAaaa', 'webA', 'v6DnsRemove', 'v4DnsRemove'].includes(now.id)));
+            if (!waiting || now.id === 'v6Firewall' || addrRechecks >= 20) return;
+            addrTimer = setTimeout(() => {
+                addrRechecks++;
+                fetch('/api/server-addresses?goal=' + encodeURIComponent(addrGoal())).then(r => r.json()).then(n => {
+                    if (!n.success) return;
+                    if (JSON.stringify([n.steps, n.dns, n.state]) !== addrShown) addrRender(n);
+                    else addrSchedule(n);
+                }).catch(() => {});
+            }, 30000);
+        }
+
         function addrRender(d) {
             addrData = d;
+            addrShown = JSON.stringify([d.steps, d.dns, d.state]);
+            addrSchedule(d);
             const rows = document.getElementById('addrRows');
             rows.replaceChildren(
                 addrRow('IPv4', d.state.v4, d.dns.a, d.dns.ptr4),
@@ -215,6 +301,7 @@
         }
 
         function addrLoad() {
+            addrRechecks = 0;
             addrSay(t('addr.loading'), 'muted');
             fetch('/api/server-addresses?goal=' + encodeURIComponent(addrGoal())).then(r => r.json()).then(d => {
                 if (!d.success) { addrSay(d.error || t('addr.failedGeneric'), 'danger'); return; }
@@ -257,6 +344,10 @@
                 body.address = document.getElementById('addrV6Address').value.trim();
                 body.prefix = Number(document.getElementById('addrV6Prefix').value.trim());
                 body.gateway = document.getElementById('addrV6Gateway').value.trim();
+            }
+            if (action === 'add-ipv6' && !body.address) {
+                addrSay(t('addr.fieldMissing'), 'danger');
+                return;
             }
             if (['remove-ipv6', 'clean-ipv4'].includes(action)) {
                 const id = action === 'remove-ipv6' ? 'v6AddressRemove' : 'v4Clean';

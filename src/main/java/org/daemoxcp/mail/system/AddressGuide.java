@@ -13,8 +13,10 @@ import java.util.List;
  * combinazione si prova senza toccare una rete.
  *
  * L'ordine, scelto per non perdere posta e per non chiudere fuori nessuno:
- *  - verso IPv4 e IPv6: prima ogni famiglia completa (indirizzo che esce su internet, DNS inverso, record), poi la posta
- *    in tutte e due. La posta va in IPv6 solo col DNS inverso IPv6 a posto: Gmail e Microsoft rifiutano senza.
+ *  - verso IPv4 e IPv6: prima ogni famiglia completa (indirizzo che esce su internet, il firewall del provider che lascia
+ *    entrare l'IPv6, DNS inverso, record), poi la posta in tutte e due. Il firewall del provider (Hetzner Cloud Firewalls
+ *    e simili) dal server non si vede: senza l'IPv6 aperto la posta in IPv6 non arriva (chi spedisce riprova in IPv4, in
+ *    ritardo), quindi lo conferma l'amministratore. La posta va in IPv6 solo col DNS inverso IPv6 a posto: Gmail e Microsoft rifiutano senza.
  *  - verso solo IPv4: i nomi del pannello e della webmail di nuovo in IPv4 su Cloudflare, la posta in solo IPv4, poi
  *    via il record AAAA, poi l'indirizzo IPv6 (chi spedisce in IPv6 smette di provarci prima che l'indirizzo sparisca).
  *  - i nomi col proxy di Cloudflare: con A e AAAA insieme Cloudflare arriva al server in IPv4 («Cloudflare will prefer
@@ -41,7 +43,7 @@ public final class AddressGuide {
      * esempio senza nome della posta): contano come «non fatto».
      */
     public record Facts(boolean v4, boolean v4Internet, boolean v4Config,
-                        boolean v6, boolean v6Internet,
+                        boolean v6, boolean v6Internet, boolean v6Firewall,
                         Boolean a, Boolean aaaa, Boolean ptr4, Boolean ptr6, Boolean webAaaa, Boolean webA,
                         IpFamily.Family mail, IpFamily.Family via, boolean sshOnV6) {}
 
@@ -55,7 +57,7 @@ public final class AddressGuide {
         switch (g) {
             case BOTH -> {
                 ids.addAll(List.of("v4Address", "v4Ptr", "v4Dns"));
-                ids.addAll(List.of("v6Address", "v6Ptr", "v6Dns"));
+                ids.addAll(List.of("v6Address", "v6Firewall", "v6Ptr", "v6Dns"));
                 ids.add("mailBoth");
             }
             case V4 -> {
@@ -63,7 +65,7 @@ public final class AddressGuide {
                 ids.addAll(List.of("webA", "mailV4", "v6DnsRemove", "v6AddressRemove"));
             }
             case V6 -> {
-                ids.addAll(List.of("v6Address", "v6Ptr", "v6Dns", "webAaaa", "mailV6"));
+                ids.addAll(List.of("v6Address", "v6Firewall", "v6Ptr", "v6Dns", "webAaaa", "mailV6"));
                 ids.addAll(List.of("v4DnsRemove", "v4Provider", "v4Clean"));
             }
         }
@@ -93,7 +95,7 @@ public final class AddressGuide {
 
     static String who(String id) {
         return switch (id) {
-            case "v4Ptr", "v6Ptr", "v4Provider" -> "you";
+            case "v4Ptr", "v6Ptr", "v6Firewall", "v4Provider" -> "you";
             default -> "panel";
         };
     }
@@ -104,6 +106,8 @@ public final class AddressGuide {
             case "v4Ptr" -> Boolean.TRUE.equals(f.ptr4());
             case "v4Dns" -> Boolean.TRUE.equals(f.a());
             case "v6Address" -> f.v6() && f.v6Internet();
+            // Il firewall del provider il server non lo vede da dentro: lo conferma l'amministratore, dopo averlo guardato.
+            case "v6Firewall" -> f.v6Firewall();
             case "v6Ptr" -> Boolean.TRUE.equals(f.ptr6());
             case "v6Dns" -> Boolean.TRUE.equals(f.aaaa());
             // Senza un account Cloudflare che veda la zona non lo si puo' sapere: non si blocca la guida (null = fatto).

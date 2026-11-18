@@ -292,6 +292,48 @@ public final class ServerAddresses {
         return s.toString();
     }
 
+    /**
+     * La parte dell'indirizzo dopo il blocco del provider: «::1» per 2a01:4f8:c012:abcd::1 in un /64. E' quella che la
+     * console di Hetzner chiede per il DNS inverso di un IPv6 (docs.hetzner.com/cloud/servers/cloud-server-rdns/: si scrive
+     * solo la parte dell'interfaccia). Null se l'indirizzo o il prefisso non vanno. Puro.
+     */
+    static String hostPart(String address, int prefix) {
+        InetAddress a = literal(address);
+        if (!(a instanceof Inet6Address a6) || prefix < 1 || prefix > 127) return null;
+        byte[] b = a6.getAddress(), host = new byte[16];
+        for (int i = 0; i < 16; i++) {
+            int before = i * 8;
+            if (before >= prefix) host[i] = b[i];
+            else if (before + 8 > prefix) host[i] = (byte) (b[i] & (0xff >> (prefix - before)));
+        }
+        try {
+            return compress((Inet6Address) InetAddress.getByAddress(host));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Il provider della macchina, dal suo firmware (kenv smbios.system.maker): «hetzner», o vuoto se un altro o non si sa. */
+    public static String provider() {
+        String maker = run(5, "kenv", "-q", "smbios.system.maker").outputTrim().toLowerCase(java.util.Locale.ROOT);
+        return maker.contains("hetzner") ? "hetzner" : "";
+    }
+
+    /** Il prefisso dell'IPv6 del server: quello che il pannello ha scritto, o quello di rc.conf, o 64 (il blocco dei provider). */
+    static int prefixOf(String iface) {
+        JSONObject saved = readState();
+        if (saved != null && saved.optInt("prefix", 0) > 0) return saved.optInt("prefix");
+        Matcher m = Pattern.compile("prefixlen\\s+(\\d{1,3})|/(\\d{1,3})").matcher(iface == null ? "" : rc("ifconfig_" + iface + "_ipv6"));
+        if (m.find()) return Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2));
+        return 64;
+    }
+
+    /** La parte dell'IPv6 del server dopo il blocco, per il DNS inverso nella console del provider; null se non ha IPv6. */
+    public static String hostPartNow(State s) {
+        if (s == null || s.v6().addresses().isEmpty()) return null;
+        return hostPart(s.v6().addresses().get(0), prefixOf(s.iface()));
+    }
+
     /** La strada IPv6 come la vuole route(8): un indirizzo link-local porta il nome dell'interfaccia (fe80::1%vtnet0). */
     static String gatewayFor(String gateway, String iface) {
         InetAddress ia = literal(gateway.replaceFirst("%.*$", ""));
