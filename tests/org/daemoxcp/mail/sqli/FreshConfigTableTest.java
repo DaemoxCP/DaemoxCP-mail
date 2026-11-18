@@ -17,13 +17,16 @@ import java.util.TreeSet;
  * without roundcube_ssl_chain, and option 3 of the menu said "no such column: roundcube_ssl_chain" until a second
  * start added it. Now Main calls dataBaseManager.prepareAtStartup(): the table first, then the columns.
  *
- *  A. The order of 0.9.0 on a new server (the columns, then the table): saving the webmail settings fails. This is
- *     the check that the test can see the defect at all.
- *  B. prepareAtStartup() on a new server: the table is created, saving the webmail settings works, the CA chain is
+ *  A. prepareAtStartup() on a new server: the table is created, saving the webmail settings works, the CA chain is
  *     read back, and the table has every column the start adds.
- *  C. A second start: nothing is created again, nothing saved is lost.
- *  D. A server installed with an older version (old column names, no roundcube_ssl_chain): nothing is created, the
+ *  B. A second start: nothing is created again, nothing saved is lost.
+ *  C. A server installed with an older version (old column names, no roundcube_ssl_chain): nothing is created, the
  *     old names become the new ones with their values, the missing column is added, saving works.
+ *
+ * That the test sees the defect was measured once, with a jar whose prepareAtStartup() kept the order of 0.9.0 and a
+ * CREATE TABLE without roundcube_ssl_chain: A and B failed (5 checks), C passed, as on the servers already installed,
+ * which never had the defect. There is no case for the old order here: with the complete CREATE TABLE of now it no
+ * longer breaks anything, and a check of it would prove nothing.
  *
  * Each case runs in its own process and temporary folder: dataBaseManager works on database/daemoxcp-mail.db of the
  * current folder, the secrets with -Ddaemoxcp.mail.secrets.dir.
@@ -47,16 +50,7 @@ public class FreshConfigTableTest {
     public static void main(String[] args) throws Exception {
         if (args.length > 0) { child(args[0]); return; }
 
-        System.out.println("== A. The order of 0.9.0 on a new server: the columns, then the table ==");
-        Path a = Files.createTempDirectory("fresh-config-a");
-        try {
-            String out = run(a, "old-order");
-            check("the table is created", out.contains("CREATED=true"));
-            check("saving the webmail settings fails, as in the menu (" + line(out, "SAVED=") + ")", out.contains("SAVED=false"));
-            check("the table has no roundcube_ssl_chain", !line(out, "COLUMNS=").contains("roundcube_ssl_chain"));
-        } finally { removeTree(a); }
-
-        System.out.println("\n== B. prepareAtStartup() on a new server ==");
+        System.out.println("== A. prepareAtStartup() on a new server ==");
         Path b = Files.createTempDirectory("fresh-config-b");
         try {
             String out = run(b, "new-order");
@@ -69,14 +63,14 @@ public class FreshConfigTableTest {
             check("the table has every column the start adds (missing: " + missing + ")", missing.isEmpty());
             check("no line about a missing table or column", !out.contains("no such"));
 
-            System.out.println("\n== C. A second start ==");
+            System.out.println("\n== B. A second start ==");
             String again = run(b, "second-start");
             check("nothing is created again", again.contains("CREATED=false"));
             check("the webmail settings are still there", again.contains("DOMAIN=webmail.example.test")
                     && again.contains("CHAIN=/usr/local/etc/ssl/webmail/chain.pem"));
         } finally { removeTree(b); }
 
-        System.out.println("\n== D. A server installed with an older version ==");
+        System.out.println("\n== C. A server installed with an older version ==");
         Path d = Files.createTempDirectory("fresh-config-d");
         try {
             String out = run(d, "older-server");
@@ -100,19 +94,10 @@ public class FreshConfigTableTest {
         dataBaseManager db = new dataBaseManager();
         boolean created;
         switch (step) {
-            case "old-order" -> {
-                // Main.main up to 0.9.0, line for line.
-                db.renameProductColumns();
-                db.ensureMailHostnameColumn();
-                db.ensureSslChainColumn();
-                db.ensureRoundcubeColumns();
-                db.ensurePostfixColumn();
-                created = db.check_tables() < 1;
-                if (created) { db.create_tables(); db.insert_data_default(); }
-            }
             case "new-order", "second-start" -> created = db.prepareAtStartup();
             case "older-server" -> {
-                try (Statement s = db.get_connection().createStatement()) {
+                // A connection of the test's own: the panel's refuses SQL outside its catalog (CatalogGuard).
+                try (java.sql.Connection own = org.daemoxcp.mail.TestSql.sqlite(); Statement s = own.createStatement()) {
                     s.execute("CREATE TABLE config (id INTEGER PRIMARY KEY AUTOINCREMENT, mail_panel_port TEXT DEFAULT '2096', "
                             + "mail_panel_host TEXT DEFAULT '127.0.0.1', mail_panel_ssl_cert TEXT DEFAULT '', "
                             + "mail_panel_ssl_cert_key TEXT DEFAULT '', mail_panel_sessions_prefix TEXT DEFAULT 'mailpanel-', "

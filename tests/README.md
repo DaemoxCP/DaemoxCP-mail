@@ -1082,10 +1082,10 @@ with the real service running sees that, on the clone (reperto 161).
 **FreshConfigTableTest** — the panel's configuration table on a server where it does not exist yet, the first
 start of the menu (step 6 of the README). Found in the clean-install rehearsal of 18/11/2026 with the 0.9.0 jar: the
 start added the newer columns before creating the table, and option 3 of the menu said "no such column:
-roundcube_ssl_chain" until a second start. In child processes, each in its own folder: the old order (saving the
-webmail settings fails: the test sees the defect), `dataBaseManager.prepareAtStartup()` on a new server (the table,
-every column, saving works), a second start (nothing created again, nothing lost), and a server installed with an
-older version (old column names renamed with their values, the missing column added).
+roundcube_ssl_chain" until a second start. In child processes, each in its own folder: `dataBaseManager.prepareAtStartup()` on a new
+server (the table, every column, saving the webmail settings works), a second start (nothing created again, nothing lost), and a server installed with an
+older version (old column names renamed with their values, the missing column added). With a jar in the old order
+the first two failed (5 checks), the third passed: installed servers never had the defect.
 
 **MysqlReconnectTest** — the running panel reconnects to MySQL with the password that is in the
 secrets file now, not with the one from the start. Real MySQL, test user `e2e_reconnect` removed at
