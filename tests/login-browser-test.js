@@ -104,6 +104,16 @@ function console_(...args) {
     }
 }
 
+// The fresh confirmation the panel asks before changing administrators (Access.CONFIRMED, since 08/11/2026): a sign-in
+// does not count as one, so after signing in again the window comes, and the browser's passkey answers it.
+async function confirmIfAsked(p) {
+    const asked = await p.waitForSelector('#panelConfirmModal.show', { timeout: 5000 }).then(() => true).catch(() => false);
+    if (!asked) return false;
+    await p.click('#panelConfirmModal [data-confirm="passkey"]');
+    await p.waitForFunction(() => !document.getElementById('panelConfirmModal').classList.contains('show'), null, { timeout: 15000 });
+    return true;
+}
+
 async function shot(page, name) {
     if (shots) await page.screenshot({ path: path.join(shots, name + '.png'), fullPage: true });
 }
@@ -234,6 +244,7 @@ async function shot(page, name) {
         await page.fill('#newUsername', 'second');
         await page.fill('#newEmail', 'second@example.org');
         await page.click('#addAdminModal .btn-primary');
+        check('creating an administrator asks for a fresh confirmation, the passkey gives it', await confirmIfAsked(page));
         await page.waitForFunction(() => document.getElementById('adminsBody').innerText.includes('second@example.org'), null, { timeout: 10000 });
         check('created: listed with its email', true);
         await shot(page, 'admins');
@@ -298,11 +309,15 @@ async function shot(page, name) {
         await page.waitForSelector('#editAdminModal.show');
         await page.selectOption('#editRole', 'operator');
         await page.click('#editAdminModal .btn-primary');
+        await confirmIfAsked(page);
         await page.waitForFunction(() => document.querySelector('#adminsBody .role-badge.operator') !== null);
         await viewer.goto(BASE + '/mailboxes');
         check('promoted to operator: the mailboxes are editable at the next page, no new sign-in',
             await viewer.locator('.topbar-readonly').count() === 0);
         await page.locator('#adminsBody tr', { hasText: 'second' }).locator('button[data-on-click^="deleteAdmin"]').click();
+        await page.waitForSelector('#panelAskModal.show', { timeout: 10000 });
+        await page.click('#panelAskGo');
+        await confirmIfAsked(page);
         await page.waitForFunction(() => !document.getElementById('adminsBody').innerText.includes('second@example.org'));
         await viewer.goto(BASE + '/home');
         check('deleted: the next page is the sign-in page', ['/', '/index'].includes(new URL(viewer.url()).pathname));

@@ -77,6 +77,10 @@ public class LoginE2EServer {
         // passed; found by running it against the test machine (reperto 178).
         Main.dbManager.update_panel_config("panel.localhost", "0", Files.readString(dir.resolve("c.pem")),
                 Files.readString(dir.resolve("k.pem")), "", "daemoxcp-mail-");
+        // The vault's key pair, as the real root part makes it at start (SSLMailServer, PanelSeparation): since the vault
+        // has a private key only in root's secrets file, a server that skips this has nothing to export, and step 3
+        // ("the vault key asks for a confirmation") ended in "Export failed" (clean-install rehearsal, 18/11/2026).
+        org.daemoxcp.mail.security.PasswordVault.ensureKeyPair();
         SSLMailServer srv = new SSLMailServer(port, Files.readString(dir.resolve("c.pem")), Files.readString(dir.resolve("k.pem")));
         Field f = SSLMailServer.class.getDeclaredField("server");
         f.setAccessible(true);

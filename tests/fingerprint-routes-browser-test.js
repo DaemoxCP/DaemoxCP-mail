@@ -19,7 +19,10 @@
 //   NODE_PATH=<playwright node_modules> node tests/fingerprint-routes-browser-test.js
 const { chromium } = require('playwright');
 const { execSync } = require('child_process');
-const BASE = 'https://127.0.0.1:2096';
+// The panel's name (HOST=panel.rehearsal.test on the test VM): once the panel has a name it refuses any other Host
+// (HostCheck), so the browser resolves that name to the tunnel. Without HOST, 127.0.0.1 as before.
+const HOST = process.env.HOST || '127.0.0.1';
+const BASE = 'https://' + HOST + ':2096';
 const VM = 'ssh -i ' + process.env.HOME + '/.ssh/freebsd_test_vm -o IdentitiesOnly=yes -o ConnectTimeout=10 root@192.168.1.20';
 let failed = 0;
 const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + what); if (!ok) failed++; };
@@ -27,7 +30,7 @@ const vm = cmd => execSync(VM + " '" + cmd + "'").toString().trim();
 const refusals = () => Number(vm('grep -c "forwarded request refused" /var/db/daemoxcp-mail/panel.log || true'));
 
 (async () => {
-    const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+    const browser = await chromium.launch({ headless: true, channel: 'chrome', args: HOST === '127.0.0.1' ? [] : ['--host-resolver-rules=MAP ' + HOST + ' 127.0.0.1'] });
     const errors = [];
     let page;
     // A call from the page, as its scripts make it (the page adds the CSRF header itself): status and answer.

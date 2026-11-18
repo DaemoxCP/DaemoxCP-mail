@@ -10,14 +10,17 @@
 //   NODE_PATH=<playwright node_modules> node tests/panel-dialogs-browser-test.js [screenshot-folder]
 const { chromium } = require('playwright');
 const { execSync } = require('child_process');
-const BASE = 'https://127.0.0.1:2096';
+// The panel's name (HOST=panel.rehearsal.test on the test VM): once the panel has a name it refuses any other Host
+// (HostCheck), so the browser resolves that name to the tunnel. Without HOST, 127.0.0.1 as before.
+const HOST = process.env.HOST || '127.0.0.1';
+const BASE = 'https://' + HOST + ':2096';
 const OUT = process.argv[2];
 const VM = 'ssh -i ' + process.env.HOME + '/.ssh/freebsd_test_vm -o IdentitiesOnly=yes -o ConnectTimeout=10 root@192.168.1.20';
 let failed = 0;
 const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + what); if (!ok) failed++; };
 
 (async () => {
-    const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+    const browser = await chromium.launch({ headless: true, channel: 'chrome', args: HOST === '127.0.0.1' ? [] : ['--host-resolver-rules=MAP ' + HOST + ' 127.0.0.1'] });
     const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1400, height: 1000 }, locale: 'en-US' });
     const page = await context.newPage();
     const errors = [], dialogs = [];
@@ -65,6 +68,10 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
         () => page.click('button[data-on-click^="deleteDomain("]'));
     await page.goto(BASE + '/mailboxes');
     await page.waitForSelector('#mailboxesTable .dropdown-toggle', { timeout: 30000 });
+    // Since 0.9 each mailbox's usage arrives a moment after the table (/api/mailbox-quota): wait for it, or the table's
+    // text before and after the cancel differs by that alone.
+    await page.waitForFunction(() => [...document.querySelectorAll('#mailboxesTable .mbx-usage')].every(c => c.textContent.trim())
+        || !document.getElementById('mbQuotaNote').hidden, null, { timeout: 30000 });
     await cancelDelete('Delete a mailbox',
         // The table's text, every mailbox in it: the same after the cancel.
         () => page.$eval('#mailboxesTable', t => [t.innerText.replace(/\s+/g, ' ').trim()]).then(x => x[0].includes('@') ? x : []),

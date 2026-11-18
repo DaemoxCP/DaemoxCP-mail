@@ -1464,6 +1464,15 @@ roles: the new administrator (Reader) signs in with a code and finds a reduced m
 and the refusals (mailbox passwords, queued messages), promoted to Operator can change the mailboxes
 at the next page, deleted is out at once. At the end the sign-in page on a phone in Italian.
 
+**dialog-focus-browser-test.js** — the focus when a panel window closes (r9), on the generated pages with a
+simulated server. Found walking every function of the 0.9.0 panel on a clean server (18/11/2026): a window opened
+over another ("Go ahead?" before revealing a password, the fresh confirmation) did not even get the focus (the
+focus trap of Bootstrap 5.3.0 focuses the new window before turning off the old one's), and when it closed the
+focus fell on the body: the window below no longer heard Escape. The client configuration of a mailbox: the focus
+inside, Escape, back on the button that opened it; "Reveal", "Go ahead?" with the focus, cancelled, the focus back
+on "Reveal", Tab kept inside, Escape; "Yes, go ahead", the password, the focus still inside, Escape. With the
+pages of 0.9.0 it fails (3 checks); the fix is in the shared panel-reboot.js.
+
 **layout-browser-test.js** — the frame in Chromium: the sidebar with four sections (with the Queue,
 Sending limits, Statistics and Administrators pages, which no link reached before), the entry of the
 page you are on, "Section › Page" in the top bar, "Skip to content" at the first Tab, the language

@@ -25,7 +25,10 @@ const REMOTE = process.env.REMOTE;
 if (!REMOTE) { console.log('REMOTE=root@<host> is needed'); process.exit(2); }
 const SSH = ['-o', 'BatchMode=yes'].concat(process.env.REMOTE_KEY ? ['-i', process.env.REMOTE_KEY.replace(/^~/, process.env.HOME)] : []);
 const PORT = 22000 + Math.floor(Math.random() * 1000);
-const BASE = 'https://127.0.0.1:' + PORT;
+// The panel's name (HOST=panel.rehearsal.test on the test VM): once the panel has one it refuses any other Host
+// (HostCheck), so the browser resolves that name to the tunnel. Without HOST, 127.0.0.1 as before.
+const HOST = process.env.HOST || '127.0.0.1';
+const BASE = 'https://' + HOST + ':' + PORT;
 const en = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'resources', 'lang', 'en.json'), 'utf8'));
 const PAGES = ['/home', '/domains', '/mailboxes', '/aliases', '/queue', '/ratelimits', '/statistics', '/dns', '/ssl',
     '/cloudflare', '/security', '/firewall', '/updates', '/logs', '/paths', '/admins', '/settings', '/account'];
@@ -51,7 +54,7 @@ function portOpen(port) {
     let up = false;
     for (let i = 0; i < 40 && !up; i++) { await new Promise(r => setTimeout(r, 250)); up = await portOpen(PORT); }
     check('ssh tunnel to the panel on 127.0.0.1:' + PORT, up);
-    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined, args: HOST === '127.0.0.1' ? [] : ['--host-resolver-rules=MAP ' + HOST + ' 127.0.0.1'] });
     try {
         const context = await browser.newContext({ locale: 'en-US', ignoreHTTPSErrors: true, viewport: { width: 1280, height: 900 } });
         const page = await context.newPage();
@@ -70,8 +73,10 @@ function portOpen(port) {
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');
         await page.fill('#consoleCode', m ? m[1] : '');
-        await Promise.all([page.waitForURL('**/account**', { timeout: 30000 }).catch(() => {}), page.click('#btnConsole')]);
-        check('signed in: on Account (' + new URL(page.url()).pathname + ')', new URL(page.url()).pathname === '/account');
+        await Promise.all([page.waitForURL(u => !u.pathname.endsWith('/index'), { timeout: 30000 }).catch(() => {}), page.click('#btnConsole')]);
+        // Account to register a passkey when the administrator has none yet, the Dashboard once they have one (the
+        // installation of step 7 of the README registers it).
+        check('signed in: on Account or the Dashboard (' + new URL(page.url()).pathname + ')', ['/account', '/home'].includes(new URL(page.url()).pathname));
 
         console.log('\n== 2. Every page ==');
         for (const p of PAGES) {

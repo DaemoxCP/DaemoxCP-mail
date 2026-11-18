@@ -288,6 +288,44 @@ function panelAskYes() {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('panelAskModal')).hide();
 }
 
+// Il fuoco torna dov'era quando una finestra si chiude (r9). Bootstrap lo rende da se' solo alle finestre aperte con
+// data-bs-toggle, e quando una finestra si apre sopra un'altra le toglie la trappola del Tab senza piu' ridargliela.
+// Le finestre del pannello aperte dal codice sopra un'altra («Procedere?», la conferma recente: scoprire una password,
+// le chiavi) lasciavano cosi' il fuoco sul body: la finestra sotto non sentiva piu' Esc e chi usa la tastiera o uno
+// screen reader restava fuori, dietro (prova da server pulito del 18/11/2026). All'apertura si ricorda chi aveva il
+// fuoco; alla chiusura la finestra ancora aperta sotto riprende la trappola, e il fuoco torna a chi lo aveva, o se non
+// c'e' piu' alla finestra stessa.
+document.addEventListener('show.bs.modal', function (e) {
+    var a = document.activeElement;
+    e.target.panelFocusBefore = a && a !== document.body ? a : null;
+});
+// Aperta sopra un'altra, la finestra nuova il fuoco non lo prendeva nemmeno: la trappola di Bootstrap 5.3.0 lo sposta
+// sulla finestra nuova PRIMA di spegnere quella della finestra sotto, che se lo riprende subito. La domanda non veniva
+// letta e Invio ed Esc andavano alla finestra dietro. Aperta del tutto, se il fuoco non e' suo, la sua trappola riparte
+// (adesso e' l'unica) e lo prende.
+document.addEventListener('shown.bs.modal', function (e) {
+    if (e.target.contains(document.activeElement)) return;
+    var inst = window.bootstrap && bootstrap.Modal.getInstance(e.target);
+    var trap = inst && inst._focustrap;
+    if (trap) { trap.deactivate(); trap.activate(); }
+    if (!e.target.contains(document.activeElement)) e.target.focus();
+});
+document.addEventListener('hidden.bs.modal', function (e) {
+    var open = Array.prototype.filter.call(document.querySelectorAll('.modal.show'), function (m) { return m !== e.target; });
+    var top = open.length ? open[open.length - 1] : null;
+    if (top && window.bootstrap) {
+        var inst = bootstrap.Modal.getInstance(top);
+        var trap = inst && inst._focustrap;
+        if (trap) { trap.deactivate(); trap.activate(); }
+    }
+    var back = e.target.panelFocusBefore;
+    e.target.panelFocusBefore = null;
+    // Disabilitato (il pulsante che ha chiesto la conferma e ora lavora) non prende il fuoco: allora la finestra.
+    var usable = back && document.contains(back) && back.offsetParent !== null && !back.disabled && (!top || top.contains(back));
+    if (usable) back.focus();
+    if (top && !top.contains(document.activeElement)) top.focus();
+});
+
 // Le finestre stanno in un <template> (Layout.rebootFrame) e si mettono in fondo alla pagina: dentro la
 // pagina, prima del suo titolo, i loro <h2> venivano prima di quello della pagina.
 document.addEventListener('DOMContentLoaded', function () {
