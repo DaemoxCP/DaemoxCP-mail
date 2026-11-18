@@ -590,6 +590,11 @@ What the panel shows but does not do yet. It is said on the pages too, so nobody
 > [!NOTE]
 > Updates of the panel from GitHub releases, verified and installed from the panel itself, are planned.
 
+### The tests
+
+`tests/` holds the panel's tests, one Java class each, plus browser tests with Playwright. They are run by hand on a
+FreeBSD test machine before every release: how, in [`tests/README.md`](tests/README.md).
+
 ---
 
 ## Coming from FreeBSD Mail Panel
