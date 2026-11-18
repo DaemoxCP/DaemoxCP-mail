@@ -240,6 +240,20 @@ console code and no passkey, a harmless change in Settings opens the confirmatio
 the command and the administrator's name; a wrong code is refused and the window stays; the command shown, run on the
 server, gives the code that confirms, and the change goes through; the same code again gets 401.
 
+`ReleaseCheckTest` (anywhere, no network) is the new-version notice: which GitHub release is newer than the running
+panel (semver order, drafts never, pre-releases only for a 0.x or suffixed panel, the link built from the tag and never
+taken from the answer), when the panel asks again (once a day, "Check now" at most once a minute, a date in the future
+does not stop it), and what it does with each of GitHub's answers, given by a local HTTP server: a list, an empty list,
+404, the rate limit, 500, a page instead of JSON, an answer over 2 MB, nobody answering.
+
+`release-notice-browser-test.js` (Playwright, VM): the same notice in the pages. The *Updates* card with the running
+version and the daily check on; "Check now" asking GitHub for real (until the repository is public it answers 404,
+and the card says so in words) and not asking again within a minute; the daily check off (the recent confirmation:
+cancelled, the switch goes back; confirmed with a console code, it goes off) and on, with a reload and the audit log;
+a newer release (the page's API answer replaced in the browser) on the card and on the *Dashboard*, with the link, a
+link that is not a GitHub release page left out, and the contrast of the link in both themes; at 375 px the card
+fits.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the
