@@ -90,6 +90,9 @@ function replies(o, st) {
         web_diagnosis: { success: true, plainContents: false, verdict: 'nginx serves only what it should.' },
         defaults_check: { success: true, lines: [{ component: 'OpenSSL', outcome: 'consistent' }] },
         panel_env: { success: true, unreachable: false, absent: false, explanation: 'Every tool is reachable.', tools: [] },
+        // Outgoing port 25 open and the provider's firewall in step with Cloudflare (repertos 245, 246): both fine.
+        smtp_out: { success: true, state: 'open' },
+        provider_firewall: { success: true, state: 'current' },
         jump_continue: { success: true, jobId: 'jump-1' },
         jump_cancel: { success: true, note: 'Move cancelled.' },
         os_upgrade_verify: { success: true, allGood: true, checks: [{ label: 'Services', level: 'ok', detail: 'All up.' }], environments: { success: false } },
@@ -463,14 +466,14 @@ const allErrors = [], allDialogs = [];
         text: li.innerText.replace(/\s+/g, ' '), buttons: li.querySelectorAll('button, a.btn').length })));
     items.forEach(x => console.log('    ' + x.level + ' ' + x.key + ': ' + x.text.slice(0, 110)));
     check('every check ran, one after the other', ['os_status', 'journal_list', 'service_users', 'watch', 'broken_libs', 'compatibility', 'java_status',
-        'web_diagnosis', 'defaults_check', 'panel_env'].every(a => dg.calls.some(c => c.action === a)));
+        'web_diagnosis', 'defaults_check', 'panel_env', 'smtp_out', 'provider_firewall'].every(a => dg.calls.some(c => c.action === a)));
     check('first what needs a look, the most important first: the two to look at, then the step to do',
         items.length === 3 && items[0].level === 'warn' && items[1].level === 'warn' && items[2].level === 'todo' && items[2].key === 'os');
     check('  each with its state in words and one button', items.every(x => x.buttons === 1) && /\(to look at\)/.test(items[0].text));
     check('  the patches: go to Updates', await dg.page.$('#diagAllList li[data-diag="os"] a[href="/updates"]') !== null);
     check('the state says how many', /2|3 things to look at/.test(await dg.page.textContent('#diagAllState')));
     check('what is fine is closed below, with how many', await dg.page.$eval('#diagAllOkBox', d => !d.hidden && !d.open)
-        && /7 checks are fine/.test(await dg.page.textContent('#diagAllOkTitle')));
+        && /9 checks are fine/.test(await dg.page.textContent('#diagAllOkTitle')));
     if (shots) await dg.page.locator('#diag-all').screenshot({ path: path.join(shots, 'diagnostics-check-all.png') });
     const cmp = await dg.page.evaluate(() => [
         diagCompat({ dovecot: { scanned: true, compatible24: false, doveconfOk: true, breakingUpgradeAvailable: true }, postfix: { verdict: 'LEVEL_BEHIND' },

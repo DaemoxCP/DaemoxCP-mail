@@ -141,7 +141,7 @@ public final class Fail2banAutoSetup {
                         // controllo di sintassi fallito lasciava un .bak.<timestamp> di
                         // troppo a ogni avvio, cioe' un file in piu' ogni volta che la
                         // riparazione NON e' avvenuta.
-                        Files.copy(pfConf, Paths.get("/etc/pf.conf.bak." + System.currentTimeMillis()));
+                        org.daemoxcp.mail.system.ConfigBackups.copy(pfConf);
                         Files.move(tmp, pfConf, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                         // Ricarica live
                         try {

@@ -1060,7 +1060,7 @@ public class PanelContent {
         .action-btn { padding: 0.25rem 0.5rem; font-size: 0.875rem; line-height: 1.5; border-radius: 0.2rem; margin-right: 5px; }
         """;
         return getHead("nav.home", "home", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="welcome-banner">
                 <h2><i class="fas fa-envelope-open-text me-2" aria-hidden="true"></i>Mail Server Dashboard</h2>
@@ -1170,7 +1170,7 @@ public class PanelContent {
             </div>
 """ + resource("pages/home-status-card.html") + """
         </div>
-    </div>
+    </main>
 """ + getFooterSection() + getScriptStart() + """
         // Fermare un servizio (e riavviare MySQL) tocca tutta la posta: prima si chiede, dicendo cosa succede.
         const serviceQuestions = {
@@ -1575,7 +1575,7 @@ public class PanelContent {
     // ============== DOMAINS.HTML ==============
     public static String getDomainsHtml() {
         return getHead("nav.domains", "domains", "") + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2><i class="fas fa-globe me-2" aria-hidden="true"></i>{{t:dom.title}}</h2>
@@ -1593,7 +1593,7 @@ public class PanelContent {
                 </table>
             </div>
         </div>
-    </div>
+    </main>
 
     <!-- Add Domain Modal -->
     <div class="modal fade" id="addDomainModal" tabindex="-1">
@@ -2995,7 +2995,7 @@ public class PanelContent {
         [data-theme="dark"] .condition-row, [data-theme="dark"] .action-row { background: #3d4249; border-color: #495057; }
         """;
         return getHead("nav.mailboxes", "mailboxes", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                 <h2><i class="fas fa-inbox me-2" aria-hidden="true"></i>{{t:mbx.title}}</h2>
@@ -3022,7 +3022,7 @@ public class PanelContent {
             </div>
 """ + resource("pages/apple-profile-card.html") + """
         </div>
-    </div>
+    </main>
 
     <!-- Add Mailbox Modal -->
     <div class="modal fade" id="addMailboxModal" tabindex="-1">
@@ -4134,7 +4134,7 @@ public class PanelContent {
     // collegato a niente, mentre /api/aliases sapeva gia' fare entrambe le cose.
     public static String getAliasesHtml() {
         return getHead("nav.aliases", "aliases", "") + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                 <h2><i class="fas fa-share me-2" aria-hidden="true"></i>{{t:al.title}}</h2>
@@ -4149,7 +4149,7 @@ public class PanelContent {
                 </table>
             </div>
         </div>
-    </div>
+    </main>
 
     <!-- Add Alias Modal -->
     <div class="modal fade" id="addAliasModal" tabindex="-1" aria-labelledby="addAliasTitle">
@@ -6441,7 +6441,7 @@ public class PanelContent {
         [data-theme="dark"] .alert .table, [data-theme="dark"] .alert .table > :not(caption) > * > * { background-color: transparent !important; color: var(--text-primary) !important; }
         """;
         return getHead("nav.dns", "dns", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <h2 class="mb-3"><i class="fas fa-server me-2" aria-hidden="true"></i>{{t:dns.title}}</h2>
 
@@ -6726,7 +6726,7 @@ public class PanelContent {
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 """ + getFooterSection() + """
     <script>
         let currentDomainId = null;
@@ -6857,7 +6857,7 @@ public class PanelContent {
         [data-theme="dark"] .card-header.bg-warning { background-color: #ffc107 !important; color: #000 !important; }
         """;
         return getHead("nav.ssl", "ssl", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <h2><i class="fas fa-lock me-2" aria-hidden="true"></i>{{t:ssl.title}}</h2>
             <p class="text-muted">{{t:ssl.subtitle}} (<strong>{{MAIL_HOSTNAME}}</strong>)</p>
@@ -7321,7 +7321,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 """ + getFooterSection() + """
     <script>
         let currentDnsChallenge = null;
@@ -7830,7 +7830,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         [data-theme="dark"] #filterActiveDesc { background: rgba(13, 110, 253, .16); }
         """;
         return getHead("nav.logs", "logs", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <!-- Statistiche -->
         <div class="row mb-4">
             <div class="col-md-6">
@@ -7937,7 +7937,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 """ + getFooterSection() + """
     <script>
         // Load stats
@@ -8109,7 +8109,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
     public static String getSettingsHtml() {
         return getHead("nav.settings", "settings", "") + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <h2><i class="fas fa-cog me-2" aria-hidden="true"></i>{{t:nav.settings}}</h2>
             <p class="text-muted">{{t:set.intro}}</p>
@@ -8234,7 +8234,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 
     <!-- Change Hostname Modal -->
     <div class="modal fade" id="changeHostnameModal" tabindex="-1">
@@ -8984,7 +8984,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         .queue-recipients { list-style: none; padding-left: 0; margin-bottom: 0; }
         """;
         return getHead("nav.queue", "queue", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                 <h2 class="mb-0"><i class="fas fa-list-ol me-2" aria-hidden="true"></i>{{t:que.title}}</h2>
@@ -9072,7 +9072,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 
     <div class="modal fade" id="messageModal" tabindex="-1" aria-labelledby="messageModalTitle" aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -9320,7 +9320,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // Spezziamo in variabili locali per non superare il limite:
         String htmlPart1 = """
     <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2><i class="fas fa-shield-alt me-2" aria-hidden="true"></i>{{t:sec.title}}</h2>
@@ -9596,7 +9596,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 
     <!-- IP Info Modal -->
     <div class="modal fade" id="ipModal" tabindex="-1">
@@ -9858,7 +9858,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         .chart-container { position: relative; height: 300px; }
         """;
         return getHead("nav.statistics", "statistics", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <h2 class="mb-0"><i class="fas fa-chart-line me-2" aria-hidden="true"></i>{{t:st.title}}</h2>
@@ -10016,7 +10016,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 """ + getFooterSection() + """
     <script src="/vendor/chart.umd.js"></script>
     <script>
@@ -10186,7 +10186,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
      */
     public static String getAccountHtml() {
         return getHead("nav.account", "account", "") + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <h2><i class="fas fa-user-gear me-2" aria-hidden="true"></i>{{t:nav.account}}</h2>
             <p class="text-muted">{{t:acc.pageIntro}}</p>
@@ -10199,7 +10199,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 """ + getAccountModals() + getFooterSection() + """
     <script>
 """ + getWebAuthnScript() + getSettingsAuthJs() + """
@@ -10215,7 +10215,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     /** La pagina che risponde, con 403, a chi apre una pagina che il suo ruolo non puo' vedere. */
     public static String getForbiddenHtml() {
         return getHead("access.title", "forbidden", "") + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="text-center py-5">
                 <i class="fas fa-ban fa-3x text-danger mb-3" aria-hidden="true"></i>
@@ -10224,7 +10224,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <a class="btn btn-primary mt-2" href="/home"><i class="fas fa-gauge-high me-1" aria-hidden="true"></i>{{t:access.home}}</a>
             </div>
         </div>
-    </div>
+    </main>
 """ + getFooterSection() + """
 </body>
 </html>
@@ -10245,7 +10245,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
         """;
         return getHead("nav.admins", "admins", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2><i class="fas fa-users-cog me-2" aria-hidden="true"></i>{{t:adm.title}}</h2>
@@ -10309,7 +10309,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 
     <!-- Add Admin Modal -->
     <div class="modal fade" id="addAdminModal" tabindex="-1">
@@ -10511,7 +10511,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         .limit-disabled td { opacity: 0.6; }
         """;
         return getHead("nav.rateLimits", "ratelimits", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <h2 class="mb-0"><i class="fas fa-stopwatch me-2" aria-hidden="true"></i>{{t:rl.title}}</h2>
@@ -10599,7 +10599,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                  sconosciuta". Una schermata che dichiara di sorvegliare qualcosa che non
                  sorveglia e' peggio della sua assenza: fa credere di avere una protezione. -->
         </div>
-    </div>
+    </main>
 
     <div class="modal fade" id="addLimitModal" tabindex="-1" aria-labelledby="addLimitTitle" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -10875,7 +10875,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
         """;
         return getHead("nav.firewall", "firewall", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container-fluid mt-4" data-style="max-width: 1200px">
+    <main id="main" tabindex="-1" class="content container-fluid mt-4" data-style="max-width: 1200px">
 
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h2 class="mb-0"><i class="fas fa-fire me-2" aria-hidden="true"></i>{{t:fw.title}}</h2>
@@ -11113,7 +11113,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <li>{{t:fw.before4.html}}</li>
             </ul>
         </div>
-    </div>
+    </main>
 """ + getFooterSection() + """
     <script>
 """ + getFirewallJs() + resource("pages/upd-api.js") + resource("pages/web443.js") + resource("pages/provider-firewall.js") + """
@@ -11814,7 +11814,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         .cf-form-card { border-left: 4px solid #0d6efd; }
         """;
         return getHead("nav.cloudflare", "cloudflare", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4" data-style="max-width: 1100px">
+    <main id="main" tabindex="-1" class="content container mt-4" data-style="max-width: 1100px">
 
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h2 class="mb-0"><i class="fas fa-cloud me-2" data-style="color:#f6821f" aria-hidden="true"></i>Cloudflare <small class="text-muted fs-6">— {{t:cf.subtitle}} (<code>{{MAIL_HOSTNAME}}</code>)</small></h2>
@@ -11919,7 +11919,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
         </div>
 
-    </div>
+    </main>
 
 """ + getFooterSection() + """
     <script>
@@ -12159,7 +12159,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         .copy-btn.copied { background: #198754; color: white; border-color: #198754; }
         """;
         return getHead("nav.paths", "paths", extraStyles) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h2><i class="fas fa-folder-tree me-2" aria-hidden="true"></i>{{t:pt.title}}</h2>
@@ -12178,7 +12178,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <p class="text-muted"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>{{t:common.loading}}</p>
             </div>
         </div>
-    </div>
+    </main>
 """ + getFooterSection() + """
     <script>
         let allCategories = [];
@@ -12319,7 +12319,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
     public static String getUpdatesHtml() {
         return getHead("nav.updates", "updates", updatesStyles()) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <h2><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i>{{t:up.title}}</h2>
             <p class="text-muted">{{t:up.intro.html}}</p>
@@ -12354,7 +12354,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
 
         </div>
-    </div>
+    </main>
 """ + getFooterSection() + """
     <script>
 """ + getUpdatesScript() + """
@@ -12371,7 +12371,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
      */
     public static String getDiagnosticsHtml() {
         return getHead("nav.diagnostics", "diagnostics", updatesStyles()) + """
-    <div id="main" tabindex="-1" class="content container mt-4">
+    <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <h2><i class="fas fa-stethoscope me-2" aria-hidden="true"></i>{{t:diag.title}}</h2>
             <p class="text-muted">{{t:diag.intro}}</p>
@@ -12579,7 +12579,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
 """ + resource("pages/cf-ranges-card.html") + """
         </div>
-    </div>
+    </main>
 """ + getFooterSection() + """
     <script>
 """ + getUpdatesScript() + """

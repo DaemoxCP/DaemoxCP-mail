@@ -1637,8 +1637,10 @@ public class Fail2banManager {
      * non e' una garanzia sufficiente.
      */
     private Path backupCopy(Path original) throws Exception {
-        Path dir = Paths.get("/var/db/daemoxcp-mail/fail2ban-backups");
+        Path dir = org.daemoxcp.mail.system.ConfigBackups.FAIL2BAN_FOLDER;
         Files.createDirectories(dir);
+        // Le copie di prima oltre le ultime KEEP - 1: con quella che il chiamante fa adesso tornano KEEP (ConfigBackups).
+        org.daemoxcp.mail.system.ConfigBackups.prune(dir, original.getFileName().toString(), org.daemoxcp.mail.system.ConfigBackups.KEEP - 1);
         return dir.resolve(original.getFileName().toString() + ".bak."
             + java.time.LocalDateTime.now().format(
                 java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")));

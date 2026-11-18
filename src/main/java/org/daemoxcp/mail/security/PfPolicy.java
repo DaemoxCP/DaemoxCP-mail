@@ -269,8 +269,7 @@ public final class PfPolicy {
     }
 
     private static void apply(Path conf, String current, String next, Ports ports) throws Exception {
-        Path backup = Path.of(PF_CONF + ".bak." + System.currentTimeMillis());
-        Files.copy(conf, backup, StandardCopyOption.COPY_ATTRIBUTES);
+        Path backup = org.daemoxcp.mail.system.ConfigBackups.copy(conf, StandardCopyOption.COPY_ATTRIBUTES);
         Path tmp = Path.of(PF_CONF + ".panel-new");
         Files.writeString(tmp, next, StandardCharsets.UTF_8);
         Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString("rw-r--r--"));

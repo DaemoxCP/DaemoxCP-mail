@@ -16,7 +16,10 @@
 //   NODE_PATH=<playwright node_modules> node tests/acme-install-browser-test.js [screenshot-folder]
 const { chromium } = require('playwright');
 const { execSync } = require('child_process');
-const BASE = 'https://127.0.0.1:2096';
+// The panel's name (HOST=panel.rehearsal.test on the test VM): once the panel has a name it refuses any other Host
+// (HostCheck), so the browser resolves that name to the tunnel. Without HOST, 127.0.0.1 as before.
+const HOST = process.env.HOST || '127.0.0.1';
+const BASE = 'https://' + HOST + ':2096';
 const OUT = process.argv[2];
 const VM = 'ssh -i ' + process.env.HOME + '/.ssh/freebsd_test_vm -o IdentitiesOnly=yes -o ConnectTimeout=10 root@192.168.1.20';
 let failed = 0;
@@ -26,7 +29,7 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
     const before = execSync(VM + " 'pkg info -e acme.sh && echo yes || echo no; test -f /var/db/acme/.acme.sh/ca/acme-v02.api.letsencrypt.org/directory/account.json && echo account || echo noaccount' </dev/null").toString();
     if (/\baccount\b/.test(before.replace('noaccount', ''))) { console.log('acme.sh already has an account on the VM: this test needs a server without one.'); process.exit(2); }
     console.log('  before: acme.sh ' + (/yes/.test(before) ? 'installed, no account' : 'not installed'));
-    const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+    const browser = await chromium.launch({ headless: true, channel: 'chrome', args: HOST === '127.0.0.1' ? [] : ['--host-resolver-rules=MAP ' + HOST + ' 127.0.0.1'] });
     const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1400, height: 1000 }, locale: 'en-US' });
     const page = await context.newPage();
     const errors = [], dialogs = [];

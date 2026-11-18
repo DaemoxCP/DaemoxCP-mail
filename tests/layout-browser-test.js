@@ -111,7 +111,7 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
         && JSON.stringify(await page.$$eval('.sidebar-section-title', e => e.map(x => x.textContent.trim()))) === JSON.stringify(['Mail', 'DNS and certificates', 'Security', 'System'])
         && await text(page, '.topbar-title') === 'DNS and certificates › DNS' && await text(page, '#logoutButton') === 'Log out');
     check('EN pressed, the title and the footer in English', await page.getAttribute('[data-set-lang="en"]', 'aria-pressed') === 'true'
-        && (await page.title()) === 'DNS - Mail Control Panel' && (await text(page, 'footer')).includes('Copyright by'));
+        && (await page.title()) === 'DNS - DaemoxCP Mail' && (await text(page, 'footer')).includes('Copyright by'));
     check('the script dictionary is the English one', await page.evaluate(() => window.I18N_LANG === 'en' && t('nav.updates') === 'Updates'));
     if (shots) await page.screenshot({ path: path.join(shots, 'frame-english.png') });
     await page.click('[data-set-lang="en"]');

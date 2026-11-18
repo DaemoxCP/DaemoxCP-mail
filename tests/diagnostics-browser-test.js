@@ -10,14 +10,17 @@
 //   NODE_PATH=<playwright node_modules> node tests/diagnostics-browser-test.js [screenshot-folder]
 const { chromium } = require('playwright');
 const { execSync } = require('child_process');
-const BASE = 'https://127.0.0.1:2096';
+// The panel's name (HOST=panel.rehearsal.test on the test VM): once the panel has a name it refuses any other Host
+// (HostCheck), so the browser resolves that name to the tunnel. Without HOST, 127.0.0.1 as before.
+const HOST = process.env.HOST || '127.0.0.1';
+const BASE = 'https://' + HOST + ':2096';
 const OUT = process.argv[2];
 const VM = 'ssh -i ' + process.env.HOME + '/.ssh/freebsd_test_vm -o IdentitiesOnly=yes -o ConnectTimeout=10 root@192.168.1.20';
 let failed = 0;
 const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + what); if (!ok) failed++; };
 
 (async () => {
-    const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+    const browser = await chromium.launch({ headless: true, channel: 'chrome', args: HOST === '127.0.0.1' ? [] : ['--host-resolver-rules=MAP ' + HOST + ' 127.0.0.1'] });
     const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1400, height: 1000 }, locale: 'en-US' });
     const page = await context.newPage();
     const errors = [], dialogs = [];
@@ -44,7 +47,8 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
     const fine = await page.$$eval('#diagAllOk > li', lis => lis.map(li => ({ key: li.dataset.diag, text: li.textContent.replace(/\s+/g, ' ').trim() })));
     fine.forEach(x => console.log('    ok ' + x.key + ': ' + x.text.slice(0, 120)));
     check('what is fine says so in words too', fine.every(x => /\(fine\)/.test(x.text) && x.text.length > 20));
-    check('ten checks, every one with a verdict', items.length + fine.length === 10);
+    // Twelve since 16/11/2026: outgoing port 25 and the provider's firewall (repertos 245, 246) joined the ten.
+    check('twelve checks, every one with a verdict', items.length + fine.length === 12);
     const order = { problem: 0, warn: 1, todo: 2, info: 3 };
     check('the most important first', items.every((x, i) => i === 0 || order[items[i - 1].level] <= order[x.level]));
     check('every item: its state in words, at most one button', items.every(x => /\(([a-z ]+)\)/.test(x.text) && x.buttons <= 1));

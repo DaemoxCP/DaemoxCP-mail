@@ -43,6 +43,8 @@ const IT_RE = new RegExp('(^|[^\\p{L}])(' + ITALIAN.join('|') + ')(?=$|[^\\p{L}]
 const now = Date.now();
 const API = {
     'GET /api/domains': { success: true, domains: [{ id: 1, domain: 'example.com' }] },
+    // Settings, IPv4/IPv6 (since 0.9): nothing chosen yet, both families in use.
+    'GET /api/ip-family': { success: true, chosen: '', effective: 'both' },
     'GET /api/dns': { success: true, mail_hostname: 'mail.example.com', server_ip: '192.0.2.1',
         records: [{ name: '@', type: 'MX', value: 'mail.example.com', fullValue: '10 mail.example.com', required: true,
                     description: 'Where mail for the domain goes', dnsZone: 'example.com', checkType: 'MX' },
@@ -336,6 +338,12 @@ const VISITS = [
             errors.push('prepare: ' + e.message);
         }
         check('<html lang="en">', await page.getAttribute('html', 'lang') === 'en');
+        // The main landmark (r9): one <main>, the target of "Skip to content". Up to 0.9.0 the panel pages had a
+        // <div id="main">, which screen readers do not list as the main region (walk of 18/11/2026).
+        const landmark = await page.evaluate(() => ({ mains: document.querySelectorAll('main').length,
+            target: (document.querySelector('a.skip-link') || {}).hash === '#main' ? (document.getElementById('main') || {}).tagName : 'no skip link' }));
+        check('one <main>, the skip link\'s target (' + landmark.mains + ', ' + landmark.target + ')', landmark.mains === 1
+            && (landmark.target === 'MAIN' || landmark.target === 'no skip link'));
         const found = await page.evaluate(src => {
             const re = new RegExp(src, 'iu');
             const out = [];

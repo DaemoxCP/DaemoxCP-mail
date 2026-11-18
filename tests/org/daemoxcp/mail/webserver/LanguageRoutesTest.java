@@ -165,7 +165,7 @@ public class LanguageRoutesTest {
             check("nothing saved: the browser language", "en".equals(langOf(queue)));
             check("the frame: sidebar, the queue marked, the title", queue.body().contains("id=\"sidebar\"")
                     && queue.body().contains("class=\"sidebar-link active\" aria-current=\"page\" href=\"/queue\"")
-                    && queue.body().contains("<title>Mail queue - Mail Control Panel</title>")
+                    && queue.body().contains("<title>Mail queue - DaemoxCP Mail</title>")
                     && queue.body().contains("<span class=\"topbar-section\">Mail</span>"));
             check("the session CSRF token is in the page", queue.body().contains("id=\"csrf_token\" value=\"" + csrf + "\""));
             check("no placeholder left in the frame", !queue.body().contains("{{t:") && !queue.body().contains("{{LAYOUT"));
@@ -175,7 +175,7 @@ public class LanguageRoutesTest {
             check("the session token: 200, saved in the account, and the cookie", save.statusCode() == 200
                     && "it".equals(db.getAdminLanguage(admin)) && setCookie(save).contains("__Host-lang=it"));
             HttpResponse<String> home = ask("GET", "/home", null, "Cookie", sessionCookie, "Accept-Language", "en");
-            check("the saved choice wins over the browser", "it".equals(langOf(home)) && home.body().contains("<title>Dashboard - Mail Control Panel</title>")
+            check("the saved choice wins over the browser", "it".equals(langOf(home)) && home.body().contains("<title>Dashboard - DaemoxCP Mail</title>")
                     && home.body().contains("<span class=\"topbar-page\">Dashboard</span>") && home.body().contains("Vai al contenuto"));
             check("and a browser without the cookie gets it aligned", setCookie(home).contains("__Host-lang=it"));
             HttpResponse<String> aligned = ask("GET", "/home", null, "Cookie", sessionCookie + "; __Host-lang=it", "Accept-Language", "en");

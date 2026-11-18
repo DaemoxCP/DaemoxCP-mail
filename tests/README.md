@@ -1340,6 +1340,15 @@ With `-Droundcube.dir=<roundcubemail-1.6.x-complete unpacked>` and `php` it also
 real code (webmail-roundcube-test.php): the httpapi driver with its Guzzle and the daemoxcp_mail_sso
 plugin's login hook, against the panel.
 
+**ConfigBackupsTest** — the backup copies the panel makes of a configuration file before changing it: the latest ten
+of each file are kept. Found walking every function of the 0.9.0 panel (18/11/2026): no copy was ever removed, and the
+real server had 221 of /etc/pf.conf and 267 of the firewall anchor. Only the two names the panel writes count
+(`file.bak.<13-digit milliseconds>` beside the file, `file.bak.<yyyyMMdd-HHmmss>` in the fail2ban folder); names
+written by hand, links and folders with the name of a copy, and BanActionRepair's one-off copies are left. The fail2ban
+folder is pruned before the new copy; the first start removes the copies of the earlier versions once, and the second
+finds nothing. In the sources, every copy goes through ConfigBackups. On the sources of 0.9.0 it fails (the 13 places
+that built a copy name), and with a ConfigBackups that removes nothing too.
+
 **ConfigSecretsTest** — the MySQL password and the TLS private key leave the SQLite database even
 on a server already started: at the first start they move to the secrets file (600, folder 700) and
 the columns are emptied; what the panel saves afterwards goes into the file; a value written by an
@@ -1463,6 +1472,15 @@ administrator with the email, signing in with a code by email (and a wrong one r
 roles: the new administrator (Reader) signs in with a code and finds a reduced menu, "Read only"
 and the refusals (mailbox passwords, queued messages), promoted to Operator can change the mailboxes
 at the next page, deleted is out at once. At the end the sign-in page on a phone in Italian.
+
+**dialog-focus-browser-test.js** — the focus when a panel window closes (r9), on the generated pages with a
+simulated server. Found walking every function of the 0.9.0 panel on a clean server (18/11/2026): a window opened
+over another ("Go ahead?" before revealing a password, the fresh confirmation) did not even get the focus (the
+focus trap of Bootstrap 5.3.0 focuses the new window before turning off the old one's), and when it closed the
+focus fell on the body: the window below no longer heard Escape. The client configuration of a mailbox: the focus
+inside, Escape, back on the button that opened it; "Reveal", "Go ahead?" with the focus, cancelled, the focus back
+on "Reveal", Tab kept inside, Escape; "Yes, go ahead", the password, the focus still inside, Escape. With the
+pages of 0.9.0 it fails (3 checks); the fix is in the shared panel-reboot.js.
 
 **layout-browser-test.js** — the frame in Chromium: the sidebar with four sections (with the Queue,
 Sending limits, Statistics and Administrators pages, which no link reached before), the entry of the
@@ -1789,3 +1807,10 @@ message as it arrived. Only on a test machine, with `-De2e.vm=yes`:
     java -De2e.vm=yes -Dpanelmail.to=alice@rehearsal.test \
          -Dpanelmail.maildir=/var/vmail/rehearsal.test/alice -Dpanelmail.copies=/var/tmp/panel-emails/copies \
          -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelMailE2ETest
+
+**PfListTablesTest** — the allow and block lists of the Firewall page in pf. Found walking every function of the
+0.9.0 panel (18/11/2026): the last address taken off a list stayed in pf until a restart, because an empty list was
+written as `table <x> persist` with no braces and pf keeps a table's contents when the anchor is loaded again with
+such a line. The line of an empty list is `{ }`; on the VM, as root (`-De2e.vm=yes`), the real pfctl in an anchor no
+rule uses: loaded again as an empty list the table is empty, with the line of 0.9.0 it keeps the address.
+
