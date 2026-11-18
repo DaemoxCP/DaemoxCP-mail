@@ -70,6 +70,9 @@ It is **careful**. The panel never changes something it cannot check, and it say
 - Domains, mailboxes, aliases and forwarding, address transforms.
 - Mailbox passwords as BLF-CRYPT hashes, and an encrypted copy the administrator can reveal. The copy is
   encrypted with a public key, and only the root part of the panel can read it.
+- Users change their password from the webmail (*Settings* → *Password*), with the current one. The change goes
+  through the panel, which checks it and writes the hash and the encrypted copy together. The panel turns
+  Roundcube's `password` plugin on by itself.
 - Sieve filters and vacation replies, compiled and checked server side.
 - A mail queue you can inspect and act on; the maximum message size.
 - Statistics from Rspamd: spam, ham and spam training.
@@ -539,8 +542,6 @@ What the panel shows but does not do yet. It is said on the pages too, so nobody
 - **Hourly and daily sending limits** are saved, but neither Postfix nor Rspamd reads them: only the maximum
   message size is applied.
 - **Sent and received counts** are not collected: the statistics page shows Rspamd's figures only.
-- **Changing the password from the webmail** goes through the panel when Roundcube's `password` plugin is on, but a
-  new installation does not turn it on.
 - **Catch-all addresses** cannot be created from the panel.
 
 ---
