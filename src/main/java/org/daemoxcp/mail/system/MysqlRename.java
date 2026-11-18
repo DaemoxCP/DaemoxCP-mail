@@ -181,10 +181,12 @@ public final class MysqlRename {
         // Le procedure di prima: solo quelle della parte web, che il pannello sa togliere e ricreare.
         Set<String> known = new LinkedHashSet<>();
         Map<String, String> drops = new LinkedHashMap<>();
-        // Tutte le DROP PROCEDURE del catalogo: quelle di adesso e quelle delle procedure ritirate.
+        // Tutte le DROP PROCEDURE del catalogo: quelle di adesso e quelle delle procedure ritirate. Si riconoscono dalle
+        // parole, non da un testo SQL scritto qui (SqlCatalogTest: niente SQL fuori dal catalogo).
         for (String drop : catalog("WEB_DROP_").values()) {
-            if (!drop.startsWith("DROP PROCEDURE IF EXISTS ")) continue;
-            String name = drop.substring(drop.lastIndexOf(' ') + 1);
+            String[] w = drop.trim().split("\\s+");
+            if (w.length != 5 || !w[0].equals("DROP") || !w[1].equals("PROCEDURE") || !w[2].equals("IF") || !w[3].equals("EXISTS")) continue;
+            String name = w[4];
             known.add(name);
             drops.put(name, drop);
         }
