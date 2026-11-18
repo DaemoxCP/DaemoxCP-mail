@@ -531,7 +531,7 @@ public class MailDatabase {
     }
 
     /**
-     * La lingua scelta dall'amministratore ("it" o "en"), o null se non l'ha mai scelta: allora
+     * La lingua scelta dall'amministratore (una delle lingue del pannello), o null se non l'ha mai scelta: allora
      * vale quella del browser. Lo segue su ogni browser, come il tema.
      */
     public String getAdminLanguage(String username) {
@@ -541,7 +541,7 @@ public class MailDatabase {
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     String lang = rs.getString("language");
-                    return "it".equals(lang) || "en".equals(lang) ? lang : null;
+                    return lang != null && org.daemoxcp.mail.i18n.I18n.LANGUAGES.contains(lang) ? lang : null;
                 }
             }
         } catch (SQLException e) {
@@ -550,9 +550,9 @@ public class MailDatabase {
         return null;
     }
 
-    /** Salva la lingua dell'amministratore: solo "it" o "en". */
+    /** Salva la lingua dell'amministratore: solo una delle lingue del pannello (I18n.LANGUAGES). */
     public boolean setAdminLanguage(String username, String lang) {
-        if (username == null || !("it".equals(lang) || "en".equals(lang))) return false;
+        if (username == null || lang == null || !org.daemoxcp.mail.i18n.I18n.LANGUAGES.contains(lang)) return false;
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_SET_ADMIN_LANGUAGE)) {
             stmt.setString(1, lang);
             stmt.setString(2, username);

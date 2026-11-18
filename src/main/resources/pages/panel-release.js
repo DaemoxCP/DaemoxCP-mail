@@ -17,7 +17,7 @@
             try {
                 return new Intl.DateTimeFormat(relLang(), o).format(d);
             } catch (e) {
-                return d.toLocaleString();
+                return d.toLocaleString(window.I18N_LANG);
             }
         }
 

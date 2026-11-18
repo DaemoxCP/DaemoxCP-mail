@@ -1310,8 +1310,6 @@
   "jc.whereWritten.html": "Le modifiche si scrivono in <code>/usr/local/etc/fail2ban/jail.local</code> e si applicano subito con <code>fail2ban-client reload</code>. Restano dopo i riavvii di fail2ban e del pannello.",
   "layout.closeMenu": "Chiudi il menu",
   "layout.language": "Lingua",
-  "layout.language.en": "English",
-  "layout.language.it": "Italiano",
   "layout.languageError": "Non sono riuscito a cambiare lingua. Riprova.",
   "layout.mainMenu": "Menu principale",
   "layout.openMenu": "Apri il menu",

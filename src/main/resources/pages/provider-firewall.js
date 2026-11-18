@@ -24,7 +24,7 @@
             list.value = r.commaList || '';
             pfwFingerprint = r.fingerprint || '';
             document.getElementById('pfw-ack').disabled = !pfwFingerprint || r.state === 'current';
-            const at = r.acknowledged && r.acknowledged.at ? new Date(r.acknowledged.at).toLocaleString() : '';
+            const at = r.acknowledged && r.acknowledged.at ? new Date(r.acknowledged.at).toLocaleString(window.I18N_LANG) : '';
             const box = (cls, icon, text) => '<div class="alert alert-' + cls + ' py-2 small mb-2"><i class="fas ' + icon
                 + ' me-1" aria-hidden="true"></i>' + escHtml(text) + '</div>';
             if (r.state === 'current') state.innerHTML = box('success', 'fa-circle-check', t('pfw.stCurrent', { date: at }));

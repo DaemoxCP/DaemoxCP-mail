@@ -48,56 +48,117 @@ public class I18nTest {
 
         System.out.println("\n== The language files ==");
         check("they load without problems" + (I18n.problems().isEmpty() ? "" : ": " + I18n.problems()), I18n.problems().isEmpty());
+        // Every file in lang/ is a language of the panel, and nothing else is: a file named pt-BR.json or ES.json
+        // would be ignored without a word, so its name is checked here.
+        Set<String> files = new TreeSet<>(), oddNames = new TreeSet<>();
+        try (var list = java.nio.file.Files.list(java.nio.file.Path.of("src/main/resources/lang"))) {
+            for (var f : (Iterable<java.nio.file.Path>) list::iterator) {
+                String name = f.getFileName().toString();
+                if (name.matches("[a-z]{2}\\.json")) files.add(name.substring(0, 2));
+                else oddNames.add(name);
+            }
+        }
+        check("every file in lang/ is named with its ISO 639-1 code (xx.json)" + (oddNames.isEmpty() ? "" : ": " + oddNames), oddNames.isEmpty());
+        check("the panel's languages are the files in lang/, Italian and English first: " + I18n.LANGUAGES,
+                new TreeSet<>(I18n.LANGUAGES).equals(files) && I18n.LANGUAGES.subList(0, 2).equals(List.of("it", "en")));
         check("Italian: " + it.size() + " texts", it.size() > 30);
         Set<String> onlyIt = new TreeSet<>(it.keySet()), onlyEn = new TreeSet<>(en.keySet());
         onlyIt.removeAll(en.keySet());
         onlyEn.removeAll(it.keySet());
-        check("the same keys" + (onlyIt.isEmpty() ? "" : "; only in Italian: " + onlyIt) + (onlyEn.isEmpty() ? "" : "; only in English: " + onlyEn),
-                onlyIt.isEmpty() && onlyEn.isEmpty());
-        List<String> blank = new ArrayList<>(), differentValues = new ArrayList<>();
-        for (String k : it.keySet()) {
-            if (it.get(k).isBlank() || (en.containsKey(k) && en.get(k).isBlank())) blank.add(k);
-            if (en.containsKey(k) && !values(it.get(k)).equals(values(en.get(k)))) differentValues.add(k);
-        }
-        check("no empty text" + (blank.isEmpty() ? "" : ": " + blank), blank.isEmpty());
-        check("the same {values} in both languages" + (differentValues.isEmpty() ? "" : ": " + differentValues), differentValues.isEmpty());
-        List<String> badPatterns = new ArrayList<>();
-        for (Map<String, String> bundle : List.of(it, en))
-            for (Map.Entry<String, String> e : bundle.entrySet())
-                if (e.getValue().contains("yyyy")) {
-                    try { java.time.format.DateTimeFormatter.ofPattern(e.getValue()); }
-                    catch (IllegalArgumentException x) { badPatterns.add(e.getKey() + " = " + e.getValue()); }
-                }
-        check("every date pattern is a valid DateTimeFormatter pattern" + (badPatterns.isEmpty() ? "" : ": " + badPatterns), badPatterns.isEmpty());
+        check("Italian and English are complete: the same keys" + (onlyIt.isEmpty() ? "" : "; only in Italian: " + onlyIt)
+                + (onlyEn.isEmpty() ? "" : "; only in English: " + onlyEn), onlyIt.isEmpty() && onlyEn.isEmpty());
         List<String> plurals = new ArrayList<>();
         for (String k : it.keySet()) {
             if (k.endsWith(".one") && !it.containsKey(k.substring(0, k.length() - 4) + ".other")) plurals.add(k);
             if (k.endsWith(".other") && !it.containsKey(k.substring(0, k.length() - 6) + ".one")) plurals.add(k);
         }
-        check("every plural has .one and .other" + (plurals.isEmpty() ? "" : ": " + plurals), plurals.isEmpty());
-        // The .html sentences enter the page as they are: only the text tags, nothing else
-        Pattern tag = Pattern.compile("<(/?)([a-zA-Z0-9]+)[^>]*>");
-        Set<String> allowed = Set.of("strong", "em", "code", "kbd", "br");
-        List<String> oddTags = new ArrayList<>();
-        for (Map<String, String> b : List.of(it, en)) {
-            for (Map.Entry<String, String> e : b.entrySet()) {
-                if (!e.getKey().endsWith(".html")) continue;
-                Matcher m = tag.matcher(e.getValue());
-                while (m.find()) if (!allowed.contains(m.group(2).toLowerCase()) || m.group().length() > m.group(2).length() + 3)
-                    oddTags.add(e.getKey() + " " + m.group());
-            }
+        check("every Italian plural has .one and .other" + (plurals.isEmpty() ? "" : ": " + plurals), plurals.isEmpty());
+        // The same rules for every language, Italian included: only keys Italian has, no empty text, the same
+        // {values}, only the plural forms the language has, valid date patterns, the .html sentences with the
+        // text tags only, the plain texts without < > &. Another language may be partial: what it lacks is
+        // shown in English, then in Italian (I18n.t).
+        for (String lang : I18n.LANGUAGES) {
+            List<String> problems = languageProblems(lang, I18n.bundle(lang), it);
+            int size = I18n.bundle(lang).size();
+            check(I18n.nativeName(lang) + " (" + lang + "): " + size + " of " + it.size() + " texts"
+                    + (size < it.size() ? " (the others in English)" : "") + ", no problem"
+                    + (problems.isEmpty() ? "" : ": " + problems.subList(0, Math.min(8, problems.size()))), problems.isEmpty());
+            check(lang + ": its plural rule is written (I18n.PLURAL_RULES), it does not borrow the English one",
+                    I18n.PLURAL_RULES.contains(lang));
         }
-        check("the .html sentences only have strong, em, code, kbd, br (no attributes)" + (oddTags.isEmpty() ? "" : ": " + oddTags), oddTags.isEmpty());
-        // The scripts also put the plain texts inside hand-built HTML: without < > & the text is
-        // the same, escaped or not. (The server's messages always go through escape().)
-        List<String> withSigns = new ArrayList<>();
-        for (Map<String, String> b : List.of(it, en)) {
-            for (Map.Entry<String, String> e : b.entrySet()) {
-                if (e.getKey().endsWith(".html") || e.getKey().startsWith("server.")) continue;
-                if (e.getValue().matches("(?s).*[<>&].*")) withSigns.add(e.getKey());
-            }
-        }
-        check("the plain page texts have no < > &" + (withSigns.isEmpty() ? "" : ": " + new TreeSet<>(withSigns)), withSigns.isEmpty());
+        // No right-to-left language yet: the frame has no dir="rtl", no mirrored Bootstrap, no mirrored icons.
+        // An Arabic or Hebrew file would give a page in the wrong direction (see the README, "Languages").
+        Set<String> rtl = new TreeSet<>(I18n.LANGUAGES);
+        rtl.retainAll(Set.of("ar", "he", "fa", "ur", "yi", "ps", "sd", "ug", "dv", "ku", "ckb"));
+        check("no right-to-left language until the frame supports it" + (rtl.isEmpty() ? "" : ": " + rtl), rtl.isEmpty());
+
+        System.out.println("\n== The language file rules can fail ==");
+        // The rules above, on files made here: a check that cannot fail checks nothing.
+        Map<String, String> good = Map.of("nav.updates", "Actualizaciones", "bulk.selected.one", "{n} seleccionado",
+                "bulk.selected.other", "{n} seleccionados", "bulk.selected.many", "{n} de seleccionados");
+        check("a good partial Spanish file: no problem " + languageProblems("es", good, it), languageProblems("es", good, it).isEmpty());
+        check("(the test plural is in Italian with {n}: bulk.selected)", "{n}".equals(String.join("", values(it.getOrDefault("bulk.selected.other", "")).stream().map(v -> "{" + v + "}").toList())));
+        check("a key Italian does not have", fails("es", Map.of("no.such.key", "x"), it, "not in Italian"));
+        check("an empty text", fails("es", Map.of("nav.updates", " "), it, "empty"));
+        check("other {values} than Italian", fails("es", Map.of("bulk.selected.other", "{count} seleccionados"), it, "{values}"));
+        check("a plural form the language does not have (few in Spanish, fine in Polish)",
+                fails("es", Map.of("bulk.selected.few", "{n} x", "bulk.selected.other", "{n} y"), it, "has no \"few\" form")
+                && languageProblems("pl", Map.of("bulk.selected.few", "{n} x", "bulk.selected.other", "{n} y"), it).isEmpty());
+        check("a translated plural without its .other", fails("es", Map.of("bulk.selected.one", "{n} x"), it, "without bulk.selected.other"));
+        String htmlKey = it.keySet().stream().filter(k -> k.endsWith(".html")).findFirst().orElseThrow();
+        check("a .html sentence with a link (" + htmlKey + ")", fails("es", Map.of(htmlKey, it.get(htmlKey) + " <a href=\"x\">y</a>"), it, "tag <a"));
+        check("a plain text with < > &", fails("es", Map.of("nav.updates", "a & b"), it, "< > &"));
+        String dateKey = it.entrySet().stream().filter(e -> e.getValue().contains("yyyy")).map(Map.Entry::getKey).findFirst().orElseThrow();
+        check("a broken date pattern (" + dateKey + ")", fails("es", Map.of(dateKey, it.get(dateKey) + " {"), it, "not a date pattern"));
+
+        System.out.println("\n== Any number of languages ==");
+        Set<String> asked = new TreeSet<>();
+        List<String> found = I18n.discover(code -> { asked.add(code); return Set.of("es", "fr", "de").contains(code); });
+        check("the languages: the files found, Italian and English first, the others by code: " + found,
+                found.equals(List.of("it", "en", "de", "es", "fr")));
+        check("only ISO 639-1 codes are tried (" + asked.size() + "), never a name from outside",
+                asked.size() > 100 && asked.stream().allMatch(c -> c.matches("[a-z]{2}")) && asked.contains("es"));
+        check("no file but Italian and English: those two", I18n.discover(code -> false).equals(List.of("it", "en")));
+        List<String> three = List.of("it", "en", "es");
+        check("a missing text: the language, then English, then Italian", I18n.chain("es", three).equals(List.of("es", "en", "it"))
+                && I18n.chain("en", three).equals(List.of("en", "it")) && I18n.chain("it", three).equals(List.of("it", "en"))
+                && I18n.chain("fr", three).equals(List.of("it", "en")) && I18n.chain(null, three).equals(List.of("it", "en")));
+        check("the names of the languages in their own language", I18n.nativeName("it").equals("Italiano")
+                && I18n.nativeName("en").equals("English") && I18n.nativeName("es").equals("Español")
+                && I18n.nativeName("fr").equals("Français") && I18n.nativeName("de").equals("Deutsch"));
+        // The plural forms, from CLDR's cardinal rules for whole numbers: the browser test compares them all with
+        // Intl.PluralRules; here a few cases written by hand.
+        check("plural forms: Italian one/other, many for millions", plural("it", 1, "one") && plural("it", 0, "other")
+                && plural("it", 2, "other") && plural("it", 1_000_000, "many") && plural("it", -1, "one"));
+        check("plural forms: French 0 and 1 are one", plural("fr", 0, "one") && plural("fr", 1, "one") && plural("fr", 2, "other"));
+        check("plural forms: Polish few for 2-4 and 22, many for 5, 12 and 25", plural("pl", 1, "one") && plural("pl", 3, "few")
+                && plural("pl", 22, "few") && plural("pl", 5, "many") && plural("pl", 12, "many") && plural("pl", 25, "many"));
+        check("plural forms: Russian one for 21, many for 11", plural("ru", 21, "one") && plural("ru", 11, "many")
+                && plural("ru", 23, "few") && plural("ru", 0, "many"));
+        check("plural forms: Czech few for 2-4, other for 5", plural("cs", 3, "few") && plural("cs", 5, "other"));
+        check("plural forms: Romanian few for 0 and 2-19 and 101, other for 20", plural("ro", 0, "few") && plural("ro", 19, "few")
+                && plural("ro", 20, "other") && plural("ro", 101, "few"));
+        check("plural forms: Arabic zero, one, two, few, many, other", plural("ar", 0, "zero") && plural("ar", 1, "one")
+                && plural("ar", 2, "two") && plural("ar", 3, "few") && plural("ar", 11, "many") && plural("ar", 100, "other"));
+        check("plural forms: Japanese only other; German like English", plural("ja", 1, "other") && plural("de", 1, "one")
+                && plural("de", 0, "other") && plural("en", 1, "one") && plural("en", 0, "other"));
+        String buttons = Layout.languageSwitch("it", List.of("it", "en"));
+        check("two languages: two buttons, the current one pressed, each named in its language",
+                buttons.contains("data-set-lang=\"it\" lang=\"it\" aria-pressed=\"true\" title=\"Italiano\">IT</button>")
+                && buttons.contains("data-set-lang=\"en\" lang=\"en\" aria-pressed=\"false\" title=\"English\">EN</button>")
+                && !buttons.contains("<select"));
+        String menu = Layout.languageSwitch("es", three);
+        check("three languages: a menu with its label, each language in its own language, the current one chosen",
+                menu.contains("<label class=\"visually-hidden\" for=\"languageSelect\">{{t:layout.language}}</label>")
+                && menu.contains("<select id=\"languageSelect\"") && menu.contains("data-set-lang-select")
+                && menu.contains("<option value=\"es\" lang=\"es\" selected>Español</option>")
+                && menu.contains("<option value=\"it\" lang=\"it\">Italiano</option>") && count(menu, " selected") == 1
+                && !menu.contains("data-set-lang=\""));
+        check("the frame uses the panel's languages", Layout.expand("<b>{{LANGUAGE_SWITCH}}</b>", "en", Layout.Viewer.NOBODY)
+                .contains(Layout.languageSwitch("en", I18n.LANGUAGES)));
+        check("the database procedure set_admin_language lists exactly the panel's languages (a new one goes in SqlCatalog too)",
+                org.daemoxcp.mail.database.SqlCatalog.WEB_CREATE_SET_ADMIN_LANGUAGE.contains("p_language NOT IN ("
+                        + String.join(", ", I18n.LANGUAGES.stream().map(l -> "'" + l + "'").toList()) + ")"));
 
         System.out.println("\n== The pages ==");
         Set<String> used = new TreeSet<>();
@@ -189,8 +250,8 @@ public class I18nTest {
         // I18n.trn("key", n, ...) uses key.one and key.other
         Pattern pluralCall = Pattern.compile("I18n\\.trn\\(\"([A-Za-z0-9_.-]*[A-Za-z0-9_-])\"");
         Set<String> serverPlurals = new TreeSet<>();
-        try (var files = java.nio.file.Files.walk(java.nio.file.Path.of("src/main/java"))) {
-            for (var f : (Iterable<java.nio.file.Path>) files.filter(x -> x.toString().endsWith(".java"))::iterator) {
+        try (var sourceFiles = java.nio.file.Files.walk(java.nio.file.Path.of("src/main/java"))) {
+            for (var f : (Iterable<java.nio.file.Path>) sourceFiles.filter(x -> x.toString().endsWith(".java"))::iterator) {
                 String source = java.nio.file.Files.readString(f);
                 Matcher p = pluralCall.matcher(source);
                 while (p.find()) serverPlurals.add(p.group(1));
@@ -278,6 +339,74 @@ public class I18nTest {
 
         System.out.println("\n" + (failed == 0 ? "ALL GREEN" : failed + " CHECKS FAILED"));
         if (failed > 0) System.exit(1);
+    }
+
+    static boolean plural(String lang, long n, String category) {
+        boolean ok = I18n.pluralCategory(lang, n).equals(category);
+        if (!ok) System.out.println("         " + lang + " " + n + ": " + I18n.pluralCategory(lang, n) + ", expected " + category);
+        return ok;
+    }
+
+    /** True if the language file has a problem whose text contains what (it fails, and for the right reason). */
+    static boolean fails(String lang, Map<String, String> bundle, Map<String, String> source, String what) {
+        List<String> problems = languageProblems(lang, bundle, source);
+        boolean ok = problems.stream().anyMatch(p -> p.contains(what));
+        if (!ok) System.out.println("         expected \"" + what + "\", got " + problems);
+        return ok;
+    }
+
+    static final Set<String> CATEGORIES = Set.of("zero", "one", "two", "few", "many", "other");
+
+    /** The plural forms a language has for whole numbers (I18n.pluralCategory over many numbers). */
+    static Set<String> categoriesOf(String lang) {
+        Set<String> out = new TreeSet<>();
+        for (long n = 0; n <= 1000; n++) out.add(I18n.pluralCategory(lang, n));
+        for (long n : new long[]{1_000_000, 2_000_000}) out.add(I18n.pluralCategory(lang, n));
+        return out;
+    }
+
+    /**
+     * What is wrong in a language file, measured against Italian (the language the panel is written in): an empty
+     * list if nothing. A key is a plural form when it ends with a CLDR category and Italian has base.other.
+     */
+    static List<String> languageProblems(String lang, Map<String, String> bundle, Map<String, String> source) {
+        List<String> out = new ArrayList<>();
+        Set<String> forms = categoriesOf(lang);
+        Pattern tag = Pattern.compile("<(/?)([a-zA-Z0-9]+)[^>]*>");
+        Set<String> allowedTags = Set.of("strong", "em", "code", "kbd", "br");
+        for (Map.Entry<String, String> e : new java.util.TreeMap<>(bundle).entrySet()) {
+            String k = e.getKey(), v = e.getValue();
+            int dot = k.lastIndexOf('.');
+            String last = dot < 0 ? "" : k.substring(dot + 1), base = dot < 0 ? k : k.substring(0, dot);
+            boolean pluralForm = CATEGORIES.contains(last) && source.containsKey(base + ".other");
+            if (!source.containsKey(k) && !pluralForm) { out.add(k + ": not in Italian"); continue; }
+            if (v.isBlank()) out.add(k + ": empty");
+            Set<String> expected = new TreeSet<>();
+            if (source.containsKey(k)) expected.addAll(values(source.get(k)));
+            else for (String c : CATEGORIES) if (source.containsKey(base + "." + c)) expected.addAll(values(source.get(base + "." + c)));
+            if (source.containsKey(k) ? !values(v).equals(expected) : !expected.containsAll(values(v)))
+                out.add(k + ": {values} " + values(v) + ", Italian " + expected);
+            // .other is always there: it is the text used when a form is missing (Polish whole numbers never ask
+            // for it, but tn() falls back to it)
+            if (pluralForm && !last.equals("other") && !forms.contains(last))
+                out.add(k + ": " + lang + " has no \"" + last + "\" form, only " + forms);
+            if (pluralForm && !bundle.containsKey(base + ".other")) out.add(k + ": translated without " + base + ".other");
+            if (v.contains("yyyy")) {
+                try { java.time.format.DateTimeFormatter.ofPattern(v); }
+                catch (IllegalArgumentException x) { out.add(k + ": not a date pattern"); }
+            }
+            if (k.endsWith(".html")) {
+                // The .html sentences enter the page as they are: only the text tags, without attributes
+                Matcher m = tag.matcher(v);
+                while (m.find()) if (!allowedTags.contains(m.group(2).toLowerCase()) || m.group().length() > m.group(2).length() + 3)
+                    out.add(k + ": tag " + m.group());
+            } else if (!k.startsWith("server.") && v.matches("(?s).*[<>&].*")) {
+                // The scripts also put the plain texts inside hand-built HTML: without < > & the text is the same,
+                // escaped or not. (The server's messages always go through escape().)
+                out.add(k + ": < > & in a plain text");
+            }
+        }
+        return out;
     }
 
     static Set<String> values(String text) {

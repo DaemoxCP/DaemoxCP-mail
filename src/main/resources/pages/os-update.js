@@ -206,7 +206,7 @@
                 + '<th scope="col">' + escHtml(t('jr.colOutcome')) + '</th><th scope="col"><span class="visually-hidden">' + escHtml(t('jr.view')) + '</span></th></tr></thead><tbody>';
             list.forEach(j => {
                 const when = new Date(j.startedUtc);
-                h += '<tr class="upd-cell"><td class="small">' + escHtml(isNaN(when) ? j.startedUtc : when.toLocaleString()) + '</td>'
+                h += '<tr class="upd-cell"><td class="small">' + escHtml(isNaN(when) ? j.startedUtc : when.toLocaleString(window.I18N_LANG)) + '</td>'
                    + '<td>' + escHtml(kind[j.type] || j.type) + '</td>'
                    // Finita male ma rifatta bene da una dopo dello stesso tipo (reperto 212): lo si dice, senza il colore d'allarme.
                    + '<td><span class="badge ' + (j.settled ? 'upd-badge-info' : (badge[j.status] || 'upd-badge-info')) + '">' + escHtml(outcome[j.status] || j.status) + '</span>'

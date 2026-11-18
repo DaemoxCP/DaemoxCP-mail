@@ -18,12 +18,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Le lingue dell'interfaccia: italiano e inglese.
+ * Le lingue dell'interfaccia: quelle che hanno un file in lang/ (oggi italiano e inglese).
  *
- * I testi stanno solo in lang/it.json e lang/en.json, dentro il jar, con le stesse chiavi (lo
- * controlla I18nTest). Le pagine scrivono {{t:chiave}} dove va un testo e il server lo
- * sostituisce a ogni richiesta, gia' come HTML sicuro; gli script chiamano t('chiave') e leggono
- * lo stesso dizionario da /i18n/(lingua).js, che il browser tiene in cache.
+ * I testi stanno solo in lang/(codice).json, dentro il jar: it.json ed en.json completi e con le stesse chiavi
+ * (lo controlla I18nTest), ogni altra lingua anche parziale. Una lingua nuova e' un file in piu' col codice ISO
+ * 639-1 (es.json, fr.json): la si trova da sola all'avvio. Un testo che manca in una lingua si mostra in inglese,
+ * e se manca anche li' in italiano (la lingua in cui il pannello e' scritto).
+ *
+ * Le pagine scrivono {{t:chiave}} dove va un testo e il server lo sostituisce a ogni richiesta, gia' come HTML
+ * sicuro; gli script chiamano t('chiave') e leggono lo stesso dizionario da /i18n/(lingua).js, che il browser
+ * tiene in cache.
  *
  * La lingua di una richiesta: quella salvata nell'account, se c'e' una sessione; poi il cookie
  * __Host-lang (la scelta fatta su questo browser, anche prima di entrare); poi la lingua del
@@ -31,11 +35,15 @@ import java.util.regex.Pattern;
  */
 public final class I18n {
 
-    public static final List<String> LANGUAGES = List.of("it", "en");
-    /** La lingua in cui il pannello e' scritto: un testo che manca in inglese si mostra in italiano. */
+    /** La lingua in cui il pannello e' scritto: l'ultima della catena dei testi che mancano. */
     public static final String SOURCE_LANGUAGE = "it";
-    /** Per un browser che non chiede ne' italiano ne' inglese. */
+    /** Per un browser che non chiede nessuna lingua del pannello, e la prima a cui si chiede un testo che manca. */
     public static final String FALLBACK_LANGUAGE = "en";
+    /** Un codice di lingua ISO 639-1: due lettere minuscole, e nient'altro arriva mai a un percorso. */
+    static final Pattern LANGUAGE_CODE = Pattern.compile("[a-z]{2}");
+
+    /** Le lingue del pannello: italiano e inglese per primi, poi quelle che hanno un file in lang/, in ordine di codice. */
+    public static final List<String> LANGUAGES = discover(code -> I18n.class.getResource("/lang/" + code + ".json") != null);
     public static final String COOKIE = "__Host-lang";
 
     static final Pattern KEY = Pattern.compile("[A-Za-z0-9_.-]{1,120}");
@@ -59,6 +67,78 @@ public final class I18n {
     }
 
     private I18n() {}
+
+    /**
+     * Le lingue che hanno un file: si provano i codici ISO 639-1 che Java conosce (Locale.getISOLanguages), mai un
+     * nome letto da fuori. Italiano e inglese per primi; il loro file c'e' sempre (se manca, problems() lo dice).
+     */
+    static List<String> discover(java.util.function.Predicate<String> exists) {
+        List<String> out = new ArrayList<>(List.of(SOURCE_LANGUAGE, FALLBACK_LANGUAGE));
+        java.util.TreeSet<String> others = new java.util.TreeSet<>();
+        for (String code : Locale.getISOLanguages())
+            if (LANGUAGE_CODE.matcher(code).matches() && !out.contains(code) && exists.test(code)) others.add(code);
+        out.addAll(others);
+        return List.copyOf(out);
+    }
+
+    /** La catena dei testi di una lingua: lei, poi l'inglese, poi l'italiano (senza doppioni). */
+    static List<String> chain(String lang) {
+        return chain(lang, LANGUAGES);
+    }
+
+    /** La catena fra le lingue date: una lingua che non c'e' vale l'italiano, come normalize(). */
+    static List<String> chain(String lang, List<String> languages) {
+        java.util.LinkedHashSet<String> c = new java.util.LinkedHashSet<>();
+        c.add(lang != null && languages.contains(lang) ? lang : SOURCE_LANGUAGE);
+        c.add(FALLBACK_LANGUAGE);
+        c.add(SOURCE_LANGUAGE);
+        return List.copyOf(c);
+    }
+
+    /** Il nome di una lingua nella lingua stessa, con la maiuscola («Italiano», «English», «Español»), per il selettore. */
+    public static String nativeName(String code) {
+        Locale l = Locale.of(code);
+        String name = l.getDisplayLanguage(l);
+        if (name == null || name.isBlank() || name.equals(code)) return code.toUpperCase(Locale.ROOT);
+        return name.substring(0, 1).toUpperCase(l) + name.substring(1);
+    }
+
+    /**
+     * La categoria del plurale per un numero intero, secondo le regole cardinali di CLDR 49 (unicode.org,
+     * cldr-core/supplemental/plurals.json, letto il 18/11/2026): una delle sei, che nei file di lingua sono i
+     * suffissi chiave.zero, chiave.one, chiave.two, chiave.few, chiave.many e chiave.other. Il pannello conta solo
+     * interi (v = 0, i = n): qui le regole ridotte a quel caso, per le lingue di PLURAL_RULES; ogni altra lingua
+     * segue l'inglese, che per molte e' sbagliato (hindi e persiano usano chiave.one anche per 0, il lituano
+     * chiave.few per 2..9): per questo I18nTest vuole ogni lingua del pannello in PLURAL_RULES, e la prova nel
+     * browser confronta queste risposte con quelle di Intl.PluralRules. Nei file di lingua chiave.(categoria); se
+     * una lingua non ha quella forma vale chiave.other. Negli script la stessa scelta la fa il browser.
+     */
+    public static String pluralCategory(String lang, long count) {
+        long n = Math.abs(count), mod10 = n % 10, mod100 = n % 100;
+        return switch (lang == null ? "" : lang) {
+            // one = i = 1 and v = 0; many = i != 0 and i % 1000000 = 0 (it, es, pt-PT; fr e pt con one = i = 0..1)
+            case "it", "es" -> n == 1 ? "one" : n != 0 && n % 1_000_000 == 0 ? "many" : "other";
+            case "fr", "pt" -> n <= 1 ? "one" : n % 1_000_000 == 0 ? "many" : "other";
+            case "pl" -> n == 1 ? "one" : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? "few" : "many";
+            case "ru", "uk" -> mod10 == 1 && mod100 != 11 ? "one"
+                    : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? "few" : "many";
+            case "cs", "sk" -> n == 1 ? "one" : n >= 2 && n <= 4 ? "few" : "other";
+            case "ro" -> n == 1 ? "one" : n == 0 || (mod100 >= 1 && mod100 <= 19) ? "few" : "other";
+            case "ar" -> n == 0 ? "zero" : n == 1 ? "one" : n == 2 ? "two" : mod100 >= 3 && mod100 <= 10 ? "few"
+                    : mod100 >= 11 ? "many" : "other";
+            case "he" -> n == 1 ? "one" : n == 2 ? "two" : "other";
+            case "ja", "zh", "ko", "vi", "th", "id" -> "other";
+            default -> n == 1 ? "one" : "other";
+        };
+    }
+
+    /**
+     * Le lingue di cui pluralCategory conosce la regola: quelle scritte qui sopra e quelle per cui la regola
+     * dell'inglese (uno, altrimenti altro) e' giusta anche per CLDR. Una lingua nuova del pannello deve stare qui.
+     */
+    public static final java.util.Set<String> PLURAL_RULES = java.util.Set.of(
+            "it", "es", "fr", "pt", "pl", "ru", "uk", "cs", "sk", "ro", "ar", "he", "ja", "zh", "ko", "vi", "th", "id",
+            "en", "de", "nl", "sv", "da", "nb", "fi", "et", "el", "hu", "tr", "bg");
 
     /**
      * Un file di lingua. Se e' rotto il pannello non si ferma: si scrive il problema (le prove lo
@@ -103,11 +183,19 @@ public final class I18n {
         return lang != null && LANGUAGES.contains(lang) ? lang : SOURCE_LANGUAGE;
     }
 
-    /** Un testo nella lingua chiesta; se manca, in italiano; se manca anche li', la chiave stessa. */
+    /** Un testo nella lingua chiesta; se manca, in inglese, poi in italiano; se manca anche li', la chiave stessa. */
     public static String t(String lang, String key) {
-        String text = BUNDLES.get(normalize(lang)).get(key);
-        if (text == null) text = BUNDLES.get(SOURCE_LANGUAGE).get(key);
-        return text != null ? text : key;
+        for (String l : chain(lang)) {
+            String text = BUNDLES.getOrDefault(l, Map.of()).get(key);
+            if (text != null) return text;
+        }
+        return key;
+    }
+
+    /** Se la catena della lingua ha un testo per la chiave. */
+    static boolean has(String lang, String key) {
+        for (String l : chain(lang)) if (BUNDLES.getOrDefault(l, Map.of()).containsKey(key)) return true;
+        return false;
     }
 
     /** Un testo con i suoi valori: {nome} diventa params.get("nome"). Il risultato non e' HTML. */
@@ -161,19 +249,21 @@ public final class I18n {
     }
 
     private static String buildScript(String lang) {
-        // Completo: quello che l'inglese non ha ancora lo prende dall'italiano, come t() qui sopra.
-        Map<String, String> all = new TreeMap<>(BUNDLES.get(SOURCE_LANGUAGE));
-        all.putAll(BUNDLES.get(lang));
+        // Completo, come t() qui sopra: l'italiano sotto, poi l'inglese, poi la lingua stessa.
+        List<String> c = new ArrayList<>(chain(lang));
+        java.util.Collections.reverse(c);
+        Map<String, String> all = new TreeMap<>();
+        for (String l : c) all.putAll(BUNDLES.getOrDefault(l, Map.of()));
         return "window.I18N_LANG=" + JSONObject.quote(lang) + ";\n"
              + "window.I18N=" + new JSONObject(all) + ";\n"
              + T_FUNCTIONS;
     }
 
     /**
-     * t(chiave, valori) e tn(chiave, numero, valori) per gli script. tn sceglie chiave.one o
-     * chiave.other: italiano e inglese hanno la stessa regola (uno, altrimenti molti), e il numero
-     * e' gia' fra i valori come {n}. I valori entrano cosi' come sono: il risultato e' testo, da
-     * mettere con textContent o da passare per escHtml() prima di innerHTML.
+     * t(chiave, valori) e tn(chiave, numero, valori) per gli script. tn sceglie la forma del plurale della lingua
+     * della pagina con Intl.PluralRules (le categorie di CLDR: chiave.one, chiave.few, chiave.many...), e se il
+     * file non ha quella forma usa chiave.other; il numero e' gia' fra i valori come {n}. I valori entrano cosi'
+     * come sono: il risultato e' testo, da mettere con textContent o da passare per escHtml() prima di innerHTML.
      */
     private static final String T_FUNCTIONS = """
         function t(key, params) {
@@ -190,7 +280,10 @@ public final class I18n {
         }
         function tn(key, count, params) {
             var values = Object.assign({ n: count }, params || {});
-            return t(key + (count === 1 ? '.one' : '.other'), values);
+            var category = count === 1 ? 'one' : 'other';
+            try { category = new Intl.PluralRules(window.I18N_LANG).select(count); } catch (e) { /* il browser non lo sa */ }
+            var full = key + '.' + category;
+            return t(Object.prototype.hasOwnProperty.call(window.I18N, full) ? full : key + '.other', values);
         }
         // La frase tradotta come nodi: dove c'e' {nome} e params.nome e' un elemento (un <code>
         // con un percorso, un badge), ci va quell'elemento; il resto e' testo. Cosi' la frase resta
@@ -241,11 +334,12 @@ public final class I18n {
         return t(current(), key, params);
     }
 
-    /** Come tn() negli script: chiave.one o chiave.other secondo il numero, che entra come {n}. */
+    /** Come tn() negli script: la forma del plurale della lingua (pluralCategory), o chiave.other; il numero entra come {n}. */
     public static String trn(String key, long count, Map<String, ?> params) {
         Map<String, Object> values = new java.util.HashMap<>(params);
         values.put("n", count);
-        return t(current(), key + (count == 1 ? ".one" : ".other"), values);
+        String lang = current(), full = key + "." + pluralCategory(lang, count);
+        return t(lang, has(lang, full) ? full : key + ".other", values);
     }
 
     /**
@@ -320,7 +414,7 @@ public final class I18n {
 
     /**
      * La lingua preferita dal browser fra quelle del pannello, secondo i pesi q ("it-IT,it;q=0.9,
-     * en;q=0.8"); a parita' vince quella scritta prima. Nessuna delle due: l'inglese.
+     * en;q=0.8"); a parita' vince quella scritta prima. Nessuna del pannello: l'inglese.
      */
     public static String fromAcceptLanguage(String header) {
         if (header == null || header.isBlank()) return FALLBACK_LANGUAGE;

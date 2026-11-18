@@ -113,17 +113,36 @@ public final class Layout {
         return I18n.escapeHtml(s == null ? "" : s).replace("{", "&#123;").replace("}", "&#125;");
     }
 
-    /** I pulsanti IT/EN, con premuto quello della lingua attuale. */
+    /** Il selettore della lingua con le lingue del pannello. */
     static String languageSwitch(String lang) {
-        StringBuilder languages = new StringBuilder();
-        for (String l : I18n.LANGUAGES) {
-            boolean current = l.equals(lang);
-            languages.append("<button type=\"button\" class=\"btn btn-outline-secondary").append(current ? " active" : "")
-                     .append("\" data-set-lang=\"").append(l).append("\" lang=\"").append(l).append("\" aria-pressed=\"")
-                     .append(current).append("\" title=\"{{t:layout.language.").append(l).append("}}\">")
-                     .append(l.toUpperCase()).append("</button>");
+        return languageSwitch(lang, I18n.LANGUAGES);
+    }
+
+    /**
+     * Il selettore della lingua. Con due lingue i pulsanti IT/EN, con premuto quello della lingua attuale: con due
+     * scelte sono i piu' veloci e stanno in poco spazio. Con tre o piu' un menu (un select nativo, accessibile con la
+     * tastiera e dagli screen reader, stretto anche a 375 px), con ogni lingua scritta nella lingua stessa. Il nome
+     * della lingua (title e opzioni) e' sempre nella sua lingua, con lang= perche' lo screen reader lo pronunci bene.
+     */
+    public static String languageSwitch(String lang, java.util.List<String> languages) {
+        if (languages.size() <= 2) {
+            StringBuilder buttons = new StringBuilder();
+            for (String l : languages) {
+                boolean current = l.equals(lang);
+                buttons.append("<button type=\"button\" class=\"btn btn-outline-secondary").append(current ? " active" : "")
+                       .append("\" data-set-lang=\"").append(l).append("\" lang=\"").append(l).append("\" aria-pressed=\"")
+                       .append(current).append("\" title=\"").append(text(I18n.nativeName(l))).append("\">")
+                       .append(l.toUpperCase(java.util.Locale.ROOT)).append("</button>");
+            }
+            return "<div class=\"btn-group btn-group-sm\" role=\"group\" aria-label=\"{{t:layout.language}}\">" + buttons + "</div>";
         }
-        return "<div class=\"btn-group btn-group-sm\" role=\"group\" aria-label=\"{{t:layout.language}}\">" + languages + "</div>";
+        StringBuilder options = new StringBuilder();
+        for (String l : languages) {
+            options.append("<option value=\"").append(l).append("\" lang=\"").append(l).append("\"")
+                   .append(l.equals(lang) ? " selected" : "").append(">").append(text(I18n.nativeName(l))).append("</option>");
+        }
+        return "<label class=\"visually-hidden\" for=\"languageSelect\">{{t:layout.language}}</label>"
+                + "<select id=\"languageSelect\" class=\"form-select form-select-sm w-auto\" data-set-lang-select>" + options + "</select>";
     }
 
     /**
@@ -132,19 +151,22 @@ public final class Layout {
      * sessione, o prima di entrare quello della pagina di accesso.
      */
     private static final String LANGUAGE_SCRIPT = PageAssets.script("""
+function panelSetLanguage(lang) {
+    if (lang === document.documentElement.lang) return;
+    var token = document.getElementById('csrf_token');
+    fetch('/api/language', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language: lang, csrf_token: token ? token.value : '' })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d.success) location.reload(); else panelSay('danger', t('layout.languageError'));
+    }).catch(function () { panelSay('danger', t('layout.languageError')); });
+}
 document.querySelectorAll('[data-set-lang]').forEach(function (button) {
-    button.addEventListener('click', function () {
-        var lang = button.getAttribute('data-set-lang');
-        if (lang === document.documentElement.lang) return;
-        var token = document.getElementById('csrf_token');
-        fetch('/api/language', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ language: lang, csrf_token: token ? token.value : '' })
-        }).then(function (r) { return r.json(); }).then(function (d) {
-            if (d.success) location.reload(); else panelSay('danger', t('layout.languageError'));
-        }).catch(function () { panelSay('danger', t('layout.languageError')); });
-    });
+    button.addEventListener('click', function () { panelSetLanguage(button.getAttribute('data-set-lang')); });
+});
+document.querySelectorAll('[data-set-lang-select]').forEach(function (select) {
+    select.addEventListener('change', function () { panelSetLanguage(select.value); });
 });
 """, true);
 
