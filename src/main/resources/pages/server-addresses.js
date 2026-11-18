@@ -4,6 +4,17 @@
 
         let addrData = null;
 
+        // Lo stato si chiede piu' volte (dopo un passo, cambiando obiettivo, il ricontrollo da solo) e ogni risposta ci mette
+        // qualche secondo (le prove d'uscita vere): si disegna solo la risposta dell'ultima domanda. Prima una risposta lenta
+        // per l'obiettivo di prima poteva arrivare dopo e coprire quello scelto dopo (visto nella prova nel browser).
+        let addrSeq = 0;
+
+        function addrFetchState() {
+            const id = ++addrSeq;
+            return fetch('/api/server-addresses?goal=' + encodeURIComponent(addrGoal())).then(r => r.json())
+                .then(d => (id === addrSeq ? d : null));
+        }
+
         // Ogni testo con la sua chiave scritta per intero: I18nTest le cerca cosi' in entrambe le lingue.
         function addrStatusText(s) {
             switch (s) {
@@ -262,8 +273,8 @@
             if (!waiting || now.id === 'v6Firewall' || addrRechecks >= 20) return;
             addrTimer = setTimeout(() => {
                 addrRechecks++;
-                fetch('/api/server-addresses?goal=' + encodeURIComponent(addrGoal())).then(r => r.json()).then(n => {
-                    if (!n.success) return;
+                addrFetchState().then(n => {
+                    if (!n || !n.success) return;
                     if (JSON.stringify([n.steps, n.dns, n.state]) !== addrShown) addrRender(n);
                     else addrSchedule(n);
                 }).catch(() => {});
@@ -303,7 +314,8 @@
         function addrLoad() {
             addrRechecks = 0;
             addrSay(t('addr.loading'), 'muted');
-            fetch('/api/server-addresses?goal=' + encodeURIComponent(addrGoal())).then(r => r.json()).then(d => {
+            addrFetchState().then(d => {
+                if (!d) return;
                 if (!d.success) { addrSay(d.error || t('addr.failedGeneric'), 'danger'); return; }
                 addrSay('', 'muted');
                 addrRender(d);
@@ -333,8 +345,8 @@
 
         // Ricarica lo stato senza cancellare l'esito appena scritto.
         function addrLoadKeepingStatus() {
-            return fetch('/api/server-addresses?goal=' + encodeURIComponent(addrGoal())).then(r => r.json()).then(d => {
-                if (d.success) addrRender(d);
+            return addrFetchState().then(d => {
+                if (d && d.success) addrRender(d);
             }).catch(() => {});
         }
 
