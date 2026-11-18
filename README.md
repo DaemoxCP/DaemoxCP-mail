@@ -68,6 +68,9 @@ It is **careful**. The panel never changes something it cannot check, and it say
 
 **Mail**
 - Domains, mailboxes, aliases and forwarding, address transforms.
+- Catch-all addresses, from the *Aliases* page. A domain's catch-all takes the mail of every address that is not an
+  alias or a mailbox that receives, so mailboxes and aliases keep theirs. Spam sent to invented addresses
+  arrives there too, and so does the mail of a mailbox that is turned off or does not receive.
 - Mailbox passwords as BLF-CRYPT hashes, and an encrypted copy the administrator can reveal. The copy is
   encrypted with a public key, and only the root part of the panel can read it.
 - Sieve filters and vacation replies, compiled and checked server side.
@@ -541,7 +544,6 @@ What the panel shows but does not do yet. It is said on the pages too, so nobody
 - **Sent and received counts** are not collected: the statistics page shows Rspamd's figures only.
 - **Changing the password from the webmail** goes through the panel when Roundcube's `password` plugin is on, but a
   new installation does not turn it on.
-- **Catch-all addresses** cannot be created from the panel.
 
 ---
 
@@ -550,7 +552,7 @@ What the panel shows but does not do yet. It is said on the pages too, so nobody
 | Page | What you do there |
 |---|---|
 | **Dashboard** | the state of the server at a glance, and the DNS still to set up |
-| **Domains**, **Mailboxes**, **Aliases** | the mail itself; from a mailbox: password, Sieve filters, vacation reply, Apple profile, webmail sign-in |
+| **Domains**, **Mailboxes**, **Aliases** | the mail itself, catch-all addresses included; from a mailbox: password, Sieve filters, vacation reply, Apple profile, webmail sign-in |
 | **Mail queue** | what is waiting, why, and what to do with it |
 | **Sending limits** | the maximum message size |
 | **Statistics** | spam, ham and spam training, from Rspamd |

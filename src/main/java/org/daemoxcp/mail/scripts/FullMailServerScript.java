@@ -809,7 +809,9 @@ inet_protocols = all
 # Virtual mailbox settings
 virtual_mailbox_domains = mysql:/usr/local/etc/postfix/mysql-virtual-domains.cf
 virtual_mailbox_maps = mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf
-virtual_alias_maps = mysql:/usr/local/etc/postfix/mysql-virtual-aliases.cf
+# Gli alias, poi ogni casella che punta a se stessa: un catch-all (alias @dominio) prende solo gli indirizzi che
+# non sono ne' alias ne' caselle (MailboxAddressMap)
+virtual_alias_maps = mysql:/usr/local/etc/postfix/mysql-virtual-aliases.cf, mysql:/usr/local/etc/postfix/""" + PostfixMaps.MAILBOX_ADDRESSES_FILE + "\n" + """
 virtual_transport = lmtp:unix:private/dovecot-lmtp
 
 # TLS settings
@@ -955,6 +957,15 @@ hosts = 127.0.0.1
 dbname = $MYSQL_DATABASE
 query = SELECT destination FROM aliases WHERE source='%s' AND active=1
 MYSQL_ALIASES
+
+# Ogni casella, attiva o no, punta a se stessa (dopo gli alias in virtual_alias_maps)
+cat > /usr/local/etc/postfix/""" + PostfixMaps.MAILBOX_ADDRESSES_FILE + " << MYSQL_MAILBOX_ADDRESSES\n" + """
+user = $MYSQL_USER
+password = $MYSQL_PASSWORD
+hosts = 127.0.0.1
+dbname = $MYSQL_DATABASE
+""" + "query = " + PostfixMaps.MAILBOX_ADDRESSES_QUERY + "\n" + """
+MYSQL_MAILBOX_ADDRESSES
 
 # Set permissions
 chmod 640 /usr/local/etc/postfix/mysql-*.cf
