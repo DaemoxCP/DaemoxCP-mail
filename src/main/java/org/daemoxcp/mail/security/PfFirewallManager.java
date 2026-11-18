@@ -638,7 +638,7 @@ public class PfFirewallManager {
 
             // Backup
             if (Files.exists(sysctl)) {
-                Files.copy(sysctl, Paths.get(sysctl + ".bak." + System.currentTimeMillis()));
+                org.daemoxcp.mail.system.ConfigBackups.copy(sysctl);
             }
             Files.writeString(sysctl, cleanedStr, StandardCharsets.UTF_8);
             LOGGER.info("net.pf.request_maxcount raised to " + target + " (was " + current + ")");
@@ -679,8 +679,7 @@ public class PfFirewallManager {
             // 3. Backup attuale (se esiste)
             Path current = Paths.get(ANCHOR_FILE);
             if (Files.exists(current)) {
-                Path backup = Paths.get(ANCHOR_FILE + ".bak." + System.currentTimeMillis());
-                Files.copy(current, backup);
+                Path backup = org.daemoxcp.mail.system.ConfigBackups.copy(current);
                 r.backupPath = backup.toString();
             }
 
@@ -755,7 +754,7 @@ public class PfFirewallManager {
         long targetLimit = Math.max(totalCidrs * 2L, 2_000_000L);
 
         // Backup
-        Files.copy(pfConf, Paths.get(PF_CONF + ".bak." + System.currentTimeMillis()));
+        org.daemoxcp.mail.system.ConfigBackups.copy(pfConf);
 
         String newContent = content;
 

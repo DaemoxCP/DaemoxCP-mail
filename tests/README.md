@@ -1340,6 +1340,15 @@ With `-Droundcube.dir=<roundcubemail-1.6.x-complete unpacked>` and `php` it also
 real code (webmail-roundcube-test.php): the httpapi driver with its Guzzle and the daemoxcp_mail_sso
 plugin's login hook, against the panel.
 
+**ConfigBackupsTest** — the backup copies the panel makes of a configuration file before changing it: the latest ten
+of each file are kept. Found walking every function of the 0.9.0 panel (18/11/2026): no copy was ever removed, and the
+real server had 221 of /etc/pf.conf and 267 of the firewall anchor. Only the two names the panel writes count
+(`file.bak.<13-digit milliseconds>` beside the file, `file.bak.<yyyyMMdd-HHmmss>` in the fail2ban folder); names
+written by hand, links and folders with the name of a copy, and BanActionRepair's one-off copies are left. The fail2ban
+folder is pruned before the new copy; the first start removes the copies of the earlier versions once, and the second
+finds nothing. In the sources, every copy goes through ConfigBackups. On the sources of 0.9.0 it fails (the 13 places
+that built a copy name), and with a ConfigBackups that removes nothing too.
+
 **ConfigSecretsTest** — the MySQL password and the TLS private key leave the SQLite database even
 on a server already started: at the first start they move to the secrets file (600, folder 700) and
 the columns are emptied; what the panel saves afterwards goes into the file; a value written by an
