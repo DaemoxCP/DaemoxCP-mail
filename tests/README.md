@@ -268,6 +268,18 @@ address and the mailbox that does not receive land in the catch-all, the mailbox
 control: with `virtual_alias_maps` put back to the aliases alone (and restored), the mailbox's mail goes to the
 catch-all, and the panel refuses to create one.
 
+`WebmailPasswordPluginTest` (where `php` is, the test machine) runs the config the panel writes into Roundcube's
+`config.inc.php` with the real PHP: the `password` plugin added to the list when it is missing, never twice, and no
+list created when the list is in another file; the current password asked for; and the SSO plugin the panel writes
+sends the webmail's key under the panel's header name and parses.
+
+`webmail-password-browser-test.js` (Playwright, VM; the webmail on 8443) changes a mailbox's password from Roundcube
+on a domain of its own: after the sign-in Roundcube's log has no new "did not answer the password copy request" (it
+had one after every sign-in from 17/11 to 18/11/2026); Settings has *Password*, with the current password; a password
+under 12 characters is refused; a good one is saved, and IMAP takes the new one and refuses the old one.
+`MailboxPasswordTest` with `-Droundcube.dir` does not see a broken sign-in hook: its second run also changes the
+password, which writes the copy by itself.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the

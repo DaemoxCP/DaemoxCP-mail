@@ -73,6 +73,9 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   indirizzi inventati, e la posta di una casella spenta o che non riceve.
 - Password delle caselle salvate come hash BLF-CRYPT, più una copia cifrata che l'amministratore può mostrare.
   La copia è cifrata con una chiave pubblica: la legge solo la parte root del pannello.
+- Chi usa la posta cambia la sua password dalla webmail (*Impostazioni* → *Password*), con quella attuale. Il cambio
+  passa dal pannello, che la controlla e scrive insieme l'hash e la copia cifrata. Il plugin `password` di Roundcube
+  lo accende il pannello da solo.
 - Filtri Sieve e risposte automatiche, compilati e controllati sul server.
 - Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
 - Statistiche da Rspamd: spam, ham e addestramento.
@@ -553,8 +556,6 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
   dimensione massima dei messaggi.
 - **I conteggi di posta inviata e ricevuta** non vengono raccolti: la pagina delle statistiche mostra solo i numeri
   di Rspamd.
-- **Il cambio password dalla webmail** passa dal pannello quando il plugin `password` di Roundcube è acceso, ma
-  un'installazione nuova non lo accende.
 
 ---
 
