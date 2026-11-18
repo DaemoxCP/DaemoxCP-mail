@@ -10444,12 +10444,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- I limiti orari e giornalieri stanno nel database ma niente li applica: ne' Postfix
-                 ne' Rspamd leggono la tabella rate_limits. Si dice, invece di lasciar credere che
-                 ci sia una protezione. La dimensione massima invece e' un parametro di Postfix. -->
-            <div class="alert alert-warning small" role="note">
-                <i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>{{t:rl.notEnforced.html}}
-            </div>
+            <!-- Se i limiti orari e giornalieri si applicano (SendingLimits: Postfix chiede al pannello prima di ogni
+                 messaggio di una casella), o perche' no: lo dice il server, invece di lasciar credere che ci sia una
+                 protezione. La dimensione massima e' un parametro di Postfix. -->
+            <div class="alert small" id="rlEnforcement" role="status" hidden></div>
             <div id="rlMsg" role="status" aria-live="polite"></div>
 
             <div class="card mb-4">
@@ -10481,6 +10479,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <button type="button" class="btn btn-primary" data-on-click="saveGlobalLimits()">
                         <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:rl.saveGlobal}}
                     </button>
+                    <p class="small text-muted mb-0 mt-3" id="rlGlobalState"></p>
+                    <p class="small mb-0 mt-1" id="rlTopSenders"></p>
                 </div>
             </div>
 
@@ -10498,12 +10498,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     <th scope="col" class="text-center">{{t:rl.colHourly}}</th>
                                     <th scope="col" class="text-center">{{t:rl.colDaily}}</th>
                                     <th scope="col" class="text-center">{{t:rl.colRecipients}}</th>
+                                    <th scope="col" class="text-center">{{t:rl.colSent}}</th>
                                     <th scope="col" class="text-center">{{t:que.colState}}</th>
                                     <th scope="col">{{t:home.colActions}}</th>
                                 </tr>
                             </thead>
                             <tbody id="limitsBody">
-                                <tr><td colspan="6" class="text-center text-muted">{{t:common.loading}}</td></tr>
+                                <tr><td colspan="7" class="text-center text-muted">{{t:common.loading}}</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -10580,9 +10581,20 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 .then(data => {
                     const tbody = document.getElementById('limitsBody');
                     if (!data.success) {
-                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">' + escHtml(data.error || t('common.unknownErrorCap')) + '</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">' + escHtml(data.error || t('common.unknownErrorCap')) + '</td></tr>';
                         return;
                     }
+                    // Se si applicano, o perche' no; e chi ha mandato di piu' nelle ultime 24 ore.
+                    const enf = data.enforcement || {};
+                    const usage = enf.usage || {};
+                    const box = document.getElementById('rlEnforcement');
+                    box.className = 'alert small ' + (enf.applied ? 'alert-success' : 'alert-warning');
+                    box.textContent = enf.applied ? t('rl.applied') : t('rl.notApplied', { reason: enf.reason || '?' });
+                    box.hidden = false;
+                    document.getElementById('rlGlobalState').textContent = (data.global || {}).notSet ? t('rl.globalNotSet') : t('rl.globalSet');
+                    const top = Object.keys(usage).sort((a, b) => usage[b].day - usage[a].day).slice(0, 5);
+                    document.getElementById('rlTopSenders').textContent = top.length
+                        ? t('rl.topSenders', { list: top.map(u => u + ' (' + usage[u].day + ')').join(', ') }) : t('rl.noSending');
                     const g = data.global || {};
                     document.getElementById('globalHourly').value = g.hourly || 50;
                     document.getElementById('globalDaily').value = g.daily || 500;
@@ -10590,7 +10602,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     if (g.max_size_note) rlMsg(g.max_size_note, 'warning');
                     currentLimits = data.limits || [];
                     if (!currentLimits.length) {
-                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">' + escHtml(t('rl.none')) + '</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">' + escHtml(t('rl.none')) + '</td></tr>';
                         return;
                     }
                     // La colonna "Uso Oggi" mostrava un conteggio che nessuno calcola: il pannello
@@ -10603,6 +10615,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             <td data-label="${escHtml(t('rl.colHourly'))}" class="text-center">${escHtml(limit.hourly_limit)}</td>
                             <td data-label="${escHtml(t('rl.colDaily'))}" class="text-center">${escHtml(limit.daily_limit)}</td>
                             <td data-label="${escHtml(t('rl.colRecipients'))}" class="text-center">${escHtml(limit.max_recipients)}</td>
+                            <td data-label="${escHtml(t('rl.colSent'))}" class="text-center">${escHtml(t('rl.sentLine', {
+                                hour: (usage[String(limit.email).toLowerCase()] || {}).hour || 0, day: (usage[String(limit.email).toLowerCase()] || {}).day || 0 }))}</td>
                             <td data-label="${escHtml(t('que.colState'))}" class="text-center">${limit.enabled
                                 ? '<span class="badge bg-success">' + escHtml(t('rl.active')) + '</span>'
                                 : '<span class="badge bg-secondary">' + escHtml(t('mbx.inactive')) + '</span>'}</td>

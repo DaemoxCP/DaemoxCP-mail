@@ -72,6 +72,10 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   La copia è cifrata con una chiave pubblica: la legge solo la parte root del pannello.
 - Filtri Sieve e risposte automatiche, compilati e controllati sul server.
 - Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
+- Limiti d'invio per casella: messaggi all'ora, al giorno e destinatari per messaggio, globali o di una casella. Prima
+  di ogni messaggio che una casella manda dopo essersi autenticata, Postfix chiede al pannello. Ogni destinatario conta
+  come un messaggio. Oltre un limite chi manda riceve un rifiuto temporaneo (`450 4.7.1`) che dice il perché. La posta
+  in arrivo non si conta, e col pannello fermo la posta passa.
 - Statistiche da Rspamd: spam, ham e addestramento.
 - POP3 a scelta (spento all'inizio).
 
@@ -545,8 +549,6 @@ quest'ordine:
 Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, così nessuno ci conta:
 
 - **Le quote** si salvano con ogni casella, ma Dovecot non le applica.
-- **I limiti d'invio all'ora e al giorno** si salvano, ma né Postfix né Rspamd li leggono: si applica solo la
-  dimensione massima dei messaggi.
 - **I conteggi di posta inviata e ricevuta** non vengono raccolti: la pagina delle statistiche mostra solo i numeri
   di Rspamd.
 - **Il cambio password dalla webmail** passa dal pannello quando il plugin `password` di Roundcube è acceso, ma
@@ -562,7 +564,7 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
 | **Dashboard** | lo stato del server a colpo d'occhio, e il DNS ancora da configurare |
 | **Domini**, **Caselle**, **Alias** | la posta; da una casella: password, filtri Sieve, risposta automatica, profilo Apple, accesso alla webmail |
 | **Coda di posta** | cosa aspetta, perché, e cosa farne |
-| **Limiti di invio** | la dimensione massima dei messaggi |
+| **Limiti di invio** | messaggi all'ora e al giorno per casella, destinatari per messaggio, la dimensione massima dei messaggi |
 | **Statistiche** | spam, ham e addestramento, da Rspamd |
 | **DNS** | i record di ogni dominio, *Configura tutto*, MTA-STS, rotazione DKIM |
 | **Certificati SSL** | Let's Encrypt, i certificati del pannello e della webmail, le scadenze |

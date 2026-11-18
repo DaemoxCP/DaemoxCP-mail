@@ -240,6 +240,19 @@ console code and no passkey, a harmless change in Settings opens the confirmatio
 the command and the administrator's name; a wrong code is refused and the window stays; the command shown, run on the
 server, gives the code that confirms, and the change goes through; the same code again gets 401.
 
+`SendingLimitsTest` (anywhere) is the panel as Postfix's policy service for the sending limits, without Postfix: which
+limit applies (the mailbox's own if active, else the global one, else none); what is not counted (another request,
+another stage, incoming mail without sasl_username); recipients per message (550), per hour and per day (450), with
+the windows moving; the counts saved and read back after a restart; the limits on a request (line length, attribute
+names and number); the question first in smtpd_data_restrictions; and a real Unix socket with two requests on one
+connection, as Postfix sends them.
+
+`sending-limits-browser-test.js` (Playwright, VM; it stops and starts the panel) is the sending limits with real
+submissions on 587, on a domain of its own: Postfix asks the panel at DATA; with a limit of 3 per hour the fourth gets
+450 4.7.1 saying why; incoming mail for the sender is not counted; the Sending limits page says "Applied", the sender's
+3 / 3 and the senders of the day; raised to 10 the fourth goes at once; the counts are on disk within a minute, root
+only; with the panel stopped Postfix lets the mail pass, and started again the counts are back and the limit holds.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the

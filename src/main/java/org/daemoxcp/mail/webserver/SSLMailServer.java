@@ -861,6 +861,9 @@ public class SSLMailServer {
             // Postfix e Dovecot in MySQL coi loro utenti, che leggono solo le colonne che usano, e non piu' con
             // quello del pannello: dopo MysqlRoot (serve la root di MySQL) e MysqlListen (MySQL com'e' davvero).
             org.daemoxcp.mail.system.MailDbUsers.ensureAtBoot();
+            // I limiti d'invio delle caselle: il pannello fa da servizio di policy per Postfix (SendingLimits), poi Postfix
+            // glielo chiede prima di ogni messaggio che una casella manda.
+            if (org.daemoxcp.mail.system.SendingLimits.start()) org.daemoxcp.mail.system.SendingLimits.ensurePostfix();
             org.daemoxcp.mail.system.SyslogNetwork.ensureAtBoot();
             org.daemoxcp.mail.system.VmailPermissions.ensureAtBoot();
             // rspamd tutto col suo utente, anche il processo principale: le sue porte sono sopra la 1023 e
@@ -11278,6 +11281,8 @@ public class SSLMailServer {
                     response.put("success", true);
                     response.put("limits", limits);
                     response.put("global", global);
+                    // Se i limiti si applicano, e quanto ha mandato ogni casella nell'ultima ora e nelle ultime 24 (SendingLimits).
+                    response.put("enforcement", org.daemoxcp.mail.system.SendingLimits.status());
                 }
                 case "POST" -> {
                     String body = readRequestBodyWithLimit(exchange);
@@ -11310,6 +11315,7 @@ public class SSLMailServer {
                                     recipients = rl.maxRecipients;
                             boolean ok = Main.mailDatabase.saveRateLimit("mailbox", mailboxId, hourly, daily, recipients,
                                     req.optBoolean("enabled", true));
+                            org.daemoxcp.mail.system.SendingLimits.invalidate();
                             response.put("success", ok);
                             if (ok) {
                                 response.put("message", I18n.tr("server.rl.mailboxSaved"));
@@ -11335,6 +11341,7 @@ public class SSLMailServer {
                                 if ("global".equalsIgnoreCase(rl.targetType)) recipients = rl.maxRecipients;
 
                             boolean okDb = Main.mailDatabase.saveRateLimit("global", null, hourly, daily, recipients, true);
+                            org.daemoxcp.mail.system.SendingLimits.invalidate();
                             response.put("success", okDb);
                             if (!okDb) {
                                 response.put("error", I18n.tr("server.rl.saveFailed"));
@@ -11362,6 +11369,7 @@ public class SSLMailServer {
                         case "delete" -> {
                             int limitId = req.optInt("id", 0);
                             boolean ok = limitId > 0 && Main.mailDatabase.deleteRateLimit(limitId);
+                            org.daemoxcp.mail.system.SendingLimits.invalidate();
                             response.put("success", ok);
                             if (ok) logAudit("RATELIMIT_DELETE", getClientIp(exchange), "Deleted rate limit " + limitId);
                             else response.put("error", I18n.tr("server.rl.deleteFailed"));

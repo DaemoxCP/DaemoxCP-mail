@@ -72,6 +72,10 @@ It is **careful**. The panel never changes something it cannot check, and it say
   encrypted with a public key, and only the root part of the panel can read it.
 - Sieve filters and vacation replies, compiled and checked server side.
 - A mail queue you can inspect and act on; the maximum message size.
+- Sending limits per mailbox: messages per hour, per day and recipients per message, global or for one mailbox.
+  Before each message a mailbox sends after signing in, Postfix asks the panel. Each recipient counts as one message.
+  Over a limit the sender gets a temporary refusal (`450 4.7.1`) that says why. Incoming mail is not counted, and with
+  the panel stopped mail passes.
 - Statistics from Rspamd: spam, ham and spam training.
 - Optional POP3 (off by default).
 
@@ -536,8 +540,6 @@ first, with *Cancel* selected: press Tab to reach *OK*. Go through the options i
 What the panel shows but does not do yet. It is said on the pages too, so nobody counts on it:
 
 - **Quotas** are saved with each mailbox, but Dovecot does not enforce them.
-- **Hourly and daily sending limits** are saved, but neither Postfix nor Rspamd reads them: only the maximum
-  message size is applied.
 - **Sent and received counts** are not collected: the statistics page shows Rspamd's figures only.
 - **Changing the password from the webmail** goes through the panel when Roundcube's `password` plugin is on, but a
   new installation does not turn it on.
@@ -552,7 +554,7 @@ What the panel shows but does not do yet. It is said on the pages too, so nobody
 | **Dashboard** | the state of the server at a glance, and the DNS still to set up |
 | **Domains**, **Mailboxes**, **Aliases** | the mail itself; from a mailbox: password, Sieve filters, vacation reply, Apple profile, webmail sign-in |
 | **Mail queue** | what is waiting, why, and what to do with it |
-| **Sending limits** | the maximum message size |
+| **Sending limits** | messages per hour and per day for each mailbox, recipients per message, the maximum message size |
 | **Statistics** | spam, ham and spam training, from Rspamd |
 | **DNS** | the records of each domain, *Set up everything*, MTA-STS, DKIM rotation |
 | **SSL certificates** | Let's Encrypt, the panel's and the webmail's certificates, their expiry |
