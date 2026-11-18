@@ -416,21 +416,29 @@ pkg install openjdk25
 ```
 
 OpenJDK on FreeBSD wants `procfs` mounted on `/proc`. Add it to `/etc/fstab`, so that it is there after every
-reboot too, and mount it now:
+reboot too, and mount it now if it is not mounted yet (some FreeBSD images already have it):
 
 ```bash
 grep -q '^proc' /etc/fstab || echo 'proc /proc procfs rw 0 0' >> /etc/fstab
 ```
 
 ```bash
-mount /proc && java -version
+mount | grep -q ' on /proc ' || mount /proc; java -version
 ```
 
 `java -version` must say `25`.
 
 ### Step 5 — The panel and the certificates on the server
 
-1. **Build the panel's jar**, on any computer with Java 25 and Maven, from this repository:
+1. **Get the panel's jar.** Download `daemoxcp-mail.jar` from the latest
+   [release](https://github.com/DaemoxCP/mail/releases) and check that its SHA-256 is the one in the release notes:
+
+   ```bash
+   shasum -a 256 daemoxcp-mail.jar
+   ```
+
+   (`sha256 -q daemoxcp-mail.jar` on FreeBSD). Or build it yourself, on any computer with Java 25 and Maven, from
+   this repository:
 
    ```bash
    tools/build-jar.sh
@@ -445,10 +453,10 @@ mount /proc && java -version
    install -d -m 755 /home/panel
    ```
 
-   Then, from your computer:
+   Then, from your computer (`target/daemoxcp-mail.jar` if you built it):
 
    ```bash
-   scp target/daemoxcp-mail.jar root@203.0.113.10:/home/panel/
+   scp daemoxcp-mail.jar root@203.0.113.10:/home/panel/
    ```
 3. **Copy the origin certificates.** The panel's pair can go anywhere: the panel reads it once and keeps it.
    The webmail's pair must stay where you put it, because nginx reads it from there: use

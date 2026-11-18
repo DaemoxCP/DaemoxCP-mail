@@ -1251,7 +1251,8 @@ public final class SqlCatalog {
             + "    roundcube_domain TEXT DEFAULT 'webmail.example.com',\n"
             + "    roundcube_port TEXT DEFAULT '8443',\n"
             + "    roundcube_ssl_cert TEXT DEFAULT '',\n"
-            + "    roundcube_ssl_key TEXT DEFAULT ''\n"
+            + "    roundcube_ssl_key TEXT DEFAULT '',\n"
+            + "    roundcube_ssl_chain TEXT DEFAULT ''\n"
             + ")\n";
 
     /** database: le colonne aggiunte dopo la prima versione */

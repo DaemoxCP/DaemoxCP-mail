@@ -239,15 +239,13 @@ fi
 # =============================================================================
 echo "${YELLOW}[PHASE 1/10] Cleaning up existing installation...${NC}"
 
-# Stop all services
-service postfix stop 2>/dev/null || true
-service dovecot stop 2>/dev/null || true
-service rspamd stop 2>/dev/null || true
-service clamav_clamd stop 2>/dev/null || true
-service clamav_freshclam stop 2>/dev/null || true
-service redis stop 2>/dev/null || true
-service nginx stop 2>/dev/null || true
-service php_fpm stop 2>/dev/null || true
+# Stop all services. Only the ones whose rc.d script is there: on a new server none is, and service(8)
+# wrote "<name> does not exist in /etc/rc.d ..." eight times on stdout (clean install of 18/11/2026).
+for svc in postfix dovecot rspamd clamav_clamd clamav_freshclam redis nginx php_fpm; do
+    if [ -x "/usr/local/etc/rc.d/$svc" ] || [ -x "/etc/rc.d/$svc" ]; then
+        service "$svc" stop 2>/dev/null || true
+    fi
+done
 
 pkill -9 master 2>/dev/null || true
 pkill -9 postfix 2>/dev/null || true
