@@ -43,6 +43,8 @@ const IT_RE = new RegExp('(^|[^\\p{L}])(' + ITALIAN.join('|') + ')(?=$|[^\\p{L}]
 const now = Date.now();
 const API = {
     'GET /api/domains': { success: true, domains: [{ id: 1, domain: 'example.com' }] },
+    // Settings, IPv4/IPv6 (since 0.9): nothing chosen yet, both families in use.
+    'GET /api/ip-family': { success: true, chosen: '', effective: 'both' },
     'GET /api/dns': { success: true, mail_hostname: 'mail.example.com', server_ip: '192.0.2.1',
         records: [{ name: '@', type: 'MX', value: 'mail.example.com', fullValue: '10 mail.example.com', required: true,
                     description: 'Where mail for the domain goes', dnsZone: 'example.com', checkType: 'MX' },

@@ -38,6 +38,10 @@ const statsQueries = [];
 const XSS = '<img src=x onerror="window.__xss=1">';
 let limits = [{ id: 4, email: 'info@example.com', target_id: 11, hourly_limit: 20, daily_limit: 200, max_recipients: 50, enabled: true }];
 
+// Whether Postfix asks the panel before each message (SendingLimits, since 0.9.0): applied in the Italian part, not
+// applied with its reason in the English one.
+let enforcement = { applied: true, usage: { 'info@example.com': { hour: 2, day: 7 } } };
+
 async function serve(route) {
     const req = route.request();
     const url = new URL(req.url());
@@ -58,7 +62,7 @@ async function serve(route) {
         return route.fulfill({ status: 200, contentType: type, body: fs.readFileSync(f) });
     }
     if (p === '/api/ratelimits' && req.method() === 'GET') {
-        return json({ success: true, limits, global: { hourly: 30, daily: 300, max_recipients: 50, max_size_mb: 25 } });
+        return json({ success: true, limits, enforcement, global: { hourly: 30, daily: 300, max_recipients: 50, max_size_mb: 25 } });
     }
     if (p === '/api/ratelimits' && req.method() === 'POST') {
         const body = JSON.parse(req.postData() || '{}');
@@ -117,8 +121,12 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     console.log('\n== Sending limits, in Italian ==');
     await page.goto(BASE + '/ratelimits');
     await page.waitForSelector('#limitsBody [data-limit-edit]');
-    check('title and the notice that the limits are not applied', (await text(page, 'h2')) === IT['rl.title']
-        && (await text(page, '.alert-warning')).includes(IT['rl.notEnforced.html'].replace(/<[^>]+>/g, '').split(':')[0]));
+    check('title, and the limits applied, in green', (await text(page, 'h2')) === IT['rl.title']
+        && (await text(page, '#rlEnforcement')) === IT['rl.applied']
+        && await page.evaluate(() => document.getElementById('rlEnforcement').classList.contains('alert-success')));
+    check('who sent the most in the last 24 hours, and the global limits apply',
+        (await text(page, '#rlTopSenders')) === IT['rl.topSenders'].replace('{list}', 'info@example.com (7)')
+        && (await text(page, '#rlGlobalState')) === IT['rl.globalSet']);
     check('global limits read: 30, 300, 25 MB', await page.inputValue('#globalHourly') === '30' && await page.inputValue('#globalDaily') === '300'
         && await page.inputValue('#globalMaxSize') === '25');
     await page.fill('#globalHourly', '40');
@@ -168,18 +176,23 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
 
     console.log('\n== Sending limits, in English ==');
     language = 'en';
+    enforcement = { applied: false, reason: 'Postfix does not ask the panel yet', usage: {} };
     await page.goto(BASE + '/ratelimits');
     await page.waitForSelector('#limitsBody tr td');
-    check('title, notice and headers in English', (await text(page, 'h2')) === 'Sending limits'
-        && (await text(page, '.alert-warning')).includes('saved but not applied yet')
-        && (await page.$$eval('thead th', e => e.map(x => x.textContent.trim()))).join('|') === 'Mailbox|Per hour|Per day|Max recipients|State|Actions');
+    await page.waitForSelector('#rlEnforcement:not([hidden])');
+    check('title, the reason they are not applied (in amber) and headers in English', (await text(page, 'h2')) === 'Sending limits'
+        && (await text(page, '#rlEnforcement')).startsWith('Saved but not applied: Postfix does not ask the panel yet.')
+        && await page.evaluate(() => document.getElementById('rlEnforcement').classList.contains('alert-warning'))
+        && (await text(page, '#rlTopSenders')) === 'No mailbox has sent anything in the last 24 hours.'
+        && (await page.$$eval('thead th', e => e.map(x => x.textContent.trim()))).join('|') === 'Mailbox|Per hour|Per day|Max recipients|Sent (hour / 24 h)|State|Actions');
     if (shots) await page.screenshot({ path: path.join(shots, 'ratelimits-english.png') });
 
     console.log('\n== Statistics, in English ==');
     await page.goto(BASE + '/statistics');
     await page.waitForFunction(() => document.getElementById('rspamdScanned').textContent !== '-' && document.getElementById('totalSent').textContent !== '-');
     check('the period sent as days (7)', statsQueries[0] === '7');
-    check('the notice that sent and received counts are not collected', (await text(page, '.alert-warning')).includes('not collected yet'));
+    check('the note says what the numbers count, and nothing warns', (await text(page, '.alert-info[role="note"]')).includes("Postfix's log")
+        && await page.locator('main .alert-warning').count() === 0);
     check('cards from "totals": 1.2K, 5.7K, 90, 12', await text(page, '#totalSent') === '1.2K' && await text(page, '#totalReceived') === '5.7K'
         && await text(page, '#totalSpam') === '90' && await text(page, '#totalBounced') === '12');
     check('Rspamd from the top level: 1.9K ham, 150 spam, 2K scanned, 7.5%', await text(page, '#rspamdHam') === '1.9K'

@@ -113,7 +113,7 @@ public final class PemTls {
         return Base64.getDecoder().decode(pem.replace(begin, "").replace(end, "").replaceAll("\\s", ""));
     }
 
-    /** PKCS#1 RSA dentro l'involucro PKCS#8 (rsaEncryption), come la leggeva il server TLS. */
+    /** PKCS#1 RSA dentro l'involucro PKCS#8 ({@code rsaEncryption}), come la leggeva il server TLS. */
     public static byte[] pkcs1ToPkcs8(byte[] pkcs1Bytes) {
         byte[] pkcs8Header = {
             0x30, (byte) 0x82, 0x00, 0x00, // SEQUENCE, length placeholder

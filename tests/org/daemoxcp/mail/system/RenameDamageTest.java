@@ -188,7 +188,9 @@ public class RenameDamageTest {
             boolean accent = m.end() < c.length() && c.charAt(m.end()) == '\''
                     && prev != '\'' && (m.end() + 1 >= c.length() || !Character.isLetter(c.charAt(m.end() + 1)));
             String why = null;
-            if (accent) why = "accent";
+            // The accent written as an apostrophe is Italian (gia'): in an English comment "folders'" is a plural
+            // possessive, not a damage (SafeOwnershipTest and tests/README.md, 17/11/2026).
+            if (accent && italian) why = "accent";
             else if (CAMEL.matcher(w).matches()) why = "identifier";
             else if (italian && FUNCTION.contains(w)) why = "English word";
             else if (ELISION.matcher(before).find() && w.matches("[b-df-gj-np-tv-z].*")) why = "elision";
