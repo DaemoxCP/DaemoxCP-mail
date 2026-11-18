@@ -130,8 +130,11 @@ public final class ReinstallJob {
         Files.createFile(r.log());
         setPermissions(r.log(), "rw-------");
 
+        // --enable-native-access: col -cp la voce Enable-Native-Access del manifest del jar non vale (solo -jar la
+        // legge), e Java 25 scriveva quattro WARNING sul System.load del driver SQLite in testa al registro della
+        // reinstallazione, quindi anche sullo schermo del menu (prova da server pulito del 18/11/2026).
         List<String> cmd = new ArrayList<>(List.of(daemon, "-f", "-o", r.log().toString(),
-                "-p", r.pid().toString(), "-t", "daemoxcp-mail-reinstall", java()));
+                "-p", r.pid().toString(), "-t", "daemoxcp-mail-reinstall", java(), "--enable-native-access=ALL-UNNAMED"));
         // Le impostazioni del pannello (cartella dei segreti, dei registri) valgono anche per lui.
         for (String k : System.getProperties().stringPropertyNames())
             if (k.startsWith("daemoxcp.mail.")) cmd.add("-D" + k + "=" + System.getProperty(k));

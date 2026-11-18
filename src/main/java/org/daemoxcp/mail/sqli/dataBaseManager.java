@@ -367,6 +367,30 @@ public class dataBaseManager {
         }
     }
 
+    /**
+     * La configurazione pronta all'avvio: su un server nuovo prima la tabella (con la riga dei valori predefiniti),
+     * poi i nomi di prima e le colonne aggiunte dopo la prima versione. L'ordine conta: fino alla 0.9.0 Main faceva le
+     * colonne PRIMA di creare la tabella, e su un server nuovo gli ALTER fallivano in silenzio sulla tabella che non
+     * c'era; la tabella nasceva poi senza roundcube_ssl_chain e l'opzione 3 del menu non salvava («no such column»),
+     * finche' un secondo avvio non aggiungeva la colonna. Su un server gia' installato la tabella c'e' e resta solo
+     * il resto, nell'ordine di sempre: i nomi di prima, poi le colonne che mancano.
+     *
+     * @return vero se la tabella e' stata creata adesso (un server nuovo)
+     */
+    public boolean prepareAtStartup() {
+        boolean created = check_tables() < 1;
+        if (created) {
+            create_tables();
+            insert_data_default();
+        }
+        renameProductColumns();
+        ensureMailHostnameColumn();
+        ensureSslChainColumn();
+        ensureRoundcubeColumns();
+        ensurePostfixColumn();
+        return created;
+    }
+
     public void ensureMailHostnameColumn() {
         this.database_.get(1).ensureMailHostnameColumn();
     }

@@ -86,12 +86,8 @@ public class SqliteSharedTest {
         dataBaseManager db = new dataBaseManager();
         switch (a[0]) {
             case "init" -> {
-                db.ensureMailHostnameColumn();
-                if (db.check_tables() < 1) { db.create_tables(); db.insert_data_default(); }
-                db.ensureMailHostnameColumn();
-                db.ensureSslChainColumn();
-                db.ensureRoundcubeColumns();
-                db.ensurePostfixColumn();
+                // What Main.main does at the first start (FreshConfigTableTest covers the order).
+                db.prepareAtStartup();
                 System.exit(0);
             }
             case "service-reads" -> {

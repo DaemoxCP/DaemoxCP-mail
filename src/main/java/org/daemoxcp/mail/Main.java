@@ -417,20 +417,12 @@ public class Main {
 
         // Initialize database BEFORE screen to avoid warnings during GUI
         dbManager = new dataBaseManager();
-        dbManager.renameProductColumns();
-        dbManager.ensureMailHostnameColumn();
-        dbManager.ensureSslChainColumn();
-        dbManager.ensureRoundcubeColumns();
-        dbManager.ensurePostfixColumn();
-        // Il database e gli utenti MySQL col nome del prodotto, prima che qualcuno entri in MySQL.
+        // Prima la tabella, poi le colonne: su un server nuovo l'ordine inverso lasciava la configurazione senza
+        // roundcube_ssl_chain fino al secondo avvio (dataBaseManager.prepareAtStartup).
+        boolean needsTableCreation = dbManager.prepareAtStartup();
+        // Il database e gli utenti MySQL col nome del prodotto, prima che qualcuno entri in MySQL. Dopo la tabella:
+        // su un server nuovo legge la riga dei valori predefiniti e non ha niente da fare.
         if (renameApplies) org.daemoxcp.mail.system.MysqlRename.ensureAtBoot(dbManager);
-
-        Integer count = dbManager.check_tables();
-        boolean needsTableCreation = (count < 1);
-        if (needsTableCreation) {
-            dbManager.create_tables();
-            dbManager.insert_data_default();
-        }
 
         // Prima che qualunque cosa entri in MySQL: se un'installazione e' stata interrotta con la
         // password nuova ancora in attesa, o se MySQL rifiuta quella del pannello (i server rotti

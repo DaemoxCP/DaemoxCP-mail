@@ -56,6 +56,17 @@ public class Chooser {
         finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
     }
 
+    /**
+     * Il titolo del menu con la versione del jar che gira (build-info, come la dashboard). Fino alla 0.9.0 era
+     * scritto «v1.0» fisso: un server nuovo con la beta 0.9.0 si presentava come 1.0. Senza versione registrata (le
+     * classi delle prove, un jar fatto senza Maven) solo il nome.
+     */
+    static String title() {
+        String name = org.daemoxcp.mail.i18n.I18n.tr("brand.name");
+        String version = org.daemoxcp.mail.system.PanelInfo.build().version();
+        return version.isEmpty() ? name : name + " " + version;
+    }
+
     private boolean confirmAction(String title, String message) {
         MessageDialogButton result = new MessageDialogBuilder()
             .setTitle(title)
@@ -159,7 +170,7 @@ public class Chooser {
         mainPanel.addComponent(exitButton);
 
         this.window.setComponent(Panels.vertical(
-                mainPanel.withBorder(Borders.doubleLine(org.daemoxcp.mail.i18n.I18n.tr("brand.name") + " v1.0")),
+                mainPanel.withBorder(Borders.doubleLine(title())),
                 new EmptySpace(new TerminalSize(0, 1))
         ));
 
