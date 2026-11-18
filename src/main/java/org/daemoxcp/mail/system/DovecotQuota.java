@@ -71,6 +71,17 @@ public final class DovecotQuota {
     static String withQuotaUserdb(String authSql) {
         if (authSql == null || !authSql.contains("passdb sql {")) return null;
         if (authSql.contains(DovecotConfig.QUOTA_USERDB)) return authSql;
+        // Il blocco scritto da una versione di prima del pannello (la sua prima riga, poi un solo userdb sql fino a
+        // userdb static): si sostituisce con quello di adesso.
+        int mark = authSql.indexOf(DovecotConfig.QUOTA_USERDB_MARK);
+        if (mark >= 0) {
+            int stat = authSql.indexOf("userdb static {", mark);
+            if (stat < 0 || (mark > 0 && authSql.charAt(mark - 1) != '\n')) return null;
+            String old = authSql.substring(mark, stat);
+            if (old.indexOf("userdb sql {") < 0 || old.indexOf("userdb sql {") != old.lastIndexOf("userdb sql {")
+                    || authSql.indexOf("userdb sql", stat) >= 0 || authSql.substring(0, mark).contains("userdb sql")) return null;
+            return authSql.substring(0, mark) + DovecotConfig.QUOTA_USERDB + authSql.substring(stat);
+        }
         if (authSql.contains("userdb sql")) return null;
         int i = authSql.indexOf("userdb static {");
         if (i < 0 || authSql.indexOf("userdb static {", i + 1) >= 0) return null;

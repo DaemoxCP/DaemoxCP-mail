@@ -753,19 +753,28 @@ public final class DovecotConfig {
 
     /**
      * Il limite di ogni casella, prima del userdb static: i suoi campi si aggiungono a quelli di static (continue-ok), e
-     * un indirizzo che non e' una casella attiva passa a static come prima (continue). iterate_query serve a doveadm
-     * con -A (l'uso di tutte le caselle nella pagina Caselle).
+     * un indirizzo che non e' una casella attiva passa a static come prima (continue). Una domanda che fallisce passa
+     * anch'essa a static (result_internalfail = continue): e' gia' il comportamento della 2.4, scritto per non
+     * dipenderne. Misurato sulla VM il 18/11/2026, con un jar senza le quote che aveva tolto quota_mb all'utente MySQL
+     * di Dovecot (MailDbUsers): una casella vera riceve ancora, senza il suo limite, con la riga e anche senza; solo un
+     * indirizzo che non esiste risponde «errore interno» invece di «sconosciuto». iterate_query serve a doveadm con -A
+     * (la pagina Caselle).
      */
     public static final String QUOTA_USERDB = """
-            # Il limite di ogni casella (quota_mb in MB; 0 = nessun limite): si aggiunge ai campi di userdb static
+            # Il limite di ogni casella (quota_mb in MB; 0 = nessun limite): si aggiunge ai campi di userdb static.
+            # Se la domanda fallisce si va avanti senza quota (gia' cosi' nella 2.4, scritto per chiarezza).
             userdb sql {
               query = SELECT CONCAT(quota_mb, 'M') AS quota_storage_size FROM mailboxes WHERE email = '%{user}' AND active = 1
               iterate_query = SELECT email AS user FROM mailboxes WHERE active = 1
               result_success = continue-ok
               result_failure = continue
+              result_internalfail = continue
             }
 
             """;
+
+    /** La prima riga del blocco delle quote, in tutte le sue versioni: cosi' DovecotQuota lo riconosce e lo aggiorna. */
+    public static final String QUOTA_USERDB_MARK = "# Il limite di ogni casella (quota_mb in MB; 0 = nessun limite)";
 
     /**
      * Impostazioni che la documentazione ufficiale conferma, e quelle che invece restano da

@@ -49,6 +49,11 @@ public class DovecotQuotaTest {
                         && DovecotQuota.withQuotaUserdb(AUTH.replace("userdb static {", "userdb passwd {")) == null
                         && DovecotQuota.withQuotaUserdb(AUTH.replace("passdb sql {", "passdb pam {")) == null
                         && DovecotQuota.withQuotaUserdb(null) == null);
+        String older = AUTH.replace("userdb static {", DovecotConfig.QUOTA_USERDB_MARK + ": an older text\nuserdb sql {\n  query = SELECT 1\n  result_success = continue-ok\n}\n\nuserdb static {");
+        String updated = DovecotQuota.withQuotaUserdb(older);
+        check("the block of an earlier version of the panel: replaced by this one", updated != null && updated.equals(with));
+        check("a query that fails goes on to userdb static (the mail does not stop)",
+                DovecotConfig.QUOTA_USERDB.contains("result_internalfail = continue") && DovecotConfig.QUOTA_USERDB.startsWith(DovecotConfig.QUOTA_USERDB_MARK));
         check("the limit is quota_mb in MB, only for an active mailbox",
                 DovecotConfig.QUOTA_USERDB.contains("CONCAT(quota_mb, 'M') AS quota_storage_size FROM mailboxes WHERE email = '%{user}' AND active = 1")
                         && DovecotConfig.QUOTA_USERDB.contains("result_success = continue-ok") && DovecotConfig.QUOTA_USERDB.contains("result_failure = continue"));
