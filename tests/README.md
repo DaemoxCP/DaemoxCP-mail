@@ -240,6 +240,20 @@ console code and no passkey, a harmless change in Settings opens the confirmatio
 the command and the administrator's name; a wrong code is refused and the window stays; the command shown, run on the
 server, gives the code that confirms, and the change goes through; the same code again gets 401.
 
+`ReleaseCheckTest` (anywhere, no network) is the new-version notice: which GitHub release is newer than the running
+panel (semver order, drafts never, pre-releases only for a 0.x or suffixed panel, the link built from the tag and never
+taken from the answer), when the panel asks again (once a day, "Check now" at most once a minute, a date in the future
+does not stop it), and what it does with each of GitHub's answers, given by a local HTTP server: a list, an empty list,
+404, the rate limit, 500, a page instead of JSON, an answer over 2 MB, nobody answering.
+
+`release-notice-browser-test.js` (Playwright, VM): the same notice in the pages. The *Updates* card with the running
+version and the daily check on; "Check now" asking GitHub for real (until the repository is public it answers 404,
+and the card says so in words) and not asking again within a minute; the daily check off (the recent confirmation:
+cancelled, the switch goes back; confirmed with a console code, it goes off) and on, with a reload and the audit log;
+a newer release (the page's API answer replaced in the browser) on the card and on the *Dashboard*, with the link, a
+link that is not a GitHub release page left out, and the contrast of the link in both themes; at 375 px the card
+fits.
+
 `MailboxAddressMapTest` and `CatchAllTest` (anywhere) are the catch-all's decisions without Postfix: when the start
 adds Postfix's mailbox map after the aliases, rewrites a map that says something else, or leaves a hand-written
 `virtual_alias_maps` alone; the map's text made from the aliases' map (only the mailboxes that receive); when a
@@ -924,7 +938,7 @@ verifies the three properties that must hold: no waiting if the domains already 
 soon as they answer, and it leaves anyway at the deadline instead of running forever.
 
 **MtaStsSequenceTest** — the pieces born from merging the two sequences: `filter()`, the filter by
-domain (exact comparison, case-insensitive: "ake.net" must not catch "domain-d.test", and a nonexistent
+domain (exact comparison, case-insensitive: "in-d.test" must not catch "domain-d.test", and a nonexistent
 domain must give an empty list, which is the guard against the false success), and `asEntries()`,
 which turns the outcome into the DNS page's rows without losing the red rows.
 

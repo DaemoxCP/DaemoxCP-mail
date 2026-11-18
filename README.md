@@ -89,6 +89,8 @@ It is **careful**. The panel never changes something it cannot check, and it say
 - Let's Encrypt certificates through `acme.sh` (the FreeBSD package, running as its own `acme` user), with the
   DNS challenge on Cloudflare.
 - Apple Mail configuration profiles (Mac, iPhone, iPad) and Thunderbird autoconfig: clients set themselves up.
+  Tested with Apple Mail on macOS on the real server: the profile sets up the account, and mail is sent and
+  received. iPhone, iPad and Thunderbird have not been tried with a real client yet.
 
 **Security**
 - Sign-in without passwords: **passkeys** (WebAuthn), one-time codes by email, or a code from the server
@@ -584,11 +586,27 @@ What the panel shows but does not do yet. It is said on the pages too, so nobody
   - the second must have nothing left to do.
 
   `rollback-panel.sh` puts everything back without losing the mail.
+
+  When a new version is out, the panel tells you. Once a day it reads the list of releases of
+  [DaemoxCP/mail](https://github.com/DaemoxCP/mail/releases) on GitHub. If one is newer than the panel, it says so,
+  with the link to the release page:
+  - on the *Dashboard*;
+  - on the *Updates* page, which also has *Check now*;
+  - in the periodic report.
+
+  It downloads and installs nothing: the update stays the step above. The check sends GitHub nothing but the request
+  itself (GitHub sees the server's address). It can be turned off on the *Updates* page. A beta panel (0.x) is also
+  told about pre-releases; a 1.x panel only about releases.
 - **Cloudflare's addresses**: when *Diagnostics* says Cloudflare changed its list, update the panel and webmail
   rule in your provider's firewall and confirm it on the *Firewall* page.
 
 > [!NOTE]
-> Updates of the panel from GitHub releases, verified and installed from the panel itself, are planned.
+> Installing a release from the panel itself, with the same checks as `upgrade-panel.sh`, is planned.
+
+### The tests
+
+`tests/` holds the panel's tests, one Java class each, plus browser tests with Playwright. They are run by hand on a
+FreeBSD test machine before every release: how, in [`tests/README.md`](tests/README.md).
 
 ---
 

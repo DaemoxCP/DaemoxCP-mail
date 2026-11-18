@@ -89,7 +89,8 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 - Certificati Let's Encrypt con `acme.sh` (il pacchetto di FreeBSD, che gira col suo utente `acme`), con la
   verifica DNS su Cloudflare.
 - Profili di configurazione di Apple Mail (Mac, iPhone, iPad) e autoconfig di Thunderbird: i programmi di posta
-  si configurano da soli.
+  si configurano da soli. Provati con Apple Mail su macOS sul server vero: il profilo configura l'account, e la
+  posta parte e arriva. iPhone, iPad e Thunderbird non sono ancora stati provati con un programma di posta vero.
 
 **Sicurezza**
 - Accesso senza password: **passkey** (WebAuthn), codici monouso via email, o un codice dalla console del server.
@@ -594,11 +595,27 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
   - il secondo non deve avere più niente da fare.
 
   `rollback-panel.sh` rimette tutto com'era senza perdere la posta.
+
+  Quando esce una versione nuova, il pannello te lo dice. Una volta al giorno legge l'elenco delle release di
+  [DaemoxCP/mail](https://github.com/DaemoxCP/mail/releases) su GitHub. Se una è più nuova del pannello, lo dice,
+  col link alla pagina della release:
+  - nella *Dashboard*;
+  - nella pagina *Aggiornamenti*, che ha anche *Controlla adesso*;
+  - nel rapporto periodico.
+
+  Non scarica e non installa niente: l'aggiornamento resta il passo qui sopra. Il controllo non manda a GitHub
+  nient'altro che la richiesta stessa (GitHub vede l'indirizzo del server). Si spegne dalla pagina *Aggiornamenti*.
+  Un pannello in beta (0.x) sente anche delle pre-release; uno 1.x solo delle release.
 - **Gli indirizzi di Cloudflare**: quando la *Diagnostica* dice che Cloudflare ha cambiato il suo elenco, aggiorna
   la regola di pannello e webmail nel firewall del fornitore e confermalo nella pagina *Firewall*.
 
 > [!NOTE]
-> Sono previsti gli aggiornamenti del pannello dalle release di GitHub, verificati e installati dal pannello stesso.
+> È prevista l'installazione di una release dal pannello stesso, con gli stessi controlli di `upgrade-panel.sh`.
+
+### I test
+
+`tests/` contiene i test del pannello, una classe Java ciascuno, più le prove nel browser con Playwright. Si lanciano a
+mano su una macchina FreeBSD di prova prima di ogni release: come, in [`tests/README.md`](tests/README.md).
 
 ---
 

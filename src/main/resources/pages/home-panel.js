@@ -97,9 +97,22 @@
             panelInfoTick();
             panelInfoStatus('');
             document.getElementById('panelInfoToggle').hidden = !r.details;
+            panelReleaseShow(r.release);
             if (!panelInfo.tick) panelInfo.tick = setInterval(panelInfoTick, 15000);
             // Se il pannello riparte mentre la pagina e' aperta, l'inizio cambia: si rilegge ogni tanto.
             if (!panelInfo.sync) panelInfo.sync = setInterval(panelInfoLoad, 5 * 60 * 1000);
+        }
+
+        // Una versione nuova su GitHub (ReleaseCheck): il server la manda solo a chi vede le pagine del sistema. Il
+        // link va alla pagina della release solo se e' davvero una release su GitHub.
+        function panelReleaseShow(release) {
+            const box = document.getElementById('panelReleaseNotice');
+            if (!box) return;
+            if (!release || !release.version) { box.hidden = true; return; }
+            document.getElementById('panelReleaseText').textContent = t('hp.newRelease', { version: release.version, current: release.current || '?' });
+            const link = document.getElementById('panelReleaseLink');
+            if (/^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\/releases\/tag\/[A-Za-z0-9._-]+$/.test(String(release.url || ''))) link.href = release.url;
+            box.hidden = false;
         }
 
         async function panelInfoToggle() {

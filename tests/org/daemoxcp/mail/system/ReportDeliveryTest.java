@@ -66,7 +66,7 @@ public class ReportDeliveryTest {
             cleanup,
             "Sep 25 19:00:01 mail postfix/smtp[500]: " + opening13,
             "Sep 25 19:00:02 mail postfix/smtp[501]: " + delivered,
-            "Sep 25 19:00:02 mail postfix/smtp[500]: 4OTHER0001: to=<other@gmail.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)");
+            "Sep 25 19:00:02 mail postfix/smtp[500]: 4OTHER0001: to=<other@example.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)");
         real("tls: the test really contains a TLS opening towards the same relay",
             otherProcess.get(1).contains("TLS connection established to " + R + ": "));
         e = PeriodicReport.outcomeInLog(otherProcess, ID, A);
@@ -98,7 +98,7 @@ public class ReportDeliveryTest {
         List<String> connectionBefore = List.of(
             cleanup,
             "Sep 25 19:00:01 mail postfix/smtp[600]: " + opening13,
-            "Sep 25 19:00:01 mail postfix/smtp[600]: 4OTHER0002: to=<other@gmail.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)",
+            "Sep 25 19:00:01 mail postfix/smtp[600]: 4OTHER0002: to=<other@example.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)",
             "Sep 25 19:00:02 mail postfix/smtp[600]: " + delivered);
         real("same process, earlier connection: no TLS", !PeriodicReport.outcomeInLog(connectionBefore, ID, A).has("tls"));
 
@@ -133,7 +133,7 @@ public class ReportDeliveryTest {
             "Sep 25 19:00:01 mail postfix/smtp[1000]: " + opening13,
             "Sep 25 19:00:01 mail postfix/smtp[1000]: SSL_connect:SSL negotiation finished successfully",
             "Sep 25 19:00:01 mail postfix/smtp[1000]: save session smtp&gmail.com&gmail-smtp-in.l.google.com&142.250.102.27&&3C7A5B to smtp cache",
-            "Sep 25 19:00:02 mail postfix/smtp[1000]: 4TLS00001: to=<other@gmail.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)",
+            "Sep 25 19:00:02 mail postfix/smtp[1000]: 4TLS00001: to=<other@example.com>, relay=" + R + ", delay=1, delays=0/0/0.5/0.5, dsn=2.0.0, status=sent (250 2.0.0 OK - gsmtp)",
             "Sep 25 19:00:02 mail postfix/smtp[1000]: " + delivered);
         e = PeriodicReport.outcomeInLog(loglevel2, ID, A);
         real("loglevel 2 and two recipients: TLS recognised", "TLSv1.3 (TLS_AES_256_GCM_SHA384)".equals(e.optString("tls")));

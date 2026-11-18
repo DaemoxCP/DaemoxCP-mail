@@ -204,6 +204,9 @@ public class PanelContent {
         [data-theme="dark"] .alert-warning { background-color: rgba(255, 193, 7, 0.15); border-color: rgba(255, 193, 7, 0.3); color: #ffda6a; }
         [data-theme="dark"] .alert-success { background-color: rgba(25, 135, 84, 0.15); border-color: rgba(25, 135, 84, 0.3); color: #75d9a3; }
         [data-theme="dark"] .alert-danger { background-color: rgba(220, 53, 69, 0.15); border-color: rgba(220, 53, 69, 0.3); color: #f1aeb5; }
+        /* Il link dentro un avviso (alert-link) col colore del suo testo: Bootstrap gli lascia quello scuro del tema chiaro,
+           1,09:1 su un avviso azzurro del tema scuro (misurato). Resta in grassetto e sottolineato. */
+        [data-theme="dark"] .alert .alert-link { color: inherit; }
         [data-theme="dark"] .list-group-item { background-color: var(--bg-card); border-color: var(--border-color); color: var(--text-primary); }
         [data-theme="dark"] .nav-tabs .nav-link { color: var(--text-secondary); }
         [data-theme="dark"] .nav-tabs .nav-link.active { background-color: var(--bg-card); border-color: var(--border-color) var(--border-color) var(--bg-card); color: var(--text-primary); }
@@ -12251,7 +12254,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <h2><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i>{{t:up.title}}</h2>
             <p class="text-muted">{{t:up.intro.html}}</p>
             <div id="upd-interrupted" aria-live="polite"></div>
-""" + resource("pages/update-center-card.html") + resource("pages/branch-card.html") + """
+""" + resource("pages/update-center-card.html") + resource("pages/panel-release-card.html") + resource("pages/branch-card.html") + """
 
             <div class="modal fade" id="pkUpdModal" tabindex="-1" aria-labelledby="pkUpdTitle" aria-hidden="true">
                 <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -12523,7 +12526,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
         return resource("pages/upd-api.js") + getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js")
                 + resource("pages/os-update.js") + resource("pages/guided.js") + resource("pages/update-center.js")
-                + resource("pages/diag-all.js");
+                + resource("pages/diag-all.js") + resource("pages/panel-release.js");
     }
 
     /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */
