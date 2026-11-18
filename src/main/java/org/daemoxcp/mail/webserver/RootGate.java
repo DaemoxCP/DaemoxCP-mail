@@ -54,6 +54,8 @@ final class RootGate {
             // POP3 acceso o spento (Impostazioni).
             Map.entry("/api/pop3", GET_POST),
             Map.entry("/api/ip-family", GET_POST),
+            // Gli indirizzi IPv4 e IPv6 del server e la loro guida (ServerAddresses): ifconfig, route, rc.conf, solo da root.
+            Map.entry("/api/server-addresses", GET_POST),
             // Le chiavi SSH di root (Impostazioni).
             Map.entry("/api/ssh-keys", GET_POST),
             // «Mostra password»: la copia dal vault la legge solo la root (0.8, punto 3).

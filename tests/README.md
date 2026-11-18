@@ -501,7 +501,41 @@ provider firewall fine and outgoing port 25 closed (the VM's network closes it),
 an IPv6 default route is refused; IPv4 only and IPv6 only (with a temporary IPv6 default route, removed at the end) are
 measured on the listening sockets of 25, 993 and 8443, on pf's rule and from this computer over both families; both
 again from the Settings card; then the console command `--ip-family`. In every step the SSH rule has no family and SSH
-answers. A virtual passkey gives the recent confirmation, and is removed at the end.
+answers. A virtual passkey gives the recent confirmation, and is removed at the end. IPv6 only keeps IPv4 on the
+loopback (since 18/11/2026: the webmail, the antispam milter and the sending limits talk to Postfix and Dovecot on
+127.0.0.1, and with `inet_protocols = ipv6` and `listen = ::` they could not): there an IPv6 socket must listen, IPv4
+ones may stay, from this computer IPv4 must not answer (pf), and on the server 127.0.0.1:993 and :587 must.
+
+`address-guide-browser-test.js` (Playwright, VM): the Settings card "Server addresses" (ServerAddresses, AddressGuide)
+through the real panel. The table with a row per family in words, the three goals, exactly one step "now"; goal IPv6
+only starts with the IPv6 address and its form (no provider suggestion on the VM); a documentation address is refused
+before anything changes; a benchmarking address (2001:2::/48, global in form, never routed) is added live, the probe
+cannot reach the internet over IPv6, and everything goes back: the interface, the routes and /etc/rc.conf exactly as
+before, the operation's log on disk saying so. Goals IPv4 only and both, only looking; the console `--addresses show`
+and its usage. A virtual passkey gives the recent confirmation, and is removed at the end.
+
+**ServerAddressesTest** — the server's addresses (ServerAddresses): ifconfig and netstat read (only global IPv6 counts,
+not link-local, local fd00::/8 or tentative), Hetzner's network configuration read for the IPv6 suggestion, the short
+form of RFC 5952, the checks of what is typed (an address with other characters never reaches a command). On a
+simulated FreeBSD that answers every command as FreeBSD 15 does: adding IPv6 runs `-ifdisabled`, the alias, waits for
+DAD, the route with the interface, and writes rc.conf only after the probe, keeping the previous lines (state file
+0600, a copy of rc.conf beside it); a failing probe, a duplicated address and a refused route leave nothing behind;
+removing puts the previous rc.conf lines back; the IPv4 clean-up refuses while IPv4 still reaches the internet or IPv6
+does not. In the sources: never `netif` or `routing` (they remove every address or route of both families), never
+pkill, never sh -c, never sshd. On the VM, as root (`-De2e.vm=yes`): the real ifconfig and route with a documentation
+address and a forced probe, rc.conf a copy: added, removed, the interface and the routes exactly as before; a failing
+probe leaves nothing.
+
+**AddressGuideTest** — the guide's steps (AddressGuide), pure: towards IPv4 and IPv6 from IPv4 only, one step at a time
+(the reverse DNS is the administrator's, the rest the panel's); mail moves to IPv6 only with the IPv6 reverse DNS;
+towards IPv4 only (web names, mail, the AAAA record, then the address, never while the panel is reached over IPv6);
+towards IPv6 only (web names, mail only from IPv6, the A record, the provider only from IPv6 and with SSH on IPv6, the
+leftovers); a server born with IPv6 only, and back to both.
+
+**ReverseDnsTest** — the reverse DNS of an IPv4 or IPv6 address confirmed forward (ReverseDns) with a fake dig: the
+PTR must give the mail name and the name point back, with A for IPv4 and AAAA for IPv6 (the check before always used
+A); another name, none, one that does not point back, dig's own error lines, bad input. HostRecords: the names it
+accepts and the records of the same name and type.
 
 `geo-ipv6-browser-test.js` (Playwright, VM): blocking by country over IPv4 and IPv6. A country is synced (its file must
 have both lists), this computer's IPv6 /64 is added to that file, then blacklist and whitelist are applied through the

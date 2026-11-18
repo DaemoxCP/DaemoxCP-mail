@@ -30,15 +30,22 @@ public class IpFamilyTest {
                 && IpFamily.fromPostfix("ipv4, ipv6") == IpFamily.Family.BOTH && IpFamily.fromPostfix("ipv6 ipv4") == IpFamily.Family.BOTH
                 && IpFamily.fromPostfix("ipv4") == IpFamily.Family.IPV4 && IpFamily.fromPostfix("ipv6") == IpFamily.Family.IPV6
                 && IpFamily.fromPostfix("") == null && IpFamily.fromPostfix("ipv5") == null);
-        check("what each service is told", IpFamily.Family.IPV4.postfix.equals("ipv4") && IpFamily.Family.IPV6.dovecot.equals("::")
+        check("what each service is told", IpFamily.Family.IPV4.postfix.equals("ipv4") && IpFamily.Family.IPV6.dovecot.equals("::, 127.0.0.1")
                 && IpFamily.Family.BOTH.dovecot.equals("*, ::") && IpFamily.Family.IPV4.pf.equals("inet ") && IpFamily.Family.BOTH.pf.isEmpty());
+        // IPv6 only keeps IPv4 on the loopback: the webmail talks to Dovecot (127.0.0.1:993) and Postfix
+        // (127.0.0.1:587), Postfix to the antispam milter (127.0.0.1:11332) and to the sending limits. pf keeps IPv4
+        // from outside away.
+        check("IPv6 only: Postfix stays on all (IPv4 loopback for the milter, the webmail, the limits)", IpFamily.Family.IPV6.postfix.equals("all"));
+        check("IPv6 only: Postfix sends over IPv6 first; otherwise Postfix's default (any)",
+                IpFamily.postfixPreference(IpFamily.Family.IPV6).equals("ipv6") && IpFamily.postfixPreference(IpFamily.Family.BOTH).equals("any")
+                        && IpFamily.postfixPreference(IpFamily.Family.IPV4).equals("any"));
 
         System.out.println("\n== Dovecot: the general listen line only ==");
         String conf = "protocols = imap lmtp\nlisten = *, ::\nservice imap-login {\n  inet_listener imaps {\n    listen = 127.0.0.1\n    port = 993\n  }\n}\n";
         String v4 = IpFamily.withDovecotListen(conf, IpFamily.Family.IPV4);
         check("IPv4 only: listen = *, the listener's own line untouched",
                 v4 != null && v4.contains("\nlisten = *\n") && v4.contains("    listen = 127.0.0.1\n") && v4.replace("listen = *\n", "listen = *, ::\n").equals(conf));
-        check("IPv6 only: listen = ::", IpFamily.withDovecotListen(conf, IpFamily.Family.IPV6).contains("\nlisten = ::\n"));
+        check("IPv6 only: listen = ::, 127.0.0.1", IpFamily.withDovecotListen(conf, IpFamily.Family.IPV6).contains("\nlisten = ::, 127.0.0.1\n"));
         check("already as asked: nothing to change", IpFamily.withDovecotListen(conf, IpFamily.Family.BOTH) == null);
         check("no general listen line, or two: not the panel's file, nothing changed",
                 IpFamily.withDovecotListen("protocols = imap\n", IpFamily.Family.IPV4) == null
@@ -68,6 +75,9 @@ public class IpFamilyTest {
         check("25 in both families", IpFamily.listensAs(sock, 25, IpFamily.Family.BOTH) && !IpFamily.listensAs(sock, 25, IpFamily.Family.IPV4));
         check("993 in IPv4 only", IpFamily.listensAs(sock, 993, IpFamily.Family.IPV4) && !IpFamily.listensAs(sock, 993, IpFamily.Family.BOTH));
         check("tcp46 counts for both", IpFamily.listensAs(sock, 8443, IpFamily.Family.BOTH));
+        check("IPv6 only: an IPv6 socket is enough (Postfix's IPv4 one and Dovecot's 127.0.0.1 stay; pf keeps outside IPv4 away)",
+                IpFamily.listensAs(sock, 25, IpFamily.Family.IPV6) && IpFamily.listensAs(sock, 2096, IpFamily.Family.IPV6)
+                        && !IpFamily.listensAs(sock, 993, IpFamily.Family.IPV6));
         check("a port that does not listen is no family", !IpFamily.listensAs(sock, 143, IpFamily.Family.IPV4)
                 && !IpFamily.listensAs(sock, 143, IpFamily.Family.IPV6) && !IpFamily.listensAs(sock, 143, IpFamily.Family.BOTH));
         check("default route read from netstat", IpFamily.hasDefaultRoute("Routing tables\n\nInternet6:\nDestination Gateway Flags\ndefault fe80::1%vtnet0 UG vtnet0\n")

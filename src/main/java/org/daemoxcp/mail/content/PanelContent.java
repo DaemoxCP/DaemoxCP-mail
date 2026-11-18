@@ -8188,6 +8188,49 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         </div>
                     </div>
 
+                    <!-- Indirizzi del server: IPv4 e IPv6, con la guida in tutte e due le direzioni (ServerAddresses) -->
+                    <div class="card mb-4" id="addrCard">
+                        <div class="card-header"><i class="fas fa-route me-2" aria-hidden="true"></i>{{t:addr.title}}</div>
+                        <div class="card-body">
+                            <p class="small text-muted">{{t:addr.intro}}</p>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm align-middle mb-0">
+                                    <caption class="small">{{t:addr.stateCaption}}</caption>
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">{{t:addr.colFamily}}</th>
+                                            <th scope="col">{{t:addr.colAddress}}</th>
+                                            <th scope="col">{{t:addr.colInternet}}</th>
+                                            <th scope="col">{{t:addr.colDns}}</th>
+                                            <th scope="col">{{t:addr.colPtr}}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="addrRows"><tr><td colspan="5" class="text-muted">{{t:addr.loading}}</td></tr></tbody>
+                                </table>
+                            </div>
+                            <fieldset class="mb-2" aria-describedby="addrGoalHint">
+                                <legend class="fs-6">{{t:addr.goalLegend}}</legend>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="addrGoal" id="addrGoalBoth" value="both" checked data-on-change="addrLoad()">
+                                    <label class="form-check-label" for="addrGoalBoth">{{t:addr.goalBoth}}</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="addrGoal" id="addrGoalV4" value="ipv4" data-on-change="addrLoad()">
+                                    <label class="form-check-label" for="addrGoalV4">{{t:addr.goalV4}}</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="addrGoal" id="addrGoalV6" value="ipv6" data-on-change="addrLoad()">
+                                    <label class="form-check-label" for="addrGoalV6">{{t:addr.goalV6}}</label>
+                                </div>
+                            </fieldset>
+                            <small id="addrGoalHint" class="text-muted d-block mb-3">{{t:addr.goalHint}}</small>
+                            <div id="addrReached" class="alert alert-success d-none" role="status">{{t:addr.reached}}</div>
+                            <ol id="addrSteps" class="list-unstyled mb-3" aria-label="{{t:addr.stepsCaption}}"></ol>
+                            <div id="addrStatus" class="small mb-2" role="status" aria-live="polite"></div>
+                            <small class="text-muted d-block"><i class="fas fa-terminal me-1" aria-hidden="true"></i>{{t:addr.console}}</small>
+                        </div>
+                    </div>
+
                     <!-- IPv4 e IPv6 (IpFamily) -->
                     <div class="card mb-4">
                         <div class="card-header"><i class="fas fa-network-wired me-2" aria-hidden="true"></i>{{t:set.ipfTitle}}</div>
@@ -8398,12 +8441,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """ + getWebAuthnScript() + getSettingsAuthJs() + """
 """ + getSettingsHostnameJs() + """
         // Load on page load
-""" + resource("pages/report.js") + resource("pages/upd-api.js") + resource("pages/port465.js") + """
+""" + resource("pages/report.js") + resource("pages/upd-api.js") + resource("pages/port465.js") + resource("pages/server-addresses.js") + """
         checkHostnameConsistency();
         checkRcDomainDnsStatus();
         repLoad();
         pop3Load();
         ipfLoad();
+        addrLoad();
         sshLoad();
 
         let csrfToken = document.getElementById('csrf_token').value;

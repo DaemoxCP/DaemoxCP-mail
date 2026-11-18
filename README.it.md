@@ -122,6 +122,14 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   indirizzo e una rotta predefinita nella famiglia che resta, e dice cosa smetterebbe di funzionare: record DNS,
   Cloudflare, la posta con i server che hanno solo IPv4, la tua stessa connessione al pannello. Finché non scegli,
   non tocca niente.
+- **Gli indirizzi del server, con una guida in tutte e due le direzioni** (*Impostazioni*, *Indirizzi del server*):
+  cosa ha il server (indirizzo, strada, se arriva davvero su internet, i record A/AAAA del nome della posta, il DNS
+  inverso di ogni famiglia) e i passi per arrivare a IPv4 e IPv6, solo IPv4 o solo IPv6, e tornare indietro. L'IPv6 si
+  aggiunge solo se il provider ne ha dato uno (su Hetzner il pannello lo legge da solo), mentre il server gira e senza
+  toccare l'IPv4, e resta solo se una prova vera mostra il server arrivare su internet; altrimenti tutto torna com'era.
+  La posta passa all'IPv6 solo col DNS inverso IPv6 a posto (Gmail e Microsoft lo pretendono). Un IPv4 che funziona il
+  pannello non lo toglie mai: lo toglie il provider (su Hetzner a server spento), poi il pannello pulisce quello che
+  resta. Una famiglia che stai usando per arrivare al pannello non si toglie mai, e SSH non si tocca.
 - Separazione dei privilegi: la parte che risponde in rete gira con un utente senza privilegi (vedi
   [Sicurezza](#sicurezza-chi-gira-da-root-e-perché)).
 
@@ -442,8 +450,9 @@ mount | grep -q ' on /proc ' || mount /proc; java -version
    shasum -a 256 daemoxcp-mail.jar
    ```
 
-   (`sha256 -q daemoxcp-mail.jar` su FreeBSD). Oppure costruiscilo tu, su un qualsiasi computer con Java 25 e Maven, da
-   questo repository:
+   (`sha256 -q daemoxcp-mail.jar` su FreeBSD). Su un server **solo IPv6** GitHub non si raggiunge dal server (non ha
+   ancora l'IPv6): scarica il jar sul tuo computer e copialo con `scp`. Oppure costruiscilo tu, su un qualsiasi computer
+   con Java 25 e Maven, da questo repository:
 
    ```bash
    tools/build-jar.sh
@@ -673,6 +682,7 @@ Ogni servizio viene controllato e ricaricato.
 | `java -jar daemoxcp-mail.jar --access-code [nome]` | un codice di accesso monouso di 8 cifre per un amministratore |
 | `java -jar daemoxcp-mail.jar --create-admin <nome> <email>` | il primo amministratore, quando non ce n'è nessuno |
 | `java -jar daemoxcp-mail.jar --ip-family both\|ipv4\|ipv6` | IPv4, IPv6 o tutte e due, come in *Impostazioni*, da root: la strada per tornare indietro quando una scelta ti ha chiuso fuori dal pannello |
+| `java -jar daemoxcp-mail.jar --addresses show\|ipv6-off\|ipv4-dhcp` | gli indirizzi del server, da root: vederli, togliere l'IPv6 aggiunto dal pannello (tornano le righe di `rc.conf` di prima), o riprendere l'IPv4 col DHCP |
 | `service daemoxcp_mail start\|stop\|restart\|status` | il pannello come servizio |
 
 I comandi da console vanno lanciati da `/home/panel`: il database del pannello è in `database/` accanto al jar.
@@ -745,6 +755,7 @@ importanza. Poi:
 | `421 Misdirected Request` | il pannello è stato chiamato per IP o con un altro nome: usa il suo nome |
 | nessun amministratore riesce a entrare | `java -jar daemoxcp-mail.jar --access-code` da `/home/panel` |
 | il pannello non risponde più dopo aver scelto solo IPv4 o solo IPv6 | da root, da `/home/panel`: `java -jar daemoxcp-mail.jar --ip-family both` |
+| il pannello non risponde più dopo un passo di *Indirizzi del server* | da root, da `/home/panel`: `java -jar daemoxcp-mail.jar --addresses show`, poi `--addresses ipv6-off` o `--addresses ipv4-dhcp`; la console web del provider funziona anche senza rete |
 
 ---
 
