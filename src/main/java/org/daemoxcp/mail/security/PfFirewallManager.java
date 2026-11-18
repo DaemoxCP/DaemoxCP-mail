@@ -491,6 +491,16 @@ public class PfFirewallManager {
     // GENERAZIONE ANCHOR PF + APPLY
     // ================================================================
     /**
+     * La riga di una tabella dell'anchor. Vuota si scrive {@code { }}: senza graffe pf, ricaricando l'anchor, tiene il
+     * contenuto di prima, e l'ultimo indirizzo tolto da una lista (consentiti o bloccati) restava attivo in pf fino al
+     * riavvio (prova di tutte le funzioni del pannello 0.9.0 su FreeBSD 15.1, 18/11/2026: con {@code { }} la tabella si
+     * svuota). pf non accetta commenti dentro le graffe.
+     */
+    static String tableLine(String name, java.util.Collection<String> cidrs) {
+        return "table <" + name + "> persist { " + String.join(", ", cidrs) + (cidrs.isEmpty() ? "" : " ") + "}\n";
+    }
+
+    /**
      * Genera il contenuto dell'anchor panel-fw secondo lo stato corrente.
      */
     public String generateAnchorContent() {
@@ -504,24 +514,9 @@ public class PfFirewallManager {
             return sb.toString();
         }
 
-        // Definizione tabelle
-        // NB: pf non accetta commenti dentro {} di una tabella inline,
-        // quindi se la lista e' vuota usiamo solo "table <X> persist" senza graffe.
-        if (state.whitelistCidrs.isEmpty()) {
-            sb.append("table <panel_wl_cidrs> persist  # vuota: nessun CIDR\n");
-        } else {
-            sb.append("table <panel_wl_cidrs> persist { ")
-              .append(String.join(", ", state.whitelistCidrs))
-              .append(" }\n");
-        }
-
-        if (state.blacklistCidrs.isEmpty()) {
-            sb.append("table <panel_bl_cidrs> persist  # vuota: nessun CIDR\n");
-        } else {
-            sb.append("table <panel_bl_cidrs> persist { ")
-              .append(String.join(", ", state.blacklistCidrs))
-              .append(" }\n");
-        }
+        // Definizione tabelle (tableLine: vuote con { }, mai senza graffe).
+        sb.append(tableLine("panel_wl_cidrs", state.whitelistCidrs));
+        sb.append(tableLine("panel_bl_cidrs", state.blacklistCidrs));
 
         // Geo: una tabella unica con TUTTI i CIDR dei paesi selezionati
         // Se modalita' GEO ma nessun zone file disponibile, salta le regole geo

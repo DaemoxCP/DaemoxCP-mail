@@ -1798,3 +1798,10 @@ message as it arrived. Only on a test machine, with `-De2e.vm=yes`:
     java -De2e.vm=yes -Dpanelmail.to=alice@rehearsal.test \
          -Dpanelmail.maildir=/var/vmail/rehearsal.test/alice -Dpanelmail.copies=/var/tmp/panel-emails/copies \
          -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelMailE2ETest
+
+**PfListTablesTest** — the allow and block lists of the Firewall page in pf. Found walking every function of the
+0.9.0 panel (18/11/2026): the last address taken off a list stayed in pf until a restart, because an empty list was
+written as `table <x> persist` with no braces and pf keeps a table's contents when the anchor is loaded again with
+such a line. The line of an empty list is `{ }`; on the VM, as root (`-De2e.vm=yes`), the real pfctl in an anchor no
+rule uses: loaded again as an empty list the table is empty, with the line of 0.9.0 it keeps the address.
+
