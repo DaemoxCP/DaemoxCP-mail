@@ -338,6 +338,12 @@ const VISITS = [
             errors.push('prepare: ' + e.message);
         }
         check('<html lang="en">', await page.getAttribute('html', 'lang') === 'en');
+        // The main landmark (r9): one <main>, the target of "Skip to content". Up to 0.9.0 the panel pages had a
+        // <div id="main">, which screen readers do not list as the main region (walk of 18/11/2026).
+        const landmark = await page.evaluate(() => ({ mains: document.querySelectorAll('main').length,
+            target: (document.querySelector('a.skip-link') || {}).hash === '#main' ? (document.getElementById('main') || {}).tagName : 'no skip link' }));
+        check('one <main>, the skip link\'s target (' + landmark.mains + ', ' + landmark.target + ')', landmark.mains === 1
+            && (landmark.target === 'MAIN' || landmark.target === 'no skip link'));
         const found = await page.evaluate(src => {
             const re = new RegExp(src, 'iu');
             const out = [];
