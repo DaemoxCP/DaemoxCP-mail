@@ -305,6 +305,19 @@ submissions on 587, on a domain of its own: Postfix asks the panel at DATA; with
 3 / 3 and the senders of the day; raised to 10 the fourth goes at once; the counts are on disk within a minute, root
 only; with the panel stopped Postfix lets the mail pass, and started again the counts are back and the limit holds.
 
+`MailLogStatsTest` (anywhere; the .bz2 part where bzip2 is) is the sent and received counts read from Postfix's log,
+without the real log: a message a mailbox sent (received by the local mailbox, sent once per recipient, outside too),
+incoming mail, a bounce of incoming and of sent mail, a deferral (nothing), Rspamd's refusals (spam, virus), the queue
+entry dropped at «removed»; the UTC day of syslog dates (00:30 in Rome, a single-digit day, December read in January,
+RFC 5424); the sums once per group; complete lines from a position; the rest of a turned-over file from its .bz2.
+
+`mail-stats-browser-test.js` (Playwright, VM) is the counts with real mail, on a domain of its own: two messages from
+A to B on 587, one from outside to B, one from A to an address that does not exist (it bounces, and Postfix's notice
+reaches A), GTUBE from outside (Rspamd refuses it); within two minutes today's counts grow by exactly 2 sent,
+4 received, 1 bounced, 1 spam, the domain's row the same, and the Statistics page shows them with the note that says
+what each number counts. The senders from outside are addresses of the run's domain: example.org has a null MX, and
+Postfix refuses it as a sender.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the

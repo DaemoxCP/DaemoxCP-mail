@@ -1035,6 +1035,34 @@ public final class SqlCatalog {
             + "VALUES (CURDATE(), ?, ?, ?, ?)\n"
             + "ON DUPLICATE KEY UPDATE bounced_count = bounced_count + ?, bytes_received = bytes_received + ?\n";
 
+    /** MailDatabase.incrementEmailStatOn: il giorno del messaggio (UTC), non quello in cui si conta (MailLogStats) */
+    public static final String MAIL_ADD_STAT_SENT_ON = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, sent_count, bytes_sent)\n"
+            + "VALUES (?, ?, ?, ?, ?)\n"
+            + "ON DUPLICATE KEY UPDATE sent_count = sent_count + ?, bytes_sent = bytes_sent + ?\n";
+
+    /** MailDatabase.incrementEmailStatOn */
+    public static final String MAIL_ADD_STAT_RECEIVED_ON = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, received_count, bytes_received)\n"
+            + "VALUES (?, ?, ?, ?, ?)\n"
+            + "ON DUPLICATE KEY UPDATE received_count = received_count + ?, bytes_received = bytes_received + ?\n";
+
+    /** MailDatabase.incrementEmailStatOn */
+    public static final String MAIL_ADD_STAT_SPAM_ON = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, spam_count, bytes_received)\n"
+            + "VALUES (?, ?, ?, ?, ?)\n"
+            + "ON DUPLICATE KEY UPDATE spam_count = spam_count + ?, bytes_received = bytes_received + ?\n";
+
+    /** MailDatabase.incrementEmailStatOn */
+    public static final String MAIL_ADD_STAT_VIRUS_ON = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, virus_count, bytes_received)\n"
+            + "VALUES (?, ?, ?, ?, ?)\n"
+            + "ON DUPLICATE KEY UPDATE virus_count = virus_count + ?, bytes_received = bytes_received + ?\n";
+
+    /** MailDatabase.incrementEmailStatOn */
+    public static final String MAIL_ADD_STAT_BOUNCED_ON = "INSERT INTO email_statistics (stat_date, mailbox_id, domain_id, bounced_count, bytes_received)\n"
+            + "VALUES (?, ?, ?, ?, ?)\n"
+            + "ON DUPLICATE KEY UPDATE bounced_count = bounced_count + ?, bytes_received = bytes_received + ?\n";
+
+    /** MailDatabase.deleteEmailStatsBefore: i conteggi tenuti un tempo definito (MailLogStats.KEEP_DAYS) */
+    public static final String MAIL_DELETE_STATS_BEFORE = "DELETE FROM email_statistics WHERE stat_date < ?";
+
     /** MailDatabase.getAuditLog: un filtro vuoto (NULL) prende tutto, invece di comporre il WHERE */
     public static final String MAIL_GET_AUDIT_LOG = "SELECT * FROM audit_log WHERE (? IS NULL OR action = ?) AND (? IS NULL OR username = ?) AND (? IS NULL OR ip_address = ?) ORDER BY created_at DESC LIMIT ?";
 

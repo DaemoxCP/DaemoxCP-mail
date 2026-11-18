@@ -2654,6 +2654,47 @@ public class MailDatabase {
         }
     }
 
+    /**
+     * Come {@link #incrementEmailStat}, nel giorno dato (UTC): quello del messaggio letto dal registro di Postfix
+     * (MailLogStats), non quello in cui lo si conta. Vero se MySQL l'ha scritto.
+     */
+    public boolean incrementEmailStatOn(java.time.LocalDate day, Integer mailboxId, Integer domainId, String statType, int count, long bytes) {
+        String sql = switch (statType) {
+            case "sent" -> SqlCatalog.MAIL_ADD_STAT_SENT_ON;
+            case "received" -> SqlCatalog.MAIL_ADD_STAT_RECEIVED_ON;
+            case "spam" -> SqlCatalog.MAIL_ADD_STAT_SPAM_ON;
+            case "virus" -> SqlCatalog.MAIL_ADD_STAT_VIRUS_ON;
+            case "bounced" -> SqlCatalog.MAIL_ADD_STAT_BOUNCED_ON;
+            default -> null;
+        };
+        if (sql == null || day == null) return false;
+        try (PreparedStatement stmt = getConnection().prepareStatement(sql)) {
+            stmt.setDate(1, java.sql.Date.valueOf(day));
+            if (mailboxId != null) stmt.setInt(2, mailboxId); else stmt.setNull(2, java.sql.Types.INTEGER);
+            if (domainId != null) stmt.setInt(3, domainId); else stmt.setNull(3, java.sql.Types.INTEGER);
+            stmt.setInt(4, count);
+            stmt.setLong(5, bytes);
+            stmt.setInt(6, count);
+            stmt.setLong(7, bytes);
+            stmt.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Failed to count a mail statistic: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** I conteggi prima del giorno dato: quante righe ha tolto. */
+    public int deleteEmailStatsBefore(java.time.LocalDate day) {
+        try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_DELETE_STATS_BEFORE)) {
+            stmt.setDate(1, java.sql.Date.valueOf(day));
+            return stmt.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Failed to remove old mail statistics: " + e.getMessage());
+            return 0;
+        }
+    }
+
     // ========== RSPAMD TRAINING ==========
 
     public boolean logRspamdTraining(String messageId, String trainedAs, int trainedBy) {

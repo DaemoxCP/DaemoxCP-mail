@@ -33,7 +33,6 @@ Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx �
 - [I programmi della posta](#i-programmi-della-posta)
 - [Sicurezza: chi gira da root, e perché](#sicurezza-chi-gira-da-root-e-perché)
 - [Installazione](#installazione)
-- [Cosa non c'è ancora](#cosa-non-cè-ancora)
 - [L'uso di tutti i giorni](#luso-di-tutti-i-giorni)
 - [Tenerlo aggiornato](#tenerlo-aggiornato)
 - [Da FreeBSD Mail Panel](#da-freebsd-mail-panel)
@@ -87,7 +86,9 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   di ogni messaggio che una casella manda dopo essersi autenticata, Postfix chiede al pannello. Ogni destinatario conta
   come un messaggio. Oltre un limite chi manda riceve un rifiuto temporaneo (`450 4.7.1`) che dice il perché. La posta
   in arrivo non si conta, e col pannello fermo la posta passa.
-- Statistiche da Rspamd: spam, ham e addestramento.
+- Statistiche: posta mandata e ricevuta per giorno e per dominio, spam e virus rifiutati da Rspamd, rimbalzi. Il
+  pannello le conta dal registro di Postfix ogni minuto (giorni in UTC, solo le sue caselle, tenute 400 giorni); anche
+  l'addestramento antispam e i numeri di Rspamd.
 - POP3 a scelta (spento all'inizio).
 
 **DNS e certificati**
@@ -556,15 +557,6 @@ quest'ordine:
 
 ---
 
-## Cosa non c'è ancora
-
-Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, così nessuno ci conta:
-
-- **I conteggi di posta inviata e ricevuta** non vengono raccolti: la pagina delle statistiche mostra solo i numeri
-  di Rspamd.
-
----
-
 ## L'uso di tutti i giorni
 
 | Pagina | Cosa ci fai |
@@ -573,7 +565,7 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
 | **Domini**, **Caselle**, **Alias** | la posta, compresi gli indirizzi catch-all; da una casella: password, filtri Sieve, risposta automatica, profilo Apple, accesso alla webmail |
 | **Coda di posta** | cosa aspetta, perché, e cosa farne |
 | **Limiti di invio** | messaggi all'ora e al giorno per casella, destinatari per messaggio, la dimensione massima dei messaggi |
-| **Statistiche** | spam, ham e addestramento, da Rspamd |
+| **Statistiche** | posta mandata e ricevuta per giorno e per dominio, spam, rimbalzi, e l'addestramento antispam da Rspamd |
 | **DNS** | i record di ogni dominio, *Configura tutto*, MTA-STS, rotazione DKIM |
 | **Certificati SSL** | Let's Encrypt, i certificati del pannello e della webmail, le scadenze |
 | **Cloudflare** | account e token, quali zone vede ognuno |

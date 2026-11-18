@@ -875,6 +875,10 @@ public class SSLMailServer {
             // I limiti d'invio delle caselle: il pannello fa da servizio di policy per Postfix (SendingLimits), poi Postfix
             // glielo chiede prima di ogni messaggio che una casella manda.
             if (org.daemoxcp.mail.system.SendingLimits.start()) org.daemoxcp.mail.system.SendingLimits.ensurePostfix();
+
+            // I conteggi di posta mandata e ricevuta, dal registro di Postfix, ogni minuto (MailLogStats): la pagina
+            // Statistiche li legge da email_statistics.
+            org.daemoxcp.mail.system.MailLogStats.start();
             org.daemoxcp.mail.system.SyslogNetwork.ensureAtBoot();
             org.daemoxcp.mail.system.VmailPermissions.ensureAtBoot();
             // rspamd tutto col suo utente, anche il processo principale: le sue porte sono sopra la 1023 e

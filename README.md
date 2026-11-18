@@ -33,7 +33,6 @@ Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx �
 - [The mail stack](#the-mail-stack)
 - [Security model: who runs as root, and why](#security-model-who-runs-as-root-and-why)
 - [Installation](#installation)
-- [Not there yet](#not-there-yet)
 - [Daily use](#daily-use)
 - [Keeping it up to date](#keeping-it-up-to-date)
 - [Coming from FreeBSD Mail Panel](#coming-from-freebsd-mail-panel)
@@ -87,7 +86,9 @@ It is **careful**. The panel never changes something it cannot check, and it say
   Before each message a mailbox sends after signing in, Postfix asks the panel. Each recipient counts as one message.
   Over a limit the sender gets a temporary refusal (`450 4.7.1`) that says why. Incoming mail is not counted, and with
   the panel stopped mail passes.
-- Statistics from Rspamd: spam, ham and spam training.
+- Statistics: mail sent and received per day and per domain, spam and viruses Rspamd refused, bounces. The panel
+  counts them from Postfix's log every minute (days in UTC, only its own mailboxes, kept 400 days); spam training
+  and Rspamd's own figures too.
 - Optional POP3 (off by default).
 
 **DNS and certificates**
@@ -548,14 +549,6 @@ first, with *Cancel* selected: press Tab to reach *OK*. Go through the options i
 
 ---
 
-## Not there yet
-
-What the panel shows but does not do yet. It is said on the pages too, so nobody counts on it:
-
-- **Sent and received counts** are not collected: the statistics page shows Rspamd's figures only.
-
----
-
 ## Daily use
 
 | Page | What you do there |
@@ -564,7 +557,7 @@ What the panel shows but does not do yet. It is said on the pages too, so nobody
 | **Domains**, **Mailboxes**, **Aliases** | the mail itself, catch-all addresses included; from a mailbox: password, Sieve filters, vacation reply, Apple profile, webmail sign-in |
 | **Mail queue** | what is waiting, why, and what to do with it |
 | **Sending limits** | messages per hour and per day for each mailbox, recipients per message, the maximum message size |
-| **Statistics** | spam, ham and spam training, from Rspamd |
+| **Statistics** | mail sent and received per day and per domain, spam, bounces, and spam training from Rspamd |
 | **DNS** | the records of each domain, *Set up everything*, MTA-STS, DKIM rotation |
 | **SSL certificates** | Let's Encrypt, the panel's and the webmail's certificates, their expiry |
 | **Cloudflare** | accounts and tokens, which zones each one sees |

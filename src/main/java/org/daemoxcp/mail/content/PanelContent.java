@@ -9876,11 +9876,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- Nessun componente del pannello scrive email_statistics (incrementEmailStat non e'
-                 chiamato da nessuno): i conteggi di invio e ricezione restano a zero. Si dice,
-                 invece di mostrare zeri come se fossero misure. Rspamd invece e' letto davvero. -->
-            <div class="alert alert-warning small" role="note">
-                <i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>{{t:st.notCollected.html}}
+            <!-- Che cosa contano i numeri qui sotto: MailLogStats li legge dal registro di Postfix ogni minuto e li scrive
+                 in email_statistics. Si dice, invece di lasciar indovinare che cosa sia un «mandato». -->
+            <div class="alert alert-info small" role="note">
+                <i class="fas fa-circle-info me-1" aria-hidden="true"></i>{{t:st.collectedHow}}
             </div>
             <div id="statsMsg" role="status" aria-live="polite"></div>
 
