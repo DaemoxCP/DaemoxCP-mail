@@ -684,6 +684,7 @@ public final class DovecotConfig {
               query = SELECT email AS user, password FROM mailboxes WHERE email = '%{user}' AND active = 1
             }
 
+            __QUOTA_USERDB__
             userdb static {
               fields {
                 uid = vmail
@@ -691,10 +692,80 @@ public final class DovecotConfig {
                 home = /var/vmail/%{user | domain}/%{user | username}/home
               }
             }
-            """, true));
+            """.replace("__QUOTA_USERDB__\n", QUOTA_USERDB), true));
+
+        // Le quote: il plugin, la radice e il servizio che Postfix interroga (le stesse righe della riparazione
+        // all'avvio, system.DovecotQuota).
+        f.add(new FileConf("conf.d/" + QUOTA_FILE_NAME, QUOTA_FILE, false));
 
         return f;
     }
+
+    /** Il file delle quote nella 2.4 (conf.d), scritto dall'installazione e dalla riparazione all'avvio (DovecotQuota). */
+    public static final String QUOTA_FILE_NAME = "90-quota.conf";
+
+    /**
+     * Le quote delle caselle nella 2.4: il plugin quota per tutti i protocolli (LMTP compreso: le voci di mail_plugins
+     * dentro protocol si aggiungono a queste), imap_quota per IMAP (GETQUOTAROOT, che Roundcube mostra), una radice
+     * col driver count, e il servizio quota-status che Postfix interroga prima di accettare un destinatario.
+     *
+     * <p>Il limite di ogni casella lo da' il userdb sql ({@link #QUOTA_USERDB}); senza, vale quota_storage_size, cioe'
+     * nessun limite. Una casella piena risponde 452 4.2.2: temporaneo, chi manda riprova per qualche giorno e il
+     * messaggio arriva se intanto si fa spazio, invece di tornare indietro. Per un destinatario che non e' una
+     * casella, o quando tutto va bene, DUNNO: decidono le altre regole di Postfix, come prima. Il socket sta nella
+     * coda di Postfix, 0600 suo, come quello di LMTP. Il servizio gira come vmail, non root: la prima prova sulla VM
+     * l'ha fatto girare da root, e ServiceUsers l'ha segnalato (18/11/2026).
+     */
+    public static final String QUOTA_FILE = """
+            # Le quote delle caselle (DaemoxCP Mail). Il limite di ogni casella arriva dal database (userdb sql in
+            # auth-sql.conf.ext, quota_mb in MB; 0 = nessun limite).
+            mail_plugins {
+              quota = yes
+            }
+
+            protocol imap {
+              mail_plugins {
+                imap_quota = yes
+              }
+            }
+
+            quota "User quota" {
+            }
+
+            # Postfix chiede prima di accettare un destinatario (check_policy_service). Una casella piena: 452,
+            # temporaneo, chi manda riprova per qualche giorno. Gira come vmail: legge il userdb (auth-userdb e' di
+            # vmail) e gli indici delle caselle (di vmail); root non gli serve (ServiceUsers lo segnalerebbe).
+            service quota-status {
+              executable = quota-status -p postfix
+              user = vmail
+              unix_listener /var/spool/postfix/private/quota-status {
+                mode = 0600
+                user = postfix
+                group = postfix
+              }
+              client_limit = 1
+            }
+
+            quota_status_success = DUNNO
+            quota_status_nouser = DUNNO
+            quota_status_overquota = 452 4.2.2 Mailbox is full
+            """;
+
+    /**
+     * Il limite di ogni casella, prima del userdb static: i suoi campi si aggiungono a quelli di static (continue-ok), e
+     * un indirizzo che non e' una casella attiva passa a static come prima (continue). iterate_query serve a doveadm
+     * con -A (l'uso di tutte le caselle nella pagina Caselle).
+     */
+    public static final String QUOTA_USERDB = """
+            # Il limite di ogni casella (quota_mb in MB; 0 = nessun limite): si aggiunge ai campi di userdb static
+            userdb sql {
+              query = SELECT CONCAT(quota_mb, 'M') AS quota_storage_size FROM mailboxes WHERE email = '%{user}' AND active = 1
+              iterate_query = SELECT email AS user FROM mailboxes WHERE active = 1
+              result_success = continue-ok
+              result_failure = continue
+            }
+
+            """;
 
     /**
      * Impostazioni che la documentazione ufficiale conferma, e quelle che invece restano da
