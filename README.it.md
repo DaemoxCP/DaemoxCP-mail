@@ -72,7 +72,9 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   La copia è cifrata con una chiave pubblica: la legge solo la parte root del pannello.
 - Filtri Sieve e risposte automatiche, compilati e controllati sul server.
 - Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
-- Statistiche da Rspamd: spam, ham e addestramento.
+- Statistiche: posta mandata e ricevuta per giorno e per dominio, spam e virus rifiutati da Rspamd, rimbalzi. Il
+  pannello le conta dal registro di Postfix ogni minuto (giorni in UTC, solo le sue caselle, tenute 400 giorni); anche
+  l'addestramento antispam e i numeri di Rspamd.
 - POP3 a scelta (spento all'inizio).
 
 **DNS e certificati**
@@ -547,8 +549,6 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
 - **Le quote** si salvano con ogni casella, ma Dovecot non le applica.
 - **I limiti d'invio all'ora e al giorno** si salvano, ma né Postfix né Rspamd li leggono: si applica solo la
   dimensione massima dei messaggi.
-- **I conteggi di posta inviata e ricevuta** non vengono raccolti: la pagina delle statistiche mostra solo i numeri
-  di Rspamd.
 - **Il cambio password dalla webmail** passa dal pannello quando il plugin `password` di Roundcube è acceso, ma
   un'installazione nuova non lo accende.
 - **Gli indirizzi catch-all** non si possono creare dal pannello.
@@ -563,7 +563,7 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
 | **Domini**, **Caselle**, **Alias** | la posta; da una casella: password, filtri Sieve, risposta automatica, profilo Apple, accesso alla webmail |
 | **Coda di posta** | cosa aspetta, perché, e cosa farne |
 | **Limiti di invio** | la dimensione massima dei messaggi |
-| **Statistiche** | spam, ham e addestramento, da Rspamd |
+| **Statistiche** | posta mandata e ricevuta per giorno e per dominio, spam, rimbalzi, e l'addestramento antispam da Rspamd |
 | **DNS** | i record di ogni dominio, *Configura tutto*, MTA-STS, rotazione DKIM |
 | **Certificati SSL** | Let's Encrypt, i certificati del pannello e della webmail, le scadenze |
 | **Cloudflare** | account e token, quali zone vede ognuno |

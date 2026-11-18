@@ -861,6 +861,9 @@ public class SSLMailServer {
             // Postfix e Dovecot in MySQL coi loro utenti, che leggono solo le colonne che usano, e non piu' con
             // quello del pannello: dopo MysqlRoot (serve la root di MySQL) e MysqlListen (MySQL com'e' davvero).
             org.daemoxcp.mail.system.MailDbUsers.ensureAtBoot();
+            // I conteggi di posta mandata e ricevuta, dal registro di Postfix, ogni minuto (MailLogStats): la pagina
+            // Statistiche li legge da email_statistics.
+            org.daemoxcp.mail.system.MailLogStats.start();
             org.daemoxcp.mail.system.SyslogNetwork.ensureAtBoot();
             org.daemoxcp.mail.system.VmailPermissions.ensureAtBoot();
             // rspamd tutto col suo utente, anche il processo principale: le sue porte sono sopra la 1023 e

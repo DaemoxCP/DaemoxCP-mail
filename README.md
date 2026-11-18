@@ -72,7 +72,9 @@ It is **careful**. The panel never changes something it cannot check, and it say
   encrypted with a public key, and only the root part of the panel can read it.
 - Sieve filters and vacation replies, compiled and checked server side.
 - A mail queue you can inspect and act on; the maximum message size.
-- Statistics from Rspamd: spam, ham and spam training.
+- Statistics: mail sent and received per day and per domain, spam and viruses Rspamd refused, bounces. The panel
+  counts them from Postfix's log every minute (days in UTC, only its own mailboxes, kept 400 days); spam training
+  and Rspamd's own figures too.
 - Optional POP3 (off by default).
 
 **DNS and certificates**
@@ -538,7 +540,6 @@ What the panel shows but does not do yet. It is said on the pages too, so nobody
 - **Quotas** are saved with each mailbox, but Dovecot does not enforce them.
 - **Hourly and daily sending limits** are saved, but neither Postfix nor Rspamd reads them: only the maximum
   message size is applied.
-- **Sent and received counts** are not collected: the statistics page shows Rspamd's figures only.
 - **Changing the password from the webmail** goes through the panel when Roundcube's `password` plugin is on, but a
   new installation does not turn it on.
 - **Catch-all addresses** cannot be created from the panel.
@@ -553,7 +554,7 @@ What the panel shows but does not do yet. It is said on the pages too, so nobody
 | **Domains**, **Mailboxes**, **Aliases** | the mail itself; from a mailbox: password, Sieve filters, vacation reply, Apple profile, webmail sign-in |
 | **Mail queue** | what is waiting, why, and what to do with it |
 | **Sending limits** | the maximum message size |
-| **Statistics** | spam, ham and spam training, from Rspamd |
+| **Statistics** | mail sent and received per day and per domain, spam, bounces, and spam training from Rspamd |
 | **DNS** | the records of each domain, *Set up everything*, MTA-STS, DKIM rotation |
 | **SSL certificates** | Let's Encrypt, the panel's and the webmail's certificates, their expiry |
 | **Cloudflare** | accounts and tokens, which zones each one sees |
