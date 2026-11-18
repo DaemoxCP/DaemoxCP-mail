@@ -214,9 +214,9 @@ public class FullMailStackScript {
             fi
             MYSQL_WORK=$(mktemp -d /var/tmp/daemoxcp-mail-all.XXXXXXXX) || exit 1
             trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
-            if mysql --no-defaults -u root --password= -e "SELECT 1" >/dev/null 2>&1; then
+            if mysql --no-defaults -u root -e "SELECT 1" >/dev/null 2>&1; then
                 echo "Fresh MySQL: setting the root password"
-                if ! mysql --no-defaults -u root --password= << EOROOT
+                if ! mysql --no-defaults -u root << EOROOT
             ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
             EOROOT
                 then

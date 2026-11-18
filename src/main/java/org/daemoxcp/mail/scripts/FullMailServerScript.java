@@ -482,12 +482,15 @@ MYSQL_SETUP_SQL="$MYSQL_WORK/setup.sql"
 #
 # Se si entra senza password, questo MySQL e' nuovo e la password si imposta adesso. Se non
 # si entra, una password c'e' gia' e deve essere quella del pannello: non si va a indovinare.
-if mysql -u root --password= -e "SELECT 1" >/dev/null 2>&1; then
+# Senza nessuna opzione di password e senza file di opzioni (--no-defaults): cosi' si prova
+# davvero "root senza password", e MySQL non stampa "Using a password on the command line
+# interface can be insecure", che con --password= vuoto compariva nel registro dell'installazione.
+if mysql --no-defaults -u root -e "SELECT 1" >/dev/null 2>&1; then
     echo "  Fresh MySQL: setting the root password"
     # Here-document NON quotato: $MYSQL_ROOT_PASSWORD si espande una volta sola, quindi un
     # dollaro DENTRO la password non viene riespanso. L'alfabeto del generatore non ha
     # apice, virgolette, barra rovescia ne' accento grave, che qui spezzerebbero la riga.
-    if ! mysql -u root --password= << EOROOT
+    if ! mysql --no-defaults -u root << EOROOT
 ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASSWORD';
 FLUSH PRIVILEGES;
 EOROOT
