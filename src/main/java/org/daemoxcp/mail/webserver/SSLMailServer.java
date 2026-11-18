@@ -359,6 +359,8 @@ public class SSLMailServer {
         context("/api/pop3", Access.api(SETTINGS), this::handleApiPop3);
         // IPv4, IPv6 o tutte e due: Postfix, Dovecot, nginx e pf (IpFamily). SSH non segue mai la scelta.
         context("/api/ip-family", Access.api(SETTINGS), this::handleApiIpFamily);
+        // Gli indirizzi del server e la guida fra IPv4 e IPv6, in tutte e due le direzioni (ServerAddresses).
+        context("/api/server-addresses", Access.api(SETTINGS), this::handleApiServerAddresses);
     }
 
     /**
@@ -11918,6 +11920,218 @@ public class SSLMailServer {
             response = new JSONObject().put("success", false).put("error", I18n.tr("server.requestFailed"));
         }
         sendJsonResponse(exchange, response);
+    }
+
+    /**
+     * /api/server-addresses: gli indirizzi del server e la guida per passare fra IPv4 e IPv6, solo IPv4, solo IPv6, in
+     * tutte e due le direzioni (ServerAddresses, AddressGuide, HostRecords, ReverseDns). Permesso settings.manage: ogni
+     * cambiamento vuole una conferma recente (Access.CONFIRMED). SSH non si tocca mai.
+     *
+     *  GET  ?goal=both|ipv4|ipv6  lo stato, i fatti e i passi della guida verso quell'obiettivo
+     *  POST {action: add-ipv6 (address, prefix, gateway) | remove-ipv6 | add-ipv4 | clean-ipv4 |
+     *        dns (type A|AAAA, op add|remove) | web-aaaa}
+     */
+    private void handleApiServerAddresses(HttpExchange exchange) throws IOException {
+        JSONObject response;
+        try {
+            String method = exchange.getRequestMethod();
+            String via = exchange.getRemoteAddress() == null || exchange.getRemoteAddress().getAddress() == null
+                    ? null : exchange.getRemoteAddress().getAddress().getHostAddress();
+            org.daemoxcp.mail.system.IpFamily.Family viaFamily = org.daemoxcp.mail.system.IpFamily.connectionFamily(via);
+            if ("GET".equals(method)) {
+                org.daemoxcp.mail.system.AddressGuide.Goal goal =
+                        org.daemoxcp.mail.system.AddressGuide.Goal.of(String.valueOf(extractParamFromQuery(exchange.getRequestURI().getQuery(), "goal")));
+                response = addressGuideState(goal == null ? org.daemoxcp.mail.system.AddressGuide.Goal.BOTH : goal, viaFamily);
+            } else if ("POST".equals(method)) {
+                JSONObject req = new JSONObject(readRequestBodyWithLimit(exchange));
+                response = addressGuideAction(req, viaFamily, getClientIp(exchange));
+            } else {
+                exchange.getResponseHeaders().set("Allow", "GET, POST");
+                sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
+                return;
+            }
+        } catch (Exception e) {
+            LOGGER.warning("[ServerAddresses] request failed: " + e.getMessage());
+            response = new JSONObject().put("success", false).put("error", I18n.tr("server.requestFailed"));
+        }
+        sendJsonResponse(exchange, response);
+    }
+
+    /** Lo stato degli indirizzi, i fatti DNS e i passi della guida verso l'obiettivo. */
+    private JSONObject addressGuideState(org.daemoxcp.mail.system.AddressGuide.Goal goal,
+                                         org.daemoxcp.mail.system.IpFamily.Family viaFamily) throws Exception {
+        org.daemoxcp.mail.system.ServerAddresses.State s = org.daemoxcp.mail.system.ServerAddresses.readForGuide();
+        boolean v4Out = s.v4().present() && org.daemoxcp.mail.system.ServerAddresses.goesOut("ipv4");
+        boolean v6Out = !s.v6().addresses().isEmpty() && s.v6().route() && org.daemoxcp.mail.system.ServerAddresses.goesOut("ipv6");
+        String host = Main.mailDatabase == null ? "" : Main.mailDatabase.getSetting("mail_hostname", "");
+        boolean hostOk = host != null && host.matches("[A-Za-z0-9.-]{1,253}") && host.contains(".");
+        String ip4 = v4Out && dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
+        String ip6 = s.v6().addresses().isEmpty() ? "" : s.v6().addresses().get(0);
+        Boolean a = hostOk && !ip4.isEmpty() ? org.daemoxcp.mail.security.HostRecords.published(host, "A", ip4)
+                : hostOk ? org.daemoxcp.mail.security.HostRecords.hasAny(host, "A") : null;
+        Boolean aaaa = hostOk && !ip6.isEmpty() ? org.daemoxcp.mail.security.HostRecords.published(host, "AAAA", ip6)
+                : hostOk ? org.daemoxcp.mail.security.HostRecords.hasAny(host, "AAAA") : null;
+        Boolean ptr4 = hostOk && !ip4.isEmpty() ? org.daemoxcp.mail.security.ReverseDns.check(ip4, host).ok() : null;
+        org.daemoxcp.mail.security.ReverseDns.Check ptr6Check = hostOk && !ip6.isEmpty()
+                ? org.daemoxcp.mail.security.ReverseDns.check(ip6, host) : null;
+        Boolean ptr6 = ptr6Check == null ? null : ptr6Check.ok();
+        Boolean webAaaa = webNamesOn(true, ip4, ip6);
+        Boolean webA = webNamesOn(false, ip4, ip6);
+        org.daemoxcp.mail.system.IpFamily.Family mail = org.daemoxcp.mail.system.IpFamily.effective();
+        org.daemoxcp.mail.system.AddressGuide.Facts f = new org.daemoxcp.mail.system.AddressGuide.Facts(
+                s.v4().present(), v4Out, !s.v4().rcLine().isEmpty(), !s.v6().addresses().isEmpty(), v6Out,
+                a, aaaa, ptr4, ptr6, webAaaa, webA, mail, viaFamily, s.sshOnV6());
+        java.util.List<org.daemoxcp.mail.system.AddressGuide.Step> plan = org.daemoxcp.mail.system.AddressGuide.plan(f, goal);
+
+        JSONArray steps = new JSONArray();
+        for (org.daemoxcp.mail.system.AddressGuide.Step st : plan)
+            steps.put(new JSONObject().put("id", st.id()).put("who", st.who()).put("status", st.status())
+                    .put("blocked", st.blocked() == null ? JSONObject.NULL : I18n.tr(st.blocked())));
+        JSONObject state = new JSONObject()
+                .put("iface", s.iface() == null ? JSONObject.NULL : s.iface())
+                .put("v4", new JSONObject().put("addresses", new JSONArray(s.v4().addresses())).put("route", s.v4().route()).put("internet", v4Out)
+                        .put("public", ip4))
+                .put("v6", new JSONObject().put("addresses", new JSONArray(s.v6().addresses())).put("route", s.v6().route()).put("internet", v6Out));
+        JSONObject dns = new JSONObject().put("host", hostOk ? host : JSONObject.NULL)
+                .put("a", a == null ? JSONObject.NULL : a).put("aaaa", aaaa == null ? JSONObject.NULL : aaaa)
+                .put("ptr4", ptr4 == null ? JSONObject.NULL : ptr4).put("ptr6", ptr6 == null ? JSONObject.NULL : ptr6)
+                .put("ptr6Found", ptr6Check == null || ptr6Check.ptr() == null ? JSONObject.NULL : ptr6Check.ptr())
+                .put("webAaaa", webAaaa == null ? JSONObject.NULL : webAaaa)
+                .put("webA", webA == null ? JSONObject.NULL : webA)
+                .put("cloudflare", hostOk && org.daemoxcp.mail.security.HostRecords.canWrite(Main.mailDatabase, cloudflareManager, host));
+        org.daemoxcp.mail.system.ServerAddresses.Suggestion sg = s.suggestion();
+        return new JSONObject().put("success", true).put("goal", goal.key).put("recommended", "both")
+                .put("reached", org.daemoxcp.mail.system.AddressGuide.reached(plan))
+                .put("state", state).put("dns", dns).put("mail", mail.key)
+                .put("via", viaFamily == null ? JSONObject.NULL : viaFamily.key).put("sshOnV6", s.sshOnV6())
+                .put("suggestion", sg == null ? JSONObject.NULL
+                        : new JSONObject().put("address", sg.address()).put("prefix", sg.prefix()).put("gateway", sg.gateway()).put("source", sg.source()))
+                .put("steps", steps);
+    }
+
+    /**
+     * Se i nomi del pannello e della webmail, su Cloudflare, arrivano al server in IPv6 (v6 true: AAAA verso l'IPv6 e
+     * nessun A verso l'IPv4) o in IPv4 (v6 false: A verso l'IPv4 e nessun AAAA verso l'IPv6). Con A e AAAA insieme
+     * Cloudflare usa l'IPv4. Nessun nome: TRUE (niente da fare). Nessun account che veda la zona: null.
+     */
+    private Boolean webNamesOn(boolean v6, String ip4, String ip6) {
+        String want = v6 ? ip6 : ip4, other = v6 ? ip4 : ip6;
+        if (want == null || want.isEmpty()) return null;
+        java.util.List<String> names = webNames();
+        if (names.isEmpty()) return true;
+        for (String n : names) {
+            org.daemoxcp.mail.security.HostRecords.Outcome has =
+                    org.daemoxcp.mail.security.HostRecords.check(Main.mailDatabase, cloudflareManager, n, v6 ? "AAAA" : "A", want);
+            if (has == null) return null;
+            if (!has.ok()) return false;
+            if (other != null && !other.isEmpty()) {
+                org.daemoxcp.mail.security.HostRecords.Outcome also =
+                        org.daemoxcp.mail.security.HostRecords.check(Main.mailDatabase, cloudflareManager, n, v6 ? "A" : "AAAA", other);
+                if (also != null && also.ok()) return false;
+            }
+        }
+        return true;
+    }
+
+    /** I nomi del pannello e della webmail, dalla configurazione (quelli che passano da Cloudflare col proxy). */
+    private java.util.List<String> webNames() {
+        java.util.List<String> names = new java.util.ArrayList<>();
+        if (Main.dbManager == null) return names;
+        try (java.sql.ResultSet r = Main.dbManager.get_data_config()) {
+            if (r.next()) {
+                for (String col : java.util.List.of("panel_host", "roundcube_domain")) {
+                    String h = r.getString(col);
+                    if (h != null && h.trim().matches("[A-Za-z0-9.-]{3,253}") && h.contains(".") && !h.endsWith(".example.com"))
+                        names.add(h.trim().toLowerCase(java.util.Locale.ROOT));
+                }
+            }
+        } catch (Exception ignored) {
+            // nessuna configurazione: nessun nome
+        }
+        return names;
+    }
+
+    /** Un passo della guida: chi lo chiede, cosa fa, e il registro delle azioni. */
+    private JSONObject addressGuideAction(JSONObject req, org.daemoxcp.mail.system.IpFamily.Family viaFamily, String clientIp) throws Exception {
+        String action = req.optString("action", "");
+        org.daemoxcp.mail.system.ServerAddresses.Result r;
+        switch (action) {
+            case "add-ipv6" -> r = org.daemoxcp.mail.system.ServerAddresses.addIpv6(req.optString("address", "").trim(),
+                    req.optInt("prefix", 64), req.optString("gateway", "").trim());
+            case "remove-ipv6" -> {
+                if (viaFamily == org.daemoxcp.mail.system.IpFamily.Family.IPV6)
+                    return new JSONObject().put("success", false).put("error", I18n.tr("guide.blocked.viaV6"));
+                r = org.daemoxcp.mail.system.ServerAddresses.removeIpv6();
+            }
+            case "add-ipv4" -> r = org.daemoxcp.mail.system.ServerAddresses.addIpv4();
+            case "clean-ipv4" -> r = org.daemoxcp.mail.system.ServerAddresses.cleanIpv4();
+            case "dns" -> {
+                return addressDnsAction(req.optString("type", ""), req.optString("op", ""), clientIp);
+            }
+            case "web-aaaa" -> {
+                return addressWebNames(true, clientIp);
+            }
+            case "web-a" -> {
+                return addressWebNames(false, clientIp);
+            }
+            default -> {
+                return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
+            }
+        }
+        logAudit(r.ok() ? "SERVER_ADDRESSES_" + action.toUpperCase(java.util.Locale.ROOT).replace('-', '_')
+                : "SERVER_ADDRESSES_" + action.toUpperCase(java.util.Locale.ROOT).replace('-', '_') + "_FAILED", clientIp, r.journal());
+        return new JSONObject().put("success", r.ok()).put(r.ok() ? "message" : "error", I18n.tr(r.message())).put("journal", r.journal());
+    }
+
+    /** Il record A o AAAA del nome della posta: crearlo (senza proxy) o toglierlo. */
+    private JSONObject addressDnsAction(String type, String op, String clientIp) {
+        if (!"A".equals(type) && !"AAAA".equals(type)) return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
+        if (!"add".equals(op) && !"remove".equals(op)) return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
+        String host = Main.mailDatabase == null ? "" : Main.mailDatabase.getSetting("mail_hostname", "");
+        org.daemoxcp.mail.system.ServerAddresses.State s = org.daemoxcp.mail.system.ServerAddresses.read();
+        String ip = "A".equals(type) ? (dnsGenerator != null ? dnsGenerator.detectServerIp() : "")
+                : s.v6().addresses().isEmpty() ? "" : s.v6().addresses().get(0);
+        if ("A".equals(type) && "remove".equals(op) && ip.isEmpty()) {
+            // Senza IPv4 il server non sa piu' il suo indirizzo: si toglie ogni A del nome che il DNS pubblico mostra.
+            ip = org.daemoxcp.mail.util.Shell.run(java.time.Duration.ofSeconds(10), "dig", "+short", "A", host).outputTrim().split("\n")[0].trim();
+        }
+        if (ip.isEmpty()) return new JSONObject().put("success", false).put("error", I18n.tr("server.hr.noIp", Map.of("t", type)));
+        org.daemoxcp.mail.security.HostRecords.Outcome o = "add".equals(op)
+                ? org.daemoxcp.mail.security.HostRecords.ensure(Main.mailDatabase, cloudflareManager, host, type, ip, false)
+                : org.daemoxcp.mail.security.HostRecords.remove(Main.mailDatabase, cloudflareManager, host, type, ip);
+        logAudit("SERVER_ADDRESSES_DNS_" + type + "_" + op.toUpperCase(java.util.Locale.ROOT) + (o.ok() ? "" : "_FAILED"), clientIp, host + " " + ip);
+        return new JSONObject().put("success", o.ok()).put(o.ok() ? "message" : "error", I18n.tr(o.key(), o.args()));
+    }
+
+    /**
+     * I nomi del pannello e della webmail su Cloudflare (col proxy) verso una sola famiglia: v6 true AAAA verso l'IPv6 e
+     * via gli A verso l'IPv4 (per un server che restera' solo IPv6), v6 false il contrario (per tornare a solo IPv4).
+     * Prima si crea il record nuovo, poi si toglie l'altro: in mezzo i nomi funzionano sempre.
+     */
+    private JSONObject addressWebNames(boolean v6, String clientIp) {
+        org.daemoxcp.mail.system.ServerAddresses.State s = org.daemoxcp.mail.system.ServerAddresses.read();
+        String ip6 = s.v6().addresses().isEmpty() ? "" : s.v6().addresses().get(0);
+        String ip4 = s.v4().present() && dnsGenerator != null ? dnsGenerator.detectServerIp() : "";
+        String want = v6 ? ip6 : ip4, other = v6 ? ip4 : ip6;
+        String type = v6 ? "AAAA" : "A", otherType = v6 ? "A" : "AAAA";
+        if (want.isEmpty()) return new JSONObject().put("success", false).put("error", I18n.tr("server.hr.noIp", Map.of("t", type)));
+        java.util.List<String> names = webNames();
+        if (names.isEmpty()) return new JSONObject().put("success", false).put("error", I18n.tr("server.hr.noWebNames"));
+        StringBuilder done = new StringBuilder();
+        for (String n : names) {
+            org.daemoxcp.mail.security.HostRecords.Outcome o =
+                    org.daemoxcp.mail.security.HostRecords.ensure(Main.mailDatabase, cloudflareManager, n, type, want, true);
+            if (o.ok() && !other.isEmpty())
+                o = org.daemoxcp.mail.security.HostRecords.remove(Main.mailDatabase, cloudflareManager, n, otherType, other);
+            if (!o.ok()) {
+                logAudit("SERVER_ADDRESSES_WEB_" + type + "_FAILED", clientIp, n);
+                return new JSONObject().put("success", false).put("error", I18n.tr(o.key(), o.args()));
+            }
+            done.append(done.length() == 0 ? "" : ", ").append(n);
+        }
+        logAudit("SERVER_ADDRESSES_WEB_" + type, clientIp, done.toString());
+        return new JSONObject().put("success", true)
+                .put("message", I18n.tr(v6 ? "server.hr.webDone" : "server.hr.webDoneV4", Map.of("names", done.toString())));
     }
 
     /**

@@ -69,7 +69,7 @@ public class SetTimeOnSystem {
 
             echo ""
             echo "[4/5] Synchronizing time with NTP server..."
-            ntpdate -u pool.ntp.org 2>/dev/null || echo "Warning: Could not sync with NTP (will sync on next boot)"
+            ntpdate -u 2.freebsd.pool.ntp.org 2>/dev/null || echo "Warning: Could not sync with NTP (will sync on next boot)"
 
             echo ""
             echo "Final time after synchronization:"

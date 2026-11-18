@@ -474,6 +474,9 @@ public class Main {
             if ("--ip-family".equals(args[i])) {
                 System.exit(setIpFamily(i + 1 < args.length ? args[i + 1] : null));
             }
+            if ("--addresses".equals(args[i])) {
+                System.exit(addresses(i + 1 < args.length ? args[i + 1] : null));
+            }
             // La reinstallazione completa staccata dal menu (ReinstallJob): la lancia la voce del
             // menu con daemon(8), in una sessione sua, e la segue. Chi chiude il terminale o uccide
             // il menu non la ferma piu' a meta' (reperto 163). L'esito va nel file indicato.
@@ -1883,6 +1886,56 @@ public class Main {
                     + (f == org.daemoxcp.mail.system.IpFamily.Family.BOTH ? "IPv4 and IPv6" : f == org.daemoxcp.mail.system.IpFamily.Family.IPV4 ? "IPv4 only" : "IPv6 only") + ".");
             for (String w : o.warnings()) System.out.println("  " + w);
             return 0;
+        } finally {
+            org.daemoxcp.mail.i18n.I18n.clearCurrent();
+        }
+    }
+
+    /**
+     * --addresses: gli indirizzi del server dalla console, la via d'uscita di chi non raggiunge piu' il pannello dopo un
+     * passo della guida (ServerAddresses). show li mostra; ipv6-off toglie l'IPv6 aggiunto dal pannello e rimette le
+     * righe di rc.conf di prima; ipv4-dhcp riprende l'IPv4 col DHCP. Gli stessi controlli e lo stesso ritorno a com'era
+     * della pagina. Da root: ifconfig, route e rc.conf. SSH non si tocca.
+     */
+    static int addresses(String value) {
+        if (value == null || !java.util.List.of("show", "ipv6-off", "ipv4-dhcp").contains(value)) {
+            System.err.println("Usage: java -jar daemoxcp-mail.jar --addresses show|ipv6-off|ipv4-dhcp");
+            return 2;
+        }
+        if (!"root".equals(System.getProperty("user.name"))) {
+            System.err.println("Run it as root: it reads and changes the network interface, the routes and /etc/rc.conf.");
+            return 2;
+        }
+        java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");
+        rootLogger.setLevel(java.util.logging.Level.WARNING);
+        for (java.util.logging.Handler h : rootLogger.getHandlers()) h.setLevel(java.util.logging.Level.WARNING);
+        String notConnected = connectFromConfig();
+        if (notConnected != null) {
+            System.err.println(notConnected);
+            return 2;
+        }
+        org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+        try {
+            if ("show".equals(value)) {
+                org.daemoxcp.mail.system.ServerAddresses.State s = org.daemoxcp.mail.system.ServerAddresses.read();
+                System.out.println("Interface: " + (s.iface() == null ? "(none found)" : s.iface()));
+                System.out.println("IPv4: " + (s.v4().addresses().isEmpty() ? "no address" : String.join(", ", s.v4().addresses()))
+                        + (s.v4().route() ? ", default route " + s.v4().gateway() : ", no default route")
+                        + (s.v4().present() ? (org.daemoxcp.mail.system.ServerAddresses.goesOut("ipv4") ? ", reaches the internet" : ", does NOT reach the internet") : ""));
+                System.out.println("IPv6: " + (s.v6().addresses().isEmpty() ? "no global address" : String.join(", ", s.v6().addresses()))
+                        + (s.v6().route() ? ", default route " + s.v6().gateway() : ", no default route")
+                        + (!s.v6().addresses().isEmpty() && s.v6().route() ? (org.daemoxcp.mail.system.ServerAddresses.goesOut("ipv6") ? ", reaches the internet" : ", does NOT reach the internet") : ""));
+                System.out.println("Mail answers on: " + org.daemoxcp.mail.system.IpFamily.effective().key);
+                return 0;
+            }
+            org.daemoxcp.mail.system.ServerAddresses.Result r = "ipv6-off".equals(value)
+                    ? org.daemoxcp.mail.system.ServerAddresses.removeIpv6()
+                    : org.daemoxcp.mail.system.ServerAddresses.addIpv4();
+            String event = "ipv6-off".equals(value) ? "SERVER_ADDRESSES_REMOVE_IPV6" : "SERVER_ADDRESSES_ADD_IPV4";
+            mailDatabase.logAuditEvent(r.ok() ? event : event + "_FAILED", "127.0.0.1", r.journal() + " (console)", "console");
+            (r.ok() ? System.out : System.err).println(org.daemoxcp.mail.i18n.I18n.tr(r.message()));
+            if (!r.journal().isEmpty()) System.out.println("Log: /var/db/daemoxcp-mail/jobs/" + r.journal());
+            return r.ok() ? 0 : 1;
         } finally {
             org.daemoxcp.mail.i18n.I18n.clearCurrent();
         }

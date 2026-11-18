@@ -51,10 +51,20 @@ public final class IpFamily {
     static final String DOVECONF = "/usr/local/bin/doveconf";
     static final String NGINX_CONF = "/usr/local/etc/nginx/nginx.conf";
 
+    /**
+     * Solo IPv6 non toglie l'IPv4 di 127.0.0.1: la webmail parla con Dovecot (127.0.0.1:993) e con Postfix
+     * (127.0.0.1:587), Postfix col filtro antispam (inet:127.0.0.1:11332) e coi limiti d'invio, tutti in IPv4 sul
+     * loopback. Con inet_protocols = ipv6 Postfix non apre ne' usa piu' nessun socket IPv4 (postconf(5): il parametro
+     * vale per le connessioni che Postfix apre e per quelle che accetta), e con listen = :: Dovecot non
+     * risponde su 127.0.0.1: la webmail non spediva piu' e la posta passava senza antispam (trovato il 18/11/2026
+     * costruendo la guida degli indirizzi). Quindi: Postfix resta su «all» e preferisce l'IPv6 per spedire
+     * (smtp_address_preference = ipv6), Dovecot ascolta su :: e su 127.0.0.1, e chi arriva da fuori in IPv4 lo ferma pf
+     * (la regola della posta con «inet6»). Su un server senza IPv4, 127.0.0.1 resta sul loopback (rc.d/routing).
+     */
     public enum Family {
         BOTH("both", "all", "*, ::", ""),
         IPV4("ipv4", "ipv4", "*", "inet "),
-        IPV6("ipv6", "ipv6", "::", "inet6 ");
+        IPV6("ipv6", "all", "::, 127.0.0.1", "inet6 ");
 
         /** Il valore salvato. */
         public final String key;
@@ -201,10 +211,22 @@ public final class IpFamily {
         return new boolean[]{v4, v6};
     }
 
-    /** Vero se la porta ascolta esattamente nelle famiglie di f (nessuna in piu', nessuna in meno). Puro. */
+    /**
+     * Vero se la porta ascolta nelle famiglie di f: tutte e due, o solo IPv4 (nessun IPv6), o IPv6 (con solo IPv6 un
+     * IPv4 puo' esserci, quello del loopback di Dovecot e quello di Postfix su «all": da fuori lo ferma pf). Puro.
+     */
     static boolean listensAs(String sockstat, int port, Family f) {
         boolean[] l = listening(sockstat, port);
-        return l[0] == f.v4() && l[1] == f.v6();
+        return switch (f) {
+            case BOTH -> l[0] && l[1];
+            case IPV4 -> l[0] && !l[1];
+            case IPV6 -> l[1];
+        };
+    }
+
+    /** smtp_address_preference: con solo IPv6 si spedisce prima in IPv6; altrimenti il valore di Postfix («any»). Puro. */
+    static String postfixPreference(Family f) {
+        return f == Family.IPV6 ? "ipv6" : "any";
     }
 
     /** Vero se fra le rotte di netstat -rn ce n'e' una predefinita. Puro. */
@@ -237,6 +259,12 @@ public final class IpFamily {
         if (f == null) return Outcome.no(org.daemoxcp.mail.i18n.I18n.tr("server.badRequest"));
         String missing = missingNetwork(f);
         if (missing != null) return Outcome.no(missing);
+        // Dal pannello la posta va in IPv6 solo col DNS inverso IPv6 a posto (Gmail e Microsoft rifiutano senza). Dalla
+        // console no: e' la via d'uscita, e deve funzionare sempre.
+        if (via != null) {
+            String ptr = missingPtr6(f);
+            if (ptr != null) return Outcome.no(ptr);
+        }
         List<String> warnings = warnings(f, via);
         if (!confirmed && !warnings.isEmpty()) return Outcome.ask(warnings);
 
@@ -282,6 +310,23 @@ public final class IpFamily {
         return null;
     }
 
+    /**
+     * Se la famiglia porta la posta in IPv6 e il server ha un IPv6 globale, il DNS inverso di quell'indirizzo deve dare
+     * il nome della posta, e il nome tornare all'indirizzo: altrimenti il motivo. Senza un IPv6 globale non serve (la
+     * posta non esce in IPv6), senza nome della posta non lo si puo' controllare e non si blocca.
+     */
+    static String missingPtr6(Family f) {
+        if (!f.v6()) return null;
+        ServerAddresses.State s = ServerAddresses.read();
+        if (s.v6().addresses().isEmpty()) return null;
+        org.daemoxcp.mail.database.MailDatabase db = org.daemoxcp.mail.Main.mailDatabase;
+        String host = db == null ? "" : db.getSetting("mail_hostname", "");
+        if (host == null || !host.matches("[a-zA-Z0-9.-]{1,253}")) return null;
+        String ip = s.v6().addresses().get(0);
+        org.daemoxcp.mail.security.ReverseDns.Check c = org.daemoxcp.mail.security.ReverseDns.check(ip, host);
+        return c.ok() ? null : org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noPtr6", Map.of("ip", ip, "h", host));
+    }
+
     /** Quello che chi sceglie deve sapere prima: cosa smette di funzionare con quella famiglia. */
     static List<String> warnings(Family f, String via) {
         List<String> w = new ArrayList<>();
@@ -307,7 +352,7 @@ public final class IpFamily {
      * non filtra e che resta comunque) o se non si sa. Un indirizzo IPv4 visto da un socket IPv6 (::ffff:a.b.c.d) e'
      * IPv4: e' quella la famiglia che la scelta chiude.
      */
-    static Family connectionFamily(String address) {
+    public static Family connectionFamily(String address) {
         if (address == null || address.isBlank()) return null;
         try {
             InetAddress a = InetAddress.ofLiteral(address.trim().replaceFirst("%.*$", ""));   // senza la zona (%vtnet0)
@@ -344,13 +389,15 @@ public final class IpFamily {
 
     private static String postfix(Family f, Map<Path, byte[]> before, List<String> touched) throws Exception {
         if (!Files.isExecutable(Path.of(POSTCONF))) return null;
-        Family now = fromPostfix(postconf("-h", "inet_protocols"));
-        if (now == f) return null;
+        String preference = postfixPreference(f);
+        if (fromPostfix(postconf("-h", "inet_protocols")) == fromPostfix(f.postfix)
+                && preference.equals(postconf("-h", "smtp_address_preference").trim())) return null;
         Path mainCf = Path.of(postconf("-h", "config_directory"), "main.cf");
         if (!Files.isRegularFile(mainCf)) return "Postfix: " + mainCf + " not found";
         before.put(mainCf, Files.readAllBytes(mainCf));
         boolean checkedBefore = Shell.run(Duration.ofSeconds(60), POSTFIX, "check").success();
-        Shell.Result r = Shell.run(Duration.ofSeconds(30), POSTCONF, "-e", "inet_protocols=" + f.postfix);
+        Shell.Result r = Shell.run(Duration.ofSeconds(30), POSTCONF, "-e", "inet_protocols=" + f.postfix,
+                "smtp_address_preference=" + preference);
         if (!r.success()) return "Postfix: postconf -e failed: " + r.outputTrim();
         if (checkedBefore && !Shell.run(Duration.ofSeconds(60), POSTFIX, "check").success())
             return "Postfix: postfix check refuses inet_protocols = " + f.postfix;

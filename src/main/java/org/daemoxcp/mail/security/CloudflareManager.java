@@ -439,6 +439,28 @@ public class CloudflareManager {
     }
 
     /**
+     * Un record A o AAAA (ServerAddresses e HostRecords). Il nome della posta va sempre senza proxy: Cloudflare non fa
+     * passare la porta 25 (developers.cloudflare.com/dns/troubleshooting/email-issues/), e il nome a cui punta un MX deve
+     * essere «DNS only». Il pannello e la webmail invece si' (2096 e 8443 sono porte che Cloudflare inoltra).
+     */
+    public RecordOp createAddressRecord(String token, String zoneId, String name, String type, String ip, boolean proxied) {
+        if (!"A".equals(type) && !"AAAA".equals(type))
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", "type " + type)));
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("type", type);
+            payload.put("name", name);
+            payload.put("content", ip);
+            payload.put("proxied", proxied);
+            payload.put("ttl", 1);
+            payload.put("comment", RECORD_COMMENT);
+            return outcome(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
+        } catch (Exception e) {
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+        }
+    }
+
+    /**
      * Crea un SRV nella forma documentata da Cloudflare: nome completo in "name" e i soli
      * campi priority/weight/port/target dentro "data".
      *

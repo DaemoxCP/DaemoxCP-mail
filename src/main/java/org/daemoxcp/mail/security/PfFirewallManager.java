@@ -396,6 +396,12 @@ public class PfFirewallManager {
             res.error = I18n.tr("server.pffw.badCountry");
             return res;
         }
+        // ipdeny.com non ha l'IPv6 (nessun AAAA, 18/11/2026): senza IPv4 non si scarica, e lo si dice subito invece di
+        // aspettare il tempo massimo. Le liste gia' scaricate restano in uso.
+        if (!org.daemoxcp.mail.system.ServerAddresses.read().v4().present()) {
+            res.error = I18n.tr("server.pffw.noIpv4Source");
+            return res;
+        }
         try {
             Files.createDirectories(Paths.get(GEOIP_DIR));
             Path target = Paths.get(GEOIP_DIR, cc.toLowerCase() + ".zone");

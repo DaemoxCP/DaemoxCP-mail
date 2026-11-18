@@ -749,6 +749,23 @@ public class DnsRecordsGenerator {
         result.checks.add(ptrCheck);
         if (!ptrCheck.passed) result.allPassed = false;
 
+        // 8-bis. Il DNS inverso dell'IPv6, quando la posta esce anche in IPv6: Gmail («550 5.7.1 ... IPv6 sending
+        // guidelines regarding PTR records») e Microsoft (450 4.7.25) lo pretendono. Il controllo di sopra cerca un A,
+        // e per un IPv6 non poteva tornare: questo cerca un AAAA (ReverseDns).
+        if (family.v6() && !serverIp6.isEmpty()) {
+            ReverseDns.Check r6 = ReverseDns.check(serverIp6, mailHostname);
+            DnsCheck ptr6 = new DnsCheck();
+            ptr6.recordType = "PTR";
+            ptr6.recordName = serverIp6;
+            ptr6.expectedValue = mailHostname;
+            ptr6.currentValue = r6.ptr();
+            ptr6.passed = r6.ok();
+            ptr6.message = r6.ok() ? "OK: " + serverIp6 + " → " + mailHostname
+                    : I18n.tr("server.dnsg.ptr6", java.util.Map.of("ip", serverIp6, "h", String.valueOf(mailHostname), "why", I18n.tr(r6.reason())));
+            result.checks.add(ptr6);
+            if (!ptr6.passed) result.allPassed = false;
+        }
+
         // 9. Check MTA-STS (optional but recommended)
         // Note: MTA-STS ID is just a version timestamp, doesn't need to match exactly
         DnsCheck mtaStsCheck = mtaStsCheck(domain,

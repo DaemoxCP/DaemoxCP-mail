@@ -7,7 +7,8 @@
 //   2. IPv4 only: Postfix (25), Dovecot (993) and the webmail (8443) listen on IPv4 only, pf lets the mail in only
 //      as inet, and from this computer the ports answer over IPv4 and not over IPv6.
 //   3. IPv6 only, with a temporary IPv6 default route on the test machine: first the warnings, then the change;
-//      the opposite of step 2.
+//      the opposite of step 2 from outside, while on 127.0.0.1 Dovecot and Postfix still answer (the webmail, the
+//      antispam and the sending limits use it).
 //   4. Both again, from the Settings card as a person does it (the confirmation window answered by the passkey).
 //   5. The console command, as root, the way back for whoever cut themselves off: --ip-family ipv4, then both;
 //      a wrong value gets the usage.
@@ -114,8 +115,17 @@ function families(sock, port) {
         async function looks(family, label) {
             const sock = remote('sockstat -46l -P tcp');
             const pf = remote('pfctl -sr 2>/dev/null');
-            const want = family === 'both' ? '46' : family === 'ipv4' ? '4' : '6';
-            for (const p of [25, 993, 8443]) check(label + ': port ' + p + ' listens as ' + family + ' (' + families(sock, p) + ')', families(sock, p) === want);
+            // IPv6 only keeps IPv4 on the loopback (the webmail, the antispam milter and the sending limits talk to
+            // Postfix and Dovecot on 127.0.0.1): there an IPv6 socket must be there, IPv4 ones may stay, and from
+            // outside IPv4 is kept away by pf (the reach checks below are the proof).
+            for (const p of [25, 993, 8443]) {
+                const f = families(sock, p);
+                const ok = family === 'both' ? f === '46' : family === 'ipv4' ? f === '4' : f.includes('6');
+                check(label + ': port ' + p + ' listens as ' + family + ' (' + f + ')', ok);
+            }
+            if (family === 'ipv6')
+                check(label + ': the local services still reach Dovecot (993) and Postfix (587) on 127.0.0.1',
+                    (() => { try { return remote('nc -z -w 3 127.0.0.1 993 && nc -z -w 3 127.0.0.1 587 && echo reached').includes('reached'); } catch (e) { return false; } })());
             const svc = pf.split('\n').filter(l => l.startsWith('pass in') && / port = (smtp|25)\b/.test(l));
             const kw = family === 'ipv4' ? ' inet ' : family === 'ipv6' ? ' inet6 ' : null;
             check(label + ': pf lets the mail in only as ' + family + ' (' + svc.map(l => l.replace(/\s+/g, ' ')).join(' | ') + ')',

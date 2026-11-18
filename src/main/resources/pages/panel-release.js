@@ -44,6 +44,7 @@
             if (/^http_\d{3}$/.test(code)) return t('rel.err.http', { code: code.slice(5) });
             switch (code) {
                 case 'network': return t('rel.err.network');
+                case 'no_ipv4': return t('rel.err.no_ipv4');
                 case 'not_found': return t('rel.err.not_found', { repository: r.repository || '' });
                 case 'rate_limited': return t('rel.err.rate_limited');
                 case 'invalid': return t('rel.err.invalid');

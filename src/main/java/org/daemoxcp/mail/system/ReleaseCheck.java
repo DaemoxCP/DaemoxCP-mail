@@ -163,7 +163,7 @@ public final class ReleaseCheck {
      *
      * @param api     l'indirizzo dell'elenco ({@link #API}; un altro solo nelle prove)
      * @param current la versione che gira
-     * @return checkedAt, ok, error (un codice: network, not_found, rate_limited, http_NNN, invalid, too_large) e
+     * @return checkedAt, ok, error (un codice: network, no_ipv4, not_found, rate_limited, http_NNN, invalid, too_large) e
      *         newest (la release piu' nuova, o assente)
      */
     static JSONObject check(URI api, Version current, Instant now) {
@@ -197,7 +197,8 @@ public final class ReleaseCheck {
         } catch (JSONException e) {
             return r.put("error", "invalid");
         } catch (IOException e) {
-            return r.put("error", "network");
+            // GitHub non ha l'IPv6 (api.github.com senza AAAA, 18/11/2026): su un server senza IPv4 non si raggiunge.
+            return r.put("error", ServerAddresses.read().v4().present() ? "network" : "no_ipv4");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return r.put("error", "network");

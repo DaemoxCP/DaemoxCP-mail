@@ -49,6 +49,7 @@ public final class ConfigBackups {
             Path.of("/etc/pf.conf"),
             Path.of("/etc/pf.anchors/panel-fw.conf"),
             Path.of("/etc/sysctl.conf"),
+            Path.of("/etc/rc.conf"),
             Path.of("/etc/resolv.conf"),
             Path.of("/usr/local/etc/unbound/unbound.conf"),
             Path.of("/var/unbound/unbound.conf"),
