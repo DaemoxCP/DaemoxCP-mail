@@ -10,7 +10,7 @@ import java.util.List;
  *
  * Reading the TXT record is tested in two ways. The meaning of every dig output, with real recorded
  * outputs (plus variants built on them): it holds everywhere, even without a network. Then the real
- * DNS: if it can be reached from here the real facts are required (on domain-d.test the record is
+ * DNS: if it can be reached from here the real facts are required (on gmail.com the record is
  * there, a SERVFAIL is not "absent"), otherwise the reading is required to say NOT_ASKED and never a
  * made-up ABSENT. Before, the test took the DNS for granted and failed on every machine that did not
  * have it, while the reading answered right.
@@ -119,12 +119,12 @@ public class MtaStsTest {
         System.out.println("\n== parseTxt(): what every dig output means ==");
         // REAL outputs of "dig +noall +comments +answer TXT _mta-sts.<domain>", recorded on 2/10/2026
         // with BIND 9.18 and the resolver 8.8.8.8 (which validates DNSSEC).
-        String domainD = ";; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 32535\n;; flags: qr rd ra ad; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1\n\n;; OPT PSEUDOSECTION:\n; EDNS: version: 0, flags:; udp: 512\n;; ANSWER SECTION:\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; id=0fec393151a7c577266a\"\n\n";
+        String published = ";; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 32535\n;; flags: qr rd ra ad; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1\n\n;; OPT PSEUDOSECTION:\n; EDNS: version: 0, flags:; udp: 512\n;; ANSWER SECTION:\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; id=0fec393151a7c577266a\"\n\n";
         String servfail = ";; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: SERVFAIL, id: 37005\n;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1\n\n;; OPT PSEUDOSECTION:\n; EDNS: version: 0, flags:; udp: 512\n; EDE: 9 (DNSKEY Missing): (No DNSKEY matches DS RRs of dnssec-failed.org)\n";
         String nxdomain = ";; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 2902\n;; flags: qr rd ra ad; QUERY: 1, ANSWER: 0, AUTHORITY: 1, ADDITIONAL: 1\n\n;; OPT PSEUDOSECTION:\n; EDNS: version: 0, flags:; udp: 512\n";
         String withoutTxt = ";; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 19074\n;; flags: qr rd ra ad; QUERY: 1, ANSWER: 0, AUTHORITY: 1, ADDITIONAL: 1\n\n;; OPT PSEUDOSECTION:\n; EDNS: version: 0, flags:; udp: 512\n";
         String unreachable = ";; communications error to 192.0.2.1#53: connection refused\n;; no servers could be reached\n";
-        randomBytes("domain-d.test, record published", 0, domainD,
+        randomBytes("domain-d.test, record published", 0, published,
                 MtaStsSetup.TxtOutcome.PRESENT, "v=STSv1; id=0fec393151a7c577266a");
         randomBytes("dnssec-failed.org, SERVFAIL: the DNS does not say what is there", 0, servfail,
                 MtaStsSetup.TxtOutcome.NOT_ASKED, "");
@@ -140,17 +140,17 @@ public class MtaStsTest {
         // Variants built on domain-d.test's real answer.
         String line = "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; id=0fec393151a7c577266a\"";
         randomBytes("record split into two strings", 0,
-                domainD.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; \" \"id=0fec393151a7c577266a\""),
+                published.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; \" \"id=0fec393151a7c577266a\""),
                 MtaStsSetup.TxtOutcome.PRESENT, "v=STSv1; id=0fec393151a7c577266a");
         randomBytes("next to another TXT on the same name", 0,
-                domainD.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\"\n" + line),
+                published.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\"\n" + line),
                 MtaStsSetup.TxtOutcome.PRESENT, "v=STSv1; id=0fec393151a7c577266a");
         randomBytes("behind a CNAME", 0,
-                domainD.replace(line, "_mta-sts.domain-d.test.\t300\tIN\tCNAME\t_mta-sts.other.net.\n_mta-sts.other.net.\t300\tIN\tTXT\t\"v=STSv1; id=7\""),
+                published.replace(line, "_mta-sts.domain-d.test.\t300\tIN\tCNAME\t_mta-sts.other.net.\n_mta-sts.other.net.\t300\tIN\tTXT\t\"v=STSv1; id=7\""),
                 MtaStsSetup.TxtOutcome.PRESENT, "v=STSv1; id=7");
-        randomBytes("upper case", 0, domainD.replace("v=STSv1; id=0fec393151a7c577266a", "V=STSV1; id=2"),
+        randomBytes("upper case", 0, published.replace("v=STSv1; id=0fec393151a7c577266a", "V=STSV1; id=2"),
                 MtaStsSetup.TxtOutcome.PRESENT, "V=STSV1; id=2");
-        randomBytes("only other TXT records", 0, domainD.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\""),
+        randomBytes("only other TXT records", 0, published.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\""),
                 MtaStsSetup.TxtOutcome.ABSENT, "");
         randomBytes("REFUSED", 0, servfail.replace("SERVFAIL", "REFUSED"), MtaStsSetup.TxtOutcome.NOT_ASKED, "");
         randomBytes("output without the answer's state", 0, "something that is not dig\n", MtaStsSetup.TxtOutcome.NOT_ASKED, "");
@@ -162,30 +162,30 @@ public class MtaStsTest {
         // For senders they are worth zero (RFC 8461 §3.1). Before, the reading took the first and said
         // PRESENT: here the first is exactly the right one, the most deceiving case.
         String old = "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; id=1700000000000\"";
-        String two = domainD.replace(line, line + "\n" + old);
+        String two = published.replace(line, line + "\n" + old);
         randomBytes("the right one and one with the old id", 0, two, MtaStsSetup.TxtOutcome.TOO_MANY, "");
         MtaStsSetup.TxtReading l2 = MtaStsSetup.parseTxt(0, two);
         require("and it reports both: " + l2.values,
                 l2.values.equals(List.of("v=STSv1; id=0fec393151a7c577266a", "v=STSv1; id=1700000000000")));
         randomBytes("one written in upper case (mailauth counts it)", 0,
-                domainD.replace(line, line + "\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"V=STSV1; id=2\""),
+                published.replace(line, line + "\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"V=STSV1; id=2\""),
                 MtaStsSetup.TxtOutcome.TOO_MANY, "");
         randomBytes("two records and a TXT that has nothing to do with it", 0,
-                domainD.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\"\n"
+                published.replace(line, "_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"google-site-verification=abc\"\n"
                         + line + "\n" + old),
                 MtaStsSetup.TxtOutcome.TOO_MANY, "");
         randomBytes("same text, but two records (one split): they are two", 0,
-                domainD.replace(line, line + "\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; \" \"id=0fec393151a7c577266a\""),
+                published.replace(line, line + "\n_mta-sts.domain-d.test.\t3498\tIN\tTXT\t\"v=STSv1; \" \"id=0fec393151a7c577266a\""),
                 MtaStsSetup.TxtOutcome.TOO_MANY, "");
         randomBytes("two records behind a CNAME", 0,
-                domainD.replace(line, "_mta-sts.domain-d.test.\t300\tIN\tCNAME\t_mta-sts.other.net.\n"
+                published.replace(line, "_mta-sts.domain-d.test.\t300\tIN\tCNAME\t_mta-sts.other.net.\n"
                         + "_mta-sts.other.net.\t300\tIN\tTXT\t\"v=STSv1; id=7\"\n"
                         + "_mta-sts.other.net.\t300\tIN\tTXT\t\"v=STSv1; id=8\""),
                 MtaStsSetup.TxtOutcome.TOO_MANY, "");
 
         System.out.println("\n== testAndTxtSteps(): the record step in the plan ==");
         String expected = "v=STSv1; id=0fec393151a7c577266a";
-        MtaStsSetup.TxtReading one = MtaStsSetup.parseTxt(0, domainD);
+        MtaStsSetup.TxtReading one = MtaStsSetup.parseTxt(0, published);
         MtaStsSetup.Step p = txtStep(List.of(
                 new MtaStsSetup.TxtReview("domain-d.test", true, one)), expected);
         require("a right record and the policy answering: done (" + p.detail + ")", "done".equals(p.state));
@@ -206,14 +206,14 @@ public class MtaStsTest {
         require("a SERVFAIL stays uncertain, with the reason (" + p.detail + ")",
                 "uncertain".equals(p.state) && p.detail.contains("SERVFAIL"));
 
-        System.out.println("\n== readTxt(): the real DNS, on the real domains ==");
+        System.out.println("\n== readTxt(): the real DNS, on a public domain that publishes MTA-STS ==");
+        // gmail.com publishes _mta-sts with "v=STSv1; id=...": a public fact, not a domain of ours.
         if (digAnswers()) {
-            for (String d : new String[]{"domain-d.test", "domain-a.test", "domain-b.test",
-                                         "name-that-does-not-exist-99887.invalid"}) {
+            for (String d : new String[]{"gmail.com", "name-that-does-not-exist-99887.invalid"}) {
                 MtaStsSetup.TxtReading l = MtaStsSetup.readTxt(d);
                 System.out.println("  " + d + " -> " + l.outcome + "  \"" + l.content + "\"");
-                if (d.equals("domain-d.test")) {
-                    require("on domain-d.test the TXT is SEEN (before, the plan did not get there)",
+                if (d.equals("gmail.com")) {
+                    require("on gmail.com the TXT is SEEN (before, the plan did not get there)",
                             l.outcome == MtaStsSetup.TxtOutcome.PRESENT);
                     require("and its content is read", l.content.startsWith("v=STSv1"));
                 }
