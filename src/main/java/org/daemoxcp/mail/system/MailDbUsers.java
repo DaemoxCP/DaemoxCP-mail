@@ -39,7 +39,8 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>{@value #POSTFIX_USER}: SELECT su domains (domain, active), mailboxes (email, active, receive_enabled) e
  *       aliases (source, destination, active). Non vede nemmeno gli hash delle password.</li>
- *   <li>{@value #DOVECOT_USER}: SELECT su mailboxes (email, password, active), cioe' la sola password_query.</li>
+ *   <li>{@value #DOVECOT_USER}: SELECT su mailboxes (email, password, active, quota_mb): la password_query e il
+ *       userdb del limite di ogni casella (DovecotQuota).</li>
  * </ul>
  * Le password le genera il pannello e stanno nel file dei segreti di root ({@link PanelSecrets#POSTFIX_DB_PASSWORD},
  * {@link PanelSecrets#DOVECOT_DB_PASSWORD}), oltre che nei file dei due servizi.
@@ -101,7 +102,7 @@ public final class MailDbUsers {
 
     static final Account DOVECOT = new Account(DOVECOT_USER, SqlCatalog.MAILDB_CREATE_DOVECOT_USER,
             SqlCatalog.MAILDB_SET_DOVECOT_PASSWORD, SqlCatalog.MAILDB_REVOKE_DOVECOT, List.of(
-                    new Grant("mailboxes", Set.of("email", "password", "active"), SqlCatalog.MAILDB_GRANT_DOVECOT_MAILBOXES)));
+                    new Grant("mailboxes", Set.of("email", "password", "active", "quota_mb"), SqlCatalog.MAILDB_GRANT_DOVECOT_MAILBOXES)));
 
     /**
      * Da root di MySQL: i due utenti, solo i loro permessi, le loro password. Quello che ha fatto finisce in done;
@@ -228,6 +229,9 @@ public final class MailDbUsers {
         try (Connection c = CatalogGuard.open(url, DOVECOT_USER, dovecotPassword)) {
             String failed = lookUp(c, SqlCatalog.MAILDB_DOVECOT_PASSWORD_LOOKUP);
             if (failed != null) return DOVECOT_USER + " cannot run Dovecot's password query: " + failed;
+            // Il userdb delle quote (DovecotQuota): senza, ogni consegna perderebbe il limite della casella.
+            failed = lookUp(c, SqlCatalog.MAILDB_DOVECOT_QUOTA_LOOKUP);
+            if (failed != null) return DOVECOT_USER + " cannot run Dovecot's quota query: " + failed;
             String why = refused(c, SqlCatalog.MAILDB_DOVECOT_ALIAS_REFUSED, 1142);
             if (why != null) return DOVECOT_USER + " " + why;
         } catch (SQLException e) {

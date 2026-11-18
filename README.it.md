@@ -76,6 +76,11 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 - Chi usa la posta cambia la sua password dalla webmail (*Impostazioni* → *Password*), con quella attuale. Il cambio
   passa dal pannello, che la controlla e scrive insieme l'hash e la copia cifrata. Il plugin `password` di Roundcube
   lo accende il pannello da solo.
+
+- Quote delle caselle, applicate da Dovecot 2.4. Prima di accettare un messaggio Postfix chiede a Dovecot: una casella
+  piena risponde `452 4.2.2`, così chi manda tiene il messaggio e riprova per qualche giorno, e non si perde niente se
+  intanto si libera spazio. La pagina *Caselle* mostra quanto usa ogni casella. Con Dovecot 2.3 non si applicano, e la
+  pagina lo dice: la pagina *Aggiornamenti* porta il server alla 2.4.
 - Filtri Sieve e risposte automatiche, compilati e controllati sul server.
 - Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
 - Statistiche da Rspamd: spam, ham e addestramento.
@@ -551,7 +556,6 @@ quest'ordine:
 
 Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, così nessuno ci conta:
 
-- **Le quote** si salvano con ogni casella, ma Dovecot non le applica.
 - **I limiti d'invio all'ora e al giorno** si salvano, ma né Postfix né Rspamd li leggono: si applica solo la
   dimensione massima dei messaggi.
 - **I conteggi di posta inviata e ricevuta** non vengono raccolti: la pagina delle statistiche mostra solo i numeri

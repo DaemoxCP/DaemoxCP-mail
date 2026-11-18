@@ -76,6 +76,11 @@ It is **careful**. The panel never changes something it cannot check, and it say
 - Users change their password from the webmail (*Settings* → *Password*), with the current one. The change goes
   through the panel, which checks it and writes the hash and the encrypted copy together. The panel turns
   Roundcube's `password` plugin on by itself.
+
+- Mailbox quotas, applied by Dovecot 2.4. Before accepting a message Postfix asks Dovecot: a full mailbox answers
+  `452 4.2.2`, so the sender keeps it and retries for a few days, and nothing is lost if space is freed meanwhile. The
+  *Mailboxes* page shows how much each mailbox uses. With Dovecot 2.3 they are not applied, and the page says so: the
+  *Updates* page moves the server to 2.4.
 - Sieve filters and vacation replies, compiled and checked server side.
 - A mail queue you can inspect and act on; the maximum message size.
 - Statistics from Rspamd: spam, ham and spam training.
@@ -543,7 +548,6 @@ first, with *Cancel* selected: press Tab to reach *OK*. Go through the options i
 
 What the panel shows but does not do yet. It is said on the pages too, so nobody counts on it:
 
-- **Quotas** are saved with each mailbox, but Dovecot does not enforce them.
 - **Hourly and daily sending limits** are saved, but neither Postfix nor Rspamd reads them: only the maximum
   message size is applied.
 - **Sent and received counts** are not collected: the statistics page shows Rspamd's figures only.

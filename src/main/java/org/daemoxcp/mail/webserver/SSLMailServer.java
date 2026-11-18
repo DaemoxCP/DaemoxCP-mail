@@ -283,6 +283,8 @@ public class SSLMailServer {
         context("/api/mailconfig", Access.api(MAIL_VIEW), this::handleApiMailConfig);
         context("/aliases", Access.page(MAIL_VIEW), this::handleProtectedPage);
         context("/api/aliases", Access.api(MAIL_VIEW, DOMAINS), this::handleApiAliases);
+        // Quanto usa ogni casella del suo limite (DovecotQuota, doveadm quota get): solo lettura, dalla root.
+        context("/api/mailbox-quota", Access.api(MAIL_VIEW), this::handleApiMailboxQuota);
         // Entrare nella webmail di una casella vuol dire leggerne la posta.
         context("/api/webmail", Access.api(MAILBOXES), this::handleApiWebmail);
         context("/api/webmail/open", Access.api(MAILBOXES), this::handleApiWebmailOpen);
@@ -865,6 +867,10 @@ public class SSLMailServer {
             // Ogni casella punta a se stessa dopo gli alias (MailboxAddressMap): un catch-all prende solo gli indirizzi
             // che non sono ne' alias ne' caselle. Dopo MailDbUsers: la mappa copia la connessione di quella degli alias.
             org.daemoxcp.mail.system.MailboxAddressMap.ensureAtBoot();
+
+            // Le quote delle caselle applicate da Dovecot 2.4, e chieste da Postfix prima di accettare (DovecotQuota). Dopo
+            // MailDbUsers: l'utente MySQL di Dovecot deve gia' poter leggere quota_mb.
+            org.daemoxcp.mail.system.DovecotQuota.ensureAtBoot();
             org.daemoxcp.mail.system.SyslogNetwork.ensureAtBoot();
             org.daemoxcp.mail.system.VmailPermissions.ensureAtBoot();
             // rspamd tutto col suo utente, anche il processo principale: le sue porte sono sopra la 1023 e
@@ -9047,6 +9053,14 @@ public class SSLMailServer {
      * home.view, details con system.view. La risposta di uptime dice se chi guarda puo' chiedere
      * anche i dettagli, cosi' la pagina mostra l'occhio solo a lui.
      */
+    private void handleApiMailboxQuota(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
+            return;
+        }
+        sendJsonResponse(exchange, org.daemoxcp.mail.system.DovecotQuota.usage());
+    }
+
     private void handleApiPanelInfo(HttpExchange exchange) throws IOException {
         if (!"GET".equals(exchange.getRequestMethod())) {
             sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));

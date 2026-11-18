@@ -3008,10 +3008,12 @@ public class PanelContent {
             </div>
 
             <div id="mbMsg" role="status" aria-live="polite"></div>
+            <!-- Le quote non applicate (DovecotQuota): lo si dice qui, invece di lasciar credere che il limite valga. -->
+            <p class="small text-muted mb-2" id="mbQuotaNote" role="status" hidden></p>
             <div class="table-responsive">
                 <table class="table table-hover table-cards">
                     <thead class="table-light">
-                        <tr><th>Email</th><th>{{t:mbx.colName}}</th><th>Quota</th><th>{{t:mbx.colFeatures}}</th><th>{{t:home.colActions}}</th></tr>
+                        <tr><th>Email</th><th>{{t:mbx.colName}}</th><th>{{t:mbx.colQuota}}</th><th>{{t:mbx.colFeatures}}</th><th>{{t:home.colActions}}</th></tr>
                     </thead>
                     <tbody id="mailboxesTable">
                         <tr><td colspan="5" class="text-center">{{t:common.loading}}</td></tr>
@@ -3341,6 +3343,60 @@ public class PanelContent {
             });
         }
 
+        // Quanto usa ogni casella del suo limite (DovecotQuota, dalla root con doveadm): sotto la quota, con una barra
+        // per chi ha un limite. Se Dovecot non applica le quote, una riga sopra la tabella lo dice.
+        function quotaSize(kb) {
+            const k = Math.max(0, Number(kb) || 0), mb = k / 1024;
+            const unit = k < 1024 ? 'kilobyte' : mb >= 1024 ? 'gigabyte' : 'megabyte';
+            const value = k < 1024 ? k : mb >= 1024 ? mb / 1024 : mb;
+            try {
+                return new Intl.NumberFormat(window.I18N_LANG || undefined, { style: 'unit', unit: unit,
+                    maximumFractionDigits: unit !== 'kilobyte' && (value < 10 || unit === 'gigabyte') ? 1 : 0 }).format(value);
+            } catch (e) {
+                return Math.round(value) + (unit === 'kilobyte' ? ' KB' : unit === 'gigabyte' ? ' GB' : ' MB');
+            }
+        }
+
+        function loadQuotaUsage() {
+            const note = document.getElementById('mbQuotaNote');
+            fetch('/api/mailbox-quota').then(r => r.json()).then(data => {
+                if (!data.success) {
+                    note.textContent = t('mbx.quotaUsageError', { error: data.error || '?' });
+                    note.hidden = false;
+                    return;
+                }
+                if (!data.applied) {
+                    note.textContent = t('mbx.quotaNotApplied', { reason: data.reason || '?' });
+                    note.hidden = false;
+                    return;
+                }
+                note.hidden = true;
+                (data.mailboxes || []).forEach(u => {
+                    const cell = document.querySelector('.mbx-usage[data-quota-of="' + CSS.escape(u.email) + '"]');
+                    if (!cell) return;
+                    cell.replaceChildren();
+                    const used = quotaSize(u.used_kb);
+                    if (!u.limit_kb) { cell.textContent = t('mbx.quotaUsedOnly', { used: used }); return; }
+                    const pct = Math.max(0, Math.min(100, Number(u.percent) || 0));
+                    const line = document.createElement('div');
+                    line.textContent = pct >= 100 ? t('mbx.quotaFull', { used: used }) : t('mbx.quotaUsed', { used: used, percent: pct });
+                    if (pct >= 100) line.className = 'text-danger fw-semibold';
+                    const bar = document.createElement('div');
+                    bar.className = 'progress mt-1';
+                    bar.setAttribute('role', 'progressbar');
+                    bar.setAttribute('aria-valuemin', '0');
+                    bar.setAttribute('aria-valuemax', '100');
+                    bar.setAttribute('aria-valuenow', String(pct));
+                    bar.setAttribute('aria-label', t('mbx.quotaUsed', { used: used, percent: pct }));
+                    const fill = document.createElement('div');
+                    fill.className = 'progress-bar ' + (pct >= 100 ? 'bg-danger' : pct >= 90 ? 'bg-warning' : 'bg-success');
+                    fill.setAttribute('data-style', 'width: ' + pct + '%');
+                    bar.append(fill);
+                    cell.append(line, bar);
+                });
+            }).catch(() => {});
+        }
+
         function loadMailboxes() {
             fetch('/api/mailboxes').then(r => r.json()).then(data => {
                 const tbody = document.getElementById('mailboxesTable');
@@ -3357,7 +3413,7 @@ public class PanelContent {
                             ${!m.active ? '<span class="badge bg-danger ms-1">' + escMbx(t('mbx.inactive')) + '</span>' : ''}
                         </td>
                         <td data-label="${escMbx(t('mbx.colName'))}">${escMbx(m.name || '-')}</td>
-                        <td data-label="Quota">${m.quota_mb === 0 ? '<span class="text-success"><i class="fas fa-infinity" aria-hidden="true"></i> ' + escMbx(t('mbx.unlimited')) + '</span>' : m.quota_mb + ' MB'}</td>
+                        <td data-label="${escMbx(t('mbx.colQuota'))}">${m.quota_mb === 0 ? '<span class="text-success"><i class="fas fa-infinity" aria-hidden="true"></i> ' + escMbx(t('mbx.unlimited')) + '</span>' : m.quota_mb + ' MB'}<div class="small text-muted mbx-usage" data-quota-of="${escMbx(m.email)}"></div></td>
                         <td data-label="${escMbx(t('mbx.colFeatures'))}">${[
                             m.autoresponder_enabled ? '<span class="badge bg-info feature-badge" title="' + escMbx(t('mbx.arOn')) + '"><i class="fas fa-reply-all" aria-hidden="true"></i></span>' : '',
                             m.forwarding_count > 0 ? '<span class="badge bg-warning feature-badge" title="' + escMbx(t('mbx.fwOn')) + '"><i class="fas fa-share" aria-hidden="true"></i> ' + m.forwarding_count + '</span>' : '',
@@ -3399,6 +3455,7 @@ public class PanelContent {
                         </td>
                     </tr>
                 `).join('');
+                loadQuotaUsage();
             });
         }
 

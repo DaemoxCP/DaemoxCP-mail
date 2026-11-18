@@ -280,6 +280,18 @@ under 12 characters is refused; a good one is saved, and IMAP takes the new one 
 `MailboxPasswordTest` with `-Droundcube.dir` does not see a broken sign-in hook: its second run also changes the
 password, which writes the copy by itself.
 
+`DovecotQuotaTest` (anywhere; the doveconf part where doveconf is) is the mailbox quotas without Dovecot: the quota
+userdb right before userdb static in `auth-sql.conf.ext`, once, and a file the panel did not write left alone; what the
+start does on 2.3, on 2.4 with and without the quota pieces; the question to quota-status right after
+`reject_unauth_destination`; the lines of `doveadm -f tab quota get -A`; and the installer's whole 2.4 configuration,
+with the quota pieces, parsed by the real doveconf.
+
+`quota-browser-test.js` (Playwright, VM) is the quotas with real mail, on a domain of its own: Dovecot gives a 1 MB
+mailbox its limit; empty, Postfix accepts it from outside; a 2 MB message fills it (Dovecot's grace lets that one
+through); then from outside 452 4.2.2, a mailbox without a limit 250; one more message from the machine is refused by
+LMTP and the bounce says the quota; IMAP's GETQUOTAROOT gives 1024 KB; the Mailboxes page says "Full" with a bar at
+100 %; the limit taken away from the panel, the recipient is accepted again at once.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the
