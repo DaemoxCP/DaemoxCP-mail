@@ -862,6 +862,9 @@ public class SSLMailServer {
             // Postfix e Dovecot in MySQL coi loro utenti, che leggono solo le colonne che usano, e non piu' con
             // quello del pannello: dopo MysqlRoot (serve la root di MySQL) e MysqlListen (MySQL com'e' davvero).
             org.daemoxcp.mail.system.MailDbUsers.ensureAtBoot();
+            // Ogni casella punta a se stessa dopo gli alias (MailboxAddressMap): un catch-all prende solo gli indirizzi
+            // che non sono ne' alias ne' caselle. Dopo MailDbUsers: la mappa copia la connessione di quella degli alias.
+            org.daemoxcp.mail.system.MailboxAddressMap.ensureAtBoot();
             org.daemoxcp.mail.system.SyslogNetwork.ensureAtBoot();
             org.daemoxcp.mail.system.VmailPermissions.ensureAtBoot();
             // rspamd tutto col suo utente, anche il processo principale: le sue porte sono sopra la 1023 e
@@ -2701,6 +2704,37 @@ public class SSLMailServer {
         return I18n.tr("server.alias.nowRejected", Map.of("address", address));
     }
 
+    /** La sorgente di un catch-all: @ e un nome di dominio valido, 254 caratteri in tutto. */
+    static boolean validCatchAllSource(String source) {
+        return source != null && source.length() <= 254 && source.startsWith("@") && SecurityUtils.isValidDomain(source.substring(1));
+    }
+
+    /**
+     * Perche' un catch-all non si puo' creare o puntare li', o null se si puo'.
+     * <ul>
+     *   <li>Postfix deve avere la mappa delle caselle dopo gli alias (MailboxAddressMap): senza, il catch-all prenderebbe
+     *       anche la posta delle caselle;</li>
+     *   <li>una destinazione nello stesso dominio deve essere una casella attiva che riceve: un indirizzo che non esiste,
+     *       o una casella spenta o che non riceve, tornerebbe al catch-all stesso, e Postfix fermerebbe la posta per il
+     *       giro senza fine.</li>
+     * </ul>
+     */
+    private static String catchAllRefused(String source, String destination) throws java.sql.SQLException {
+        String notReady = org.daemoxcp.mail.system.MailboxAddressMap.notReady();
+        if (notReady != null) return I18n.tr("server.alias.catchAllNotReady", Map.of("reason", notReady));
+        MailDatabase.Mailbox m = Main.mailDatabase.getMailboxByEmail(destination);
+        return catchAllLoop(source, destination, m != null && m.active && m.receiveEnabled);
+    }
+
+    /** La seconda regola di {@link #catchAllRefused}, senza database: la esercita CatchAllTest. */
+    static String catchAllLoop(String source, String destination, boolean destinationIsMailbox) {
+        String domain = source.substring(1);
+        int at = destination.lastIndexOf('@');
+        if (at >= 0 && destination.substring(at + 1).equals(domain) && !destinationIsMailbox)
+            return I18n.tr("server.alias.catchAllLoop", Map.of("domain", domain, "destination", destination));
+        return null;
+    }
+
     /** Un indirizzo per un alias: i caratteri ammessi da isValidEmail e i limiti della RFC 5321 (254 in tutto, 64 prima della @). */
     private static boolean validAliasAddress(String email) {
         return email != null && email.length() <= 254 && SecurityUtils.isValidEmail(email) && email.indexOf('@') <= 64;
@@ -2730,6 +2764,10 @@ public class SSLMailServer {
             return r.put("success", false).put("error", I18n.tr("server.badEmail"));
         if (changeDestination && destination.equals(alias.source) && Main.mailDatabase.getMailboxByEmail(alias.source) == null)
             return r.put("success", false).put("error", aliasOnItself(alias.source));
+        if (changeDestination && alias.source.startsWith("@")) {
+            String refused = catchAllRefused(alias.source, destination);
+            if (refused != null) return r.put("success", false).put("error", refused);
+        }
 
         boolean newDestination = !destination.equals(alias.destination);
         if (newDestination) {
@@ -2817,10 +2855,17 @@ public class SSLMailServer {
 
                     String source = req.optString("source", "").toLowerCase().trim();
                     String destination = req.optString("destination", "").toLowerCase().trim();
+                    // Un catch-all e' un alias con sorgente @dominio: la posta di ogni indirizzo del dominio che non e'
+                    // ne' alias ne' casella (MailboxAddressMap).
+                    boolean catchAll = source.startsWith("@");
+                    String catchAllRefused = null;
 
-                    if (!validAliasAddress(source) || !validAliasAddress(destination)) {
+                    if (!(catchAll ? validCatchAllSource(source) : validAliasAddress(source)) || !validAliasAddress(destination)) {
                         response.put("success", false);
                         response.put("error", I18n.tr("server.badEmail"));
+                    } else if (catchAll && (catchAllRefused = catchAllRefused(source, destination)) != null) {
+                        response.put("success", false);
+                        response.put("error", catchAllRefused);
                     } else if (source.equals(destination) && Main.mailDatabase.getMailboxByEmail(source) == null) {
                         // "casella -> se stessa" e' il modo di tenerne una copia quando la posta e'
                         // inoltrata altrove; su un indirizzo che non e' una casella non porta da nessuna parte.
@@ -2849,6 +2894,9 @@ public class SSLMailServer {
                                 // Se la sorgente e' anche una casella, da ora la sua posta va solo alle destinazioni.
                                 String note = afterAliases(source, domain.id);
                                 if (note != null) response.put("note", I18n.tr("server.alias.created") + " " + note);
+                                // Un catch-all raccoglie anche lo spam verso indirizzi inventati: lo si dice subito.
+                                if (catchAll) response.put("note", I18n.tr("server.alias.catchAllCreated",
+                                        Map.of("domain", domainName, "destination", destination)));
                             } else {
                                 response.put("success", false);
                                 response.put("error", I18n.tr("server.alias.alreadyExists"));

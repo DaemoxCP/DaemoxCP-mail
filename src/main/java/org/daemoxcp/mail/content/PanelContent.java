@@ -4107,7 +4107,13 @@ public class PanelContent {
                             <span class="input-group-text">@</span>
                             <select class="form-select" id="alDomain" aria-label="{{t:al.sourceDomain}}" required></select>
                         </div>
-                        <small class="d-block text-muted mb-3">{{t:al.sourceHint}}</small>
+                        <small class="d-block text-muted mb-2">{{t:al.sourceHint}}</small>
+                        <!-- Il catch-all: l'alias con sorgente @dominio, per ogni indirizzo che non e' ne' alias ne' casella. -->
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" id="alCatchAll" aria-describedby="alCatchAllHint" data-on-change="aliasCatchAllToggle(this)">
+                            <label class="form-check-label" for="alCatchAll">{{t:al.catchAll}}</label>
+                        </div>
+                        <small class="d-block text-muted mb-3" id="alCatchAllHint">{{t:al.catchAllHint}}</small>
                         <label class="form-label" for="alDest">{{t:mbx.fwDest}}</label>
                         <input type="email" class="form-control mb-1" id="alDest" placeholder="{{t:al.destPh}}" maxlength="254" autocomplete="off" required>
                         <small class="d-block text-muted mb-3">{{t:al.destHint}}</small>
@@ -4192,8 +4198,12 @@ public class PanelContent {
                 }
                 tbody.innerHTML = currentAliases.map(a => {
                     const id = parseInt(a.id);
-                    const whoText = escAl(t('al.who', { source: a.source, dest: a.destination }));
-                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="text-long">' + escAl(a.source) + '</td><td class="text-long">' + escAl(a.destination)
+                    const catchAll = String(a.source).startsWith('@');
+                    const shown = catchAll ? t('al.catchAllSource', { domain: String(a.source).slice(1) }) : a.source;
+                    const whoText = escAl(t('al.who', { source: shown, dest: a.destination }));
+                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="text-long">' + escAl(shown)
+                        + (catchAll ? ' <span class="badge bg-info text-dark ms-1">' + escAl(t('al.catchAllBadge')) + '</span>' : '')
+                        + '</td><td class="text-long">' + escAl(a.destination)
                         + (a.active ? '' : ' <span class="badge bg-secondary ms-1">' + escAl(t('mbx.inactive')) + '</span>') + '</td>'
                         + '<td class="text-nowrap">'
                         + '<button type="button" class="btn btn-sm btn-outline-primary me-1" data-on-click="openEditAlias(' + id + ')" aria-label="' + escAl(t('al.editOf')) + ' ' + whoText + '">' + escAl(t('common.edit')) + '</button>'
@@ -4211,7 +4221,8 @@ public class PanelContent {
             const a = currentAliases.find(x => parseInt(x.id) === id);
             if (!a) return;
             document.getElementById('edAliasId').value = id;
-            document.getElementById('edSource').value = a.source;
+            document.getElementById('edSource').value = String(a.source).startsWith('@')
+                ? t('al.catchAllSource', { domain: String(a.source).slice(1) }) : a.source;
             document.getElementById('edDest').value = a.destination;
             document.getElementById('edErr').textContent = '';
             bootstrap.Modal.getOrCreateInstance(document.getElementById('editAliasModal')).show();
@@ -4254,16 +4265,25 @@ public class PanelContent {
             }).catch(() => aliasMsg(t('common.noAnswer'), 'danger'));
         }
 
+        // Il catch-all non ha un nome prima della @: il campo si svuota e si spegne finche' la casella e' spuntata.
+        function aliasCatchAllToggle(box) {
+            const local = document.getElementById('alLocal');
+            local.disabled = box.checked;
+            local.required = !box.checked;
+            if (box.checked) local.value = '';
+        }
+
         function addAlias() {
             const err = document.getElementById('alErr');
             err.textContent = '';
+            const catchAll = document.getElementById('alCatchAll').checked;
             const local = document.getElementById('alLocal').value.trim().toLowerCase();
             const domain = document.getElementById('alDomain').value;
             const dest = document.getElementById('alDest').value.trim().toLowerCase();
-            if (!local || !domain || !dest) { err.textContent = t('al.fillBoth'); return; }
+            if ((!catchAll && !local) || !domain || !dest) { err.textContent = t('al.fillBoth'); return; }
             // Sorgente = destinazione e' ammessa solo su una casella (serve a tenerne una copia):
-            // lo decide il server, che sa quali indirizzi sono caselle.
-            const source = local + '@' + domain;
+            // lo decide il server, che sa quali indirizzi sono caselle. Il catch-all e' @dominio.
+            const source = catchAll ? '@' + domain : local + '@' + domain;
             fetch('/api/aliases', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -4273,6 +4293,8 @@ public class PanelContent {
                     bootstrap.Modal.getInstance(document.getElementById('addAliasModal')).hide();
                     document.getElementById('alLocal').value = '';
                     document.getElementById('alDest').value = '';
+                    document.getElementById('alCatchAll').checked = false;
+                    aliasCatchAllToggle(document.getElementById('alCatchAll'));
                     aliasMsg(data.note || t('al.created', { source: source, dest: dest }), data.note ? 'warning' : 'success');
                     loadAliases();
                 } else {

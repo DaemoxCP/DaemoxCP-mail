@@ -254,6 +254,20 @@ a newer release (the page's API answer replaced in the browser) on the card and 
 link that is not a GitHub release page left out, and the contrast of the link in both themes; at 375 px the card
 fits.
 
+`MailboxAddressMapTest` and `CatchAllTest` (anywhere) are the catch-all's decisions without Postfix: when the start
+adds Postfix's mailbox map after the aliases, rewrites a map that says something else, or leaves a hand-written
+`virtual_alias_maps` alone; the map's text made from the aliases' map (only the mailboxes that receive); when a
+catch-all can be created; that both installers write the map; what a catch-all source is, and a destination that
+would come back to the catch-all itself.
+
+`catch-all-browser-test.js` (Playwright, VM) is the catch-all with real mail, on a domain of its own that it removes
+at the end. Before the catch-all, from outside (the machine's own address, not in mynetworks), Postfix refuses an
+invented address and a mailbox that does not receive, and accepts a mailbox: the map changes nothing without a
+catch-all. The catch-all made from the Aliases page; then, over SMTP and checked with `doveadm search`, an invented
+address and the mailbox that does not receive land in the catch-all, the mailbox and an alias keep their mail. The
+control: with `virtual_alias_maps` put back to the aliases alone (and restored), the mailbox's mail goes to the
+catch-all, and the panel refuses to create one.
+
 `MenuReinstall` is not a test but the driver of the full reinstallation from the menu
 (`ReinstallJob.runFromMenu`, the same function as the menu entry: it starts it detached with
 daemon(8) and follows its log) on a server where the panel has already started: it unlocks the
@@ -1483,6 +1497,10 @@ session first and then the same parameters, bound to the session save the public
 WebSessions, no DKIM private key and no password hash or copy out of the database save Show password's two.
 
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.SqlCatalogTest
+
+With the test MySQL and `-Dmysql.root=yes` its part 5 ends by dropping `'daemoxcp_mail'@'127.0.0.1'`, the user the
+other MySQL tests sign in with: in a series, run it last (on 18/11/2026 the tests after it all said "connected to
+MySQL as the panel user: FAILED").
 
 **WebRoutinesTest** — the web part's own MySQL user, on the test MySQL as
 its root. The migration (WebDbAccess): the locked owner of the procedures, the 40 procedures, the web

@@ -68,6 +68,9 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 
 **Posta**
 - Domini, caselle, alias e inoltri, trasformazioni degli indirizzi.
+- Indirizzi catch-all, dalla pagina *Alias*. Il catch-all di un dominio prende la posta di ogni indirizzo che non è
+  un alias o una casella che riceve, così caselle e alias tengono la loro. Ci arriva anche lo spam mandato a
+  indirizzi inventati, e la posta di una casella spenta o che non riceve.
 - Password delle caselle salvate come hash BLF-CRYPT, più una copia cifrata che l'amministratore può mostrare.
   La copia è cifrata con una chiave pubblica: la legge solo la parte root del pannello.
 - Filtri Sieve e risposte automatiche, compilati e controllati sul server.
@@ -552,7 +555,6 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
   di Rspamd.
 - **Il cambio password dalla webmail** passa dal pannello quando il plugin `password` di Roundcube è acceso, ma
   un'installazione nuova non lo accende.
-- **Gli indirizzi catch-all** non si possono creare dal pannello.
 
 ---
 
@@ -561,7 +563,7 @@ Quello che il pannello mostra ma non fa ancora. Lo dicono anche le sue pagine, c
 | Pagina | Cosa ci fai |
 |---|---|
 | **Dashboard** | lo stato del server a colpo d'occhio, e il DNS ancora da configurare |
-| **Domini**, **Caselle**, **Alias** | la posta; da una casella: password, filtri Sieve, risposta automatica, profilo Apple, accesso alla webmail |
+| **Domini**, **Caselle**, **Alias** | la posta, compresi gli indirizzi catch-all; da una casella: password, filtri Sieve, risposta automatica, profilo Apple, accesso alla webmail |
 | **Coda di posta** | cosa aspetta, perché, e cosa farne |
 | **Limiti di invio** | la dimensione massima dei messaggi |
 | **Statistiche** | spam, ham e addestramento, da Rspamd |
