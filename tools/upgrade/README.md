@@ -206,5 +206,3 @@ Dopo un ritorno, il passaggio si rifà identico.
   - si toglie la cartella;
   - si toglie `/root/.acme.sh.moved-to-var-db-acme`, che `AcmeUser` lascia apposta.
 - **La casella di prova** si toglie dal pannello.
-- **La chiave d'ispezione** (`mail-server-inspection-october-31-2026`) va tolta da
-  `/root/.ssh/authorized_keys` quando il committente lo dice.
