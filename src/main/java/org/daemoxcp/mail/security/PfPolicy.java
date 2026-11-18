@@ -80,10 +80,24 @@ public final class PfPolicy {
         return Set.copyOf(r);
     }
     private static final Pattern TABLE_LIMIT = Pattern.compile("set\\s+limit\\s+table-entries\\s+(\\d{1,10})");
+    /**
+     * Il servizio dei metadati del provider (169.254.169.254, Hetzner Cloud come gli altri grandi provider) solo per root.
+     * Dentro c'e' anche la configurazione con cui il server e' nato: sul server vero, il 18/11/2026, quella di Hetzner
+     * portava in chiaro una password di root, e la leggeva qualunque programma sulla macchina (www, la parte web del
+     * pannello, Roundcube...). A root serve (ServerAddresses legge da li' l'IPv6 assegnato), agli altri no.
+     *
+     * <p>pf.conf(5), FreeBSD 15: «user» vale per i socket TCP e UDP della macchina, per una connessione in uscita e' chi
+     * l'ha aperta; i pacchetti inoltrati («unknown») li prende solo una regola che nomina unknown. «return»: chi e'
+     * bloccato riceve subito un rifiuto invece di aspettare. In IPv6 lo stesso servizio (fe80::a9fe:a9fe) sul server
+     * vero non risponde: non serve una regola.
+     */
+    static final String METADATA_RULE = "block return out quick proto { tcp, udp } to 169.254.169.254 user != 0";
+
     /** Le regole che scrive questa classe: in un file col suo HEADER si riconoscono e si riscrivono. */
-    private static final List<String> POLICY_PREFIXES = List.of("block in all", "pass out all keep state",
+    private static final List<String> POLICY_PREFIXES = List.of("block in all", "pass out all keep state", METADATA_RULE,
             "pass in inet proto icmp ", "pass in inet6 proto icmp6", "pass in inet proto udp from port 67 to port 68",
             "pass in proto tcp to port {", "pass in inet proto tcp to port {", "pass in inet6 proto tcp to port {");
+
 
     /** La posta e il web: sempre. */
     static final SortedSet<Integer> FIXED = new TreeSet<>(List.of(25, 80, 143, 443, 465, 587, 993));
@@ -133,6 +147,9 @@ public final class PfPolicy {
         b.append("# Il resto: in ingresso solo quello che serve.\n");
         b.append("block in all\n");
         b.append("pass out all keep state\n\n");
+        b.append("# Il servizio dei metadati del provider solo per root: dentro c'e' la configurazione con cui il server\n");
+        b.append("# e' nato, password di root compresa. Gli altri utenti ricevono subito un rifiuto.\n");
+        b.append(METADATA_RULE).append("\n\n");
         b.append("# Senza questi la macchina perde la rete: ICMP essenziale, IPv6 (vicini, router), le risposte DHCP.\n");
         b.append("pass in inet proto icmp icmp-type { echoreq, unreach, timex, paramprob }\n");
         b.append("pass in inet6 proto icmp6\n");

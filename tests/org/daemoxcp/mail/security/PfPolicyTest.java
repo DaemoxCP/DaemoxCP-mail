@@ -16,7 +16,9 @@ import java.util.TreeSet;
  *  2. a pf.conf with rules the panel does not write is left alone, and so is one with another first line;
  *  3. a second time nothing changes; a new webmail port or a second sshd port is followed;
  *  4. the outputs it reads: sockstat (sshd's ports) and pfctl -sr (is SSH let in);
- *  5. on the VM, as root (-De2e.vm=yes): the real pfctl accepts the file it writes (syntax only, nothing loaded).
+ *  5. on the VM, as root (-De2e.vm=yes): the real pfctl accepts the file it writes (syntax only, nothing loaded);
+ *  6. the provider's metadata service (169.254.169.254) only for root: the rule is in the file once, and a panel
+ *     pf.conf from before gets it at the next start (MetadataRootOnlyTest checks the live pf on the VM).
  *
  * Usage (on the VM):
  *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.PfPolicyTest
@@ -176,6 +178,19 @@ public class PfPolicyTest {
                 """;
         check("pfctl -sr: SSH on 22 (as 'ssh') and on 2222 is let in", PfPolicy.letsIn(pfctl, 22) && PfPolicy.letsIn(pfctl, 2222));
         check("  and 4190 is not", !PfPolicy.letsIn(pfctl, 4190));
+
+        System.out.println("\n== 6. The provider's metadata service only for root ==");
+        check("the rule: TCP and UDP to 169.254.169.254 refused at once for every user but root",
+                r.contains("block return out quick proto { tcp, udp } to 169.254.169.254 user != 0"));
+        check("  once, outgoing only, and nothing else names that address", r.stream().filter(l -> l.contains("169.254.169.254")).count() == 1
+                && r.stream().filter(l -> l.contains("169.254.169.254")).allMatch(l -> l.startsWith("block return out quick")));
+        check("  in the IPv6-only file too (the family touches only the services rule)",
+                v6only != null && v6only.contains("\n" + PfPolicy.METADATA_RULE + "\n"));
+        String withoutRule = fromServer == null ? "" : java.util.Arrays.stream(fromServer.split("\n", -1))
+                .filter(l -> !l.contains("169.254.169.254") && !l.contains("metadati") && !l.contains("e' nato"))
+                .collect(java.util.stream.Collectors.joining("\n"));
+        check("a panel pf.conf from before the rule is still the panel's, and at the next start it gets the rule",
+                !withoutRule.contains("169.254.169.254") && fromServer != null && fromServer.equals(PfPolicy.transform(withoutRule, today)));
 
         boolean e2e = "yes".equals(System.getProperty("e2e.vm")) && "root".equals(System.getProperty("user.name"));
         if (e2e) {
