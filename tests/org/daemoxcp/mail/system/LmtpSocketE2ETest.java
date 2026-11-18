@@ -17,7 +17,7 @@ import org.daemoxcp.mail.util.Shell;
  *  3. back to the files of before, then a run where Postfix refuses the transport: ROLLED_BACK, port 24 again,
  *     Postfix on it, a delivery still arrives;
  *  4. the move again: DONE (the VM stays as an upgraded server would be).
- *   java -De2e.vm=yes -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.LmtpSocketE2ETest
+ *   java -De2e.vm=yes -cp "tests:daemoxcp-mail.jar" org.daemoxcp.mail.system.LmtpSocketE2ETest
  */
 public class LmtpSocketE2ETest {
 

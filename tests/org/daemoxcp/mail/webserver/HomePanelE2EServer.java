@@ -25,7 +25,7 @@ import java.util.concurrent.Executors;
  *
  * Usage (from an empty folder with the jar inside; READY on stderr when it listens):
  *   java -Dmysql.port=... -Dmysql.user=... -Dmysql.password=... -Dmysql.database=... \
- *        -cp "tests:$D/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.HomePanelE2EServer PORT
+ *        -cp "tests:$D/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.HomePanelE2EServer PORT
  */
 public class HomePanelE2EServer {
 

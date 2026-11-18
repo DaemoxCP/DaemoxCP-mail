@@ -35,7 +35,7 @@ import java.util.List;
  *    kernel, looking at pf.conf makes no sense.
  *
  * It runs on the VM, where pfctl talks to the kernel:
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.PfSetupTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.security.PfSetupTest
  */
 public class PfSetupTest {
 

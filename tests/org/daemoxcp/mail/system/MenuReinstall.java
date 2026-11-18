@@ -17,7 +17,7 @@ import org.daemoxcp.mail.sqli.dataBaseManager;
  * if that is outside the boot environment (/home).
  *
  * Usage (from the panel's folder, as root):
- *   java -De2e.vm=yes -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MenuReinstall [hostname]
+ *   java -De2e.vm=yes -cp "tests:daemoxcp-mail.jar" org.daemoxcp.mail.system.MenuReinstall [hostname]
  * Without a hostname it uses the saved one, like the menu window that proposes it.
  */
 public class MenuReinstall {

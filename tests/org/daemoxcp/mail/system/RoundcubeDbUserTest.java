@@ -41,7 +41,7 @@ import java.util.regex.Pattern;
  * panel's password) and that of a start stopped before the revoke.
  *
  * <p>It changes real owners: it must be run as root on the FreeBSD VM, where www and wheel exist.
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RoundcubeDbUserTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.RoundcubeDbUserTest
  */
 public class RoundcubeDbUserTest {
 

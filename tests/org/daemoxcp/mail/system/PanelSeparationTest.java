@@ -21,7 +21,7 @@ import java.util.Set;
  *     removed after.
  *
  * Usage (on the VM):
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelSeparationTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelSeparationTest
  */
 public class PanelSeparationTest {
 

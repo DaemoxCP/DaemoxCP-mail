@@ -30,7 +30,7 @@ import java.util.Optional;
  *
  * Usage (with the test MySQL of README.md; it empties the panel tables of that database):
  *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
- *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.LoginSecurityTest
+ *        -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.LoginSecurityTest
  */
 public class LoginSecurityTest {
 

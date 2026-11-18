@@ -41,7 +41,7 @@ import java.util.logging.Logger;
  *
  * Usage (on the VM, with the test MySQL of tests/README.md, as root):
  *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
- *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.WebRoutinesTest
+ *        -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.WebRoutinesTest
  */
 public class WebRoutinesTest {
 

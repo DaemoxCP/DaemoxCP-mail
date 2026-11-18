@@ -13,7 +13,7 @@ import java.io.PrintStream;
  * system mail (point 67): first myorigin = localhost.
  *
  * Runs anywhere (it calls nothing):
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.LocalMtaRepairTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.LocalMtaRepairTest
  */
 public class LocalMtaRepairTest {
 

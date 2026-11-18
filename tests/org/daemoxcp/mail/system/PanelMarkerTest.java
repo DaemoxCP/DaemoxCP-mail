@@ -17,7 +17,7 @@ import java.util.stream.Stream;
  * byte to the one today's code writes from scratch, with the same permissions; a second pass must
  * find nothing. The effect on the real services is measured by the test on the VM (reperti).
  *
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelMarkerTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelMarkerTest
  */
 public class PanelMarkerTest {
 

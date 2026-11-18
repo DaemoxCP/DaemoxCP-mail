@@ -48,7 +48,7 @@ function standIn() {
         const errors = [], dialogs = [];
         page.on('pageerror', e => errors.push(String(e)));
         page.on('dialog', async d => { dialogs.push(d.message()); await d.dismiss(); });
-        const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null')
+        const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null')
             .match(/([0-9]{4} [0-9]{4})/)[1];
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');

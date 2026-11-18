@@ -26,7 +26,7 @@ import java.util.Properties;
  *     lock everybody out).
  *
  * Usage (on the VM):
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.MysqlRootTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.MysqlRootTest
  */
 public class MysqlRootTest {
 

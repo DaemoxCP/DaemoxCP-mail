@@ -21,7 +21,7 @@
 // machine's firewall lets the panel's 2096 through).
 //
 // Usage (from the project root, after mvn package, with the test MySQL of README.md):
-//   D=$(mktemp -d) && cp target/daemoxcp-mail-1.0.jar $D/
+//   D=$(mktemp -d) && cp target/daemoxcp-mail.jar $D/
 //   MYSQL="-Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test" \
 //     NODE_PATH=$(npm root -g) node tests/login-browser-test.js $D [screenshots-dir]
 const { chromium } = require('playwright');
@@ -45,7 +45,7 @@ const CLIENT_IP_OF = () => REMOTE ? remote('echo "${SSH_CLIENT%% *}"').trim() : 
 let CLIENT_IP = '127.0.0.1';
 function remote(cmd, opts) { return execFileSync('ssh', SSH.concat([REMOTE, cmd]), Object.assign({ encoding: 'utf8' }, opts || {})); }
 const BASE = 'https://panel.localhost:' + PORT;
-const JAR = path.join(dir, 'daemoxcp-mail-1.0.jar');
+const JAR = path.join(dir, 'daemoxcp-mail.jar');
 const PROPS = (process.env.MYSQL || '').split(' ').filter(Boolean)
     .concat(['-Ddaemoxcp.mail.secrets.dir=' + path.join(dir, 'secrets'), '-Ddaemoxcp.mail.vault.key=' + path.join(dir, 'master.key')]);
 let failures = 0;

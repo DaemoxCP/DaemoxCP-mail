@@ -39,7 +39,7 @@ import java.util.regex.Pattern;
  *
  * It creates a domain nobody can own (vacation-reset.test: .test is reserved) with two mailboxes in the mail database,
  * and removes all of it at the end. It touches the mail system, so only as root with -De2e.vm=yes, on the VM:
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.VacationTrackingE2ETest [database]
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.VacationTrackingE2ETest [database]
  */
 public class VacationTrackingE2ETest {
 

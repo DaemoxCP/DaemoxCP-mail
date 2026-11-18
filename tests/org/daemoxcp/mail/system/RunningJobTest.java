@@ -17,8 +17,8 @@ import java.util.List;
  *  - packageTurn says who holds the turn and since when, and nothing when it is free.
  *
  * Usage (from the project root, after mvn package):
- *   javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/system/RunningJobTest.java
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RunningJobTest
+ *   javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/system/RunningJobTest.java
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RunningJobTest
  */
 public class RunningJobTest {
 

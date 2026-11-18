@@ -1,7 +1,7 @@
 # La prova del passaggio da una versione vecchia
 
 > Dal 17/11/2026 il pannello si chiama DaemoxCP Mail: servizio `daemoxcp_mail`, cartella `/var/db/daemoxcp-mail`, jar
-> `daemoxcp-mail-1.0.jar`. Questi strumenti provano il passaggio dalle versioni di prima, che hanno ancora i nomi
+> `daemoxcp-mail.jar`. Questi strumenti provano il passaggio dalle versioni di prima, che hanno ancora i nomi
 > `mailpanel`: `check-state.sh`, `photo.sh` e gli script di Roundcube trovano l'uno o l'altro; `upgrade-phase.sh` resta
 > quello del 31/10, per il pannello dell'11/10. Il passaggio di adesso si prova con `tools/upgrade/upgrade-panel.sh`.
 

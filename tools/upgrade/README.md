@@ -46,7 +46,7 @@ resta fermo una decina di secondi; la posta resta sempre accesa.
 
 ```sh
 sh /root/panel-upgrade/upgrade-panel.sh -m upgrade-test@example.com -p /root/panel-upgrade/test.pass \
-    /root/panel-upgrade/daemoxcp-mail-1.0.jar IMPRONTA
+    /root/panel-upgrade/daemoxcp-mail.jar IMPRONTA
 ```
 
 | Passo | Cosa fa | Si ferma se |
@@ -84,7 +84,7 @@ INFO: [ProductRename] DONE: database/mail_panel.db -> database/daemoxcp-mail.db
 INFO: [DataFolderRename] DONE: /var/db/mailpanel -> /var/db/daemoxcp-mail, /var/db/mail-panel -> /var/db/daemoxcp-mail; paths updated in ...; reloaded [PHP, NGINX]
 INFO: [PanelMarker] DONE: the product name updated in the comments of ...
 INFO: [PanelUserRename] DONE: the user and group mailpanel are now daemoxcp_mail (uid ..., gid ..., comment 'DaemoxCP Mail web part')
-INFO: [PanelServiceRename] DONE: /usr/local/etc/rc.d/mailpanel -> /usr/local/etc/rc.d/daemoxcp_mail (...), rc.conf [enable] now daemoxcp_mail_*, pidfile ..., jar also /home/panel/daemoxcp-mail-1.0.jar (the same file: the old name goes at the next start), run.sh updated
+INFO: [PanelServiceRename] DONE: /usr/local/etc/rc.d/mailpanel -> /usr/local/etc/rc.d/daemoxcp_mail (...), rc.conf [enable] now daemoxcp_mail_*, pidfile ..., jar also /home/panel/daemoxcp-mail.jar (the same file: the old name goes at the next start), run.sh updated
 INFO: [AuthJailRename] DONE: mail-panel-auth -> daemoxcp-mail-auth: log /var/log/daemoxcp-mail-auth.log, filter, jail.local, newsyslog; fail2ban reloaded
 INFO: [PublicSurfaceRename] DONE: moved /var/log/nginx/mailpanel-public-access.log -> daemoxcp-mail-public-access.log; ...
 INFO: [MysqlRename] DONE: database mailserver -> daemoxcp_mail (... tables), users [mailpanel@localhost -> daemoxcp_mail@localhost, ...]; ... rewritten, Postfix and Dovecot reloaded and checked, the empty database mailserver removed; ...

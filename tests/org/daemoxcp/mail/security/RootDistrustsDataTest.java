@@ -25,7 +25,7 @@ import java.nio.file.Path;
  *
  * Usage (on the VM):
  *   java -De2e.vm=yes -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=... \
- *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.RootDistrustsDataTest
+ *        -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.RootDistrustsDataTest
  */
 public class RootDistrustsDataTest {
 

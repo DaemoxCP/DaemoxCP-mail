@@ -893,6 +893,8 @@ public class SSLMailServer {
             org.daemoxcp.mail.system.PostfixInetProtocols.ensureAtBoot();
             // La famiglia di indirizzi scelta nelle Impostazioni (IpFamily): Postfix, Dovecot, nginx. Senza scelta non fa niente.
             org.daemoxcp.mail.system.IpFamily.ensureAtBoot();
+            // Il nome del jar senza versione (0.9.0): sui server di prima, il collegamento daemoxcp-mail.jar.
+            org.daemoxcp.mail.system.JarName.ensureAtBoot();
 
             // Roundcube col suo utente e il suo pool di php-fpm, non piu' con l'utente di nginx: sui
             // server installati prima. Prima del plugin SSO, che da' la sua configurazione al gruppo

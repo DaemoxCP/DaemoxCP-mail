@@ -31,8 +31,8 @@ import java.util.Map;
  * The real resolver, on a real machine, is measured by the installation from scratch (reperti).
  *
  * It runs on the VM, like the other script tests:
- *   javac -cp &lt;dir&gt;/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/scripts/LocalResolverTest.java
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.LocalResolverTest
+ *   javac -cp &lt;dir&gt;/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/scripts/LocalResolverTest.java
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.scripts.LocalResolverTest
  */
 public class LocalResolverTest {
 

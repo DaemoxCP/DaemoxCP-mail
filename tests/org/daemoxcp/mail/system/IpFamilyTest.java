@@ -11,7 +11,7 @@ import java.util.TreeSet;
  * The effect on the real services is measured by tests/ip-family-browser-test.js on the test machine.
  *
  * It runs anywhere (it calls nothing):
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.IpFamilyTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.IpFamilyTest
  */
 public class IpFamilyTest {
 

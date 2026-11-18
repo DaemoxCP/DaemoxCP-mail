@@ -52,7 +52,7 @@ import java.util.concurrent.Executors;
  * <p>Usage (with the test MySQL of README.md):
  * <pre>
  *   su -m nobody -c 'java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
- *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.SieveDialogFieldsTest'
+ *        -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.SieveDialogFieldsTest'
  * </pre>
  */
 public class SieveDialogFieldsTest {

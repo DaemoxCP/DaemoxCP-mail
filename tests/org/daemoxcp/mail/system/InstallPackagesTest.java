@@ -52,8 +52,8 @@ import java.util.Set;
  * C on the one this machine's catalog would pick.
  *
  * Usage, on the VM:
- *   java -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallPackagesTest
- *   java -De2e.vm=yes -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.InstallPackagesTest
+ *   java -cp "tests:daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallPackagesTest
+ *   java -De2e.vm=yes -cp "tests:daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallPackagesTest
  */
 public class InstallPackagesTest {
 

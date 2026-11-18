@@ -37,7 +37,7 @@ import java.util.List;
  * SQLite, secrets and logs; MySQL is not needed (port 1). ONLY on a test clone: it is switched on
  * with -De2e.vm=yes, as root, and it refuses to start if there are already real ways back (the
  * pruning would remove some) or packages unlocked by an interrupted job.
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ReinstallJobTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ReinstallJobTest
  */
 public class ReinstallJobTest {
 

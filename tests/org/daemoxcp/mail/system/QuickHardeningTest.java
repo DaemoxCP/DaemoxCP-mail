@@ -24,7 +24,7 @@ import java.util.logging.Logger;
  * the check after the restart must see, syslogd still listening, a folder vmail cannot enter.
  *
  * Usage (on the VM):
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.QuickHardeningTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.QuickHardeningTest
  */
 public class QuickHardeningTest {
 

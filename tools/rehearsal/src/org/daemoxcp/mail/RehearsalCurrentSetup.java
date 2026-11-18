@@ -12,8 +12,8 @@ import java.nio.file.Path;
  *
  * Si compila contro il jar installato e si lancia dalla sua cartella (jarPath() e la cartella
  * corrente finiscono nello script di avvio):
- *   javac --release 25 -cp daemoxcp-mail-1.0.jar -d classes RehearsalCurrentSetup.java
- *   java -cp classes:daemoxcp-mail-1.0.jar org.daemoxcp.mail.RehearsalCurrentSetup rehearsal.test
+ *   javac --release 25 -cp daemoxcp-mail.jar -d classes RehearsalCurrentSetup.java
+ *   java -cp classes:daemoxcp-mail.jar org.daemoxcp.mail.RehearsalCurrentSetup rehearsal.test
  */
 public class RehearsalCurrentSetup {
     public static void main(String[] a) throws Exception {

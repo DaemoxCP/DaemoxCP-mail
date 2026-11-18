@@ -22,7 +22,7 @@ import java.util.Map;
  * the administrator's lines, a file that is not there and a damaged line that is not a comment stay
  * as they are. The effect on the real files is measured by the test on the VM (reperti).
  *
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.CommentRepairTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.CommentRepairTest
  */
 public class CommentRepairTest {
 

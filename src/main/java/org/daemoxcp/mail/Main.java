@@ -458,15 +458,15 @@ public class Main {
         }
 
         // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
-        //   java -jar daemoxcp-mail-1.0.jar --create-admin <nome> <email>   il primo amministratore
-        //   java -jar daemoxcp-mail-1.0.jar --access-code [nome]            un codice di accesso monouso
-        //   java -jar daemoxcp-mail-1.0.jar --ip-family both|ipv4|ipv6      IPv4, IPv6 o tutte e due (da root)
+        //   java -jar daemoxcp-mail.jar --create-admin <nome> <email>   il primo amministratore
+        //   java -jar daemoxcp-mail.jar --access-code [nome]            un codice di accesso monouso
+        //   java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6      IPv4, IPv6 o tutte e due (da root)
         // Il primo amministratore non si crea dal pannello web: chi raggiungesse per primo la
         // pagina diventerebbe amministratore.
         for (int i = 0; i < args.length; i++) {
             if ("--create-admin".equals(args[i])) {
                 if (i + 2 >= args.length) {
-                    System.err.println("Usage: java -jar daemoxcp-mail-1.0.jar --create-admin <name> <email>");
+                    System.err.println("Usage: java -jar daemoxcp-mail.jar --create-admin <name> <email>");
                     System.exit(2);
                 }
                 String notConnected = connectFromConfig();
@@ -490,7 +490,7 @@ public class Main {
                 String host = i + 1 < args.length ? args[i + 1].trim() : "";
                 Path exitFile = i + 2 < args.length ? Path.of(args[i + 2]) : null;
                 if (!org.daemoxcp.mail.system.ReinstallJob.validHostname(host)) {
-                    System.err.println("Usage: java -jar daemoxcp-mail-1.0.jar --reinstall <mail hostname> [result file]");
+                    System.err.println("Usage: java -jar daemoxcp-mail.jar --reinstall <mail hostname> [result file]");
                     if (exitFile != null) org.daemoxcp.mail.system.ReinstallJob.writeExit(exitFile, false);
                     System.exit(2);
                 }
@@ -1294,7 +1294,7 @@ public class Main {
                     setupRequired = !mailDatabase.hasAdminUser();
                     if (setupRequired)
                         System.out.println(ANSI_YELLOW + "No administrator yet. Create the first one from the console:\n"
-                                + "  java -jar daemoxcp-mail-1.0.jar --create-admin <name> <email>" + ANSI_RESET);
+                                + "  java -jar daemoxcp-mail.jar --create-admin <name> <email>" + ANSI_RESET);
                     System.out.println(ANSI_GREEN + "Connected to MySQL database" + ANSI_RESET);
                 } else {
                     System.out.println(ANSI_YELLOW + "[WARNING] Could not connect to MySQL database" + ANSI_RESET);
@@ -1667,7 +1667,7 @@ public class Main {
     }
 
     /**
-     * java -jar daemoxcp-mail-1.0.jar --create-admin <nome> <email>: il primo amministratore,
+     * java -jar daemoxcp-mail.jar --create-admin <nome> <email>: il primo amministratore,
      * superadmin, senza password. Solo se non ce n'e' nessuno attivo: gli altri si aggiungono
      * dalla pagina Amministratori, e chi ha perso l'accesso usa --access-code. Stampa un codice
      * di accesso monouso, perche' l'email del server potrebbe non partire ancora (DNS da fare).
@@ -1839,7 +1839,7 @@ public class Main {
     }
 
     /**
-     * java -jar daemoxcp-mail-1.0.jar --access-code [nome]: un codice monouso di otto cifre
+     * java -jar daemoxcp-mail.jar --access-code [nome]: un codice monouso di otto cifre
      * per entrare senza email ne' passkey (primo accesso, email persa). Lo genera solo chi ha una
      * shell sul server; vale 15 minuti, una volta. Restituisce il codice di uscita del processo.
      */
@@ -1863,7 +1863,7 @@ public class Main {
     static int setIpFamily(String value) {
         org.daemoxcp.mail.system.IpFamily.Family f = org.daemoxcp.mail.system.IpFamily.Family.of(value);
         if (f == null) {
-            System.err.println("Usage: java -jar daemoxcp-mail-1.0.jar --ip-family both|ipv4|ipv6");
+            System.err.println("Usage: java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6");
             return 2;
         }
         if (!"root".equals(System.getProperty("user.name"))) {
@@ -1902,6 +1902,6 @@ public class Main {
                 && (a.hasEmail() || !org.daemoxcp.mail.security.AuthStore.passkeysOf(a.id()).isEmpty()));
         if (!someoneCanLogIn)
             System.out.println(ANSI_YELLOW + "No administrator has a login email or a passkey yet. Get a one-time code with:\n"
-                    + "  java -jar daemoxcp-mail-1.0.jar --access-code" + ANSI_RESET);
+                    + "  java -jar daemoxcp-mail.jar --access-code" + ANSI_RESET);
     }
 }

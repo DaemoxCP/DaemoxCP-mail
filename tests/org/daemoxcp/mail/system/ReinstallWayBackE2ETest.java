@@ -24,7 +24,7 @@ import java.util.List;
  * It creates and removes real boot environments: ONLY on a test clone, and it refuses to start if
  * there are already ways back of package jobs (the pruning would remove them). It is switched on
  * with -De2e.vm=yes, as root, where bectl check succeeds:
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ReinstallWayBackE2ETest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ReinstallWayBackE2ETest
  */
 public class ReinstallWayBackE2ETest {
 

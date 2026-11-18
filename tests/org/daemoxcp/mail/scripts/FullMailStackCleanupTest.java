@@ -39,8 +39,8 @@ import java.util.stream.Stream;
  *    are not touched, and the test checks it.
  *
  * As root on the VM (pw -R writes the files and calls pwd_mkdb):
- *   javac -cp &lt;dir&gt;/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/scripts/FullMailStackCleanupTest.java
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.scripts.FullMailStackCleanupTest
+ *   javac -cp &lt;dir&gt;/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/scripts/FullMailStackCleanupTest.java
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.scripts.FullMailStackCleanupTest
  */
 public class FullMailStackCleanupTest {
 

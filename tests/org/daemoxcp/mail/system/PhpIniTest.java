@@ -27,7 +27,7 @@ import java.util.Map;
  *    message the user reads talks about the wrong thing.
  *
  * It runs on the VM, where php is:
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PhpIniTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.PhpIniTest
  */
 public class PhpIniTest {
 

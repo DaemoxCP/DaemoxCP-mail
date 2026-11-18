@@ -22,8 +22,8 @@ import java.util.List;
  *  - if Cloudflare ignored the filter and answered every record, still only the exact ones are touched.
  *
  * Usage (from the project root, after mvn package):
- *   javac -cp target/daemoxcp-mail-1.0.jar -d tests tests/org/daemoxcp/mail/security/CloudflareCommentsTest.java
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.CloudflareCommentsTest
+ *   javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/security/CloudflareCommentsTest.java
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.CloudflareCommentsTest
  */
 public class CloudflareCommentsTest {
 

@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
  *    for it only in the messages that go to the administrator, never in the email change.
  *
  * It runs on the VM like the others:
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PanelMailTest
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelMailTest
  * With -Dpanelmail.dump=<folder> it also writes the composed messages (.eml), to look at them in a
  * mail program.
  */

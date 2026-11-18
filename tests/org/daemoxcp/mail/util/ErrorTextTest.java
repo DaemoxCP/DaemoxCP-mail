@@ -32,7 +32,7 @@ import java.util.logging.Logger;
  * </ul>
  * And in the sources: no route answer of SSLMailServer and no "success" answer of UpdateManager puts
  * {@code getMessage()} by itself any more.
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.util.ErrorTextTest
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.util.ErrorTextTest
  */
 public class ErrorTextTest {
 

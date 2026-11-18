@@ -50,7 +50,7 @@ import java.util.stream.Stream;
  *     column is ASCII (the database's collation is not the one of its tables).
  *
  * Usage (on the VM, from the project folder for part 3):
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.database.SqlCatalogTest
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.database.SqlCatalogTest
  *   java -Dmysql.root=yes -Dmysql.port=33062 -cp ... org.daemoxcp.mail.database.SqlCatalogTest
  */
 public class SqlCatalogTest {

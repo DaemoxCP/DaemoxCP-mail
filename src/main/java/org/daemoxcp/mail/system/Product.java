@@ -19,6 +19,8 @@ public final class Product {
     public static final String NAME = "DaemoxCP Mail";
     public static final String SLUG = "daemoxcp-mail";
     public static final String ID = "daemoxcp_mail";
+    /** Il nome del jar, senza versione (dalla 0.9.0): quello dei comandi da console e del README (JarName). */
+    public static final String JAR_FILE = SLUG + ".jar";
 
     private Product() {}
 }

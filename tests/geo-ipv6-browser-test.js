@@ -60,7 +60,7 @@ function reach(host, port) {
         await cdp.send('WebAuthn.enable');
         await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true,
             hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
-        const m = remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null').match(/One-time access code for [^:]*: (\d{4} \d{4})/);
+        const m = remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null').match(/One-time access code for [^:]*: (\d{4} \d{4})/);
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');
         await page.fill('#consoleCode', m ? m[1] : '');

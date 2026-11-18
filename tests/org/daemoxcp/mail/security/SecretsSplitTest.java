@@ -23,7 +23,7 @@ import java.util.Properties;
  *     and the root file stay 0600 root. The group daemoxcp_mail is created if missing, and removed after.
  *
  * Usage (on the VM):
- *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.SecretsSplitTest
+ *   java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.SecretsSplitTest
  */
 public class SecretsSplitTest {
 

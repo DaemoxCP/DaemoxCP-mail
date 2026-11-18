@@ -30,7 +30,7 @@ rm -f "$saved"
 
 echo "build $build, commit $commit$([ "$modified" = true ] && echo ' (con modifiche non salvate in un commit)')"
 if command -v sha256 >/dev/null 2>&1; then
-    sha256 -q target/daemoxcp-mail-1.0.jar
+    sha256 -q target/daemoxcp-mail.jar
 else
-    shasum -a 256 target/daemoxcp-mail-1.0.jar | cut -d' ' -f1
+    shasum -a 256 target/daemoxcp-mail.jar | cut -d' ' -f1
 fi

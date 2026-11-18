@@ -44,7 +44,7 @@ import java.util.stream.Stream;
  *
  * Part 3 creates a domain nobody can own (sieve-owner.test: .test is reserved) with two mailboxes in the mail database
  * and removes all of it at the end. Parts 2 and 3 only as root with -De2e.vm=yes, on the VM:
- *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.SieveFolderOwnerTest [database]
+ *   java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SieveFolderOwnerTest [database]
  */
 public class SieveFolderOwnerTest {
 

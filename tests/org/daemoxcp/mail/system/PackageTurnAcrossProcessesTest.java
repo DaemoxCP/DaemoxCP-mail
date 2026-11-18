@@ -34,7 +34,7 @@ import java.util.Map;
  * List, job record, notice and lock live in a test folder. The restore asks pkg about two packages
  * that do not exist (pkg info -e), so it changes nothing on the machine; it must be run on the VM
  * like the others, as root (the script checks it):
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PackageTurnAcrossProcessesTest
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PackageTurnAcrossProcessesTest
  */
 public class PackageTurnAcrossProcessesTest {
 

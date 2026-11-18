@@ -17,7 +17,7 @@ import java.util.Map;
  *     webmail not answering;
  *  4. a fault (php-fpm -t refusing, the webmail not answering after the reload, php-fpm not reading the file, a file
  *     not writable): php.ini gone, the rotation gone, the pool as before.
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PhpHardeningTest
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PhpHardeningTest
  */
 public class PhpHardeningTest {
 

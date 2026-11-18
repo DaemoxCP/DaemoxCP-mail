@@ -12,7 +12,7 @@ import java.util.List;
  * rename could not replace forward.conf ("Operation not permitted") and the upgrade stopped at the first start.
  *
  * It needs FreeBSD and root (chflags), in a temporary folder; anywhere else it says so and stops:
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.ImmutableCommentTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.ImmutableCommentTest
  */
 public class ImmutableCommentTest {
 

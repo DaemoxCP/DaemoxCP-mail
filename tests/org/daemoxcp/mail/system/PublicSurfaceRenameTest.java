@@ -25,7 +25,7 @@ import java.util.stream.Stream;
  * on the real nginx, fail2ban and pf is measured by the test on the VM (reperti).
  *
  * It runs anywhere (it calls nothing):
- *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.PublicSurfaceRenameTest
+ *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.PublicSurfaceRenameTest
  */
 public class PublicSurfaceRenameTest {
 

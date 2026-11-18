@@ -21,7 +21,7 @@ import java.util.Map;
  *     unknown; the rules from this server's ports; a confirmation of a list that changed meanwhile is refused, a good
  *     one is written 0600.
  * Needs openssl: on the VM.
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.security.PanelCertificateTest
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.PanelCertificateTest
  */
 public class PanelCertificateTest {
 

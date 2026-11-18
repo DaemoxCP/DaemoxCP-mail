@@ -30,7 +30,7 @@ import java.util.UUID;
  *  5. refusals that change nothing: a roundcube account with more than its database, a panel with only part of it.
  *
  * Usage (on the VM, with the test MySQL of tests/README.md, as root):
- *   java -Dmysql.port=33062 -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.RoundcubeDbUserMysqlTest
+ *   java -Dmysql.port=33062 -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RoundcubeDbUserMysqlTest
  */
 public class RoundcubeDbUserMysqlTest {
 

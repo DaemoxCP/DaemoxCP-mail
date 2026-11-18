@@ -72,7 +72,7 @@ function families(sock, port) {
         await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
             protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
             isUserVerified: true, automaticPresenceSimulation: true } });
-        const m = remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code').match(/One-time access code for [^:]*: (\d{4} \d{4})/);
+        const m = remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code').match(/One-time access code for [^:]*: (\d{4} \d{4})/);
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');
         await page.fill('#consoleCode', m[1]);
@@ -174,7 +174,7 @@ function families(sock, port) {
         console.log('\n== 5. From the console, as root: the way back when a choice cut you off ==');
         const anchor = () => remote('pfctl -a panel-fw -sr 2>/dev/null | wc -l').trim();
         const anchorBefore = anchor();
-        const consoleRun = v => remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --ip-family ' + v + ' 2>&1; echo "rc=$?"');
+        const consoleRun = v => remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --ip-family ' + v + ' 2>&1; echo "rc=$?"');
         let out = consoleRun('ipv4');
         let auditOut = out;
         check('--ip-family ipv4: done (' + out.trim().split('\n')[0] + ')', /rc=0/.test(out) && /^Done/m.test(out));

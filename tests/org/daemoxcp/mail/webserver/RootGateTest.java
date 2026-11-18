@@ -23,7 +23,7 @@ import java.util.stream.Stream;
  *     list, so no page feature is refused by mistake.
  *
  * Usage (on the VM, from the project folder for part 4):
- *   java -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.RootGateTest
+ *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.RootGateTest
  */
 public class RootGateTest {
 

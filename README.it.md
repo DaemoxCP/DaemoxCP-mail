@@ -228,7 +228,7 @@ Misurati su un server in uso (`ps -ax -o user,command`):
 | `…/panel-secrets.properties` | `0640` | `root:daemoxcp_mail` | i segreti della parte web, **in sola lettura** per lei: chiavi di cifratura, la sua password di MySQL, la chiave pubblica della cassaforte |
 | `…/firewall.json` | `0600` | `root:wheel` | lo stato del firewall |
 | `/home/panel/` | `0755` | `root:wheel` | la cartella del pannello |
-| `/home/panel/daemoxcp-mail-1.0.jar` | `0644` | `root:wheel` | il programma: la parte web lo legge, solo root lo cambia |
+| `/home/panel/daemoxcp-mail.jar` | `0644` | `root:wheel` | il programma: la parte web lo legge, solo root lo cambia |
 | `/home/panel/database/` | `0750` | `root:daemoxcp_mail` | la configurazione del pannello (SQLite) |
 | `/var/run/daemoxcp-mail/root.sock` | `0660` | `root:daemoxcp_mail` | il canale fra le due parti |
 | `/var/db/daemoxcp-mail/` | `0755` | `root:wheel` | lo stato del pannello, i registri, i file pubblici di MTA-STS |
@@ -424,7 +424,7 @@ mount /proc && java -version
    tools/build-jar.sh
    ```
 
-   Scrive `target/daemoxcp-mail-1.0.jar` col numero di build e il commit dentro, e stampa lo SHA-256 del jar.
+   Scrive `target/daemoxcp-mail.jar` col numero di build e il commit dentro, e stampa lo SHA-256 del jar.
 2. **Mettilo in `/home/panel`**, non in `/root`. La parte web del pannello gira col suo utente, `daemoxcp_mail`,
    che deve poter leggere il jar; `/root` è chiusa agli altri utenti.
 
@@ -435,7 +435,7 @@ mount /proc && java -version
    Poi, dal tuo computer:
 
    ```bash
-   scp target/daemoxcp-mail-1.0.jar root@203.0.113.10:/home/panel/
+   scp target/daemoxcp-mail.jar root@203.0.113.10:/home/panel/
    ```
 3. **Copia i certificati d'origine.** La coppia del pannello può stare dove vuoi: il pannello la legge una volta e
    se la tiene. Quella della webmail deve restare dove la metti, perché nginx la legge da lì: usa
@@ -467,7 +467,7 @@ Apri il menu dalla cartella del pannello, in un terminale di almeno 120 × 40 ca
 `ssh -t root@203.0.113.10`):
 
 ```bash
-cd /home/panel && java -jar daemoxcp-mail-1.0.jar
+cd /home/panel && java -jar daemoxcp-mail.jar
 ```
 
 Frecce per muoverti, Invio per scegliere, Tab per passare da un campo al successivo. Ogni opzione chiede prima una
@@ -615,7 +615,7 @@ Un secondo avvio non ha niente da fare.
 | Cosa | Prima | Adesso |
 |---|---|---|
 | servizio | `service mailpanel …` | `service daemoxcp_mail …` |
-| jar | `freebsd-mail-panel-1.0.jar` | `daemoxcp-mail-1.0.jar` |
+| jar | `freebsd-mail-panel-1.0.jar` | `daemoxcp-mail.jar` |
 | utente e gruppo della parte web | `mailpanel` | `daemoxcp_mail` (stesso uid e gid) |
 | segreti | `/usr/local/etc/mail-panel/` | `/usr/local/etc/daemoxcp-mail/` |
 | dati | `/var/db/mailpanel/`, `/var/db/mail-panel/` | `/var/db/daemoxcp-mail/` |
@@ -642,14 +642,19 @@ Ogni servizio viene controllato e ricaricato.
 
 | Comando (da `/home/panel`) | Cosa fa |
 |---|---|
-| `java -jar daemoxcp-mail-1.0.jar` | il menu nel terminale; il server web parte dalla sua ultima voce |
-| `java -jar daemoxcp-mail-1.0.jar --web` | solo il server web, senza menu (quello che esegue il servizio) |
-| `java -jar daemoxcp-mail-1.0.jar --access-code [nome]` | un codice di accesso monouso di 8 cifre per un amministratore |
-| `java -jar daemoxcp-mail-1.0.jar --create-admin <nome> <email>` | il primo amministratore, quando non ce n'è nessuno |
-| `java -jar daemoxcp-mail-1.0.jar --ip-family both\|ipv4\|ipv6` | IPv4, IPv6 o tutte e due, come in *Impostazioni*, da root: la strada per tornare indietro quando una scelta ti ha chiuso fuori dal pannello |
+| `java -jar daemoxcp-mail.jar` | il menu nel terminale; il server web parte dalla sua ultima voce |
+| `java -jar daemoxcp-mail.jar --web` | solo il server web, senza menu (quello che esegue il servizio) |
+| `java -jar daemoxcp-mail.jar --access-code [nome]` | un codice di accesso monouso di 8 cifre per un amministratore |
+| `java -jar daemoxcp-mail.jar --create-admin <nome> <email>` | il primo amministratore, quando non ce n'è nessuno |
+| `java -jar daemoxcp-mail.jar --ip-family both\|ipv4\|ipv6` | IPv4, IPv6 o tutte e due, come in *Impostazioni*, da root: la strada per tornare indietro quando una scelta ti ha chiuso fuori dal pannello |
 | `service daemoxcp_mail start\|stop\|restart\|status` | il pannello come servizio |
 
 I comandi da console vanno lanciati da `/home/panel`: il database del pannello è in `database/` accanto al jar.
+
+Dalla 0.9.0 il jar si chiama `daemoxcp-mail.jar`, senza la versione (la versione è dentro, e nella dashboard). Sui
+server installati prima il file si chiama ancora `daemoxcp-mail-1.0.jar` e il servizio continua a usare quello: al
+primo avvio il pannello aggiunge accanto il collegamento `daemoxcp-mail.jar`, così i comandi qui sopra sono uguali
+dappertutto, e `tools/upgrade/upgrade-panel.sh`, che sostituisce il file vero, non lascia mai indietro il collegamento.
 
 ### Il menu nel terminale
 
@@ -712,8 +717,8 @@ importanza. Poi:
 | un programma di posta non entra | *Fail2ban*: l'indirizzo può essere bannato; la casella può essere disattivata |
 | il pannello non risponde | `service daemoxcp_mail status`, poi `/var/db/daemoxcp-mail/panel.log` |
 | `421 Misdirected Request` | il pannello è stato chiamato per IP o con un altro nome: usa il suo nome |
-| nessun amministratore riesce a entrare | `java -jar daemoxcp-mail-1.0.jar --access-code` da `/home/panel` |
-| il pannello non risponde più dopo aver scelto solo IPv4 o solo IPv6 | da root, da `/home/panel`: `java -jar daemoxcp-mail-1.0.jar --ip-family both` |
+| nessun amministratore riesce a entrare | `java -jar daemoxcp-mail.jar --access-code` da `/home/panel` |
+| il pannello non risponde più dopo aver scelto solo IPv4 o solo IPv6 | da root, da `/home/panel`: `java -jar daemoxcp-mail.jar --ip-family both` |
 
 ---
 

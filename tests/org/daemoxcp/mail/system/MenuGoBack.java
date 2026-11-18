@@ -7,7 +7,7 @@ import org.daemoxcp.mail.i18n.I18n;
  * The driver of menu item 6 (ReinstallReturn.goBack on the most recent reinstallation way back),
  * without the confirmation window and without rebooting: whoever runs it reboots. Like
  * MenuReinstall, only on a test clone.
- *   java -De2e.vm=yes -cp "tests:daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.MenuGoBack
+ *   java -De2e.vm=yes -cp "tests:daemoxcp-mail.jar" org.daemoxcp.mail.system.MenuGoBack
  */
 public class MenuGoBack {
     public static void main(String[] args) {

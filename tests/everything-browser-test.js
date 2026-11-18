@@ -34,7 +34,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const POSTFIX_PORTS = 'sockstat -l -P tcp | awk "\\$2==\\"master\\" {print \\$5, \\$6}" | sort -u | tr "\\n" " "';
 
 async function signIn(page) {
-    const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail-1.0.jar --access-code 2>/dev/null').match(/([0-9]{4} [0-9]{4})/)[1];
+    const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null').match(/([0-9]{4} [0-9]{4})/)[1];
     await page.goto(BASE + '/index');
     await page.click('#linkConsole');
     await page.fill('#consoleCode', code);

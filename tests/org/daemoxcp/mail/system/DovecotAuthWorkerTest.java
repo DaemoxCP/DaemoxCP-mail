@@ -29,7 +29,7 @@ import java.util.logging.Logger;
  *
  * Usage (on the VM):
  *   java -De2e.vm=yes -Dtest.mailbox=alice@rehearsal.test -Dtest.passfile=/root/upgrade/alice.pass \
- *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.system.DovecotAuthWorkerTest
+ *        -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.DovecotAuthWorkerTest
  */
 public class DovecotAuthWorkerTest {
 

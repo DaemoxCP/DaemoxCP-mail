@@ -48,7 +48,7 @@ import java.util.regex.Pattern;
  *
  * Usage (with the test MySQL of README.md):
  *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
- *        -cp "tests:target/daemoxcp-mail-1.0.jar" org.daemoxcp.mail.webserver.LoginRoutesTest
+ *        -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.webserver.LoginRoutesTest
  */
 public class LoginRoutesTest {
 

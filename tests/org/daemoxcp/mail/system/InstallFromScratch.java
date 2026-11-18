@@ -24,7 +24,7 @@ import java.util.Map;
  * password that might be there.
  *
  * Usage (from the panel's folder, as root, on a machine with nothing else):
- *   java -cp "tests:daemoxcp-mail-1.0.jar" \
+ *   java -cp "tests:daemoxcp-mail.jar" \
  *        org.daemoxcp.mail.system.InstallFromScratch mail.test.local webmail.test.local 8443
  */
 public class InstallFromScratch {
