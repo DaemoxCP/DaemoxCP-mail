@@ -214,9 +214,9 @@ public class FullMailStackScript {
             fi
             MYSQL_WORK=$(mktemp -d /var/tmp/daemoxcp-mail-all.XXXXXXXX) || exit 1
             trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
-            if mysql --no-defaults -u root --password= -e "SELECT 1" >/dev/null 2>&1; then
+            if mysql --no-defaults -u root -e "SELECT 1" >/dev/null 2>&1; then
                 echo "Fresh MySQL: setting the root password"
-                if ! mysql --no-defaults -u root --password= << EOROOT
+                if ! mysql --no-defaults -u root << EOROOT
             ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
             EOROOT
                 then
@@ -411,7 +411,8 @@ mynetworks = 127.0.0.0/8 [::1]/128
 # Virtual mailbox settings
 virtual_mailbox_domains = mysql:/usr/local/etc/postfix/mysql-virtual-domains.cf
 virtual_mailbox_maps = mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf
-virtual_alias_maps = mysql:/usr/local/etc/postfix/mysql-virtual-aliases.cf
+# Gli alias, poi ogni casella che punta a se stessa: un catch-all prende solo gli indirizzi che non esistono
+virtual_alias_maps = mysql:/usr/local/etc/postfix/mysql-virtual-aliases.cf, mysql:/usr/local/etc/postfix/""" + PostfixMaps.MAILBOX_ADDRESSES_FILE + "\n" + """
 virtual_transport = lmtp:unix:private/dovecot-lmtp
 virtual_mailbox_base = /var/vmail
 virtual_minimum_uid = 5000
@@ -468,6 +469,14 @@ password = ${MAILSERVER_PASS}
 hosts = 127.0.0.1
 dbname = daemoxcp_mail
 query = SELECT destination FROM aliases WHERE source='%s' AND active=1
+MYSQLCONF
+
+            cat > /usr/local/etc/postfix/""" + PostfixMaps.MAILBOX_ADDRESSES_FILE + " << MYSQLCONF\n" + """
+user = daemoxcp_mail
+password = ${MAILSERVER_PASS}
+hosts = 127.0.0.1
+dbname = daemoxcp_mail
+""" + "query = " + PostfixMaps.MAILBOX_ADDRESSES_QUERY + "\n" + """
 MYSQLCONF
 
             chmod 640 /usr/local/etc/postfix/mysql-*.cf

@@ -220,8 +220,10 @@ public class MailDbUsersTest {
         check("the 2.3 auth-sql.conf.ext is untouched", snapshot(at).stream().anyMatch(s -> s.startsWith("auth-sql.conf.ext"))
                 && before.stream().filter(s -> s.startsWith("auth-sql.conf.ext")).toList()
                 .equals(snapshot(at).stream().filter(s -> s.startsWith("auth-sql.conf.ext")).toList()));
-        check("each map probed before and after (6), Postfix and Dovecot reloaded once each",
-                f.postmaps == 6 && f.postfixReloads == 1 && f.dovecotReloads == 1);
+        // Every map of the list, the mailbox addresses' one included (MailboxAddressMap): before and after.
+        int maps = MailDbUsers.POSTFIX_MAPS.size();
+        check("each map probed before and after (" + 2 * maps + ", " + f.postmaps + "), Postfix and Dovecot reloaded once each",
+                maps == 4 && f.postmaps == 2 * maps && f.postfixReloads == 1 && f.dovecotReloads == 1);
         check("no temporary file left next to the maps", snapshot(at).size() == before.size());
 
         List<String> switched = snapshot(at);

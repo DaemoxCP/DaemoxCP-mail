@@ -46,7 +46,7 @@ final class RootGate {
             Map.entry("/api/fail2ban_health", GET_POST), Map.entry("/api/clamav_health", GET_POST),
             Map.entry("/api/unbound_health", GET_POST), Map.entry("/api/firewall", GET_POST), Map.entry("/api/rspamd", GET_POST),
             Map.entry("/api/updates", GET_POST), Map.entry("/api/logs", GET_POST), Map.entry("/api/system_paths", GET),
-            Map.entry("/api/panel_info", GET), Map.entry("/api/service", POST), Map.entry("/api/timezone-diag", GET_POST),
+            Map.entry("/api/panel_info", GET), Map.entry("/api/mailbox-quota", GET), Map.entry("/api/service", POST), Map.entry("/api/timezone-diag", GET_POST),
             Map.entry("/api/postfix-aliases-health", GET_POST), Map.entry("/api/sso", GET_POST), Map.entry("/api/admins", GET_POST),
             Map.entry("/api/report", POST), Map.entry("/api/hostname", GET_POST), Map.entry("/api/roundcube-domain", GET_POST),
             // L'accesso e la scheda Account: amministratori, passkey, codici e sessioni li decide la root (0.8.2, A).

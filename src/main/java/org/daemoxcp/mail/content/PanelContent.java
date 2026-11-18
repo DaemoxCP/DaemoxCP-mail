@@ -204,6 +204,9 @@ public class PanelContent {
         [data-theme="dark"] .alert-warning { background-color: rgba(255, 193, 7, 0.15); border-color: rgba(255, 193, 7, 0.3); color: #ffda6a; }
         [data-theme="dark"] .alert-success { background-color: rgba(25, 135, 84, 0.15); border-color: rgba(25, 135, 84, 0.3); color: #75d9a3; }
         [data-theme="dark"] .alert-danger { background-color: rgba(220, 53, 69, 0.15); border-color: rgba(220, 53, 69, 0.3); color: #f1aeb5; }
+        /* Il link dentro un avviso (alert-link) col colore del suo testo: Bootstrap gli lascia quello scuro del tema chiaro,
+           1,09:1 su un avviso azzurro del tema scuro (misurato). Resta in grassetto e sottolineato. */
+        [data-theme="dark"] .alert .alert-link { color: inherit; }
         [data-theme="dark"] .list-group-item { background-color: var(--bg-card); border-color: var(--border-color); color: var(--text-primary); }
         [data-theme="dark"] .nav-tabs .nav-link { color: var(--text-secondary); }
         [data-theme="dark"] .nav-tabs .nav-link.active { background-color: var(--bg-card); border-color: var(--border-color) var(--border-color) var(--bg-card); color: var(--text-primary); }
@@ -3005,10 +3008,12 @@ public class PanelContent {
             </div>
 
             <div id="mbMsg" role="status" aria-live="polite"></div>
+            <!-- Le quote non applicate (DovecotQuota): lo si dice qui, invece di lasciar credere che il limite valga. -->
+            <p class="small text-muted mb-2" id="mbQuotaNote" role="status" hidden></p>
             <div class="table-responsive">
                 <table class="table table-hover table-cards">
                     <thead class="table-light">
-                        <tr><th>Email</th><th>{{t:mbx.colName}}</th><th>Quota</th><th>{{t:mbx.colFeatures}}</th><th>{{t:home.colActions}}</th></tr>
+                        <tr><th>Email</th><th>{{t:mbx.colName}}</th><th>{{t:mbx.colQuota}}</th><th>{{t:mbx.colFeatures}}</th><th>{{t:home.colActions}}</th></tr>
                     </thead>
                     <tbody id="mailboxesTable">
                         <tr><td colspan="5" class="text-center">{{t:common.loading}}</td></tr>
@@ -3338,6 +3343,60 @@ public class PanelContent {
             });
         }
 
+        // Quanto usa ogni casella del suo limite (DovecotQuota, dalla root con doveadm): sotto la quota, con una barra
+        // per chi ha un limite. Se Dovecot non applica le quote, una riga sopra la tabella lo dice.
+        function quotaSize(kb) {
+            const k = Math.max(0, Number(kb) || 0), mb = k / 1024;
+            const unit = k < 1024 ? 'kilobyte' : mb >= 1024 ? 'gigabyte' : 'megabyte';
+            const value = k < 1024 ? k : mb >= 1024 ? mb / 1024 : mb;
+            try {
+                return new Intl.NumberFormat(window.I18N_LANG || undefined, { style: 'unit', unit: unit,
+                    maximumFractionDigits: unit !== 'kilobyte' && (value < 10 || unit === 'gigabyte') ? 1 : 0 }).format(value);
+            } catch (e) {
+                return Math.round(value) + (unit === 'kilobyte' ? ' KB' : unit === 'gigabyte' ? ' GB' : ' MB');
+            }
+        }
+
+        function loadQuotaUsage() {
+            const note = document.getElementById('mbQuotaNote');
+            fetch('/api/mailbox-quota').then(r => r.json()).then(data => {
+                if (!data.success) {
+                    note.textContent = t('mbx.quotaUsageError', { error: data.error || '?' });
+                    note.hidden = false;
+                    return;
+                }
+                if (!data.applied) {
+                    note.textContent = t('mbx.quotaNotApplied', { reason: data.reason || '?' });
+                    note.hidden = false;
+                    return;
+                }
+                note.hidden = true;
+                (data.mailboxes || []).forEach(u => {
+                    const cell = document.querySelector('.mbx-usage[data-quota-of="' + CSS.escape(u.email) + '"]');
+                    if (!cell) return;
+                    cell.replaceChildren();
+                    const used = quotaSize(u.used_kb);
+                    if (!u.limit_kb) { cell.textContent = t('mbx.quotaUsedOnly', { used: used }); return; }
+                    const pct = Math.max(0, Math.min(100, Number(u.percent) || 0));
+                    const line = document.createElement('div');
+                    line.textContent = pct >= 100 ? t('mbx.quotaFull', { used: used }) : t('mbx.quotaUsed', { used: used, percent: pct });
+                    if (pct >= 100) line.className = 'text-danger fw-semibold';
+                    const bar = document.createElement('div');
+                    bar.className = 'progress mt-1';
+                    bar.setAttribute('role', 'progressbar');
+                    bar.setAttribute('aria-valuemin', '0');
+                    bar.setAttribute('aria-valuemax', '100');
+                    bar.setAttribute('aria-valuenow', String(pct));
+                    bar.setAttribute('aria-label', t('mbx.quotaUsed', { used: used, percent: pct }));
+                    const fill = document.createElement('div');
+                    fill.className = 'progress-bar ' + (pct >= 100 ? 'bg-danger' : pct >= 90 ? 'bg-warning' : 'bg-success');
+                    fill.setAttribute('data-style', 'width: ' + pct + '%');
+                    bar.append(fill);
+                    cell.append(line, bar);
+                });
+            }).catch(() => {});
+        }
+
         function loadMailboxes() {
             fetch('/api/mailboxes').then(r => r.json()).then(data => {
                 const tbody = document.getElementById('mailboxesTable');
@@ -3354,7 +3413,7 @@ public class PanelContent {
                             ${!m.active ? '<span class="badge bg-danger ms-1">' + escMbx(t('mbx.inactive')) + '</span>' : ''}
                         </td>
                         <td data-label="${escMbx(t('mbx.colName'))}">${escMbx(m.name || '-')}</td>
-                        <td data-label="Quota">${m.quota_mb === 0 ? '<span class="text-success"><i class="fas fa-infinity" aria-hidden="true"></i> ' + escMbx(t('mbx.unlimited')) + '</span>' : m.quota_mb + ' MB'}</td>
+                        <td data-label="${escMbx(t('mbx.colQuota'))}">${m.quota_mb === 0 ? '<span class="text-success"><i class="fas fa-infinity" aria-hidden="true"></i> ' + escMbx(t('mbx.unlimited')) + '</span>' : m.quota_mb + ' MB'}<div class="small text-muted mbx-usage" data-quota-of="${escMbx(m.email)}"></div></td>
                         <td data-label="${escMbx(t('mbx.colFeatures'))}">${[
                             m.autoresponder_enabled ? '<span class="badge bg-info feature-badge" title="' + escMbx(t('mbx.arOn')) + '"><i class="fas fa-reply-all" aria-hidden="true"></i></span>' : '',
                             m.forwarding_count > 0 ? '<span class="badge bg-warning feature-badge" title="' + escMbx(t('mbx.fwOn')) + '"><i class="fas fa-share" aria-hidden="true"></i> ' + m.forwarding_count + '</span>' : '',
@@ -3396,6 +3455,7 @@ public class PanelContent {
                         </td>
                     </tr>
                 `).join('');
+                loadQuotaUsage();
             });
         }
 
@@ -4104,7 +4164,13 @@ public class PanelContent {
                             <span class="input-group-text">@</span>
                             <select class="form-select" id="alDomain" aria-label="{{t:al.sourceDomain}}" required></select>
                         </div>
-                        <small class="d-block text-muted mb-3">{{t:al.sourceHint}}</small>
+                        <small class="d-block text-muted mb-2">{{t:al.sourceHint}}</small>
+                        <!-- Il catch-all: l'alias con sorgente @dominio, per ogni indirizzo che non e' ne' alias ne' casella. -->
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" id="alCatchAll" aria-describedby="alCatchAllHint" data-on-change="aliasCatchAllToggle(this)">
+                            <label class="form-check-label" for="alCatchAll">{{t:al.catchAll}}</label>
+                        </div>
+                        <small class="d-block text-muted mb-3" id="alCatchAllHint">{{t:al.catchAllHint}}</small>
                         <label class="form-label" for="alDest">{{t:mbx.fwDest}}</label>
                         <input type="email" class="form-control mb-1" id="alDest" placeholder="{{t:al.destPh}}" maxlength="254" autocomplete="off" required>
                         <small class="d-block text-muted mb-3">{{t:al.destHint}}</small>
@@ -4189,8 +4255,12 @@ public class PanelContent {
                 }
                 tbody.innerHTML = currentAliases.map(a => {
                     const id = parseInt(a.id);
-                    const whoText = escAl(t('al.who', { source: a.source, dest: a.destination }));
-                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="text-long">' + escAl(a.source) + '</td><td class="text-long">' + escAl(a.destination)
+                    const catchAll = String(a.source).startsWith('@');
+                    const shown = catchAll ? t('al.catchAllSource', { domain: String(a.source).slice(1) }) : a.source;
+                    const whoText = escAl(t('al.who', { source: shown, dest: a.destination }));
+                    return '<tr' + (a.active ? '' : ' class="text-muted"') + '><td class="text-long">' + escAl(shown)
+                        + (catchAll ? ' <span class="badge bg-info text-dark ms-1">' + escAl(t('al.catchAllBadge')) + '</span>' : '')
+                        + '</td><td class="text-long">' + escAl(a.destination)
                         + (a.active ? '' : ' <span class="badge bg-secondary ms-1">' + escAl(t('mbx.inactive')) + '</span>') + '</td>'
                         + '<td class="text-nowrap">'
                         + '<button type="button" class="btn btn-sm btn-outline-primary me-1" data-on-click="openEditAlias(' + id + ')" aria-label="' + escAl(t('al.editOf')) + ' ' + whoText + '">' + escAl(t('common.edit')) + '</button>'
@@ -4208,7 +4278,8 @@ public class PanelContent {
             const a = currentAliases.find(x => parseInt(x.id) === id);
             if (!a) return;
             document.getElementById('edAliasId').value = id;
-            document.getElementById('edSource').value = a.source;
+            document.getElementById('edSource').value = String(a.source).startsWith('@')
+                ? t('al.catchAllSource', { domain: String(a.source).slice(1) }) : a.source;
             document.getElementById('edDest').value = a.destination;
             document.getElementById('edErr').textContent = '';
             bootstrap.Modal.getOrCreateInstance(document.getElementById('editAliasModal')).show();
@@ -4251,16 +4322,25 @@ public class PanelContent {
             }).catch(() => aliasMsg(t('common.noAnswer'), 'danger'));
         }
 
+        // Il catch-all non ha un nome prima della @: il campo si svuota e si spegne finche' la casella e' spuntata.
+        function aliasCatchAllToggle(box) {
+            const local = document.getElementById('alLocal');
+            local.disabled = box.checked;
+            local.required = !box.checked;
+            if (box.checked) local.value = '';
+        }
+
         function addAlias() {
             const err = document.getElementById('alErr');
             err.textContent = '';
+            const catchAll = document.getElementById('alCatchAll').checked;
             const local = document.getElementById('alLocal').value.trim().toLowerCase();
             const domain = document.getElementById('alDomain').value;
             const dest = document.getElementById('alDest').value.trim().toLowerCase();
-            if (!local || !domain || !dest) { err.textContent = t('al.fillBoth'); return; }
+            if ((!catchAll && !local) || !domain || !dest) { err.textContent = t('al.fillBoth'); return; }
             // Sorgente = destinazione e' ammessa solo su una casella (serve a tenerne una copia):
-            // lo decide il server, che sa quali indirizzi sono caselle.
-            const source = local + '@' + domain;
+            // lo decide il server, che sa quali indirizzi sono caselle. Il catch-all e' @dominio.
+            const source = catchAll ? '@' + domain : local + '@' + domain;
             fetch('/api/aliases', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -4270,6 +4350,8 @@ public class PanelContent {
                     bootstrap.Modal.getInstance(document.getElementById('addAliasModal')).hide();
                     document.getElementById('alLocal').value = '';
                     document.getElementById('alDest').value = '';
+                    document.getElementById('alCatchAll').checked = false;
+                    aliasCatchAllToggle(document.getElementById('alCatchAll'));
                     aliasMsg(data.note || t('al.created', { source: source, dest: dest }), data.note ? 'warning' : 'success');
                     loadAliases();
                 } else {
@@ -10443,12 +10525,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- I limiti orari e giornalieri stanno nel database ma niente li applica: ne' Postfix
-                 ne' Rspamd leggono la tabella rate_limits. Si dice, invece di lasciar credere che
-                 ci sia una protezione. La dimensione massima invece e' un parametro di Postfix. -->
-            <div class="alert alert-warning small" role="note">
-                <i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>{{t:rl.notEnforced.html}}
-            </div>
+            <!-- Se i limiti orari e giornalieri si applicano (SendingLimits: Postfix chiede al pannello prima di ogni
+                 messaggio di una casella), o perche' no: lo dice il server, invece di lasciar credere che ci sia una
+                 protezione. La dimensione massima e' un parametro di Postfix. -->
+            <div class="alert small" id="rlEnforcement" role="status" hidden></div>
             <div id="rlMsg" role="status" aria-live="polite"></div>
 
             <div class="card mb-4">
@@ -10480,6 +10560,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <button type="button" class="btn btn-primary" data-on-click="saveGlobalLimits()">
                         <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:rl.saveGlobal}}
                     </button>
+                    <p class="small text-muted mb-0 mt-3" id="rlGlobalState"></p>
+                    <p class="small mb-0 mt-1" id="rlTopSenders"></p>
                 </div>
             </div>
 
@@ -10497,12 +10579,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     <th scope="col" class="text-center">{{t:rl.colHourly}}</th>
                                     <th scope="col" class="text-center">{{t:rl.colDaily}}</th>
                                     <th scope="col" class="text-center">{{t:rl.colRecipients}}</th>
+                                    <th scope="col" class="text-center">{{t:rl.colSent}}</th>
                                     <th scope="col" class="text-center">{{t:que.colState}}</th>
                                     <th scope="col">{{t:home.colActions}}</th>
                                 </tr>
                             </thead>
                             <tbody id="limitsBody">
-                                <tr><td colspan="6" class="text-center text-muted">{{t:common.loading}}</td></tr>
+                                <tr><td colspan="7" class="text-center text-muted">{{t:common.loading}}</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -10579,9 +10662,20 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 .then(data => {
                     const tbody = document.getElementById('limitsBody');
                     if (!data.success) {
-                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">' + escHtml(data.error || t('common.unknownErrorCap')) + '</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">' + escHtml(data.error || t('common.unknownErrorCap')) + '</td></tr>';
                         return;
                     }
+                    // Se si applicano, o perche' no; e chi ha mandato di piu' nelle ultime 24 ore.
+                    const enf = data.enforcement || {};
+                    const usage = enf.usage || {};
+                    const box = document.getElementById('rlEnforcement');
+                    box.className = 'alert small ' + (enf.applied ? 'alert-success' : 'alert-warning');
+                    box.textContent = enf.applied ? t('rl.applied') : t('rl.notApplied', { reason: enf.reason || '?' });
+                    box.hidden = false;
+                    document.getElementById('rlGlobalState').textContent = (data.global || {}).notSet ? t('rl.globalNotSet') : t('rl.globalSet');
+                    const top = Object.keys(usage).sort((a, b) => usage[b].day - usage[a].day).slice(0, 5);
+                    document.getElementById('rlTopSenders').textContent = top.length
+                        ? t('rl.topSenders', { list: top.map(u => u + ' (' + usage[u].day + ')').join(', ') }) : t('rl.noSending');
                     const g = data.global || {};
                     document.getElementById('globalHourly').value = g.hourly || 50;
                     document.getElementById('globalDaily').value = g.daily || 500;
@@ -10589,7 +10683,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     if (g.max_size_note) rlMsg(g.max_size_note, 'warning');
                     currentLimits = data.limits || [];
                     if (!currentLimits.length) {
-                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">' + escHtml(t('rl.none')) + '</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">' + escHtml(t('rl.none')) + '</td></tr>';
                         return;
                     }
                     // La colonna "Uso Oggi" mostrava un conteggio che nessuno calcola: il pannello
@@ -10602,6 +10696,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                             <td data-label="${escHtml(t('rl.colHourly'))}" class="text-center">${escHtml(limit.hourly_limit)}</td>
                             <td data-label="${escHtml(t('rl.colDaily'))}" class="text-center">${escHtml(limit.daily_limit)}</td>
                             <td data-label="${escHtml(t('rl.colRecipients'))}" class="text-center">${escHtml(limit.max_recipients)}</td>
+                            <td data-label="${escHtml(t('rl.colSent'))}" class="text-center">${escHtml(t('rl.sentLine', {
+                                hour: (usage[String(limit.email).toLowerCase()] || {}).hour || 0, day: (usage[String(limit.email).toLowerCase()] || {}).day || 0 }))}</td>
                             <td data-label="${escHtml(t('que.colState'))}" class="text-center">${limit.enabled
                                 ? '<span class="badge bg-success">' + escHtml(t('rl.active')) + '</span>'
                                 : '<span class="badge bg-secondary">' + escHtml(t('mbx.inactive')) + '</span>'}</td>
@@ -12228,7 +12324,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <h2><i class="fas fa-arrow-up-right-dots me-2" aria-hidden="true"></i>{{t:up.title}}</h2>
             <p class="text-muted">{{t:up.intro.html}}</p>
             <div id="upd-interrupted" aria-live="polite"></div>
-""" + resource("pages/update-center-card.html") + resource("pages/branch-card.html") + """
+""" + resource("pages/update-center-card.html") + resource("pages/panel-release-card.html") + resource("pages/branch-card.html") + """
 
             <div class="modal fade" id="pkUpdModal" tabindex="-1" aria-labelledby="pkUpdTitle" aria-hidden="true">
                 <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -12500,7 +12596,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // quindi interrompe la fusione — ed e' per questo che le parti sono metodi.
         return resource("pages/upd-api.js") + getUpdatesScript1() + getUpdatesScript2() + getUpdatesScriptPackages() + resource("pages/branch.js")
                 + resource("pages/os-update.js") + resource("pages/guided.js") + resource("pages/update-center.js")
-                + resource("pages/diag-all.js");
+                + resource("pages/diag-all.js") + resource("pages/panel-release.js");
     }
 
     /** La tabella dei pacchetti e la finestra di aggiornamento di un pacchetto. */

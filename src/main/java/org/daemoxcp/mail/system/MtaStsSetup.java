@@ -374,7 +374,7 @@ public class MtaStsSetup {
      * test che non arriva alla riga che deve verificare non verifica niente.
      *
      * Il confronto e' senza distinzione di maiuscole perche' i nomi di dominio non ne hanno,
-     * ed e' ESATTO: "ake.net" non deve trovare "domain-d.test".
+     * ed e' ESATTO: "in-d.test" non deve trovare "domain-d.test".
      */
     static List<MailDatabase.Domain> filter(List<MailDatabase.Domain> allItems, String domainOnly) {
         List<MailDatabase.Domain> out = new ArrayList<>();

@@ -20,7 +20,7 @@ import java.util.logging.Logger;
  * Postfix's and Dovecot's own MySQL users (MailDbUsers), on the test MySQL, as its root:
  *
  *  1. the users: both host names, only their columns (Postfix: domains, mailboxes without the password, aliases;
- *     Dovecot: address, hash and state of the mailboxes), their passwords; a second run changes and logs nothing;
+ *     Dovecot: address, hash, state and quota of the mailboxes), their passwords; a second run changes and logs nothing;
  *  2. each user by itself, over its own JDBC connection like the service would: the lookups of its files answer
  *     with the right rows; what it must not read MySQL refuses (the password column, the other tables, any write);
  *  3. put back: an extra privilege (a whole table, a global one) is taken away with everything else and the
@@ -168,10 +168,11 @@ public class MailDbUsersMysqlTest {
                     && columns.size() == 16);
             columns = rows(root, "SELECT grantee, table_name, column_name, privilege_type FROM information_schema.column_privileges "
                     + "WHERE grantee = ? ORDER BY table_name, column_name", "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'");
-            check("Dovecot: SELECT on email, password, active of mailboxes, and nothing else: " + columns, columns.equals(List.of(
+            check("Dovecot: SELECT on email, password, active, quota_mb of mailboxes, and nothing else: " + columns, columns.equals(List.of(
                     "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|active|SELECT",
                     "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|email|SELECT",
-                    "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|password|SELECT")));
+                    "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|password|SELECT",
+                    "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|quota_mb|SELECT")));
             for (String u : List.of(MailDbUsers.POSTFIX_USER, MailDbUsers.DOVECOT_USER)) {
                 List<String> other = rows(root, "SELECT privilege_type FROM information_schema.table_privileges WHERE grantee LIKE ? "
                         + "UNION ALL SELECT privilege_type FROM information_schema.schema_privileges WHERE grantee LIKE ? "
@@ -198,6 +199,12 @@ public class MailDbUsersMysqlTest {
                     rows(pf, "SELECT CONCAT(SUBSTRING_INDEX(email,'@',-1),'/',SUBSTRING_INDEX(email,'@',1),'/') FROM mailboxes WHERE email='bob@mdu-alpha.test' AND active=1 AND receive_enabled=1").isEmpty());
             check("Postfix: the alias lookup gives its destination",
                     rows(pf, "SELECT destination FROM aliases WHERE source='info@mdu-alpha.test' AND active=1").equals(List.of("ann@mdu-alpha.test")));
+            // The map that makes a catch-all safe (MailboxAddressMap): its own query, with Postfix's %s filled in.
+            String own = org.daemoxcp.mail.scripts.PostfixMaps.MAILBOX_ADDRESSES_QUERY;
+            check("Postfix: the mailbox addresses lookup gives a mailbox that receives itself",
+                    rows(pf, own.replace("%s", "ann@mdu-alpha.test")).equals(List.of("ann@mdu-alpha.test")));
+            check("Postfix: and not one that does not receive (its mail must not count as a mailbox's)",
+                    rows(pf, own.replace("%s", "bob@mdu-alpha.test")).isEmpty());
             check("Postfix: the password column refused (1143)", refusal(pf, "SELECT password FROM mailboxes WHERE email='ann@mdu-alpha.test'") == 1143);
             check("Postfix: SELECT * on mailboxes refused (1143)", refusal(pf, "SELECT * FROM mailboxes") == 1143);
             check("Postfix: the administrators refused (1142)", refusal(pf, "SELECT * FROM panel_admin") == 1142);
@@ -212,6 +219,12 @@ public class MailDbUsersMysqlTest {
             check("Dovecot: the aliases refused (1142)", refusal(dc, "SELECT destination FROM aliases") == 1142);
             check("Dovecot: the domains refused (1142)", refusal(dc, "SELECT domain FROM domains") == 1142);
             check("Dovecot: another column of mailboxes refused (1143)", refusal(dc, "SELECT receive_enabled FROM mailboxes") == 1143);
+            // The quota userdb (DovecotQuota): its own query, with Dovecot's %{user} filled in.
+            String quota = org.daemoxcp.mail.scripts.DovecotConfig.QUOTA_USERDB.lines().filter(l -> l.trim().startsWith("query = "))
+                    .findFirst().orElse("").trim().substring("query = ".length());
+            check("Dovecot: the quota lookup gives a mailbox's limit in MB (" + rows(dc, quota.replace("%{user}", "ann@mdu-alpha.test")) + ")",
+                    rows(dc, quota.replace("%{user}", "ann@mdu-alpha.test")).size() == 1
+                            && rows(dc, quota.replace("%{user}", "ann@mdu-alpha.test")).get(0).endsWith("M"));
             check("Dovecot: changing a password refused (1142)", refusal(dc, "UPDATE mailboxes SET password = 'x' WHERE email = 'ann@mdu-alpha.test'") == 1142);
         }
 
