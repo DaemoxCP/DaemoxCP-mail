@@ -27,8 +27,18 @@ public class MetadataRootOnlyTest {
         if (!ok) failed++;
     }
 
+    /**
+     * A block with «return» on a socket of the machine itself shows up as EACCES («Permission denied»), measured on the
+     * VM on 18/11/2026; a refusal from the other side would be «Connection refused». Both mean: not let through.
+     */
     record Try(String output, long millis) {
-        boolean refused() { return output.contains("Connection refused"); }
+        boolean refused() { return output.contains("Permission denied") || output.contains("Connection refused"); }
+    }
+
+    /** A live rule (pfctl -sr writes «block return out quick inet proto tcp from any to ... user != 0»). */
+    static boolean blocks(String rule, String proto) {
+        String t = rule.trim();
+        return t.startsWith("block return out quick") && t.contains("proto " + proto) && t.contains("to 169.254.169.254") && t.endsWith("user != 0");
     }
 
     /** fetch with a short timeout, as that user (root: directly), and how long it took. */
@@ -49,8 +59,7 @@ public class MetadataRootOnlyTest {
                 .filter(l -> l.contains("169.254.169.254")).toList();
         rules.forEach(l -> System.out.println("         " + l.trim()));
         check("TCP and UDP to 169.254.169.254 blocked with a refusal for every user but root",
-                rules.stream().anyMatch(l -> l.startsWith("block return out quick proto tcp") && l.contains("user != 0"))
-                        && rules.stream().anyMatch(l -> l.startsWith("block return out quick proto udp") && l.contains("user != 0")));
+                rules.stream().anyMatch(l -> blocks(l, "tcp")) && rules.stream().anyMatch(l -> blocks(l, "udp")));
 
         System.out.println("\n== 2. As www ==");
         Try www = fetch("www", "http://169.254.169.254/hetzner/v1/metadata");

@@ -516,7 +516,8 @@ and its usage. A virtual passkey gives the recent confirmation, and is removed a
 
 **MetadataRootOnlyTest** — the provider's metadata service (169.254.169.254) only for root, on the VM's live pf after
 the panel has started (PfPolicy.METADATA_RULE, `-De2e.vm=yes` as root): the live rules block TCP and UDP to it for every
-user but root (`user != 0`, with `return`); as www a connection is refused at once (under 2 s); as root pf does not
+user but root (`user != 0`, with `return`); as www a connection is refused at once (under 2 s: on a socket of the
+machine itself a block with `return` shows up as "Permission denied"); as root pf does not
 refuse it (the VM has no metadata service: a timeout); another link-local address stays free. On the real server, on
 18/11/2026, the service handed out to any local user the configuration the server was created with, an initial root
 password included. On the live pf of the release before the rule it fails (www waits 4 s, no rule).
