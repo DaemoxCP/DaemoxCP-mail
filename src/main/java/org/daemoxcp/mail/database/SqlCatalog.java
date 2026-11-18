@@ -1565,6 +1565,9 @@ public final class SqlCatalog {
     /** MailDbUsers, da utente di Postfix: la domanda di mysql-virtual-aliases.cf */
     public static final String MAILDB_POSTFIX_ALIAS_LOOKUP = "SELECT destination FROM aliases WHERE source = ? AND active = 1";
 
+    /** MailDbUsers, da utente di Postfix: la domanda di mysql-virtual-mailbox-addresses.cf (MailboxAddressMap) */
+    public static final String MAILDB_POSTFIX_ADDRESS_LOOKUP = "SELECT email FROM mailboxes WHERE email = ? AND active = 1 AND receive_enabled = 1";
+
     /** MailDbUsers, da utente di Postfix: la password di una casella, che deve essere rifiutata */
     public static final String MAILDB_POSTFIX_PASSWORD_REFUSED = "SELECT password FROM mailboxes WHERE email = ?";
 

@@ -199,6 +199,12 @@ public class MailDbUsersMysqlTest {
                     rows(pf, "SELECT CONCAT(SUBSTRING_INDEX(email,'@',-1),'/',SUBSTRING_INDEX(email,'@',1),'/') FROM mailboxes WHERE email='bob@mdu-alpha.test' AND active=1 AND receive_enabled=1").isEmpty());
             check("Postfix: the alias lookup gives its destination",
                     rows(pf, "SELECT destination FROM aliases WHERE source='info@mdu-alpha.test' AND active=1").equals(List.of("ann@mdu-alpha.test")));
+            // The map that makes a catch-all safe (MailboxAddressMap): its own query, with Postfix's %s filled in.
+            String own = org.daemoxcp.mail.scripts.PostfixMaps.MAILBOX_ADDRESSES_QUERY;
+            check("Postfix: the mailbox addresses lookup gives a mailbox that receives itself",
+                    rows(pf, own.replace("%s", "ann@mdu-alpha.test")).equals(List.of("ann@mdu-alpha.test")));
+            check("Postfix: and not one that does not receive (its mail must not count as a mailbox's)",
+                    rows(pf, own.replace("%s", "bob@mdu-alpha.test")).isEmpty());
             check("Postfix: the password column refused (1143)", refusal(pf, "SELECT password FROM mailboxes WHERE email='ann@mdu-alpha.test'") == 1143);
             check("Postfix: SELECT * on mailboxes refused (1143)", refusal(pf, "SELECT * FROM mailboxes") == 1143);
             check("Postfix: the administrators refused (1142)", refusal(pf, "SELECT * FROM panel_admin") == 1142);

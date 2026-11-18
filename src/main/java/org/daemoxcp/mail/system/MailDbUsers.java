@@ -71,7 +71,7 @@ public final class MailDbUsers {
 
     /** Le mappe di Postfix che interrogano MySQL, come le scrivono gli script d'installazione. */
     static final List<String> POSTFIX_MAPS = List.of("mysql-virtual-domains.cf", "mysql-virtual-mailboxes.cf",
-            "mysql-virtual-aliases.cf");
+            "mysql-virtual-aliases.cf", MailboxAddressMap.FILE);
     /** Una chiave che non c'e' mai (.invalid e' riservato): la domanda gira, MySQL risponde vuoto. */
     static final String PROBE = "daemoxcp-mail-probe@invalid";
 
@@ -217,7 +217,7 @@ public final class MailDbUsers {
     static String verifyUsers(String url, String postfixPassword, String dovecotPassword) {
         try (Connection c = CatalogGuard.open(url, POSTFIX_USER, postfixPassword)) {
             for (String q : List.of(SqlCatalog.MAILDB_POSTFIX_DOMAIN_LOOKUP, SqlCatalog.MAILDB_POSTFIX_MAILBOX_LOOKUP,
-                    SqlCatalog.MAILDB_POSTFIX_ALIAS_LOOKUP)) {
+                    SqlCatalog.MAILDB_POSTFIX_ALIAS_LOOKUP, SqlCatalog.MAILDB_POSTFIX_ADDRESS_LOOKUP)) {
                 String failed = lookUp(c, q);
                 if (failed != null) return POSTFIX_USER + " cannot run a Postfix lookup: " + failed;
             }

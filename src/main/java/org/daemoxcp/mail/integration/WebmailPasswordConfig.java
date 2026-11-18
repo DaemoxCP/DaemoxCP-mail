@@ -23,6 +23,11 @@ import java.util.regex.Pattern;
  * Le impostazioni stanno in un blocco in fondo a config.inc.php, che il pannello riscrive a ogni
  * avvio; in PHP vince l'ultima assegnazione, e le righe del driver sql di prima si tolgono (dentro
  * c'era anche la password MySQL del pannello, che la webmail non deve piu' conoscere).
+ *
+ * <p>Il blocco accende anche il plugin password, se manca dall'elenco: l'installazione completa scriveva solo
+ * archive e zipdownload, e la pagina per cambiare password nella webmail non c'era (sulla VM, 18/11/2026). Lo
+ * aggiunge solo quando l'elenco sta in questo stesso file: Roundcube unisce i file sostituendo l'elenco intero, e
+ * un elenco nuovo qui toglierebbe i plugin scritti altrove.
  */
 public final class WebmailPasswordConfig {
 
@@ -40,6 +45,10 @@ public final class WebmailPasswordConfig {
             "(?m)^[ \\t]*\\$config\\[['\"]password_(driver|db_dsn|query|crypt_hash|algorithm|algorithm_prefix|"
             + "httpapi_[a-z_]+|http_client|minimum_length)['\"]\\][ \\t]*=[^\\n]*;[ \\t]*\\r?\\n?");
     private static final Pattern KEY = Pattern.compile("[A-Za-z0-9_-]{20,128}");
+
+    /** La riga che accende il plugin password (vedi sopra): solo se l'elenco e' in questo file, e una volta sola. */
+    static final String PLUGIN_LINE = "if (isset($config['plugins']) && is_array($config['plugins']) && !in_array('password', $config['plugins'], true)) "
+            + "{ $config['plugins'][] = 'password'; }";
 
     /** L'intestazione con cui Roundcube manda la chiave della webmail (WebmailPasswordHandler la legge). */
     public static final String KEY_HEADER = "X-DaemoxCP-Key";
@@ -85,6 +94,11 @@ public final class WebmailPasswordConfig {
                 + "$config['password_http_client'] = ['verify' => false, 'timeout' => 15, 'http_errors' => false, 'headers' => ['" + KEY_HEADER + "' => '" + key + "']];\n"
                 + "// Same rule as the panel (SecurityUtils.isValidMailboxPassword): the panel checks it again\n"
                 + "$config['password_minimum_length'] = 12;\n"
+                + "// The current password is asked for: the panel checks it before the change (without the plugin's own\n"
+                + "// config file Roundcube's default is off, and the form had no field for it)\n"
+                + "$config['password_confirm_current'] = true;\n"
+                + "// The password plugin on, if the list of plugins is in this file and does not have it yet\n"
+                + PLUGIN_LINE + "\n"
                 + END + "\n";
     }
 
