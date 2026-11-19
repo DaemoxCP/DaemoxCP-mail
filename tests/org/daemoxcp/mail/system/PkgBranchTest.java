@@ -284,8 +284,10 @@ public class PkgBranchTest {
         ro.brokenWrite = true;
         imp = PkgBranch.state(ro).getString("fingerprint");
         r = PkgBranch.change(ro, logInto(ro), "latest", imp);
-        real("folder not writable: error said, nothing downloaded", !r.getBoolean("success") && r.getString("error").contains("Read-only")
-                && ro.updates == 0);
+        // The page reads a translated text; the raw reason (the file system's, in English) goes to the panel log (ErrorText).
+        real("folder not writable: error said, translated, nothing downloaded", !r.getBoolean("success")
+                && r.getString("error").contains(org.daemoxcp.mail.i18n.I18n.tr("server.detailsInLog"))
+                && !r.getString("error").contains("Read-only") && ro.updates == 0);
 
         System.out.println("\n== The fingerprint: only what was seen is changed ==");
         FakeSystem changed = new FakeSystem();

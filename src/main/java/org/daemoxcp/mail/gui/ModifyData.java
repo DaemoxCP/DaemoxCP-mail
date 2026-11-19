@@ -35,9 +35,10 @@ public class ModifyData {
 
     // Hints
     private static final String PORT_HINT = "[0-9] (1-65535)";
-    private static final String HOST_HINT = "the panel's name, e.g. panel.example.com";
-    private static final String PEM_HINT = "paste the PEM, or the path of a file, e.g. /root/panel-cert.pem";
-    private static final String PREFIX_HINT = "[a-z A-Z 0-9 _ -] (1-20 chars)";
+    // Nella lingua della console: si chiedono quando si mostrano, non quando si carica la classe.
+    private static String hostHint() { return org.daemoxcp.mail.i18n.I18n.tr("console.cfg.hostHint"); }
+    private static String pemHint() { return org.daemoxcp.mail.i18n.I18n.tr("console.cfg.pemHint"); }
+    private static String prefixHint() { return org.daemoxcp.mail.i18n.I18n.tr("console.cfg.prefixHint"); }
 
     public ModifyData(dataBaseManager dbmanager) {
         this.database_manager = dbmanager;
@@ -59,8 +60,8 @@ public class ModifyData {
         panelHost.setValidationPattern(Pattern.compile("[a-zA-Z0-9.-]*"));
         panelSessionPrefix.setValidationPattern(Pattern.compile("[a-zA-Z0-9_-]*"));
 
-        this.submitButton = new Button("Submit", this::onSubmit);
-        this.exitButton = new Button("Exit", this::onExit);
+        this.submitButton = new Button(org.daemoxcp.mail.i18n.I18n.tr("console.save"), this::onSubmit);
+        this.exitButton = new Button(org.daemoxcp.mail.i18n.I18n.tr("console.exit"), this::onExit);
     }
 
     private void loadDataFromDatabase() {
@@ -83,7 +84,7 @@ public class ModifyData {
                 setTextSafe(panelSessionPrefix, result.getString("panel_sessions_prefix"));
             }
         } catch (SQLException e) {
-            System.out.println("Error loading config: " + e.getMessage());
+            System.out.println(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.loadFailed", java.util.Map.of("e", String.valueOf(e.getMessage()))));
             // Don't crash, just use default empty values
         }
     }
@@ -100,16 +101,16 @@ public class ModifyData {
     }
 
     public void show(MultiWindowTextGUI gui) {
-        this.window = new BasicWindow("Web Panel Configuration");
+        this.window = new BasicWindow(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.title"));
 
         Panel mainPanel = new Panel(new GridLayout(1).setVerticalSpacing(1));
 
         // Panel settings section
-        mainPanel.addComponent(createPanelSettingsForm().withBorder(Borders.singleLine("Panel Settings")));
+        mainPanel.addComponent(createPanelSettingsForm().withBorder(Borders.singleLine(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.settings"))));
         mainPanel.addComponent(new EmptySpace(new TerminalSize(0, 1)));
 
         // Hints
-        mainPanel.addComponent(createHintsPanel().withBorder(Borders.singleLine("Allowed Characters")));
+        mainPanel.addComponent(createHintsPanel().withBorder(Borders.singleLine(org.daemoxcp.mail.i18n.I18n.tr("console.allowedChars"))));
         mainPanel.addComponent(new EmptySpace(new TerminalSize(0, 1)));
 
         // Buttons
@@ -129,12 +130,12 @@ public class ModifyData {
     private Panel createPanelSettingsForm() {
         Panel formPanel = new Panel(new GridLayout(2).setHorizontalSpacing(3).setVerticalSpacing(1));
 
-        addLabelAndTextBox(formPanel, "PANEL PORT:", panelPort);
-        addLabelAndTextBox(formPanel, "PANEL HOST:", panelHost);
-        addLabelAndTextBox(formPanel, "SSL CERTIFICATE (PEM):", panelSslCert);
-        addLabelAndTextBox(formPanel, "SSL PRIVATE KEY (PEM):", panelSslCertKey);
-        addLabelAndTextBox(formPanel, "SSL CA CHAIN (optional):", panelSslChain);
-        addLabelAndTextBox(formPanel, "SESSION PREFIX:", panelSessionPrefix);
+        addLabelAndTextBox(formPanel, org.daemoxcp.mail.i18n.I18n.tr("console.cfg.port"), panelPort);
+        addLabelAndTextBox(formPanel, org.daemoxcp.mail.i18n.I18n.tr("console.cfg.host"), panelHost);
+        addLabelAndTextBox(formPanel, org.daemoxcp.mail.i18n.I18n.tr("console.cfg.cert"), panelSslCert);
+        addLabelAndTextBox(formPanel, org.daemoxcp.mail.i18n.I18n.tr("console.cfg.key"), panelSslCertKey);
+        addLabelAndTextBox(formPanel, org.daemoxcp.mail.i18n.I18n.tr("console.cfg.chain"), panelSslChain);
+        addLabelAndTextBox(formPanel, org.daemoxcp.mail.i18n.I18n.tr("console.cfg.prefix"), panelSessionPrefix);
 
         return formPanel;
     }
@@ -142,17 +143,17 @@ public class ModifyData {
     private Panel createHintsPanel() {
         Panel hintsPanel = new Panel(new GridLayout(2).setHorizontalSpacing(2).setVerticalSpacing(0));
 
-        hintsPanel.addComponent(new Label("PORT:"));
+        hintsPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.hint.port")));
         hintsPanel.addComponent(new Label(PORT_HINT));
 
-        hintsPanel.addComponent(new Label("HOST:"));
-        hintsPanel.addComponent(new Label(HOST_HINT));
+        hintsPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.hint.host")));
+        hintsPanel.addComponent(new Label(hostHint()));
 
-        hintsPanel.addComponent(new Label("PREFIX:"));
-        hintsPanel.addComponent(new Label(PREFIX_HINT));
+        hintsPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.hint.prefix")));
+        hintsPanel.addComponent(new Label(prefixHint()));
 
-        hintsPanel.addComponent(new Label("CERT/KEY:"));
-        hintsPanel.addComponent(new Label(PEM_HINT));
+        hintsPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.hint.certKey")));
+        hintsPanel.addComponent(new Label(pemHint()));
 
         return hintsPanel;
     }
@@ -163,7 +164,7 @@ public class ModifyData {
                 Panels.horizontal(
                         textBox,
                         new EmptySpace(new TerminalSize(1, 1)),
-                        new Button("Clear", () -> textBox.setText(""))
+                        new Button(org.daemoxcp.mail.i18n.I18n.tr("console.clear"), () -> textBox.setText(""))
                 )
         );
     }
@@ -174,47 +175,47 @@ public class ModifyData {
         // Validate panel port
         String port = panelPort.getText().trim();
         if (port.isEmpty()) {
-            errors.append("- Panel Port is required\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.portRequired")).append("\n");
         } else if (!PORT_PATTERN.matcher(port).matches()) {
-            errors.append("- Panel Port must contain only numbers\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.portDigits")).append("\n");
         } else {
             int portNum = Integer.parseInt(port);
             if (portNum < 1 || portNum > 65535) {
-                errors.append("- Panel Port must be between 1 and 65535\n");
+                errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.portRange")).append("\n");
             }
         }
 
         // Validate panel host
         String host = panelHost.getText().trim();
         if (host.isEmpty()) {
-            errors.append("- Panel Host is required\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.hostRequired")).append("\n");
         } else if (!HOST_PATTERN.matcher(host).matches()) {
-            errors.append("- Panel Host: " + HOST_HINT + "\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.hostBad", java.util.Map.of("hint", hostHint()))).append("\n");
         }
 
         // Validate session prefix
         String prefix = panelSessionPrefix.getText().trim();
         if (prefix.isEmpty()) {
-            errors.append("- Session prefix is required\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.prefixRequired")).append("\n");
         } else if (!PREFIX_PATTERN.matcher(prefix).matches()) {
-            errors.append("- Session prefix: " + PREFIX_HINT + "\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.prefixBad", java.util.Map.of("hint", prefixHint()))).append("\n");
         }
 
         // SSL cert validation (optional but if one is provided, both needed)
         String sslCert = panelSslCert.getText().trim();
         String sslKey = panelSslCertKey.getText().trim();
         if (!sslCert.isEmpty() && sslKey.isEmpty()) {
-            errors.append("- SSL Private Key is required when SSL Cert is provided\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.keyNeeded")).append("\n");
         }
         if (sslCert.isEmpty() && !sslKey.isEmpty()) {
-            errors.append("- SSL Certificate is required when SSL Key is provided\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.certNeeded")).append("\n");
         }
 
         // Certificato, chiave e catena: il PEM incollato, o letto dal file di cui si e' scritto il percorso; poi il
         // controllo prima di salvare (reperto 243): leggibile, valido adesso, copre il nome, chiave sua.
-        resolvedCert = resolve(sslCert, "SSL Certificate", errors);
-        resolvedKey = resolve(sslKey, "SSL Private Key", errors);
-        resolvedChain = resolve(panelSslChain.getText().trim(), "SSL CA Chain", errors);
+        resolvedCert = resolve(sslCert, org.daemoxcp.mail.i18n.I18n.tr("console.cfg.certName"), errors);
+        resolvedKey = resolve(sslKey, org.daemoxcp.mail.i18n.I18n.tr("console.cfg.keyName"), errors);
+        resolvedChain = resolve(panelSslChain.getText().trim(), org.daemoxcp.mail.i18n.I18n.tr("console.cfg.chainName"), errors);
         certCheck = null;
         if (errors.length() == 0 && !resolvedCert.isEmpty() && !resolvedKey.isEmpty()) {
             certCheck = PemTls.check(host, resolvedCert, resolvedKey, java.time.Instant.now());
@@ -244,28 +245,28 @@ public class ModifyData {
         if (validationErrors != null) {
             MessageDialog.showMessageDialog(
                     this.gui,
-                    "Validation Error",
-                    "Please fix the following errors:\n\n" + validationErrors,
+                    org.daemoxcp.mail.i18n.I18n.tr("console.invalidTitle"),
+                    org.daemoxcp.mail.i18n.I18n.tr("console.invalidText") + "\n\n" + validationErrors,
                     MessageDialogButton.OK
             );
             return;
         }
 
         StringBuilder message = new StringBuilder();
-        message.append("Panel Port: ").append(panelPort.getText()).append("\n");
-        message.append("Panel Host: ").append(panelHost.getText()).append("\n");
-        message.append("Session Prefix: ").append(panelSessionPrefix.getText()).append("\n");
+        message.append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.port")).append(" ").append(panelPort.getText()).append("\n");
+        message.append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.host")).append(" ").append(panelHost.getText()).append("\n");
+        message.append(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.prefix")).append(" ").append(panelSessionPrefix.getText()).append("\n");
         if (certCheck != null) {
             message.append("\n");
             for (String line : certCheck.info()) message.append(line).append("\n");
-            for (String w : certCheck.warnings()) message.append("WARNING: ").append(w).append("\n");
+            for (String w : certCheck.warnings()) message.append(org.daemoxcp.mail.i18n.I18n.tr("console.warning")).append(" ").append(w).append("\n");
         }
 
         // Cancel is first = pre-selected (safety)
         MessageDialogButton result = MessageDialog.showMessageDialog(
                 this.gui,
-                "Confirm Changes",
-                "Are you sure you want to save these changes?\n\n" + message.toString(),
+                org.daemoxcp.mail.i18n.I18n.tr("console.confirmTitle"),
+                org.daemoxcp.mail.i18n.I18n.tr("console.confirmSave") + "\n\n" + message.toString(),
                 MessageDialogButton.Cancel,
                 MessageDialogButton.OK
         );
@@ -274,16 +275,16 @@ public class ModifyData {
             if (saveDataToDatabase()) {
                 MessageDialog.showMessageDialog(
                         this.gui,
-                        "Data Saved",
-                        "Your changes have been saved successfully.",
+                        org.daemoxcp.mail.i18n.I18n.tr("console.savedTitle"),
+                        org.daemoxcp.mail.i18n.I18n.tr("console.savedText"),
                         MessageDialogButton.OK
                 );
                 window.close();
             } else {
                 MessageDialog.showMessageDialog(
                         this.gui,
-                        "Error",
-                        "There was a problem saving to the database.",
+                        org.daemoxcp.mail.i18n.I18n.tr("console.errorTitle"),
+                        org.daemoxcp.mail.i18n.I18n.tr("console.saveFailed"),
                         MessageDialogButton.OK
                 );
             }
@@ -294,8 +295,8 @@ public class ModifyData {
         // Cancel is first = pre-selected (safety)
         MessageDialogButton result = MessageDialog.showMessageDialog(
                 this.gui,
-                "Confirm Exit",
-                "Are you sure you want to exit?\nAny unsaved changes will be lost.",
+                org.daemoxcp.mail.i18n.I18n.tr("console.exitTitle"),
+                org.daemoxcp.mail.i18n.I18n.tr("console.exitText"),
                 MessageDialogButton.Cancel,
                 MessageDialogButton.OK
         );
@@ -318,8 +319,8 @@ public class ModifyData {
         } catch (Exception e) {
             MessageDialog.showMessageDialog(
                     this.gui,
-                    "Error",
-                    "Failed to save data to database: " + e.getMessage(),
+                    org.daemoxcp.mail.i18n.I18n.tr("console.errorTitle"),
+                    org.daemoxcp.mail.i18n.I18n.tr("console.saveFailedWhy", java.util.Map.of("e", String.valueOf(e.getMessage()))),
                     MessageDialogButton.OK
             );
             return false;

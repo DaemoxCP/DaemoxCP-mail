@@ -240,7 +240,7 @@ public final class BanActionRepair {
         } catch (Exception e) {
             try { restore(copies); Shell.run(Duration.ofSeconds(30), CLIENT, "reload"); } catch (Exception ignore) { }
             return r.put("success", false).put("steps", steps)
-                    .put("message", I18n.tr("server.banfix.errorRestored", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+                    .put("message", I18n.tr("server.banfix.errorRestored", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("BanActionRepair", e))));
         }
     }
 
@@ -450,7 +450,7 @@ public final class BanActionRepair {
             }
             return out.toString();
         } catch (Exception e) {
-            return "(" + I18n.tr("server.banfix.logUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))) + ")";
+            return "(" + I18n.tr("server.banfix.logUnreadable", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("BanActionRepair", e))) + ")";
         }
     }
 
@@ -488,7 +488,7 @@ public final class BanActionRepair {
                 }
             }
         } catch (Exception e) {
-            return "(" + I18n.tr("server.banfix.confUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))) + ")";
+            return "(" + I18n.tr("server.banfix.confUnreadable", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("BanActionRepair", e))) + ")";
         }
         return out.length() == 0
             ? "(" + I18n.tr("server.banfix.noFileDefines", java.util.Map.of("jail", String.valueOf(jail))) + ")"

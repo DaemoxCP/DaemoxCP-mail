@@ -67,7 +67,7 @@ function portOpen(port) {
         page.on('pageerror', e => scriptErrors.push(new URL(page.url()).pathname + ': ' + e.message));
 
         console.log('== 1. Sign-in ==');
-        const out = remote('cd ' + PANEL_DIR + ' && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code');
+        const out = remote('cd ' + PANEL_DIR + ' && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --access-code');
         const m = out.match(/One-time access code for [^:]*: (\d{4} \d{4})/);
         check('a one-time code from the console', !!m);
         await page.goto(BASE + '/index');

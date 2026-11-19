@@ -210,7 +210,7 @@ public class Autoconfig {
                 domains.put(j);
             }
         } catch (Exception e) {
-            troubles.add(I18n.tr("server.autoconf.domainsUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            troubles.add(I18n.tr("server.autoconf.domainsUnreadable", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("Autoconfig", e))));
         }
         r.put("domains", domains).put("reviewed", reviewed).put("working", working);
 
@@ -298,7 +298,7 @@ public class Autoconfig {
                     .put("error", I18n.tr("server.autoconf.noCname", java.util.Map.of("name", String.valueOf(name))));
         } catch (Exception e) {
             return r.put("ok", false)
-                    .put("error", I18n.tr("server.autoconf.unreachable", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName() + (e.getMessage() == null ? "" : " - " + e.getMessage())))));
+                    .put("error", I18n.tr("server.autoconf.unreachable", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("Autoconfig", e))));
         }
     }
 
@@ -484,7 +484,7 @@ public class Autoconfig {
                     .put("note", I18n.tr("server.autoconf.done", java.util.Map.of("copy", String.valueOf(copy))));
         } catch (Exception e) {
             return new JSONObject().put("success", false)
-                    .put("error", I18n.tr("server.autoconf.installError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+                    .put("error", I18n.tr("server.autoconf.installError", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("Autoconfig", e))));
         }
     }
 

@@ -116,7 +116,7 @@ public class Fail2banManager {
             status.recentBans = getRecentBans(20);
 
         } catch (Exception e) {
-            status.error = e.getMessage();
+            status.error = org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e);
         }
 
         return status;
@@ -234,7 +234,7 @@ public class Fail2banManager {
             if (!lp.isEmpty()) jail.logFile = String.join(", ", lp);
 
         } catch (Exception e) {
-            jail.error = e.getMessage();
+            jail.error = org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e);
         }
 
         return jail;
@@ -356,7 +356,7 @@ public class Fail2banManager {
 
         } catch (Exception e) {
             action.success = false;
-            action.message = "Error: " + e.getMessage();
+            action.message = I18n.tr("server.errorWith", java.util.Map.of("error", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
 
         return action;
@@ -397,7 +397,7 @@ public class Fail2banManager {
 
         } catch (Exception e) {
             action.success = false;
-            action.message = "Error: " + e.getMessage();
+            action.message = I18n.tr("server.errorWith", java.util.Map.of("error", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
 
         return action;
@@ -426,7 +426,7 @@ public class Fail2banManager {
 
         } catch (Exception e) {
             action.success = false;
-            action.message = "Error: " + e.getMessage();
+            action.message = I18n.tr("server.errorWith", java.util.Map.of("error", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
 
         return action;
@@ -449,7 +449,7 @@ public class Fail2banManager {
 
         } catch (Exception e) {
             action.success = false;
-            action.message = "Error: " + e.getMessage();
+            action.message = I18n.tr("server.errorWith", java.util.Map.of("error", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
 
         return action;
@@ -469,7 +469,7 @@ public class Fail2banManager {
             action.message = "Fail2ban started";
         } catch (Exception e) {
             action.success = false;
-            action.message = "Error: " + e.getMessage();
+            action.message = I18n.tr("server.errorWith", java.util.Map.of("error", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
 
         return action;
@@ -489,7 +489,7 @@ public class Fail2banManager {
             action.message = "Fail2ban stopped";
         } catch (Exception e) {
             action.success = false;
-            action.message = "Error: " + e.getMessage();
+            action.message = I18n.tr("server.errorWith", java.util.Map.of("error", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
 
         return action;
@@ -551,7 +551,7 @@ public class Fail2banManager {
                         + (rs.success() ? "" : " " + I18n.tr("server.f2bm.cmdReported", java.util.Map.of("o", String.valueOf(rs.output().trim()))));
                 }
             } catch (Exception e) {
-                restartOutcome = " " + I18n.tr("server.f2bm.cannotVerifyPf", java.util.Map.of("m", String.valueOf(e.getMessage())));
+                restartOutcome = " " + I18n.tr("server.f2bm.cannotVerifyPf", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
             }
 
             result.success = true;
@@ -560,7 +560,7 @@ public class Fail2banManager {
 
         } catch (Exception e) {
             result.success = false;
-            result.error = "Installation failed: " + e.getMessage();
+            result.error = I18n.tr("server.f2bm.installFailed", java.util.Map.of("e", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
 
         return result;
@@ -911,7 +911,7 @@ public class Fail2banManager {
             }
 
         } catch (Exception e) {
-            config.error = e.getMessage();
+            config.error = org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e);
         }
 
         return config;
@@ -948,7 +948,7 @@ public class Fail2banManager {
 
         } catch (Exception e) {
             action.success = false;
-            action.message = "Error: " + e.getMessage();
+            action.message = I18n.tr("server.errorWith", java.util.Map.of("error", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
 
         return action;
@@ -1148,7 +1148,7 @@ public class Fail2banManager {
             r.message = I18n.tr("server.f2bm.sectionNotFound", java.util.Map.of("j", String.valueOf(jailName)));
         } catch (Exception e) {
             r.success = false;
-            r.message = I18n.tr("server.f2bm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            r.message = I18n.tr("server.f2bm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
         return r;
     }
@@ -1205,7 +1205,7 @@ public class Fail2banManager {
             r.message = I18n.tr("server.f2bm.ignoreAdded", java.util.Map.of("ip", String.valueOf(ip), "j", String.valueOf(jailName)));
         } catch (Exception e) {
             r.success = false;
-            r.message = I18n.tr("server.f2bm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            r.message = I18n.tr("server.f2bm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
         return r;
     }
@@ -1235,7 +1235,7 @@ public class Fail2banManager {
             r.message = I18n.tr("server.f2bm.ignoreRemoved", java.util.Map.of("ip", String.valueOf(ip), "j", String.valueOf(jailName)));
         } catch (Exception e) {
             r.success = false;
-            r.message = I18n.tr("server.f2bm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            r.message = I18n.tr("server.f2bm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
         return r;
     }
@@ -1419,7 +1419,7 @@ public class Fail2banManager {
             enrichWithGeoIP(info, ip, whoisCountry);
 
         } catch (Exception e) {
-            info.error = e.getMessage();
+            info.error = org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e);
         }
 
         return info;
@@ -1621,7 +1621,7 @@ public class Fail2banManager {
                 : I18n.tr("server.f2bm.filterNoMatch", java.util.Map.of("n", String.valueOf(c.logLines2)));
             return c;
         } catch (Exception e) {
-            c.message = I18n.tr("server.f2bm.checkError", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            c.message = I18n.tr("server.f2bm.checkError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
             return c;
         }
     }
@@ -2039,7 +2039,7 @@ public class Fail2banManager {
                 j.banCommands.add(cmd.replace("\n", " "));
             }
         } catch (Exception e) {
-            j.actionsOutput = I18n.tr("server.f2bm.actionsError", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            j.actionsOutput = I18n.tr("server.f2bm.actionsError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e)));
         }
     }
 
@@ -2073,7 +2073,7 @@ public class Fail2banManager {
             }
             t.read = true;
         } catch (Exception e) {
-            t.error = e.getMessage() == null ? I18n.tr("server.f2bm.readError") : e.getMessage();
+            t.error = org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e);
         }
         return t;
     }
@@ -2327,7 +2327,7 @@ public class Fail2banManager {
             parseStatusFields(s);
             s.success = true;
         } catch (Exception e) {
-            s.error = e.getMessage();
+            s.error = org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e);
         }
         return s;
     }
@@ -2341,7 +2341,7 @@ public class Fail2banManager {
             // Esempio: get <jail> ignoreip può ritornare "127.0.0.1/8\n::1"
             return trimmed;
         } catch (Exception e) {
-            return "(" + I18n.tr("server.f2bm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))) + ")";
+            return "(" + I18n.tr("server.f2bm.errorLower", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("Fail2banManager", e))) + ")";
         }
     }
 
@@ -2551,7 +2551,7 @@ public class Fail2banManager {
      * Ritorna true se l'IP è stato effettivamente aggiunto (false se già presente).
      */
     public synchronized boolean addPermanentBan(String ip) throws Exception {
-        if (!isValidIp(ip)) throw new IllegalArgumentException("Invalid IP: " + ip);
+        if (!isValidIp(ip)) throw org.daemoxcp.mail.util.ShownException.Argument.of("server.badIp");
 
         ensurePermanentBanFile();
         java.util.Set<String> current = readPermanentBanFile();
@@ -2578,7 +2578,7 @@ public class Fail2banManager {
      * Ritorna true se rimosso, false se non era presente.
      */
     public synchronized boolean removePermanentBan(String ip) throws Exception {
-        if (!isValidIp(ip)) throw new IllegalArgumentException("Invalid IP: " + ip);
+        if (!isValidIp(ip)) throw org.daemoxcp.mail.util.ShownException.Argument.of("server.badIp");
 
         java.util.Set<String> current = readPermanentBanFile();
         if (!current.contains(ip)) return false;

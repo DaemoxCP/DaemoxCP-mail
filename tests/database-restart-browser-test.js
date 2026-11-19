@@ -33,7 +33,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     page.on('pageerror', e => errors.push(String(e)));
     let mysqlStopped = false;
     try {
-        const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null').match(/([0-9]{4} [0-9]{4})/)[1];
+        const code = vm('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --access-code 2>/dev/null').match(/([0-9]{4} [0-9]{4})/)[1];
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');
         await page.fill('#consoleCode', code);

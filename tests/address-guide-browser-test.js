@@ -68,7 +68,7 @@ function said(text, key) {
         await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
             protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
             isUserVerified: true, automaticPresenceSimulation: true } });
-        const m = remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code').match(/One-time access code for [^:]*: (\d{4} \d{4})/);
+        const m = remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --access-code').match(/One-time access code for [^:]*: (\d{4} \d{4})/);
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');
         await page.fill('#consoleCode', m[1]);
@@ -327,11 +327,11 @@ function said(text, key) {
         check('  nothing changed by looking', live() === before && rcSha() === rcBefore);
 
         console.log('\n== 5. The console ==');
-        const show = remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --addresses show');
+        const show = remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --addresses show');
         check('--addresses show: the interface, IPv4, IPv6, the mail family', /Interface: \S+/.test(show) && /IPv4: /.test(show)
             && /IPv6: /.test(show) && /Mail answers on: (both|ipv4|ipv6)/.test(show));
         let usage = '';
-        try { remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --addresses everything'); } catch (e) { usage = String(e.stderr || ''); }
+        try { remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --addresses everything'); } catch (e) { usage = String(e.stderr || ''); }
         check('a wrong value gets the usage', /Usage: .*--addresses show\|ipv6-off\|ipv4-dhcp/.test(usage));
         check('the recent confirmation was asked by the panel (' + confirmations + ' times)', confirmations >= 1);
     } catch (e) {

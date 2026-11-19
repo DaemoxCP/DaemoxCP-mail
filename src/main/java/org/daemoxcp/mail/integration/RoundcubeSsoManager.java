@@ -170,7 +170,7 @@ public class RoundcubeSsoManager {
         if (masterPassword == null || masterPassword.isEmpty()) {
             SsoToken result = new SsoToken();
             result.success = false;
-            result.error = "Master password not configured. Reinstall mail server or restart panel.";
+            result.error = org.daemoxcp.mail.i18n.I18n.tr("server.sso.noMaster");
             return result;
         }
 
@@ -217,7 +217,7 @@ public class RoundcubeSsoManager {
         } catch (Exception e) {
             SsoToken result = new SsoToken();
             result.success = false;
-            result.error = "Token generation failed: " + e.getMessage();
+            result.error = org.daemoxcp.mail.i18n.I18n.tr("server.sso.tokenFailed", java.util.Map.of("e", org.daemoxcp.mail.util.ErrorText.detail("RoundcubeSsoManager.token", e)));
             return result;
         }
     }
@@ -269,7 +269,7 @@ public class RoundcubeSsoManager {
         } catch (Exception e) {
             SsoToken result = new SsoToken();
             result.success = false;
-            result.error = "Token generation failed: " + e.getMessage();
+            result.error = org.daemoxcp.mail.i18n.I18n.tr("server.sso.tokenFailed", java.util.Map.of("e", org.daemoxcp.mail.util.ErrorText.detail("RoundcubeSsoManager.token", e)));
             return result;
         }
     }
@@ -363,7 +363,7 @@ public class RoundcubeSsoManager {
             // Check Roundcube exists
             if (!Files.exists(Paths.get(ROUNDCUBE_PATH))) {
                 result.success = false;
-                result.error = "Roundcube not found at " + ROUNDCUBE_PATH;
+                result.error = org.daemoxcp.mail.i18n.I18n.tr("server.sso.noRoundcube", java.util.Map.of("path", ROUNDCUBE_PATH));
                 return result;
             }
 
@@ -422,13 +422,13 @@ public class RoundcubeSsoManager {
             executeCommand("chmod 640 " + SSO_PLUGIN_PATH + "/config.inc.php");
 
             result.success = true;
-            result.message = "SSO plugin installed successfully";
+            result.message = org.daemoxcp.mail.i18n.I18n.tr("server.sso.installed");
             result.pluginPath = SSO_PLUGIN_PATH;
             System.out.println("[SSO] Plugin installation complete");
 
         } catch (Exception e) {
             result.success = false;
-            result.error = "Plugin installation failed: " + e.getMessage();
+            result.error = org.daemoxcp.mail.i18n.I18n.tr("server.sso.installFailed", java.util.Map.of("e", org.daemoxcp.mail.util.ErrorText.detail("RoundcubeSsoManager.installPlugin", e)));
             System.err.println("[SSO] Plugin installation failed: " + e.getMessage());
             e.printStackTrace();
         }
@@ -758,7 +758,7 @@ $config['daemoxcp_mail_sso_token_expiry'] = %d;
             status.roundcubeUrl = roundcubeUrl;
 
         } catch (Exception e) {
-            status.error = e.getMessage();
+            status.error = org.daemoxcp.mail.util.ErrorText.detail("RoundcubeSsoManager", e);
         }
 
         return status;

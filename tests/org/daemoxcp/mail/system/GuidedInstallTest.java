@@ -29,6 +29,8 @@ public class GuidedInstallTest {
     }
 
     public static void main(String[] args) throws Exception {
+        // The console speaks the panel's language (Main.chooseConsoleLanguage): here its English is read.
+        org.daemoxcp.mail.i18n.I18n.setProcessLanguage("en");
         System.out.println("== 1. The time zone");
         Path zi = Files.createTempDirectory("zoneinfo-test");
         try {

@@ -397,9 +397,9 @@ public final class SendingLimits {
     public static JSONObject status() {
         JSONObject r = new JSONObject();
         String why = null;
-        if (server == null || !server.isOpen()) why = "the panel's policy service is not running";
+        if (server == null || !server.isOpen()) why = org.daemoxcp.mail.i18n.I18n.tr("server.limits.notRunning");
         else if (!postconf("-h", "smtpd_data_restrictions").contains("private/daemoxcp-sending-limits"))
-            why = "Postfix does not ask the panel yet (smtpd_data_restrictions)";
+            why = org.daemoxcp.mail.i18n.I18n.tr("server.limits.notAsked");
         r.put("applied", why == null);
         if (why != null) r.put("reason", why);
         JSONObject usage = new JSONObject();

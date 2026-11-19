@@ -48,7 +48,7 @@ const NEWER = { version: '1.0.0', tag: 'v1.0.0', url: 'https://github.com/Daemox
         page.on('pageerror', e => errors.push(e.message));
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');
-        await page.fill('#consoleCode', code(remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null')));
+        await page.fill('#consoleCode', code(remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --access-code 2>/dev/null')));
         await Promise.all([page.waitForURL(u => !u.pathname.endsWith('/index'), { timeout: 30000 }), page.click('#btnConsole')]);
 
         console.log('== 1. The card on Updates ==');

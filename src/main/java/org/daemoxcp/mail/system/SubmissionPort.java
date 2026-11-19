@@ -140,7 +140,7 @@ public class SubmissionPort {
             }
             return r;
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", I18n.tr("server.subm.readError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.subm.readError", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("SubmissionPort", e))));
         }
     }
 
@@ -209,7 +209,7 @@ public class SubmissionPort {
             return r.put("success", true)
                     .put("note", I18n.tr("server.subm.done", java.util.Map.of("svc", String.valueOf(m.entry), "copy", String.valueOf(copy))));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", I18n.tr("server.subm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.subm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("SubmissionPort", e))));
         }
     }
 

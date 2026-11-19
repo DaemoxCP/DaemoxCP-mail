@@ -49,7 +49,7 @@ function status(hostHeader, extra) {
     try {
         const context = await browser.newContext({ ignoreHTTPSErrors: true, extraHTTPHeaders: { 'CF-Connecting-IP': FORGED, 'X-Forwarded-For': FORGED, 'X-Real-IP': FORGED } });
         const page = await context.newPage();
-        const m = remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null').match(/One-time access code for [^:]*: (\d{4} \d{4})/);
+        const m = remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --access-code 2>/dev/null').match(/One-time access code for [^:]*: (\d{4} \d{4})/);
         await page.goto('https://' + HOST + ':' + PORT + '/index');
         await page.click('#linkConsole');
         await page.fill('#consoleCode', m ? m[1] : '');

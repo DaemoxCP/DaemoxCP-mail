@@ -443,7 +443,7 @@ public class PfFirewallManager {
             res.message = I18n.tr("server.pffw.downloaded", java.util.Map.of("n", String.valueOf(lines4 + lines6), "cc", String.valueOf(cc)))
                     + (v6[0] == null ? " " + I18n.tr("server.pffw.noIpv6List", java.util.Map.of("e", String.valueOf(v6[1]))) : "");
         } catch (Exception e) {
-            res.error = e.getMessage();
+            res.error = org.daemoxcp.mail.util.ErrorText.detail("PfFirewallManager", e);
         }
         return res;
     }
@@ -751,7 +751,7 @@ public class PfFirewallManager {
             r.anchorContent = newContent;
         } catch (Exception e) {
             r.success = false;
-            r.message = I18n.tr("server.pffw.error", java.util.Map.of("err", String.valueOf(e.getMessage())));
+            r.message = I18n.tr("server.pffw.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("PfFirewallManager", e)));
         }
         return r;
     }

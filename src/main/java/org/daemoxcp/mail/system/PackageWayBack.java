@@ -177,7 +177,7 @@ public final class PackageWayBack {
         boolean listed = run("bectl list -H 2>/dev/null | cut -f1", 60).outputTrim().lines().anyMatch(name::equals);
         if (!c.success() || !listed) {
             String err = c.outputTrim().isEmpty() ? "exit " + c.exitCode() : c.outputTrim();
-            throw new IllegalStateException(I18n.tr("server.um.x.wbFailed", Map.of("name", name, "err", err)));
+            throw org.daemoxcp.mail.util.ShownException.of("server.um.x.wbFailed", Map.of("name", name, "err", err));
         }
         log.accept(I18n.tr("server.um.x.wbCreated", Map.of("name", name)));
         log.accept(I18n.tr("server.um.x.wbHowBack", Map.of("name", name)));

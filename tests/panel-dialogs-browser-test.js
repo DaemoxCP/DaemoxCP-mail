@@ -27,7 +27,7 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
     page.on('pageerror', e => errors.push(page.url() + ': ' + String(e)));
     page.on('dialog', async d => { dialogs.push(page.url() + ': ' + d.type() + ': ' + d.message()); await d.dismiss(); });
 
-    const code = execSync(VM + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null'")
+    const code = execSync(VM + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --access-code 2>/dev/null'")
         .toString().match(/([0-9]{4} [0-9]{4})/)[1];
     await page.goto(BASE + '/index');
     await page.click('#linkConsole');

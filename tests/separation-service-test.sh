@@ -61,7 +61,7 @@ restart() {
 # Signs in with a one-time console code; leaves the cookies in $JAR_COOKIES and the CSRF token in $CSRF.
 login() {
     JAR_COOKIES=$(mktemp /var/tmp/sep-cookies.XXXXXX)
-    code=$(cd "$PANEL" && "$JAVA" -jar "$JAR" --access-code 2>/dev/null | sed -n 's/.*One-time access code for [^:]*: \([0-9]\{4\} [0-9]\{4\}\).*/\1/p' | head -1)
+    code=$(cd "$PANEL" && "$JAVA" -jar "$JAR" --lang en --access-code 2>/dev/null | sed -n 's/.*One-time access code for [^:]*: \([0-9]\{4\} [0-9]\{4\}\).*/\1/p' | head -1)
     pre=$(curl -sk -A "$UA" -c "$JAR_COOKIES" -b "$JAR_COOKIES" "$BASE/index" | sed -n 's/.*id="csrf_token" value="\([^"]*\)".*/\1/p' | head -1)
     LOGIN=$(curl -sk -A "$UA" -c "$JAR_COOKIES" -b "$JAR_COOKIES" -H 'Content-Type: application/json' \
         -d "{\"action\":\"console_verify\",\"code\":\"$code\",\"csrf_token\":\"$pre\"}" "$BASE/api/login")

@@ -317,7 +317,7 @@ public class BlacklistChecker {
             }
         } catch (Exception e) {
             r.error = true;
-            r.message = I18n.tr("server.bl.error", java.util.Map.of("err", String.valueOf(e.getMessage())));
+            r.message = I18n.tr("server.bl.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("BlacklistChecker", e)));
         }
         return r;
     }

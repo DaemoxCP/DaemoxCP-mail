@@ -1988,19 +1988,19 @@ public class SSLMailServer {
             }
             String body = readRequestBodyWithLimit(exchange);
             if (body == null) {
-                sendJsonError(exchange, 413, "Request too large");
+                sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
                 return;
             }
             JSONObject request;
             try {
                 request = new JSONObject(body);
             } catch (Exception e) {
-                sendJsonError(exchange, 400, "Bad request");
+                sendJsonError(exchange, 400, I18n.tr("server.badRequest"));
                 return;
             }
             String lang = request.optString("language", "");
             if (!I18n.LANGUAGES.contains(lang)) {
-                sendJsonError(exchange, 400, "Unknown language");
+                sendJsonError(exchange, 400, I18n.tr("server.unknownLanguage"));
                 return;
             }
             if (isAuthenticated(exchange)) {
@@ -2017,7 +2017,7 @@ public class SSLMailServer {
             sendJsonResponse(exchange, new JSONObject().put("success", true).put("language", lang));
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error in handleApiLanguage", e);
-            sendJsonError(exchange, 500, "Internal server error");
+            sendJsonError(exchange, 500, I18n.tr("server.internalError"));
         }
     }
 
@@ -3579,7 +3579,7 @@ public class SSLMailServer {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Could not read HTML file: " + filename, e);
         }
-        return "<html><body><h1>Page not found</h1></body></html>";
+        return "<html><body><h1>" + I18n.escapeHtml(I18n.tr("server.pageNotFound")) + "</h1></body></html>";
     }
 
     /**
@@ -3969,7 +3969,7 @@ public class SSLMailServer {
         }
 
         if (dkimManager == null) {
-            sendJsonError(exchange, 503, "DKIM manager not initialized");
+            sendJsonError(exchange, 503, I18n.tr("server.partNotReady", Map.of("part", "DKIM")));
             return;
         }
 
@@ -4402,7 +4402,7 @@ public class SSLMailServer {
         }
 
         if (dnsGenerator == null) {
-            sendJsonError(exchange, 503, "DNS generator not initialized");
+            sendJsonError(exchange, 503, I18n.tr("server.partNotReady", Map.of("part", "DNS")));
             return;
         }
 
@@ -4541,7 +4541,7 @@ public class SSLMailServer {
             return;
         }
         if (cloudflareManager == null) {
-            sendJsonError(exchange, 503, "Cloudflare manager not initialized");
+            sendJsonError(exchange, 503, I18n.tr("server.partNotReady", Map.of("part", "Cloudflare")));
             return;
         }
         String method = exchange.getRequestMethod();
@@ -5049,7 +5049,7 @@ public class SSLMailServer {
         }
 
         if (acmeManager == null) {
-            sendJsonError(exchange, 503, "ACME manager not initialized");
+            sendJsonError(exchange, 503, I18n.tr("server.partNotReady", Map.of("part", "ACME")));
             return;
         }
 
@@ -5779,7 +5779,7 @@ public class SSLMailServer {
                     }
                 } else {
                     response.put("success", false);
-                    response.put("error", "Unknown action");
+                    response.put("error", I18n.tr("server.unknownAction"));
                 }
 
             } else if ("POST".equals(method)) {
@@ -5812,11 +5812,11 @@ public class SSLMailServer {
                         String url = json.getString("url");
                         ssoManager.setRoundcubeUrl(url);
                         response.put("success", true);
-                        response.put("message", "Roundcube URL updated");
+                        response.put("message", I18n.tr("server.rcUrlUpdated"));
                     }
                     default -> {
                         response.put("success", false);
-                        response.put("error", "Unknown action: " + action);
+                        response.put("error", I18n.tr("server.badActionNamed", Map.of("action", String.valueOf(action))));
                     }
                 }
             }
@@ -5958,7 +5958,7 @@ public class SSLMailServer {
                     String jailName = extractParamFromQuery(query, "name");
                     if (jailName == null) {
                         response.put("success", false);
-                        response.put("error", "Jail name required");
+                        response.put("error", I18n.tr("server.jailNameRequired"));
                     } else if (!org.daemoxcp.mail.security.InputValidator.isValidJailName(jailName)) {
                         response.put("success", false);
                         response.put("error", I18n.tr("server.f2b.badJail"));
@@ -6055,7 +6055,7 @@ public class SSLMailServer {
                     String ip = extractParamFromQuery(query, "ip");
                     if (ip == null) {
                         response.put("success", false);
-                        response.put("error", "IP address required");
+                        response.put("error", I18n.tr("server.ipRequired"));
                     } else if (!org.daemoxcp.mail.security.InputValidator.isValidIp(ip)) {
                         response.put("success", false);
                         response.put("error", I18n.tr("server.badIp"));
@@ -6402,7 +6402,7 @@ public class SSLMailServer {
                     }
                     default -> {
                         response.put("success", false);
-                        response.put("error", "Unknown action: " + action);
+                        response.put("error", I18n.tr("server.badActionNamed", Map.of("action", String.valueOf(action))));
                     }
                 }
             }
@@ -8701,9 +8701,9 @@ public class SSLMailServer {
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             boolean done = p.waitFor(600, java.util.concurrent.TimeUnit.SECONDS); // 10 min
-            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", "Timeout (>10min)"); return r; }
+            if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", I18n.tr("server.clam.timeout")); return r; }
             r.put("success", p.exitValue() == 0);
-            r.put("message", p.exitValue() == 0 ? I18n.tr("server.clam.dbUpdated") : "freshclam exit=" + p.exitValue());
+            r.put("message", p.exitValue() == 0 ? I18n.tr("server.clam.dbUpdated") : I18n.tr("server.clam.exit", Map.of("code", String.valueOf(p.exitValue()))));
             r.put("output", out.length() > 4000 ? out.substring(out.length() - 4000) : out);
         } catch (Exception e) {
             r.put("success", false);
