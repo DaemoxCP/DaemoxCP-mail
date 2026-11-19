@@ -12,11 +12,13 @@ import java.util.TreeSet;
  *  1. the panel's pf.conf files of before (the real server's, the installer's, the page button's) become
  *     the new one: the fail2ban anchor, the permaban table and the panel's anchor stay, the table limit
  *     stays, the "pass everything" goes, and in comes only SSH (sshd's ports and 22), mail, web, webmail
- *     and the panel, plus ICMP, ICMPv6 and DHCP replies;
+ *     and the panel, plus ICMP, ICMPv6 and DHCP replies; the family a choice closes is refused at once, here and,
+ *     first of all, in the panel firewall's anchor (allowed and blocked addresses, countries);
  *  2. a pf.conf with rules the panel does not write is left alone, and so is one with another first line;
  *  3. a second time nothing changes; a new webmail port or a second sshd port is followed;
  *  4. the outputs it reads: sockstat (sshd's ports) and pfctl -sr (is SSH let in);
- *  5. on the VM, as root (-De2e.vm=yes): the real pfctl accepts the file it writes (syntax only, nothing loaded);
+ *  5. on the VM, as root (-De2e.vm=yes): the real pfctl accepts the file it writes and the panel firewall's anchor
+ *     with the closed family refused first (syntax only, nothing loaded);
  *  6. the provider's metadata service (169.254.169.254) only for root: the rule is in the file once, and a panel
  *     pf.conf from before gets it at the next start (MetadataRootOnlyTest checks the live pf on the VM).
  *
@@ -124,6 +126,31 @@ public class PfPolicyTest {
                 fromServer != null && fromServer.equals(PfPolicy.transform(v4only, today, "", false))
                         && out6.equals(PfPolicy.transform(v4only, today, "inet ", false)) && v4only.equals(PfPolicy.transform(out6, today, "inet ", true))
                         && v6only.equals(PfPolicy.transform(v4only, today, "inet6 ", false)));
+        // The panel's firewall (anchor panel-fw: allowed and blocked addresses, countries) is evaluated before these rules,
+        // and its quick rules decided alone: on the real server (19/11), with mail over IPv6 only going out, IPv6 to the
+        // mail client ports fell into the countries' block, silently instead of the «no»; with country lists that have
+        // IPv6 too it would have come in. Its first rule is now the same refusal, quick.
+        String quick6 = PfPolicy.closedRefusal(today, "inet ", true);
+        check("the anchor's refusal: IPv4 only or IPv6 only going out close IPv6 at once, quick, on every service port",
+                ("block return in quick inet6 proto tcp to port { 25, 80, 143, 443, 465, 587, 993, 2096, 8443 }").equals(quick6));
+        check("  IPv6 only closes IPv4; both closes nothing; the pf.conf rule is the same without quick",
+                ("block return in quick inet proto tcp to port { 25, 80, 143, 443, 465, 587, 993, 2096, 8443 }").equals(PfPolicy.closedRefusal(today, "inet6 ", true))
+                        && PfPolicy.closedRefusal(today, "", true) == null && PfPolicy.closedRefusal(today, null, true) == null
+                        && out6 != null && out6.contains("\n" + PfPolicy.closedRefusal(today, "inet ", false) + "\n"));
+        PfFirewallManager.FirewallState geo = new PfFirewallManager.FirewallState();
+        geo.mode = PfFirewallManager.Mode.GEO_WHITELIST;
+        geo.whitelistCidrs.add("2001:db8::/32");
+        String anchor = PfFirewallManager.anchorBody(geo, List.of("/var/db/daemoxcp-mail/geoip/it.zone"), quick6);
+        int refusalAt = anchor.indexOf(quick6 + "\n"), firstPass = anchor.indexOf("\npass in quick"), countries = anchor.indexOf("from <panel_geo_wl>");
+        check("in the anchor the refusal comes before the allowed addresses and the countries (" + refusalAt + " < " + firstPass + " < " + countries + ")",
+                refusalAt > 0 && firstPass > refusalAt && countries > firstPass);
+        String anchorBoth = PfFirewallManager.anchorBody(geo, List.of("/var/db/daemoxcp-mail/geoip/it.zone"), null);
+        check("  with both families open the anchor has no refusal, and the rest is the same as before",
+                !anchorBoth.contains("block return") && anchor.replace("# La famiglia chiusa dalla scelta IPv4/IPv6: rifiutata subito, prima di liste e paesi\n" + quick6 + "\n", "").equals(anchorBoth));
+        PfFirewallManager.FirewallState off = new PfFirewallManager.FirewallState();
+        off.mode = PfFirewallManager.Mode.DISABLED;
+        check("  a disabled panel firewall stays empty, refusal or not (pf.conf refuses on its own)",
+                !PfFirewallManager.anchorBody(off, List.of(), quick6).contains("block"));
         check("the real server's file is the panel's and is transformed", fromServer != null && fromServer.startsWith(PfPolicy.HEADER));
         // The panel's own file with the first line it had before the product name (DaemoxCP Mail, 17/11/2026):
         // only that line changes, the rules stay exactly the same.
@@ -217,6 +244,15 @@ public class PfPolicyTest {
             org.daemoxcp.mail.util.Shell.Result syntax = org.daemoxcp.mail.util.Shell.run("/sbin/pfctl", "-nf", f.toString());
             check("pfctl -nf accepts the file (" + syntax.outputTrim() + ")", syntax.success());
             Files.deleteIfExists(f);
+            // The anchor with the refusal first, as applyConfiguration checks it (a country list of both families).
+            Path zone = Files.createTempFile("pf-policy-zone-", ".zone");
+            Files.writeString(zone, "192.0.2.0/24\n# IPv6\n2001:db8::/32\n");
+            Path a = Files.createTempFile("pf-policy-anchor-", ".conf");
+            Files.writeString(a, PfFirewallManager.anchorBody(geo, List.of(zone.toString()), quick6));
+            org.daemoxcp.mail.util.Shell.Result anchorSyntax = org.daemoxcp.mail.util.Shell.run("/sbin/pfctl", "-nf", a.toString());
+            check("pfctl -nf accepts the anchor with the refusal first (" + anchorSyntax.outputTrim() + ")", anchorSyntax.success());
+            Files.deleteIfExists(a);
+            Files.deleteIfExists(zone);
         } else {
             System.out.println("\n  (part 5 skipped: it needs pfctl as root, turned on with -De2e.vm=yes on the VM)");
         }

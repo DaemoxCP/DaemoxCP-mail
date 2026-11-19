@@ -1882,6 +1882,9 @@ public class Main {
                 return 1;
             }
             mailDatabase.logAuditEvent("IP_FAMILY_CHANGED", "127.0.0.1", f.key + " (console)", "console");
+            // Il firewall del pannello (liste, paesi) segue la scelta: la sua prima regola rifiuta la famiglia chiusa.
+            org.daemoxcp.mail.security.PfFirewallManager.ApplyResult fw = org.daemoxcp.mail.security.PfFirewallManager.reapplySaved();
+            if (fw != null && !fw.success) System.out.println("  The panel firewall (lists, countries) was not reloaded: " + fw.message);
             System.out.println("Done: Postfix, Dovecot, nginx and pf now answer on " + switch (f) {
                 case BOTH -> "IPv4 and IPv6.";
                 case IPV4 -> "IPv4 only.";

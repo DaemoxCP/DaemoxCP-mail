@@ -172,16 +172,40 @@ public final class PfPolicy {
         b.append("pass in proto tcp to port ").append(list(p.ssh())).append(" keep state\n\n");
         b.append("# Posta, web (sfida HTTP dei certificati, MTA-STS), webmail, pannello.\n");
         b.append("pass in ").append(family == null ? "" : family).append("proto tcp to port ").append(list(p.services())).append(" keep state\n");
-        String closed = "inet ".equals(family) ? "inet6 " : "inet6 ".equals(family) ? "inet " : null;
-        if (closed != null) {
+        String refusal = closedRefusal(p, family, false);
+        if (refusal != null) {
             b.append("\n# La famiglia chiusa: un rifiuto subito, non il silenzio (chi prova passa all'altra senza attese).\n");
-            b.append("block return in ").append(closed).append("proto tcp to port ").append(list(p.services())).append('\n');
+            b.append(refusal).append('\n');
         }
         if (smtpOut6Blocked) {
             b.append("\n# La posta non esce in IPv6: Postfix prova l'IPv6, riceve subito un rifiuto e spedisce in IPv4.\n");
             b.append(SMTP_OUT6_RULE).append('\n');
         }
         return b.toString();
+    }
+
+    /** La famiglia che la scelta chiude: «inet6 » con «inet » (solo IPv4, o la posta in IPv6 solo in uscita), «inet »
+     *  con «inet6 » (solo IPv6), null se entrano tutte e due. Puro. */
+    static String closedFamily(String family) {
+        return "inet ".equals(family) ? "inet6 " : "inet6 ".equals(family) ? "inet " : null;
+    }
+
+    /**
+     * Il rifiuto subito della famiglia chiusa sulle porte dei servizi, o null se la scelta non ne chiude nessuna. quick
+     * per l'anchor panel-fw (PfFirewallManager): l'anchor si valuta prima di queste regole, e le sue regole quick (i
+     * consentiti, i paesi) decidevano da sole, senza guardare la famiglia. Visto sul server vero il 19/11, con la posta
+     * in IPv6 solo in uscita: sulle porte dei programmi di posta l'IPv6 finiva nel blocco dei paesi, in silenzio invece
+     * del «no»; e con gli elenchi dei paesi rinnovati (anche IPv6) sarebbe entrato. Puro.
+     */
+    static String closedRefusal(Ports p, String family, boolean quick) {
+        String closed = closedFamily(family);
+        if (closed == null) return null;
+        return "block return in " + (quick ? "quick " : "") + closed + "proto tcp to port " + list(p.services());
+    }
+
+    /** Lo stesso rifiuto, quick, per la scelta e le porte di adesso: la prima regola dell'anchor panel-fw. */
+    static String closedRefusalForAnchor() {
+        return closedRefusal(currentPorts(), org.daemoxcp.mail.system.IpFamily.pfKeyword(), true);
     }
 
     /**
