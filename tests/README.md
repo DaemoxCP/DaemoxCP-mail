@@ -1332,6 +1332,16 @@ text, the names of the buttons for screen readers, the question before stopping 
 MySQL (cancelled, nothing starts), the CSRF token to /api/service, the re-reading after every
 command; dark theme and phone, where the tables become cards.
 
+**FixedTextsTest** — the i18n stays complete: no fixed text a person reads. In the page templates (between two tags),
+in the scripts (a sentence outside `t()`), in the attributes read or heard (title, aria-label, placeholder, alt), in
+the server's answers (a fixed "message" or "error", `sendJsonError` with a fixed text), in the console's windows,
+labels, buttons, titles and menu items; an error for the page is a ShownException, and no raw `e.getMessage()` goes
+into a translated text or an answer (`ErrorText.detail`). The technical texts, the same in every language, are listed,
+and a list may not keep an entry no longer used. Every check first finds a fixed text in a sample made wrong on
+purpose. Logs, journals and the output of other programs are not checked: they stay in English.
+
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.i18n.FixedTextsTest
+
 **I18nTest** — the interface's languages (I18n) and the pages' frame (Layout). The panel's languages
 are the files in lang/, each named with its ISO 639-1 code. Italian and English are complete, with
 the same keys. Every language, partial ones too, has only keys Italian has, no empty text, the same
@@ -1838,10 +1848,11 @@ installs (none for a user it does not know). It calls nothing.
 
 **ErrorTextTest** — what an exception says to the page (ErrorText, reperto 231). The routes used to put
 `e.getMessage()` of any exception in the answer: a MySQL duplicate showed the table and the key, a missing file its
-path. Now the messages of IllegalArgumentException and IllegalStateException (the ones the panel writes for the page)
-pass, and PasskeyException's key is translated; an IOException with a path, an SQLException naming a table,
-InvalidPathException, NumberFormatException, a NullPointerException or no message give the generic text, with one
-WARNING line in the log carrying the route's method and the exception; a MySQL duplicate (1062, also wrapped) says "it
+path. Now only an error already translated for the page passes: ShownException (and ShownException.Argument, an
+IllegalArgumentException, both TranslatedError) and PasskeyException's key. Any other exception, also an
+IllegalArgumentException or IllegalStateException with an English text written in the code or wrapping another one,
+an IOException with a path, an SQLException naming a table, a NullPointerException or no message give the generic
+text, with one WARNING line in the log carrying the route's method and the exception; a MySQL duplicate (1062, also wrapped) says "it
 already exists" without the key. Then in the sources: no route answer of SSLMailServer and no "success" answer of
 UpdateManager puts `getMessage()` by itself. It calls nothing; run from the project root (it reads `src/`).
 
