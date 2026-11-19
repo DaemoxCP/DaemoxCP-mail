@@ -112,6 +112,9 @@ public class QuickHardeningTest {
     }
 
     static List<String> logged = new ArrayList<>();
+    // java.util.logging keeps loggers only weakly: without this field a garbage collection between adding the
+    // handler and the first message can drop the logger, handler included, and the class then logs to a new one.
+    static final List<Logger> WATCHED = new ArrayList<>();
 
     static Handler capture(Class<?> c) {
         Handler h = new Handler() {
@@ -119,7 +122,9 @@ public class QuickHardeningTest {
             @Override public void flush() {}
             @Override public void close() {}
         };
-        Logger.getLogger(c.getName()).addHandler(h);
+        Logger logger = Logger.getLogger(c.getName());
+        WATCHED.add(logger);
+        logger.addHandler(h);
         return h;
     }
 

@@ -45,6 +45,9 @@ public class MailDbUsersMysqlTest {
     static String port, database, url;
     static final String POSTFIX_PW = "PostfixTestPasswordPostfixTest01", DOVECOT_PW = "DovecotTestPasswordDovecotTest01";
     static final List<String> LOG = new ArrayList<>();
+    // java.util.logging keeps loggers only weakly: without this field a garbage collection between adding the
+    // handler and the first message can drop the logger, handler included, and the class then logs to a new one.
+    static final Logger WATCHED = Logger.getLogger(MailDbUsers.class.getName());
 
     static Connection as(String user, String password) throws SQLException {
         return DriverManager.getConnection(url, user, password);
@@ -119,7 +122,7 @@ public class MailDbUsersMysqlTest {
                 + "?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
         Path dir = Files.createTempDirectory("mail-db-users");
         System.setProperty("daemoxcp.mail.secrets.dir", dir.toString());
-        Logger.getLogger(MailDbUsers.class.getName()).addHandler(new Handler() {
+        WATCHED.addHandler(new Handler() {
             @Override public void publish(LogRecord r) { LOG.add(r.getMessage()); }
             @Override public void flush() { }
             @Override public void close() { }

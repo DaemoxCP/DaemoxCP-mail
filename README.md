@@ -145,7 +145,8 @@ It is **careful**. The panel never changes something it cannot check, and it say
   - every service and every certificate;
   - Cloudflare's address list.
 - Logs, system paths, service users, scheduled restarts, periodic reports by email.
-- Interface in **English and Italian**, light and dark theme, usable from a phone.
+- Interface in **English and Italian** (another language is one more file: see [Languages](#languages)), light and
+  dark theme, usable from a phone.
 
 ---
 
@@ -724,6 +725,40 @@ Option 6 brings back the boot environment taken before the last installation, an
 | 2096 | the panel | Cloudflare only |
 | 8443 | the webmail | Cloudflare only |
 | 3306, 11332–11334, 53 | MySQL, Rspamd, the resolver | the server itself |
+
+### Languages
+
+The panel speaks English and Italian. It uses, in this order:
+
+1. the language chosen with the switch in the top bar, saved with the account (it follows you on every browser);
+2. the one chosen before signing in;
+3. the browser's preferred language, among the panel's;
+4. English.
+
+Every text of the interface is in `src/main/resources/lang/`, one file per language named with its ISO 639-1 code
+(`it.json`, `en.json`): flat keys, no text in the pages or in the code. A new language is a new file, and its code
+in one list:
+
+1. Copy `en.json` to the new code, for example `es.json`, and translate the values. Leave the keys and the
+   `{values}` in braces as they are. The `.html` texts may use only `<strong>`, `<em>`, `<code>`, `<kbd>` and
+   `<br>`.
+2. Plural forms. A counted text has `key.one` and `key.other`. A language with more forms adds the ones CLDR
+   gives it (`key.few`, `key.many`…). The panel picks the form with the CLDR rules: `I18n.pluralCategory` on
+   the server, `Intl.PluralRules` in the browser. A language missing from `I18n.PLURAL_RULES` needs its rule
+   written there first.
+3. Add the code to the list in the database procedure `set_admin_language` (`SqlCatalog.java`): the database
+   saves only the panel's languages. The procedure is updated by itself at the next start.
+4. Rebuild the jar (`tools/build-jar.sh`) and run `I18nTest` and `layout-browser-test.js`
+   ([tests/README.md](tests/README.md)). They refuse a key Italian does not have, a missing `{value}`, a plural
+   form the language does not have, and a language missing from the procedure's list.
+
+At the next start the language is in the switch, written in its own language (*Español*, *Français*). With three
+or more languages the two buttons become a menu. The file may be partial: a missing text is shown in English,
+then in Italian. The dates in the pages follow the language.
+
+> [!NOTE]
+> Right-to-left languages (Arabic, Hebrew, Persian…) need a frame that does not exist yet: `dir="rtl"`,
+> Bootstrap's RTL build and mirrored icons. The tests refuse them until then.
 
 ---
 

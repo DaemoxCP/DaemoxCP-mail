@@ -294,6 +294,9 @@ public class LoginSecurityTest {
 
     static final List<String[]> MAIL = new ArrayList<>();
     static final List<String> LOG = new java.util.concurrent.CopyOnWriteArrayList<>();
+    // java.util.logging keeps loggers only weakly: without this field a garbage collection between adding the
+    // handler and the first message can drop the logger, handler included, and the class then logs to a new one.
+    static final java.util.logging.Logger WATCHED = java.util.logging.Logger.getLogger(LoginCodes.class.getName());
 
     static String lastCode() {
         String body = MAIL.get(MAIL.size() - 1)[2];
@@ -306,7 +309,7 @@ public class LoginSecurityTest {
         org.daemoxcp.mail.i18n.I18n.setCurrent("en");
         LoginCodes.mailer = (to, subject, body) -> MAIL.add(new String[]{to, subject, body});
         LoginCodes.synchronousMail = true;
-        java.util.logging.Logger.getLogger(LoginCodes.class.getName()).addHandler(new java.util.logging.Handler() {
+        WATCHED.addHandler(new java.util.logging.Handler() {
             @Override public void publish(java.util.logging.LogRecord r) { LOG.add(String.valueOf(r.getMessage())); }
             @Override public void flush() { }
             @Override public void close() { }

@@ -26,6 +26,11 @@ import java.lang.reflect.Method;
  * file (PageAssets): assets/ holds them, to be served as /assets/..., and csp.txt holds the
  * Content-Security-Policy the panel sends, for the browser tests to send it too.
  *
+ * For the language tests: language-select.html is the language menu the frame shows with three or more languages
+ * (today the panel has two, so no page has it), and plural-categories.json holds the plural category Java gives
+ * for every language with a written rule (I18n.PLURAL_RULES) and many numbers, for the browser to compare with its
+ * own Intl.PluralRules.
+ *
  * Usage:
  *   javac -cp target/daemoxcp-mail.jar -d tests tests/org/daemoxcp/mail/content/PageGenerator.java
  *   java  -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.content.PageGenerator /tmp/pages
@@ -62,6 +67,17 @@ public class PageGenerator {
         Layout.registerAssets();
         PageAssets.writeAll(dir.toPath());
         write(new File(dir, "csp.txt"), org.daemoxcp.mail.webserver.SecurityHeaders.CONTENT_SECURITY_POLICY);
+        write(new File(dir, "language-select.html"),
+                I18n.render(Layout.languageSwitch("it", java.util.List.of("it", "en", "es")), "it"));
+        org.json.JSONObject plurals = new org.json.JSONObject();
+        long[] numbers = {1000, 1001, 1_000_000, 2_000_000, 3_000_000};
+        for (String lang : new java.util.TreeSet<>(I18n.PLURAL_RULES)) {
+            org.json.JSONObject byNumber = new org.json.JSONObject();
+            for (long n = 0; n <= 130; n++) byNumber.put(String.valueOf(n), I18n.pluralCategory(lang, n));
+            for (long n : numbers) byNumber.put(String.valueOf(n), I18n.pluralCategory(lang, n));
+            plurals.put(lang, byNumber);
+        }
+        write(new File(dir, "plural-categories.json"), plurals.toString());
         System.out.println("generated " + done + ", skipped " + skipped);
     }
 

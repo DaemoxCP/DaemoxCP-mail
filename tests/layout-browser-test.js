@@ -1,5 +1,8 @@
 // The frame of the mail panel pages in Chromium: the sectioned sidebar, the top bar, the panel that
 // opens on a phone, the "Skip to content" link and the language switch, also on the login page.
+// With three or more languages the switch is a menu: PageGenerator writes it (language-select.html) and
+// the page /home3 is the home page with that menu in place of the buttons. The plural forms: the
+// category Java gives (plural-categories.json) must be the one Chromium's Intl.PluralRules gives.
 // The server is simulated: it serves the pages as the panel completes them (PageGenerator, Italian
 // or English according to the chosen language) and answers /api/language like the panel.
 //
@@ -17,6 +20,10 @@ const shots = process.argv[3];
 const resources = path.join(__dirname, '..', 'src', 'main', 'resources');
 // The Italian page is checked against the texts of it.json, never written here.
 const IT = JSON.parse(fs.readFileSync(path.join(resources, 'lang', 'it.json'), 'utf8'));
+const EN = JSON.parse(fs.readFileSync(path.join(resources, 'lang', 'en.json'), 'utf8'));
+// The two-button switch of the frame, replaced on /home3 by the menu for three languages
+const BUTTONS = /<div class="btn-group btn-group-sm" role="group" aria-label="[^"]*">(?:<button [^>]*data-set-lang="[a-z]{2}"[^>]*>[A-Z]{2}<\/button>)+<\/div>/g;
+let menuSwaps = 0;
 const BASE = 'http://panel.test';
 let failed = 0;
 function check(what, ok) {
@@ -27,15 +34,19 @@ function check(what, ok) {
 let language = 'it';
 let theme = 'auto';
 const changes = [];
-const PAGES = { '/home': 'home', '/updates': 'updates', '/queue': 'queue', '/dns': 'dns', '/admins': 'admins', '/index': 'index', '/setup': 'setup' };
+const PAGES = { '/home': 'home', '/home3': 'home', '/updates': 'updates', '/queue': 'queue', '/dns': 'dns', '/admins': 'admins', '/index': 'index', '/setup': 'setup' };
 
 async function serve(route) {
     const req = route.request();
     const p = new URL(req.url()).pathname;
     if (PAGES[p]) {
         const f = path.join(pages, PAGES[p] + (language === 'it' ? '' : '.' + language) + '.html');
-        const html = fs.readFileSync(f, 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-test')
+        let html = fs.readFileSync(f, 'utf8').replace(/\{\{CSRF_TOKEN\}\}/g, 'csrf-test')
             .replace(/\{\{THEME\}\}/g, theme).replace(/\{\{COLOR_SCHEME\}\}/g, theme === 'auto' ? 'light dark' : theme);
+        if (p === '/home3') {
+            const menu = fs.readFileSync(path.join(pages, 'language-select.html'), 'utf8');
+            html = html.replace(BUTTONS, () => { menuSwaps++; return menu; });
+        }
         return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html, headers: csp.headers(pages) });
     }
     if (p.startsWith('/assets/')) return csp.asset(route, pages, p);
@@ -120,12 +131,61 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     await Promise.all([page.waitForNavigation(), page.click('[data-set-lang="it"]')]);
     check('and back to Italian', await page.getAttribute('html', 'lang') === 'it' && await text(page, '.topbar-title') === 'DNS e certificati › DNS');
 
+    check('each button says its language in that language (title and lang)', await page.getAttribute('[data-set-lang="it"]', 'title') === 'Italiano'
+        && await page.getAttribute('[data-set-lang="en"]', 'title') === 'English' && await page.getAttribute('[data-set-lang="en"]', 'lang') === 'en');
+
+    console.log('\n== With three languages: a menu ==');
+    menuSwaps = 0;
+    await page.goto(BASE + '/home3');
+    check('the page has the menu in place of the buttons', menuSwaps === 1 && await page.locator('[data-set-lang]').count() === 0
+        && await page.isVisible('select#languageSelect'));
+    check('the menu has its name for screen readers (label for): ' + IT['layout.language'],
+        await page.evaluate(() => document.getElementById('languageSelect').labels[0].textContent.trim()) === IT['layout.language']);
+    const options = await page.$$eval('#languageSelect option', o => o.map(x => x.value + ':' + x.lang + ':' + x.textContent + (x.selected ? ':selected' : '')));
+    check('each language in its own language, the current one chosen: ' + options.join(' '),
+        options.join(' ') === 'it:it:Italiano:selected en:en:English es:es:Español');
+    const before = changes.length;
+    await Promise.all([page.waitForNavigation(), page.selectOption('#languageSelect', 'en')]);
+    check('choosing English sends the request with the token and reloads in English', changes.length === before + 1
+        && changes[before].language === 'en' && changes[before].csrf_token === 'csrf-test' && await page.getAttribute('html', 'lang') === 'en');
+    await page.selectOption('#languageSelect', 'es');
+    await page.waitForSelector('#panelNotices [role=alert]');
+    check('a language the server refuses: the error, in a notice the screen reader reads', changes.length === before + 2
+        && (await text(page, '#panelNotices [role=alert]')).includes(EN['layout.languageError']) && await page.getAttribute('html', 'lang') === 'en');
+    await page.focus('#languageSelect');
+    check('the menu is reached and used with the keyboard (a native select)', await page.evaluate(() => document.activeElement.id) === 'languageSelect');
+    language = 'it';
+
+    console.log('\n== Plural forms ==');
+    const javaPlurals = JSON.parse(fs.readFileSync(path.join(pages, 'plural-categories.json'), 'utf8'));
+    const pluralLangs = Object.keys(javaPlurals);
+    const differences = await page.evaluate(table => {
+        const out = [];
+        for (const lang of Object.keys(table)) {
+            const rules = new Intl.PluralRules(lang);
+            for (const n of Object.keys(table[lang])) {
+                const browser = rules.select(Number(n));
+                if (browser !== table[lang][n]) out.push(lang + ' ' + n + ': Java ' + table[lang][n] + ', browser ' + browser);
+            }
+        }
+        return out;
+    }, javaPlurals);
+    check(pluralLangs.length + ' languages, ' + Object.keys(javaPlurals.it || {}).length + ' numbers each: Java gives the plural form the browser gives'
+        + (differences.length ? ': ' + differences.slice(0, 8).join('; ') : ''), pluralLangs.length >= 20 && differences.length === 0);
+    await page.goto(BASE + '/home');
+    const plural = Object.keys(IT).find(k => k.endsWith('.one') && IT[k.slice(0, -4) + '.other'] && IT[k.slice(0, -4) + '.other'].includes('{n}'));
+    const base = plural.slice(0, -4);
+    check('tn() in Italian: 1 is .one, 2 is .other, a million (CLDR "many", no such text) falls back to .other (' + base + ')',
+        await page.evaluate(b => tn(b, 1) === t(b + '.one', { n: 1 }) && tn(b, 2) === t(b + '.other', { n: 2 })
+            && tn(b, 1000000) === t(b + '.other', { n: 1000000 }) && new Intl.PluralRules('it').select(1000000) === 'many', base));
+
     console.log('\n== Before logging in ==');
     await page.goto(BASE + '/index');
     check('the login page has IT/EN and the theme button, without the frame', await page.isVisible('[data-set-lang="en"]')
         && await page.isVisible('.theme-toggle-login') && await page.locator('#sidebar').count() === 0);
+    const beforeLogin = changes.length;
     await Promise.all([page.waitForNavigation(), page.click('[data-set-lang="en"]')]);
-    check('it switches with the login page token', changes.length === 3 && changes[2].csrf_token === 'csrf-test'
+    check('it switches with the login page token', changes.length === beforeLogin + 1 && changes[beforeLogin].csrf_token === 'csrf-test'
         && await page.getAttribute('html', 'lang') === 'en');
     await page.goto(BASE + '/setup');
     check('the setup page has the switch too', await page.isVisible('[data-set-lang="it"]')

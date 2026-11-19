@@ -112,6 +112,10 @@ public class WebRoutinesTest {
         return WebDbAccess.ensure(db, "");
     }
 
+    // java.util.logging keeps loggers only weakly: without this field a garbage collection between adding the
+    // handler and the first message can drop the logger, handler included, and the class then logs to a new one.
+    static final Logger WATCHED = Logger.getLogger(WebDbAccess.class.getName());
+
     static boolean logged(String what) {
         return LOG.stream().anyMatch(l -> l.contains(what));
     }
@@ -126,7 +130,7 @@ public class WebRoutinesTest {
         Path dir = Files.createTempDirectory("web-routines");
         System.setProperty("daemoxcp.mail.secrets.dir", dir.toString());
         System.setProperty("daemoxcp.mail.vault.key", dir.resolve("master.key").toString());
-        Logger.getLogger(WebDbAccess.class.getName()).addHandler(new Handler() {
+        WATCHED.addHandler(new Handler() {
             @Override public void publish(LogRecord r) { LOG.add(r.getMessage()); }
             @Override public void flush() { }
             @Override public void close() { }
