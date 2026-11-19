@@ -144,7 +144,8 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   - ogni servizio e ogni certificato;
   - l'elenco degli indirizzi di Cloudflare.
 - Registri, percorsi di sistema, utenti dei servizi, riavvii programmati, rapporti periodici via email.
-- Interfaccia in **italiano e inglese**, tema chiaro e scuro, usabile dal telefono.
+- Interfaccia in **italiano e inglese** (un'altra lingua è un file in più: vedi [Lingue](#lingue)), tema chiaro e
+  scuro, usabile dal telefono.
 
 ---
 
@@ -738,6 +739,39 @@ L'opzione 6 riporta il boot environment preso prima dell'ultima installazione, e
 | 2096 | il pannello | solo Cloudflare |
 | 8443 | la webmail | solo Cloudflare |
 | 3306, 11332–11334, 53 | MySQL, Rspamd, il risolutore | il server stesso |
+
+### Lingue
+
+Il pannello parla italiano e inglese. Usa, in quest'ordine:
+
+1. la lingua scelta col selettore nella barra in alto, salvata con l'account (ti segue su ogni browser);
+2. quella scelta prima di entrare;
+3. la lingua preferita dal browser, fra quelle del pannello;
+4. l'inglese.
+
+Ogni testo dell'interfaccia sta in `src/main/resources/lang/`, un file per lingua col suo codice ISO 639-1
+(`it.json`, `en.json`): chiavi piatte, nessun testo nelle pagine o nel codice. Una lingua nuova è un file nuovo, e il
+suo codice in un elenco:
+
+1. Copia `en.json` col codice nuovo, per esempio `es.json`, e traduci i valori. Lascia come sono le chiavi e i
+   `{valori}` fra graffe. I testi `.html` possono usare solo `<strong>`, `<em>`, `<code>`, `<kbd>` e `<br>`.
+2. Le forme del plurale. Un testo con un numero ha `chiave.one` e `chiave.other`. Una lingua con più forme
+   aggiunge quelle che le dà CLDR (`chiave.few`, `chiave.many`…). Il pannello sceglie la forma con le regole di
+   CLDR: `I18n.pluralCategory` sul server, `Intl.PluralRules` nel browser. Per una lingua che non è in
+   `I18n.PLURAL_RULES` prima va scritta lì la sua regola.
+3. Aggiungi il codice all'elenco della procedura del database `set_admin_language` (`SqlCatalog.java`): il
+   database salva solo le lingue del pannello. La procedura si aggiorna da sola al primo avvio.
+4. Ricostruisci il jar (`tools/build-jar.sh`) e fai girare `I18nTest` e `layout-browser-test.js`
+   ([tests/README.md](tests/README.md)). Rifiutano una chiave che l'italiano non ha, un `{valore}` che manca, una
+   forma del plurale che la lingua non ha e una lingua che manca dall'elenco della procedura.
+
+Al riavvio la lingua è nel selettore, scritta nella sua lingua (*Español*, *Français*). Con tre o più lingue i due
+pulsanti diventano un menu. Il file può essere parziale: un testo che manca si vede in inglese, poi in italiano.
+Le date nelle pagine seguono la lingua.
+
+> [!NOTE]
+> Le lingue da destra a sinistra (arabo, ebraico, persiano…) vogliono una cornice che ancora non c'è:
+> `dir="rtl"`, la versione RTL di Bootstrap e le icone specchiate. Fino ad allora le prove le rifiutano.
 
 ---
 

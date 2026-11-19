@@ -50,7 +50,7 @@
                 return new Intl.DateTimeFormat(panelInfoLang(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
                     hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }).format(d);
             } catch (e) {
-                return d.toLocaleString();
+                return d.toLocaleString(window.I18N_LANG);
             }
         }
 

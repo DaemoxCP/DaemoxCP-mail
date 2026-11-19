@@ -1737,8 +1737,10 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_GET_ADMIN_LANGUAGE = "GRANT EXECUTE ON PROCEDURE get_admin_language" + WEB_TO;
 
     /**
-     * MAIL_SET_ADMIN_LANGUAGE nella parte web, solo per l'amministratore della sessione: la sua lingua, solo it o
-     * en.
+     * MAIL_SET_ADMIN_LANGUAGE nella parte web, solo per l'amministratore della sessione: la sua lingua, solo una
+     * delle lingue del pannello. L'elenco e' scritto qui, perche' il catalogo e' solo testo: una lingua nuova (un file
+     * in lang/) va aggiunta anche qui, e I18nTest fallisce finche' l'elenco non e' uguale a I18n.LANGUAGES. Il testo
+     * cambiato fa ricreare la procedura da sola al primo avvio (WebDbAccess confronta l'impronta).
      */
     public static final String WEB_CALL_SET_ADMIN_LANGUAGE = "CALL set_admin_language(?, ?, ?)";
 

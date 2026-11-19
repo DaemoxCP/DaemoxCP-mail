@@ -1330,12 +1330,18 @@ text, the names of the buttons for screen readers, the question before stopping 
 MySQL (cancelled, nothing starts), the CSRF token to /api/service, the re-reading after every
 command; dark theme and phone, where the tables become cards.
 
-**I18nTest** — the interface's languages (I18n) and the pages' frame (Layout). The language files
-have the same keys, no empty text and the same {values} in Italian and in English; every
-{{t:key}} and every t('key') of the scripts exists in both languages; no script hides the t
-function behind a variable with the same name; a completed page has no placeholders left. Then the
-language of a request (Accept-Language with the weights, the cookie) and the frame: the four
-sections, every page served by the panel in the menu, the page you are on marked.
+**I18nTest** — the interface's languages (I18n) and the pages' frame (Layout). The panel's languages
+are the files in lang/, each named with its ISO 639-1 code. Italian and English are complete, with
+the same keys. Every language, partial ones too, has only keys Italian has, no empty text, the same
+{values}, only the plural forms CLDR gives it, a written plural rule, and no right-to-left language
+yet. Each of these rules is also run on a bad file made in the test, to see it fail for the right
+reason. Then any number of languages: the files found, the fallback chain (the language, English,
+Italian), the plural forms of ten languages, the names of the languages in their own language, two
+buttons for two languages and a menu for three, the database procedure taking exactly the panel's
+languages. Every {{t:key}} and every t('key') of the scripts exists in Italian and English; no script
+hides the t function behind a variable with the same name; a completed page has no placeholders
+left. Then the language of a request (Accept-Language with the weights, the cookie) and the frame:
+the four sections, every page served by the panel in the menu, the page you are on marked.
 
 **LanguageRoutesTest** — the languages on the real server (SSLMailServer), over HTTPS, with the
 test MySQL: the dictionary /i18n/(language).js, the language of the sign-in page (cookie before the
@@ -1528,9 +1534,13 @@ pages of 0.9.0 it fails (3 checks); the fix is in the shared panel-reboot.js.
 Sending limits, Statistics and Administrators pages, which no link reached before), the entry of the
 page you are on, "Section › Page" in the top bar, "Skip to content" at the first Tab, the language
 change (the request with the CSRF token, the page coming back in English, the scripts' English
-dictionary, and back), the language choice on the sign-in and installation pages, the menu on the
-phone (it opens, takes the focus, closes with Esc and with the X), no sideways scrolling, the dark
-theme.
+dictionary, and back), each button named in its own language, the language choice on the sign-in and
+installation pages, the menu on the phone (it opens, takes the focus, closes with Esc and with the
+X), no sideways scrolling, the dark theme. With three languages, the menu PageGenerator writes
+(language-select.html) in place of the buttons: its label, each language in its own language, the
+choice sent with the token, a refused language shown in an alert. The plural forms: for every
+language in I18n.PLURAL_RULES and 136 numbers, the form Java gives (plural-categories.json) is the
+one Chromium's Intl.PluralRules gives; tn() falls back to .other for a form the file does not have.
 
 **MailQueueTest** — Postfix's queue (MailQueueManager) with a fake executor that records the
 commands instead of running them. The queue ID never reaches a shell: every command is a list of
