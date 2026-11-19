@@ -8214,7 +8214,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     <input class="form-check-input" type="radio" name="addrGoal" id="addrGoalBoth" value="both" checked data-on-change="addrLoad()">
                                     <label class="form-check-label" for="addrGoalBoth">{{t:addr.goalBoth}}</label>
                                     <div class="form-check form-switch mt-1">
-                                        <input class="form-check-input" type="checkbox" role="switch" id="addrInbound6" aria-describedby="addrInbound6Hint" data-on-change="addrLoad()">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="addrInbound6" aria-describedby="addrInbound6Hint" data-on-change="addrSwitch()">
                                         <label class="form-check-label" for="addrInbound6">{{t:addr.inbound6}}</label>
                                         <small id="addrInbound6Hint" class="text-muted d-block">{{t:addr.inbound6Hint}}</small>
                                     </div>

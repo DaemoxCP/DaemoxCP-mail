@@ -363,6 +363,14 @@ public final class IpFamily {
         return c.ok() ? null : org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noPtr6", Map.of("ip", ip, "h", host));
     }
 
+    /**
+     * Gli avvisi di una scelta senza farla: la guida degli indirizzi li mostra nella sua sola conferma e poi sceglie
+     * con «confermata», cosi' chi tocca la casella «La posta entra anche in IPv6» vede una finestra, non due.
+     */
+    public static List<String> preview(Family f, String via) {
+        return f == null ? List.of() : warnings(f, via);
+    }
+
     /** Quello che chi sceglie deve sapere prima: cosa smette di funzionare con quella famiglia. */
     static List<String> warnings(Family f, String via) {
         List<String> w = new ArrayList<>();

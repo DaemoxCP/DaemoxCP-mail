@@ -118,6 +118,8 @@ function said(text, key) {
         let s = await steps();
         check('switch off, the steps for mail over IPv6 only going out: ' + s.join(' '), s.length === 8 && s.includes('mailSend6/next')
             && s.includes('v6Firewall/next') && s.includes('v6Ptr/next') && !s.some(x => /PtrSend|SendDns|spf6/.test(x)));
+        check('  with other steps still to do, the switch only chooses: no question, the steps are shown',
+            !(await page.locator('#panelAskModal.show').count()));
         await page.check('#addrInbound6');
         await until(() => document.querySelectorAll('#addrSteps li').length === 8 && !!document.querySelector('#addrSteps li[data-step="mailBoth"]'), null, 60000);
         s = await steps();
@@ -147,6 +149,104 @@ function said(text, key) {
             check('«Check again» says the outcome with the time (' + after.near + '), screen readers hear it too, the focus stays on the button',
                 /\d{1,2}[:.]\d{2}[:.]\d{2}/.test(after.near) && after.status === after.near && after.hidden && after.focus);
         }
+
+        console.log('\n== 0b. The switch is an on/off: with only the mail step left it applies, after one question ==');
+        // The test machine cannot finish the other steps (its reverse DNS is not the mail name). Here the browser sees
+        // the real guide with every other step marked done, and a stand-in /api/ip-family that records what the page
+        // asks: these requests never reach the panel, and nothing on the test machine changes.
+        let fakeMail = 'both', postOk = true, previewWarnings = [];
+        const previews = [], posts = [];
+        await page.route('**/api/server-addresses?**', async route => {
+            const goal = new URL(route.request().url()).searchParams.get('goal');
+            const res = await route.fetch();
+            const d = await res.json();
+            if (d.success && (goal === 'both' || goal === 'send6')) {
+                const want = goal === 'send6' ? 'ipv6out' : 'both';
+                d.mail = fakeMail;
+                d.steps = d.steps.map((x, i) => Object.assign({}, x,
+                    { status: i < d.steps.length - 1 || fakeMail === want ? 'done' : 'now' }));
+                d.reached = fakeMail === want;
+            }
+            await route.fulfill({ response: res, json: d });
+        });
+        await page.route('**/api/ip-family**', async route => {
+            const req = route.request();
+            if (req.method() === 'POST') {
+                const body = JSON.parse(req.postData() || '{}');
+                posts.push(body.family + (body.confirmed ? '/confirmed' : '/asked'));
+                if (postOk) fakeMail = body.family;
+                return route.fulfill({ json: postOk ? { success: true, confirm: false, warnings: [], effective: body.family }
+                    : { success: false, confirm: false, warnings: [], error: 'refused by the test' } });
+            }
+            const family = new URL(req.url()).searchParams.get('family');
+            if (family) previews.push(family);
+            return route.fulfill({ json: Object.assign({ success: true, chosen: fakeMail, effective: fakeMail },
+                family ? { family: family, warnings: previewWarnings } : {}) });
+        });
+        const ask = () => page.waitForSelector('#panelAskModal.show', { timeout: 30000 }).then(() => true).catch(() => false);
+        const askText = () => page.innerText('#panelAskBody');
+        const closed = () => page.waitForSelector('#panelAskModal', { state: 'hidden', timeout: 30000 }).then(() => true).catch(() => false);
+        const settled = () => until(() => !document.querySelector('#addrCard input:disabled:not([name])')
+            && !/…/.test(document.getElementById('addrStatus').textContent), null, 60000);
+        await page.goto(BASE + '/settings');
+        await until(() => addrData && addrData.reached === true, null, 60000);
+        check('a guide with mail on both and nothing left to do: the switch is on, «reached» shown',
+            await page.$eval('#addrInbound6', i => i.checked) && await page.$eval('#addrReached', e => !e.classList.contains('d-none')));
+
+        // Off, then «Cancel»: nothing is asked of the server, the switch comes back on.
+        await page.uncheck('#addrInbound6');
+        let asked = await ask();
+        let text = asked ? await askText() : '';
+        check('switch off: one question, with what happens (the step «mail over IPv6 only going out»)',
+            asked && said(text, 'guide.how.mailSend6') && previews.join() === 'ipv6out');
+        await page.click('#panelAskModal [data-bs-dismiss=modal].btn-outline-secondary');
+        await closed();
+        await settled();
+        check('  «Cancel»: no choice sent, the switch back on, as the server is (' + posts.join() + ')',
+            posts.length === 0 && await page.$eval('#addrInbound6', i => i.checked));
+
+        // Off, then «Yes»: the choice goes with «confirmed», the switch stays off, the outcome is said.
+        await page.uncheck('#addrInbound6');
+        asked = await ask();
+        await page.click('#panelAskGo');
+        await closed();
+        await until(() => addrData && addrData.mail === 'ipv6out' && addrData.reached === true, null, 60000);
+        await settled();
+        check('  «Yes»: one choice sent, ipv6out confirmed (' + posts.join() + '), the switch off, the outcome said',
+            asked && posts.join() === 'ipv6out/confirmed' && !(await page.$eval('#addrInbound6', i => i.checked))
+            && said(await page.textContent('#addrStatus'), 'set.ipfDone'));
+        check('  the focus back on the switch', await page.evaluate(() => document.activeElement && document.activeElement.id === 'addrInbound6'));
+
+        // On, with a warning from IpFamily: the same single question carries it, in red.
+        previewWarnings = ['TEST WARNING: you reach the panel over the family that closes'];
+        await page.check('#addrInbound6');
+        asked = await ask();
+        text = asked ? await askText() : '';
+        const red = asked && await page.$eval('#panelAskGo', b => b.classList.contains('btn-danger'));
+        await page.click('#panelAskGo');
+        await closed();
+        await until(() => addrData && addrData.mail === 'both', null, 60000);
+        await settled();
+        check('switch on with a warning: one question with what happens and the warning, red button; both confirmed (' + posts.join() + ')',
+            asked && said(text, 'guide.how.mailBoth') && text.includes('TEST WARNING') && red
+            && posts.join() === 'ipv6out/confirmed,both/confirmed' && await page.$eval('#addrInbound6', i => i.checked));
+
+        // A choice that does not hold: the switch comes back, and the reason is said.
+        previewWarnings = [];
+        postOk = false;
+        await page.uncheck('#addrInbound6');
+        asked = await ask();
+        await page.click('#panelAskGo');
+        await closed();
+        await until(() => document.getElementById('addrStatus').className.includes('text-danger'), null, 60000);
+        await settled();
+        check('a choice that fails: the switch back on, the reason said (' + (await page.textContent('#addrStatus')).slice(0, 60) + ')',
+            asked && await page.$eval('#addrInbound6', i => i.checked) && (await page.textContent('#addrStatus')).includes('refused by the test'));
+
+        await page.unroute('**/api/server-addresses?**');
+        await page.unroute('**/api/ip-family**');
+        await page.goto(BASE + '/settings');
+        check('the real guide again', await loaded());
 
         console.log('\n== 1. Goal IPv6 only ==');
         await page.check('#addrGoalV6');
