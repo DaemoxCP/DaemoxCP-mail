@@ -125,7 +125,7 @@ public class PfFirewallManager {
         if (state.enabled && state.mode != Mode.DISABLED) {
             scheduler.schedule(() -> {
                 try {
-                    LOGGER.info("Auto-apply firewall config al boot (mode=" + state.mode + ")");
+                    LOGGER.info("Auto-apply firewall config at boot (mode=" + state.mode + ")");
                     ApplyResult r = applyConfiguration();
                     LOGGER.info("Auto-apply at boot: " + (r.success ? "OK" : "FAIL — " + r.message));
                 } catch (Exception e) {
