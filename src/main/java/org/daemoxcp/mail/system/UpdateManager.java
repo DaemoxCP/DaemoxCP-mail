@@ -5562,7 +5562,7 @@ public final class UpdateManager {
               + "foreach (['PATH_INFO','PATH_TRANSLATED','ORIG_PATH_INFO','SCRIPT_FILENAME',\n"
               + "          'SCRIPT_NAME','REQUEST_URI'] as $k) {\n"
               + "    echo $k, ' = ', array_key_exists($k, $_SERVER)\n"
-              + "        ? '[' . $_SERVER[$k] . ']' : '(NON IMPOSTATA)', \"\\n\";\n"
+              + "        ? '[' . $_SERVER[$k] . ']' : '(not set)', \"\\n\";\n"
               + "}\n"
               + "echo 'cgi.fix_pathinfo = ', ini_get('cgi.fix_pathinfo'), \"\\n\";\n");
             ok("chmod 644 " + file, 15);

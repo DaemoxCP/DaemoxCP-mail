@@ -1342,6 +1342,14 @@ purpose. Logs, journals and the output of other programs are not checked: they s
 
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.i18n.FixedTextsTest
 
+**EnglishLogsTest** — the panel's log lines stay in English, the same for everyone. The texts written in a log call
+(a java.util.logging logger, `System.out`, `System.err`) and in the message of an exception created in the code have
+no Italian word: one of a short list English does not have (al, della, sono, gia', senza...). Comments and translation
+keys are not read. The checks first find an Italian line in a sample made wrong on purpose; on the sources before
+this test they find «Auto-apply firewall config al boot», seen in the real server's log on 19/11/2026.
+
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.i18n.EnglishLogsTest
+
 **I18nTest** — the interface's languages (I18n) and the pages' frame (Layout). The panel's languages
 are the files in lang/, each named with its ISO 639-1 code. Italian and English are complete, with
 the same keys. Every language, partial ones too, has only keys Italian has, no empty text, the same
