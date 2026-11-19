@@ -50,10 +50,13 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
         .test(document.getElementById('pfw-state').innerText), null, { timeout: 120000 });
     const rows = await page.$$eval('#pfw-rules tr', trs => trs.map(tr => [...tr.children].map(c => c.innerText.trim())));
     console.log('    ' + JSON.stringify(rows));
-    check('three rules: SSH from your IP, mail from anyone, panel and webmail from Cloudflare', rows.length === 3
-        && /SSH/.test(rows[0][0]) && /22/.test(rows[0][1]) && /your IP/.test(rows[0][2])
+    // SSH: only the administrator's IPv4. Their IPv6 changes every day on computers and phones (temporary addresses):
+    // a /128 rule stops working the next day (seen on the real server).
+    check('four rules: SSH from your IPv4 only, mail from anyone, panel and webmail from Cloudflare, ICMP from anyone', rows.length === 4
+        && /SSH/.test(rows[0][0]) && /22/.test(rows[0][1]) && /your IPv4, as \/32/.test(rows[0][2]) && !/\/128/.test(rows[0][2])
         && rows[1][1] === '25, 80, 143, 443, 465, 587, 993' && /Any IPv4, any IPv6/.test(rows[1][2])
-        && rows[2][1] === '2096, 8443' && /Cloudflare/.test(rows[2][2]));
+        && rows[2][1] === '2096, 8443' && /Cloudflare/.test(rows[2][2])
+        && /ICMP/.test(rows[3][0]) && /No port/.test(rows[3][1]) && /Any IPv4, any IPv6/.test(rows[3][2]));
     const list = await page.inputValue('#pfw-list');
     check('Cloudflare\'s official list, comma separated, ready to paste (' + list.split(', ').length + ' ranges)',
         list.split(', ').length >= 22 && list.includes('173.245.48.0/20') && list.includes('2400:cb00::/32'));

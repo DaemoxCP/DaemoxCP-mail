@@ -7074,7 +7074,7 @@
   "addr.openFirewall": "Open the card with the rules ready to copy (Firewall, Your provider's firewall)",
   "addr.fieldMissing": "Write the IPv6 address first (it is in your provider's console).",
   "guide.step.v6Firewall": "Your provider's firewall lets IPv6 in",
-  "guide.how.v6Firewall": "If your provider has a firewall in front of the server (on Hetzner: Firewalls), the mail ports (25, 465, 587, 143, 993), 80 and 443 must accept Any IPv6 too, and 2096 and 8443 Cloudflare's IPv6 addresses: the card below has every rule ready to copy. The server cannot see that firewall from inside, so the panel asks you. SSH: leave its rule as it is (only your own address); with IPv6 SSH can be reached over IPv6 too, with the same keys. If there is no firewall of the provider in front of the server, there is nothing to do.",
+  "guide.how.v6Firewall": "If your provider has a firewall in front of the server (on Hetzner: Firewalls), the mail ports (25, 465, 587, 143, 993), 80 and 443 must accept Any IPv6 too, and 2096 and 8443 Cloudflare's IPv6 addresses; an ICMP rule with Any IPv4 and Any IPv6 is recommended too, for ping and IPv6's service messages. The card below has every rule ready to copy. The server cannot see that firewall from inside, so the panel asks you. SSH: leave its rule as it is, with your IPv4; do not add your IPv6, because the computer changes it every day. If there is no firewall of the provider in front of the server, there is nothing to do.",
   "guide.do.v6Firewall": "Done: the firewall lets IPv6 in",
   "guide.howHetzner.v6Ptr": "On Hetzner: open the Cloud Console, the server, the Networking tab. Next to the IPv6 address press the pencil (Reverse DNS): in the address field write the part below, in the name field the mail server's name, and save. Gmail and Microsoft refuse mail over IPv6 without it.",
   "guide.howHetzner.v4Ptr": "On Hetzner: open the Cloud Console, the server, the Networking tab. Next to the IPv4 address press the pencil (Reverse DNS), write the mail server's name and save.",
@@ -7277,7 +7277,7 @@
   "pfw.rowMail": "Mail, certificates and MTA-STS",
   "pfw.rowMailPop3": "Mail (POP3 included), certificates and MTA-STS",
   "pfw.rowWeb": "Panel and webmail (through Cloudflare)",
-  "pfw.srcYourIp": "Only your IP address: your IPv4 as /32 and, if you have one, your IPv6 as /128",
+  "pfw.srcYourIp": "Only your IPv4, as /32. Not your IPv6: computers and phones change it every day (temporary addresses) and the rule would stop working. If at home you only have IPv6, use your /64 network (the first four groups of the address).",
   "pfw.srcAny": "Any IPv4, any IPv6",
   "pfw.srcCloudflare": "Only Cloudflare's addresses: the list below",
   "pfw.nothingElse.html": "No other inbound rule is needed. In particular <strong>no rule for 53 (DNS) or 123 (NTP)</strong>: the Hetzner Cloud firewall is stateful, so the answers to the queries this server makes come back on their own, and an open 123 would only expose the clock service. Port 4190 (ManageSieve) stays closed: the webmail reaches it from inside the server.",
@@ -7329,5 +7329,10 @@
   "server.acme.stillOld": "{s} still presents the previous certificate on port {p}.",
   "server.acme.serviceRefused": "{s}: its configuration does not pass its own check, so it was not reloaded and keeps the previous certificate ({e}).",
   "server.acme.reloadFailed": "{s}: the reload failed ({e}).",
-  "ssl.checkRunning": "Checking. If the certificate is within the threshold it is renewed now: Let's Encrypt checks the DNS records of every name, which takes a few minutes. Leave this page open."
+  "ssl.checkRunning": "Checking. If the certificate is within the threshold it is renewed now: Let's Encrypt checks the DNS records of every name, which takes a few minutes. Leave this page open.",
+  "addr.lastCheck": "Last check: at {time}.",
+  "addr.checkedSame": "Checked at {time}: nothing new yet. If you have just saved, wait a few minutes: the panel keeps checking by itself.",
+  "addr.checkedChanged": "Checked at {time}: something changed, the steps are up to date.",
+  "pfw.rowIcmp": "Ping and service messages (ICMP), recommended",
+  "pfw.icmpPorts": "No port: choose ICMP as the protocol"
 }

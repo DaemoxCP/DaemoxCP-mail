@@ -15,11 +15,15 @@
             const r = await updApi('provider_firewall');
             const rules = r.rules || {};
             const body = document.getElementById('pfw-rules');
-            const row = (what, ports, sources) => '<tr><th scope="row" class="fw-normal">' + escHtml(what) + '</th><td><code>'
-                + escHtml(ports) + '</code></td><td>' + escHtml(sources) + '</td></tr>';
+            const row = (what, ports, sources, plain) => '<tr><th scope="row" class="fw-normal">' + escHtml(what) + '</th><td>'
+                + (plain ? escHtml(ports) : '<code>' + escHtml(ports) + '</code>') + '</td><td>' + escHtml(sources) + '</td></tr>';
+            // ICMP: nessuna porta. Senza questa regola il firewall di Hetzner Cloud scarta ogni ping, in IPv4 e in IPv6
+            // (visto sul server vero): non si puo' controllare se il server e' raggiungibile, e all'IPv6 mancano i suoi
+            // messaggi di servizio. Non apre nessun servizio.
             body.innerHTML = row(t('pfw.rowSsh'), pfwPorts(rules.ssh), t('pfw.srcYourIp'))
                 + row(t(rules.pop3 ? 'pfw.rowMailPop3' : 'pfw.rowMail'), pfwPorts(rules.open), t('pfw.srcAny'))
-                + row(t('pfw.rowWeb'), pfwPorts(rules.cloudflare), t('pfw.srcCloudflare'));
+                + row(t('pfw.rowWeb'), pfwPorts(rules.cloudflare), t('pfw.srcCloudflare'))
+                + row(t('pfw.rowIcmp'), t('pfw.icmpPorts'), t('pfw.srcAny'), true);
             const list = document.getElementById('pfw-list');
             list.value = r.commaList || '';
             pfwFingerprint = r.fingerprint || '';
