@@ -50,6 +50,22 @@ public final class HostRecords {
         return false;
     }
 
+    /**
+     * Il nome solo per spedire in IPv6, quando la posta in IPv6 esce soltanto: il primo nome del server di posta con
+     * «-out» (mail.example.org -> mail-out.example.org), nella stessa zona. Il DNS inverso dell'IPv6 da' questo nome,
+     * e questo nome ha l'AAAA dell'indirizzo: cosi' chi riceve conferma il DNS inverso (Gmail, Microsoft) senza che il
+     * nome della posta, quello a cui gli altri consegnano, abbia un AAAA. Null se il nome della posta non va bene.
+     */
+    public static String sendingName(String mailHost) {
+        if (!validHost(mailHost)) return null;
+        String h = mailHost.toLowerCase(Locale.ROOT);
+        int dot = h.indexOf('.');
+        String label = h.substring(0, dot) + "-out";
+        if (label.length() > 63) return null;
+        String name = label + h.substring(dot);
+        return validHost(name) ? name : null;
+    }
+
     /** Se c'e' un account Cloudflare che vede la zona di questo nome. */
     public static boolean canWrite(MailDatabase db, CloudflareManager cf, String host) {
         return target(db, cf, host) != null;

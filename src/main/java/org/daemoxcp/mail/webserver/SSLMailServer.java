@@ -11927,9 +11927,9 @@ public class SSLMailServer {
      * tutte e due le direzioni (ServerAddresses, AddressGuide, HostRecords, ReverseDns). Permesso settings.manage: ogni
      * cambiamento vuole una conferma recente (Access.CONFIRMED). SSH non si tocca mai.
      *
-     *  GET  ?goal=both|ipv4|ipv6  lo stato, i fatti e i passi della guida verso quell'obiettivo
+     *  GET  ?goal=both|ipv4|ipv6|send6  lo stato, i fatti e i passi della guida verso quell'obiettivo
      *  POST {action: add-ipv6 (address, prefix, gateway) | remove-ipv6 | add-ipv4 | clean-ipv4 | confirm-firewall |
-     *        dns (type A|AAAA, op add|remove) | web-aaaa | web-a}
+     *        dns (type A|AAAA, op add|remove) | send-dns (op add|remove) | spf6 (op add|remove) | web-aaaa | web-a}
      */
     private void handleApiServerAddresses(HttpExchange exchange) throws IOException {
         JSONObject response;
@@ -11981,13 +11981,20 @@ public class SSLMailServer {
         org.daemoxcp.mail.security.ReverseDns.Check ptr6Check = hostOk && !ip6.isEmpty()
                 ? org.daemoxcp.mail.security.ReverseDns.check(ip6, host) : null;
         Boolean ptr6 = ptr6Check == null ? null : ptr6Check.givesName();
+        // La posta in IPv6 solo in uscita: il nome per spedire (mail-out...), il suo AAAA, l'ip6 nell'SPF dei domini.
+        String sendHost = hostOk ? org.daemoxcp.mail.security.HostRecords.sendingName(host) : null;
+        Boolean ptr6Send = ptr6Check == null || sendHost == null ? null : sendHost.equalsIgnoreCase(String.valueOf(ptr6Check.ptr()));
+        Boolean sendAaaa = sendHost == null ? null : !ip6.isEmpty() ? org.daemoxcp.mail.security.HostRecords.published(sendHost, "AAAA", ip6)
+                : org.daemoxcp.mail.security.HostRecords.hasAny(sendHost, "AAAA");
+        org.daemoxcp.mail.security.SpfIp6.Status spf = org.daemoxcp.mail.security.SpfIp6.status(Main.mailDatabase, ip6);
         Boolean webAaaa = webNamesOn(true, ip4, ip6);
         Boolean webA = webNamesOn(false, ip4, ip6);
         org.daemoxcp.mail.system.IpFamily.Family mail = org.daemoxcp.mail.system.IpFamily.effective();
         boolean v6Firewall = Main.mailDatabase != null && !Main.mailDatabase.getSetting(ADDRESS_V6_FIREWALL, "").isEmpty();
         org.daemoxcp.mail.system.AddressGuide.Facts f = new org.daemoxcp.mail.system.AddressGuide.Facts(
                 s.v4().present(), v4Out, !s.v4().rcLine().isEmpty(), !s.v6().addresses().isEmpty(), v6Out, v6Firewall,
-                a, aaaa, ptr4, ptr6, webAaaa, webA, mail, viaFamily, s.sshOnV6());
+                a, aaaa, ptr4, ptr6, webAaaa, webA, mail, viaFamily, s.sshOnV6(),
+                ptr6Send, sendAaaa, !ip6.isEmpty() && spf.allCovered(), spf.anyPanelIp6());
         java.util.List<org.daemoxcp.mail.system.AddressGuide.Step> plan = org.daemoxcp.mail.system.AddressGuide.plan(f, goal);
 
         JSONArray steps = new JSONArray();
@@ -12008,9 +12015,15 @@ public class SSLMailServer {
                 .put("ptr4Found", ptr4Check == null || ptr4Check.ptr() == null ? JSONObject.NULL : ptr4Check.ptr())
                 .put("webAaaa", webAaaa == null ? JSONObject.NULL : webAaaa)
                 .put("webA", webA == null ? JSONObject.NULL : webA)
+                .put("sendHost", sendHost == null ? JSONObject.NULL : sendHost)
+                .put("sendAaaa", sendAaaa == null ? JSONObject.NULL : sendAaaa)
+                .put("spf6Missing", new JSONArray(spf.uncovered()))
                 .put("cloudflare", hostOk && org.daemoxcp.mail.security.HostRecords.canWrite(Main.mailDatabase, cloudflareManager, host));
         org.daemoxcp.mail.system.ServerAddresses.Suggestion sg = s.suggestion();
-        return new JSONObject().put("success", true).put("goal", goal.key).put("recommended", "both")
+        // Consigliato: com'e' gia' la posta se riceve anche in IPv6 (o solo IPv6), altrimenti l'IPv6 solo in uscita.
+        String recommended = mail == org.daemoxcp.mail.system.IpFamily.Family.BOTH ? "both"
+                : mail == org.daemoxcp.mail.system.IpFamily.Family.IPV6 ? "ipv6" : "send6";
+        return new JSONObject().put("success", true).put("goal", goal.key).put("recommended", recommended)
                 .put("provider", org.daemoxcp.mail.system.ServerAddresses.provider())
                 .put("reached", org.daemoxcp.mail.system.AddressGuide.reached(plan))
                 .put("state", state).put("dns", dns).put("mail", mail.key)
@@ -12084,7 +12097,19 @@ public class SSLMailServer {
             }
             case "clean-ipv4" -> r = org.daemoxcp.mail.system.ServerAddresses.cleanIpv4();
             case "dns" -> {
-                return addressDnsAction(req.optString("type", ""), req.optString("op", ""), clientIp);
+                return addressDnsAction(req.optString("type", ""), req.optString("op", ""), clientIp, false);
+            }
+            case "send-dns" -> {
+                return addressDnsAction("AAAA", req.optString("op", ""), clientIp, true);
+            }
+            case "spf6" -> {
+                String op = req.optString("op", "");
+                if (!"add".equals(op) && !"remove".equals(op)) return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
+                org.daemoxcp.mail.system.ServerAddresses.State st = org.daemoxcp.mail.system.ServerAddresses.read();
+                String ip6 = st.v6().addresses().isEmpty() ? "" : st.v6().addresses().get(0);
+                org.daemoxcp.mail.security.SpfIp6.Outcome o = org.daemoxcp.mail.security.SpfIp6.apply(Main.mailDatabase, cloudflareManager, ip6, "add".equals(op));
+                logAudit("SERVER_ADDRESSES_SPF6_" + op.toUpperCase(java.util.Locale.ROOT) + (o.ok() ? "" : "_FAILED"), clientIp, String.valueOf(o.args().get("list")));
+                return new JSONObject().put("success", o.ok()).put(o.ok() ? "message" : "error", I18n.tr(o.key(), o.args()));
             }
             case "web-aaaa" -> {
                 return addressWebNames(true, clientIp);
@@ -12103,23 +12128,28 @@ public class SSLMailServer {
         return new JSONObject().put("success", r.ok()).put(r.ok() ? "message" : "error", I18n.tr(r.message())).put("journal", r.journal());
     }
 
-    /** Il record A o AAAA del nome della posta: crearlo (senza proxy) o toglierlo. */
-    private JSONObject addressDnsAction(String type, String op, String clientIp) {
+    /**
+     * Il record A o AAAA del nome della posta, o (send true) l'AAAA del nome solo per spedire: crearlo (senza proxy) o
+     * toglierlo.
+     */
+    private JSONObject addressDnsAction(String type, String op, String clientIp, boolean send) {
         if (!"A".equals(type) && !"AAAA".equals(type)) return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
         if (!"add".equals(op) && !"remove".equals(op)) return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
-        String host = Main.mailDatabase == null ? "" : Main.mailDatabase.getSetting("mail_hostname", "");
+        String mailHost = Main.mailDatabase == null ? "" : Main.mailDatabase.getSetting("mail_hostname", "");
+        String host = send ? org.daemoxcp.mail.security.HostRecords.sendingName(mailHost) : mailHost;
+        if (host == null) return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
         org.daemoxcp.mail.system.ServerAddresses.State s = org.daemoxcp.mail.system.ServerAddresses.read();
         String ip = "A".equals(type) ? (dnsGenerator != null ? dnsGenerator.detectServerIp() : "")
                 : s.v6().addresses().isEmpty() ? "" : s.v6().addresses().get(0);
-        if ("A".equals(type) && "remove".equals(op) && ip.isEmpty()) {
-            // Senza IPv4 il server non sa piu' il suo indirizzo: si toglie ogni A del nome che il DNS pubblico mostra.
-            ip = org.daemoxcp.mail.util.Shell.run(java.time.Duration.ofSeconds(10), "dig", "+short", "A", host).outputTrim().split("\n")[0].trim();
+        if ("remove".equals(op) && ip.isEmpty()) {
+            // Senza quell'indirizzo il server non sa piu' quale era: si toglie il record del nome che il DNS pubblico mostra.
+            ip = org.daemoxcp.mail.security.FreshDns.query(type, host).split("\n")[0].trim();
         }
         if (ip.isEmpty()) return new JSONObject().put("success", false).put("error", I18n.tr("server.hr.noIp", Map.of("t", type)));
         org.daemoxcp.mail.security.HostRecords.Outcome o = "add".equals(op)
                 ? org.daemoxcp.mail.security.HostRecords.ensure(Main.mailDatabase, cloudflareManager, host, type, ip, false)
                 : org.daemoxcp.mail.security.HostRecords.remove(Main.mailDatabase, cloudflareManager, host, type, ip);
-        logAudit("SERVER_ADDRESSES_DNS_" + type + "_" + op.toUpperCase(java.util.Locale.ROOT) + (o.ok() ? "" : "_FAILED"), clientIp, host + " " + ip);
+        logAudit("SERVER_ADDRESSES_" + (send ? "SEND_" : "") + "DNS_" + type + "_" + op.toUpperCase(java.util.Locale.ROOT) + (o.ok() ? "" : "_FAILED"), clientIp, host + " " + ip);
         return new JSONObject().put("success", o.ok()).put(o.ok() ? "message" : "error", I18n.tr(o.key(), o.args()));
     }
 

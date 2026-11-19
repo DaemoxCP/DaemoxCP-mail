@@ -8213,6 +8213,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="addrGoal" id="addrGoalBoth" value="both" checked data-on-change="addrLoad()">
                                     <label class="form-check-label" for="addrGoalBoth">{{t:addr.goalBoth}}</label>
+                                    <div class="form-check form-switch mt-1">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="addrInbound6" aria-describedby="addrInbound6Hint" data-on-change="addrLoad()">
+                                        <label class="form-check-label" for="addrInbound6">{{t:addr.inbound6}}</label>
+                                        <small id="addrInbound6Hint" class="text-muted d-block">{{t:addr.inbound6Hint}}</small>
+                                    </div>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="addrGoal" id="addrGoalV4" value="ipv4" data-on-change="addrLoad()">
@@ -8240,6 +8245,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="ipFamily" id="ipfBoth" value="both" disabled>
                                     <label class="form-check-label" for="ipfBoth">{{t:set.ipfBoth}}</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="ipFamily" id="ipfOut6" value="ipv6out" disabled>
+                                    <label class="form-check-label" for="ipfOut6">{{t:set.ipfOut6}}</label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="ipFamily" id="ipfV4" value="ipv4" disabled>
@@ -8467,7 +8476,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         return """
         // ========== IPv4 e IPv6 (IpFamily) ==========
 
-        function ipfName(k) { return t(k === 'ipv4' ? 'set.ipfV4' : k === 'ipv6' ? 'set.ipfV6' : 'set.ipfBoth'); }
+        function ipfName(k) {
+            switch (k) {
+                case 'ipv4': return t('set.ipfV4');
+                case 'ipv6': return t('set.ipfV6');
+                case 'ipv6out': return t('set.ipfOut6');
+                default: return t('set.ipfBoth');
+            }
+        }
 
         function ipfSay(text, kind) {
             const el = document.getElementById('ipfStatus');

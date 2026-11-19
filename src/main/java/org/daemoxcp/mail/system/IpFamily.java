@@ -33,6 +33,13 @@ import java.util.regex.Pattern;
  * resta senza famiglia, e sshd non si tocca. Non la seguono gli indirizzi interni (127.0.0.1, ::1): i servizi parlano
  * fra loro come sempre.
  *
+ * <p>La quarta scelta, «IPv6 solo in uscita» (chiesta dal committente il 19/11/2026, «come fa Apple»): il server
+ * riceve solo in IPv4 (posta, webmail, pannello), e in IPv6 la posta soltanto esce. Postfix resta su «all» per poter
+ * spedire in IPv6, ma da fuori in IPv6 non entra niente: la regola dei servizi di pf e' solo «inet», come con solo
+ * IPv4, e Dovecot e nginx ascoltano solo in IPv4. Il nome della posta non ha AAAA (nessuno prova a consegnare in IPv6);
+ * il DNS inverso dell'IPv6 da' un nome solo per spedire (HostRecords.sendingName), che ha il suo AAAA; l'SPF dei
+ * domini ha l'ip6 (SpfIp6). La guida degli indirizzi fa questi passi, e quelli per tornare indietro.
+ *
  * <p>Finche' l'amministratore non sceglie, all'avvio non cambia niente: i servizi restano come sono, e la pagina
  * mostra la famiglia che usa Postfix. Una scelta si applica servizio per servizio, ognuno col suo controllo (postfix
  * check, doveconf, nginx -t, e poi le porte davvero in ascolto in quella famiglia); al primo che non torna si rimettono
@@ -42,7 +49,7 @@ public final class IpFamily {
 
     private static final Logger LOGGER = Logger.getLogger(IpFamily.class.getName());
 
-    /** La scelta, in panel_settings: "both", "ipv4" o "ipv6". Senza riga, nessuna scelta. */
+    /** La scelta, in panel_settings: "both", "ipv4", "ipv6" o "ipv6out". Senza riga, nessuna scelta. */
     public static final String SETTING = "ip_family";
 
     static final String POSTCONF = "/usr/local/sbin/postconf";
@@ -64,7 +71,9 @@ public final class IpFamily {
     public enum Family {
         BOTH("both", "all", "*, ::", ""),
         IPV4("ipv4", "ipv4", "*", "inet "),
-        IPV6("ipv6", "all", "::, 127.0.0.1", "inet6 ");
+        IPV6("ipv6", "all", "::, 127.0.0.1", "inet6 "),
+        /** Entra solo IPv4; in IPv6 la posta soltanto esce (Postfix su «all», pf e gli altri come solo IPv4). */
+        IPV6_OUT("ipv6out", "all", "*", "inet ");
 
         /** Il valore salvato. */
         public final String key;
@@ -82,9 +91,14 @@ public final class IpFamily {
             this.pf = pf;
         }
 
+        /** Il server riceve in IPv4 (e la posta esce in IPv4). */
         public boolean v4() { return this != IPV6; }
 
-        public boolean v6() { return this != IPV4; }
+        /** Il server riceve in IPv6: si ascolta in IPv6, il nome della posta ha l'AAAA. Non con IPV6_OUT. */
+        public boolean v6() { return this == BOTH || this == IPV6; }
+
+        /** La posta esce in IPv6: serve il DNS inverso dell'IPv6 confermato all'andata. */
+        public boolean sends6() { return this != IPV4; }
 
         /** La famiglia di quel valore salvato, o null. */
         public static Family of(String key) {
@@ -221,6 +235,9 @@ public final class IpFamily {
             case BOTH -> l[0] && l[1];
             case IPV4 -> l[0] && !l[1];
             case IPV6 -> l[1];
+            // Postfix su «all» ascolta anche in IPv6 (per spedire in IPv6 deve), ma da fuori pf non fa entrare
+            // niente in IPv6: conta che ascolti in IPv4.
+            case IPV6_OUT -> l[0];
         };
     }
 
@@ -306,17 +323,20 @@ public final class IpFamily {
         boolean route6 = hasDefaultRoute(Shell.run(Duration.ofSeconds(10), "netstat", "-rn", "-f", "inet6").output());
         if (f == Family.IPV4 && !(v4 && route4)) return org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noIpv4");
         if (f == Family.IPV6 && !(v6 && route6)) return org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noIpv6");
+        if (f == Family.IPV6_OUT && !(v4 && route4)) return org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noIpv4");
+        if (f == Family.IPV6_OUT && !(v6 && route6)) return org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noIpv6");
         if (f == Family.BOTH && !(v4 && route4) && !(v6 && route6)) return org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noNetwork");
         return null;
     }
 
     /**
      * Se la famiglia porta la posta in IPv6 e il server ha un IPv6 globale, il DNS inverso di quell'indirizzo deve dare
-     * il nome della posta, e il nome tornare all'indirizzo: altrimenti il motivo. Senza un IPv6 globale non serve (la
-     * posta non esce in IPv6), senza nome della posta non lo si puo' controllare e non si blocca.
+     * il nome della posta o quello per spedire (HostRecords.sendingName), e quel nome tornare all'indirizzo: altrimenti
+     * il motivo. Senza un IPv6 globale non serve (la posta non esce in IPv6), senza nome della posta non lo si puo'
+     * controllare e non si blocca.
      */
     static String missingPtr6(Family f) {
-        if (!f.v6()) return null;
+        if (!f.sends6()) return null;
         ServerAddresses.State s = ServerAddresses.read();
         if (s.v6().addresses().isEmpty()) return null;
         org.daemoxcp.mail.database.MailDatabase db = org.daemoxcp.mail.Main.mailDatabase;
@@ -324,20 +344,34 @@ public final class IpFamily {
         if (host == null || !host.matches("[a-zA-Z0-9.-]{1,253}")) return null;
         String ip = s.v6().addresses().get(0);
         org.daemoxcp.mail.security.ReverseDns.Check c = org.daemoxcp.mail.security.ReverseDns.check(ip, host);
-        return c.ok() ? null : org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noPtr6", Map.of("ip", ip, "h", host));
+        if (c.ok()) return null;
+        String send = org.daemoxcp.mail.security.HostRecords.sendingName(host);
+        if (send != null && org.daemoxcp.mail.security.ReverseDns.check(ip, send).ok()) return null;
+        return org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noPtr6", Map.of("ip", ip, "h", f == Family.IPV6_OUT && send != null ? send : host));
     }
 
     /** Quello che chi sceglie deve sapere prima: cosa smette di funzionare con quella famiglia. */
     static List<String> warnings(Family f, String via) {
         List<String> w = new ArrayList<>();
         Family reachedBy = connectionFamily(via);
-        if (reachedBy != null && f != Family.BOTH && reachedBy != f)
-            w.add(org.daemoxcp.mail.i18n.I18n.tr(reachedBy == Family.IPV4 ? "server.ipf.warnYouV4" : "server.ipf.warnYouV6"));
+        if (reachedBy == Family.IPV4 && !f.v4()) w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnYouV4"));
+        if (reachedBy == Family.IPV6 && !f.v6()) w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnYouV6"));
         org.daemoxcp.mail.database.MailDatabase db = org.daemoxcp.mail.Main.mailDatabase;
         String host = db == null ? "" : db.getSetting("mail_hostname", "");
         boolean hostOk = host != null && host.matches("[a-zA-Z0-9.-]{1,253}");
         if (f == Family.IPV4 && hostOk && !dig("AAAA", host).isEmpty())
             w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnAaaa", Map.of("h", host)));
+        if (f == Family.IPV6_OUT) {
+            // Con l'AAAA chi spedisce prova l'IPv6 e trova la porta chiusa (riprova in IPv4, in ritardo).
+            if (hostOk && !dig("AAAA", host).isEmpty())
+                w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnAaaaOut", Map.of("h", host)));
+            ServerAddresses.State s = ServerAddresses.read();
+            if (!s.v6().addresses().isEmpty() && db != null) {
+                List<String> without = org.daemoxcp.mail.security.SpfIp6.status(db, s.v6().addresses().get(0)).uncovered();
+                if (!without.isEmpty())
+                    w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnSpf6", Map.of("list", String.join(", ", without))));
+            }
+        }
         if (f == Family.IPV6) {
             w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnV6Only"));
             if (hostOk && !dig("A", host).isEmpty())
@@ -363,8 +397,9 @@ public final class IpFamily {
         }
     }
 
+    /** Il record com'e' adesso, chiesto a chi lo pubblica (FreshDns), non alla memoria del risolutore. */
     private static String dig(String type, String host) {
-        return Shell.run(Duration.ofSeconds(10), "dig", "+short", type, host).outputTrim();
+        return org.daemoxcp.mail.security.FreshDns.query(type, host);
     }
 
     /**

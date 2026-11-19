@@ -83,6 +83,22 @@ public class IpFamilyTest {
         check("default route read from netstat", IpFamily.hasDefaultRoute("Routing tables\n\nInternet6:\nDestination Gateway Flags\ndefault fe80::1%vtnet0 UG vtnet0\n")
                 && !IpFamily.hasDefaultRoute("Internet6:\n::1 link#2 UHS lo0\n"));
 
+        System.out.println("\n== IPv6 only going out (ipv6out) ==");
+        IpFamily.Family out = IpFamily.Family.IPV6_OUT;
+        check("the saved value", IpFamily.Family.of("ipv6out") == out && IpFamily.Family.of(" IPv6Out ") == out);
+        check("it receives over IPv4 only and sends over both: v4, not v6, sends6", out.v4() && !out.v6() && out.sends6()
+                && IpFamily.Family.BOTH.v6() && IpFamily.Family.BOTH.sends6() && IpFamily.Family.IPV6.v6() && IpFamily.Family.IPV6.sends6()
+                && !IpFamily.Family.IPV4.v6() && !IpFamily.Family.IPV4.sends6());
+        check("Postfix on all (to send over IPv6), Dovecot and pf as with IPv4 only, Postfix's default preference",
+                out.postfix.equals("all") && out.dovecot.equals("*") && out.pf.equals("inet ") && IpFamily.postfixPreference(out).equals("any"));
+        check("nginx: the IPv4 lines only, as with IPv4 only", IpFamily.withNginxListen(both, 8443, out).equals(nginx));
+        check("a port counts when it listens over IPv4 (Postfix listens over IPv6 too, pf keeps it closed)",
+                IpFamily.listensAs(sock, 25, out) && IpFamily.listensAs(sock, 993, out) && !IpFamily.listensAs(sock, 2096, out));
+        check("using the panel over IPv6 warns that this closes it, over IPv4 not",
+                IpFamily.warnings(out, "2001:db8::5").contains(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnYouV6"))
+                        && !IpFamily.warnings(out, "192.0.2.5").contains(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnYouV4"))
+                        && !IpFamily.warnings(out, "192.0.2.5").contains(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnYouV6")));
+
         System.out.println("\n== The administrator's own connection ==");
         check("the family of the connection a choice comes from", IpFamily.connectionFamily("203.0.113.7") == IpFamily.Family.IPV4
                 && IpFamily.connectionFamily("::ffff:203.0.113.7") == IpFamily.Family.IPV4
@@ -108,7 +124,8 @@ public class IpFamilyTest {
         check("SPF by family", "v=spf1 ip4:8.8.8.8 ip6:2a01:4f8::1 mx -all".equals(DnsRecordsGenerator.spfValue("8.8.8.8", "2a01:4f8::1", IpFamily.Family.BOTH))
                 && "v=spf1 ip4:8.8.8.8 mx -all".equals(DnsRecordsGenerator.spfValue("8.8.8.8", "2a01:4f8::1", IpFamily.Family.IPV4))
                 && "v=spf1 ip6:2a01:4f8::1 mx -all".equals(DnsRecordsGenerator.spfValue("8.8.8.8", "2a01:4f8::1", IpFamily.Family.IPV6))
-                && "v=spf1 ip4:8.8.8.8 mx -all".equals(DnsRecordsGenerator.spfValue("8.8.8.8", "", IpFamily.Family.BOTH)));
+                && "v=spf1 ip4:8.8.8.8 mx -all".equals(DnsRecordsGenerator.spfValue("8.8.8.8", "", IpFamily.Family.BOTH))
+                && "v=spf1 ip4:8.8.8.8 ip6:2a01:4f8::1 mx -all".equals(DnsRecordsGenerator.spfValue("8.8.8.8", "2a01:4f8::1", IpFamily.Family.IPV6_OUT)));
         check("no address of the family known: no SPF at all, never a placeholder",
                 DnsRecordsGenerator.spfValue("", "", IpFamily.Family.BOTH) == null
                         && DnsRecordsGenerator.spfValue("YOUR_SERVER_IP", "", IpFamily.Family.IPV4) == null

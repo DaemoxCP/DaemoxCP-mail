@@ -51,7 +51,8 @@ public class DnsRecordsGenerator {
 
         // 2. SPF Record
         org.daemoxcp.mail.system.IpFamily.Family family = org.daemoxcp.mail.system.IpFamily.effective();
-        records.records.add(generateSpfRecord(domain, family.v4() ? serverIp : "", family.v6() ? detectServerIpv6() : "", family));
+        // L'ip6 nell'SPF quando la posta esce in IPv6 (anche solo in uscita: li' «mx» non copre l'IPv6, SpfIp6).
+        records.records.add(generateSpfRecord(domain, family.v4() ? serverIp : "", family.sends6() ? detectServerIpv6() : "", family));
 
         // 4. DKIM Record (if configured)
         MailDatabase.Domain dbDomain = database.getDomainByName(domain);
@@ -504,8 +505,10 @@ public class DnsRecordsGenerator {
         result.checks.add(aCheck);
         if (!aCheck.passed && family.v4()) result.allPassed = false;
 
-        // 1-bis. AAAA, quando il server parla IPv6 e ha un indirizzo IPv6 pubblico (con solo IPv6, sempre).
-        String serverIp6 = family.v6() ? detectServerIpv6() : "";
+        // 1-bis. AAAA, quando il server riceve in IPv6 e ha un indirizzo IPv6 pubblico (con solo IPv6, sempre).
+        // ip6Now: l'IPv6 quando la posta esce in IPv6, anche solo in uscita (DNS inverso, SPF).
+        String ip6Now = family.sends6() ? detectServerIpv6() : "";
+        String serverIp6 = family.v6() ? ip6Now : "";
         if (family == org.daemoxcp.mail.system.IpFamily.Family.IPV6 || !serverIp6.isEmpty()) {
             DnsCheck aaaa = verifyRecord(mailHostname, "AAAA");
             aaaa.recordType = "AAAA";
@@ -523,6 +526,21 @@ public class DnsRecordsGenerator {
             }
             result.checks.add(aaaa);
             if (!aaaa.passed) result.allPassed = false;
+        }
+        // 1-ter. Con la posta in IPv6 solo in uscita il nome della posta NON deve avere l'AAAA: chi consegna proverebbe
+        // l'IPv6 e troverebbe la porta chiusa (riprova in IPv4, in ritardo).
+        if (family == org.daemoxcp.mail.system.IpFamily.Family.IPV6_OUT) {
+            DnsCheck noAaaa = new DnsCheck();
+            noAaaa.recordType = "AAAA";
+            noAaaa.recordName = mailHostname;
+            noAaaa.expectedValue = "-";
+            String found = FreshDns.query("AAAA", String.valueOf(mailHostname)).trim();
+            noAaaa.currentValue = found.isEmpty() ? null : found;
+            noAaaa.passed = found.isEmpty();
+            noAaaa.message = found.isEmpty() ? I18n.tr("server.dnsg.noAaaaOutOk", java.util.Map.of("h", String.valueOf(mailHostname)))
+                    : I18n.tr("server.dnsg.aaaaOut", java.util.Map.of("h", String.valueOf(mailHostname)));
+            result.checks.add(noAaaa);
+            if (!noAaaa.passed) result.allPassed = false;
         }
 
         // 2. Check MX - verify it points to our mail server
@@ -596,6 +614,12 @@ public class DnsRecordsGenerator {
             if (!e.warnings.isEmpty())
                 spfCheck.message = (spfCheck.message == null ? "" : spfCheck.message + " ")
                                  + String.join(" ", e.warnings);
+            // In IPv6 solo in uscita «mx» non copre l'IPv6 (il nome della posta non ha l'AAAA): serve ip6.
+            if (family == org.daemoxcp.mail.system.IpFamily.Family.IPV6_OUT && !ip6Now.isEmpty() && e.record != null
+                    && !SpfIp6.covers(e.record, ip6Now)) {
+                spfCheck.passed = false;
+                spfCheck.message = I18n.tr("server.dnsg.spfNoIp6", java.util.Map.of("ip", ip6Now));
+            }
         } else if (spfCheck.message != null && spfCheck.message.startsWith(I18n.tr("server.dnsg.notFound"))) {
             spfCheck.message = I18n.tr("server.dnsg.noSpf");
         }
@@ -752,16 +776,25 @@ public class DnsRecordsGenerator {
         // 8-bis. Il DNS inverso dell'IPv6, quando la posta esce anche in IPv6: Gmail («550 5.7.1 ... IPv6 sending
         // guidelines regarding PTR records») e Microsoft (450 4.7.25) lo pretendono. Il controllo di sopra cerca un A,
         // e per un IPv6 non poteva tornare: questo cerca un AAAA (ReverseDns).
-        if (family.v6() && !serverIp6.isEmpty()) {
-            ReverseDns.Check r6 = ReverseDns.check(serverIp6, mailHostname);
+        // Il nome giusto e' quello della posta, o quello solo per spedire (HostRecords.sendingName): con la posta in
+        // IPv6 solo in uscita, solo quest'ultimo (il nome della posta non ha l'AAAA).
+        if (family.sends6() && !ip6Now.isEmpty()) {
+            String sendHost = HostRecords.sendingName(mailHostname);
+            boolean outOnly = family == org.daemoxcp.mail.system.IpFamily.Family.IPV6_OUT;
+            String want = outOnly && sendHost != null ? sendHost : mailHostname;
+            ReverseDns.Check r6 = ReverseDns.check(ip6Now, want);
+            if (!r6.ok() && !outOnly && sendHost != null) {
+                ReverseDns.Check viaSend = ReverseDns.check(ip6Now, sendHost);
+                if (viaSend.ok()) { r6 = viaSend; want = sendHost; }
+            }
             DnsCheck ptr6 = new DnsCheck();
             ptr6.recordType = "PTR";
-            ptr6.recordName = serverIp6;
-            ptr6.expectedValue = mailHostname;
+            ptr6.recordName = ip6Now;
+            ptr6.expectedValue = want;
             ptr6.currentValue = r6.ptr();
             ptr6.passed = r6.ok();
-            ptr6.message = r6.ok() ? "OK: " + serverIp6 + " → " + mailHostname
-                    : I18n.tr("server.dnsg.ptr6", java.util.Map.of("ip", serverIp6, "h", String.valueOf(mailHostname), "why", I18n.tr(r6.reason())));
+            ptr6.message = r6.ok() ? "OK: " + ip6Now + " → " + want
+                    : I18n.tr("server.dnsg.ptr6", java.util.Map.of("ip", ip6Now, "h", String.valueOf(want), "why", I18n.tr(r6.reason())));
             result.checks.add(ptr6);
             if (!ptr6.passed) result.allPassed = false;
         }
@@ -1199,7 +1232,8 @@ public class DnsRecordsGenerator {
         StringBuilder b = new StringBuilder("v=spf1");
         boolean any = false;
         if (family.v4() && isPublicIpv4(ip4)) { b.append(" ip4:").append(ip4); any = true; }
-        if (family.v6() && isPublicIpv6(ip6)) { b.append(" ip6:").append(ip6); any = true; }
+        // ip6 quando la posta esce in IPv6, anche solo in uscita: li' «mx» non copre l'IPv6 (SpfIp6).
+        if (family.sends6() && isPublicIpv6(ip6)) { b.append(" ip6:").append(ip6); any = true; }
         return any ? b.append(" mx -all").toString() : null;
     }
 

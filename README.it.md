@@ -130,6 +130,11 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   La posta passa all'IPv6 solo col DNS inverso IPv6 a posto (Gmail e Microsoft lo pretendono). Un IPv4 che funziona il
   pannello non lo toglie mai: lo toglie il provider (su Hetzner a server spento), poi il pannello pulisce quello che
   resta. Una famiglia che stai usando per arrivare al pannello non si toglie mai, e SSH non si tocca.
+  Con IPv4 e IPv6, un interruttore dice se la posta entra anche in IPv6. Spento (consigliato, come fa Apple): la
+  posta esce in IPv6 ma entra solo in IPv4, dove spam e attacchi si filtrano meglio. La guida allora porta il DNS
+  inverso dell'IPv6 su un nome solo per spedire (`mail-out.` col tuo dominio, col suo AAAA), aggiunge `ip6:` all'SPF
+  dei domini, lascia il nome della posta senza AAAA e non fa entrare niente in IPv6. Accenderlo, o tornare a solo
+  IPv4, sono passi della stessa guida.
 - Separazione dei privilegi: la parte che risponde in rete gira con un utente senza privilegi (vedi
   [Sicurezza](#sicurezza-chi-gira-da-root-e-perché)).
 
@@ -682,7 +687,7 @@ Ogni servizio viene controllato e ricaricato.
 | `java -jar daemoxcp-mail.jar --web` | solo il server web, senza menu (quello che esegue il servizio) |
 | `java -jar daemoxcp-mail.jar --access-code [nome]` | un codice di accesso monouso di 8 cifre per un amministratore |
 | `java -jar daemoxcp-mail.jar --create-admin <nome> <email>` | il primo amministratore, quando non ce n'è nessuno |
-| `java -jar daemoxcp-mail.jar --ip-family both\|ipv4\|ipv6` | IPv4, IPv6 o tutte e due, come in *Impostazioni*, da root: la strada per tornare indietro quando una scelta ti ha chiuso fuori dal pannello |
+| `java -jar daemoxcp-mail.jar --ip-family both\|ipv4\|ipv6\|ipv6out` | IPv4, IPv6, tutte e due, o tutte e due con la posta in IPv6 solo in uscita, come in *Impostazioni*, da root: la strada per tornare indietro quando una scelta ti ha chiuso fuori dal pannello |
 | `java -jar daemoxcp-mail.jar --addresses show\|ipv6-off\|ipv4-dhcp` | gli indirizzi del server, da root: vederli, togliere l'IPv6 aggiunto dal pannello (tornano le righe di `rc.conf` di prima), o riprendere l'IPv4 col DHCP |
 | `service daemoxcp_mail start\|stop\|restart\|status` | il pannello come servizio |
 

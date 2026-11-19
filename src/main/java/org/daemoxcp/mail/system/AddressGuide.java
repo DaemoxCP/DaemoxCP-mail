@@ -22,6 +22,10 @@ import java.util.List;
  *  - i nomi col proxy di Cloudflare: con A e AAAA insieme Cloudflare arriva al server in IPv4 («Cloudflare will prefer
  *    the IPv4 address», developers.cloudflare.com/network/ipv6-compatibility/). Quindi verso solo IPv6 AAAA e via gli
  *    A, verso solo IPv4 A e via gli AAAA: altrimenti il pannello e la webmail non si raggiungono piu'.
+ *  - verso IPv4 e IPv6 con la posta in IPv6 solo in uscita («come Apple», la casella «La posta entra anche in IPv6»
+ *    spenta): l'indirizzo IPv6, il DNS inverso verso il nome solo per spedire (HostRecords.sendingName), l'AAAA di quel
+ *    nome, l'ip6 nell'SPF dei domini, nessun AAAA sul nome della posta, poi la posta (IpFamily.IPV6_OUT). Tornare a
+ *    ricevere anche in IPv6 e' l'obiettivo IPv4 e IPv6: il DNS inverso verso il nome solo per spedire va bene anche li'.
  *  - verso solo IPv6: l'IPv6 completo, i nomi del pannello e della webmail anche in IPv6, la posta in solo IPv6, via il
  *    record A, poi l'IPv4 tolto dal provider e la sua configurazione rimasta. Togliere l'IPv4 e' bloccato finche' chi
  *    usa il pannello non ci arriva in IPv6 e finche' sshd non ascolta in IPv6: dopo, quella sarebbe l'unica strada.
@@ -29,7 +33,7 @@ import java.util.List;
 public final class AddressGuide {
 
     public enum Goal {
-        BOTH("both"), V4("ipv4"), V6("ipv6");
+        BOTH("both"), V4("ipv4"), V6("ipv6"), SEND6("send6");
         public final String key;
         Goal(String key) { this.key = key; }
         public static Goal of(String k) {
@@ -41,11 +45,16 @@ public final class AddressGuide {
     /**
      * Quello che si sa del server. I Boolean null sono «non si sa» (un controllo DNS che non e' stato possibile, per
      * esempio senza nome della posta): contano come «non fatto».
+     *
+     * ptr6: il DNS inverso dell'IPv6 da' il nome della posta; ptr6Send: da' il nome solo per spedire; sendAaaa: quel
+     * nome ha l'AAAA dell'indirizzo; spf6: l'SPF di ogni dominio autorizza l'IPv6; spf6Any: in qualche SPF del
+     * pannello c'e' un ip6 (da togliere tornando a solo IPv4).
      */
     public record Facts(boolean v4, boolean v4Internet, boolean v4Config,
                         boolean v6, boolean v6Internet, boolean v6Firewall,
                         Boolean a, Boolean aaaa, Boolean ptr4, Boolean ptr6, Boolean webAaaa, Boolean webA,
-                        IpFamily.Family mail, IpFamily.Family via, boolean sshOnV6) {}
+                        IpFamily.Family mail, IpFamily.Family via, boolean sshOnV6,
+                        Boolean ptr6Send, Boolean sendAaaa, Boolean spf6, Boolean spf6Any) {}
 
     /** Un passo: id (che e' anche la chiave dei testi), chi lo fa («panel» o «you»), stato, motivo se bloccato. */
     public record Step(String id, String who, String status, String blocked) {}
@@ -60,9 +69,15 @@ public final class AddressGuide {
                 ids.addAll(List.of("v6Address", "v6Firewall", "v6Ptr", "v6Dns"));
                 ids.add("mailBoth");
             }
+            case SEND6 -> {
+                ids.addAll(List.of("v4Address", "v4Ptr", "v4Dns"));
+                // Prima tutto quello che serve per spedire in IPv6, poi via l'AAAA del nome della posta (chi consegna
+                // smette di provare l'IPv6), poi la posta: da li' in IPv6 non entra piu' niente.
+                ids.addAll(List.of("v6Address", "v6PtrSend", "v6SendDns", "spf6", "v6DnsRemove", "mailSend6"));
+            }
             case V4 -> {
                 ids.addAll(List.of("v4Address", "v4Ptr", "v4Dns"));
-                ids.addAll(List.of("webA", "mailV4", "v6DnsRemove", "v6AddressRemove"));
+                ids.addAll(List.of("webA", "mailV4", "v6DnsRemove", "v6SendDnsRemove", "spf6Remove", "v6AddressRemove"));
             }
             case V6 -> {
                 ids.addAll(List.of("v6Address", "v6Firewall", "v6Ptr", "v6Dns", "webAaaa", "mailV6"));
@@ -95,7 +110,7 @@ public final class AddressGuide {
 
     static String who(String id) {
         return switch (id) {
-            case "v4Ptr", "v6Ptr", "v6Firewall", "v4Provider" -> "you";
+            case "v4Ptr", "v6Ptr", "v6PtrSend", "v6Firewall", "v4Provider" -> "you";
             default -> "panel";
         };
     }
@@ -108,7 +123,14 @@ public final class AddressGuide {
             case "v6Address" -> f.v6() && f.v6Internet();
             // Il firewall del provider il server non lo vede da dentro: lo conferma l'amministratore, dopo averlo guardato.
             case "v6Firewall" -> f.v6Firewall();
-            case "v6Ptr" -> Boolean.TRUE.equals(f.ptr6());
+            // Ricevendo anche in IPv6 va bene tutti e due i nomi: chi spedisce conferma il DNS inverso col suo AAAA.
+            case "v6Ptr" -> Boolean.TRUE.equals(f.ptr6()) || Boolean.TRUE.equals(f.ptr6Send());
+            case "v6PtrSend" -> Boolean.TRUE.equals(f.ptr6Send());
+            case "v6SendDns" -> Boolean.TRUE.equals(f.sendAaaa());
+            case "spf6" -> Boolean.TRUE.equals(f.spf6());
+            case "mailSend6" -> f.mail() == IpFamily.Family.IPV6_OUT;
+            case "v6SendDnsRemove" -> !Boolean.TRUE.equals(f.sendAaaa());
+            case "spf6Remove" -> !Boolean.TRUE.equals(f.spf6Any());
             case "v6Dns" -> Boolean.TRUE.equals(f.aaaa());
             // Senza un account Cloudflare che veda la zona non lo si puo' sapere: non si blocca la guida (null = fatto).
             case "webAaaa" -> !Boolean.FALSE.equals(f.webAaaa());
@@ -125,9 +147,13 @@ public final class AddressGuide {
         };
     }
 
-    /** Il DNS inverso IPv6 completo: il PTR da' il nome della posta, e quel nome ha l'AAAA dell'indirizzo. */
+    /**
+     * Il DNS inverso IPv6 completo: il PTR da' il nome della posta e quel nome ha l'AAAA dell'indirizzo, oppure da' il
+     * nome solo per spedire e quel nome ha l'AAAA.
+     */
     static boolean fcrdns6(Facts f) {
-        return Boolean.TRUE.equals(f.ptr6()) && Boolean.TRUE.equals(f.aaaa());
+        return Boolean.TRUE.equals(f.ptr6()) && Boolean.TRUE.equals(f.aaaa())
+                || Boolean.TRUE.equals(f.ptr6Send()) && Boolean.TRUE.equals(f.sendAaaa());
     }
 
     /** Perche' il passo di adesso non si puo' fare ancora (chiave della lingua), o null. */
@@ -137,6 +163,9 @@ public final class AddressGuide {
             // l'AAAA dell'indirizzo (aaaa). Senza, Gmail e Microsoft rifiutano.
             case "mailBoth" -> f.v6() && !fcrdns6(f) ? "guide.blocked.ptr6" : null;
             // Solo IPv6 anche per il pannello (pf lo fa rispettare): chi lo sceglie deve arrivarci gia' in IPv6.
+            // La posta in IPv6 solo in uscita: il DNS inverso verso il nome per spedire, il suo AAAA e l'SPF.
+            case "mailSend6" -> !(Boolean.TRUE.equals(f.ptr6Send()) && Boolean.TRUE.equals(f.sendAaaa())) ? "guide.blocked.ptr6Send"
+                    : !Boolean.TRUE.equals(f.spf6()) ? "guide.blocked.spf6" : null;
             case "mailV6" -> !fcrdns6(f) ? "guide.blocked.ptr6"
                     : f.via() == IpFamily.Family.IPV4 ? "guide.blocked.viaV4" : null;
             case "mailV4" -> f.via() == IpFamily.Family.IPV6 ? "guide.blocked.viaV6" : null;
