@@ -123,6 +123,12 @@ public class ReverseDnsTest {
         check("a type the panel never asks, or a name with other characters: nothing reaches dig", quiet);
 
         System.out.println("\n== 4. HostRecords ==");
+        check("the sending name: the first label of the mail name with -out, in the same zone",
+                "mail-out.example.org".equals(HostRecords.sendingName("mail.example.org"))
+                        && "mail-out.example.org".equals(HostRecords.sendingName("MAIL.Example.org"))
+                        && "mx1-out.mail.example.org".equals(HostRecords.sendingName("mx1.mail.example.org"))
+                        && HostRecords.sendingName("localhost") == null && HostRecords.sendingName(null) == null
+                        && HostRecords.sendingName("a".repeat(60) + ".example.org") == null);
         check("names it accepts", HostRecords.validHost("mail.example.org") && HostRecords.validHost("panel.mail.example.org")
                 && !HostRecords.validHost("localhost") && !HostRecords.validHost("-bad.example.org") && !HostRecords.validHost("a b.example.org")
                 && !HostRecords.validHost(null));

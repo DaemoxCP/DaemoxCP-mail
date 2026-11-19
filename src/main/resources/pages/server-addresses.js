@@ -36,6 +36,12 @@
                 case 'v6Firewall': return t('guide.step.v6Firewall');
                 case 'v6Ptr': return t('guide.step.v6Ptr');
                 case 'v6Dns': return t('guide.step.v6Dns');
+                case 'v6PtrSend': return t('guide.step.v6PtrSend');
+                case 'v6SendDns': return t('guide.step.v6SendDns');
+                case 'spf6': return t('guide.step.spf6');
+                case 'mailSend6': return t('guide.step.mailSend6');
+                case 'v6SendDnsRemove': return t('guide.step.v6SendDnsRemove');
+                case 'spf6Remove': return t('guide.step.spf6Remove');
                 case 'webAaaa': return t('guide.step.webAaaa');
                 case 'webA': return t('guide.step.webA');
                 case 'mailBoth': return t('guide.step.mailBoth');
@@ -59,6 +65,12 @@
                 case 'v6Firewall': return t('guide.how.v6Firewall', p);
                 case 'v6Ptr': return t('guide.how.v6Ptr', p);
                 case 'v6Dns': return t('guide.how.v6Dns', p);
+                case 'v6PtrSend': return t('guide.how.v6PtrSend', p);
+                case 'v6SendDns': return t('guide.how.v6SendDns', p);
+                case 'spf6': return t('guide.how.spf6', p);
+                case 'mailSend6': return t('guide.how.mailSend6', p);
+                case 'v6SendDnsRemove': return t('guide.how.v6SendDnsRemove', p);
+                case 'spf6Remove': return t('guide.how.spf6Remove', p);
                 case 'webAaaa': return t('guide.how.webAaaa', p);
                 case 'webA': return t('guide.how.webA', p);
                 case 'mailBoth': return t('guide.how.mailBoth', p);
@@ -77,6 +89,10 @@
             switch (id) {
                 case 'v4Dns': return t('guide.howManual.v4Dns', p);
                 case 'v6Dns': return t('guide.howManual.v6Dns', p);
+                case 'v6SendDns': return t('guide.howManual.v6SendDns', p);
+                case 'v6SendDnsRemove': return t('guide.howManual.v6SendDnsRemove', p);
+                case 'spf6': return t('guide.howManual.spf6', p);
+                case 'spf6Remove': return t('guide.howManual.spf6Remove', p);
                 case 'webAaaa': return t('guide.howManual.webAaaa', p);
                 case 'webA': return t('guide.howManual.webA', p);
                 case 'v6DnsRemove': return t('guide.howManual.v6DnsRemove', p);
@@ -91,13 +107,19 @@
             switch (id) {
                 case 'v4Ptr': return t('guide.howHetzner.v4Ptr', p);
                 case 'v6Ptr': return t('guide.howHetzner.v6Ptr', p);
+                case 'v6PtrSend': return t('guide.howHetzner.v6PtrSend', p);
                 default: return '';
             }
         }
 
+        // L'obiettivo: IPv4 e IPv6 con la casella «La posta entra anche in IPv6» spenta e' «send6», la posta in IPv6
+        // solo in uscita; la casella vale solo per IPv4 e IPv6.
         function addrGoal() {
             const r = document.querySelector('input[name="addrGoal"]:checked');
-            return r ? r.value : 'both';
+            const g = r ? r.value : 'both';
+            const sw = document.getElementById('addrInbound6');
+            if (sw) sw.disabled = g !== 'both';
+            return g === 'both' && sw && !sw.checked ? 'send6' : g;
         }
 
         function addrEl(tag, cls, text) {
@@ -153,8 +175,11 @@
         function addrParams(id) {
             const d = addrData;
             const v6 = (d.state.v6.addresses && d.state.v6.addresses[0]) || (d.suggestion && d.suggestion.address) || '';
-            const ip = /v6|Aaaa|AAAA/.test(id) || id === 'webAaaa' ? v6 : (d.state.v4.public || (d.state.v4.addresses || [])[0] || '');
-            return { h: d.dns.host || '', ip: ip };
+            const ip = /v6|Aaaa|AAAA|spf6|Send6/.test(id) ? v6 : (d.state.v4.public || (d.state.v4.addresses || [])[0] || '');
+            // I passi della posta in IPv6 solo in uscita parlano del nome solo per spedire (mail-out...).
+            const send = ['v6PtrSend', 'v6SendDns', 'v6SendDnsRemove', 'mailSend6'].includes(id);
+            return { h: (send ? d.dns.sendHost : d.dns.host) || '', ip: ip, mail: d.dns.host || '',
+                list: (d.dns.spf6Missing || []).join(', ') };
         }
 
         function addrButton(label, action, danger) {
@@ -212,13 +237,13 @@
                 return box;
             }
             const params = addrParams(step.id);
-            const manual = !d.dns.cloudflare && ['v4Dns', 'v6Dns', 'webAaaa', 'webA', 'v6DnsRemove', 'v4DnsRemove'].includes(step.id);
-            const hetzner = d.provider === 'hetzner' && (step.id === 'v4Ptr' || step.id === 'v6Ptr');
+            const manual = !d.dns.cloudflare && addrManualIds.includes(step.id);
+            const hetzner = d.provider === 'hetzner' && ['v4Ptr', 'v6Ptr', 'v6PtrSend'].includes(step.id);
             box.append(addrEl('p', 'small mb-2', manual ? addrHowManual(step.id, params) : hetzner ? addrHowHetzner(step.id, params) : addrHow(step.id, params)));
 
             // Il DNS inverso: i valori da scrivere nella console del provider, con «Copia», e cosa da' adesso.
-            if (step.id === 'v4Ptr' || step.id === 'v6Ptr') {
-                const v6 = step.id === 'v6Ptr';
+            if (['v4Ptr', 'v6Ptr', 'v6PtrSend'].includes(step.id)) {
+                const v6 = step.id !== 'v4Ptr';
                 if (v6 && hetzner && d.state.v6.hostPart) box.append(addrCopyRow(t('addr.copyAddressField'), d.state.v6.hostPart));
                 box.append(addrCopyRow(t('addr.copyFullAddress'), params.ip));
                 box.append(addrCopyRow(t('addr.copyNameField'), params.h));
@@ -274,6 +299,11 @@
                 case 'webAaaa': box.append(addrButton(t('guide.do.webAaaa'), "addrDo('web-aaaa')", false)); break;
                 case 'webA': box.append(addrButton(t('guide.do.webA'), "addrDo('web-a')", false)); break;
                 case 'mailBoth': box.append(addrButton(t('guide.do.mailBoth'), "addrMail('both', false)", false)); break;
+                case 'v6SendDns': box.append(addrButton(t('guide.do.v6SendDns'), "addrSend('send-dns', 'add')", false)); break;
+                case 'spf6': box.append(addrButton(t('guide.do.spf6'), "addrSend('spf6', 'add')", false)); break;
+                case 'mailSend6': box.append(addrButton(t('guide.do.mailSend6'), "addrMail('ipv6out', false)", false)); break;
+                case 'v6SendDnsRemove': box.append(addrButton(t('guide.do.v6SendDnsRemove'), "addrSend('send-dns', 'remove')", true)); break;
+                case 'spf6Remove': box.append(addrButton(t('guide.do.spf6Remove'), "addrSend('spf6', 'remove')", true)); break;
                 case 'mailV4': box.append(addrButton(t('guide.do.mailV4'), "addrMail('ipv4', false)", false)); break;
                 case 'mailV6': box.append(addrButton(t('guide.do.mailV6'), "addrMail('ipv6', false)", true)); break;
                 case 'v6DnsRemove': box.append(addrButton(t('guide.do.v6DnsRemove'), "addrDns('AAAA', 'remove')", true)); break;
@@ -291,7 +321,7 @@
         function addrSchedule(d) {
             clearTimeout(addrTimer);
             const now = (d.steps || []).find(s => s.status === 'now');
-            const waiting = now && (now.who === 'you' || (!d.dns.cloudflare && ['v4Dns', 'v6Dns', 'webAaaa', 'webA', 'v6DnsRemove', 'v4DnsRemove'].includes(now.id)));
+            const waiting = now && (now.who === 'you' || (!d.dns.cloudflare && addrManualIds.includes(now.id)));
             if (!waiting || now.id === 'v6Firewall' || addrRechecks >= 20) return;
             addrTimer = setTimeout(() => {
                 addrRechecks++;
@@ -336,12 +366,23 @@
             });
         }
 
+        // I passi che, senza un account Cloudflare che veda la zona, l'amministratore fa a mano nel suo DNS.
+        const addrManualIds = ['v4Dns', 'v6Dns', 'webAaaa', 'webA', 'v6DnsRemove', 'v4DnsRemove', 'v6SendDns', 'v6SendDnsRemove', 'spf6', 'spf6Remove'];
+        // Alla prima risposta la casella «La posta entra anche in IPv6» prende com'e' il server: accesa se la posta
+        // riceve gia' in IPv6. Senza, spenta: la scelta consigliata.
+        let addrSynced = false;
+
         function addrLoad() {
             addrRechecks = 0;
             addrSay(t('addr.loading'), 'muted');
             addrFetchState().then(d => {
                 if (!d) return;
                 if (!d.success) { addrSay(d.error || t('addr.failedGeneric'), 'danger'); return; }
+                const sw = document.getElementById('addrInbound6');
+                if (!addrSynced) {
+                    addrSynced = true;
+                    if (sw && !sw.checked && d.mail === 'both' && d.goal === 'send6') { sw.checked = true; addrLoad(); return; }
+                }
                 addrSay('', 'muted');
                 addrRender(d);
             }).catch(() => addrSay(t('addr.failedGeneric'), 'danger'));
@@ -424,6 +465,15 @@
                 if (!await panelConfirm(addrHow(id, addrParams(id)), true)) return;
             }
             return addrPost(body);
+        }
+
+        // L'AAAA del nome solo per spedire, e l'ip6 nell'SPF dei domini: si tolgono con una conferma, come gli altri record.
+        async function addrSend(action, op) {
+            if (op === 'remove') {
+                const id = action === 'spf6' ? 'spf6Remove' : 'v6SendDnsRemove';
+                if (!await panelConfirm(addrHow(id, addrParams(id)), true)) return;
+            }
+            return addrPost({ action: action, op: op });
         }
 
         async function addrDns(type, op) {

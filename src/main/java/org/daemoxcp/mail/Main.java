@@ -452,7 +452,7 @@ public class Main {
         // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
         //   java -jar daemoxcp-mail.jar --create-admin <nome> <email>   il primo amministratore
         //   java -jar daemoxcp-mail.jar --access-code [nome]            un codice di accesso monouso
-        //   java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6      IPv4, IPv6 o tutte e due (da root)
+        //   java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6|ipv6out   IPv4, IPv6, tutte e due, o IPv6 solo in uscita (da root)
         // Il primo amministratore non si crea dal pannello web: chi raggiungesse per primo la
         // pagina diventerebbe amministratore.
         for (int i = 0; i < args.length; i++) {
@@ -1850,7 +1850,7 @@ public class Main {
     }
 
     /**
-     * --ip-family: IPv4, IPv6 o tutte e due, dalla console, come la scheda delle Impostazioni ma senza avvisi da
+     * --ip-family: IPv4, IPv6, tutte e due, o la posta in IPv6 solo in uscita (ipv6out), dalla console, come la scheda delle Impostazioni ma senza avvisi da
      * confermare: e' la strada di chi ha scelto una famiglia sola e da li' non raggiunge piu' il pannello. Gli stessi
      * controlli (indirizzo e rotta nella famiglia che resta) e lo stesso ritorno a com'era se un servizio non regge.
      * Da root: riscrive le configurazioni di Postfix, Dovecot e nginx e ricarica pf.
@@ -1858,7 +1858,7 @@ public class Main {
     static int setIpFamily(String value) {
         org.daemoxcp.mail.system.IpFamily.Family f = org.daemoxcp.mail.system.IpFamily.Family.of(value);
         if (f == null) {
-            System.err.println("Usage: java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6");
+            System.err.println("Usage: java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6|ipv6out");
             return 2;
         }
         if (!"root".equals(System.getProperty("user.name"))) {

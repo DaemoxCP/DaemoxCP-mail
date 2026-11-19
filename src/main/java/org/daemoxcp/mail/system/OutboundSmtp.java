@@ -45,7 +45,8 @@ public final class OutboundSmtp {
         IOException last = null;
         for (java.net.InetAddress a : java.net.InetAddress.getAllByName(host)) {
             boolean six = a instanceof java.net.Inet6Address;
-            if (six ? !f.v6() : !f.v4()) continue;
+            // In uscita conta se Postfix spedisce in quella famiglia (anche con la posta in IPv6 solo in uscita).
+            if (six ? !f.sends6() : !f.v4()) continue;
             try {
                 return bannerAt(a);
             } catch (IOException e) {

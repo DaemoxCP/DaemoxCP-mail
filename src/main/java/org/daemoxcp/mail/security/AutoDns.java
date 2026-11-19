@@ -876,7 +876,7 @@ public class AutoDns {
     /** null quando l'IP non si conosce: meglio nessun record che uno invalido. */
     private String spfValue() {
         org.daemoxcp.mail.system.IpFamily.Family family = org.daemoxcp.mail.system.IpFamily.effective();
-        return DnsRecordsGenerator.spfValue(family.v4() ? serverIp() : "", family.v6() ? serverIpv6() : "", family);
+        return DnsRecordsGenerator.spfValue(family.v4() ? serverIp() : "", family.sends6() ? serverIpv6() : "", family);
     }
 
     /** L'IPv6 pubblico del server, o "" se non lo si conosce. */

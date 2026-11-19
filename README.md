@@ -130,6 +130,11 @@ It is **careful**. The panel never changes something it cannot check, and it say
   IPv6 reverse DNS in place (Gmail and Microsoft require it). The panel never removes a working IPv4: your provider
   does (on Hetzner with the server off), then the panel cleans up what is left. A family you are using to reach the
   panel is never removed, and SSH is never touched.
+  With IPv4 and IPv6, a switch says whether mail also comes in over IPv6. Off (recommended, as Apple does): mail goes
+  out over IPv6 but comes in only over IPv4, where spam and attacks are filtered better. The guide then points the
+  IPv6 reverse DNS to a name for sending only (`mail-out.` and your domain, with its own AAAA), adds `ip6:` to the
+  domains' SPF, keeps the mail name without AAAA and lets nothing in over IPv6. Switching it on, or going back to IPv4
+  only, are steps of the same guide.
 - Privilege separation: the part that answers on the network runs as an unprivileged user (see
   [Security model](#security-model-who-runs-as-root-and-why)).
 
@@ -668,7 +673,7 @@ in the services' files are updated along the way, and each service is checked an
 | `java -jar daemoxcp-mail.jar --web` | only the web server, no menu (what the service runs) |
 | `java -jar daemoxcp-mail.jar --access-code [name]` | a one-time 8-digit sign-in code for an administrator |
 | `java -jar daemoxcp-mail.jar --create-admin <name> <email>` | the first administrator, when there is none |
-| `java -jar daemoxcp-mail.jar --ip-family both\|ipv4\|ipv6` | IPv4, IPv6 or both, as in *Settings*, as root: the way back when a choice cut you off from the panel |
+| `java -jar daemoxcp-mail.jar --ip-family both\|ipv4\|ipv6\|ipv6out` | IPv4, IPv6, both, or both with mail over IPv6 only going out, as in *Settings*, as root: the way back when a choice cut you off from the panel |
 | `java -jar daemoxcp-mail.jar --addresses show\|ipv6-off\|ipv4-dhcp` | the server's addresses, as root: show them, remove the IPv6 the panel added (the previous `rc.conf` lines come back), or take IPv4 again by DHCP |
 | `service daemoxcp_mail start\|stop\|restart\|status` | the panel as a service |
 

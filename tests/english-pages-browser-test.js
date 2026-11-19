@@ -46,17 +46,19 @@ const API = {
     // Settings, IPv4/IPv6 (since 0.9): nothing chosen yet, both families in use.
     'GET /api/ip-family': { success: true, chosen: '', effective: 'both' },
     // The server's addresses (Settings): a server with IPv4 only, on the way to both.
-    'GET /api/server-addresses': { success: true, goal: 'both', recommended: 'both', reached: false, mail: 'ipv4', via: 'ipv4', sshOnV6: true,
+    // Mail over IPv6 only going out (the switch off, the default): the titles of its steps in English too.
+    'GET /api/server-addresses': { success: true, goal: 'send6', recommended: 'send6', reached: false, mail: 'ipv4', via: 'ipv4', sshOnV6: true,
         provider: 'hetzner',
         state: { iface: 'vtnet0', v4: { addresses: ['203.0.113.10'], route: true, internet: true, public: '203.0.113.10' },
                  v6: { addresses: [], route: false, internet: false, hostPart: null } },
         dns: { host: 'mail.example.com', a: true, aaaa: false, ptr4: true, ptr6: null, ptr6Found: null, ptr4Found: 'mail.example.com',
-               webAaaa: null, webA: null, cloudflare: true },
+               webAaaa: null, webA: null, sendHost: 'mail-out.example.com', sendAaaa: false, spf6Missing: ['example.com'], cloudflare: true },
         suggestion: { address: '2001:db8:1234:5678::1', prefix: 64, gateway: 'fe80::1%vtnet0', source: 'hetzner' },
         steps: [{ id: 'v4Address', who: 'panel', status: 'done', blocked: null }, { id: 'v4Ptr', who: 'you', status: 'done', blocked: null },
                 { id: 'v4Dns', who: 'panel', status: 'done', blocked: null }, { id: 'v6Address', who: 'panel', status: 'now', blocked: null },
-                { id: 'v6Firewall', who: 'you', status: 'next', blocked: null }, { id: 'v6Ptr', who: 'you', status: 'next', blocked: null }, { id: 'v6Dns', who: 'panel', status: 'next', blocked: null },
-                { id: 'mailBoth', who: 'panel', status: 'next', blocked: null }] },
+                { id: 'v6PtrSend', who: 'you', status: 'next', blocked: null }, { id: 'v6SendDns', who: 'panel', status: 'next', blocked: null },
+                { id: 'spf6', who: 'panel', status: 'next', blocked: null }, { id: 'v6DnsRemove', who: 'panel', status: 'next', blocked: null },
+                { id: 'mailSend6', who: 'panel', status: 'next', blocked: null }] },
     'GET /api/dns': { success: true, mail_hostname: 'mail.example.com', server_ip: '192.0.2.1',
         records: [{ name: '@', type: 'MX', value: 'mail.example.com', fullValue: '10 mail.example.com', required: true,
                     description: 'Where mail for the domain goes', dnsZone: 'example.com', checkType: 'MX' },
