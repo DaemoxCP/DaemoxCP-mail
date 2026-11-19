@@ -775,9 +775,17 @@ Al riavvio la lingua è nel selettore, scritta nella sua lingua (*Español*, *Fr
 pulsanti diventano un menu. Il file può essere parziale: un testo che manca si vede in inglese, poi in italiano.
 Le date nelle pagine seguono la lingua.
 
-La console (il menu a schermo e i comandi come `--access-code` o `--ip-family`) parla la lingua del pannello: quella
-scelta dal primo amministratore attivo, l'inglese se nessuno l'ha ancora scelta. `--lang it` (o `en`) la cambia per un
-comando: `java -jar daemoxcp-mail.jar --lang it --access-code`. I pulsanti delle finestre del menu vengono da Lanterna,
+La console (il menu a schermo e i comandi come `--access-code` o `--ip-family`) gira da root e non sa chi c'è davanti
+al terminale. Prende, in quest'ordine:
+
+1. `--lang it` (o `en`), per un comando: `java -jar daemoxcp-mail.jar --lang it --access-code`;
+2. la lingua del terminale: la prima impostata fra `LC_ALL`, `LC_MESSAGES` e `LANG`, se è una lingua del pannello
+   (`it_IT.UTF-8`, `en_US.UTF-8`). Ogni amministratore può metterla una volta nel profilo della sua shell. Il `C.UTF-8`
+   predefinito di FreeBSD non è una lingua;
+3. per un comando che riguarda un amministratore (`--access-code nome`), la lingua che quell'amministratore ha scelto
+   nel pannello;
+4. la lingua del pannello: quella scelta dal primo amministratore attivo;
+5. l'inglese. I pulsanti delle finestre del menu vengono da Lanterna,
 che ha le sue traduzioni; quelle italiane stanno in `src/main/resources/multilang/lanterna-ui_it.properties`, e una
 lingua nuova può volere il suo file anche lì. I registri e i giornali delle operazioni restano in inglese, uguali per
 tutti.

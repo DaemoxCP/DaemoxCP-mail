@@ -763,9 +763,16 @@ At the next start the language is in the switch, written in its own language (*E
 or more languages the two buttons become a menu. The file may be partial: a missing text is shown in English,
 then in Italian. The dates in the pages follow the language.
 
-The console (the on-screen menu and the commands such as `--access-code` or `--ip-family`) speaks the panel's
-language: the one chosen by the first active administrator, English if nobody has chosen one yet. `--lang en` (or
-`it`) changes it for one command: `java -jar daemoxcp-mail.jar --lang en --access-code`. The buttons of the menu's
+The console (the on-screen menu and the commands such as `--access-code` or `--ip-family`) runs as root and cannot
+know who is at the terminal. It takes, in this order:
+
+1. `--lang en` (or `it`), for one command: `java -jar daemoxcp-mail.jar --lang en --access-code`;
+2. the terminal's language: the first of `LC_ALL`, `LC_MESSAGES`, `LANG` that is set, if it is a language of the panel
+   (`it_IT.UTF-8`, `en_US.UTF-8`). Each administrator can set it once in their shell profile. FreeBSD's default
+   `C.UTF-8` is no language;
+3. for a command about one administrator (`--access-code name`), the language that administrator chose in the panel;
+4. the panel's language: the one chosen by the first active administrator;
+5. English. The buttons of the menu's
 windows come from Lanterna, which has its own translations; the Italian ones are in
 `src/main/resources/multilang/lanterna-ui_it.properties`, and a new language may need its file there too.
 Logs and operation journals stay in English, the same for everyone.
