@@ -1882,8 +1882,12 @@ public class Main {
                 return 1;
             }
             mailDatabase.logAuditEvent("IP_FAMILY_CHANGED", "127.0.0.1", f.key + " (console)", "console");
-            System.out.println("Done: Postfix, Dovecot, nginx and pf now answer on "
-                    + (f == org.daemoxcp.mail.system.IpFamily.Family.BOTH ? "IPv4 and IPv6" : f == org.daemoxcp.mail.system.IpFamily.Family.IPV4 ? "IPv4 only" : "IPv6 only") + ".");
+            System.out.println("Done: Postfix, Dovecot, nginx and pf now answer on " + switch (f) {
+                case BOTH -> "IPv4 and IPv6.";
+                case IPV4 -> "IPv4 only.";
+                case IPV6 -> "IPv6 only.";
+                case IPV6_OUT -> "IPv4 only; mail also goes out over IPv6.";
+            });
             for (String w : o.warnings()) System.out.println("  " + w);
             return 0;
         } finally {
