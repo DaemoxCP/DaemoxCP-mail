@@ -4,12 +4,15 @@
 //
 //   0. The card: a row for IPv4 and one for IPv6 (with words, not only colours), the three goals, the steps numbered
 //      with exactly one step "now".
+//  0b. The switch «mail also comes in over IPv6» as an on/off: with only the mail step left it applies after one
+//      question (cancel, yes, a warning, a failure), against a stand-in /api/ip-family: nothing changes here.
 //   1. Goal IPv6 only: the first step is the IPv6 address, with its form (the test machine is not on Hetzner: no
 //      suggestion from the provider, the fields to fill).
 //   2. A documentation address (2001:db8::/32): refused before anything changes, with the reason.
 //   3. A benchmarking address (2001:2::/48, RFC 5180: global in form, never routed): the panel adds it live, the probe
 //      cannot reach the internet over IPv6 (the test machine has none), and everything goes back: no address, no IPv6
-//      default route, /etc/rc.conf unchanged, and the operation's log on disk says so.
+//      default route, /etc/rc.conf unchanged, and the operation's log on disk says so. If the test machine already
+//      has an IPv6 default route from its network, the panel refuses to add one and that refusal is checked instead.
 //   4. Goals IPv4 only and both: the steps change, and only looking changes nothing.
 //   5. The console: --addresses show answers, as root.
 // The change needs a recent confirmation (the console code does not count): the run creates a passkey in a virtual
@@ -154,42 +157,59 @@ function said(text, key) {
         // The test machine cannot finish the other steps (its reverse DNS is not the mail name). Here the browser sees
         // the real guide with every other step marked done, and a stand-in /api/ip-family that records what the page
         // asks: these requests never reach the panel, and nothing on the test machine changes.
+        // The real guide, asked once by the browser (route.fetch would go from Node, which does not know the panel's
+        // test name), is the base of the stand-in. A stand-in that fails becomes a failed check, never a crash that
+        // skips the clean-up at the end.
+        const real = {};
+        for (const g of ['both', 'send6']) real[g] = await page.evaluate(g => fetch('/api/server-addresses?goal=' + g).then(r => r.json()), g);
+        const lastOf = g => real[g] && real[g].success && real[g].steps.length ? real[g].steps[real[g].steps.length - 1].id : '';
+        check('the real guide towards both and towards «only going out», the base of the stand-in (last steps '
+            + lastOf('both') + ', ' + lastOf('send6') + ')', lastOf('both') === 'mailBoth' && lastOf('send6') === 'mailSend6');
         let fakeMail = 'both', postOk = true, previewWarnings = [];
-        const previews = [], posts = [];
+        const previews = [], posts = [], routeErrors = [];
         await page.route('**/api/server-addresses?**', async route => {
-            const goal = new URL(route.request().url()).searchParams.get('goal');
-            const res = await route.fetch();
-            const d = await res.json();
-            if (d.success && (goal === 'both' || goal === 'send6')) {
+            try {
+                const goal = new URL(route.request().url()).searchParams.get('goal');
+                if (!real[goal]) return await route.continue();
+                const d = JSON.parse(JSON.stringify(real[goal]));
                 const want = goal === 'send6' ? 'ipv6out' : 'both';
                 d.mail = fakeMail;
                 d.steps = d.steps.map((x, i) => Object.assign({}, x,
                     { status: i < d.steps.length - 1 || fakeMail === want ? 'done' : 'now' }));
                 d.reached = fakeMail === want;
+                await route.fulfill({ json: d });
+            } catch (e) {
+                routeErrors.push(e.message.split('\n')[0]);
+                await route.abort().catch(() => {});
             }
-            await route.fulfill({ response: res, json: d });
         });
         await page.route('**/api/ip-family**', async route => {
-            const req = route.request();
-            if (req.method() === 'POST') {
-                const body = JSON.parse(req.postData() || '{}');
-                posts.push(body.family + (body.confirmed ? '/confirmed' : '/asked'));
-                if (postOk) fakeMail = body.family;
-                return route.fulfill({ json: postOk ? { success: true, confirm: false, warnings: [], effective: body.family }
-                    : { success: false, confirm: false, warnings: [], error: 'refused by the test' } });
+            try {
+                const req = route.request();
+                if (req.method() === 'POST') {
+                    const body = JSON.parse(req.postData() || '{}');
+                    posts.push(body.family + (body.confirmed ? '/confirmed' : '/asked'));
+                    if (postOk) fakeMail = body.family;
+                    return await route.fulfill({ json: postOk ? { success: true, confirm: false, warnings: [], effective: body.family }
+                        : { success: false, confirm: false, warnings: [], error: 'refused by the test' } });
+                }
+                const family = new URL(req.url()).searchParams.get('family');
+                if (family) previews.push(family);
+                return await route.fulfill({ json: Object.assign({ success: true, chosen: fakeMail, effective: fakeMail },
+                    family ? { family: family, warnings: previewWarnings } : {}) });
+            } catch (e) {
+                routeErrors.push(e.message.split('\n')[0]);
+                await route.abort().catch(() => {});
             }
-            const family = new URL(req.url()).searchParams.get('family');
-            if (family) previews.push(family);
-            return route.fulfill({ json: Object.assign({ success: true, chosen: fakeMail, effective: fakeMail },
-                family ? { family: family, warnings: previewWarnings } : {}) });
         });
-        const ask = () => page.waitForSelector('#panelAskModal.show', { timeout: 30000 }).then(() => true).catch(() => false);
+        const WAIT = 240000;
+        const ask = () => page.waitForSelector('#panelAskModal.show', { timeout: WAIT }).then(() => true).catch(() => false);
         const askText = () => page.innerText('#panelAskBody');
         const closed = () => page.waitForSelector('#panelAskModal', { state: 'hidden', timeout: 30000 }).then(() => true).catch(() => false);
         const settled = () => until(() => !document.querySelector('#addrCard input:disabled:not([name])')
-            && !/…/.test(document.getElementById('addrStatus').textContent), null, 60000);
+            && !/…/.test(document.getElementById('addrStatus').textContent), null, WAIT);
         await page.goto(BASE + '/settings');
-        await until(() => addrData && addrData.reached === true, null, 60000);
+        await until(() => addrData && addrData.reached === true, null, WAIT);
         check('a guide with mail on both and nothing left to do: the switch is on, «reached» shown',
             await page.$eval('#addrInbound6', i => i.checked) && await page.$eval('#addrReached', e => !e.classList.contains('d-none')));
 
@@ -199,23 +219,25 @@ function said(text, key) {
         let text = asked ? await askText() : '';
         check('switch off: one question, with what happens (the step «mail over IPv6 only going out»)',
             asked && said(text, 'guide.how.mailSend6') && previews.join() === 'ipv6out');
+        // The dialog is hidden a moment before it says so (Bootstrap's «hidden» comes after the fade): the page answers
+        // then, so the checks wait for what the page does, not for the dialog.
         await page.click('#panelAskModal [data-bs-dismiss=modal].btn-outline-secondary');
         await closed();
+        const backOn = await until(() => document.getElementById('addrInbound6').checked, null, 30000);
         await settled();
-        check('  «Cancel»: no choice sent, the switch back on, as the server is (' + posts.join() + ')',
-            posts.length === 0 && await page.$eval('#addrInbound6', i => i.checked));
+        check('  «Cancel»: no choice sent, the switch back on, as the server is (' + posts.join() + ')', backOn && posts.length === 0);
 
         // Off, then «Yes»: the choice goes with «confirmed», the switch stays off, the outcome is said.
         await page.uncheck('#addrInbound6');
         asked = await ask();
         await page.click('#panelAskGo');
         await closed();
-        await until(() => addrData && addrData.mail === 'ipv6out' && addrData.reached === true, null, 60000);
+        await until(() => addrData && addrData.mail === 'ipv6out' && addrData.reached === true, null, WAIT);
         await settled();
         check('  «Yes»: one choice sent, ipv6out confirmed (' + posts.join() + '), the switch off, the outcome said',
             asked && posts.join() === 'ipv6out/confirmed' && !(await page.$eval('#addrInbound6', i => i.checked))
             && said(await page.textContent('#addrStatus'), 'set.ipfDone'));
-        check('  the focus back on the switch', await page.evaluate(() => document.activeElement && document.activeElement.id === 'addrInbound6'));
+        check('  the focus back on the switch', await until(() => document.activeElement && document.activeElement.id === 'addrInbound6', null, 30000));
 
         // On, with a warning from IpFamily: the same single question carries it, in red.
         previewWarnings = ['TEST WARNING: you reach the panel over the family that closes'];
@@ -225,7 +247,7 @@ function said(text, key) {
         const red = asked && await page.$eval('#panelAskGo', b => b.classList.contains('btn-danger'));
         await page.click('#panelAskGo');
         await closed();
-        await until(() => addrData && addrData.mail === 'both', null, 60000);
+        await until(() => addrData && addrData.mail === 'both', null, WAIT);
         await settled();
         check('switch on with a warning: one question with what happens and the warning, red button; both confirmed (' + posts.join() + ')',
             asked && said(text, 'guide.how.mailBoth') && text.includes('TEST WARNING') && red
@@ -238,11 +260,13 @@ function said(text, key) {
         asked = await ask();
         await page.click('#panelAskGo');
         await closed();
-        await until(() => document.getElementById('addrStatus').className.includes('text-danger'), null, 60000);
+        const failedBack = await until(() => document.getElementById('addrStatus').className.includes('text-danger')
+            && document.getElementById('addrInbound6').checked, null, WAIT);
         await settled();
         check('a choice that fails: the switch back on, the reason said (' + (await page.textContent('#addrStatus')).slice(0, 60) + ')',
-            asked && await page.$eval('#addrInbound6', i => i.checked) && (await page.textContent('#addrStatus')).includes('refused by the test'));
+            asked && failedBack && (await page.textContent('#addrStatus')).includes('refused by the test'));
 
+        check('the stand-ins answered every request' + (routeErrors.length ? ' (' + routeErrors[0] + ')' : ''), routeErrors.length === 0);
         await page.unroute('**/api/server-addresses?**');
         await page.unroute('**/api/ip-family**');
         await page.goto(BASE + '/settings');
@@ -266,20 +290,30 @@ function said(text, key) {
         check('  the interface and the routes as before', live() === before);
 
         console.log('\n== 3. An address that cannot reach the internet: added, probed, everything back ==');
+        // Since the Mac has IPv6 its network gives the test machine an IPv6 default route: then the panel refuses to
+        // add an address of its own, and that refusal is what can be checked here (as in ip-family, step 1).
+        const routed6 = /^default /m.test(before);
         await page.check('#addrGoalV6');
         await until(() => !!document.getElementById('addrV6Address'), null, 30000);
         await page.fill('#addrV6Address', '2001:2::7');
         await page.click('#addrSteps li[data-step="v6Address"] button');
         const back = await until(() => document.getElementById('addrStatus').className.includes('text-danger'), null, 120000);
         const t3 = await page.textContent('#addrStatus');
-        check('the probe failed and it says so (' + t3.slice(0, 70) + '…)', back && said(t3, 'server.addr.probeFailedV6'));
-        const journal = (t3.match(/[0-9]{8}-[0-9]{6}-server-addresses__[A-Za-z0-9._-]+\.log/) || [])[0];
-        check('  the log of the operation is named (' + journal + ')', !!journal);
-        check('  the interface and the routes exactly as before', live() === before);
-        check('  /etc/rc.conf unchanged', rcSha() === rcBefore);
-        const log = journal ? remote('cat /var/db/daemoxcp-mail/jobs/' + journal) : '';
-        check('  the log: the address added live, the probe, the way back, the end', /inet6 2001:2::7 prefixlen 64 alias -> ok/.test(log)
-            && /going back: nothing stays/.test(log) && /=== end: failed/.test(log) && !/sysrc -f \S+ ifconfig_/.test(log));
+        if (routed6) {
+            console.log('  (the test machine has an IPv6 default route from its network: the probe cannot be tried)');
+            check('refused because a default route is already there (' + t3.slice(0, 70) + '…)', back && said(t3, 'server.addr.v6RouteAlready'));
+            check('  the interface and the routes exactly as before', live() === before);
+            check('  /etc/rc.conf unchanged', rcSha() === rcBefore);
+        } else {
+            check('the probe failed and it says so (' + t3.slice(0, 70) + '…)', back && said(t3, 'server.addr.probeFailedV6'));
+            const journal = (t3.match(/[0-9]{8}-[0-9]{6}-server-addresses__[A-Za-z0-9._-]+\.log/) || [])[0];
+            check('  the log of the operation is named (' + journal + ')', !!journal);
+            check('  the interface and the routes exactly as before', live() === before);
+            check('  /etc/rc.conf unchanged', rcSha() === rcBefore);
+            const log = journal ? remote('cat /var/db/daemoxcp-mail/jobs/' + journal) : '';
+            check('  the log: the address added live, the probe, the way back, the end', /inet6 2001:2::7 prefixlen 64 alias -> ok/.test(log)
+                && /going back: nothing stays/.test(log) && /=== end: failed/.test(log) && !/sysrc -f \S+ ifconfig_/.test(log));
+        }
 
         console.log('\n== 4. Goals IPv4 only and both: only looking ==');
         await page.check('#addrGoalV4');
