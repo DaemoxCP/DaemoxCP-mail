@@ -68,8 +68,11 @@ public class AddressGuideTest {
         check("an address that does not reach the internet is not done", now(AddressGuide.plan(f.build(), AddressGuide.Goal.BOTH)).equals("v6Address/now"));
         f.v6Internet = true; f.ptr6 = true;
         check("reverse DNS set: now the AAAA record", now(AddressGuide.plan(f.build(), AddressGuide.Goal.BOTH)).equals("v6Dns/now"));
+        check("mail over IPv6 waits for the whole reverse DNS: the PTR gives the name AND the name has the AAAA",
+                "guide.blocked.ptr6".equals(AddressGuide.blocked(f.build(), "mailBoth")) && "guide.blocked.ptr6".equals(AddressGuide.blocked(f.build(), "mailV6")));
         f.aaaa = true;
-        check("AAAA published: now mail over both", now(AddressGuide.plan(f.build(), AddressGuide.Goal.BOTH)).equals("mailBoth/now"));
+        check("AAAA published: now mail over both", now(AddressGuide.plan(f.build(), AddressGuide.Goal.BOTH)).equals("mailBoth/now")
+                && AddressGuide.blocked(f.build(), "mailBoth") == null);
         f.mail = BOTH;
         check("mail on both: the goal is reached", AddressGuide.reached(AddressGuide.plan(f.build(), AddressGuide.Goal.BOTH)));
 

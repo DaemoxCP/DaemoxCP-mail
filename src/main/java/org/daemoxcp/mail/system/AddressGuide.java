@@ -125,13 +125,19 @@ public final class AddressGuide {
         };
     }
 
+    /** Il DNS inverso IPv6 completo: il PTR da' il nome della posta, e quel nome ha l'AAAA dell'indirizzo. */
+    static boolean fcrdns6(Facts f) {
+        return Boolean.TRUE.equals(f.ptr6()) && Boolean.TRUE.equals(f.aaaa());
+    }
+
     /** Perche' il passo di adesso non si puo' fare ancora (chiave della lingua), o null. */
     static String blocked(Facts f, String id) {
         return switch (id) {
-            // La posta in IPv6 solo col DNS inverso IPv6: senza, Gmail e Microsoft rifiutano.
-            case "mailBoth" -> f.v6() && !Boolean.TRUE.equals(f.ptr6()) ? "guide.blocked.ptr6" : null;
+            // La posta in IPv6 solo col DNS inverso IPv6 confermato all'andata: il PTR da' il nome (ptr6) e il nome ha
+            // l'AAAA dell'indirizzo (aaaa). Senza, Gmail e Microsoft rifiutano.
+            case "mailBoth" -> f.v6() && !fcrdns6(f) ? "guide.blocked.ptr6" : null;
             // Solo IPv6 anche per il pannello (pf lo fa rispettare): chi lo sceglie deve arrivarci gia' in IPv6.
-            case "mailV6" -> !Boolean.TRUE.equals(f.ptr6()) ? "guide.blocked.ptr6"
+            case "mailV6" -> !fcrdns6(f) ? "guide.blocked.ptr6"
                     : f.via() == IpFamily.Family.IPV4 ? "guide.blocked.viaV4" : null;
             case "mailV4" -> f.via() == IpFamily.Family.IPV6 ? "guide.blocked.viaV6" : null;
             // Non si toglie la famiglia da cui l'amministratore sta usando il pannello.
