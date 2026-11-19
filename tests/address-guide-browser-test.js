@@ -105,13 +105,19 @@ function said(text, key) {
             && rows.every(r => /(Yes|No|Sì|Not checked|Non controllato)/.test(r)));
         check('the table has a caption and column headers', await page.$eval('#addrCard table', t => !!t.caption && t.querySelectorAll('thead th[scope=col]').length === 5));
         check('three goals, "both" chosen first', await page.$$eval('input[name=addrGoal]', rs => rs.length === 3 && rs.find(r => r.checked).value === 'both'));
-        // «Mail also comes in over IPv6» is off at first (the test machine's mail is not on both): mail over IPv6 only
-        // going out, as Apple does. No step for the provider's firewall (nothing comes in over IPv6), the reverse DNS to
-        // the sending name, its AAAA, the IPv6 in the SPF.
-        check('the switch «mail also comes in over IPv6»: there, off, with its explanation',
-            await page.$eval('#addrInbound6', i => i.type === 'checkbox' && !i.checked && !i.disabled && !!document.getElementById(i.getAttribute('aria-describedby'))));
+        // «Mail also comes in over IPv6» starts as the server is: on when mail already comes in over IPv6 (the test
+        // machine's mail is on both), off otherwise (the recommended choice). Off: mail over IPv6 only going out, as
+        // Apple does. No step for the provider's firewall (nothing comes in over IPv6), the reverse DNS to the sending
+        // name, its AAAA, the IPv6 in the SPF.
+        const sw0 = await page.$eval('#addrInbound6', i => ({ type: i.type, checked: i.checked, disabled: i.disabled,
+            hint: !!document.getElementById(i.getAttribute('aria-describedby')) }));
+        const mailNow = await page.evaluate(() => addrData && addrData.mail);
+        check('the switch «mail also comes in over IPv6»: there, with its explanation, as the server is (mail ' + mailNow + ', switch '
+            + (sw0.checked ? 'on' : 'off') + ')', sw0.type === 'checkbox' && !sw0.disabled && sw0.hint && sw0.checked === (mailNow === 'both'));
+        await page.uncheck('#addrInbound6');
+        await until(() => !!document.querySelector('#addrSteps li[data-step="mailSend6"]'), null, 60000);
         let s = await steps();
-        check('the steps for mail over IPv6 only going out: ' + s.join(' '), s.length === 9 && s.includes('v6PtrSend/next')
+        check('switch off, the steps for mail over IPv6 only going out: ' + s.join(' '), s.length === 9 && s.includes('v6PtrSend/next')
             && s.includes('v6SendDns/next') && s.includes('spf6/next') && s.includes('mailSend6/next') && !s.some(x => x.startsWith('v6Firewall/')));
         await page.check('#addrInbound6');
         await until(() => document.querySelectorAll('#addrSteps li').length === 8 && !!document.querySelector('#addrSteps li[data-step="mailBoth"]'), null, 60000);
