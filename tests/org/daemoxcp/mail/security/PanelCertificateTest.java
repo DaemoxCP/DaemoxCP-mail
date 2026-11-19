@@ -52,6 +52,8 @@ public class PanelCertificateTest {
     static String read(String f) throws Exception { return Files.readString(dir.resolve(f)); }
 
     public static void main(String[] args) throws Exception {
+        // The console speaks the panel's language (Main.chooseConsoleLanguage): here its English is read.
+        org.daemoxcp.mail.i18n.I18n.setProcessLanguage("en");
         dir = Files.createTempDirectory("panel-cert-test");
         try {
             run();
@@ -85,7 +87,7 @@ public class PanelCertificateTest {
         check("another domain refused, naming what it covers",
                 PemTls.check("panel.example.net", read("site.crt"), read("site.key"), Instant.now()).errors().stream().anyMatch(e -> e.contains("does not cover")));
         check("the webmail's certificate checked the same way, naming the webmail",
-                PemTls.check("webmail name", "webmail.example.net", read("site.crt"), read("site.key"), Instant.now()).errors()
+                PemTls.check("webmail", "webmail.example.net", read("site.crt"), read("site.key"), Instant.now()).errors()
                         .stream().anyMatch(e -> e.contains("does not cover the webmail name webmail.example.net")));
         check("expired refused", PemTls.check("panel.example.com", read("site.crt"), read("site.key"), Instant.now().plus(60, ChronoUnit.DAYS))
                 .errors().stream().anyMatch(e -> e.contains("expired")));

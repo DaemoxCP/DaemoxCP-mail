@@ -763,6 +763,16 @@ At the next start the language is in the switch, written in its own language (*E
 or more languages the two buttons become a menu. The file may be partial: a missing text is shown in English,
 then in Italian. The dates in the pages follow the language.
 
+The console (the on-screen menu and the commands such as `--access-code` or `--ip-family`) speaks the panel's
+language: the one chosen by the first active administrator, English if nobody has chosen one yet. `--lang en` (or
+`it`) changes it for one command: `java -jar daemoxcp-mail.jar --lang en --access-code`. The buttons of the menu's
+windows come from Lanterna, which has its own translations; the Italian ones are in
+`src/main/resources/multilang/lanterna-ui_it.properties`, and a new language may need its file there too.
+Logs and operation journals stay in English, the same for everyone.
+
+`FixedTextsTest` keeps all of this true: a fixed text in a page, a script, an attribute, an answer of the server or a
+window of the console makes it fail.
+
 > [!NOTE]
 > Right-to-left languages (Arabic, Hebrew, Persian…) need a frame that does not exist yet: `dir="rtl"`,
 > Bootstrap's RTL build and mirrored icons. The tests refuse them until then.

@@ -174,7 +174,7 @@ function unlisted(page, selector, text) {
 
     if (!E.SESSION) {
         // The real panel: a one-time code from its console, as an administrator who lost access would do.
-        const code = execSync(E.VM_LOGIN + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null'")
+        const code = execSync(E.VM_LOGIN + " 'cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --access-code 2>/dev/null'")
             .toString().match(/([0-9]{4} [0-9]{4})/)[1];
         await page.goto(E.REMOTE + '/index');
         await page.click('#linkConsole');

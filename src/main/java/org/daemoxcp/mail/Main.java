@@ -180,15 +180,15 @@ public class Main {
         if (defaultValue != null && !defaultValue.isEmpty()) {
             textBox.setText(defaultValue);
         }
-        panel.addComponent(new Label("Input:"));
+        panel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.input")));
         panel.addComponent(textBox);
 
         // Cancel first = pre-selected (safety)
-        panel.addComponent(new Button("Cancel", () -> {
+        panel.addComponent(new Button(org.daemoxcp.mail.i18n.I18n.tr("console.cancel"), () -> {
             result[0] = null;
             window.close();
         }));
-        panel.addComponent(new Button("OK", () -> {
+        panel.addComponent(new Button(org.daemoxcp.mail.i18n.I18n.tr("console.ok"), () -> {
             result[0] = textBox.getText();
             window.close();
         }));
@@ -343,7 +343,7 @@ public class Main {
      */
     private static void waitForEnter() {
         if (nonInteractive) return;
-        System.out.println(ANSI_YELLOW + "Press ENTER to continue..." + ANSI_RESET);
+        System.out.println(ANSI_YELLOW + org.daemoxcp.mail.i18n.I18n.tr("console.pressEnter") + ANSI_RESET);
         try {
             System.in.read();
             // Clear any remaining input
@@ -430,7 +430,7 @@ public class Main {
         // processo: il servizio --web, il menu, i comandi da console. Di solito costa una
         // connessione e non cambia niente (PendingDbPassword.settleAtStartup).
         try {
-            org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+            org.daemoxcp.mail.i18n.I18n.setCurrent("en");   // una riga d'avvio di ogni modo, servizio compreso: un registro
             String decided;
             try { decided = org.daemoxcp.mail.system.PendingDbPassword.settleAtStartup(dbManager).message(); }
             finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
@@ -449,6 +449,10 @@ public class Main {
             System.out.println("Writing the install scripts failed: " + e.getMessage());
         }
 
+        // La lingua della console (il menu a schermo e i comandi qui sotto): --lang, poi quella del pannello, poi
+        // l'inglese. Non per il servizio (--web): le sue righe sono registri e restano in inglese.
+        if (!java.util.Arrays.asList(args).contains("--web")) chooseConsoleLanguage(args);
+
         // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
         //   java -jar daemoxcp-mail.jar --create-admin <nome> <email>   il primo amministratore
         //   java -jar daemoxcp-mail.jar --access-code [nome]            un codice di accesso monouso
@@ -458,7 +462,7 @@ public class Main {
         for (int i = 0; i < args.length; i++) {
             if ("--create-admin".equals(args[i])) {
                 if (i + 2 >= args.length) {
-                    System.err.println("Usage: java -jar daemoxcp-mail.jar --create-admin <name> <email>");
+                    System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.usage", java.util.Map.of("cmd", "java -jar daemoxcp-mail.jar --create-admin <name> <email>")));
                     System.exit(2);
                 }
                 String notConnected = connectFromConfig();
@@ -485,7 +489,7 @@ public class Main {
                 String host = i + 1 < args.length ? args[i + 1].trim() : "";
                 Path exitFile = i + 2 < args.length ? Path.of(args[i + 2]) : null;
                 if (!org.daemoxcp.mail.system.ReinstallJob.validHostname(host)) {
-                    System.err.println("Usage: java -jar daemoxcp-mail.jar --reinstall <mail hostname> [result file]");
+                    System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.usage", java.util.Map.of("cmd", "java -jar daemoxcp-mail.jar --reinstall <mail hostname> [result file]")));
                     if (exitFile != null) org.daemoxcp.mail.system.ReinstallJob.writeExit(exitFile, false);
                     System.exit(2);
                 }
@@ -528,8 +532,8 @@ public class Main {
         // per riaccendersi da solo (la riga di riavvio la ricostruisce dal processo vivo).
         // Se pero' non c'e', se lo scrive, cosi' esiste un modo breve per avviare --web a mano.
         try {
-            // La console e' in inglese: il messaggio condiviso con il pannello si chiede in inglese.
-            org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+            // Il messaggio condiviso con il pannello, nella lingua della console.
+            org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
             String created;
             try { created = org.daemoxcp.mail.system.UpdateManager.createRunSh(); }
             finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
@@ -548,11 +552,11 @@ public class Main {
         }
 
         MultiWindowTextGUI gui = new MultiWindowTextGUI(screen, new DefaultWindowManager(), new EmptySpace(TextColor.ANSI.BLUE));
-        Welcome simpleBox = new Welcome("Information", "Welcome to " + org.daemoxcp.mail.i18n.I18n.tr("brand.name"));
+        Welcome simpleBox = new Welcome(org.daemoxcp.mail.i18n.I18n.tr("console.info"), org.daemoxcp.mail.i18n.I18n.tr("console.welcome", java.util.Map.of("product", org.daemoxcp.mail.i18n.I18n.tr("brand.name"))));
         simpleBox.show(gui);
 
         if (needsTableCreation) {
-            Welcome success = new Welcome("Information", "Database initialized successfully");
+            Welcome success = new Welcome(org.daemoxcp.mail.i18n.I18n.tr("console.info"), org.daemoxcp.mail.i18n.I18n.tr("console.dbReady"));
             success.show(gui);
         }
 
@@ -562,7 +566,7 @@ public class Main {
         // Se l'ultima reinstallazione completa non e' finita, lo si dice appena il menu si apre, con le
         // due strade: la voce 6 (il server di prima) o la 4 (rifarla).
         String unfinished = reinstallAttention();
-        if (!unfinished.isEmpty()) new Welcome("Attention", unfinished).show(gui);
+        if (!unfinished.isEmpty()) new Welcome(org.daemoxcp.mail.i18n.I18n.tr("console.attention"), unfinished).show(gui);
 
         // Main loop
         if (dbManager.check_tables() > 0) {
@@ -584,14 +588,14 @@ public class Main {
                     case 1: {
                         // Fuso orario, NTP e DNS. Il fuso lo sceglie chi installa (reperto 242): prima era sempre
                         // Europe/Rome. Si propone quello che il sistema ha gia', e un nome sbagliato non parte.
-                        String zone = showTextInputDialogWithDefault(gui, "Time zone",
-                                "The server's time zone (IANA name, e.g. Europe/Rome, Europe/London, UTC):",
+                        String zone = showTextInputDialogWithDefault(gui, org.daemoxcp.mail.i18n.I18n.tr("console.tz.title"),
+                                org.daemoxcp.mail.i18n.I18n.tr("console.tz.ask"),
                                 org.daemoxcp.mail.system.SystemTimeZone.current());
                         if (zone == null) break;
                         zone = zone.trim();
                         String zoneProblem = org.daemoxcp.mail.system.SystemTimeZone.problem(zone);
                         if (zoneProblem != null) {
-                            new com.googlecode.lanterna.gui2.dialogs.MessageDialogBuilder().setTitle("Time zone").setText(zoneProblem)
+                            new com.googlecode.lanterna.gui2.dialogs.MessageDialogBuilder().setTitle(org.daemoxcp.mail.i18n.I18n.tr("console.tz.title")).setText(zoneProblem)
                                     .addButton(MessageDialogButton.OK).build().showDialog(gui);
                             break;
                         }
@@ -667,12 +671,12 @@ public class Main {
         SetTimeOnSystemScript timezoneScript = new SetTimeOnSystemScript();
         timezoneScript.write_file();
         if (!timezoneScript.writed)
-            new Welcome("Attention", "Cannot write install_scripts/setup_timezone_and_dns.sh: see the panel log.").show(gui);
+            new Welcome(org.daemoxcp.mail.i18n.I18n.tr("console.attention"), org.daemoxcp.mail.i18n.I18n.tr("console.cannotWriteScript", java.util.Map.of("script", "install_scripts/setup_timezone_and_dns.sh"))).show(gui);
 
         FullMailServerScript mailServerScript = new FullMailServerScript();
         mailServerScript.write_file();
         if (!mailServerScript.writed)
-            new Welcome("Attention", "Cannot write install_scripts/install_mail_server.sh: see the panel log.").show(gui);
+            new Welcome(org.daemoxcp.mail.i18n.I18n.tr("console.attention"), org.daemoxcp.mail.i18n.I18n.tr("console.cannotWriteScript", java.util.Map.of("script", "install_scripts/install_mail_server.sh"))).show(gui);
     }
 
     /**
@@ -685,7 +689,7 @@ public class Main {
         String failedLog = org.daemoxcp.mail.system.ReinstallJob.lastFailedAfterChanges();
         if (!interrupted && failedLog.isEmpty()) return "";
         String wayBack = org.daemoxcp.mail.system.ReinstallReturn.latest();
-        org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+        org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
         try {
             return org.daemoxcp.mail.i18n.I18n.tr("server.wayBack.menuAttention", java.util.Map.of(
                     "log", failedLog.isEmpty() ? "-" : failedLog,
@@ -703,13 +707,13 @@ public class Main {
     private static void goBackFromMenu(Screen screen, MultiWindowTextGUI gui) {
         String name = org.daemoxcp.mail.system.ReinstallReturn.latest();
         if (name.isEmpty()) {
-            org.daemoxcp.mail.i18n.I18n.setCurrent("en");
-            try { new Welcome("Go back", org.daemoxcp.mail.i18n.I18n.tr("server.wayBack.none")).show(gui); }
+            org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
+            try { new Welcome(org.daemoxcp.mail.i18n.I18n.tr("console.menu.backTitle"), org.daemoxcp.mail.i18n.I18n.tr("server.wayBack.none")).show(gui); }
             finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
             return;
         }
         try { screen.stopScreen(); } catch (IOException e) { throw new RuntimeException(e); }
-        org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+        org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
         try {
             System.out.println(ANSI_CYAN + "[WAY BACK] " + name + ANSI_RESET);
             JSONObjectHolder.last = org.daemoxcp.mail.system.ReinstallReturn.goBack(name,
@@ -767,11 +771,11 @@ public class Main {
         String defaultValue = (savedHostname != null && !savedHostname.trim().isEmpty())
                 ? savedHostname : "mail.example.com";
 
-        String mailHostname = showTextInputDialogWithDefault(gui, "Mail Server Hostname",
-                "Enter the mail server hostname:", defaultValue);
+        String mailHostname = showTextInputDialogWithDefault(gui, org.daemoxcp.mail.i18n.I18n.tr("console.install.hostTitle"),
+                org.daemoxcp.mail.i18n.I18n.tr("console.install.hostAsk"), defaultValue);
 
         if (mailHostname == null || mailHostname.trim().isEmpty()) {
-            Welcome cancelled = new Welcome("Cancelled", "Installation cancelled - no hostname provided");
+            Welcome cancelled = new Welcome(org.daemoxcp.mail.i18n.I18n.tr("console.install.cancelledTitle"), org.daemoxcp.mail.i18n.I18n.tr("console.install.cancelled"));
             cancelled.show(gui);
             return;
         }
@@ -781,14 +785,14 @@ public class Main {
         org.daemoxcp.mail.system.InstallNames.Result names = org.daemoxcp.mail.system.InstallNames.check(
                 mailHostname.trim(), dbManager.getRoundcubeDomain(), savedPanelHost());
         if (!names.problems().isEmpty()) {
-            new com.googlecode.lanterna.gui2.dialogs.MessageDialogBuilder().setTitle("Before installing")
-                    .setText("The installation does not start:\n\n- " + String.join("\n- ", names.problems()))
+            new com.googlecode.lanterna.gui2.dialogs.MessageDialogBuilder().setTitle(org.daemoxcp.mail.i18n.I18n.tr("console.install.beforeTitle"))
+                    .setText(org.daemoxcp.mail.i18n.I18n.tr("console.install.notStarting") + "\n\n- " + String.join("\n- ", names.problems()))
                     .addButton(MessageDialogButton.OK).build().showDialog(gui);
             return;
         }
         if (!names.warnings().isEmpty()) {
-            MessageDialogButton go = new com.googlecode.lanterna.gui2.dialogs.MessageDialogBuilder().setTitle("Before installing")
-                    .setText("- " + String.join("\n- ", names.warnings()) + "\n\nInstall anyway?")
+            MessageDialogButton go = new com.googlecode.lanterna.gui2.dialogs.MessageDialogBuilder().setTitle(org.daemoxcp.mail.i18n.I18n.tr("console.install.beforeTitle"))
+                    .setText("- " + String.join("\n- ", names.warnings()) + "\n\n" + org.daemoxcp.mail.i18n.I18n.tr("console.install.anyway"))
                     .addButton(MessageDialogButton.Cancel).addButton(MessageDialogButton.OK).build().showDialog(gui);
             if (go != MessageDialogButton.OK) return;
         }
@@ -837,7 +841,7 @@ public class Main {
         org.daemoxcp.mail.system.PackageWayBack.Prepared[] wayBack = {null};
         java.util.function.Consumer<String> wayBackLog =
                 line -> { if (!line.isEmpty()) System.out.println(ANSI_CYAN + "[WAY BACK] " + line + ANSI_RESET); };
-        org.daemoxcp.mail.i18n.I18n.setCurrent("en");   // la console e' in inglese
+        org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
         try {
             start = InstallLocks.prepare(org.daemoxcp.mail.i18n.I18n.tr("server.reinstall.turn"), () -> {
                 try {
@@ -855,7 +859,7 @@ public class Main {
         finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
         if (start.refusal() != null) {
             System.out.println(ANSI_RED + "[STOPPED] " + start.refusal() + ANSI_RESET);
-            org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+            org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
             try { System.out.println(ANSI_RED + org.daemoxcp.mail.i18n.I18n.tr("server.reinstall.notStarted") + ANSI_RESET); }
             finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
             System.out.flush();
@@ -868,7 +872,7 @@ public class Main {
             success = installOnTurn(mailHostname, systemTouched);
         } finally {
             String back;
-            org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+            org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
             try { back = InstallLocks.finish(start.held()); }
             finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
             if (!back.isEmpty()) {
@@ -877,7 +881,7 @@ public class Main {
             }
             // Dopo la riprotezione: il boot environment resta se lo script ha cominciato a cambiare
             // il sistema, si toglie se si e' fermato prima.
-            org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+            org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
             try { org.daemoxcp.mail.system.PackageWayBack.afterInstallation(wayBackLog, wayBack[0], systemTouched.get()); }
             catch (RuntimeException e) { System.out.println(ANSI_YELLOW + "[WAY BACK] " + e.getMessage() + ANSI_RESET); }
             finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
@@ -932,7 +936,7 @@ public class Main {
                 org.daemoxcp.mail.system.PendingDbPassword.panelStore(dbManager);
         org.daemoxcp.mail.system.PendingDbPassword.Probe mysqlProbe =
                 org.daemoxcp.mail.system.PendingDbPassword.mysqlProbe(mysqlHost, mysqlPort, mysqlUser);
-        org.daemoxcp.mail.i18n.I18n.setCurrent("en");   // la console e' in inglese
+        org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
         try {
             org.daemoxcp.mail.system.PendingDbPassword.Prepared prepared =
                     org.daemoxcp.mail.system.PendingDbPassword.prepare(passwordStore, mysqlProbe, mysqlUser);
@@ -1038,7 +1042,7 @@ public class Main {
         // Quale password conosce MySQL adesso: lo dice MySQL, non il codice d'uscita. Uno script
         // fallito dopo la fase 3 ha gia' dato a MySQL (e a Postfix e Dovecot) la password nuova;
         // uno fermato prima no. Il turno dei pacchetti e' ancora nostro (runInstallation).
-        org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+        org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
         try {
             org.daemoxcp.mail.system.PendingDbPassword.Result decided =
                     org.daemoxcp.mail.system.PendingDbPassword.settle(passwordStore, mysqlProbe, mysqlUser);
@@ -1093,7 +1097,7 @@ public class Main {
             // Le utenze del pannello se ne vanno con le tabelle (lo script le ricrea vuote): chi ha
             // reinstallato deve sapere che il pannello web non fa entrare nessuno finche' non crea il
             // primo amministratore dalla console.
-            org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+            org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
             try {
                 System.out.println(ANSI_YELLOW + "[PANEL] " + org.daemoxcp.mail.i18n.I18n.tr("server.reinstall.accountsDeleted") + ANSI_RESET);
             } finally {
@@ -1670,32 +1674,31 @@ public class Main {
      */
     public static int createFirstAdmin(String username, String email, java.io.PrintStream out, java.io.PrintStream err) {
         if (!org.daemoxcp.mail.webserver.SecurityUtils.isValidUsername(username)) {
-            err.println("Invalid name: 3 to 50 characters among unaccented letters, digits, hyphen and underscore.");
+            err.println(org.daemoxcp.mail.i18n.I18n.tr("console.admin.badName"));
             return 2;
         }
         if (!org.daemoxcp.mail.security.LoginCodes.validEmail(email)) {
-            err.println("Invalid email address: ASCII characters only, at most 254.");
+            err.println(org.daemoxcp.mail.i18n.I18n.tr("console.admin.badEmail"));
             return 2;
         }
         try {
             mailDatabase.createSchema();
             org.daemoxcp.mail.security.AuthStore.migrate();
         } catch (Exception e) {
-            err.println("Cannot prepare the panel tables: " + e.getMessage());
+            err.println(org.daemoxcp.mail.i18n.I18n.tr("console.admin.tablesFailed", java.util.Map.of("e", String.valueOf(e.getMessage()))));
             return 2;
         }
         if (mailDatabase.hasAdminUser()) {
-            err.println("There is already an administrator. Add the others from the Administrators page; "
-                    + "if nobody can sign in, get a one-time code with --access-code [name].");
+            err.println(org.daemoxcp.mail.i18n.I18n.tr("console.admin.exists"));
             return 2;
         }
         org.daemoxcp.mail.security.AuthStore.Created created =
                 org.daemoxcp.mail.security.AuthStore.createAdmin(username, email, "superadmin");
         if (created.result() != org.daemoxcp.mail.security.AuthStore.CreateResult.CREATED) {
             err.println(switch (created.result()) {
-                case NAME_TAKEN -> "A deactivated administrator already has this name: choose another one.";
-                case EMAIL_TAKEN -> "A deactivated administrator already has this email: choose another one.";
-                default -> "The administrator was not created: the details are in the panel log.";
+                case NAME_TAKEN -> org.daemoxcp.mail.i18n.I18n.tr("console.admin.nameTaken");
+                case EMAIL_TAKEN -> org.daemoxcp.mail.i18n.I18n.tr("console.admin.emailTaken");
+                default -> org.daemoxcp.mail.i18n.I18n.tr("console.admin.notCreated");
             });
             return 2;
         }
@@ -1706,9 +1709,9 @@ public class Main {
         org.daemoxcp.mail.security.AuthStore.Admin admin =
                 org.daemoxcp.mail.security.AuthStore.adminById(created.id()).orElseThrow();
         String code = org.daemoxcp.mail.security.LoginCodes.issueConsoleCode(admin);
-        out.println("Administrator " + username + " created (superadmin), sign-in email " + email + ".");
-        out.println("One-time access code for " + username + ": " + code.substring(0, 4) + " " + code.substring(4));
-        out.println("Valid for 15 minutes, once. On the login page choose \"Code from the server console\", then register a passkey.");
+        out.println(org.daemoxcp.mail.i18n.I18n.tr("console.admin.created", java.util.Map.of("name", username, "email", email)));
+        out.println(org.daemoxcp.mail.i18n.I18n.tr("console.code.line", java.util.Map.of("name", username, "code", code.substring(0, 4) + " " + code.substring(4))));
+        out.println(org.daemoxcp.mail.i18n.I18n.tr("console.code.useFirst", java.util.Map.of("link", org.daemoxcp.mail.i18n.I18n.tr("login.consoleLink"))));
         return 0;
     }
 
@@ -1738,19 +1741,61 @@ public class Main {
     static String connectFromConfig() {
         try (ResultSet result = dbManager.get_data_config()) {
             if (!result.next())
-                return "The panel is not configured yet: install the mail server from the menu first.";
-            mailDatabase = new MailDatabase();
-            mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // rilegge la password a ogni ricollegamento
-            mailDatabase.setCredentials(result.getString("mysql_user"), dbManager.mysqlPassword());
-            mailDatabase.setHost(result.getString("mysql_host"));
-            mailDatabase.setPort(Integer.parseInt(result.getString("mysql_port")));
-            mailDatabase.setDatabase(result.getString("mysql_database"));
+                return org.daemoxcp.mail.i18n.I18n.tr("console.notConfigured");
+            mailDatabase = configuredMailDatabase(result);
         } catch (Exception e) {
-            return "Cannot read the panel configuration: " + e.getMessage();
+            return org.daemoxcp.mail.i18n.I18n.tr("console.configUnreadable", java.util.Map.of("e", String.valueOf(e.getMessage())));
         }
-        if (!mailDatabase.connect()) return "MySQL does not answer: start it and try again.";
+        if (!mailDatabase.connect()) return org.daemoxcp.mail.i18n.I18n.tr("console.mysqlDown");
         mysqlAvailable = true;
         return null;
+    }
+
+    /** La lingua della console: la sceglie chooseConsoleLanguage, una volta, all'avvio. */
+    static String consoleLanguage = "en";
+
+    /**
+     * La lingua della console (menu a schermo e comandi da riga di comando): --lang xx se c'e' e il pannello ha quella
+     * lingua; se no quella del pannello, del primo amministratore attivo che ne ha scelta una; se no l'inglese (anche
+     * su un server non ancora installato, o con MySQL fermo). Diventa la lingua del processo (I18n), cosi' ogni testo
+     * della console la segue senza passarsela.
+     */
+    static void chooseConsoleLanguage(String[] args) {
+        String asked = null;
+        for (int i = 0; i < args.length; i++) {
+            if (!"--lang".equals(args[i])) continue;
+            String v = i + 1 < args.length ? args[i + 1].trim().toLowerCase(java.util.Locale.ROOT) : "";
+            if (org.daemoxcp.mail.i18n.I18n.LANGUAGES.contains(v)) asked = v;
+            else System.err.println("--lang " + v + ": the panel has " + String.join(", ", org.daemoxcp.mail.i18n.I18n.LANGUAGES));
+        }
+        String saved = asked == null ? savedPanelLanguage() : null;
+        consoleLanguage = asked != null ? asked : saved != null ? saved : "en";
+        org.daemoxcp.mail.i18n.I18n.setProcessLanguage(consoleLanguage);
+        // Anche i pulsanti delle finestre di Lanterna (OK, Annulla, Si', No): li sceglie dalla lingua predefinita.
+        java.util.Locale.setDefault(java.util.Locale.forLanguageTag(consoleLanguage));
+    }
+
+    /** La lingua del pannello letta da MySQL con una connessione sola, chiusa subito; null se non si legge. */
+    static String savedPanelLanguage() {
+        try (ResultSet result = dbManager.get_data_config()) {
+            if (!result.next()) return null;
+            MailDatabase db = configuredMailDatabase(result);
+            if (!db.connect()) return null;
+            try { return db.getPanelLanguage(); } finally { db.close(); }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Un MailDatabase con la configurazione del pannello (la riga di SQLite), non ancora collegato. */
+    static MailDatabase configuredMailDatabase(ResultSet result) throws java.sql.SQLException {
+        MailDatabase db = new MailDatabase();
+        db.setPasswordSource(dbManager::mysqlPassword);   // rilegge la password a ogni ricollegamento
+        db.setCredentials(result.getString("mysql_user"), dbManager.mysqlPassword());
+        db.setHost(result.getString("mysql_host"));
+        db.setPort(Integer.parseInt(result.getString("mysql_port")));
+        db.setDatabase(result.getString("mysql_database"));
+        return db;
     }
 
     /** L'esito di un comando da console: il testo da mostrare e se e' riuscito. */
@@ -1767,7 +1812,7 @@ public class Main {
             mailDatabase.createSchema();
             org.daemoxcp.mail.security.AuthStore.migrate();
         } catch (Exception e) {
-            return new ConsoleResult(false, "Cannot prepare the login tables: " + e.getMessage());
+            return new ConsoleResult(false, org.daemoxcp.mail.i18n.I18n.tr("console.code.tablesFailed", java.util.Map.of("e", String.valueOf(e.getMessage()))));
         }
         java.util.List<org.daemoxcp.mail.security.AuthStore.Admin> admins = org.daemoxcp.mail.security.AuthStore.admins().stream()
                 .filter(org.daemoxcp.mail.security.AuthStore.Admin::active).toList();
@@ -1775,15 +1820,13 @@ public class Main {
                 ? org.daemoxcp.mail.security.AuthStore.adminByUsername(username)
                 : admins.size() == 1 ? java.util.Optional.of(admins.get(0)) : java.util.Optional.empty();
         if (admin.isEmpty()) {
-            return new ConsoleResult(false, username != null ? "No active administrator named " + username + "."
-                    : admins.isEmpty() ? "No administrator yet: create the first one with --create-admin <name> <email>."
-                    : "Specify the administrator: --access-code <name>. Administrators: "
-                      + admins.stream().map(org.daemoxcp.mail.security.AuthStore.Admin::username).toList());
+            return new ConsoleResult(false, username != null ? org.daemoxcp.mail.i18n.I18n.tr("console.code.noSuchAdmin", java.util.Map.of("name", username))
+                    : admins.isEmpty() ? org.daemoxcp.mail.i18n.I18n.tr("console.code.noAdmin", java.util.Map.of("cmd", "--create-admin <name> <email>"))
+                    : org.daemoxcp.mail.i18n.I18n.tr("console.code.whichAdmin", java.util.Map.of("cmd", "--access-code <name>", "names", String.join(", ", admins.stream().map(org.daemoxcp.mail.security.AuthStore.Admin::username).toList()))));
         }
         String code = org.daemoxcp.mail.security.LoginCodes.issueConsoleCode(admin.get());
-        return new ConsoleResult(true, "One-time access code for " + admin.get().username() + ": "
-                + code.substring(0, 4) + " " + code.substring(4) + "\n"
-                + "Valid for 15 minutes, once. On the login page choose \"Code from the server console\".");
+        return new ConsoleResult(true, org.daemoxcp.mail.i18n.I18n.tr("console.code.line", java.util.Map.of("name", admin.get().username(), "code", code.substring(0, 4) + " " + code.substring(4))) + "\n"
+                + org.daemoxcp.mail.i18n.I18n.tr("console.code.use", java.util.Map.of("link", org.daemoxcp.mail.i18n.I18n.tr("login.consoleLink"))));
     }
 
     /**
@@ -1791,7 +1834,7 @@ public class Main {
      * bastano. Se non c'e' ancora nessun amministratore, si crea qui il primo.
      */
     private static void emergencyAccess(MultiWindowTextGUI gui) {
-        String title = "Emergency access code";
+        String title = org.daemoxcp.mail.i18n.I18n.tr("console.menu.code");
         String notConnected = connectFromConfig();
         if (notConnected != null) {
             message(gui, title, notConnected);
@@ -1801,28 +1844,28 @@ public class Main {
             mailDatabase.createSchema();   // reperto 248, come --create-admin
             org.daemoxcp.mail.security.AuthStore.migrate();
         } catch (Exception e) {
-            message(gui, title, "Cannot prepare the login tables: " + e.getMessage());
+            message(gui, title, org.daemoxcp.mail.i18n.I18n.tr("console.code.tablesFailed", java.util.Map.of("e", String.valueOf(e.getMessage()))));
             return;
         }
         java.util.List<String> names = org.daemoxcp.mail.security.AuthStore.admins().stream()
                 .filter(org.daemoxcp.mail.security.AuthStore.Admin::active)
                 .map(org.daemoxcp.mail.security.AuthStore.Admin::username).toList();
         if (names.isEmpty()) {
-            String name = showTextInputDialog(gui, "First administrator",
-                    "No administrator yet. Name (3-50: letters, digits, - and _):");
+            String name = showTextInputDialog(gui, org.daemoxcp.mail.i18n.I18n.tr("console.admin.firstTitle"),
+                    org.daemoxcp.mail.i18n.I18n.tr("console.admin.askName"));
             if (name == null || name.isBlank()) return;
-            String email = showTextInputDialog(gui, "First administrator", "Sign-in email:");
+            String email = showTextInputDialog(gui, org.daemoxcp.mail.i18n.I18n.tr("console.admin.firstTitle"), org.daemoxcp.mail.i18n.I18n.tr("console.admin.askEmail"));
             if (email == null || email.isBlank()) return;
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
             java.io.ByteArrayOutputStream err = new java.io.ByteArrayOutputStream();
             int rc = createFirstAdmin(name.trim(), email.trim(), new java.io.PrintStream(out, true, java.nio.charset.StandardCharsets.UTF_8),
                     new java.io.PrintStream(err, true, java.nio.charset.StandardCharsets.UTF_8));
-            message(gui, "First administrator", (rc == 0 ? out : err).toString(java.nio.charset.StandardCharsets.UTF_8).trim());
+            message(gui, org.daemoxcp.mail.i18n.I18n.tr("console.admin.firstTitle"), (rc == 0 ? out : err).toString(java.nio.charset.StandardCharsets.UTF_8).trim());
             return;
         }
         String chosen = names.size() == 1 ? names.get(0)
                 : new com.googlecode.lanterna.gui2.dialogs.ListSelectDialogBuilder<String>()
-                        .setTitle(title).setDescription("Which administrator?")
+                        .setTitle(title).setDescription(org.daemoxcp.mail.i18n.I18n.tr("console.code.whichTitle"))
                         .addListItems(names.toArray(new String[0])).build().showDialog(gui);
         if (chosen == null) return;
         message(gui, title, accessCode(chosen).text());
@@ -1858,11 +1901,11 @@ public class Main {
     static int setIpFamily(String value) {
         org.daemoxcp.mail.system.IpFamily.Family f = org.daemoxcp.mail.system.IpFamily.Family.of(value);
         if (f == null) {
-            System.err.println("Usage: java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6|ipv6out");
+            System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.usage", java.util.Map.of("cmd", "java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6|ipv6out")));
             return 2;
         }
         if (!"root".equals(System.getProperty("user.name"))) {
-            System.err.println("Run it as root: it changes the configuration of Postfix, Dovecot, nginx and pf.");
+            System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.ipf.asRoot"));
             return 2;
         }
         // In console le righe INFO dei servizi toccati sono rumore: restano avvisi ed errori, e l'esito qui sotto.
@@ -1874,7 +1917,7 @@ public class Main {
             System.err.println(notConnected);
             return 2;
         }
-        org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+        org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
         try {
             org.daemoxcp.mail.system.IpFamily.Outcome o = org.daemoxcp.mail.system.IpFamily.choose(f, true, null);
             if (!o.done()) {
@@ -1884,12 +1927,12 @@ public class Main {
             mailDatabase.logAuditEvent("IP_FAMILY_CHANGED", "127.0.0.1", f.key + " (console)", "console");
             // Il firewall del pannello (liste, paesi) segue la scelta: la sua prima regola rifiuta la famiglia chiusa.
             org.daemoxcp.mail.security.PfFirewallManager.ApplyResult fw = org.daemoxcp.mail.security.PfFirewallManager.reapplySaved();
-            if (fw != null && !fw.success) System.out.println("  The panel firewall (lists, countries) was not reloaded: " + fw.message);
-            System.out.println("Done: Postfix, Dovecot, nginx and pf now answer on " + switch (f) {
-                case BOTH -> "IPv4 and IPv6.";
-                case IPV4 -> "IPv4 only.";
-                case IPV6 -> "IPv6 only.";
-                case IPV6_OUT -> "IPv4 only; mail also goes out over IPv6.";
+            if (fw != null && !fw.success) System.out.println("  " + org.daemoxcp.mail.i18n.I18n.tr("console.ipf.fwNotReloaded", java.util.Map.of("e", String.valueOf(fw.message))));
+            System.out.println(switch (f) {
+                case BOTH -> org.daemoxcp.mail.i18n.I18n.tr("console.ipf.doneBoth");
+                case IPV4 -> org.daemoxcp.mail.i18n.I18n.tr("console.ipf.doneV4");
+                case IPV6 -> org.daemoxcp.mail.i18n.I18n.tr("console.ipf.doneV6");
+                case IPV6_OUT -> org.daemoxcp.mail.i18n.I18n.tr("console.ipf.doneOut6");
             });
             for (String w : o.warnings()) System.out.println("  " + w);
             return 0;
@@ -1906,11 +1949,11 @@ public class Main {
      */
     static int addresses(String value) {
         if (value == null || !java.util.List.of("show", "ipv6-off", "ipv4-dhcp").contains(value)) {
-            System.err.println("Usage: java -jar daemoxcp-mail.jar --addresses show|ipv6-off|ipv4-dhcp");
+            System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.usage", java.util.Map.of("cmd", "java -jar daemoxcp-mail.jar --addresses show|ipv6-off|ipv4-dhcp")));
             return 2;
         }
         if (!"root".equals(System.getProperty("user.name"))) {
-            System.err.println("Run it as root: it reads and changes the network interface, the routes and /etc/rc.conf.");
+            System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.addr.asRoot"));
             return 2;
         }
         java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");
@@ -1921,18 +1964,18 @@ public class Main {
             System.err.println(notConnected);
             return 2;
         }
-        org.daemoxcp.mail.i18n.I18n.setCurrent("en");
+        org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
         try {
             if ("show".equals(value)) {
                 org.daemoxcp.mail.system.ServerAddresses.State s = org.daemoxcp.mail.system.ServerAddresses.read();
-                System.out.println("Interface: " + (s.iface() == null ? "(none found)" : s.iface()));
-                System.out.println("IPv4: " + (s.v4().addresses().isEmpty() ? "no address" : String.join(", ", s.v4().addresses()))
-                        + (s.v4().route() ? ", default route " + s.v4().gateway() : ", no default route")
-                        + (s.v4().present() ? (org.daemoxcp.mail.system.ServerAddresses.goesOut("ipv4") ? ", reaches the internet" : ", does NOT reach the internet") : ""));
-                System.out.println("IPv6: " + (s.v6().addresses().isEmpty() ? "no global address" : String.join(", ", s.v6().addresses()))
-                        + (s.v6().route() ? ", default route " + s.v6().gateway() : ", no default route")
-                        + (!s.v6().addresses().isEmpty() && s.v6().route() ? (org.daemoxcp.mail.system.ServerAddresses.goesOut("ipv6") ? ", reaches the internet" : ", does NOT reach the internet") : ""));
-                System.out.println("Mail answers on: " + org.daemoxcp.mail.system.IpFamily.effective().key);
+                System.out.println(org.daemoxcp.mail.i18n.I18n.tr("console.addr.iface", java.util.Map.of("name", s.iface() == null ? org.daemoxcp.mail.i18n.I18n.tr("console.addr.noIface") : s.iface())));
+                System.out.println("IPv4: " + (s.v4().addresses().isEmpty() ? org.daemoxcp.mail.i18n.I18n.tr("console.addr.noV4") : String.join(", ", s.v4().addresses()))
+                        + (s.v4().route() ? org.daemoxcp.mail.i18n.I18n.tr("console.addr.route", java.util.Map.of("gw", String.valueOf(s.v4().gateway()))) : org.daemoxcp.mail.i18n.I18n.tr("console.addr.noRoute"))
+                        + (s.v4().present() ? (org.daemoxcp.mail.system.ServerAddresses.goesOut("ipv4") ? org.daemoxcp.mail.i18n.I18n.tr("console.addr.out") : org.daemoxcp.mail.i18n.I18n.tr("console.addr.noOut")) : ""));
+                System.out.println("IPv6: " + (s.v6().addresses().isEmpty() ? org.daemoxcp.mail.i18n.I18n.tr("console.addr.noV6") : String.join(", ", s.v6().addresses()))
+                        + (s.v6().route() ? org.daemoxcp.mail.i18n.I18n.tr("console.addr.route", java.util.Map.of("gw", String.valueOf(s.v6().gateway()))) : org.daemoxcp.mail.i18n.I18n.tr("console.addr.noRoute"))
+                        + (!s.v6().addresses().isEmpty() && s.v6().route() ? (org.daemoxcp.mail.system.ServerAddresses.goesOut("ipv6") ? org.daemoxcp.mail.i18n.I18n.tr("console.addr.out") : org.daemoxcp.mail.i18n.I18n.tr("console.addr.noOut")) : ""));
+                System.out.println(org.daemoxcp.mail.i18n.I18n.tr("console.addr.mail", java.util.Map.of("family", org.daemoxcp.mail.system.IpFamily.effective().key)));
                 return 0;
             }
             org.daemoxcp.mail.system.ServerAddresses.Result r = "ipv6-off".equals(value)
@@ -1941,7 +1984,7 @@ public class Main {
             String event = "ipv6-off".equals(value) ? "SERVER_ADDRESSES_REMOVE_IPV6" : "SERVER_ADDRESSES_ADD_IPV4";
             mailDatabase.logAuditEvent(r.ok() ? event : event + "_FAILED", "127.0.0.1", r.journal() + " (console)", "console");
             (r.ok() ? System.out : System.err).println(org.daemoxcp.mail.i18n.I18n.tr(r.message()));
-            if (!r.journal().isEmpty()) System.out.println("Log: /var/db/daemoxcp-mail/jobs/" + r.journal());
+            if (!r.journal().isEmpty()) System.out.println(org.daemoxcp.mail.i18n.I18n.tr("console.addr.log", java.util.Map.of("path", "/var/db/daemoxcp-mail/jobs/" + r.journal())));
             return r.ok() ? 0 : 1;
         } finally {
             org.daemoxcp.mail.i18n.I18n.clearCurrent();

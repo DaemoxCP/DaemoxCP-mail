@@ -55,8 +55,8 @@ public class RoundcubeConfig {
         roundcube_ssl_key.setValidationPattern(Pattern.compile("[a-zA-Z0-9./_-]*"));
         roundcube_ssl_chain.setValidationPattern(Pattern.compile("[a-zA-Z0-9./_-]*"));
 
-        this.submitButton = new Button("Save", this::onSubmit);
-        this.exitButton = new Button("Cancel", this::onExit);
+        this.submitButton = new Button(org.daemoxcp.mail.i18n.I18n.tr("console.save"), this::onSubmit);
+        this.exitButton = new Button(org.daemoxcp.mail.i18n.I18n.tr("console.cancel"), this::onExit);
     }
 
     private void loadDataFromDatabase() {
@@ -79,7 +79,7 @@ public class RoundcubeConfig {
                 }
             }
         } catch (SQLException e) {
-            System.out.println("Error loading config: " + e.getMessage());
+            System.out.println(org.daemoxcp.mail.i18n.I18n.tr("console.cfg.loadFailed", java.util.Map.of("e", String.valueOf(e.getMessage()))));
         }
     }
 
@@ -92,23 +92,23 @@ public class RoundcubeConfig {
     }
 
     public void show(MultiWindowTextGUI gui) {
-        this.window = new BasicWindow("Roundcube Webmail Configuration");
+        this.window = new BasicWindow(org.daemoxcp.mail.i18n.I18n.tr("console.rc.title"));
 
         Panel mainPanel = new Panel(new GridLayout(1).setVerticalSpacing(1));
 
         // Info message
         Panel infoPanel = new Panel();
-        infoPanel.addComponent(new Label("Configure Roundcube webmail settings."));
-        infoPanel.addComponent(new Label("These settings are REQUIRED before installing the mail server."));
-        mainPanel.addComponent(infoPanel.withBorder(Borders.singleLine("Info")));
+        infoPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.intro")));
+        infoPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.required")));
+        mainPanel.addComponent(infoPanel.withBorder(Borders.singleLine(org.daemoxcp.mail.i18n.I18n.tr("console.info"))));
         mainPanel.addComponent(new EmptySpace(new TerminalSize(0, 1)));
 
         // Roundcube settings
-        mainPanel.addComponent(createRoundcubeForm().withBorder(Borders.singleLine("Roundcube Settings")));
+        mainPanel.addComponent(createRoundcubeForm().withBorder(Borders.singleLine(org.daemoxcp.mail.i18n.I18n.tr("console.rc.settings"))));
         mainPanel.addComponent(new EmptySpace(new TerminalSize(0, 1)));
 
         // Hints
-        mainPanel.addComponent(createHintsPanel().withBorder(Borders.singleLine("Examples")));
+        mainPanel.addComponent(createHintsPanel().withBorder(Borders.singleLine(org.daemoxcp.mail.i18n.I18n.tr("console.examples"))));
         mainPanel.addComponent(new EmptySpace(new TerminalSize(0, 1)));
 
         // Buttons
@@ -127,39 +127,39 @@ public class RoundcubeConfig {
     private Panel createRoundcubeForm() {
         Panel formPanel = new Panel(new GridLayout(2).setHorizontalSpacing(3).setVerticalSpacing(1));
 
-        formPanel.addComponent(new Label("DOMAIN:"));
+        formPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.domain")));
         formPanel.addComponent(Panels.horizontal(
                 roundcube_domain,
                 new EmptySpace(new TerminalSize(1, 1)),
-                new Button("Clear", () -> roundcube_domain.setText(""))
+                new Button(org.daemoxcp.mail.i18n.I18n.tr("console.clear"), () -> roundcube_domain.setText(""))
         ));
 
-        formPanel.addComponent(new Label("PORT:"));
+        formPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.hint.port")));
         formPanel.addComponent(Panels.horizontal(
                 roundcube_port,
                 new EmptySpace(new TerminalSize(1, 1)),
-                new Button("Clear", () -> roundcube_port.setText(""))
+                new Button(org.daemoxcp.mail.i18n.I18n.tr("console.clear"), () -> roundcube_port.setText(""))
         ));
 
-        formPanel.addComponent(new Label("SSL CERT PATH (optional):"));
+        formPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.certPath")));
         formPanel.addComponent(Panels.horizontal(
                 roundcube_ssl_cert,
                 new EmptySpace(new TerminalSize(1, 1)),
-                new Button("Clear", () -> roundcube_ssl_cert.setText(""))
+                new Button(org.daemoxcp.mail.i18n.I18n.tr("console.clear"), () -> roundcube_ssl_cert.setText(""))
         ));
 
-        formPanel.addComponent(new Label("SSL KEY PATH (optional):"));
+        formPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.keyPath")));
         formPanel.addComponent(Panels.horizontal(
                 roundcube_ssl_key,
                 new EmptySpace(new TerminalSize(1, 1)),
-                new Button("Clear", () -> roundcube_ssl_key.setText(""))
+                new Button(org.daemoxcp.mail.i18n.I18n.tr("console.clear"), () -> roundcube_ssl_key.setText(""))
         ));
 
-        formPanel.addComponent(new Label("SSL CA CHAIN (optional):"));
+        formPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.chainPath")));
         formPanel.addComponent(Panels.horizontal(
                 roundcube_ssl_chain,
                 new EmptySpace(new TerminalSize(1, 1)),
-                new Button("Clear", () -> roundcube_ssl_chain.setText(""))
+                new Button(org.daemoxcp.mail.i18n.I18n.tr("console.clear"), () -> roundcube_ssl_chain.setText(""))
         ));
 
         return formPanel;
@@ -168,17 +168,17 @@ public class RoundcubeConfig {
     private Panel createHintsPanel() {
         Panel hintsPanel = new Panel(new GridLayout(2).setHorizontalSpacing(2).setVerticalSpacing(0));
 
-        hintsPanel.addComponent(new Label("DOMAIN:"));
+        hintsPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.domain")));
         hintsPanel.addComponent(new Label("webmail.example.com, roundcube.example.com"));
 
-        hintsPanel.addComponent(new Label("PORT:"));
-        hintsPanel.addComponent(new Label("8443 (recommended), 443, 8080"));
+        hintsPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.hint.port")));
+        hintsPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.portExamples")));
 
-        hintsPanel.addComponent(new Label("SSL PATHS:"));
-        hintsPanel.addComponent(new Label("files that stay there (nginx reads them), e.g. /usr/local/etc/ssl/webmail/cert.pem"));
+        hintsPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.sslPaths")));
+        hintsPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.sslPathsHint")));
 
         hintsPanel.addComponent(new Label(""));
-        hintsPanel.addComponent(new Label("empty: the panel's certificate if set, otherwise the mail server's"));
+        hintsPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.rc.sslEmptyHint")));
 
         return hintsPanel;
     }
@@ -194,41 +194,41 @@ public class RoundcubeConfig {
 
         // Domain is required
         if (domain.isEmpty()) {
-            errors.append("- Domain is required\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.domainRequired")).append("\n");
         } else if (!HOST_PATTERN.matcher(domain).matches()) {
-            errors.append("- Domain must contain only: a-z A-Z 0-9 . -\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.domainChars")).append("\n");
         } else if (domain.equalsIgnoreCase(org.daemoxcp.mail.system.InstallNames.DEFAULT_WEBMAIL)) {
             // Il nome di fabbrica non e' un nome (reperto 244): l'installazione non partirebbe.
-            errors.append("- Write your webmail name, for example webmail.yourdomain.com (the example name is not one)\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.domainExample")).append("\n");
         }
 
         // Port is required
         if (port.isEmpty()) {
-            errors.append("- Port is required\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.portRequired")).append("\n");
         } else if (!PORT_PATTERN.matcher(port).matches()) {
-            errors.append("- Port must contain only numbers\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.portDigits")).append("\n");
         } else {
             int portNum = Integer.parseInt(port);
             if (portNum < 1 || portNum > 65535) {
-                errors.append("- Port must be between 1 and 65535\n");
+                errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.portRange")).append("\n");
             }
         }
 
         // SSL paths validation (optional but if one is provided, both needed)
         if (!sslCert.isEmpty() && !PATH_PATTERN.matcher(sslCert).matches()) {
-            errors.append("- SSL Cert path contains invalid characters\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.certChars")).append("\n");
         }
         if (!sslKey.isEmpty() && !PATH_PATTERN.matcher(sslKey).matches()) {
-            errors.append("- SSL Key path contains invalid characters\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.keyChars")).append("\n");
         }
         if (!sslCert.isEmpty() && sslKey.isEmpty()) {
-            errors.append("- SSL Key path is required when SSL Cert path is provided\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.keyNeeded")).append("\n");
         }
         if (sslCert.isEmpty() && !sslKey.isEmpty()) {
-            errors.append("- SSL Cert path is required when SSL Key path is provided\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.certNeeded")).append("\n");
         }
         if (!sslChain.isEmpty() && !PATH_PATTERN.matcher(sslChain).matches()) {
-            errors.append("- SSL CA Chain path contains invalid characters\n");
+            errors.append("- ").append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.chainChars")).append("\n");
         }
 
         // Il certificato della webmail come quello del pannello (reperto 243): i file ci sono, il certificato copre il
@@ -236,7 +236,7 @@ public class RoundcubeConfig {
         certCheck = null;
         if (errors.length() == 0 && !sslCert.isEmpty() && !sslKey.isEmpty()) {
             try {
-                certCheck = org.daemoxcp.mail.security.PemTls.check("webmail name", domain,
+                certCheck = org.daemoxcp.mail.security.PemTls.check("webmail", domain,
                         org.daemoxcp.mail.security.PemTls.readFile(java.nio.file.Path.of(sslCert)),
                         org.daemoxcp.mail.security.PemTls.readFile(java.nio.file.Path.of(sslKey)), java.time.Instant.now());
                 for (String e : certCheck.errors()) errors.append("- ").append(e).append("\n");
@@ -255,30 +255,30 @@ public class RoundcubeConfig {
         if (validationErrors != null) {
             MessageDialog.showMessageDialog(
                     this.gui,
-                    "Validation Error",
-                    "Please fix the following errors:\n\n" + validationErrors,
+                    org.daemoxcp.mail.i18n.I18n.tr("console.invalidTitle"),
+                    org.daemoxcp.mail.i18n.I18n.tr("console.invalidText") + "\n\n" + validationErrors,
                     MessageDialogButton.OK
             );
             return;
         }
 
         StringBuilder message = new StringBuilder();
-        message.append("Domain: ").append(roundcube_domain.getText()).append("\n");
-        message.append("Port: ").append(roundcube_port.getText()).append("\n");
+        message.append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.domain")).append(" ").append(roundcube_domain.getText()).append("\n");
+        message.append(org.daemoxcp.mail.i18n.I18n.tr("console.hint.port")).append(" ").append(roundcube_port.getText()).append("\n");
         if (!roundcube_ssl_cert.getText().trim().isEmpty()) {
-            message.append("SSL: these files (they must stay there)\n");
+            message.append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.sslTheseFiles")).append("\n");
             if (certCheck != null) {
                 for (String line : certCheck.info()) message.append(line).append("\n");
-                for (String w : certCheck.warnings()) message.append("WARNING: ").append(w).append("\n");
+                for (String w : certCheck.warnings()) message.append(org.daemoxcp.mail.i18n.I18n.tr("console.warning")).append(" ").append(w).append("\n");
             }
         } else {
-            message.append("SSL: the panel's certificate if one is set, otherwise the mail server's\n");
+            message.append(org.daemoxcp.mail.i18n.I18n.tr("console.rc.sslDefault")).append("\n");
         }
 
         MessageDialogButton result = MessageDialog.showMessageDialog(
                 this.gui,
-                "Confirm Changes",
-                "Save Roundcube configuration?\n\n" + message.toString(),
+                org.daemoxcp.mail.i18n.I18n.tr("console.confirmTitle"),
+                org.daemoxcp.mail.i18n.I18n.tr("console.rc.confirmSave") + "\n\n" + message.toString(),
                 MessageDialogButton.Cancel,
                 MessageDialogButton.OK
         );
@@ -287,17 +287,16 @@ public class RoundcubeConfig {
             if (saveDataToDatabase()) {
                 MessageDialog.showMessageDialog(
                         this.gui,
-                        "Saved",
-                        "Roundcube configuration saved successfully.\n\n" +
-                        "Webmail URL: https://" + roundcube_domain.getText() + ":" + roundcube_port.getText(),
+                        org.daemoxcp.mail.i18n.I18n.tr("console.savedTitle"),
+                        org.daemoxcp.mail.i18n.I18n.tr("console.rc.saved", java.util.Map.of("url", "https://" + roundcube_domain.getText() + ":" + roundcube_port.getText())),
                         MessageDialogButton.OK
                 );
                 window.close();
             } else {
                 MessageDialog.showMessageDialog(
                         this.gui,
-                        "Error",
-                        "Failed to save configuration.",
+                        org.daemoxcp.mail.i18n.I18n.tr("console.errorTitle"),
+                        org.daemoxcp.mail.i18n.I18n.tr("console.rc.saveFailed"),
                         MessageDialogButton.OK
                 );
             }
@@ -307,8 +306,8 @@ public class RoundcubeConfig {
     private void onExit() {
         MessageDialogButton result = MessageDialog.showMessageDialog(
                 this.gui,
-                "Confirm Exit",
-                "Exit without saving?",
+                org.daemoxcp.mail.i18n.I18n.tr("console.exitTitle"),
+                org.daemoxcp.mail.i18n.I18n.tr("console.rc.exitText"),
                 MessageDialogButton.Cancel,
                 MessageDialogButton.OK
         );

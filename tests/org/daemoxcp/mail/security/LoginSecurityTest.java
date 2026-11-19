@@ -428,6 +428,8 @@ public class LoginSecurityTest {
 
     static void firstAdmin(MailDatabase db) throws Exception {
         System.out.println("\n== The first administrator, from the console (--create-admin) ==");
+        // The console speaks the panel's language (Main.chooseConsoleLanguage): here its English is read.
+        org.daemoxcp.mail.i18n.I18n.setProcessLanguage("en");
         db.dropAllTables();
         Main.mysqlAvailable = true;
         Main.setupRequired = true;

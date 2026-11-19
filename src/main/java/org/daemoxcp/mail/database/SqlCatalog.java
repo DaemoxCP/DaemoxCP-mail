@@ -318,6 +318,9 @@ public final class SqlCatalog {
     /** MailDatabase.getAdminLanguage */
     public static final String MAIL_GET_ADMIN_LANGUAGE = "SELECT language FROM panel_admin WHERE username = ?";
 
+    /** MailDatabase.getPanelLanguage: la lingua della console, quella del primo amministratore attivo che ne ha scelta una. */
+    public static final String MAIL_GET_PANEL_LANGUAGE = "SELECT language FROM panel_admin WHERE language IS NOT NULL AND active = TRUE ORDER BY id LIMIT 1";
+
     /** MailDatabase.setAdminLanguage */
     public static final String MAIL_SET_ADMIN_LANGUAGE = "UPDATE panel_admin SET language = ? WHERE username = ?";
 

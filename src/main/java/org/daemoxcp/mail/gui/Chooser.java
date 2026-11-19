@@ -34,7 +34,7 @@ public class Chooser {
     public int option = -1;
 
     public Chooser() {
-        this.window = new BasicWindow(org.daemoxcp.mail.i18n.I18n.tr("brand.name") + " - Select an option");
+        this.window = new BasicWindow(org.daemoxcp.mail.i18n.I18n.tr("brand.name") + " - " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.choose"));
     }
 
     public void run(MultiWindowTextGUI gui) throws IOException {
@@ -51,9 +51,7 @@ public class Chooser {
      * (amministratori, passkey, sessioni): si cancellano, deciso dal committente il 07/11/2026.
      */
     private static String reinstallWarning() {
-        org.daemoxcp.mail.i18n.I18n.setCurrent("en");
-        try { return org.daemoxcp.mail.i18n.I18n.tr("server.reinstall.menuWarning"); }
-        finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
+        return org.daemoxcp.mail.i18n.I18n.tr("server.reinstall.menuWarning");   // nella lingua della console
     }
 
     /**
@@ -84,42 +82,32 @@ public class Chooser {
 
         Panel selectionPanel = new Panel();
         selectionPanel.setLayoutManager(new LinearLayout(Direction.VERTICAL));
-        selectionPanel.addComponent(new Label("Select an option:"));
+        selectionPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.menu.chooseLabel")));
 
         ActionListBox actionListBox = new ActionListBox();
 
         // ============== SYSTEM CONFIGURATION ==============
-        actionListBox.addItem("1) Time zone, clock (NTP) and DNS resolver", () -> {
-            if (confirmAction("Confirm", "Set the time zone, the clock (NTP) and the DNS resolver?\n\nNext you choose the time zone.")) {
+        actionListBox.addItem("1) " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.time"), () -> {
+            if (confirmAction(org.daemoxcp.mail.i18n.I18n.tr("console.menu.confirm"), org.daemoxcp.mail.i18n.I18n.tr("console.menu.timeAsk"))) {
                 setOptionAndClose(1);
             }
         });
 
-        actionListBox.addItem("2) Edit Panel Configuration", () -> {
-            if (confirmAction("Confirm", "Edit " + org.daemoxcp.mail.system.Product.NAME + " configuration?\n\n(Port, Host, SSL settings)")) {
+        actionListBox.addItem("2) " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.panel"), () -> {
+            if (confirmAction(org.daemoxcp.mail.i18n.I18n.tr("console.menu.confirm"), org.daemoxcp.mail.i18n.I18n.tr("console.menu.panelAsk", java.util.Map.of("product", org.daemoxcp.mail.system.Product.NAME)))) {
                 setOptionAndClose(2);
             }
         });
 
-        actionListBox.addItem("3) Edit Roundcube Configuration", () -> {
-            if (confirmAction("Confirm", "Edit Roundcube webmail configuration?\n\n(Domain, Port, SSL paths)\n\nREQUIRED before installing mail server!")) {
+        actionListBox.addItem("3) " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.roundcube"), () -> {
+            if (confirmAction(org.daemoxcp.mail.i18n.I18n.tr("console.menu.confirm"), org.daemoxcp.mail.i18n.I18n.tr("console.menu.roundcubeAsk"))) {
                 setOptionAndClose(3);
             }
         });
 
         // ============== MAIL SERVER (UNIFIED) ==============
-        actionListBox.addItem("4) Install/Reinstall Mail Server", () -> {
-            if (confirmAction("Confirm Installation",
-                    "Install/Reinstall the complete Mail Server?\n\n" +
-                    "This will install:\n" +
-                    "  • Postfix (SMTP)\n" +
-                    "  • Dovecot (IMAP/POP3)\n" +
-                    "  • Rspamd (Anti-Spam)\n" +
-                    "  • ClamAV (Antivirus)\n" +
-                    "  • Roundcube (Webmail)\n" +
-                    "  • MySQL tables\n" +
-                    "  • Self-signed SSL (temporary)\n\n" +
-                    reinstallWarning())) {
+        actionListBox.addItem("4) " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.install"), () -> {
+            if (confirmAction(org.daemoxcp.mail.i18n.I18n.tr("console.menu.installTitle"), org.daemoxcp.mail.i18n.I18n.tr("console.menu.installAsk") + "\n\n" + reinstallWarning())) {
                 setOptionAndClose(4);
             }
         });
@@ -127,21 +115,16 @@ public class Chooser {
         // ============== ACCESS ==============
         // Il codice di accesso di emergenza, per quando passkey ed email non bastano: si genera
         // solo da qui (o con --access-code), cioe' da chi ha accesso al server.
-        actionListBox.addItem("5) Emergency access code", () -> setOptionAndClose(5));
-        actionListBox.addItem("6) Go back to the server before the last reinstallation", () -> {
-            if (confirmAction("Go back",
-                    "Go back to the server as it was before the last\n" +
-                    "complete reinstallation (its way back)?\n\n" +
-                    "The mail that arrived after it is kept.\n" +
-                    "The MySQL database goes back to then.\n" +
-                    "The server must restart: you choose when.")) {
+        actionListBox.addItem("5) " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.code"), () -> setOptionAndClose(5));
+        actionListBox.addItem("6) " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.back"), () -> {
+            if (confirmAction(org.daemoxcp.mail.i18n.I18n.tr("console.menu.backTitle"), org.daemoxcp.mail.i18n.I18n.tr("console.menu.backAsk"))) {
                 setOptionAndClose(6);
             }
         });
 
         // ============== START SERVER ==============
-        actionListBox.addItem(">>> Start " + org.daemoxcp.mail.system.Product.NAME + " web server <<<", () -> {
-            if (confirmAction("Start WebServer", "Start the " + org.daemoxcp.mail.system.Product.NAME + " web server?")) {
+        actionListBox.addItem(">>> " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.start", java.util.Map.of("product", org.daemoxcp.mail.system.Product.NAME)) + " <<<", () -> {
+            if (confirmAction(org.daemoxcp.mail.i18n.I18n.tr("console.menu.startTitle"), org.daemoxcp.mail.i18n.I18n.tr("console.menu.startAsk", java.util.Map.of("product", org.daemoxcp.mail.system.Product.NAME)))) {
                 setOptionAndClose(100);
             }
         });
@@ -156,10 +139,10 @@ public class Chooser {
 
         selectionPanel.addComponent(actionListBox);
 
-        mainPanel.addComponent(selectionPanel.withBorder(Borders.singleLine("Options")));
+        mainPanel.addComponent(selectionPanel.withBorder(Borders.singleLine(org.daemoxcp.mail.i18n.I18n.tr("console.menu.options"))));
         mainPanel.addComponent(new EmptySpace(TerminalSize.ONE));
 
-        Button exitButton = new Button("Exit", () -> setOptionAndClose(0));
+        Button exitButton = new Button(org.daemoxcp.mail.i18n.I18n.tr("console.exit"), () -> setOptionAndClose(0));
         exitButton.setLayoutData(GridLayout.createLayoutData(
                 GridLayout.Alignment.CENTER,
                 GridLayout.Alignment.CENTER,

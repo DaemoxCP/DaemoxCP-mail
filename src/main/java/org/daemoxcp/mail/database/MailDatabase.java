@@ -550,6 +550,23 @@ public class MailDatabase {
         return null;
     }
 
+    /**
+     * La lingua della console (menu a schermo e comandi): quella del primo amministratore attivo che ne ha scelta una,
+     * o null se nessuno l'ha scelta. La console non ha una sessione: parla la lingua di chi ha installato il pannello.
+     */
+    public String getPanelLanguage() {
+        try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_PANEL_LANGUAGE);
+             ResultSet rs = stmt.executeQuery()) {
+            if (rs.next()) {
+                String lang = rs.getString("language");
+                return lang != null && org.daemoxcp.mail.i18n.I18n.LANGUAGES.contains(lang) ? lang : null;
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Cannot read the panel language", e);
+        }
+        return null;
+    }
+
     /** Salva la lingua dell'amministratore: solo una delle lingue del pannello (I18n.LANGUAGES). */
     public boolean setAdminLanguage(String username, String lang) {
         if (username == null || lang == null || !org.daemoxcp.mail.i18n.I18n.LANGUAGES.contains(lang)) return false;

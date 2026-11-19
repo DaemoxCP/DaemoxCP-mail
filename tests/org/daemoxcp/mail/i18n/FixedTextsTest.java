@@ -23,6 +23,8 @@ import java.util.stream.Stream;
  *     error page with a fixed text (sendJsonError), are not allowed; short codes (too_large) that the page translates
  *     are.
  *  5. The checks can fail: each one finds the fixed text in a small sample made wrong on purpose.
+ *  6. The console (Main and gui/*: the on-screen menu, its windows, and the commands' answers): a window, a label, a
+ *     button, a title, a menu item or a dialog never has a fixed text; the console speaks the panel's language.
  *
  * Logs, operation journals and the output of other programs are not checked: they stay in English, the same for
  * everyone (decided on 19/11/2026). A text that is really technical goes in the lists below, with nothing else.
@@ -174,6 +176,24 @@ public class FixedTextsTest {
         return out;
     }
 
+    // ---------- 6. the console ----------
+
+    /** A text given to the on-screen menu (Lanterna) or as a command's answer, written as a fixed string. */
+    static final Pattern CONSOLE_TEXT = Pattern.compile("(new (Label|Button|BasicWindow|Welcome)\\(|Borders\\.(singleLine|doubleLine)\\(|"
+            + "\\.set(Title|Text|Description)\\(|showTextInputDialog(WithDefault)?\\(gui,\\s*|addItem\\(|new ConsoleResult\\((true|false),\\s*|"
+            + "message\\(gui,\\s*(title,\\s*)?)\"([^\"]*)\"");
+    static final Set<String> CONSOLE_EXAMPLES = Set.of("webmail.example.com, roundcube.example.com");
+
+    static List<String> consoleTexts(String file, String src) {
+        List<String> out = new ArrayList<>();
+        Matcher m = CONSOLE_TEXT.matcher(src);
+        while (m.find()) {
+            String text = m.group(m.groupCount());
+            if (WORD.matcher(text).find() && !CONSOLE_EXAMPLES.contains(text)) out.add(text + "\t" + file + ":" + line(src, m.start()));
+        }
+        return out;
+    }
+
     static int line(String src, int at) {
         int n = 1;
         for (int i = 0; i < at; i++) if (src.charAt(i) == '\n') n++;
@@ -215,6 +235,9 @@ public class FixedTextsTest {
                 unknown(scriptTexts("x", "el.textContent = 'Entropy: none yet';\nel.textContent = t('pw.entropyNone');\n"
                         + "document.querySelector('#a .b c');\n", false), TECHNICAL_SCRIPT_TEXT).size() == 1);
         check("a fixed attribute is found", unknown(attributes("x", "<input placeholder=\"mario rossi\">"), EXAMPLE_VALUES).size() == 1);
+        check("a fixed text in a console window, label or menu item is found, a translated one is not",
+                consoleTexts("x", "new Label(\"Panel Settings\"); new Button(I18n.tr(\"console.save\"), x); actionListBox.addItem(\"1) \" + a, b);"
+                        + " new Welcome(\"Information\", text);").size() == 2);
         check("a fixed answer of the server is found, a code is not",
                 answers("x", "r.put(\"error\", \"Unknown action\"); r.put(\"error\", \"too_large\");"
                         + " sendJsonError(exchange, 400, \"Bad request\");").size() == 2);
@@ -252,6 +275,14 @@ public class FixedTextsTest {
         List<String> shown = new ArrayList<>();
         for (String f : ans) shown.add(f.replace('\t', ' '));
         check("no answer of the server is a fixed sentence" + show(shown), ans.isEmpty());
+
+        System.out.println("\n== 6. The console ==");
+        List<String> console = new ArrayList<>();
+        console.addAll(consoleTexts("Main.java", Files.readString(Path.of("src/main/java/org/daemoxcp/mail/Main.java"))));
+        for (Path p : files("src/main/java/org/daemoxcp/mail/gui", ".java")) console.addAll(consoleTexts(p.getFileName().toString(), Files.readString(p)));
+        List<String> c = new ArrayList<>();
+        for (String f : console) c.add(f.replace('\t', ' '));
+        check("every window, label, button, title and menu item of the console comes from the language files" + show(c), console.isEmpty());
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         System.exit(failed == 0 ? 0 : 1);

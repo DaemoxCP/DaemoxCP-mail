@@ -190,38 +190,39 @@ public final class PemTls {
      * chiave e' proprio la sua (una firma fatta con la chiave si verifica con la chiave pubblica del certificato).
      */
     public static Check check(String host, String certPem, String keyPem, Instant now) {
-        return check("panel name", host, certPem, keyPem, now);
+        return check("panel", host, certPem, keyPem, now);
     }
 
-    /** Lo stesso controllo per un altro nome (whose: «webmail name»), detto nei messaggi. */
+    /** Lo stesso controllo per un altro nome (whose: «panel» o «webmail»), detto nei messaggi nella lingua della console. */
     public static Check check(String whose, String host, String certPem, String keyPem, Instant now) {
         List<String> errors = new ArrayList<>(), warnings = new ArrayList<>(), info = new ArrayList<>();
         List<X509Certificate> chain;
         try {
             chain = certificates(certPem);
         } catch (Exception e) {
-            errors.add("The certificate cannot be read: it must be PEM (-----BEGIN CERTIFICATE-----).");
+            errors.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.unreadable"));
             return new Check(errors, warnings, info);
         }
         X509Certificate leaf = chain.get(0);
         List<String> names = names(leaf);
-        info.add("Certificate for: " + String.join(", ", names));
-        info.add("Issued by: " + leaf.getIssuerX500Principal().getName());
-        info.add("Valid until: " + leaf.getNotAfter().toInstant().toString().substring(0, 10) + " (UTC)");
-        if (now.isAfter(leaf.getNotAfter().toInstant())) errors.add("The certificate has expired.");
+        String what = "webmail".equals(whose) ? org.daemoxcp.mail.i18n.I18n.tr("console.tls.webmailName") : org.daemoxcp.mail.i18n.I18n.tr("console.tls.panelName");
+        info.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.for", java.util.Map.of("names", String.join(", ", names))));
+        info.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.issuer", java.util.Map.of("issuer", leaf.getIssuerX500Principal().getName())));
+        info.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.until", java.util.Map.of("date", leaf.getNotAfter().toInstant().toString().substring(0, 10))));
+        if (now.isAfter(leaf.getNotAfter().toInstant())) errors.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.expired"));
         // Dieci minuti di tolleranza: un certificato appena emesso (l'Origin Certificate di Cloudflare) comincia nel
         // secondo in cui nasce, e un orologio del server un po' indietro non lo deve rifiutare.
         if (now.plus(java.time.Duration.ofMinutes(10)).isBefore(leaf.getNotBefore().toInstant()))
-            errors.add("The certificate is not valid yet.");
+            errors.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.notYet"));
         if (dnsName(host)) {
             if (!covers(names, host))
-                errors.add("The certificate does not cover the " + whose + " " + host + ": it covers " + String.join(", ", names) + ".");
+                errors.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.notCovered", java.util.Map.of("what", what, "host", host, "names", String.join(", ", names))));
         } else {
-            warnings.add("The " + whose + " " + host + " is not a domain name: Cloudflare and the browsers need one, like "
-                    + ("panel name".equals(whose) ? "panel.example.com (passkeys too)." : "webmail.example.com."));
+            warnings.add("webmail".equals(whose) ? org.daemoxcp.mail.i18n.I18n.tr("console.tls.notDomainWebmail", java.util.Map.of("host", host))
+                    : org.daemoxcp.mail.i18n.I18n.tr("console.tls.notDomainPanel", java.util.Map.of("host", host)));
         }
         if (leaf.getIssuerX500Principal().equals(leaf.getSubjectX500Principal()))
-            warnings.add("The certificate is self-signed: browsers will warn, and Cloudflare Full (strict) refuses it.");
+            warnings.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.selfSigned"));
         try {
             PrivateKey key = privateKey(normalize(keyPem));
             String alg = "EC".equals(key.getAlgorithm()) ? "SHA256withECDSA" : "SHA256withRSA";
@@ -233,10 +234,10 @@ public final class PemTls {
             Signature v = Signature.getInstance(alg);
             v.initVerify(leaf.getPublicKey());
             v.update(probe);
-            if (v.verify(sig)) info.add("The private key belongs to the certificate.");
-            else errors.add("The private key is not the certificate's key.");
+            if (v.verify(sig)) info.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.keyMatches"));
+            else errors.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.keyOther"));
         } catch (Exception e) {
-            errors.add("The private key cannot be read, or it is not the certificate's key (" + e.getClass().getSimpleName() + ").");
+            errors.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.keyUnreadable", java.util.Map.of("why", e.getClass().getSimpleName())));
         }
         return new Check(errors, warnings, info);
     }

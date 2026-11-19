@@ -35,21 +35,18 @@ public final class InstallNames {
         String mail = lower(mailHost), webmail = lower(webmailDomain), panel = lower(panelHost);
 
         if (!PemTls.dnsName(mail))
-            problems.add("The mail server name must be a full domain name, like mail.example.com.");
+            problems.add(org.daemoxcp.mail.i18n.I18n.tr("console.names.mailNotDomain"));
         if (webmail.isEmpty() || webmail.equals(DEFAULT_WEBMAIL))
-            problems.add("Set the webmail name first, with option 3 (for example webmail.example.com on your domain).");
+            problems.add(org.daemoxcp.mail.i18n.I18n.tr("console.names.webmailFirst"));
         else if (!PemTls.dnsName(webmail))
-            problems.add("The webmail name must be a full domain name, like webmail.example.com.");
+            problems.add(org.daemoxcp.mail.i18n.I18n.tr("console.names.webmailNotDomain"));
         else if (webmail.equals(mail))
-            problems.add("The webmail name must differ from the mail server name: in Cloudflare the mail name stays"
-                    + " \"DNS only\" (mail does not go through the proxy), the webmail name goes through the proxy.");
+            problems.add(org.daemoxcp.mail.i18n.I18n.tr("console.names.webmailSameAsMail"));
 
         if (!PemTls.dnsName(panel))
-            warnings.add("The panel has no name of its own yet (" + (panel.isEmpty() ? "empty" : panel) + "): after the"
-                    + " installation set it with option 2, with its certificate (passkeys and Cloudflare need a name).");
+            warnings.add(org.daemoxcp.mail.i18n.I18n.tr("console.names.panelNoName", java.util.Map.of("name", panel.isEmpty() ? org.daemoxcp.mail.i18n.I18n.tr("console.names.empty") : panel)));
         else if (panel.equals(mail))
-            problems.add("The panel name must differ from the mail server name, for the same reason: the panel goes"
-                    + " through the Cloudflare proxy, the mail name does not.");
+            problems.add(org.daemoxcp.mail.i18n.I18n.tr("console.names.panelSameAsMail"));
         return new Result(problems, warnings);
     }
 

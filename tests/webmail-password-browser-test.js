@@ -68,7 +68,7 @@ function imap(user, password) {
         panel = await context.newPage();
         await panel.goto(BASE + '/index');
         await panel.click('#linkConsole');
-        await panel.fill('#consoleCode', code(remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null')));
+        await panel.fill('#consoleCode', code(remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --access-code 2>/dev/null')));
         await Promise.all([panel.waitForURL(u => !u.pathname.endsWith('/index'), { timeout: 30000 }), panel.click('#btnConsole')]);
         await panel.goto(BASE + '/mailboxes');
 

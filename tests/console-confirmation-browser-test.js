@@ -38,7 +38,7 @@ function portOpen(port) {
         page.on('dialog', d => d.accept());
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');
-        await page.fill('#consoleCode', code(remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null')));
+        await page.fill('#consoleCode', code(remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --access-code 2>/dev/null')));
         await Promise.all([page.waitForURL(u => !u.pathname.endsWith('/index'), { timeout: 30000 }), page.click('#btnConsole')]);
         const account = await page.evaluate(() => fetch('/api/account').then(r => r.json()));
         check('signed in with a console code (' + account.username + ', ' + (account.passkeys || []).length + ' passkeys)', account.success === true);
@@ -63,7 +63,7 @@ function portOpen(port) {
         await page.waitForSelector('#panelConfirmConsoleCode', { state: 'visible' });
         const command = (await page.locator('#panelConfirmConsoleCommand').innerText()).trim();
         check('it shows the command with the name (' + command + ')',
-            command === 'java -jar daemoxcp-mail.jar --access-code ' + account.username);
+            command === 'java -jar daemoxcp-mail.jar --lang en --access-code ' + account.username);
         check('the field has focus', await page.evaluate(() => document.activeElement && document.activeElement.id === 'panelConfirmConsoleCode'));
 
         console.log('\n== 3. A wrong code ==');

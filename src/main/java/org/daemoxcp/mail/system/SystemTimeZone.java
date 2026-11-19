@@ -51,13 +51,13 @@ public final class SystemTimeZone {
     }
 
     static String problem(String name, Path zoneinfo) {
-        if (name == null || name.isBlank()) return "Write a time zone, for example Europe/Rome or UTC.";
+        if (name == null || name.isBlank()) return org.daemoxcp.mail.i18n.I18n.tr("console.tz.empty");
         if (!NAME.matcher(name).matches())
-            return "\"" + printable(name) + "\" is not a time zone name: letters, digits, _ + - and / only, like Europe/Rome.";
+            return org.daemoxcp.mail.i18n.I18n.tr("console.tz.badName", java.util.Map.of("name", printable(name)));
         if (!ZoneId.getAvailableZoneIds().contains(name))
-            return "\"" + name + "\" is not a known time zone. Examples: Europe/Rome, Europe/London, America/New_York, UTC.";
+            return org.daemoxcp.mail.i18n.I18n.tr("console.tz.unknown", java.util.Map.of("name", name));
         if (!Files.isRegularFile(zoneinfo.resolve(name), LinkOption.NOFOLLOW_LINKS))
-            return "\"" + name + "\" is not in " + zoneinfo + " on this system.";
+            return org.daemoxcp.mail.i18n.I18n.tr("console.tz.notHere", java.util.Map.of("name", name, "dir", String.valueOf(zoneinfo)));
         return null;
     }
 

@@ -775,6 +775,16 @@ Al riavvio la lingua è nel selettore, scritta nella sua lingua (*Español*, *Fr
 pulsanti diventano un menu. Il file può essere parziale: un testo che manca si vede in inglese, poi in italiano.
 Le date nelle pagine seguono la lingua.
 
+La console (il menu a schermo e i comandi come `--access-code` o `--ip-family`) parla la lingua del pannello: quella
+scelta dal primo amministratore attivo, l'inglese se nessuno l'ha ancora scelta. `--lang it` (o `en`) la cambia per un
+comando: `java -jar daemoxcp-mail.jar --lang it --access-code`. I pulsanti delle finestre del menu vengono da Lanterna,
+che ha le sue traduzioni; quelle italiane stanno in `src/main/resources/multilang/lanterna-ui_it.properties`, e una
+lingua nuova può volere il suo file anche lì. I registri e i giornali delle operazioni restano in inglese, uguali per
+tutti.
+
+`FixedTextsTest` tiene vero tutto questo: un testo fisso in una pagina, in uno script, in un attributo, in una
+risposta del server o in una finestra della console la fa fallire.
+
 > [!NOTE]
 > Le lingue da destra a sinistra (arabo, ebraico, persiano…) vogliono una cornice che ancora non c'è:
 > `dir="rtl"`, la versione RTL di Bootstrap e le icone specchiate. Fino ad allora le prove le rifiutano.

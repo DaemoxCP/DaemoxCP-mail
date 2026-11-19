@@ -9,7 +9,7 @@ set host [lindex $argv 1]
 set dir [lindex $argv 2]
 set jar [lindex $argv 3]
 log_user 0
-spawn ssh -tt -i $key -o BatchMode=yes root@$host "cd $dir && TERM=xterm exec java -jar $jar"
+spawn ssh -tt -i $key -o BatchMode=yes root@$host "cd $dir && TERM=xterm exec java -jar $jar --lang en"
 proc step {what pattern} {
     expect {
         -re $pattern { puts "  OK   $what" }

@@ -318,10 +318,21 @@ public final class I18n {
         CURRENT.remove();
     }
 
-    /** La lingua della richiesta in corso; fuori da una richiesta (avvio, prove), l'italiano. */
+    /** La lingua del processo fuori da una richiesta: l'italiano, salvo la console, che fissa la sua (Main). */
+    private static volatile String processLanguage = SOURCE_LANGUAGE;
+
+    /**
+     * La lingua di questo processo fuori da una richiesta. La fissa una volta la console (il menu a schermo e i comandi
+     * da riga di comando, Main), con la lingua del pannello; il servizio no: le sue righe d'avvio sono registri.
+     */
+    public static void setProcessLanguage(String lang) {
+        processLanguage = normalize(lang);
+    }
+
+    /** La lingua della richiesta in corso; fuori da una richiesta, quella del processo (l'italiano, o la console). */
     public static String current() {
         String lang = CURRENT.get();
-        return lang != null ? lang : SOURCE_LANGUAGE;
+        return lang != null ? lang : processLanguage;
     }
 
     /** Un testo nella lingua della richiesta in corso. */

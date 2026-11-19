@@ -85,7 +85,7 @@ async function waitFor(fn, seconds) { for (let i = 0; i < seconds; i++) { if (fn
         page.on('pageerror', e => errors.push(e.message));
         await page.goto(BASE + '/index');
         await page.click('#linkConsole');
-        await page.fill('#consoleCode', code(remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --access-code 2>/dev/null')));
+        await page.fill('#consoleCode', code(remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --lang en --access-code 2>/dev/null')));
         await Promise.all([page.waitForURL(u => !u.pathname.endsWith('/index'), { timeout: 30000 }), page.click('#btnConsole')]);
         await page.goto(BASE + '/mailboxes');
 
