@@ -7074,7 +7074,7 @@
   "addr.openFirewall": "Apri la scheda con le regole pronte da copiare (Firewall, Il firewall del tuo provider)",
   "addr.fieldMissing": "Prima scrivi l'indirizzo IPv6 (lo trovi nella console del provider).",
   "guide.step.v6Firewall": "Il firewall del provider lascia entrare l'IPv6",
-  "guide.how.v6Firewall": "Se il provider ha un firewall davanti al server (su Hetzner: Firewalls), le porte della posta (25, 465, 587, 143, 993), la 80 e la 443 devono accettare anche Any IPv6, e la 2096 e la 8443 gli indirizzi IPv6 di Cloudflare: la scheda qui sotto ha tutte le regole pronte da copiare. Il server quel firewall non lo vede da dentro, per questo il pannello lo chiede a te. SSH: lascia la sua regola com'è (solo il tuo indirizzo); con l'IPv6 SSH si raggiunge anche in IPv6, con le stesse chiavi. Se davanti al server non c'è un firewall del provider, non devi fare niente.",
+  "guide.how.v6Firewall": "Se il provider ha un firewall davanti al server (su Hetzner: Firewalls), le porte della posta (25, 465, 587, 143, 993), la 80 e la 443 devono accettare anche Any IPv6, e la 2096 e la 8443 gli indirizzi IPv6 di Cloudflare; consigliata anche una regola ICMP con Any IPv4 e Any IPv6, per il ping e i messaggi di servizio dell'IPv6. La scheda qui sotto ha tutte le regole pronte da copiare. Il server quel firewall non lo vede da dentro, per questo il pannello lo chiede a te. SSH: lascia la sua regola com'è, col tuo IPv4; non aggiungere il tuo IPv6, perché il computer lo cambia ogni giorno. Se davanti al server non c'è un firewall del provider, non devi fare niente.",
   "guide.do.v6Firewall": "Fatto: il firewall lascia entrare l'IPv6",
   "guide.howHetzner.v6Ptr": "Su Hetzner: apri la Cloud Console, il server, la scheda Networking. Accanto all'indirizzo IPv6 premi la matita (Reverse DNS): nel campo dell'indirizzo scrivi la parte qui sotto, nel campo del nome il nome del server di posta, e salva. Senza, Gmail e Microsoft rifiutano la posta in IPv6.",
   "guide.howHetzner.v4Ptr": "Su Hetzner: apri la Cloud Console, il server, la scheda Networking. Accanto all'indirizzo IPv4 premi la matita (Reverse DNS), scrivi il nome del server di posta e salva.",
@@ -7277,7 +7277,7 @@
   "pfw.rowMail": "Posta, certificati e MTA-STS",
   "pfw.rowMailPop3": "Posta (POP3 compreso), certificati e MTA-STS",
   "pfw.rowWeb": "Pannello e webmail (attraverso Cloudflare)",
-  "pfw.srcYourIp": "Solo il tuo indirizzo IP: il tuo IPv4 come /32 e, se ce l'hai, il tuo IPv6 come /128",
+  "pfw.srcYourIp": "Solo il tuo IPv4, come /32. Non il tuo IPv6: computer e telefoni lo cambiano ogni giorno (indirizzi temporanei) e la regola smetterebbe di valere. Se a casa hai solo IPv6, metti la tua rete /64 (le prime quattro parti dell'indirizzo).",
   "pfw.srcAny": "Qualsiasi IPv4, qualsiasi IPv6",
   "pfw.srcCloudflare": "Solo gli indirizzi di Cloudflare: la lista qui sotto",
   "pfw.nothingElse.html": "Non serve nessun'altra regola in entrata. In particolare <strong>nessuna regola per la 53 (DNS) o la 123 (NTP)</strong>: il firewall di Hetzner Cloud è stateful, quindi le risposte alle domande che fa questo server tornano da sole, e una 123 aperta esporrebbe solo il servizio dell'orologio. La porta 4190 (ManageSieve) resta chiusa: la webmail ci arriva dall'interno del server.",
@@ -7329,5 +7329,10 @@
   "server.acme.stillOld": "{s} presenta ancora il certificato di prima sulla porta {p}.",
   "server.acme.serviceRefused": "{s}: la sua configurazione non passa il suo controllo, quindi non è stato ricaricato e tiene il certificato di prima ({e}).",
   "server.acme.reloadFailed": "{s}: il ricaricamento non è riuscito ({e}).",
-  "ssl.checkRunning": "Verifica in corso. Se il certificato è entro la soglia viene rinnovato adesso: Let's Encrypt controlla i record DNS di ogni nome, e ci vogliono alcuni minuti. Lascia aperta questa pagina."
+  "ssl.checkRunning": "Verifica in corso. Se il certificato è entro la soglia viene rinnovato adesso: Let's Encrypt controlla i record DNS di ogni nome, e ci vogliono alcuni minuti. Lascia aperta questa pagina.",
+  "addr.lastCheck": "Ultimo controllo: alle {time}.",
+  "addr.checkedSame": "Controllato alle {time}: ancora niente di nuovo. Se hai appena salvato, aspetta qualche minuto: il pannello continua a controllare da solo.",
+  "addr.checkedChanged": "Controllato alle {time}: è cambiato qualcosa, i passi sono aggiornati.",
+  "pfw.rowIcmp": "Ping e messaggi di servizio (ICMP), consigliata",
+  "pfw.icmpPorts": "Nessuna porta: come protocollo scegli ICMP"
 }

@@ -113,6 +113,24 @@ function said(text, key) {
             const copies = await page.$$eval('#addrSteps li[data-status=now] button[data-copy]', bs => bs.map(b => b.dataset.copy));
             check('the reverse DNS step: the address and the name ready to copy (' + copies.length + ' values), what it gives now, the automatic check',
                 copies.length >= 2 && await page.$eval('#addrSteps li[data-status=now]', li => li.querySelectorAll('p').length >= 3));
+            // «Check again» always says how it went, next to the button, and keeps the focus there. Before, with nothing
+            // changed the page was drawn again the same and said nothing: the button seemed to do nothing (seen on the
+            // real server, waiting for the reverse DNS).
+            check('the time of the last check is shown under the button', said(await page.innerText('#addrLastCheck'), 'addr.lastCheck'));
+            const outcomes = ['addr.checkedSame', 'addr.checkedChanged'].flatMap(k => ['en', 'it'].map(l => LANG[l][k].split('{')[0]));
+            await page.click('#addrSteps li[data-status=now] button[data-recheck]');
+            await page.waitForFunction(p => {
+                const e = document.getElementById('addrLastCheck');
+                return e && p.some(x => e.textContent.startsWith(x));
+            }, outcomes, { timeout: 60000 });
+            const after = await page.evaluate(() => ({
+                near: document.getElementById('addrLastCheck').textContent,
+                status: document.getElementById('addrStatus').textContent,
+                hidden: document.getElementById('addrStatus').className === 'visually-hidden',
+                focus: !!document.activeElement && document.activeElement.dataset.recheck === '1'
+            }));
+            check('«Check again» says the outcome with the time (' + after.near + '), screen readers hear it too, the focus stays on the button',
+                /\d{1,2}[:.]\d{2}[:.]\d{2}/.test(after.near) && after.status === after.near && after.hidden && after.focus);
         }
 
         console.log('\n== 1. Goal IPv6 only ==');

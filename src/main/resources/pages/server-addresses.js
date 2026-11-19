@@ -107,10 +107,26 @@
             return e;
         }
 
-        function addrSay(text, kind) {
+        // hidden: solo per gli screen reader (la riga e' un role=status sempre nella pagina), quando lo stesso esito si
+        // vede gia' accanto al pulsante che l'ha chiesto, in fondo alla scheda e lontano da qui.
+        function addrSay(text, kind, hidden) {
             const el = document.getElementById('addrStatus');
-            el.className = 'small mb-2 text-' + (kind || 'muted');
+            el.className = hidden ? 'visually-hidden' : 'small mb-2 text-' + (kind || 'muted');
             el.textContent = text || '';
+        }
+
+        // L'ora di un controllo, nella lingua del pannello, coi secondi: due controlli nello stesso minuto si
+        // distinguono, e lo screen reader legge di nuovo una frase che e' cambiata.
+        function addrTime() {
+            return new Date().toLocaleTimeString(window.I18N_LANG, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        function addrSetLast(text, cls) {
+            const el = document.getElementById('addrLastCheck');
+            if (!el) return false;
+            el.className = 'small mt-2 mb-0 ' + (cls || 'text-muted');
+            el.textContent = text;
+            return true;
         }
 
         // Si o no o «non controllato»: la parola e un'icona che non e' l'unico segnale (r9: il colore non basta).
@@ -220,7 +236,13 @@
             }
             if (step.who === 'you' || manual) {
                 box.append(addrEl('p', 'small text-muted mb-2', t('addr.recheck')));
-                box.append(addrButton(t('addr.checkAgain'), 'addrLoad()', false));
+                const again = addrButton(t('addr.checkAgain'), 'addrRecheck()', false);
+                again.dataset.recheck = '1';
+                box.append(again);
+                // Quando e' stato l'ultimo controllo, da solo o col pulsante: si vede che il pannello sta guardando.
+                const last = addrEl('p', 'small text-muted mt-2 mb-0', t('addr.lastCheck', { time: addrTime() }));
+                last.id = 'addrLastCheck';
+                box.append(last);
                 return box;
             }
             switch (step.id) {
@@ -276,7 +298,10 @@
                 addrFetchState().then(n => {
                     if (!n || !n.success) return;
                     if (JSON.stringify([n.steps, n.dns, n.state]) !== addrShown) addrRender(n);
-                    else addrSchedule(n);
+                    else {
+                        addrSetLast(t('addr.lastCheck', { time: addrTime() }));
+                        addrSchedule(n);
+                    }
                 }).catch(() => {});
             }, 30000);
         }
@@ -320,6 +345,39 @@
                 addrSay('', 'muted');
                 addrRender(d);
             }).catch(() => addrSay(t('addr.failedGeneric'), 'danger'));
+        }
+
+        // «Controlla di nuovo»: dice sempre com'e' andata, accanto al pulsante. Prima, se non era cambiato niente, la
+        // pagina si ridisegnava uguale e non diceva nulla: sembrava che il pulsante non facesse niente (visto sul server
+        // vero, aspettando il DNS inverso). Se non e' cambiato niente la pagina non si ridisegna e il fuoco resta sul
+        // pulsante; se e' cambiato, il fuoco torna sul pulsante del passo nuovo, se ce l'ha.
+        function addrRecheck() {
+            addrRechecks = 0;
+            const btn = document.querySelector('#addrSteps button[data-recheck]');
+            if (btn) btn.disabled = true;
+            addrSetLast(t('addr.loading'));
+            addrFetchState().then(d => {
+                if (!d) return;
+                if (btn) btn.disabled = false;
+                if (!d.success) {
+                    addrSetLast(d.error || t('addr.failedGeneric'), 'text-danger');
+                    addrSay(d.error || t('addr.failedGeneric'), 'danger', true);
+                    return;
+                }
+                const changed = JSON.stringify([d.steps, d.dns, d.state]) !== addrShown;
+                const time = addrTime();
+                const msg = changed ? t('addr.checkedChanged', { time: time }) : t('addr.checkedSame', { time: time });
+                if (changed) addrRender(d);
+                else addrSchedule(d);
+                const near = addrSetLast(msg, changed ? 'text-success' : 'text-muted');
+                addrSay(msg, changed ? 'success' : 'muted', near);
+                const again = document.querySelector('#addrSteps button[data-recheck]');
+                if (again) again.focus();
+            }).catch(() => {
+                if (btn) btn.disabled = false;
+                addrSetLast(t('addr.failedGeneric'), 'text-danger');
+                addrSay(t('addr.failedGeneric'), 'danger', true);
+            });
         }
 
         function addrLock(locked) {
