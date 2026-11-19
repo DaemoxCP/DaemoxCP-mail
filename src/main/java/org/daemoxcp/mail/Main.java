@@ -452,6 +452,9 @@ public class Main {
         // La lingua della console (il menu a schermo e i comandi qui sotto): --lang, poi quella del pannello, poi
         // l'inglese. Non per il servizio (--web): le sue righe sono registri e restano in inglese.
         if (!java.util.Arrays.asList(args).contains("--web")) chooseConsoleLanguage(args);
+        // Poi --lang e il suo valore non ci sono piu': i comandi leggono i loro argomenti per posizione
+        // (--access-code --lang en prendeva «--lang» per il nome dell'amministratore).
+        args = org.daemoxcp.mail.i18n.ConsoleLanguage.withoutFlag(args);
 
         // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
         //   java -jar daemoxcp-mail.jar --create-admin <nome> <email>   il primo amministratore
@@ -1754,22 +1757,38 @@ public class Main {
     /** La lingua della console: la sceglie chooseConsoleLanguage, una volta, all'avvio. */
     static String consoleLanguage = "en";
 
+    /** Vero se la lingua viene da --lang o dal terminale: allora un comando per un amministratore non la cambia. */
+    static boolean consoleLanguageAsked = false;
+
     /**
-     * La lingua della console (menu a schermo e comandi da riga di comando): --lang xx se c'e' e il pannello ha quella
-     * lingua; se no quella del pannello, del primo amministratore attivo che ne ha scelta una; se no l'inglese (anche
-     * su un server non ancora installato, o con MySQL fermo). Diventa la lingua del processo (I18n), cosi' ogni testo
-     * della console la segue senza passarsela.
+     * La lingua della console (menu a schermo e comandi da riga di comando), nell'ordine di ConsoleLanguage: --lang xx,
+     * la lingua del terminale (LC_ALL, LC_MESSAGES, LANG), la lingua del pannello (del primo amministratore attivo che
+     * ne ha scelta una), l'inglese (anche su un server non ancora installato, o con MySQL fermo). La lingua di un
+     * amministratore per i suoi comandi la mette useAdminLanguage. Diventa la lingua del processo (I18n), cosi' ogni
+     * testo della console la segue senza passarsela.
      */
     static void chooseConsoleLanguage(String[] args) {
-        String asked = null;
-        for (int i = 0; i < args.length; i++) {
-            if (!"--lang".equals(args[i])) continue;
-            String v = i + 1 < args.length ? args[i + 1].trim().toLowerCase(java.util.Locale.ROOT) : "";
-            if (org.daemoxcp.mail.i18n.I18n.LANGUAGES.contains(v)) asked = v;
-            else System.err.println("--lang " + v + ": the panel has " + String.join(", ", org.daemoxcp.mail.i18n.I18n.LANGUAGES));
-        }
-        String saved = asked == null ? savedPanelLanguage() : null;
-        consoleLanguage = asked != null ? asked : saved != null ? saved : "en";
+        java.util.List<String> languages = org.daemoxcp.mail.i18n.I18n.LANGUAGES;
+        String flag = org.daemoxcp.mail.i18n.ConsoleLanguage.fromFlag(args, languages,
+                v -> System.err.println("--lang " + v + ": the panel has " + String.join(", ", languages)));
+        String terminal = flag == null ? org.daemoxcp.mail.i18n.ConsoleLanguage.fromTerminal(System.getenv(), languages) : null;
+        consoleLanguageAsked = flag != null || terminal != null;
+        String panel = consoleLanguageAsked ? null : savedPanelLanguage();
+        useConsoleLanguage(org.daemoxcp.mail.i18n.ConsoleLanguage.choose(flag, terminal, null, panel));
+    }
+
+    /**
+     * Un comando per un amministratore (--access-code nome) parla la lingua che lui ha scelto nel pannello, se c'e' e
+     * se --lang o il terminale non ne hanno gia' detta una: il codice e' per lui.
+     */
+    static void useAdminLanguage(String username) {
+        if (consoleLanguageAsked || username == null || mailDatabase == null) return;
+        String own = mailDatabase.getAdminLanguage(username);
+        if (own != null) useConsoleLanguage(org.daemoxcp.mail.i18n.ConsoleLanguage.choose(null, null, own, consoleLanguage));
+    }
+
+    private static void useConsoleLanguage(String lang) {
+        consoleLanguage = lang;
         org.daemoxcp.mail.i18n.I18n.setProcessLanguage(consoleLanguage);
         // Anche i pulsanti delle finestre di Lanterna (OK, Annulla, Si', No): li sceglie dalla lingua predefinita.
         java.util.Locale.setDefault(java.util.Locale.forLanguageTag(consoleLanguage));
@@ -1887,6 +1906,7 @@ public class Main {
             System.err.println(notConnected);
             return 2;
         }
+        useAdminLanguage(username);
         ConsoleResult r = accessCode(username);
         (r.ok() ? System.out : System.err).println(r.text());
         return r.ok() ? 0 : 2;
