@@ -112,7 +112,13 @@ public class PfFirewallManager {
         });
 
     public PfFirewallManager() {
+        this(true);
+    }
+
+    /** background false: solo lo stato salvato, senza riapplicare all'avvio e senza la sincronizzazione dei paesi. */
+    private PfFirewallManager(boolean background) {
         loadState();
+        if (!background) return;
         // Auto-apply al boot: se il firewall era ATTIVO prima del riavvio, ri-applica
         // l'anchor nel kernel. Importante perche' in pf.conf non c'e' "load anchor",
         // quindi al boot l'anchor panel-fw e' vuoto finche' il pannello non lo carica.
@@ -130,6 +136,18 @@ public class PfFirewallManager {
         // Avvia auto-sync ogni ora (controlla, scarica solo se serve)
         scheduler.scheduleWithFixedDelay(this::autoSyncTick,
             5, 60 * 60, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    /**
+     * L'anchor panel-fw di nuovo, dallo stato salvato, senza avviare i lavori in sottofondo: per la console, che cambia
+     * la scelta IPv4/IPv6 (Main --ip-family) e poi esce. L'anchor dipende dalla scelta (il rifiuto della famiglia
+     * chiusa e' la sua prima regola): dalla pagina lo ricarica gia' /api/ip-family, dalla console non lo ricaricava
+     * nessuno. Null se il firewall del pannello e' spento o disattivato: allora l'anchor e' vuoto e decide pf.conf.
+     */
+    public static ApplyResult reapplySaved() {
+        PfFirewallManager m = new PfFirewallManager(false);
+        if (!m.state.enabled || m.state.mode == Mode.DISABLED) return null;
+        return m.applyConfiguration();
     }
 
     /**
@@ -507,14 +525,31 @@ public class PfFirewallManager {
     }
 
     /**
-     * Genera il contenuto dell'anchor panel-fw secondo lo stato corrente.
+     * Genera il contenuto dell'anchor panel-fw secondo lo stato corrente e la scelta IPv4/IPv6 (IpFamily).
      */
     public String generateAnchorContent() {
         StringBuilder sb = new StringBuilder();
         sb.append("# Anchor panel-fw — written by DaemoxCP Mail\n");
         sb.append("# Generato: ").append(Instant.now()).append("\n");
         sb.append("# NON modificare a mano: viene sovrascritto.\n\n");
+        if (state.mode == Mode.DISABLED) return sb.append(anchorBody(state, List.of(), null)).toString();
+        List<String> geoFiles = new ArrayList<>();
+        if (state.mode == Mode.GEO_WHITELIST || state.mode == Mode.GEO_BLACKLIST) {
+            for (String cc : state.geoCountries) {
+                Path p = Paths.get(GEOIP_DIR, cc.toLowerCase() + ".zone");
+                if (Files.exists(p)) geoFiles.add(p.toString());
+            }
+        }
+        return sb.append(anchorBody(state, geoFiles, PfPolicy.closedRefusalForAnchor())).toString();
+    }
 
+    /**
+     * Le tabelle e le regole dell'anchor. geoFiles: le liste dei paesi gia' scaricate; refusal: il rifiuto della famiglia
+     * chiusa dalla scelta IPv4/IPv6 (PfPolicy.closedRefusal, quick), o null. Puro, a parte le porte di POP3 (senza
+     * database POP3 e' spento).
+     */
+    static String anchorBody(FirewallState state, List<String> geoFiles, String refusal) {
+        StringBuilder sb = new StringBuilder();
         if (state.mode == Mode.DISABLED) {
             sb.append("# Firewall panel-fw DISABILITATO — nessuna regola attiva.\n");
             return sb.toString();
@@ -528,12 +563,7 @@ public class PfFirewallManager {
         // Se modalita' GEO ma nessun zone file disponibile, salta le regole geo
         // (altrimenti GEO_WHITELIST con tabella vuota = lockout totale!)
         boolean geoActive = false;
-        List<String> geoFiles = new ArrayList<>();
         if (state.mode == Mode.GEO_WHITELIST || state.mode == Mode.GEO_BLACKLIST) {
-            for (String cc : state.geoCountries) {
-                Path p = Paths.get(GEOIP_DIR, cc.toLowerCase() + ".zone");
-                if (Files.exists(p)) geoFiles.add(p.toString());
-            }
             geoActive = !geoFiles.isEmpty();
 
             if (geoActive) {
@@ -553,6 +583,15 @@ public class PfFirewallManager {
         sb.append("\n");
 
         // === Regole ===
+        // 0. La famiglia chiusa dalla scelta IPv4/IPv6 (IpFamily): un rifiuto subito, prima di tutto il resto. Senza,
+        //    le regole quick qui sotto decidevano da sole: l'IPv6 di un paese consentito o di un indirizzo consentito
+        //    entrava anche con la posta in IPv6 solo in uscita, e quello degli altri spariva in silenzio invece del «no».
+        //    SSH non c'e': la sua regola non la cambia il pannello, e da li' si torna sempre indietro.
+        if (refusal != null) {
+            sb.append("# La famiglia chiusa dalla scelta IPv4/IPv6: rifiutata subito, prima di liste e paesi\n");
+            sb.append(refusal).append("\n");
+        }
+
         // 1. CIDR whitelist: sempre pass (override tutto)
         sb.append("# Whitelist CIDR: sempre permesso\n");
         sb.append("pass in quick from <panel_wl_cidrs> to any keep state\n");

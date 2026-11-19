@@ -134,7 +134,8 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   ma entra solo in IPv4, dove spam e attacchi si filtrano meglio. Un nome solo per tutto, quello della posta, col suo
   AAAA e il suo DNS inverso IPv6: chi prova a consegnare in IPv6 riceve subito un rifiuto dal firewall del server e
   consegna in IPv4, senza ritardi. Le configurazioni dei servizi si scrivono una volta e valgono per ogni scelta
-  (ascoltano in IPv4 e in IPv6); decide il firewall. Cambiare l'interruttore non tocca né il DNS né i servizi.
+  (ascoltano in IPv4 e in IPv6); decide il firewall, comprese le regole del pannello (indirizzi consentiti e bloccati,
+  paesi): la famiglia chiusa si rifiuta prima di loro. Cambiare l'interruttore non tocca né il DNS né i servizi.
 - Separazione dei privilegi: la parte che risponde in rete gira con un utente senza privilegi (vedi
   [Sicurezza](#sicurezza-chi-gira-da-root-e-perché)).
 

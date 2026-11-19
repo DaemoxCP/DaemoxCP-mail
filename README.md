@@ -134,7 +134,8 @@ It is **careful**. The panel never changes something it cannot check, and it say
   but comes in only over IPv4, where spam and attacks are filtered better. One name for everything, the mail name,
   with its AAAA and its IPv6 reverse DNS: whoever tries to deliver over IPv6 gets an immediate refusal from the
   server's firewall and delivers over IPv4, with no delay. The services' configurations are written once and work for
-  every choice (they listen over IPv4 and IPv6); the firewall decides. Changing the switch touches neither the DNS nor
+  every choice (they listen over IPv4 and IPv6); the firewall decides, the panel's own rules too (allowed and blocked
+  addresses, countries): the closed family is refused before them. Changing the switch touches neither the DNS nor
   the services.
 - Privilege separation: the part that answers on the network runs as an unprivileged user (see
   [Security model](#security-model-who-runs-as-root-and-why)).

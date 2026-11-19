@@ -7,6 +7,10 @@
 //   2. IPv4 only: pf lets the mail in only as inet and refuses IPv6 at once (block return), mail does not go out over
 //      IPv6, and from this computer the ports answer over IPv4 and not over IPv6. Then IPv6 only going out (ipv6out):
 //      the same from outside, but mail may go out over IPv6.
+//  2c. The panel's own firewall (anchor panel-fw: allowed and blocked addresses, countries) follows the choice: its
+//      quick rules come before pf.conf's, so the closed family is refused there first. With this computer's IPv6 among
+//      the allowed addresses and mail over IPv6 only going out, IPv6 is still refused at once (before, the allowed
+//      address went in; on the real server, 19/11, the countries' block made it silence instead of a «no»).
 // The services listen over IPv4 and IPv6 whatever the choice (universal configurations, written once): the family is
 // pf's, so in every step 25, 993 and 8443 listen on both, and the reach checks from this computer are the proof.
 //   3. IPv6 only, with a temporary IPv6 default route on the test machine: first the warnings, then the change;
@@ -14,7 +18,7 @@
 //      antispam and the sending limits use it).
 //   4. Both again, from the Settings card as a person does it (the confirmation window answered by the passkey).
 //   5. The console command, as root, the way back for whoever cut themselves off: --ip-family ipv4, then both;
-//      a wrong value gets the usage.
+//      the panel's firewall follows it too (its first rule refuses the closed family); a wrong value gets the usage.
 // In every step the SSH rule has no family and SSH still answers. The changes need a recent confirmation (the
 // console code does not count): the run creates a passkey in a virtual authenticator and removes it at the end.
 //
@@ -34,7 +38,7 @@ const SSH = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-i', process.env
 const PORT = 24000 + Math.floor(Math.random() * 1000);
 const BASE = 'https://' + HOST + ':' + PORT;
 const V4 = REMOTE.split('@')[1];
-let failures = 0, confirmations = 0, page = null;
+let failures = 0, confirmations = 0, page = null, allowedMine = null;
 const PASSKEY = 'E2E ' + PORT;
 function check(what, ok) { console.log((ok ? '  OK     ' : '  FAILED ') + what); if (!ok) failures++; }
 function remote(cmd) { return execFileSync('ssh', SSH.concat([REMOTE, cmd]), { encoding: 'utf8' }); }
@@ -46,6 +50,23 @@ function reach(host, port) {
         const s = net.connect({ host, port, timeout: 3000 }, () => { s.destroy(); resolve(true); });
         s.on('timeout', () => { s.destroy(); resolve(false); });
         s.on('error', () => resolve(false));
+    });
+}
+// Refused at once (a «no» from pf, block return), not silence: the time it took, or -1 if it was not refused.
+function refusedIn(host, port) {
+    return new Promise(resolve => {
+        const t = Date.now();
+        const s = net.connect({ host, port, timeout: 3000 }, () => { s.destroy(); resolve(-1); });
+        s.on('timeout', () => { s.destroy(); resolve(-1); });
+        s.on('error', e => resolve(e.code === 'ECONNREFUSED' ? Date.now() - t : -1));
+    });
+}
+// The address this computer uses towards the test machine's IPv6 (the one pf sees).
+function sourceTowards(host) {
+    return new Promise(resolve => {
+        const s = net.connect({ host, port: 22, timeout: 3000 }, () => { const a = s.localAddress; s.destroy(); resolve(a); });
+        s.on('timeout', () => { s.destroy(); resolve(null); });
+        s.on('error', () => resolve(null));
     });
 }
 function families(sock, port) {
@@ -95,14 +116,14 @@ function families(sock, port) {
         const csrf = await page.$eval('#csrf_token', e => e.value);
         // Through the page's own fetch: when the server asks for the confirmation the shared window opens, and the
         // passkey answers it; then the page sends the request again by itself.
-        const api = async (body) => {
+        const callApi = async (path, body) => {
             let over = false;
-            const call = page.evaluate(async ({ body, csrf }) => {
-                const r = await fetch('/api/ip-family', body ? { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            const call = page.evaluate(async ({ path, body, csrf }) => {
+                const r = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(Object.assign({ csrf_token: csrf }, body)) } : {});
                 const text = await r.text();
                 try { return JSON.parse(text); } catch (e) { return { success: false, error: 'HTTP ' + r.status + ': ' + text.slice(0, 200) }; }
-            }, { body, csrf }).catch(e => ({ success: false, error: 'page: ' + e.message.split('\n')[0] })).finally(() => { over = true; });
+            }, { path, body, csrf }).catch(e => ({ success: false, error: 'page: ' + e.message.split('\n')[0] })).finally(() => { over = true; });
             while (!over) {
                 if (await page.locator('#panelConfirmModal.show').count()) {
                     await page.click('#panelConfirmModal [data-confirm="passkey"]').catch(() => {});
@@ -114,6 +135,9 @@ function families(sock, port) {
             }
             return call;
         };
+        const api = body => callApi('/api/ip-family', body);
+        const firewall = body => callApi('/api/firewall', body);
+        const anchorRules = () => remote('pfctl -a panel-fw -sr 2>/dev/null').split('\n').filter(l => l.trim());
 
         async function looks(family, label) {
             const sock = remote('sockstat -46l -P tcp');
@@ -173,6 +197,33 @@ function families(sock, port) {
         check('done (' + (d.error || 'ok') + ')', d.success);
         await looks('ipv6out', 'IPv6 only going out');
 
+        console.log('\n== 2c. The panel\'s own firewall follows the choice ==');
+        const fwBefore = await firewall(null);
+        const mine = await sourceTowards(V6);
+        console.log('  (panel firewall: ' + (fwBefore.enabled ? 'on' : 'off') + ', mode ' + fwBefore.mode + ')');
+        if (!fwBefore.enabled || fwBefore.mode === 'DISABLED' || !mine) {
+            console.log('  (skipped: the panel firewall is off here, or this computer has no IPv6 towards the test machine)');
+        } else {
+            allowedMine = mine + '/128';
+            d = await firewall({ action: 'add_cidr_wl', cidr: allowedMine });
+            check('this computer\'s IPv6 among the allowed addresses (' + (d.message || d.error) + ')', d.success);
+            d = await firewall({ action: 'apply' });
+            check('  applied (' + (d.message || d.error) + ')', d.success);
+            const rules = anchorRules();
+            check('the anchor\'s first rule refuses IPv6 at once, before the allowed addresses (' + (rules[0] || '').replace(/\s+/g, ' ') + ')',
+                /^block return in quick inet6 proto tcp .*port = (smtp|25)\b/.test(rules[0] || '')
+                && rules.findIndex(l => l.includes('<panel_wl_cidrs>')) > 0);
+            for (const p of [993, 25, 8443]) {
+                const ms = await refusedIn(V6, p);
+                check('  from this computer, allowed: port ' + p + ' over IPv6 ' + (ms >= 0 ? 'refused in ' + ms + ' ms' : 'NOT refused (it answered, or silence)'), ms >= 0 && ms < 2000);
+            }
+            check('  and over IPv4 port 993 still answers', await reach(V4, 993));
+            d = await firewall({ action: 'remove_cidr_wl', cidr: allowedMine });
+            const d2 = await firewall({ action: 'apply' });
+            check('this computer\'s IPv6 out of the allowed addresses again, applied (' + (d2.message || d2.error) + ')', d.success && d2.success);
+            if (d.success) allowedMine = null;
+        }
+
         console.log('\n== 3. IPv6 only, with a temporary IPv6 default route ==');
         remote('route -6 add default ' + V6.replace(/:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/, '::1') + ' >/dev/null 2>&1; netstat -rn -f inet6 | grep -c ^default');
         d = await api({ family: 'ipv6' });
@@ -200,7 +251,7 @@ function families(sock, port) {
         console.log('  (confirmations asked: ' + confirmations + ')');
 
         console.log('\n== 5. From the console, as root: the way back when a choice cut you off ==');
-        const anchor = () => remote('pfctl -a panel-fw -sr 2>/dev/null | wc -l').trim();
+        const anchor = () => String(anchorRules().length);
         const anchorBefore = anchor();
         const consoleRun = v => remote('cd /home/panel && /usr/local/openjdk25/bin/java -jar daemoxcp-mail.jar --ip-family ' + v + ' 2>&1; echo "rc=$?"');
         let out = consoleRun('ipv4');
@@ -209,11 +260,19 @@ function families(sock, port) {
         await looks('ipv4', 'Console IPv4');
         d = await api(null);
         check('the running panel sees the console choice (' + d.chosen + ')', d.chosen === 'ipv4');
-        check('the firewall anchor keeps its ' + anchorBefore + ' rules (' + anchor() + ')', anchor() === anchorBefore);
+        // pfctl -sr writes one rule per port: the refusal is as many rules as the service ports, all first.
+        const consoleRules = anchorRules();
+        const refusing = consoleRules.filter(l => l.startsWith('block return in quick inet6 ')).length;
+        const others = consoleRules.length - refusing;
+        check('the panel firewall follows the console too: first ' + refusing + ' rules refuse IPv6 (' + (consoleRules[0] || '').replace(/\s+/g, ' ').slice(0, 60)
+            + '), the other ' + anchorBefore + ' stay (' + others + ')', (fwBefore.enabled === false || fwBefore.mode === 'DISABLED')
+            ? anchor() === anchorBefore : refusing > 0 && consoleRules.slice(0, refusing).every(l => l.startsWith('block return in quick inet6 ')) && String(others) === anchorBefore);
         out = consoleRun('both');
         auditOut += out;
         check('--ip-family both: done (' + out.trim().split('\n')[0] + ')', /rc=0/.test(out) && /^Done/m.test(out));
         await looks('both', 'Console both');
+        check('  back to both: the panel firewall without the refusal, its ' + anchorBefore + ' rules as before (' + anchor() + ')',
+            anchor() === anchorBefore && !anchorRules().some(l => l.startsWith('block return')));
         out = consoleRun('v6');
         check('a wrong value: the usage, exit 2', /rc=2/.test(out) && /Usage/.test(out));
         check('the audit log took both console changes (no "Failed to log audit event")', !/Failed to log audit event|audit log was not written/.test(auditOut));
@@ -228,6 +287,16 @@ function families(sock, port) {
                 return r.success ? 'removed' : 'not removed: ' + r.error;
             }, { name: PASSKEY, csrf: await page.$eval('#csrf_token', e => e.value).catch(() => '') }).catch(e => 'page: ' + e.message.split('\n')[0]);
             check('the passkey of this run ' + gone, gone === 'removed');
+        }
+        if (page && allowedMine) {
+            const csrf = await page.$eval('#csrf_token', e => e.value).catch(() => '');
+            const r = await page.evaluate(async ({ cidr, csrf }) => {
+                const post = b => fetch('/api/firewall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ csrf_token: csrf }, b)) }).then(x => x.json());
+                const a = await post({ action: 'remove_cidr_wl', cidr });
+                const b = await post({ action: 'apply' });
+                return a.success && b.success;
+            }, { cidr: allowedMine, csrf }).catch(() => false);
+            check('this computer\'s IPv6 taken out of the allowed addresses at the end', r);
         }
         try { remote('route -6 delete default >/dev/null 2>&1; true'); } catch (e) {}
         await browser.close();
