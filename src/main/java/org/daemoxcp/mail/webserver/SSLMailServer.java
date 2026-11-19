@@ -11928,8 +11928,8 @@ public class SSLMailServer {
      * cambiamento vuole una conferma recente (Access.CONFIRMED). SSH non si tocca mai.
      *
      *  GET  ?goal=both|ipv4|ipv6  lo stato, i fatti e i passi della guida verso quell'obiettivo
-     *  POST {action: add-ipv6 (address, prefix, gateway) | remove-ipv6 | add-ipv4 | clean-ipv4 |
-     *        dns (type A|AAAA, op add|remove) | web-aaaa}
+     *  POST {action: add-ipv6 (address, prefix, gateway) | remove-ipv6 | add-ipv4 | clean-ipv4 | confirm-firewall |
+     *        dns (type A|AAAA, op add|remove) | web-aaaa | web-a}
      */
     private void handleApiServerAddresses(HttpExchange exchange) throws IOException {
         JSONObject response;
@@ -11957,6 +11957,9 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
+    /** L'amministratore ha guardato il firewall del provider e lascia entrare l'IPv6 (istante UTC), vuoto se no. */
+    private static final String ADDRESS_V6_FIREWALL = "address_v6_firewall_confirmed";
+
     /** Lo stato degli indirizzi, i fatti DNS e i passi della guida verso l'obiettivo. */
     private JSONObject addressGuideState(org.daemoxcp.mail.system.AddressGuide.Goal goal,
                                          org.daemoxcp.mail.system.IpFamily.Family viaFamily) throws Exception {
@@ -11971,15 +11974,17 @@ public class SSLMailServer {
                 : hostOk ? org.daemoxcp.mail.security.HostRecords.hasAny(host, "A") : null;
         Boolean aaaa = hostOk && !ip6.isEmpty() ? org.daemoxcp.mail.security.HostRecords.published(host, "AAAA", ip6)
                 : hostOk ? org.daemoxcp.mail.security.HostRecords.hasAny(host, "AAAA") : null;
-        Boolean ptr4 = hostOk && !ip4.isEmpty() ? org.daemoxcp.mail.security.ReverseDns.check(ip4, host).ok() : null;
+        org.daemoxcp.mail.security.ReverseDns.Check ptr4Check = hostOk && !ip4.isEmpty() ? org.daemoxcp.mail.security.ReverseDns.check(ip4, host) : null;
+        Boolean ptr4 = ptr4Check == null ? null : ptr4Check.ok();
         org.daemoxcp.mail.security.ReverseDns.Check ptr6Check = hostOk && !ip6.isEmpty()
                 ? org.daemoxcp.mail.security.ReverseDns.check(ip6, host) : null;
         Boolean ptr6 = ptr6Check == null ? null : ptr6Check.ok();
         Boolean webAaaa = webNamesOn(true, ip4, ip6);
         Boolean webA = webNamesOn(false, ip4, ip6);
         org.daemoxcp.mail.system.IpFamily.Family mail = org.daemoxcp.mail.system.IpFamily.effective();
+        boolean v6Firewall = Main.mailDatabase != null && !Main.mailDatabase.getSetting(ADDRESS_V6_FIREWALL, "").isEmpty();
         org.daemoxcp.mail.system.AddressGuide.Facts f = new org.daemoxcp.mail.system.AddressGuide.Facts(
-                s.v4().present(), v4Out, !s.v4().rcLine().isEmpty(), !s.v6().addresses().isEmpty(), v6Out,
+                s.v4().present(), v4Out, !s.v4().rcLine().isEmpty(), !s.v6().addresses().isEmpty(), v6Out, v6Firewall,
                 a, aaaa, ptr4, ptr6, webAaaa, webA, mail, viaFamily, s.sshOnV6());
         java.util.List<org.daemoxcp.mail.system.AddressGuide.Step> plan = org.daemoxcp.mail.system.AddressGuide.plan(f, goal);
 
@@ -11991,16 +11996,20 @@ public class SSLMailServer {
                 .put("iface", s.iface() == null ? JSONObject.NULL : s.iface())
                 .put("v4", new JSONObject().put("addresses", new JSONArray(s.v4().addresses())).put("route", s.v4().route()).put("internet", v4Out)
                         .put("public", ip4))
-                .put("v6", new JSONObject().put("addresses", new JSONArray(s.v6().addresses())).put("route", s.v6().route()).put("internet", v6Out));
+                .put("v6", new JSONObject().put("addresses", new JSONArray(s.v6().addresses())).put("route", s.v6().route()).put("internet", v6Out)
+                        .put("hostPart", org.daemoxcp.mail.system.ServerAddresses.hostPartNow(s) == null ? JSONObject.NULL
+                                : org.daemoxcp.mail.system.ServerAddresses.hostPartNow(s)));
         JSONObject dns = new JSONObject().put("host", hostOk ? host : JSONObject.NULL)
                 .put("a", a == null ? JSONObject.NULL : a).put("aaaa", aaaa == null ? JSONObject.NULL : aaaa)
                 .put("ptr4", ptr4 == null ? JSONObject.NULL : ptr4).put("ptr6", ptr6 == null ? JSONObject.NULL : ptr6)
                 .put("ptr6Found", ptr6Check == null || ptr6Check.ptr() == null ? JSONObject.NULL : ptr6Check.ptr())
+                .put("ptr4Found", ptr4Check == null || ptr4Check.ptr() == null ? JSONObject.NULL : ptr4Check.ptr())
                 .put("webAaaa", webAaaa == null ? JSONObject.NULL : webAaaa)
                 .put("webA", webA == null ? JSONObject.NULL : webA)
                 .put("cloudflare", hostOk && org.daemoxcp.mail.security.HostRecords.canWrite(Main.mailDatabase, cloudflareManager, host));
         org.daemoxcp.mail.system.ServerAddresses.Suggestion sg = s.suggestion();
         return new JSONObject().put("success", true).put("goal", goal.key).put("recommended", "both")
+                .put("provider", org.daemoxcp.mail.system.ServerAddresses.provider())
                 .put("reached", org.daemoxcp.mail.system.AddressGuide.reached(plan))
                 .put("state", state).put("dns", dns).put("mail", mail.key)
                 .put("via", viaFamily == null ? JSONObject.NULL : viaFamily.key).put("sshOnV6", s.sshOnV6())
@@ -12064,6 +12073,13 @@ public class SSLMailServer {
                 r = org.daemoxcp.mail.system.ServerAddresses.removeIpv6();
             }
             case "add-ipv4" -> r = org.daemoxcp.mail.system.ServerAddresses.addIpv4();
+            case "confirm-firewall" -> {
+                // Il firewall del provider dal server non si vede: lo conferma l'amministratore, e resta finche' c'e' l'IPv6.
+                if (Main.mailDatabase == null) return new JSONObject().put("success", false).put("error", I18n.tr("server.requestFailed"));
+                Main.mailDatabase.setSetting(ADDRESS_V6_FIREWALL, java.time.Instant.now().toString());
+                logAudit("SERVER_ADDRESSES_V6_FIREWALL_CONFIRMED", clientIp, "provider firewall lets IPv6 in");
+                return new JSONObject().put("success", true).put("message", I18n.tr("server.addr.firewallConfirmed"));
+            }
             case "clean-ipv4" -> r = org.daemoxcp.mail.system.ServerAddresses.cleanIpv4();
             case "dns" -> {
                 return addressDnsAction(req.optString("type", ""), req.optString("op", ""), clientIp);
@@ -12078,6 +12094,8 @@ public class SSLMailServer {
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
             }
         }
+        // Senza IPv6 la conferma del firewall non vale piu': se torna, si guarda di nuovo.
+        if (r.ok() && "remove-ipv6".equals(action) && Main.mailDatabase != null) Main.mailDatabase.setSetting(ADDRESS_V6_FIREWALL, "");
         logAudit(r.ok() ? "SERVER_ADDRESSES_" + action.toUpperCase(java.util.Locale.ROOT).replace('-', '_')
                 : "SERVER_ADDRESSES_" + action.toUpperCase(java.util.Locale.ROOT).replace('-', '_') + "_FAILED", clientIp, r.journal());
         return new JSONObject().put("success", r.ok()).put(r.ok() ? "message" : "error", I18n.tr(r.message())).put("journal", r.journal());
