@@ -1,11 +1,8 @@
 package org.daemoxcp.mail.security;
 
 import java.net.InetAddress;
-import java.time.Duration;
 import java.util.Locale;
-import java.util.function.Function;
-
-import org.daemoxcp.mail.util.Shell;
+import java.util.function.BiFunction;
 
 /**
  * Il DNS inverso di un indirizzo, IPv4 o IPv6, e la sua conferma all'andata: il nome che il PTR dice deve essere quello
@@ -15,14 +12,27 @@ import org.daemoxcp.mail.util.Shell;
  * sending guidelines regarding PTR records and authentication»), Microsoft 365 anche (450 4.7.25 senza PTR per l'IPv6).
  * Il controllo di prima (DnsRecordsGenerator.checkPtrAndFcrdns) cercava sempre un record A: per un IPv6 non poteva mai
  * tornare. Questo vale per tutte e due le famiglie.
+ *
+ * Le domande vanno ai server che pubblicano i record (FreshDns), non alla memoria del risolutore del server: il DNS
+ * inverso appena salvato dall'amministratore si vede subito.
  */
 public final class ReverseDns {
 
     /** Esito: va bene o no, il PTR trovato (o null), e il motivo come chiave della lingua (null se va bene). */
-    public record Check(boolean ok, String ptr, String reason) {}
+    public record Check(boolean ok, String ptr, String reason) {
+        /**
+         * Il DNS inverso da' il nome del server di posta, anche se quel nome non torna ancora all'indirizzo. E' il
+         * passo dell'amministratore nella guida: il ritorno (il record A o AAAA) lo scrive il pannello DOPO, e chi lo
+         * pretendesse qui bloccherebbe la guida per sempre (visto sul server vero: DNS inverso IPv6 giusto, nessun
+         * AAAA ancora, passo fermo). Il controllo intero (ok) resta quello che serve prima di spedire.
+         */
+        public boolean givesName() {
+            return ok || "server.rdns.notBack".equals(reason);
+        }
+    }
 
-    /** dig con i suoi argomenti: quello vero, oppure un finto nelle prove. */
-    static Function<String[], String> dig = args -> Shell.run(Duration.ofSeconds(10), args).outputTrim();
+    /** La domanda al DNS (tipo, nome): ai server che pubblicano il record (FreshDns), oppure un finto nelle prove. */
+    static BiFunction<String, String, String> lookup = FreshDns::query;
 
     private ReverseDns() {}
 
@@ -30,11 +40,10 @@ public final class ReverseDns {
         InetAddress a = literal(ip);
         if (a == null) return new Check(false, null, "server.rdns.noIp");
         if (hostname == null || !hostname.matches("[A-Za-z0-9.-]{1,253}")) return new Check(false, null, "server.rdns.noHost");
-        String rev = dig.apply(new String[] {"dig", "+short", "-x", ip});
-        String ptr = firstName(rev);
+        String ptr = firstName(lookup.apply("PTR", FreshDns.reverseName(a)));
         if (ptr == null) return new Check(false, null, "server.rdns.none");
         if (!ptr.equalsIgnoreCase(hostname)) return new Check(false, ptr, "server.rdns.otherName");
-        String fwd = dig.apply(new String[] {"dig", "+short", a instanceof java.net.Inet6Address ? "AAAA" : "A", ptr});
+        String fwd = lookup.apply(a instanceof java.net.Inet6Address ? "AAAA" : "A", ptr);
         if (!DnsRecordsGenerator.containsAddress(fwd, ip)) return new Check(false, ptr, "server.rdns.notBack");
         return new Check(true, ptr, null);
     }

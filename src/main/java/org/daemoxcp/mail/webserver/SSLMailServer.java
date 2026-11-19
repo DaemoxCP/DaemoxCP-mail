@@ -11974,11 +11974,13 @@ public class SSLMailServer {
                 : hostOk ? org.daemoxcp.mail.security.HostRecords.hasAny(host, "A") : null;
         Boolean aaaa = hostOk && !ip6.isEmpty() ? org.daemoxcp.mail.security.HostRecords.published(host, "AAAA", ip6)
                 : hostOk ? org.daemoxcp.mail.security.HostRecords.hasAny(host, "AAAA") : null;
+        // Il passo del DNS inverso e' fatto quando il PTR da' il nome della posta (givesName): il ritorno all'indirizzo
+        // (A o AAAA) e' il passo dopo, del pannello, e la posta in quella famiglia aspetta tutti e due (AddressGuide).
         org.daemoxcp.mail.security.ReverseDns.Check ptr4Check = hostOk && !ip4.isEmpty() ? org.daemoxcp.mail.security.ReverseDns.check(ip4, host) : null;
-        Boolean ptr4 = ptr4Check == null ? null : ptr4Check.ok();
+        Boolean ptr4 = ptr4Check == null ? null : ptr4Check.givesName();
         org.daemoxcp.mail.security.ReverseDns.Check ptr6Check = hostOk && !ip6.isEmpty()
                 ? org.daemoxcp.mail.security.ReverseDns.check(ip6, host) : null;
-        Boolean ptr6 = ptr6Check == null ? null : ptr6Check.ok();
+        Boolean ptr6 = ptr6Check == null ? null : ptr6Check.givesName();
         Boolean webAaaa = webNamesOn(true, ip4, ip6);
         Boolean webA = webNamesOn(false, ip4, ip6);
         org.daemoxcp.mail.system.IpFamily.Family mail = org.daemoxcp.mail.system.IpFamily.effective();

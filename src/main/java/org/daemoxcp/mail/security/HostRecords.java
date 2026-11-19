@@ -1,13 +1,11 @@
 package org.daemoxcp.mail.security;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 import org.daemoxcp.mail.database.MailDatabase;
-import org.daemoxcp.mail.util.Shell;
 
 /**
  * I record A e AAAA dei nomi del server su Cloudflare: quello della posta (senza proxy), e per un server solo IPv6 anche
@@ -35,16 +33,19 @@ public final class HostRecords {
 
     private HostRecords() {}
 
-    /** Se il DNS pubblico da' gia' quell'indirizzo per quel nome (dig +short TYPE nome). */
+    /**
+     * Se il DNS pubblico da' gia' quell'indirizzo per quel nome, chiesto ai server della zona (FreshDns): un record
+     * appena scritto su Cloudflare si vede subito, non quando scade il «nessun record» ricordato dal risolutore.
+     */
     public static boolean published(String host, String type, String ip) {
         if (!validHost(host)) return false;
-        return DnsRecordsGenerator.containsAddress(Shell.run(Duration.ofSeconds(10), "dig", "+short", type, host).outputTrim(), ip);
+        return DnsRecordsGenerator.containsAddress(FreshDns.query(type, host), ip);
     }
 
-    /** Se il nome ha un record di quel tipo, qualunque indirizzo (dig): per sapere se c'e' ancora un A da togliere. */
+    /** Se il nome ha un record di quel tipo, qualunque indirizzo (FreshDns): per sapere se c'e' ancora un A da togliere. */
     public static boolean hasAny(String host, String type) {
         if (!validHost(host)) return false;
-        for (String l : Shell.run(Duration.ofSeconds(10), "dig", "+short", type, host).outputTrim().split("\n"))
+        for (String l : FreshDns.query(type, host).split("\n"))
             if (l.trim().matches("[0-9A-Fa-f:.]{2,45}")) return true;
         return false;
     }
