@@ -40,7 +40,7 @@ public final class ErrorText {
     static String shown(Throwable e) {
         if (e == null || e.getMessage() == null || e.getMessage().isBlank()) return null;
         if (e instanceof PasskeyService.PasskeyException) return I18n.tr(e.getMessage());
-        return e instanceof ShownException ? e.getMessage() : null;
+        return e instanceof TranslatedError ? e.getMessage() : null;
     }
 
     /** Vero se fra le cause c'e' un duplicato di MySQL. */

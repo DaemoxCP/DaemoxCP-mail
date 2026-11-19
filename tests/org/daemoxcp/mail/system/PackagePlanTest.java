@@ -247,7 +247,10 @@ public class PackagePlanTest {
         real("version outside every range: I don't know, I don't make it up", "unknown".equals(v.getString("verdict")));
         PackagePlan.VersionComparator broken = (x, y) -> { throw new IllegalStateException("pkg does not answer"); };
         v = PackagePlan.assessFix("1.30.4,3", "1.30.4,3", nginxProblems, broken);
-        real("broken comparison: I don't know", "unknown".equals(v.getString("verdict")) && v.getString("explanation").contains("pkg does not answer"));
+        // The page reads a translated text; the raw reason (an exception's, in English) goes to the panel log (ErrorText).
+        real("broken comparison: I don't know, and the reason is in the panel log, not on the page", "unknown".equals(v.getString("verdict"))
+                && v.getString("explanation").contains(org.daemoxcp.mail.i18n.I18n.tr("server.detailsInLog"))
+                && !v.getString("explanation").contains("pkg does not answer"));
 
         real("bounds: one", PackagePlan.bounds("< 1.30.5,3").size() == 1);
         real("bounds: two", PackagePlan.bounds(">= 1.25.0 : < 1.30.5,3").size() == 2);

@@ -67,6 +67,9 @@ public class ErrorTextTest {
         String shown = I18n.tr("server.badIp");
         check("ShownException: its translated text (" + shown + ")", !shown.equals("server.badIp")
                 && ErrorText.forPage("handleX", ShownException.of("server.badIp")).equals(shown));
+        check("ShownException.Argument (an IllegalArgumentException, as the callers catch it): its translated text",
+                ErrorText.forPage("handleX", ShownException.Argument.of("server.badIp")).equals(shown)
+                && ShownException.Argument.of("server.badIp") instanceof IllegalArgumentException);
         String withValue = I18n.tr("server.convert.maxDest", java.util.Map.of("n", "10"));
         check("ShownException with a {value}: the text with the value", ErrorText.forPage("handleX",
                 ShownException.of("server.convert.maxDest", java.util.Map.of("n", "10"))).equals(withValue) && withValue.contains("10"));

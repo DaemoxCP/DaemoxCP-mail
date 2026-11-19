@@ -247,7 +247,7 @@ public class I18nTest {
         // (a "server.x" text with a single dot, like Kafka's server.properties, is not a key)
         // (only the calls here: in the mail panel "server.example.com" is a host name, not a key)
         // (ShownException.of("key"): an error written for the page, translated when it is thrown)
-        Pattern serverKey = Pattern.compile("(?:I18n\\.tr|jsonError|ShownException\\.of)\\(\"([A-Za-z0-9_.-]*[A-Za-z0-9_-])\"()");
+        Pattern serverKey = Pattern.compile("(?:I18n\\.tr|jsonError|ShownException\\.of|ShownException\\.Argument\\.of)\\(\"([A-Za-z0-9_.-]*[A-Za-z0-9_-])\"()");
         // I18n.trn("key", n, ...) uses key.one and key.other
         Pattern pluralCall = Pattern.compile("I18n\\.trn\\(\"([A-Za-z0-9_.-]*[A-Za-z0-9_-])\"");
         Set<String> serverPlurals = new TreeSet<>();

@@ -2551,7 +2551,7 @@ public class Fail2banManager {
      * Ritorna true se l'IP è stato effettivamente aggiunto (false se già presente).
      */
     public synchronized boolean addPermanentBan(String ip) throws Exception {
-        if (!isValidIp(ip)) throw org.daemoxcp.mail.util.ShownException.of("server.badIp");
+        if (!isValidIp(ip)) throw org.daemoxcp.mail.util.ShownException.Argument.of("server.badIp");
 
         ensurePermanentBanFile();
         java.util.Set<String> current = readPermanentBanFile();
@@ -2578,7 +2578,7 @@ public class Fail2banManager {
      * Ritorna true se rimosso, false se non era presente.
      */
     public synchronized boolean removePermanentBan(String ip) throws Exception {
-        if (!isValidIp(ip)) throw org.daemoxcp.mail.util.ShownException.of("server.badIp");
+        if (!isValidIp(ip)) throw org.daemoxcp.mail.util.ShownException.Argument.of("server.badIp");
 
         java.util.Set<String> current = readPermanentBanFile();
         if (!current.contains(ip)) return false;

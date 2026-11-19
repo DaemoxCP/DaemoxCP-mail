@@ -14,7 +14,22 @@ import java.util.Map;
  * <p>Si costruisce con la chiave del testo: of("server.x.y") o of("server.x.y", Map.of("name", ...)). Il testo si
  * traduce subito, nella lingua della richiesta in corso (I18n.current), come faceva chi lo lanciava con I18n.tr.
  */
-public class ShownException extends IllegalStateException {
+public class ShownException extends IllegalStateException implements TranslatedError {
+
+    /** Un argomento sbagliato, detto alla pagina gia' tradotto: come ShownException, ma IllegalArgumentException. */
+    public static final class Argument extends IllegalArgumentException implements TranslatedError {
+        private Argument(String text) {
+            super(text);
+        }
+
+        public static Argument of(String key) {
+            return new Argument(I18n.tr(key));
+        }
+
+        public static Argument of(String key, Map<String, ?> params) {
+            return new Argument(I18n.tr(key, params));
+        }
+    }
 
     private final String key;
 
