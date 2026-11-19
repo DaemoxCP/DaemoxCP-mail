@@ -107,6 +107,23 @@ public class PfPolicyTest {
         check("  and a pf.conf with the family is still the panel's: it becomes IPv4 only, then both again",
                 back != null && back.contains("\npass in inet proto tcp to port { 25,") && fromServer != null
                         && fromServer.equals(PfPolicy.transform(back, today, "")) && fromServer.equals(PfPolicy.transform(back, today)));
+        // The services listen over IPv4 and IPv6 always (universal configurations): the closed family gets an immediate
+        // refusal (block return), not silence, so whoever tries it moves to the other one at once. Only IPv4: mail does
+        // not go out over IPv6 either (Postfix on «all» tries IPv6, is refused at once, sends over IPv4).
+        check("IPv6 only: IPv4 to the services refused at once, mail free to go out",
+                v6only != null && v6only.contains("\nblock return in inet proto tcp to port { 25,") && !v6only.contains(PfPolicy.SMTP_OUT6_RULE)
+                        && !v6only.contains("block return in inet6"));
+        String v4only = PfPolicy.transform(SERVER, today, "inet ", true);
+        check("IPv4 only: IPv6 to the services refused at once, and mail kept from going out over IPv6",
+                v4only != null && v4only.contains("\nblock return in inet6 proto tcp to port { 25,") && v4only.contains("\n" + PfPolicy.SMTP_OUT6_RULE + "\n"));
+        String out6 = PfPolicy.transform(SERVER, today, "inet ", false);
+        check("IPv6 only going out: IPv6 to the services refused at once, mail free to go out over IPv6",
+                out6 != null && out6.contains("\nblock return in inet6 proto tcp to port { 25,") && !out6.contains(PfPolicy.SMTP_OUT6_RULE));
+        check("both: no refusal rule at all", fromServer != null && !fromServer.contains("block return in") && !fromServer.contains(PfPolicy.SMTP_OUT6_RULE));
+        check("  and the files with those rules are still the panel's: back to both, and from one family to another",
+                fromServer != null && fromServer.equals(PfPolicy.transform(v4only, today, "", false))
+                        && out6.equals(PfPolicy.transform(v4only, today, "inet ", false)) && v4only.equals(PfPolicy.transform(out6, today, "inet ", true))
+                        && v6only.equals(PfPolicy.transform(v4only, today, "inet6 ", false)));
         check("the real server's file is the panel's and is transformed", fromServer != null && fromServer.startsWith(PfPolicy.HEADER));
         // The panel's own file with the first line it had before the product name (DaemoxCP Mail, 17/11/2026):
         // only that line changes, the rules stay exactly the same.

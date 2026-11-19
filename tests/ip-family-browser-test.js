@@ -4,8 +4,11 @@
 //
 //   0. The state the panel reports.
 //   1. IPv6 only without an IPv6 default route: refused with the reason, nothing changes.
-//   2. IPv4 only: Postfix (25), Dovecot (993) and the webmail (8443) listen on IPv4 only, pf lets the mail in only
-//      as inet, and from this computer the ports answer over IPv4 and not over IPv6.
+//   2. IPv4 only: pf lets the mail in only as inet and refuses IPv6 at once (block return), mail does not go out over
+//      IPv6, and from this computer the ports answer over IPv4 and not over IPv6. Then IPv6 only going out (ipv6out):
+//      the same from outside, but mail may go out over IPv6.
+// The services listen over IPv4 and IPv6 whatever the choice (universal configurations, written once): the family is
+// pf's, so in every step 25, 993 and 8443 listen on both, and the reach checks from this computer are the proof.
 //   3. IPv6 only, with a temporary IPv6 default route on the test machine: first the warnings, then the change;
 //      the opposite of step 2 from outside, while on 127.0.0.1 Dovecot and Postfix still answer (the webmail, the
 //      antispam and the sending limits use it).
@@ -115,45 +118,60 @@ function families(sock, port) {
         async function looks(family, label) {
             const sock = remote('sockstat -46l -P tcp');
             const pf = remote('pfctl -sr 2>/dev/null');
-            // IPv6 only keeps IPv4 on the loopback (the webmail, the antispam milter and the sending limits talk to
-            // Postfix and Dovecot on 127.0.0.1): there an IPv6 socket must be there, IPv4 ones may stay, and from
-            // outside IPv4 is kept away by pf (the reach checks below are the proof).
+            // Universal configurations: every service listens over IPv4 and IPv6 whatever the choice; pf decides.
             for (const p of [25, 993, 8443]) {
                 const f = families(sock, p);
-                const ok = family === 'both' ? f === '46' : family === 'ipv4' ? f === '4' : f.includes('6');
-                check(label + ': port ' + p + ' listens as ' + family + ' (' + f + ')', ok);
+                check(label + ': port ' + p + ' listens over IPv4 and IPv6, the choice is pf\'s (' + f + ')', f === '46');
             }
             if (family === 'ipv6')
                 check(label + ': the local services still reach Dovecot (993) and Postfix (587) on 127.0.0.1',
                     (() => { try { return remote('nc -z -w 3 127.0.0.1 993 && nc -z -w 3 127.0.0.1 587 && echo reached').includes('reached'); } catch (e) { return false; } })());
             const svc = pf.split('\n').filter(l => l.startsWith('pass in') && / port = (smtp|25)\b/.test(l));
-            const kw = family === 'ipv4' ? ' inet ' : family === 'ipv6' ? ' inet6 ' : null;
+            const kw = family === 'ipv4' || family === 'ipv6out' ? ' inet ' : family === 'ipv6' ? ' inet6 ' : null;
             check(label + ': pf lets the mail in only as ' + family + ' (' + svc.map(l => l.replace(/\s+/g, ' ')).join(' | ') + ')',
                 svc.length > 0 && svc.every(l => kw ? l.includes(kw) : !/ inet6? /.test(l)));
+            // The closed family: an immediate refusal, not silence. Only IPv4: mail kept from going out over IPv6.
+            const closed = family === 'ipv4' || family === 'ipv6out' ? 'inet6' : family === 'ipv6' ? 'inet' : null;
+            const refusals = pf.split('\n').filter(l => l.startsWith('block return in') && / port = (smtp|25)\b/.test(l));
+            check(label + ': the closed family is refused at once (' + refusals.map(l => l.replace(/\s+/g, ' ')).join(' | ') + ')',
+                closed ? refusals.length > 0 && refusals.every(l => l.includes(' ' + closed + ' ')) : refusals.length === 0);
+            const out6 = pf.split('\n').some(l => l.startsWith('block return out') && l.includes(' inet6 ') && / port = (smtp|25)\b/.test(l));
+            check(label + ': mail ' + (family === 'ipv4' ? 'kept from going out' : 'free to go out') + ' over IPv6', out6 === (family === 'ipv4'));
             const ssh = pf.split('\n').filter(l => l.startsWith('pass in') && / port = (ssh|22)\b/.test(l));
             check(label + ': the SSH rule has no family', ssh.length > 0 && ssh.every(l => !/ inet6? /.test(l)));
             for (const p of [25, 993, 8443]) {
                 const r4 = await reach(V4, p), r6 = await reach(V6, p);
                 check(label + ': from the Mac, port ' + p + ' over IPv4 ' + (r4 ? 'answers' : 'does not') + ', over IPv6 ' + (r6 ? 'answers' : 'does not'),
-                    r4 === (family !== 'ipv6') && r6 === (family !== 'ipv4'));
+                    r4 === (family !== 'ipv6') && r6 === (family === 'both' || family === 'ipv6'));
             }
             check(label + ': SSH still answers over IPv4', remote('echo alive').trim() === 'alive');
         }
 
         console.log('== 0. What the panel reports ==');
         let d = await api(null);
-        check('GET: chosen ' + d.chosen + ', in use ' + d.effective, d.success && ['both', 'ipv4', 'ipv6'].includes(d.effective)
-            && (d.chosen === null || ['both', 'ipv4', 'ipv6'].includes(d.chosen)));
+        check('GET: chosen ' + d.chosen + ', in use ' + d.effective, d.success && ['both', 'ipv4', 'ipv6', 'ipv6out'].includes(d.effective)
+            && (d.chosen === null || ['both', 'ipv4', 'ipv6', 'ipv6out'].includes(d.chosen)));
 
         console.log('\n== 1. IPv6 only without an IPv6 default route: refused, nothing changes ==');
-        d = await api({ family: 'ipv6' });
-        check('refused, with the reason (' + d.error + ')', !d.success && !d.confirm && /IPv6/.test(d.error || ''));
+        // Since the Mac has IPv6 its network gives the test machine an IPv6 default route: then this cannot be tried.
+        if (remote('netstat -rn -f inet6 | grep -c ^default || true').trim() !== '0') {
+            console.log('  (skipped: the test machine has an IPv6 default route from its network)');
+        } else {
+            d = await api({ family: 'ipv6' });
+            check('refused, with the reason (' + d.error + ')', !d.success && !d.confirm && /IPv6/.test(d.error || ''));
+        }
 
         console.log('\n== 2. IPv4 only ==');
         d = await api({ family: 'ipv4' });
         if (d.confirm) { console.log('  (warnings: ' + d.warnings.join(' / ') + ')'); d = await api({ family: 'ipv4', confirmed: true }); }
         check('done (' + (d.error || 'ok') + ')', d.success);
         await looks('ipv4', 'IPv4 only');
+
+        console.log('\n== 2b. IPv6 only going out ==');
+        d = await api({ family: 'ipv6out' });
+        if (d.confirm) { console.log('  (warnings: ' + d.warnings.join(' / ') + ')'); d = await api({ family: 'ipv6out', confirmed: true }); }
+        check('done (' + (d.error || 'ok') + ')', d.success);
+        await looks('ipv6out', 'IPv6 only going out');
 
         console.log('\n== 3. IPv6 only, with a temporary IPv6 default route ==');
         remote('route -6 add default ' + V6.replace(/:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/, '::1') + ' >/dev/null 2>&1; netstat -rn -f inet6 | grep -c ^default');

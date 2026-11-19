@@ -130,11 +130,12 @@ It is **careful**. The panel never changes something it cannot check, and it say
   IPv6 reverse DNS in place (Gmail and Microsoft require it). The panel never removes a working IPv4: your provider
   does (on Hetzner with the server off), then the panel cleans up what is left. A family you are using to reach the
   panel is never removed, and SSH is never touched.
-  With IPv4 and IPv6, a switch says whether mail also comes in over IPv6. Off (recommended, as Apple does): mail goes
-  out over IPv6 but comes in only over IPv4, where spam and attacks are filtered better. The guide then points the
-  IPv6 reverse DNS to a name for sending only (`mail-out.` and your domain, with its own AAAA), adds `ip6:` to the
-  domains' SPF, keeps the mail name without AAAA and lets nothing in over IPv6. Switching it on, or going back to IPv4
-  only, are steps of the same guide.
+  With IPv4 and IPv6, a switch says whether mail also comes in over IPv6. Off (recommended): mail goes out over IPv6
+  but comes in only over IPv4, where spam and attacks are filtered better. One name for everything, the mail name,
+  with its AAAA and its IPv6 reverse DNS: whoever tries to deliver over IPv6 gets an immediate refusal from the
+  server's firewall and delivers over IPv4, with no delay. The services' configurations are written once and work for
+  every choice (they listen over IPv4 and IPv6); the firewall decides. Changing the switch touches neither the DNS nor
+  the services.
 - Privilege separation: the part that answers on the network runs as an unprivileged user (see
   [Security model](#security-model-who-runs-as-root-and-why)).
 

@@ -34,11 +34,16 @@ import java.util.regex.Pattern;
  * fra loro come sempre.
  *
  * <p>La quarta scelta, «IPv6 solo in uscita» (chiesta dal committente il 19/11/2026, «come fa Apple»): il server
- * riceve solo in IPv4 (posta, webmail, pannello), e in IPv6 la posta soltanto esce. Postfix resta su «all» per poter
- * spedire in IPv6, ma da fuori in IPv6 non entra niente: la regola dei servizi di pf e' solo «inet», come con solo
- * IPv4, e Dovecot e nginx ascoltano solo in IPv4. Il nome della posta non ha AAAA (nessuno prova a consegnare in IPv6);
- * il DNS inverso dell'IPv6 da' un nome solo per spedire (HostRecords.sendingName), che ha il suo AAAA; l'SPF dei
- * domini ha l'ip6 (SpfIp6). La guida degli indirizzi fa questi passi, e quelli per tornare indietro.
+ * riceve solo in IPv4 (posta, webmail, pannello), e in IPv6 la posta soltanto esce. Un nome solo, quello della posta,
+ * con il suo AAAA e il suo DNS inverso come per tutte e due: chi prova a consegnare in IPv6 riceve subito un rifiuto da
+ * pf e passa all'IPv4.
+ *
+ * <p>Configurazioni universali (chiesto dal committente il 19/11/2026: «le configurazioni farle universali così che poi
+ * è solo il pannello che si adatta»): Postfix, Dovecot e nginx ascoltano sempre in IPv4 e in IPv6, scritti una volta;
+ * la famiglia la decide pf (la regola dei servizi con la sua famiglia, un rifiuto subito sull'altra, e la posta che non
+ * esce in IPv6 con solo IPv4). Cambiare scelta non riscrive i servizi e non li riavvia: solo pf, e un reload di Postfix
+ * se cambia la preferenza d'uscita (solo IPv6). Il primo passaggio di un server che aveva gia' scelto li porta una volta
+ * alla forma universale.
  *
  * <p>Finche' l'amministratore non sceglie, all'avvio non cambia niente: i servizi restano come sono, e la pagina
  * mostra la famiglia che usa Postfix. Una scelta si applica servizio per servizio, ognuno col suo controllo (postfix
@@ -72,8 +77,8 @@ public final class IpFamily {
         BOTH("both", "all", "*, ::", ""),
         IPV4("ipv4", "ipv4", "*", "inet "),
         IPV6("ipv6", "all", "::, 127.0.0.1", "inet6 "),
-        /** Entra solo IPv4; in IPv6 la posta soltanto esce (Postfix su «all», pf e gli altri come solo IPv4). */
-        IPV6_OUT("ipv6out", "all", "*", "inet ");
+        /** Entra solo IPv4; in IPv6 la posta soltanto esce (pf come solo IPv4, ma la posta esce anche in IPv6). */
+        IPV6_OUT("ipv6out", "all", "*, ::", "inet ");
 
         /** Il valore salvato. */
         public final String key;
@@ -141,6 +146,12 @@ public final class IpFamily {
     public static String pfKeyword() {
         Family c = chosen();
         return c == null ? "" : c.pf;
+    }
+
+    /** Se pf deve tenere la posta fuori dall'IPv6 in uscita: con solo IPv4 scelto (Postfix e' universale, su «all»). */
+    public static boolean pfBlocksSmtpOut6() {
+        Family c = chosen();
+        return c != null && !c.sends6();
     }
 
     // ===================== funzioni pure =====================
@@ -235,8 +246,6 @@ public final class IpFamily {
             case BOTH -> l[0] && l[1];
             case IPV4 -> l[0] && !l[1];
             case IPV6 -> l[1];
-            // Postfix su «all» ascolta anche in IPv6 (per spedire in IPv6 deve), ma da fuori pf non fa entrare
-            // niente in IPv6: conta che ascolti in IPv4.
             case IPV6_OUT -> l[0];
         };
     }
@@ -285,11 +294,18 @@ public final class IpFamily {
         List<String> warnings = warnings(f, via);
         if (!confirmed && !warnings.isEmpty()) return Outcome.ask(warnings);
 
-        String problem = align(f);
-        if (problem != null) return Outcome.no(problem);
+        // Prima pf con la scelta nuova, poi i servizi nella forma universale (dalla seconda volta non cambiano): cosi'
+        // Postfix su «all» non spedisce mai in IPv6 prima che pf lo tenga fuori, se la scelta e' solo IPv4.
+        String before = db.getSetting(SETTING, "");
         db.setSetting(SETTING, f.key);
         org.daemoxcp.mail.security.PfPolicy.ensureAtBoot();
-        LOGGER.info("[IpFamily] DONE: the server now speaks " + f.key + " (Postfix, Dovecot, nginx, pf)");
+        String problem = align(f);
+        if (problem != null) {
+            db.setSetting(SETTING, before == null ? "" : before);
+            org.daemoxcp.mail.security.PfPolicy.ensureAtBoot();
+            return Outcome.no(problem);
+        }
+        LOGGER.info("[IpFamily] DONE: the server now speaks " + f.key + " (pf; Postfix, Dovecot, nginx listen on both)");
         return Outcome.ok(warnings);
     }
 
@@ -330,10 +346,10 @@ public final class IpFamily {
     }
 
     /**
-     * Se la famiglia porta la posta in IPv6 e il server ha un IPv6 globale, il DNS inverso di quell'indirizzo deve dare
-     * il nome della posta o quello per spedire (HostRecords.sendingName), e quel nome tornare all'indirizzo: altrimenti
-     * il motivo. Senza un IPv6 globale non serve (la posta non esce in IPv6), senza nome della posta non lo si puo'
-     * controllare e non si blocca.
+     * Se la famiglia porta la posta in IPv6 (anche solo in uscita) e il server ha un IPv6 globale, il DNS inverso di
+     * quell'indirizzo deve dare il nome della posta, e il nome tornare all'indirizzo: altrimenti il motivo. Senza un
+     * IPv6 globale non serve (la posta non esce in IPv6), senza nome della posta non lo si puo' controllare e non si
+     * blocca.
      */
     static String missingPtr6(Family f) {
         if (!f.sends6()) return null;
@@ -344,10 +360,7 @@ public final class IpFamily {
         if (host == null || !host.matches("[a-zA-Z0-9.-]{1,253}")) return null;
         String ip = s.v6().addresses().get(0);
         org.daemoxcp.mail.security.ReverseDns.Check c = org.daemoxcp.mail.security.ReverseDns.check(ip, host);
-        if (c.ok()) return null;
-        String send = org.daemoxcp.mail.security.HostRecords.sendingName(host);
-        if (send != null && org.daemoxcp.mail.security.ReverseDns.check(ip, send).ok()) return null;
-        return org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noPtr6", Map.of("ip", ip, "h", f == Family.IPV6_OUT && send != null ? send : host));
+        return c.ok() ? null : org.daemoxcp.mail.i18n.I18n.tr("server.ipf.noPtr6", Map.of("ip", ip, "h", host));
     }
 
     /** Quello che chi sceglie deve sapere prima: cosa smette di funzionare con quella famiglia. */
@@ -361,17 +374,7 @@ public final class IpFamily {
         boolean hostOk = host != null && host.matches("[a-zA-Z0-9.-]{1,253}");
         if (f == Family.IPV4 && hostOk && !dig("AAAA", host).isEmpty())
             w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnAaaa", Map.of("h", host)));
-        if (f == Family.IPV6_OUT) {
-            // Con l'AAAA chi spedisce prova l'IPv6 e trova la porta chiusa (riprova in IPv4, in ritardo).
-            if (hostOk && !dig("AAAA", host).isEmpty())
-                w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnAaaaOut", Map.of("h", host)));
-            ServerAddresses.State s = ServerAddresses.read();
-            if (!s.v6().addresses().isEmpty() && db != null) {
-                List<String> without = org.daemoxcp.mail.security.SpfIp6.status(db, s.v6().addresses().get(0)).uncovered();
-                if (!without.isEmpty())
-                    w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnSpf6", Map.of("list", String.join(", ", without))));
-            }
-        }
+
         if (f == Family.IPV6) {
             w.add(org.daemoxcp.mail.i18n.I18n.tr("server.ipf.warnV6Only"));
             if (hostOk && !dig("A", host).isEmpty())
@@ -403,16 +406,17 @@ public final class IpFamily {
     }
 
     /**
-     * Postfix, Dovecot e nginx nella famiglia f. Null se e' fatto (o se era gia' cosi'); altrimenti il motivo, con tutti
-     * i file rimessi com'erano e i servizi gia' toccati riavviati.
+     * Postfix, Dovecot e nginx nella forma universale: in ascolto in IPv4 e in IPv6, qualunque sia f (la famiglia la
+     * decide pf); di f conta solo la preferenza d'uscita di Postfix. Null se e' fatto (o se era gia' cosi'); altrimenti
+     * il motivo, con tutti i file rimessi com'erano e i servizi gia' toccati riavviati.
      */
     static synchronized String align(Family f) {
         Map<Path, byte[]> before = new LinkedHashMap<>();
         List<String> touched = new ArrayList<>();
         try {
             String why = postfix(f, before, touched);
-            if (why == null) why = dovecot(f, before, touched);
-            if (why == null) why = nginx(f, before, touched);
+            if (why == null) why = dovecot(Family.BOTH, before, touched);
+            if (why == null) why = nginx(Family.BOTH, before, touched);
             if (why == null) return null;
             restore(before, touched);
             return why;
@@ -425,21 +429,26 @@ public final class IpFamily {
     private static String postfix(Family f, Map<Path, byte[]> before, List<String> touched) throws Exception {
         if (!Files.isExecutable(Path.of(POSTCONF))) return null;
         String preference = postfixPreference(f);
-        if (fromPostfix(postconf("-h", "inet_protocols")) == fromPostfix(f.postfix)
-                && preference.equals(postconf("-h", "smtp_address_preference").trim())) return null;
+        boolean protocols = fromPostfix(postconf("-h", "inet_protocols")) != Family.BOTH;
+        if (!protocols && preference.equals(postconf("-h", "smtp_address_preference").trim())) return null;
         Path mainCf = Path.of(postconf("-h", "config_directory"), "main.cf");
         if (!Files.isRegularFile(mainCf)) return "Postfix: " + mainCf + " not found";
         before.put(mainCf, Files.readAllBytes(mainCf));
         boolean checkedBefore = Shell.run(Duration.ofSeconds(60), POSTFIX, "check").success();
-        Shell.Result r = Shell.run(Duration.ofSeconds(30), POSTCONF, "-e", "inet_protocols=" + f.postfix,
+        Shell.Result r = Shell.run(Duration.ofSeconds(30), POSTCONF, "-e", "inet_protocols=" + Family.BOTH.postfix,
                 "smtp_address_preference=" + preference);
         if (!r.success()) return "Postfix: postconf -e failed: " + r.outputTrim();
         if (checkedBefore && !Shell.run(Duration.ofSeconds(60), POSTFIX, "check").success())
-            return "Postfix: postfix check refuses inet_protocols = " + f.postfix;
+            return "Postfix: postfix check refuses inet_protocols = " + Family.BOTH.postfix;
         touched.add("postfix");
-        // inet_protocols vuole un riavvio: un reload tiene i socket aperti.
+        if (!protocols) {
+            // Cambia solo la preferenza d'uscita: basta un reload, i socket restano.
+            Shell.run(Duration.ofSeconds(60), "service", "postfix", "reload");
+            return null;
+        }
+        // inet_protocols vuole un riavvio: un reload tiene i socket aperti. Succede una volta sola (forma universale).
         Shell.run(Duration.ofSeconds(90), "service", "postfix", "restart");
-        if (!waitListening(25, f)) return "Postfix: after the restart port 25 does not listen as " + f.key;
+        if (!waitListening(25, Family.BOTH)) return "Postfix: after the restart port 25 does not listen on IPv4 and IPv6";
         return null;
     }
 

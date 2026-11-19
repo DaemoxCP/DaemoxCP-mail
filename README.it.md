@@ -130,11 +130,11 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   La posta passa all'IPv6 solo col DNS inverso IPv6 a posto (Gmail e Microsoft lo pretendono). Un IPv4 che funziona il
   pannello non lo toglie mai: lo toglie il provider (su Hetzner a server spento), poi il pannello pulisce quello che
   resta. Una famiglia che stai usando per arrivare al pannello non si toglie mai, e SSH non si tocca.
-  Con IPv4 e IPv6, un interruttore dice se la posta entra anche in IPv6. Spento (consigliato, come fa Apple): la
-  posta esce in IPv6 ma entra solo in IPv4, dove spam e attacchi si filtrano meglio. La guida allora porta il DNS
-  inverso dell'IPv6 su un nome solo per spedire (`mail-out.` col tuo dominio, col suo AAAA), aggiunge `ip6:` all'SPF
-  dei domini, lascia il nome della posta senza AAAA e non fa entrare niente in IPv6. Accenderlo, o tornare a solo
-  IPv4, sono passi della stessa guida.
+  Con IPv4 e IPv6, un interruttore dice se la posta entra anche in IPv6. Spento (consigliato): la posta esce in IPv6
+  ma entra solo in IPv4, dove spam e attacchi si filtrano meglio. Un nome solo per tutto, quello della posta, col suo
+  AAAA e il suo DNS inverso IPv6: chi prova a consegnare in IPv6 riceve subito un rifiuto dal firewall del server e
+  consegna in IPv4, senza ritardi. Le configurazioni dei servizi si scrivono una volta e valgono per ogni scelta
+  (ascoltano in IPv4 e in IPv6); decide il firewall. Cambiare l'interruttore non tocca né il DNS né i servizi.
 - Separazione dei privilegi: la parte che risponde in rete gira con un utente senza privilegi (vedi
   [Sicurezza](#sicurezza-chi-gira-da-root-e-perché)).
 
