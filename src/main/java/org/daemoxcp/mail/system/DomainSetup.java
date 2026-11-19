@@ -125,7 +125,7 @@ public class DomainSetup {
                     .put("note", I18n.tr("server.cfgdom.summary", java.util.Map.of("ok", String.valueOf(succeeded), "tot", String.valueOf(steps.length()))));
         } catch (Exception e) {
             return r.put("success", false).put("steps", steps)
-                    .put("error", I18n.tr("server.cfgdom.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+                    .put("error", I18n.tr("server.cfgdom.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("DomainSetup", e))));
         }
     }
 
@@ -193,7 +193,7 @@ public class DomainSetup {
                 return CloudflareChoice.no(I18n.tr("server.operationFailed"));
             return c;
         } catch (Exception e) {
-            return CloudflareChoice.no(I18n.tr("server.cfgdom.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return CloudflareChoice.no(I18n.tr("server.cfgdom.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("DomainSetup", e))));
         }
     }
 
@@ -219,7 +219,7 @@ public class DomainSetup {
                     d.dkimSelector, d.dkimPublicKey, dk::newKey, k -> dk.install(d.id, d.domain, k));
             return entry("DKIM", st.ok(), st.message());
         } catch (Exception e) {
-            return entry("DKIM", false, I18n.tr("server.cfgdom.dkimError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return entry("DKIM", false, I18n.tr("server.cfgdom.dkimError", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("DomainSetup", e))));
         }
     }
 

@@ -7544,5 +7544,15 @@
   "console.tz.empty": "Scrivi un fuso orario, per esempio Europe/Rome o UTC.",
   "console.tz.badName": "«{name}» non è il nome di un fuso orario: solo lettere, cifre, _ + - e /, come Europe/Rome.",
   "console.tz.unknown": "«{name}» non è un fuso orario conosciuto. Esempi: Europe/Rome, Europe/London, America/New_York, UTC.",
-  "console.tz.notHere": "«{name}» non c'è in {dir} su questo sistema."
+  "console.tz.notHere": "«{name}» non c'è in {dir} su questo sistema.",
+  "server.vault.noPublicKey": "La cassaforte delle password non ha ancora la chiave pubblica.",
+  "server.vault.noPrivateKey": "La cassaforte delle password non ha ancora la chiave privata.",
+  "server.limits.notRunning": "il servizio del pannello che applica i limiti non è in funzione",
+  "server.limits.notAsked": "Postfix non chiede ancora al pannello (smtpd_data_restrictions)",
+  "server.sso.noMaster": "La password principale della webmail non è configurata: reinstalla il server di posta o riavvia il pannello.",
+  "server.sso.tokenFailed": "Non riesco a creare l'accesso alla webmail: {e}",
+  "server.sso.noRoundcube": "Roundcube non c'è in {path}.",
+  "server.sso.installed": "Il plugin di accesso alla webmail è installato.",
+  "server.sso.installFailed": "Il plugin di accesso alla webmail non si è installato: {e}",
+  "server.f2bm.installFailed": "Installazione non riuscita: {e}"
 }

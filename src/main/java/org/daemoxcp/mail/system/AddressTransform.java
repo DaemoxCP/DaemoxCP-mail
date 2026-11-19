@@ -443,18 +443,18 @@ public final class AddressTransform {
         for (int k = 0; requests != null && k < requests.length(); k++) {
             String x = requests.optString(k, "").trim().toLowerCase(Locale.ROOT);
             if (x.isEmpty() || d.contains(x)) continue;
-            if (!validAddress(x)) throw new IllegalArgumentException(I18n.tr("server.convert.badAddress", java.util.Map.of("x", String.valueOf(x))));
+            if (!validAddress(x)) throw org.daemoxcp.mail.util.ShownException.of("server.convert.badAddress", java.util.Map.of("x", String.valueOf(x)));
             if (x.equals(address))
-                throw new IllegalArgumentException(I18n.tr("server.convert.selfDest", java.util.Map.of("a", String.valueOf(address))));
+                throw org.daemoxcp.mail.util.ShownException.of("server.convert.selfDest", java.util.Map.of("a", String.valueOf(address)));
             d.add(x);
         }
-        if (d.isEmpty()) throw new IllegalArgumentException(I18n.tr("server.convert.needDest", java.util.Map.of("a", String.valueOf(address))));
-        if (d.size() > MAX_DESTINATIONS) throw new IllegalArgumentException(I18n.tr("server.convert.maxDest", java.util.Map.of("n", String.valueOf(MAX_DESTINATIONS))));
+        if (d.isEmpty()) throw org.daemoxcp.mail.util.ShownException.of("server.convert.needDest", java.util.Map.of("a", String.valueOf(address)));
+        if (d.size() > MAX_DESTINATIONS) throw org.daemoxcp.mail.util.ShownException.of("server.convert.maxDest", java.util.Map.of("n", String.valueOf(MAX_DESTINATIONS)));
         for (String x : d) {
             String dom = domain(x);
             if (network.panelDomain(dom) && !network.receives(x) && network.activeDestinations(x).isEmpty()
                     && network.activeDestinations("@" + dom).isEmpty())
-                throw new IllegalArgumentException(I18n.tr("server.convert.deadDest", java.util.Map.of("x", String.valueOf(x))));
+                throw org.daemoxcp.mail.util.ShownException.of("server.convert.deadDest", java.util.Map.of("x", String.valueOf(x)));
         }
         // Dopo, la posta per l'indirizzo andra' alle destinazioni nuove e a quelle che ha gia'.
         Set<String> all = new LinkedHashSet<>(d);
@@ -462,7 +462,7 @@ public final class AddressTransform {
         for (String x : all) {
             String round = round(x, address, network);
             if (round != null)
-                throw new IllegalArgumentException(I18n.tr("server.convert.loop", java.util.Map.of("x", String.valueOf(x), "a", String.valueOf(address), "loop", String.valueOf(round))));
+                throw org.daemoxcp.mail.util.ShownException.of("server.convert.loop", java.util.Map.of("x", String.valueOf(x), "a", String.valueOf(address), "loop", String.valueOf(round)));
         }
         return d;
     }

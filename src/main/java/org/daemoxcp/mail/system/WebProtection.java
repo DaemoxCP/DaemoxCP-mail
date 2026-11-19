@@ -291,7 +291,7 @@ public class WebProtection {
                     .put("note", I18n.tr("server.pubweb.installed"));
         } catch (Exception e) {
             return new JSONObject().put("success", false)
-                    .put("error", I18n.tr("server.pubweb.installError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+                    .put("error", I18n.tr("server.pubweb.installError", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("WebProtection", e))));
         }
     }
 
@@ -310,7 +310,7 @@ public class WebProtection {
             return r.put("success", true).put("mode", mode).put("text", text)
                     .put("id", MtaSts.id(text));
         } catch (Exception e) {
-            return r.put("success", false).put("error", I18n.tr("server.pubweb.cannotWrite", java.util.Map.of("file", String.valueOf(POLICY_FILE), "err", String.valueOf(e.getMessage()))));
+            return r.put("success", false).put("error", I18n.tr("server.pubweb.cannotWrite", java.util.Map.of("file", String.valueOf(POLICY_FILE), "err", org.daemoxcp.mail.util.ErrorText.detail("WebProtection", e))));
         }
     }
 
@@ -426,7 +426,7 @@ public class WebProtection {
             return r.put("success", true)
                     .put("note", I18n.tr("server.pubweb.includeAdded", java.util.Map.of("dir", String.valueOf(PROPOSED_FOLDER), "file", String.valueOf(main), "copy", String.valueOf(MAIN_COPY))));
         } catch (Exception e) {
-            return r.put("success", false).put("error", I18n.tr("server.pubweb.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return r.put("success", false).put("error", I18n.tr("server.pubweb.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("WebProtection", e))));
         }
     }
 
@@ -528,7 +528,7 @@ public class WebProtection {
             return r.put("success", true).put("state", st.output.trim())
                     .put("note", I18n.tr("server.pubweb.jailActive"));
         } catch (Exception e) {
-            return r.put("success", false).put("error", I18n.tr("server.pubweb.jailError", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return r.put("success", false).put("error", I18n.tr("server.pubweb.jailError", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("WebProtection", e))));
         }
     }
 

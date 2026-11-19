@@ -919,7 +919,7 @@ public class DnsRecordsGenerator {
 
         } catch (Exception e) {
             check.passed = false;
-            check.message = I18n.tr("server.dnsg.ptrError", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            check.message = I18n.tr("server.dnsg.ptrError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DnsRecordsGenerator", e)));
             return check;
         }
     }

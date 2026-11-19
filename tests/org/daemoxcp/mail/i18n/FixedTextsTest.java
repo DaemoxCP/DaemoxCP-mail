@@ -25,6 +25,10 @@ import java.util.stream.Stream;
  *  5. The checks can fail: each one finds the fixed text in a small sample made wrong on purpose.
  *  6. The console (Main and gui/*: the on-screen menu, its windows, and the commands' answers): a window, a label, a
  *     button, a title, a menu item or a dialog never has a fixed text; the console speaks the panel's language.
+ *  7. An error written for the page is a ShownException (translated, ErrorText lets it through), never an
+ *     IllegalArgumentException or IllegalStateException with I18n.tr inside (ErrorText now keeps those from the page).
+ *  8. The raw text of an exception (e.getMessage(): MySQL's, a file's, in English) never goes into a translated text
+ *     or a field of an answer: ErrorText.detail(caller, e) instead. Journals, log lines and the console keep it.
  *
  * Logs, operation journals and the output of other programs are not checked: they stay in English, the same for
  * everyone (decided on 19/11/2026). A text that is really technical goes in the lists below, with nothing else.
@@ -194,6 +198,44 @@ public class FixedTextsTest {
         return out;
     }
 
+    // ---------- 7-8. errors ----------
+
+    static final Pattern TRANSLATED_PLAIN_EXCEPTION = Pattern.compile("new (IllegalArgumentException|IllegalStateException)\\(\\s*(org\\.daemoxcp\\.mail\\.i18n\\.)?I18n\\.");
+    static final Pattern CATCH_VAR = Pattern.compile("catch\\s*\\(\\s*(?:final\\s+)?[\\w.]+(?:\\s*\\|\\s*[\\w.]+)*\\s+(\\w+)\\s*\\)");
+    static final Pattern TO_PAGE = Pattern.compile("I18n\\.tr\\(|errorMessage\\s*=|\\.put\\(\"(error|message|warning|detail|reason|messageText)\"|\\.error\\s*=|\\.message\\s*=");
+    static final Pattern NOT_TO_PAGE = Pattern.compile("\\.write\\(|\\.line\\(|journal|log\\.append|out\\.println|err\\.println|LOGGER|\\.log\\(|System\\.(out|err)|logAudit|\\.warning\\(|\\.info\\(|\\.severe\\(|\\.fine\\(");
+
+    static List<String> translatedPlainExceptions(String file, String src) {
+        List<String> out = new ArrayList<>();
+        Matcher m = TRANSLATED_PLAIN_EXCEPTION.matcher(src);
+        while (m.find()) out.add("new " + m.group(1) + "(I18n...)\t" + file + ":" + line(src, m.start()));
+        return out;
+    }
+
+    /** The statements (split at ; { }) that put a caught exception's raw message towards a page. */
+    static List<String> rawDetails(String file, String src) {
+        List<String> out = new ArrayList<>();
+        Set<String> caught = new TreeSet<>();
+        Matcher c = CATCH_VAR.matcher(src);
+        while (c.find()) caught.add(c.group(1));
+        if (caught.isEmpty()) return out;
+        String code = withoutComments(src).replaceAll("(?m)//[^\\n\"]*$", "");
+        int start = 0;
+        for (int i = 0; i <= code.length(); i++) {
+            if (i < code.length() && ";{}".indexOf(code.charAt(i)) < 0) continue;
+            String stmt = code.substring(start, Math.min(i + 1, code.length()));
+            start = i + 1;
+            if (!stmt.contains("getMessage()") || !TO_PAGE.matcher(stmt).find() || NOT_TO_PAGE.matcher(stmt).find()) continue;
+            for (String v : caught) {
+                if (Pattern.compile("(?<![\\w.])" + v + "\\.getMessage\\(\\)").matcher(stmt).find()) {
+                    out.add(v + ".getMessage() towards a page\t" + file + ":" + line(code, i));
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
     static int line(String src, int at) {
         int n = 1;
         for (int i = 0; i < at; i++) if (src.charAt(i) == '\n') n++;
@@ -238,6 +280,11 @@ public class FixedTextsTest {
         check("a fixed text in a console window, label or menu item is found, a translated one is not",
                 consoleTexts("x", "new Label(\"Panel Settings\"); new Button(I18n.tr(\"console.save\"), x); actionListBox.addItem(\"1) \" + a, b);"
                         + " new Welcome(\"Information\", text);").size() == 2);
+        check("a translated error thrown as a plain IllegalStateException is found, a ShownException is not",
+                translatedPlainExceptions("x", "throw new IllegalStateException(I18n.tr(\"server.a\")); throw ShownException.of(\"server.a\");").size() == 1);
+        check("a raw exception text towards a page is found; in a journal it is not",
+                rawDetails("x", "try { a(); } catch (Exception e) { r.put(\"error\", e.getMessage()); }\n"
+                        + "try { b(); } catch (IOException ex) { job.write(\"failed: \" + ex.getMessage()); }").size() == 1);
         check("a fixed answer of the server is found, a code is not",
                 answers("x", "r.put(\"error\", \"Unknown action\"); r.put(\"error\", \"too_large\");"
                         + " sendJsonError(exchange, 400, \"Bad request\");").size() == 2);
@@ -283,6 +330,21 @@ public class FixedTextsTest {
         List<String> c = new ArrayList<>();
         for (String f : console) c.add(f.replace('\t', ' '));
         check("every window, label, button, title and menu item of the console comes from the language files" + show(c), console.isEmpty());
+
+        System.out.println("\n== 7-8. Errors ==");
+        List<String> plain = new ArrayList<>(), raw = new ArrayList<>();
+        for (Path p : files("src/main/java", ".java")) {
+            String name = p.toString().replaceFirst("^src/main/java/org/daemoxcp/mail/", ""), src = Files.readString(p);
+            plain.addAll(translatedPlainExceptions(name, src));
+            // the console shows its administrator the raw detail; ErrorText is where the detail is turned into text
+            if (name.equals("Main.java") || name.startsWith("gui/") || name.equals("util/ErrorText.java")) continue;
+            raw.addAll(rawDetails(name, src));
+        }
+        List<String> pl = new ArrayList<>(), rw = new ArrayList<>();
+        for (String f : plain) pl.add(f.replace('\t', ' '));
+        for (String f : raw) rw.add(f.replace('\t', ' '));
+        check("every translated error for the page is a ShownException" + show(pl), plain.isEmpty());
+        check("no raw exception text goes towards a page (ErrorText.detail instead)" + show(rw), raw.isEmpty());
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         System.exit(failed == 0 ? 0 : 1);

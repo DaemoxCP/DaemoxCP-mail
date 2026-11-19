@@ -976,7 +976,7 @@ public final class PackagePlan {
             }
             return r.put("verdict", verdict).put("explanation", explain);
         } catch (RuntimeException e) {
-            return r.put("verdict", "unknown").put("explanation", I18n.tr("server.plan.v.compareFailed", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return r.put("verdict", "unknown").put("explanation", I18n.tr("server.plan.v.compareFailed", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("PackagePlan", e))));
         }
     }
 
@@ -999,7 +999,7 @@ public final class PackagePlan {
         JSONObject vuln;
         try { vuln = readAudit(out); }
         catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", I18n.tr("server.plan.auditJson", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.plan.auditJson", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("PackagePlan", e))));
         }
         VersionComparator c = pkgComparison();
         JSONObject per = new JSONObject();

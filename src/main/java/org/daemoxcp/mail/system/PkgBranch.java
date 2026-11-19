@@ -370,7 +370,7 @@ public final class PkgBranch {
             }
         } catch (IOException e) {
             try { restore(s, before); } catch (IOException ignored) { /* detto sotto */ }
-            return error(log, I18n.tr("server.branch.cannotWrite", java.util.Map.of("dir", String.valueOf(FOLDER), "m", String.valueOf(e.getMessage()))));
+            return error(log, I18n.tr("server.branch.cannotWrite", java.util.Map.of("dir", String.valueOf(FOLDER), "m", org.daemoxcp.mail.util.ErrorText.detail("PkgBranch", e))));
         }
         // Cosa cambia per i pacchetti installati, dal catalogo appena scaricato.
         int updatable = 0;

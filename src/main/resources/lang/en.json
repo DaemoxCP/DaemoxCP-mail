@@ -7544,5 +7544,15 @@
   "console.tz.empty": "Write a time zone, for example Europe/Rome or UTC.",
   "console.tz.badName": "\"{name}\" is not a time zone name: letters, digits, _ + - and / only, like Europe/Rome.",
   "console.tz.unknown": "\"{name}\" is not a known time zone. Examples: Europe/Rome, Europe/London, America/New_York, UTC.",
-  "console.tz.notHere": "\"{name}\" is not in {dir} on this system."
+  "console.tz.notHere": "\"{name}\" is not in {dir} on this system.",
+  "server.vault.noPublicKey": "The password vault has no public key yet.",
+  "server.vault.noPrivateKey": "The password vault has no private key yet.",
+  "server.limits.notRunning": "the panel's policy service is not running",
+  "server.limits.notAsked": "Postfix does not ask the panel yet (smtpd_data_restrictions)",
+  "server.sso.noMaster": "The webmail master password is not configured: reinstall the mail server or restart the panel.",
+  "server.sso.tokenFailed": "The webmail sign-in could not be created: {e}",
+  "server.sso.noRoundcube": "Roundcube is not in {path}.",
+  "server.sso.installed": "The webmail sign-in plugin is installed.",
+  "server.sso.installFailed": "The webmail sign-in plugin was not installed: {e}",
+  "server.f2bm.installFailed": "Installation failed: {e}"
 }

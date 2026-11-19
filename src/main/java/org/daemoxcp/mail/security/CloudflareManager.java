@@ -78,7 +78,7 @@ public class CloudflareManager {
                 email == null ? null : email.trim(), apiToken.trim());
             return new AddAccountResult(true, newId, I18n.tr("server.cfm.added"));
         } catch (Exception e) {
-            return new AddAccountResult(false, -1, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new AddAccountResult(false, -1, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -125,7 +125,7 @@ public class CloudflareManager {
                                     : I18n.tr("server.cfm.tokenSaved"));
 
         } catch (Exception e) {
-            return new AddAccountResult(false, id, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new AddAccountResult(false, id, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -166,7 +166,7 @@ public class CloudflareManager {
             }
             return new TokenCheck(true, I18n.tr("server.cfm.tokenActive"), status);
         } catch (Exception e) {
-            return new TokenCheck(false, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))), null);
+            return new TokenCheck(false, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))), null);
         }
     }
 
@@ -198,7 +198,7 @@ public class CloudflareManager {
             }
             return new ZoneLookup(false, null, null, I18n.tr("server.cfm.noZone", java.util.Map.of("d", String.valueOf(domain))));
         } catch (Exception e) {
-            return new ZoneLookup(false, null, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new ZoneLookup(false, null, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -222,7 +222,7 @@ public class CloudflareManager {
             }
             return new RecordOp(false, null, extractErrorMessage(body));
         } catch (Exception e) {
-            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -300,7 +300,7 @@ public class CloudflareManager {
             }
             return new RecordOp(false, null, "not found");
         } catch (Exception e) {
-            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -434,7 +434,7 @@ public class CloudflareManager {
             payload.put("comment", RECORD_COMMENT);
             return outcome(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -456,7 +456,7 @@ public class CloudflareManager {
             payload.put("comment", RECORD_COMMENT);
             return outcome(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -482,7 +482,7 @@ public class CloudflareManager {
             payload.put("comment", RECORD_COMMENT);
             return outcome(call("POST", "/zones/" + zoneId + "/dns_records", token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -506,7 +506,7 @@ public class CloudflareManager {
             return outcome(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -527,7 +527,7 @@ public class CloudflareManager {
             return outcome(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -541,7 +541,7 @@ public class CloudflareManager {
             return outcome(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -556,7 +556,7 @@ public class CloudflareManager {
             return outcome(call("PATCH", "/zones/" + zoneId + "/dns_records/" + recordId,
                     token, payload.toString()));
         } catch (Exception e) {
-            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 
@@ -655,7 +655,7 @@ public class CloudflareManager {
             }
             return new RecordOp(false, null, extractErrorMessage(body));
         } catch (Exception e) {
-            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new RecordOp(false, null, I18n.tr("server.cfm.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("CloudflareManager", e))));
         }
     }
 

@@ -22,8 +22,11 @@ import java.util.logging.Logger;
  * <p>Before, the routes put {@code e.getMessage()} of any exception in the answer: a duplicate in MySQL showed the
  * page the table and key, a missing file its path, a broken JSON the name of the key.
  * <ul>
- *   <li>IllegalArgumentException and IllegalStateException with a message: the message, nothing in the log;</li>
+ *   <li>ShownException (an error written for the page, already translated): its text, nothing in the log;</li>
  *   <li>PasskeyException: the text of the key it carries;</li>
+ *   <li>IllegalArgumentException and IllegalStateException with a message written by hand, or wrapping another
+ *       exception: the generic text, and the log (until 19/11/2026 their message passed, often an English text
+ *       written in the code, or a wrapped exception's class and path, in the Italian pages too);</li>
  *   <li>InvalidPathException, NumberFormatException, an IOException with a path, an SQLException naming a table, a
  *       NullPointerException, no message at all: the generic text, and one WARNING line in the log with the route's
  *       method and the whole exception;</li>
@@ -59,15 +62,29 @@ public class ErrorTextTest {
         check("the three texts exist in English (" + generic + " | " + inLog + " | " + exists + ")",
                 !generic.equals("server.requestFailed") && !inLog.equals("server.detailsInLog") && !exists.equals("server.alreadyExists"));
 
-        System.out.println("\n== The panel's own messages pass");
+        System.out.println("\n== The panel's own messages pass, translated");
         LOGGED.clear();
-        check("IllegalArgumentException: its message", ErrorText.forPage("handleX", new IllegalArgumentException("The address is not valid")).equals("The address is not valid"));
-        check("IllegalStateException: its message", ErrorText.forPage("handleX", new IllegalStateException("Another update is running")).equals("Another update is running"));
+        String shown = I18n.tr("server.badIp");
+        check("ShownException: its translated text (" + shown + ")", !shown.equals("server.badIp")
+                && ErrorText.forPage("handleX", ShownException.of("server.badIp")).equals(shown));
+        String withValue = I18n.tr("server.convert.maxDest", java.util.Map.of("n", "10"));
+        check("ShownException with a {value}: the text with the value", ErrorText.forPage("handleX",
+                ShownException.of("server.convert.maxDest", java.util.Map.of("n", "10"))).equals(withValue) && withValue.contains("10"));
         String passkey = I18n.tr("server.passkey.expired");
         check("PasskeyException: the text of its key (" + passkey + ")", !passkey.equals("server.passkey.expired")
                 && ErrorText.forPage("handleX", new PasskeyService.PasskeyException("server.passkey.expired")).equals(passkey));
-        check("detail() of the same: the message", ErrorText.detail("handleX", new IllegalArgumentException("Too many destinations")).equals("Too many destinations"));
+        check("detail() of the same: the text", ErrorText.detail("handleX", ShownException.of("server.badIp")).equals(shown));
         check("  nothing in the log", LOGGED.isEmpty());
+
+        System.out.println("\n== A text written by hand in the code does not reach the page");
+        LOGGED.clear();
+        check("IllegalArgumentException with an English text: the generic text",
+                ErrorText.forPage("handleX", new IllegalArgumentException("The address is not valid")).equals(generic));
+        check("IllegalStateException with an English text: the generic text",
+                ErrorText.forPage("handleX", new IllegalStateException("Another update is running")).equals(generic));
+        check("IllegalStateException wrapping an IOException with a path: in detail(), «" + inLog + "»",
+                ErrorText.detail("handleX", new IllegalStateException(new java.io.IOException("/root/secret: denied"))).equals(inLog));
+        check("  each one in the log", LOGGED.size() == 3);
 
         System.out.println("\n== Anything else: the generic text, and the log");
         Object[][] hidden = {

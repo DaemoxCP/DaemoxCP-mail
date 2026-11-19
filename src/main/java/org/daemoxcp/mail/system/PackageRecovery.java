@@ -185,7 +185,7 @@ public final class PackageRecovery {
             Files.deleteIfExists(notice);
             return new JSONObject().put("success", true).put("note", I18n.tr("server.recovery.dismissed"));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", String.valueOf(e.getMessage()));
+            return new JSONObject().put("success", false).put("error", org.daemoxcp.mail.util.ErrorText.detail("PackageRecovery", e));
         }
     }
 

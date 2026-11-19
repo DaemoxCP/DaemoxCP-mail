@@ -73,7 +73,7 @@ public class AutoDns {
             r.put("reports", reportDelivery(d));
             return r;
         } catch (Exception e) {
-            return error(I18n.tr("server.adns.readState", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return error(I18n.tr("server.adns.readState", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AutoDns", e))));
         }
     }
 
@@ -224,7 +224,7 @@ public class AutoDns {
                                 ? I18n.tr("server.adns.policyNone", java.util.Map.of("p", String.valueOf(pol)))
                                 : I18n.tr("server.adns.policyActive", java.util.Map.of("p", String.valueOf(pol))))));
         } catch (Exception e) {
-            return error(I18n.tr("server.adns.createError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return error(I18n.tr("server.adns.createError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AutoDns", e))));
         }
     }
 
@@ -315,7 +315,7 @@ public class AutoDns {
                                : I18n.tr("server.adns.noneNow"))
                             + " " + I18n.tr("server.adns.propagation"));
         } catch (Exception e) {
-            return error(I18n.tr("server.adns.editError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return error(I18n.tr("server.adns.editError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AutoDns", e))));
         }
     }
 
@@ -350,7 +350,7 @@ public class AutoDns {
 
             return alignMtaStsTxt(acct.apiToken, zl.zoneId, name, value, r);
         } catch (Exception e) {
-            return error(I18n.tr("server.adns.createError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return error(I18n.tr("server.adns.createError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AutoDns", e))));
         }
     }
 
@@ -472,7 +472,7 @@ public class AutoDns {
             return o.put("exists", false)
                     .put("note", I18n.tr("server.adns.ruaInside"));
         } catch (Exception e) {
-            return o.put("exists", false).put("error", I18n.tr("server.adns.readBoxes", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return o.put("exists", false).put("error", I18n.tr("server.adns.readBoxes", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AutoDns", e))));
         }
     }
 
@@ -528,7 +528,7 @@ public class AutoDns {
                     .put("note", I18n.tr("server.adns.aliasCreated", java.util.Map.of("a", String.valueOf(address), "d", String.valueOf(dest), "dom", String.valueOf(d.domain)))
                             + (internal ? "" : " " + I18n.tr("server.adns.aliasExternal", java.util.Map.of("d", String.valueOf(dest)))));
         } catch (Exception e) {
-            return error(I18n.tr("server.adns.aliasError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return error(I18n.tr("server.adns.aliasError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AutoDns", e))));
         }
     }
 
@@ -565,7 +565,7 @@ public class AutoDns {
             return r.put("success", true).put("mailboxId", id).put("password", password)
                     .put("note", I18n.tr("server.adns.boxCreated", java.util.Map.of("a", String.valueOf(address), "dom", String.valueOf(d.domain))));
         } catch (Exception e) {
-            return error(I18n.tr("server.adns.boxError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return error(I18n.tr("server.adns.boxError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AutoDns", e))));
         }
     }
 
@@ -592,7 +592,7 @@ public class AutoDns {
                     if (m.email != null && !m.email.isBlank()) list.put(m.email);
             return r.put("mailboxes", list);
         } catch (Exception e) {
-            return error(I18n.tr("server.adns.readMailboxes", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return error(I18n.tr("server.adns.readMailboxes", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AutoDns", e))));
         }
     }
 
@@ -799,7 +799,7 @@ public class AutoDns {
             return r.put("success", true).put("recordId", op.recordId)
                     .put("note", I18n.tr("server.adns.createdOn", java.util.Map.of("kind", String.valueOf(def[1]), "name", String.valueOf(fullName), "z", String.valueOf(zl.zoneName))));
         } catch (Exception e) {
-            return error(I18n.tr("server.adns.createError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return error(I18n.tr("server.adns.createError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AutoDns", e))));
         }
     }
 

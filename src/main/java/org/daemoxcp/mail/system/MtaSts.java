@@ -142,7 +142,7 @@ public class MtaSts {
                         ? I18n.tr("server.mtasts.modeNone")
                         : I18n.tr("server.mtasts.modeTesting"));
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", I18n.tr("server.mtasts.saveFailed", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.mtasts.saveFailed", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("MtaSts", e))));
         }
     }
 

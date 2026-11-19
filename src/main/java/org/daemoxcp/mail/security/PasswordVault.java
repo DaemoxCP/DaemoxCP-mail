@@ -146,7 +146,7 @@ public class PasswordVault {
             ensureKeyPair();
             pub = PanelSecrets.text(PanelSecrets.VAULT_PUBLIC_KEY);
         }
-        if (pub.isEmpty()) throw new IllegalStateException("The vault has no public key yet");
+        if (pub.isEmpty()) throw org.daemoxcp.mail.util.ShownException.of("server.vault.noPublicKey");
         return publicKey(pub);
     }
 
@@ -163,7 +163,7 @@ public class PasswordVault {
     public String exportPrivateKeyBase64() {
         if (!runningAsRoot()) throw new IllegalStateException("Only the root part has the vault's private key");
         String priv = PanelSecrets.text(PanelSecrets.VAULT_PRIVATE_KEY);
-        if (priv.isEmpty()) throw new IllegalStateException("The vault has no private key yet");
+        if (priv.isEmpty()) throw org.daemoxcp.mail.util.ShownException.of("server.vault.noPrivateKey");
         return priv;
     }
 
@@ -216,7 +216,7 @@ public class PasswordVault {
         if (!runningAsRoot()) throw new IllegalStateException("Only the root part reads the vault");
         if (!isCurrentFormat(encoded)) return decryptOld(encoded);
         String priv = PanelSecrets.text(PanelSecrets.VAULT_PRIVATE_KEY);
-        if (priv.isEmpty()) throw new IllegalStateException("The vault has no private key");
+        if (priv.isEmpty()) throw org.daemoxcp.mail.util.ShownException.of("server.vault.noPrivateKey");
         try {
             return decryptWith(encoded, privateKey(priv));
         } catch (RuntimeException current) {

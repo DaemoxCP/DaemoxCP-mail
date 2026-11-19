@@ -125,7 +125,7 @@ public class PostfixAliasesManager {
             return s;
         } catch (Exception e) {
             s.success = false;
-            s.error = I18n.tr("server.aliases.diagError", java.util.Map.of("err", String.valueOf(e.getMessage())));
+            s.error = I18n.tr("server.aliases.diagError", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("PostfixAliasesManager", e)));
             s.overall = "ERROR";
             return s;
         }
@@ -165,7 +165,7 @@ public class PostfixAliasesManager {
                     s.sourceExists = true;
                 } catch (Exception e) {
                     r.success = false;
-                    r.message = I18n.tr("server.aliases.createError", java.util.Map.of("file", String.valueOf(s.aliasFile), "err", String.valueOf(e.getMessage())));
+                    r.message = I18n.tr("server.aliases.createError", java.util.Map.of("file", String.valueOf(s.aliasFile), "err", org.daemoxcp.mail.util.ErrorText.detail("PostfixAliasesManager", e)));
                     return r;
                 }
             } else {
@@ -200,7 +200,7 @@ public class PostfixAliasesManager {
             return r;
         } catch (Exception e) {
             r.success = false;
-            r.message = I18n.tr("server.aliases.fixError", java.util.Map.of("err", String.valueOf(e.getMessage())));
+            r.message = I18n.tr("server.aliases.fixError", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("PostfixAliasesManager", e)));
             return r;
         }
     }
@@ -277,7 +277,7 @@ public class PostfixAliasesManager {
             return r;
         } catch (Exception e) {
             r.success = false;
-            r.message = I18n.tr("server.aliases.error", java.util.Map.of("err", String.valueOf(e.getMessage())));
+            r.message = I18n.tr("server.aliases.error", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("PostfixAliasesManager", e)));
             return r;
         }
     }

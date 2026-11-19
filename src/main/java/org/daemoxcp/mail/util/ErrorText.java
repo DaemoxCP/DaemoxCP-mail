@@ -3,11 +3,9 @@ package org.daemoxcp.mail.util;
 import org.daemoxcp.mail.i18n.I18n;
 import org.daemoxcp.mail.security.PasskeyService;
 
-import java.nio.file.InvalidPathException;
 import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.PatternSyntaxException;
 
 /**
  * Il testo di un'eccezione che puo' arrivare a una pagina (reperto 231, r19: all'utente solo messaggi generici, mai
@@ -17,10 +15,11 @@ import java.util.regex.PatternSyntaxException;
  * pagina «Duplicate entry 'x' for key 'mailboxes.email'», un file mancante il suo percorso, un JSON storto il nome della
  * chiave. Qui si decide in un punto solo che cosa passa:
  * <ul>
- *   <li>il messaggio di IllegalArgumentException e IllegalStateException: sono quelle che il pannello lancia con un
- *       testo scritto per chi usa la pagina, di solito con I18n.tr (AddressTransform, gli aggiornamenti). Non i loro
- *       sottotipi del JDK che portano un percorso o l'input grezzo (InvalidPathException, NumberFormatException,
- *       PatternSyntaxException). Di PasskeyException il testo della chiave che porta;</li>
+ *   <li>il testo di ShownException, gia' tradotto: e' quella che il pannello lancia con un testo scritto per chi usa
+ *       la pagina (AddressTransform, gli aggiornamenti). Di PasskeyException il testo della chiave che porta. Fino al
+ *       19/11/2026 passava il messaggio di ogni IllegalArgumentException e IllegalStateException: molte avevano un
+ *       testo inglese scritto nel codice, o il toString() di un'eccezione avvolta (classe, percorso), e arrivavano
+ *       cosi' anche nelle pagine italiane (i18n completo);</li>
  *   <li>un duplicato di MySQL (errore 1062, anche dentro un'altra eccezione): «esiste gia'», senza la chiave;</li>
  *   <li>qualunque altra: una riga nel log del pannello con l'eccezione intera, e alla pagina il testo generico.</li>
  * </ul>
@@ -41,9 +40,7 @@ public final class ErrorText {
     static String shown(Throwable e) {
         if (e == null || e.getMessage() == null || e.getMessage().isBlank()) return null;
         if (e instanceof PasskeyService.PasskeyException) return I18n.tr(e.getMessage());
-        if (e instanceof InvalidPathException || e instanceof NumberFormatException || e instanceof PatternSyntaxException)
-            return null;
-        return e instanceof IllegalArgumentException || e instanceof IllegalStateException ? e.getMessage() : null;
+        return e instanceof ShownException ? e.getMessage() : null;
     }
 
     /** Vero se fra le cause c'e' un duplicato di MySQL. */

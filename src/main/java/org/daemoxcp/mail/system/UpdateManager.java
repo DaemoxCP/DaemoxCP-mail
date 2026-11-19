@@ -2727,7 +2727,7 @@ public final class UpdateManager {
                     j.errorMessage = outcome.optString("error", I18n.tr("server.um.x.seqInterrupted"));
             } catch (Exception e) {
                 j.status = "error";
-                j.errorMessage = String.valueOf(e.getMessage());
+                j.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
                 j.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
             } finally {
                 j.finish();
@@ -2770,7 +2770,7 @@ public final class UpdateManager {
                             "tot", String.valueOf(outcome.optInt("total", 0))));
             } catch (Exception e) {
                 j.status = "error";
-                j.errorMessage = String.valueOf(e.getMessage());
+                j.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
                 j.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
             } finally {
                 j.finish();
@@ -2887,7 +2887,7 @@ public final class UpdateManager {
             }
         } catch (Exception e) {
             job.status = "error";
-            job.errorMessage = e.getMessage();
+            job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
             if (script != null) try { java.nio.file.Files.deleteIfExists(script); } catch (Exception ignored) {}
@@ -3925,7 +3925,7 @@ public final class UpdateManager {
                 wb = PackageWayBack.before(j::write, kind);
             } catch (IllegalStateException e) {
                 j.status = "error";
-                j.errorMessage = e.getMessage();
+                j.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
                 j.write(e.getMessage());
                 return;
             }
@@ -4289,7 +4289,7 @@ public final class UpdateManager {
             }
         } catch (Exception e) {
             job.status = "error";
-            job.errorMessage = e.getMessage();
+            job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             for (String p : sideEffects.problems()) job.errorMessage += " " + p;
             if (outcome != null && !outcome.outsidePlan().isEmpty()) job.errorMessage += " " + divergenceMessage(outcome.outsidePlan());
             job.write("");
@@ -4838,7 +4838,7 @@ public final class UpdateManager {
             outcome = checkPlanOutcome(job, watch, plan, "Dovecot 2.4 move", true);
             if (delCode != 0) throw new IllegalStateException("pkg delete exited with code " + delCode);
             for (String n : install)
-                if (insCode != 0 || !ok("pkg info -e " + n, 20)) throw new IllegalStateException(I18n.tr("server.um.dv24move.notInstalled", Map.of("n", n)));
+                if (insCode != 0 || !ok("pkg info -e " + n, 20)) throw org.daemoxcp.mail.util.ShownException.of("server.um.dv24move.notInstalled", Map.of("n", n));
             if (outcome.mapsProblem() != null) throw new IllegalStateException(outcome.mapsProblem());
 
             job.advance(5, TOT);
@@ -4851,12 +4851,12 @@ public final class UpdateManager {
             Map<String, String> env = new LinkedHashMap<>();
             env.put("DB_PASS", panelDbPassword());
             if (runLogged(job, "sh " + script, 300, null, env) != 0)
-                throw new IllegalStateException(I18n.tr("server.um.dv24move.configRefused"));
+                throw org.daemoxcp.mail.util.ShownException.of("server.um.dv24move.configRefused");
 
             job.advance(6, TOT);
             job.write("");
             job.write("[6/" + TOT + "] " + I18n.tr("server.um.dv24move.s6"));
-            if (!startDovecot(job)) throw new IllegalStateException(I18n.tr("server.um.dv24move.notStarted"));
+            if (!startDovecot(job)) throw org.daemoxcp.mail.util.ShownException.of("server.um.dv24move.notStarted");
             dovecotStopped = false;
             // La configurazione scritta legge con l'utente del pannello: si torna a quello di Dovecot, come dopo la
             // rigenerazione (MailDbUsers), prima delle prove, cosi' si prova cio' che resta.
@@ -5027,7 +5027,7 @@ public final class UpdateManager {
             return new JSONObject().put("ok", true).put("driver", d.driver()).put("user", d.user())
                     .put("pass", d.password()).put("host", d.host()).put("db", d.db());
         } catch (Exception e) {
-            return r.put("error", e.getMessage());
+            return r.put("error", org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e));
         }
     }
 
@@ -5483,7 +5483,7 @@ public final class UpdateManager {
             ok("rm -f " + err, 15);
             return r.put("ok", true);
         } catch (Exception e) {
-            return r.put("error", e.getMessage());
+            return r.put("error", org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e));
         }
     }
 
@@ -5576,7 +5576,7 @@ public final class UpdateManager {
             String out = sh("curl -sk -m 20 " + res + "'" + u + "' 2>&1 | head -c 1200", 60);
             return new JSONObject().put("ok", true).put("url", u).put("output", out.trim());
         } catch (Exception e) {
-            return new JSONObject().put("ok", false).put("error", e.getMessage());
+            return new JSONObject().put("ok", false).put("error", org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e));
         } finally {
             // La sonda sparisce comunque: non deve restare un file PHP nella radice del web.
             ok("rm -f " + file, 20);
@@ -6198,7 +6198,7 @@ public final class UpdateManager {
             }
         } catch (Exception e) {
             job.status = "error";
-            job.errorMessage = e.getMessage();
+            job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             // pkg fermo a meta' dopo che uno script ha gia' scritto: si dicono tutte e due.
             for (String p : sideEffects.problems()) job.errorMessage += " " + p;
             if (outcome != null && !outcome.outsidePlan().isEmpty()) job.errorMessage += " " + divergenceMessage(outcome.outsidePlan());
@@ -7535,7 +7535,7 @@ public final class UpdateManager {
             }
         } catch (Exception e) {
             job.status = "error";
-            job.errorMessage = e.getMessage();
+            job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             // Il confronto col piano e gli script che hanno scritto si dicono anche qui: pkg fermo a
             // meta' e' proprio il caso in cui contano.
             for (String p : sideEffects.problems()) job.errorMessage += " " + p;
@@ -8670,7 +8670,7 @@ public final class UpdateManager {
             job.write("=== " + job.outcome + " ===");
         } catch (Exception e) {
             job.status = "error";
-            job.errorMessage = String.valueOf(e.getMessage());
+            job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
         } finally {
             APPROVED_CHANGES.remove();
             job.finish();
@@ -9043,7 +9043,7 @@ public final class UpdateManager {
             }
         } catch (Exception e) {
             job.status = "error";
-            job.errorMessage = e.getMessage();
+            job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             // pkg fermo a meta' dopo che uno script ha gia' scritto: si dicono tutte e due.
             for (String p : sideEffects.problems()) job.errorMessage += " " + p;
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
@@ -9151,7 +9151,7 @@ public final class UpdateManager {
                 }
             } catch (Exception e) {
                 j.status = "error";
-                j.errorMessage = e.getMessage();
+                j.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
                 j.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
             } finally {
                 j.finish();
@@ -10634,7 +10634,7 @@ public final class UpdateManager {
                 j.write(I18n.tr("server.um.startSystemUpdateSearch.11", java.util.Map.of("p", String.valueOf(((System.currentTimeMillis() - start) / 1000)))));
                 j.status = "completed";
             } catch (Exception e) {
-                j.status = "error"; j.errorMessage = e.getMessage();
+                j.status = "error"; j.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
                 j.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
             } finally { j.finish(); }
         }, "os-fetch");
@@ -10688,16 +10688,16 @@ public final class UpdateManager {
             j.write(I18n.tr("server.osPatch.step1", Map.of("total", String.valueOf(TOT))));
             JSONObject os = operatingSystem();
             if (!os.optBoolean("updatableWithFreebsdUpdate", false))
-                throw new IllegalStateException(os.optString("updatesNote", I18n.tr("server.um.findSystemUpdates.1")));
+                throw org.daemoxcp.mail.util.ShownException.translated(os.optString("updatesNote", I18n.tr("server.um.findSystemUpdates.1")));
             String fromUserland = os.optString("userland");
             j.write("    " + I18n.tr("server.osPatch.now", Map.of("userland", fromUserland, "kernel", os.optString("uname"))));
             long freeKb = number(sh("df -k / | awk 'NR==2 {print $4}'", 20));
             if (freeKb < 1024L * 1024L)
-                throw new IllegalStateException(I18n.tr("server.osPatch.noSpace", Map.of("mb", String.valueOf(freeKb / 1024))));
+                throw org.daemoxcp.mail.util.ShownException.of("server.osPatch.noSpace", Map.of("mb", String.valueOf(freeKb / 1024)));
             if (ok("pgrep -f '/usr/sbin/freebsd-update' >/dev/null", 10))
-                throw new IllegalStateException(I18n.tr("server.osPatch.otherRunning"));
+                throw org.daemoxcp.mail.util.ShownException.of("server.osPatch.otherRunning");
             if (!ok("bectl check", 30))
-                throw new IllegalStateException(I18n.tr("server.osPatch.noBootEnvironments"));
+                throw org.daemoxcp.mail.util.ShownException.of("server.osPatch.noBootEnvironments");
 
             j.advance(2, TOT);
             j.write("");
@@ -10705,7 +10705,7 @@ public final class UpdateManager {
             StringBuilder fetched = new StringBuilder();
             int code = runLogged(j, "freebsd-update --not-running-from-cron fetch 2>&1", 1800, fetched);
             if (code != 0 && !OsPatch.nothingToFetch(fetched.toString()))
-                throw new IllegalStateException(I18n.tr("server.um.startSystemUpdateSearch.8", Map.of("code", String.valueOf(code))));
+                throw org.daemoxcp.mail.util.ShownException.of("server.um.startSystemUpdateSearch.8", Map.of("code", String.valueOf(code)));
             String ready = sh("freebsd-update updatesready 2>&1", 60);
             if (OsPatch.nothingToInstall(ready)) {
                 j.write("");
@@ -10727,7 +10727,7 @@ public final class UpdateManager {
             if (!ts.matches("[0-9]{8}-[0-9]{6}")) throw new IllegalStateException("invalid date");
             String be = BE_PREFIX + "freebsd-patches-" + ts;
             if (!ok("bectl create " + be, 300) || !ok("bectl list -H 2>/dev/null | cut -f1 | grep -qx '" + be + "'", 30))
-                throw new IllegalStateException(I18n.tr("server.osPatch.beFailed", Map.of("be", be)));
+                throw org.daemoxcp.mail.util.ShownException.of("server.osPatch.beFailed", Map.of("be", be));
             j.write("    " + I18n.tr("server.osPatch.beCreated", Map.of("be", be)));
 
             j.advance(4, TOT);
@@ -10740,7 +10740,7 @@ public final class UpdateManager {
                 StringBuilder out = new StringBuilder();
                 code = runLogged(j, "freebsd-update -f " + osPatchConfig + " install 2>&1", 3600, out);
                 if (code != 0 && !OsPatch.nothingToInstall(out.toString()))
-                    throw new IllegalStateException(I18n.tr("server.osPatch.installFailed", Map.of("code", String.valueOf(code), "be", be)));
+                    throw org.daemoxcp.mail.util.ShownException.of("server.osPatch.installFailed", Map.of("code", String.valueOf(code), "be", be));
                 if (OsPatch.asksRebootFirst(out.toString())) { rebootFirst = true; break; }
                 if (OsPatch.nothingToInstall(sh("freebsd-update updatesready 2>&1", 60))) break;
             }
@@ -10770,7 +10770,7 @@ public final class UpdateManager {
             j.status = "completed";
         } catch (Exception e) {
             j.status = "error";
-            j.errorMessage = e.getMessage();
+            j.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             j.write(I18n.tr("server.um.startMtaStsActivation.1", Map.of("message", String.valueOf(e.getMessage()))));
         }
     }
@@ -10802,7 +10802,7 @@ public final class UpdateManager {
             j.advance(1, TOT);
             j.write(I18n.tr("server.search.step1", Map.of("total", String.valueOf(TOT))));
             int code = runLogged(j, "pkg update 2>&1", 600);
-            if (code != 0) throw new IllegalStateException(I18n.tr("server.search.pkgFailed", Map.of("code", String.valueOf(code))));
+            if (code != 0) throw org.daemoxcp.mail.util.ShownException.of("server.search.pkgFailed", Map.of("code", String.valueOf(code)));
 
             j.advance(2, TOT);
             j.write("");
@@ -10820,7 +10820,7 @@ public final class UpdateManager {
                 StringBuilder out = new StringBuilder();
                 code = runLogged(j, "freebsd-update --not-running-from-cron fetch 2>&1", 1800, out);
                 if (code != 0 && !OsPatch.nothingToFetch(out.toString()))
-                    throw new IllegalStateException(I18n.tr("server.um.startSystemUpdateSearch.8", Map.of("code", String.valueOf(code))));
+                    throw org.daemoxcp.mail.util.ShownException.of("server.um.startSystemUpdateSearch.8", Map.of("code", String.valueOf(code)));
             }
             j.write("");
             j.outcome = I18n.tr("server.search.done");
@@ -10828,7 +10828,7 @@ public final class UpdateManager {
             j.status = "completed";
         } catch (Exception e) {
             j.status = "error";
-            j.errorMessage = e.getMessage();
+            j.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             j.write(I18n.tr("server.um.startMtaStsActivation.1", Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
             j.finish();
@@ -11812,7 +11812,7 @@ public final class UpdateManager {
             job.write(I18n.tr("server.um.runSystemPreparation.20"));
         } catch (Exception e) {
             job.status = "error";
-            job.errorMessage = e.getMessage();
+            job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
             job.finish();
@@ -12206,7 +12206,7 @@ public final class UpdateManager {
             job.write(I18n.tr("server.um.startSystemUpdateSearch.3", java.util.Map.of("errorMessage", String.valueOf(job.errorMessage))));
         } catch (Exception e) {
             job.status = "error";
-            job.errorMessage = e.getMessage();
+            job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
             job.finish();
@@ -12608,7 +12608,7 @@ public final class UpdateManager {
                     j.status = "error";
                 }
             } catch (RuntimeException e) {
-                j.errorMessage = I18n.tr("server.um.startBranchChange.3", java.util.Map.of("message", String.valueOf(e.getMessage())));
+                j.errorMessage = I18n.tr("server.um.startBranchChange.3", java.util.Map.of("message", org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e)));
                 j.status = "error";
             } finally {
                 j.finish();
@@ -12774,7 +12774,7 @@ public final class UpdateManager {
                 }
             } catch (Exception e) {
                 j.status = "error";
-                j.errorMessage = e.getMessage();
+                j.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
                 j.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
             } finally {
                 if (unlocked) {
@@ -12894,7 +12894,7 @@ public final class UpdateManager {
             }
         } catch (Exception e) {
             job.status = "error";
-            job.errorMessage = e.getMessage();
+            job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
             if (!unlockedPackages.isEmpty()) {
@@ -13062,7 +13062,7 @@ public final class UpdateManager {
             job.status = problems.isEmpty() ? "completed" : "error";
             job.errorMessage = String.join(" ", problems);
         } catch (Exception e) {
-            job.status = "error"; job.errorMessage = e.getMessage();
+            job.status = "error"; job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         }
     }
@@ -13307,7 +13307,7 @@ public final class UpdateManager {
             writeActionMessages(job, captured.toString());
 
         } catch (Exception e) {
-            job.status = "error"; job.errorMessage = e.getMessage();
+            job.status = "error"; job.errorMessage = org.daemoxcp.mail.util.ErrorText.detail("UpdateManager", e);
             job.write(I18n.tr("server.um.startMtaStsActivation.1", java.util.Map.of("message", String.valueOf(e.getMessage()))));
         } finally {
             // La riprotezione avviene SEMPRE, qualunque cosa sia andata storta sopra.

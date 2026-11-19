@@ -179,7 +179,7 @@ public class AppleProfile {
                     if (m.email != null && !m.email.isBlank()) mailboxes.put(m.email);
         } catch (Exception e) {
             return new JSONObject().put("success", false)
-                    .put("error", I18n.tr("server.appleprof.mailboxesUnreadable", java.util.Map.of("err", String.valueOf(e.getMessage()))));
+                    .put("error", I18n.tr("server.appleprof.mailboxesUnreadable", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("AppleProfile", e))));
         }
         return r.put("mailboxes", mailboxes);
     }

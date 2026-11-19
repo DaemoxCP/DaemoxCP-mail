@@ -167,7 +167,7 @@ public class AcmeManager {
 
     private String acme(String args, Map<String, String> env) throws Exception {
         AcmeUser.Layout l = layout();
-        if (l == null) throw new IllegalStateException(I18n.tr("server.acme.notInstalled"));
+        if (l == null) throw org.daemoxcp.mail.util.ShownException.of("server.acme.notInstalled");
         try {
             return AcmeUser.run(l, args, env);
         } finally {
@@ -184,7 +184,7 @@ public class AcmeManager {
      */
     private String acmeWithHttpChallenge(String args, String webroot) throws Exception {
         AcmeUser.Layout l = layout();
-        if (l == null) throw new IllegalStateException(I18n.tr("server.acme.notInstalled"));
+        if (l == null) throw org.daemoxcp.mail.util.ShownException.of("server.acme.notInstalled");
         boolean own = webroot == null || webroot.isEmpty() || AcmeUser.WEBROOT.equals(webroot);
         if (!l.asAcme())
             return AcmeUser.run(l, args + (own ? " --standalone" : " -w " + webroot), null);
@@ -201,7 +201,7 @@ public class AcmeManager {
         try (AcmeUser.Challenge c = AcmeUser.Challenge.open()) {
             return AcmeUser.run(l, args, null);
         } catch (java.net.BindException e) {
-            return I18n.tr("server.acme.port80Busy", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            return I18n.tr("server.acme.port80Busy", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e)));
         }
     }
 
@@ -254,7 +254,7 @@ public class AcmeManager {
             }
 
         } catch (Exception e) {
-            return new InstallResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+            return new InstallResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null);
         }
     }
 
@@ -336,7 +336,7 @@ public class AcmeManager {
             return new CertificateResult(false, I18n.tr("server.acme.issueFailed"), output);
 
         } catch (Exception e) {
-            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null);
         }
     }
 
@@ -658,7 +658,7 @@ public class AcmeManager {
                     saved.put(f, dest.toString());
                 }
             } catch (Exception e) {
-                return new DeployResult(false, I18n.tr("server.acme.noBackup", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+                return new DeployResult(false, I18n.tr("server.acme.noBackup", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null);
             }
 
             // Copy files
@@ -708,7 +708,7 @@ public class AcmeManager {
             return new DeployResult(true, I18n.tr("server.acme.deployed"), reloadOutput.toString());
 
         } catch (Exception e) {
-            return new DeployResult(false, I18n.tr("server.acme.deployError", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+            return new DeployResult(false, I18n.tr("server.acme.deployError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null);
         }
     }
 
@@ -773,7 +773,7 @@ public class AcmeManager {
             return new CertificateResult(false, I18n.tr("server.acme.renewFailed"), output);
 
         } catch (Exception e) {
-            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null);
         }
     }
 
@@ -855,7 +855,7 @@ public class AcmeManager {
             return new CertificateResult(true, I18n.tr("server.acme.issuedWithNames", java.util.Map.of("n", String.valueOf(seen.size()))),
                     output + "\n" + (dep.output != null ? dep.output : ""));
         } catch (Exception e) {
-            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null);
         }
     }
 
@@ -905,7 +905,7 @@ public class AcmeManager {
             return new CertificateResult(false, I18n.tr("server.acme.renewCfFailed"), output);
 
         } catch (Exception e) {
-            return new CertificateResult(false, I18n.tr("server.acme.cfError", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+            return new CertificateResult(false, I18n.tr("server.acme.cfError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null);
         }
     }
 
@@ -1018,8 +1018,8 @@ public class AcmeManager {
         } catch (Exception e) {
             System.err.println("[ACME] Certificate check failed: " + e.getMessage());
             database.setSetting(SETTING_AUTO_RENEW_LAST_CHECK, now);
-            database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "FAIL|" + I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
-            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+            database.setSetting(SETTING_AUTO_RENEW_LAST_RESULT, "FAIL|" + I18n.tr("server.acme.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))));
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null);
         }
     }
 
@@ -1256,7 +1256,7 @@ public class AcmeManager {
             return new DnsChallengeResult(false, I18n.tr("server.acme.challengeFailed", java.util.Map.of("o", String.valueOf(output))), null, null);
 
         } catch (Exception e) {
-            return new DnsChallengeResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null, null);
+            return new DnsChallengeResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null, null);
         }
     }
 
@@ -1330,7 +1330,7 @@ public class AcmeManager {
             return new CertificateResult(false, I18n.tr("server.acme.verifiedNotIssued"), output);
 
         } catch (Exception e) {
-            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null);
         }
     }
 
@@ -1408,7 +1408,7 @@ public class AcmeManager {
             return new CertificateResult(true, I18n.tr("server.acme.manualInstalled"), reloadOutput);
 
         } catch (Exception e) {
-            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+            return new CertificateResult(false, I18n.tr("server.acme.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("AcmeManager", e))), null);
         }
     }
 

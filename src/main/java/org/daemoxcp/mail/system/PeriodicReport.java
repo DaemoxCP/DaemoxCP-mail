@@ -241,7 +241,7 @@ public final class PeriodicReport {
                     .put("text", m.text())
                     .put("thingsToDo", data.getJSONArray("toDo").length());
         } catch (Exception e) {
-            return new JSONObject().put("success", false).put("error", I18n.tr("server.rp.composeFailed", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return new JSONObject().put("success", false).put("error", I18n.tr("server.rp.composeFailed", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("PeriodicReport", e))));
         }
     }
 
@@ -359,7 +359,7 @@ public final class PeriodicReport {
                             + ": " + I18n.tr("server.rp.realSender"));
         } catch (Exception e) {
             return new JSONObject().put("success", false)
-                    .put("error", I18n.tr("server.rp.readFailed", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+                    .put("error", I18n.tr("server.rp.readFailed", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("PeriodicReport", e))));
         }
     }
 
@@ -405,7 +405,7 @@ public final class PeriodicReport {
             return r.put("success", true).put("alreadyExisted", false).put("id", id)
                     .put("note", I18n.tr("server.rp.created"));
         } catch (Exception e) {
-            return r.put("success", false).put("error", I18n.tr("server.rp.createError", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return r.put("success", false).put("error", I18n.tr("server.rp.createError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("PeriodicReport", e))));
         }
     }
 
@@ -506,7 +506,7 @@ public final class PeriodicReport {
 
         JSONObject data;
         try { data = UpdateManager.reportData(); }
-        catch (Exception e) { return r.put("success", false).put("error", I18n.tr("server.rp.collectFailed", java.util.Map.of("m", String.valueOf(e.getMessage())))); }
+        catch (Exception e) { return r.put("success", false).put("error", I18n.tr("server.rp.collectFailed", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("PeriodicReport", e)))); }
         // Il certificato lo conosce solo questa classe: si aggiunge qui alle cose da fare,
         // e si riordina, altrimenti "scade fra 3 giorni" finirebbe in fondo all'elenco.
         JSONArray df = data.optJSONArray("toDo");
@@ -601,7 +601,7 @@ public final class PeriodicReport {
                         + (said.isEmpty() ? "" : ": " + said));
         } catch (Exception e) {
             return r.put("output", output.toString()).put("success", false)
-                    .put("error", I18n.tr("server.rp.cannotRun", java.util.Map.of("p", String.valueOf(sendmail), "m", String.valueOf(e.getMessage()))));
+                    .put("error", I18n.tr("server.rp.cannotRun", java.util.Map.of("p", String.valueOf(sendmail), "m", org.daemoxcp.mail.util.ErrorText.detail("PeriodicReport", e))));
         }
 
         // Il codice 0 dice soltanto che il messaggio e' nella coda di ingresso di Postfix.
@@ -679,7 +679,7 @@ public final class PeriodicReport {
             if (java.nio.file.Files.exists(mw) && java.nio.file.Files.isSameFile(p, mw))
                 return I18n.tr("server.rp.isMailwrapper", java.util.Map.of("p", String.valueOf(path)));
         } catch (java.io.IOException e) {
-            return I18n.tr("server.rp.cannotCheck", java.util.Map.of("p", String.valueOf(path), "m", String.valueOf(e.getMessage())));
+            return I18n.tr("server.rp.cannotCheck", java.util.Map.of("p", String.valueOf(path), "m", org.daemoxcp.mail.util.ErrorText.detail("PeriodicReport", e)));
         }
         return null;
     }
@@ -978,7 +978,7 @@ public final class PeriodicReport {
         } catch (Exception e) {
             outside.add(new JSONObject().put("urgency", 3)
                     .put("title", I18n.tr("mail.report.title.watchIncomplete"))
-                    .put("what", I18n.tr("server.rp.survFailed", java.util.Map.of("m", String.valueOf(e.getMessage()))))
+                    .put("what", I18n.tr("server.rp.survFailed", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("PeriodicReport", e))))
                     .put("where", I18n.tr("server.rp.whereSurveillance")));
         }
 
@@ -1030,7 +1030,7 @@ public final class PeriodicReport {
                     .put("expiresOn", i.expiresAt == null ? "?"
                             : PanelMail.longDate(lang, i.expiresAt.atZone(java.time.ZoneId.systemDefault())));
         } catch (Exception e) {
-            return r.put("problem", I18n.tr("server.rp.c.certReadFailed", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return r.put("problem", I18n.tr("server.rp.c.certReadFailed", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("PeriodicReport", e))));
         }
     }
 

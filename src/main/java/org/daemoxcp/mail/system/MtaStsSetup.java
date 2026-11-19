@@ -412,7 +412,7 @@ public class MtaStsSetup {
                 if (domainsToTouch(domainOnly).isEmpty())
                     return stopped(r, doneOnes, I18n.tr("server.sts.notPanelDomain", java.util.Map.of("d", String.valueOf(domainOnly))));
             } catch (Exception e) {
-                return stopped(r, doneOnes, I18n.tr("server.sts.domainsUnreadable", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+                return stopped(r, doneOnes, I18n.tr("server.sts.domainsUnreadable", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("MtaStsSetup", e))));
             }
         }
 
@@ -476,7 +476,7 @@ public class MtaStsSetup {
                         e.optString("note", e.optString("error", ""))));
             }
         } catch (Exception e) {
-            cname.put(note("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
+            cname.put(note("", false, I18n.tr("server.sts.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("MtaStsSetup", e)))));
         }
         doneOnes.put(new JSONObject().put("key", "cname").put("title", "CNAME mta-sts")
                 .put("detail", cname));
@@ -543,7 +543,7 @@ public class MtaStsSetup {
             }
         } catch (Exception e) {
             blind++;
-            proxy.put(note("", false, I18n.tr("server.sts.checkError", java.util.Map.of("m", String.valueOf(e.getMessage())))));
+            proxy.put(note("", false, I18n.tr("server.sts.checkError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("MtaStsSetup", e)))));
         }
         doneOnes.put(new JSONObject().put("key", "proxy")
                 .put("title", I18n.tr("server.sts.stepProxy"))
@@ -636,7 +636,7 @@ public class MtaStsSetup {
                         e.optString("note", e.optString("error", ""))));
             }
         } catch (Exception e) {
-            finals.put(note("", false, I18n.tr("server.sts.error", java.util.Map.of("m", String.valueOf(e.getMessage())))));
+            finals.put(note("", false, I18n.tr("server.sts.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("MtaStsSetup", e)))));
         }
         if (job != null) { job.advance(8, 8); job.write("[7-8/8] " + I18n.tr("server.sts.finalExamined", java.util.Map.of("n", String.valueOf(finals.length())))); }
         doneOnes.put(new JSONObject().put("key", "txt").put("title", I18n.tr("server.sts.finalTitle"))
@@ -899,7 +899,7 @@ public class MtaStsSetup {
                                         resolves, found.proxied, crooked));
             } catch (Exception e) {
                 out.add(new NameReview(d.domain, NameState.BLIND,
-                        I18n.tr("server.sts.checkError", java.util.Map.of("m", String.valueOf(e.getMessage()))), resolves));
+                        I18n.tr("server.sts.checkError", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("MtaStsSetup", e))), resolves));
             }
         }
         return out;

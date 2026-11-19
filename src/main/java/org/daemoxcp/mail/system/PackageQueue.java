@@ -208,7 +208,7 @@ public final class PackageQueue {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Cannot take the package turn lock " + turnLock, e);
             if (c != null) try { c.close(); } catch (Exception ignored) { }
-            return I18n.tr("server.turn.lockFileError", java.util.Map.of("file", String.valueOf(turnLock), "err", String.valueOf(e.getMessage())));
+            return I18n.tr("server.turn.lockFileError", java.util.Map.of("file", String.valueOf(turnLock), "err", org.daemoxcp.mail.util.ErrorText.detail("PackageQueue", e)));
         }
     }
 

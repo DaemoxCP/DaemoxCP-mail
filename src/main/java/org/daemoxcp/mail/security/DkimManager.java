@@ -444,7 +444,7 @@ public class DkimManager {
 
         } catch (Exception e) {
             r.success = false;
-            r.message = I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            r.message = I18n.tr("server.dkimm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e)));
             return r;
         }
     }
@@ -520,13 +520,13 @@ public class DkimManager {
                     }
                 } catch (Exception e) {
                     unverifiable++;
-                    j.put("state", "uncertain").put("messageText", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+                    j.put("state", "uncertain").put("messageText", I18n.tr("server.dkimm.errorLower", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e))));
                 }
                 lines.put(j);
             }
         } catch (Exception e) {
             return new org.json.JSONObject().put("success", false)
-                    .put("error", I18n.tr("server.dkimm.domainsUnreadable", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+                    .put("error", I18n.tr("server.dkimm.domainsUnreadable", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e))));
         }
         r.put("domains", lines);
         r.put("withoutKey", withoutKey).put("unverifiable", unverifiable)
@@ -560,7 +560,7 @@ public class DkimManager {
                        : "Scheduled rotation set every " + v + " days");
             return getRotationSchedule(domainId);
         } catch (Exception e) {
-            return new ScheduleResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), 0, null, null);
+            return new ScheduleResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e))), 0, null, null);
         }
     }
 
@@ -579,7 +579,7 @@ public class DkimManager {
             }
             return r;
         } catch (Exception e) {
-            return new ScheduleResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), 0, null, null);
+            return new ScheduleResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e))), 0, null, null);
         }
     }
 
@@ -687,7 +687,7 @@ public class DkimManager {
             return result;
         } catch (Exception e) {
             result.success = false;
-            result.message = I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage())));
+            result.message = I18n.tr("server.dkimm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e)));
             return result;
         }
     }
@@ -738,7 +738,7 @@ public class DkimManager {
                 "Orphan DKIM record deleted from Cloudflare (id " + recordId + ", account '" + acct.label + "')");
             return new RotationActionResult(true, I18n.tr("server.dkimm.recordDeleted"));
         } catch (Exception e) {
-            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e))));
         }
     }
 
@@ -871,7 +871,7 @@ public class DkimManager {
                         "TXT record created in Cloudflare (zone " + zl.zoneName + ", record id " + op.recordId + "). State → propagated.");
                 } catch (Exception cfErr) {
                     return new RotationStartResult(true, newSelector, dnsRecordName, dnsRecordValue,
-                        I18n.tr("server.dkimm.genCfException", java.util.Map.of("e", String.valueOf(cfErr.getMessage()))));
+                        I18n.tr("server.dkimm.genCfException", java.util.Map.of("e", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", cfErr))));
                 }
             }
 
@@ -950,7 +950,7 @@ public class DkimManager {
                     lastRaw);
             }
         } catch (Exception e) {
-            return new PropagationCheckResult(false, false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))), null);
+            return new PropagationCheckResult(false, false, I18n.tr("server.dkimm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e))), null);
         }
     }
 
@@ -992,7 +992,7 @@ public class DkimManager {
             return new RotationActionResult(true,
                 I18n.tr("server.dkimm.activated", java.util.Map.of("newer", String.valueOf(newSelector), "old", String.valueOf(oldSelector))));
         } catch (Exception e) {
-            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e))));
         }
     }
 
@@ -1086,7 +1086,7 @@ public class DkimManager {
                     ? " " + I18n.tr("server.dkimm.removeOld", java.util.Map.of("n", String.valueOf(prevRecordName)))
                     : cfNote));
         } catch (Exception e) {
-            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e))));
         }
     }
 
@@ -1157,7 +1157,7 @@ public class DkimManager {
                     ? " " + I18n.tr("server.dkimm.removePending", java.util.Map.of("n", String.valueOf(pendingRecordName)))
                     : cfNote));
         } catch (Exception e) {
-            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", String.valueOf(e.getMessage()))));
+            return new RotationActionResult(false, I18n.tr("server.dkimm.error", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("DkimManager", e))));
         }
     }
 
