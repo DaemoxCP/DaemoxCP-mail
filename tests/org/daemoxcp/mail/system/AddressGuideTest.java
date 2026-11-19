@@ -31,12 +31,10 @@ public class AddressGuideTest {
     static final class F {
         boolean v4 = true, v4Internet = true, v4Config = true, v6 = false, v6Internet = false, v6Firewall = false, sshOnV6 = true;
         Boolean a = true, aaaa = false, ptr4 = true, ptr6 = null, webAaaa = null, webA = null;
-        Boolean ptr6Send = null, sendAaaa = null, spf6 = null, spf6Any = null;
         IpFamily.Family mail = V4, via = V4;
 
         AddressGuide.Facts build() {
-            return new AddressGuide.Facts(v4, v4Internet, v4Config, v6, v6Internet, v6Firewall, a, aaaa, ptr4, ptr6, webAaaa, webA, mail, via, sshOnV6,
-                    ptr6Send, sendAaaa, spf6, spf6Any);
+            return new AddressGuide.Facts(v4, v4Internet, v4Config, v6, v6Internet, v6Firewall, a, aaaa, ptr4, ptr6, webAaaa, webA, mail, via, sshOnV6);
         }
     }
 
@@ -90,7 +88,7 @@ public class AddressGuideTest {
         F b = new F();
         b.v6 = true; b.v6Internet = true; b.ptr6 = true; b.aaaa = true; b.mail = BOTH;
         p = AddressGuide.plan(b.build(), AddressGuide.Goal.V4);
-        check("the steps: " + ids(p), ids(p).equals("v4Address,v4Ptr,v4Dns,webA,mailV4,v6DnsRemove,v6SendDnsRemove,spf6Remove,v6AddressRemove"));
+        check("the steps: " + ids(p), ids(p).equals("v4Address,v4Ptr,v4Dns,webA,mailV4,v6DnsRemove,v6AddressRemove"));
         check("web names not known (no Cloudflare): not a dead end, now mail over IPv4 (" + now(p) + ")", now(p).equals("mailV4/now"));
         b.webA = false;
         check("web names still on IPv6: they come first", now(AddressGuide.plan(b.build(), AddressGuide.Goal.V4)).equals("webA/now"));
@@ -157,53 +155,23 @@ public class AddressGuideTest {
         final IpFamily.Family OUT = IpFamily.Family.IPV6_OUT;
         F o = new F();
         p = AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6);
-        check("the steps: " + ids(p), ids(p).equals("v4Address,v4Ptr,v4Dns,v6Address,v6PtrSend,v6SendDns,spf6,v6DnsRemove,mailSend6"));
-        check("no step for the provider's firewall: nothing comes in over IPv6", !ids(p).contains("v6Firewall"));
-        check("IPv4 done: now the IPv6 address", now(p).equals("v6Address/now"));
-        o.v6 = true; o.v6Internet = true; o.ptr6 = true;
-        check("the reverse DNS gives the mail name (as on the real server): not enough, it must give the sending name",
-                now(AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6)).equals("v6PtrSend/now")
-                        && AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6).get(4).who().equals("you"));
-        o.ptr6 = false; o.ptr6Send = true;
-        check("the reverse DNS gives the sending name: now its AAAA", now(AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6)).equals("v6SendDns/now"));
-        check("mail cannot go out over IPv6 before the AAAA of the sending name", "guide.blocked.ptr6Send".equals(AddressGuide.blocked(o.build(), "mailSend6")));
-        o.sendAaaa = true;
-        check("AAAA published: now the IPv6 in the SPF", now(AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6)).equals("spf6/now")
-                && "guide.blocked.spf6".equals(AddressGuide.blocked(o.build(), "mailSend6")));
-        o.spf6 = true; o.aaaa = true;
-        check("SPF done, but the mail name has an AAAA: it goes first", now(AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6)).equals("v6DnsRemove/now"));
-        o.aaaa = false;
-        check("no AAAA on the mail name: now mail over IPv6 only going out", now(AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6)).equals("mailSend6/now")
+        check("the steps: the same as towards both, with the last one for mail going out only: " + ids(p),
+                ids(p).equals("v4Address,v4Ptr,v4Dns,v6Address,v6Firewall,v6Ptr,v6Dns,mailSend6"));
+        check("one name: the reverse DNS step is the mail name's, no separate sending name and no SPF step",
+                !ids(p).contains("PtrSend") && !ids(p).contains("SendDns") && !ids(p).contains("spf6"));
+        o.v6 = true; o.v6Internet = true; o.v6Firewall = true; o.ptr6 = true;
+        check("reverse DNS on the mail name (as on the real server): now its AAAA", now(AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6)).equals("v6Dns/now"));
+        check("mail cannot go out over IPv6 before the AAAA (the reverse DNS must point back)",
+                "guide.blocked.ptr6".equals(AddressGuide.blocked(o.build(), "mailSend6")));
+        o.aaaa = true;
+        check("AAAA published: now mail over IPv6 only going out", now(AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6)).equals("mailSend6/now")
                 && AddressGuide.blocked(o.build(), "mailSend6") == null);
         o.mail = OUT;
         check("mail on ipv6out: reached", AddressGuide.reached(AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6)));
-
-        // The switch on: mail comes in over IPv6 too. The reverse DNS to the sending name is fine there as well.
-        check("switch on from there: the provider's firewall first", now(AddressGuide.plan(o.build(), AddressGuide.Goal.BOTH)).equals("v6Firewall/now"));
-        o.v6Firewall = true;
-        check("then the AAAA of the mail name: the reverse DNS to the sending name counts", now(AddressGuide.plan(o.build(), AddressGuide.Goal.BOTH)).equals("v6Dns/now"));
-        o.aaaa = true;
-        check("then mail over both, not blocked (the sending name confirms the reverse DNS)",
-                now(AddressGuide.plan(o.build(), AddressGuide.Goal.BOTH)).equals("mailBoth/now") && AddressGuide.blocked(o.build(), "mailBoth") == null);
+        // The switch: from there to receiving over IPv6 too is one step, and back is one step too. Nothing else moves.
+        check("switch on: only mail over both is left", now(AddressGuide.plan(o.build(), AddressGuide.Goal.BOTH)).equals("mailBoth/now"));
         o.mail = BOTH;
-        check("mail on both: reached", AddressGuide.reached(AddressGuide.plan(o.build(), AddressGuide.Goal.BOTH)));
-
-        // Switch off again, from a server that receives over IPv6 with the reverse DNS on the mail name.
-        F r = new F();
-        r.v6 = true; r.v6Internet = true; r.v6Firewall = true; r.ptr6 = true; r.aaaa = true; r.mail = BOTH;
-        check("switch off from both: first the reverse DNS moves to the sending name (the mail AAAA goes only later)",
-                now(AddressGuide.plan(r.build(), AddressGuide.Goal.SEND6)).equals("v6PtrSend/now"));
-
-        // Back to IPv4 only from ipv6out: the sending name's AAAA and the IPv6 in the SPF go too.
-        F w = new F();
-        w.v6 = true; w.v6Internet = true; w.ptr6Send = true; w.sendAaaa = true; w.spf6 = true; w.spf6Any = true; w.mail = OUT;
-        check("to IPv4 only: first mail on IPv4", now(AddressGuide.plan(w.build(), AddressGuide.Goal.V4)).equals("mailV4/now"));
-        w.mail = V4;
-        check("then the sending name's AAAA", now(AddressGuide.plan(w.build(), AddressGuide.Goal.V4)).equals("v6SendDnsRemove/now"));
-        w.sendAaaa = false;
-        check("then the IPv6 out of the SPF", now(AddressGuide.plan(w.build(), AddressGuide.Goal.V4)).equals("spf6Remove/now"));
-        w.spf6Any = false;
-        check("then the address", now(AddressGuide.plan(w.build(), AddressGuide.Goal.V4)).equals("v6AddressRemove/now"));
+        check("switch off again: only mail going out is left", now(AddressGuide.plan(o.build(), AddressGuide.Goal.SEND6)).equals("mailSend6/now"));
         check("the goal key send6", AddressGuide.Goal.of("send6") == AddressGuide.Goal.SEND6);
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");

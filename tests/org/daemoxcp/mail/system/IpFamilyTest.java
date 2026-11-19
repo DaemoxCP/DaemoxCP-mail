@@ -89,9 +89,8 @@ public class IpFamilyTest {
         check("it receives over IPv4 only and sends over both: v4, not v6, sends6", out.v4() && !out.v6() && out.sends6()
                 && IpFamily.Family.BOTH.v6() && IpFamily.Family.BOTH.sends6() && IpFamily.Family.IPV6.v6() && IpFamily.Family.IPV6.sends6()
                 && !IpFamily.Family.IPV4.v6() && !IpFamily.Family.IPV4.sends6());
-        check("Postfix on all (to send over IPv6), Dovecot and pf as with IPv4 only, Postfix's default preference",
-                out.postfix.equals("all") && out.dovecot.equals("*") && out.pf.equals("inet ") && IpFamily.postfixPreference(out).equals("any"));
-        check("nginx: the IPv4 lines only, as with IPv4 only", IpFamily.withNginxListen(both, 8443, out).equals(nginx));
+        check("the services as with both (universal), pf as with IPv4 only, Postfix's default preference",
+                out.postfix.equals("all") && out.dovecot.equals("*, ::") && out.pf.equals("inet ") && IpFamily.postfixPreference(out).equals("any"));
         check("a port counts when it listens over IPv4 (Postfix listens over IPv6 too, pf keeps it closed)",
                 IpFamily.listensAs(sock, 25, out) && IpFamily.listensAs(sock, 993, out) && !IpFamily.listensAs(sock, 2096, out));
         check("using the panel over IPv6 warns that this closes it, over IPv4 not",

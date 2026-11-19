@@ -94,9 +94,13 @@ public final class PfPolicy {
     static final String METADATA_RULE = "block return out quick proto { tcp, udp } to 169.254.169.254 user != 0";
 
     /** Le regole che scrive questa classe: in un file col suo HEADER si riconoscono e si riscrivono. */
+    /** La posta che non esce in IPv6 (solo IPv4): Postfix sa spedire in tutte e due, la famiglia la decide pf. */
+    static final String SMTP_OUT6_RULE = "block return out inet6 proto tcp to port 25";
+
     private static final List<String> POLICY_PREFIXES = List.of("block in all", "pass out all keep state", METADATA_RULE,
             "pass in inet proto icmp ", "pass in inet6 proto icmp6", "pass in inet proto udp from port 67 to port 68",
-            "pass in proto tcp to port {", "pass in inet proto tcp to port {", "pass in inet6 proto tcp to port {");
+            "pass in proto tcp to port {", "pass in inet proto tcp to port {", "pass in inet6 proto tcp to port {",
+            "block return in inet proto tcp to port {", "block return in inet6 proto tcp to port {", SMTP_OUT6_RULE);
 
 
     /** La posta e il web: sempre. */
@@ -126,11 +130,21 @@ public final class PfPolicy {
         return render(p, tableLimit, "");
     }
 
+    /** Come sotto, con la posta libera di uscire in IPv6. */
+    static String render(Ports p, String tableLimit, String family) {
+        return render(p, tableLimit, family, false);
+    }
+
     /**
      * Come sopra, con la famiglia dei servizi: family e' "", "inet " o "inet6 " (IpFamily.pfKeyword). Vale per la posta,
      * il web, la webmail e il pannello; SSH resta senza famiglia, sempre (la regola su SSH non la cambia il pannello).
+     *
+     * I servizi ascoltano sempre in IPv4 e in IPv6 (configurazioni universali, IpFamily): la famiglia la decide solo pf.
+     * Sulla famiglia chiusa pf risponde subito «no» (block return) invece di tacere: chi prova a consegnare in IPv6 al
+     * nome della posta, che ha anche l'AAAA, passa all'IPv4 in un attimo, senza aspettare un timeout. smtpOut6Blocked:
+     * la posta non esce in IPv6 (solo IPv4).
      */
-    static String render(Ports p, String tableLimit, String family) {
+    static String render(Ports p, String tableLimit, String family, boolean smtpOut6Blocked) {
         StringBuilder b = new StringBuilder();
         b.append(HEADER).append('\n');
         b.append("#\n");
@@ -158,6 +172,15 @@ public final class PfPolicy {
         b.append("pass in proto tcp to port ").append(list(p.ssh())).append(" keep state\n\n");
         b.append("# Posta, web (sfida HTTP dei certificati, MTA-STS), webmail, pannello.\n");
         b.append("pass in ").append(family == null ? "" : family).append("proto tcp to port ").append(list(p.services())).append(" keep state\n");
+        String closed = "inet ".equals(family) ? "inet6 " : "inet6 ".equals(family) ? "inet " : null;
+        if (closed != null) {
+            b.append("\n# La famiglia chiusa: un rifiuto subito, non il silenzio (chi prova passa all'altra senza attese).\n");
+            b.append("block return in ").append(closed).append("proto tcp to port ").append(list(p.services())).append('\n');
+        }
+        if (smtpOut6Blocked) {
+            b.append("\n# La posta non esce in IPv6: Postfix prova l'IPv6, riceve subito un rifiuto e spedisce in IPv4.\n");
+            b.append(SMTP_OUT6_RULE).append('\n');
+        }
         return b.toString();
     }
 
@@ -171,6 +194,11 @@ public final class PfPolicy {
 
     /** Come sopra, con la famiglia dei servizi (IpFamily.pfKeyword). */
     static String transform(String current, Ports p, String family) {
+        return transform(current, p, family, false);
+    }
+
+    /** Come sopra, e con la posta che non esce in IPv6 (IpFamily.pfBlocksSmtpOut6). */
+    static String transform(String current, Ports p, String family, boolean smtpOut6Blocked) {
         if (current == null) return null;
         String first = current.lines().filter(l -> !l.isBlank()).findFirst().orElse("").trim();
         boolean ours = first.equals(HEADER) || first.equals(PREVIOUS_HEADER);
@@ -188,12 +216,12 @@ public final class PfPolicy {
             if (ours && POLICY_PREFIXES.stream().anyMatch(t::startsWith)) continue;
             return null;
         }
-        return render(p, tableLimit, family);
+        return render(p, tableLimit, family, smtpOut6Blocked);
     }
 
     /** Il pf.conf del pannello con le porte di adesso (il pulsante che crea un pf.conf che manca). */
     public static String renderNow() {
-        return render(currentPorts(), null, org.daemoxcp.mail.system.IpFamily.pfKeyword());
+        return render(currentPorts(), null, org.daemoxcp.mail.system.IpFamily.pfKeyword(), org.daemoxcp.mail.system.IpFamily.pfBlocksSmtpOut6());
     }
 
     /** Le porte TCP su cui sshd ascolta adesso, dall'uscita di sockstat -46l -P tcp. */
@@ -273,7 +301,7 @@ public final class PfPolicy {
             if (!Shell.run(Duration.ofSeconds(15), PFCTL, "-s", "info").output().contains("Status: Enabled")) return;
             String current = Files.readString(conf, StandardCharsets.UTF_8);
             Ports ports = currentPorts();
-            String next = transform(current, ports, org.daemoxcp.mail.system.IpFamily.pfKeyword());
+            String next = transform(current, ports, org.daemoxcp.mail.system.IpFamily.pfKeyword(), org.daemoxcp.mail.system.IpFamily.pfBlocksSmtpOut6());
             if (next == null) {
                 LOGGER.info("[PfPolicy] /etc/pf.conf has rules the panel does not write: left as it is, every port it lets in stays open");
                 return;

@@ -545,13 +545,7 @@ PTR must give the mail name and the name point back, with A for IPv4 and AAAA fo
 A); another name, none, one that does not point back, dig's own error lines, bad input. The guide's reverse DNS step
 is done when the PTR gives the name (the AAAA comes after). FreshDns: the question goes to the zone's own servers (SOA,
 NS, no recursion), the second when the first does not answer, the server's resolver only when none does, no odd
-server name reaches dig. HostRecords: the names it accepts, the records of the same name and type, the sending name
-(mail-out...).
-
-**SpfIp6Test** — the server's IPv6 in the domains' SPF, for mail over IPv6 only going out (SpfIp6): the panel's own
-form «v=spf1 [ip4] [ip6] mx -all» in any case, adding and removing the ip6 (an old one replaced), an SPF written by
-hand never rewritten, whether an SPF authorises an address (exact, inside a prefix, «+»; never «-», «~», «?»), and
-the state of several domains with the DNS answered by a fake.
+server name reaches dig. HostRecords: the names it accepts and the records of the same name and type.
 
 `geo-ipv6-browser-test.js` (Playwright, VM): blocking by country over IPv4 and IPv6. A country is synced (its file must
 have both lists), this computer's IPv6 /64 is added to that file, then blacklist and whitelist are applied through the
