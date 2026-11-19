@@ -1063,7 +1063,7 @@ public class PanelContent {
     <main id="main" tabindex="-1" class="content container mt-4">
         <div class="content-container">
             <div class="welcome-banner">
-                <h2><i class="fas fa-envelope-open-text me-2" aria-hidden="true"></i>Mail Server Dashboard</h2>
+                <h2><i class="fas fa-envelope-open-text me-2" aria-hidden="true"></i>{{t:home.dashTitle}}</h2>
                 <p class="mb-0">{{t:home.subtitle}}</p>
             </div>
 
@@ -1078,10 +1078,10 @@ public class PanelContent {
                 <div class="bg-white p-3 rounded border mb-3">
                     <table class="table table-sm mb-0">
                         <tr><td width="150"><strong>{{t:home.cfDomain}}</strong></td><td><code id="mailServerDomain">-</code></td></tr>
-                        <tr><td><strong>Type:</strong></td><td>A</td></tr>
-                        <tr><td><strong>Name:</strong></td><td><code id="mailServerSubdomain">mail</code></td></tr>
-                        <tr><td><strong>IPv4 address:</strong></td><td><code id="serverIpDisplay">-</code></td></tr>
-                        <tr><td><strong>Proxy status:</strong></td><td><span class="text-danger"><strong>{{t:home.dnsOnlyGrey}}</strong></span></td></tr>
+                        <tr><td><strong>{{t:home.cfType}}</strong></td><td>A</td></tr>
+                        <tr><td><strong>{{t:home.cfName}}</strong></td><td><code id="mailServerSubdomain">mail</code></td></tr>
+                        <tr><td><strong>{{t:home.cfIpv4}}</strong></td><td><code id="serverIpDisplay">-</code></td></tr>
+                        <tr><td><strong>{{t:home.cfProxyStatus}}</strong></td><td><span class="text-danger"><strong>{{t:home.dnsOnlyGrey}}</strong></span></td></tr>
                         <tr><td><strong>TTL:</strong></td><td>Auto</td></tr>
                     </table>
                 </div>
@@ -1338,8 +1338,8 @@ public class PanelContent {
                                 '<h6 class="text-danger mb-2"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(t('home.aMissing')) + '</h6>' +
                                 '<p class="mb-1">' + t('home.aWhat.html') + '</p>' +
                                 '<table class="table table-sm table-bordered mb-2" data-style="max-width:500px">' +
-                                '<tr><td width="100"><strong>Type</strong></td><td><code>A</code></td></tr>' +
-                                '<tr><td><strong>Name</strong></td><td><code>' + escHtml(subdomain) + '</code></td></tr>' +
+                                '<tr><td width="100"><strong>' + escHtml(t('home.cfTypeCol')) + '</strong></td><td><code>A</code></td></tr>' +
+                                '<tr><td><strong>' + escHtml(t('home.cfNameCol')) + '</strong></td><td><code>' + escHtml(subdomain) + '</code></td></tr>' +
                                 '<tr><td><strong>IPv4</strong></td><td><code>' + escHtml(c.expected) + '</code></td></tr>' +
                                 '<tr><td><strong>Proxy</strong></td><td><span class="text-danger fw-bold">' + escHtml(t('home.dnsOnlyGrey')) + '</span></td></tr>' +
                                 '<tr><td><strong>TTL</strong></td><td>Auto</td></tr>' +
@@ -1351,8 +1351,8 @@ public class PanelContent {
                                 '<h6 class="text-danger mb-2"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(t('home.mxMissing')) + '</h6>' +
                                 '<p class="mb-1">' + t('home.mxWhat.html') + '</p>' +
                                 '<table class="table table-sm table-bordered mb-2" data-style="max-width:500px">' +
-                                '<tr><td width="100"><strong>Type</strong></td><td><code>MX</code></td></tr>' +
-                                '<tr><td><strong>Name</strong></td><td>' + t('home.mxName.html', { name: escHtml(c.name) }) + '</td></tr>' +
+                                '<tr><td width="100"><strong>' + escHtml(t('home.cfTypeCol')) + '</strong></td><td><code>MX</code></td></tr>' +
+                                '<tr><td><strong>' + escHtml(t('home.cfNameCol')) + '</strong></td><td>' + t('home.mxName.html', { name: escHtml(c.name) }) + '</td></tr>' +
                                 '<tr><td><strong>Server</strong></td><td><code>' + escHtml(hostname) + '</code></td></tr>' +
                                 '<tr><td><strong>' + escHtml(t('home.priority')) + '</strong></td><td><code>10</code></td></tr>' +
                                 '<tr><td><strong>TTL</strong></td><td>Auto</td></tr>' +
@@ -1429,8 +1429,8 @@ public class PanelContent {
                             '<h6 class="text-danger mb-2"><i class="fas fa-envelope-open-text me-1" aria-hidden="true"></i>' + escHtml(t('home.rcMissing')) + '</h6>' +
                             '<p class="mb-1">' + t('home.rcWhat.html') + '</p>' +
                             '<table class="table table-sm table-bordered mb-2" data-style="max-width:500px">' +
-                            '<tr><td width="100"><strong>Type</strong></td><td><code>A</code></td></tr>' +
-                            '<tr><td><strong>Name</strong></td><td><code>' + escHtml(rcSub) + '</code></td></tr>' +
+                            '<tr><td width="100"><strong>' + escHtml(t('home.cfTypeCol')) + '</strong></td><td><code>A</code></td></tr>' +
+                            '<tr><td><strong>' + escHtml(t('home.cfNameCol')) + '</strong></td><td><code>' + escHtml(rcSub) + '</code></td></tr>' +
                             '<tr><td><strong>IPv4</strong></td><td><code>' + escapeHtml(data.server_ip || 'IP_SERVER') + '</code></td></tr>' +
                             '<tr><td><strong>Proxy</strong></td><td>' + escHtml(t('home.rcProxy')) + '</td></tr>' +
                             '<tr><td><strong>TTL</strong></td><td>Auto</td></tr>' +
@@ -1870,7 +1870,7 @@ public class PanelContent {
                                         <tr><td class="fw-bold">{{t:cfg.imapPortSec}}</td><td><code>993 / SSL-TLS</code></td></tr>
                                         <tr><td class="fw-bold">{{t:cfg.smtpServer}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgOutlookSmtp" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgOutlookSmtp')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">{{t:cfg.smtpPortSec}}</td><td><code>587 / STARTTLS</code></td></tr>
-                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" data-on-click="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">{{t:common.username}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" data-on-click="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">Password</td><td><small class="text-muted">{{t:cfg.seeCredentials}}</small></td></tr>
                                     </table>
                                 </li>
@@ -1888,7 +1888,7 @@ public class PanelContent {
                                     <table class="table table-sm table-bordered mt-2 mb-0">
                                         <tr><td class="fw-bold" data-style="width:35%">{{t:cfg.inServerImap}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAppleImap" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgAppleImap')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">{{t:cfg.outServerSmtp}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAppleSmtp" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgAppleSmtp')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
-                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" data-on-click="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">{{t:common.username}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" data-on-click="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">Password</td><td><small class="text-muted">{{t:cfg.seeCredentials}}</small></td></tr>
                                     </table>
                                 </li>
@@ -1908,7 +1908,7 @@ public class PanelContent {
                                         <tr><td class="fw-bold">{{t:cfg.inPortSec}}</td><td><code>993 / SSL</code></td></tr>
                                         <tr><td class="fw-bold">{{t:cfg.outServer}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="cfgAndroidSmtp" readonly><button class="btn btn-outline-secondary" data-on-click="copyInputValue('cfgAndroidSmtp')"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">{{t:cfg.outPortSec}}</td><td><code>587 / STARTTLS</code></td></tr>
-                                        <tr><td class="fw-bold">Username</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" data-on-click="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
+                                        <tr><td class="fw-bold">{{t:common.username}}</td><td><div class="input-group input-group-sm"><input type="text" class="form-control font-monospace cfg-shared-email" readonly><button class="btn btn-outline-secondary" data-on-click="copySharedField(this)"><i class="fas fa-copy" aria-hidden="true"></i></button></div></td></tr>
                                         <tr><td class="fw-bold">Password</td><td><small class="text-muted">{{t:cfg.seeCredentials}}</small></td></tr>
                                     </table>
                                 </li>
@@ -2502,7 +2502,7 @@ public class PanelContent {
             document.getElementById('pwgenPreview').value = '';
             document.getElementById('pwgenStrengthBadge').textContent = '—';
             document.getElementById('pwgenStrengthBadge').className = 'badge bg-secondary';
-            document.getElementById('pwgenEntropyText').textContent = 'Entropia: — bit';
+            document.getElementById('pwgenEntropyText').textContent = t('pw.entropyNone');
             document.getElementById('pwgenUseBtn').disabled = true;
             // Aggiorna nota Include in base al type selezionato
             pwgenUpdateIncludeNote();
@@ -3036,8 +3036,8 @@ public class PanelContent {
                             <select class="form-select" id="mbDomain" required></select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label" for="mbUser">Username</label>
-                            <input type="text" class="form-control" id="mbUser" placeholder="mario" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+                            <label class="form-label" for="mbUser">{{t:common.username}}</label>
+                            <input type="text" class="form-control" id="mbUser" placeholder="{{t:mbx.userPh}}" autocomplete="off" autocapitalize="off" spellcheck="false" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="mbPass">Password</label>
@@ -3409,7 +3409,7 @@ public class PanelContent {
                     <tr>
                         <td data-label="Email" class="text-long">
                             <strong>${escMbx(m.email)}</strong>
-                            ${!m.receive_enabled ? '<span class="badge bg-secondary ms-1" title="' + escMbx(t('mbx.sendOnly')) + '"><i class="fas fa-ban" aria-hidden="true"></i> No-Reply</span>' : ''}
+                            ${!m.receive_enabled ? '<span class="badge bg-secondary ms-1" title="' + escMbx(t('mbx.sendOnly')) + '"><i class="fas fa-ban" aria-hidden="true"></i> ' + escMbx(t('mbx.noReplyBadge')) + '</span>' : ''}
                             ${!m.active ? '<span class="badge bg-danger ms-1">' + escMbx(t('mbx.inactive')) + '</span>' : ''}
                         </td>
                         <td data-label="${escMbx(t('mbx.colName'))}">${escMbx(m.name || '-')}</td>
@@ -6532,7 +6532,7 @@ public class PanelContent {
                         <summary>{{t:dns.cfHowTo}}</summary>
                         <div class="mt-2 p-3 bg-white border rounded small">
                             <ol class="mb-2">
-                                <li>{{t:dns.cfStep1a}} <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">My Profile → API Tokens</a>{{t:dns.cfStep1b.html}}</li>
+                                <li>{{t:dns.cfStep1a}} <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">{{t:dns.cfTokenPath}}</a>{{t:dns.cfStep1b.html}}</li>
                                 <li>{{t:dns.cfStep2.html}}</li>
                                 <li>{{t:dns.cfStep3.html}}</li>
                                 <li>{{t:dns.cfStep4.html}}</li>
@@ -6931,7 +6931,7 @@ public class PanelContent {
                         <h5 class="mt-3"><i class="fas fa-link me-2" aria-hidden="true"></i>{{t:ssl.references}}</h5>
                         <ul class="mb-0">
                             <li><a href="https://letsencrypt.org/docs/rate-limits/" target="_blank" rel="noopener">{{t:ssl.officialRl}}</a></li>
-                            <li><a href="https://github.com/acmesh-official/acme.sh/wiki" target="_blank" rel="noopener">Wiki acme.sh</a></li>
+                            <li><a href="https://github.com/acmesh-official/acme.sh/wiki" target="_blank" rel="noopener">{{t:ssl.acmeWiki}}</a></li>
                         </ul>
                     </div>
                 </div>
@@ -7219,9 +7219,9 @@ public class PanelContent {
                                             <tr><th>{{t:ssl.mgFile}}</th><th>{{t:ssl.mgWhat}}</th><th>{{t:ssl.mgExample}}</th></tr>
                                         </thead>
                                         <tbody>
-                                            <tr><td><strong>{{t:ssl.mgServerCert}}</strong></td><td>{{t:ssl.mgLeaf}}</td><td><code>tuodominio.crt</code>, <code>cert.pem</code></td></tr>
+                                            <tr><td><strong>{{t:ssl.mgServerCert}}</strong></td><td>{{t:ssl.mgLeaf}}</td><td><code>{{t:ssl.exampleCrt}}</code>, <code>cert.pem</code></td></tr>
                                             <tr><td><strong>{{t:ssl.mgBundle}}</strong></td><td>{{t:ssl.mgBundleWhat}}</td><td><code>ca-bundle.crt</code>, <code>intermediate.crt</code>, <code>chain.pem</code></td></tr>
-                                            <tr><td><strong>{{t:ssl.mgKey}}</strong></td><td>{{t:ssl.mgKeyWhat}}</td><td><code>tuodominio.key</code>, <code>privkey.pem</code></td></tr>
+                                            <tr><td><strong>{{t:ssl.mgKey}}</strong></td><td>{{t:ssl.mgKeyWhat}}</td><td><code>{{t:ssl.exampleKey}}</code>, <code>privkey.pem</code></td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -7342,7 +7342,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                     <h5><i class="fas fa-exclamation-triangle text-danger me-2" aria-hidden="true"></i>${escHtml(t('ssl.selfSignedTemp'))}</h5>
                                     <table class="table table-sm table-borderless mb-0">
                                         <tr><td data-style="width:150px"><strong>${escHtml(t('ssl.cDomain'))}</strong></td><td>${escHtml(data.common_name || data.hostname || 'N/A')}</td></tr>
-                                        <tr><td><strong>${escHtml(t('ssl.cIssuer'))}</strong></td><td>${escHtml(data.issuer || 'Self-Signed')}</td></tr>
+                                        <tr><td><strong>${escHtml(t('ssl.cIssuer'))}</strong></td><td>${escHtml(data.issuer || t('ssl.selfSigned'))}</td></tr>
                                         <tr><td><strong>${escHtml(t('ssl.cExpires'))}</strong></td><td>${escHtml(data.expires_at || 'N/A')} ${data.days_until_expiry ? escHtml(tn('dns.daysParen', data.days_until_expiry)) : ''}</td></tr>
                                         <tr><td><strong>${escHtml(t('ssl.cAlgorithm'))}</strong></td><td>${escHtml(data.algorithm || 'RSA')}</td></tr>
                                     </table>
@@ -8797,7 +8797,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     if (data.domain && data.domain !== t('server.notConfigured')) {
                         el.style.display = 'block';
                         if (data.dns_ok && data.dns_proxied) {
-                            el.innerHTML = '<span class="badge bg-info"><i class="fas fa-cloud me-1" aria-hidden="true"></i>DNS OK (Proxy/CDN) - ' + escapeHtml(data.domain) + ' -> ' + escapeHtml(data.dns_result) + '</span>';
+                            el.innerHTML = '<span class="badge bg-info"><i class="fas fa-cloud me-1" aria-hidden="true"></i>' + escapeHtml(t('set.dnsOkCdn')) + ' - ' + escapeHtml(data.domain) + ' -> ' + escapeHtml(data.dns_result) + '</span>';
                         } else if (data.dns_ok) {
                             el.innerHTML = '<span class="badge bg-success"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>DNS OK - ' + escapeHtml(data.domain) + ' -> ' + escapeHtml(data.dns_result) + '</span>';
                         } else {
@@ -8826,9 +8826,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     if (data.domain) {
                         dnsEl.style.display = 'block';
                         if (data.dns_ok && data.dns_proxied) {
-                            dnsEl.innerHTML = '<div class="alert alert-info py-2 mb-0"><i class="fas fa-cloud me-1" aria-hidden="true"></i>DNS OK (Proxy/CDN): <code>' + escapeHtml(data.domain) + '</code> -> <code>' + escapeHtml(data.dns_result) + '</code></div>';
+                            dnsEl.innerHTML = '<div class="alert alert-info py-2 mb-0"><i class="fas fa-cloud me-1" aria-hidden="true"></i>' + escapeHtml(t('set.dnsOkCdn')) + ': <code>' + escapeHtml(data.domain) + '</code> -> <code>' + escapeHtml(data.dns_result) + '</code></div>';
                         } else if (data.dns_ok) {
-                            dnsEl.innerHTML = '<div class="alert alert-success py-2 mb-0"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>DNS OK: <code>' + escapeHtml(data.domain) + '</code> -> <code>' + escapeHtml(data.dns_result) + '</code></div>';
+                            dnsEl.innerHTML = '<div class="alert alert-success py-2 mb-0"><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escapeHtml(t('set.dnsOk')) + ': <code>' + escapeHtml(data.domain) + '</code> -> <code>' + escapeHtml(data.dns_result) + '</code></div>';
                         } else {
                             dnsEl.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(t('set.dnsNotSetFor', { domain: data.domain })) + '</div>';
                         }

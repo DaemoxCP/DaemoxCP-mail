@@ -303,7 +303,7 @@ public final class DovecotQuota {
         r.put("applied", why == null);
         if (why != null) return r.put("reason", why).put("mailboxes", new JSONArray());
         Shell.Result q = Shell.run(Duration.ofSeconds(60), DovecotAuthWorker.DOVEADM, "-f", "tab", "quota", "get", "-A");
-        if (!q.success()) return r.put("success", false).put("error", "doveadm quota get failed (exit " + q.exitCode() + ")");
+        if (!q.success()) return r.put("success", false).put("error", org.daemoxcp.mail.i18n.I18n.tr("server.quota.readFailed", java.util.Map.of("code", String.valueOf(q.exitCode()))));
         return r.put("mailboxes", parseUsage(q.outputTrim()));
     }
 
