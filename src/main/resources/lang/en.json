@@ -7033,8 +7033,8 @@
   "guide.how.v6Dns": "The AAAA record is the DNS entry that tells everyone \"for {h}, this is the IPv6 address\". The panel creates it on Cloudflare ({h} → {ip}), as DNS only.",
   "guide.how.webAaaa": "The panel adds on Cloudflare, proxied, an AAAA record → {ip} for the panel and webmail names, and then removes their A records: when both exist Cloudflare uses IPv4, and without IPv4 it would find nobody.",
   "guide.how.webA": "The panel adds on Cloudflare, proxied, an A record → {ip} for the panel and webmail names, and then removes their AAAA records: without IPv6, Cloudflare reaches the server only this way.",
-  "guide.how.mailBoth": "Postfix, Dovecot, the webmail and the firewall answer on IPv4 and IPv6. Postfix restarts: a few seconds without receiving mail; servers that were sending simply try again.",
-  "guide.how.mailV4": "Postfix, Dovecot, the webmail and the firewall answer on IPv4 only. Postfix restarts: a few seconds without receiving mail.",
+  "guide.how.mailBoth": "Postfix, Dovecot, the webmail and the firewall answer on IPv4 and IPv6. The first time, the services are set up for every choice and Postfix restarts: a few seconds without receiving mail, and servers that were sending simply try again. From then on only the firewall changes.",
+  "guide.how.mailV4": "Postfix, Dovecot, the webmail and the firewall answer on IPv4 only. The first time, the services are set up for every choice and Postfix restarts: a few seconds without receiving mail, and servers that were sending simply try again. From then on only the firewall changes.",
   "guide.how.mailV6": "Postfix, Dovecot, the webmail and the firewall answer on IPv6 only (the services keep talking to each other on 127.0.0.1). From now on servers with IPv4 only cannot send mail here; this server keeps sending to them over IPv4 until its IPv4 address is removed.",
   "guide.how.v6DnsRemove": "The panel removes from Cloudflare the AAAA record {h} → {ip}, so that nobody tries to send to this server over IPv6 any more.",
   "guide.how.v6AddressRemove": "The panel removes the route and the address while the server runs, without touching IPv4, and puts back in /etc/rc.conf the IPv6 lines there were before. Afterwards you can remove the address's reverse DNS in your provider's console.",
@@ -7336,9 +7336,9 @@
   "pfw.rowIcmp": "Ping and service messages (ICMP), recommended",
   "pfw.icmpPorts": "No port: choose ICMP as the protocol",
   "addr.inbound6": "Mail also comes in over IPv6",
-  "addr.inbound6Hint": "Off (recommended): mail also goes out over IPv6 but comes in only over IPv4, where spam and attacks are filtered better; whoever tries to deliver to you over IPv6 gets an immediate «no» and delivers over IPv4, with no delay. On: mail comes in and goes out over both. Changing it touches neither the DNS nor the services: the server's firewall does it.",
+  "addr.inbound6Hint": "Off (recommended): mail also goes out over IPv6 but comes in only over IPv4, where spam and attacks are filtered better; whoever tries to deliver to you over IPv6 gets an immediate «no» and delivers over IPv4, with no delay. On: mail comes in and goes out over both. It is a switch: once the other steps below are done, you touch it, confirm, and it applies at once; before that it only chooses, and the guide shows the steps that are missing. Changing it does not touch the DNS: the server's firewall does it.",
   "set.ipfOut6": "IPv4 and IPv6, but mail over IPv6 only going out",
   "guide.step.mailSend6": "Mail over IPv6 only going out",
-  "guide.how.mailSend6": "Mail goes out over IPv6 too, and nothing comes in over IPv6: the server's firewall answers «no» at once to whoever tries, who then delivers over IPv4 with no delay. Mail, webmail and the panel are received over IPv4 only. The DNS stays as it is, and SSH is not touched.",
+  "guide.how.mailSend6": "Mail goes out over IPv6 too, and nothing comes in over IPv6: the server's firewall answers «no» at once to whoever tries, who then delivers over IPv4 with no delay. Mail, webmail and the panel are received over IPv4 only. The DNS stays as it is, and SSH is not touched. The first time, the services are set up for every choice and Postfix restarts: a few seconds without receiving mail, and servers that were sending simply try again. From then on only the firewall changes.",
   "guide.do.mailSend6": "Mail over IPv6 only going out"
 }

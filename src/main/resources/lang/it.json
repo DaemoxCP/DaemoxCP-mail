@@ -7033,8 +7033,8 @@
   "guide.how.v6Dns": "Il record AAAA è la voce del DNS che dice a tutti «per {h}, l'indirizzo IPv6 è questo». Il pannello lo crea su Cloudflare ({h} → {ip}), in «DNS only».",
   "guide.how.webAaaa": "Il pannello aggiunge su Cloudflare, col proxy, un record AAAA → {ip} per i nomi del pannello e della webmail, e poi toglie i loro record A: quando ci sono tutti e due Cloudflare usa l'IPv4, e senza IPv4 non troverebbe nessuno.",
   "guide.how.webA": "Il pannello aggiunge su Cloudflare, col proxy, un record A → {ip} per i nomi del pannello e della webmail, e poi toglie i loro record AAAA: senza IPv6, Cloudflare arriva al server solo così.",
-  "guide.how.mailBoth": "Postfix, Dovecot, la webmail e il firewall rispondono in IPv4 e in IPv6. Postfix si riavvia: qualche secondo senza ricevere posta, e i server che stavano spedendo riprovano da soli.",
-  "guide.how.mailV4": "Postfix, Dovecot, la webmail e il firewall rispondono solo in IPv4. Postfix si riavvia: qualche secondo senza ricevere posta.",
+  "guide.how.mailBoth": "Postfix, Dovecot, la webmail e il firewall rispondono in IPv4 e in IPv6. La prima volta i servizi si preparano per tutte le scelte e Postfix si riavvia: qualche secondo senza ricevere posta, e i server che stavano spedendo riprovano da soli. Dalla volta dopo cambia solo il firewall.",
+  "guide.how.mailV4": "Postfix, Dovecot, la webmail e il firewall rispondono solo in IPv4. La prima volta i servizi si preparano per tutte le scelte e Postfix si riavvia: qualche secondo senza ricevere posta, e i server che stavano spedendo riprovano da soli. Dalla volta dopo cambia solo il firewall.",
   "guide.how.mailV6": "Postfix, Dovecot, la webmail e il firewall rispondono solo in IPv6 (fra loro i servizi continuano a parlarsi su 127.0.0.1). Da qui in poi i server che hanno solo IPv4 non possono mandare posta qui; questo server continua a spedire a loro in IPv4 finché ha il suo indirizzo IPv4.",
   "guide.how.v6DnsRemove": "Il pannello toglie da Cloudflare il record AAAA {h} → {ip}, così nessuno prova più a spedire a questo server in IPv6.",
   "guide.how.v6AddressRemove": "Il pannello toglie la strada e l'indirizzo mentre il server gira, senza toccare l'IPv4, e rimette in /etc/rc.conf le righe IPv6 che c'erano prima. Dopo puoi togliere il DNS inverso dell'indirizzo nella console del provider.",
@@ -7336,9 +7336,9 @@
   "pfw.rowIcmp": "Ping e messaggi di servizio (ICMP), consigliata",
   "pfw.icmpPorts": "Nessuna porta: come protocollo scegli ICMP",
   "addr.inbound6": "La posta entra anche in IPv6",
-  "addr.inbound6Hint": "Spenta (consigliato): la posta esce anche in IPv6 ma entra solo in IPv4, dove spam e attacchi si filtrano meglio; chi prova a consegnarti in IPv6 riceve subito un «no» e ti consegna in IPv4, senza ritardi. Accesa: la posta entra ed esce in tutte e due. Cambiarla non tocca né il DNS né i servizi: lo fa il firewall del server.",
+  "addr.inbound6Hint": "Spenta (consigliato): la posta esce anche in IPv6 ma entra solo in IPv4, dove spam e attacchi si filtrano meglio; chi prova a consegnarti in IPv6 riceve subito un «no» e ti consegna in IPv4, senza ritardi. Accesa: la posta entra ed esce in tutte e due. È un interruttore: quando gli altri passi qui sotto sono fatti, la tocchi, confermi e vale subito; prima sceglie soltanto, e la guida mostra i passi che mancano. Cambiarla non tocca il DNS: lo fa il firewall del server.",
   "set.ipfOut6": "IPv4 e IPv6, ma la posta in IPv6 solo in uscita",
   "guide.step.mailSend6": "Posta in IPv6 solo in uscita",
-  "guide.how.mailSend6": "La posta esce anche in IPv6, e in IPv6 non entra niente: il firewall del server risponde subito «no» a chi prova, che ti consegna in IPv4 senza ritardi. La posta, la webmail e il pannello si ricevono solo in IPv4. Il DNS resta com'è, e SSH non si tocca.",
+  "guide.how.mailSend6": "La posta esce anche in IPv6, e in IPv6 non entra niente: il firewall del server risponde subito «no» a chi prova, che ti consegna in IPv4 senza ritardi. La posta, la webmail e il pannello si ricevono solo in IPv4. Il DNS resta com'è, e SSH non si tocca. La prima volta i servizi si preparano per tutte le scelte e Postfix si riavvia: qualche secondo senza ricevere posta, e i server che stavano spedendo riprovano da soli. Dalla volta dopo cambia solo il firewall.",
   "guide.do.mailSend6": "Posta in IPv6 solo in uscita"
 }

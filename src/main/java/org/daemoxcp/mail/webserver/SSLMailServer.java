@@ -11880,10 +11880,25 @@ public class SSLMailServer {
         JSONObject response = new JSONObject();
         try {
             String method = exchange.getRequestMethod();
+            // Chi sceglie, come lo vede il pannello: col pannello separato e' l'IP che la parte web ha ricavato
+            // (r18, dietro Cloudflare quello del browser).
+            String via = exchange.getRemoteAddress() == null || exchange.getRemoteAddress().getAddress() == null
+                    ? null : exchange.getRemoteAddress().getAddress().getHostAddress();
             if ("GET".equals(method)) {
                 org.daemoxcp.mail.system.IpFamily.Family c = org.daemoxcp.mail.system.IpFamily.chosen();
                 response.put("success", true).put("chosen", c == null ? JSONObject.NULL : c.key)
                         .put("effective", org.daemoxcp.mail.system.IpFamily.effective().key);
+                // ?family=...: gli avvisi che quella scelta darebbe, senza farla. La casella «La posta entra anche in
+                // IPv6» della guida li mette nella sua sola conferma, prima di applicare.
+                String asked = extractParamFromQuery(exchange.getRequestURI().getQuery(), "family");
+                if (asked != null) {
+                    org.daemoxcp.mail.system.IpFamily.Family f = org.daemoxcp.mail.system.IpFamily.Family.of(asked);
+                    if (f == null) {
+                        sendJsonError(exchange, 400, I18n.tr("server.badRequest"));
+                        return;
+                    }
+                    response.put("family", f.key).put("warnings", new JSONArray(org.daemoxcp.mail.system.IpFamily.preview(f, via)));
+                }
             } else if ("POST".equals(method)) {
                 JSONObject req = new JSONObject(readRequestBodyWithLimit(exchange));
                 org.daemoxcp.mail.system.IpFamily.Family f = org.daemoxcp.mail.system.IpFamily.Family.of(req.optString("family", ""));
@@ -11891,10 +11906,6 @@ public class SSLMailServer {
                     sendJsonError(exchange, 400, I18n.tr("server.badRequest"));
                     return;
                 }
-                // Chi sceglie, come lo vede il pannello: col pannello separato e' l'IP che la parte web ha ricavato
-                // (r18, dietro Cloudflare quello del browser).
-                String via = exchange.getRemoteAddress() == null || exchange.getRemoteAddress().getAddress() == null
-                        ? null : exchange.getRemoteAddress().getAddress().getHostAddress();
                 org.daemoxcp.mail.system.IpFamily.Outcome o = org.daemoxcp.mail.system.IpFamily.choose(f, req.optBoolean("confirmed", false), via);
                 if (o.done()) {
                     if (firewallManager != null) {

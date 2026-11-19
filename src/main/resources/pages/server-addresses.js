@@ -366,6 +366,44 @@
             }).catch(() => addrSay(t('addr.failedGeneric'), 'danger'));
         }
 
+        // La casella «La posta entra anche in IPv6» e' un acceso/spento vero. Se gli altri passi sono gia' fatti e manca
+        // solo quello della posta, toccarla applica subito la scelta, dopo UNA conferma: cosa succede e gli avvisi che
+        // IpFamily darebbe (chi la tocca da quale famiglia arriva), chiesti prima senza cambiare niente. Se si annulla o
+        // non riesce, la casella torna com'era: cosi' dice sempre com'e' il server. Se mancano altri passi la casella
+        // sceglie soltanto, e la guida mostra i passi che mancano. Prima sceglieva e basta, e serviva anche il pulsante
+        // dell'ultimo passo: due gesti per un acceso/spento (chiesto dall'amministratore il 19/11).
+        async function addrSwitch() {
+            const sw = document.getElementById('addrInbound6');
+            const was = !sw.checked;
+            addrRechecks = 0;
+            addrSay(t('addr.loading'), 'muted');
+            let d;
+            try { d = await addrFetchState(); } catch (e) { addrSay(t('addr.failedGeneric'), 'danger'); return; }
+            if (!d) return;
+            if (!d.success) { addrSay(d.error || t('addr.failedGeneric'), 'danger'); return; }
+            addrSay('', 'muted');
+            addrRender(d);
+            const open = (d.steps || []).filter(s => s.status !== 'done');
+            const last = open.length === 1 && open[0].status === 'now' && ['mailBoth', 'mailSend6'].includes(open[0].id) ? open[0].id : '';
+            if (!last) return;
+            const family = last === 'mailBoth' ? 'both' : 'ipv6out';
+            // Gli avvisi della scelta, senza farla. Se non arrivano si chiede la scelta senza «confermata»: se ce ne sono,
+            // IpFamily li manda indietro e addrMail li mostra in una seconda conferma, prima di cambiare.
+            let warnings = null;
+            try {
+                const w = await fetch('/api/ip-family?family=' + encodeURIComponent(family)).then(r => r.json());
+                if (w && w.success && Array.isArray(w.warnings)) warnings = w.warnings;
+            } catch (e) { warnings = null; }
+            const said = [addrHow(last, addrParams(last))].concat(warnings || []).join('\n');
+            if (await panelConfirm(said, !!(warnings && warnings.length)) && await addrMail(family, warnings !== null)) {
+                sw.focus();
+                return;
+            }
+            sw.checked = was;
+            await addrLoadKeepingStatus();
+            sw.focus();
+        }
+
         // «Controlla di nuovo»: dice sempre com'e' andata, accanto al pulsante. Prima, se non era cambiato niente, la
         // pagina si ridisegnava uguale e non diceva nulla: sembrava che il pulsante non facesse niente (visto sul server
         // vero, aspettando il DNS inverso). Se non e' cambiato niente la pagina non si ridisegna e il fuoco resta sul
@@ -455,6 +493,7 @@
 
         // La posta: la stessa scelta della scheda «IPv4 e IPv6» (IpFamily). Prima senza conferma: se IpFamily ha degli
         // avvisi (chi la sceglie da quale famiglia arriva, i record che restano) si mostrano, e solo dopo un «si'» si va.
+        // Restituisce vero solo se la scelta e' stata applicata (la casella di sopra torna com'era se no).
         async function addrMail(family, confirmed) {
             addrLock(true);
             addrSay(t('set.ipfApplying'), 'muted');
@@ -469,17 +508,18 @@
             } catch (e) {
                 addrLock(false);
                 addrSay(t('set.ipfFailed', { e: '' }), 'danger');
-                return;
+                return false;
             }
             addrLock(false);
             if (d.confirm) {
                 addrSay('', 'muted');
                 if (await panelConfirm((d.warnings || []).join('\n'), true)) return addrMail(family, true);
-                return;
+                return false;
             }
             if (d.success) addrSay(t('set.ipfDone', { f: ipfName(family) }), 'success');
             else addrSay(t('set.ipfFailed', { e: d.error || '' }), 'danger');
             ipfLoad();
-            return addrLoadKeepingStatus();
+            await addrLoadKeepingStatus();
+            return !!d.success;
         }
 
