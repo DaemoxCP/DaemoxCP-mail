@@ -90,6 +90,12 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   posta buona. Dovecot lascia il messaggio in una cartella di raccolta con l'utente della posta, e la parte root del
   pannello lo consegna al controller di Rspamd ogni minuto e lo cancella: la password del controller non esce mai dai
   segreti di root. Il filtro bayesiano di Rspamd comincia a decidere dopo 200 messaggi per tipo.
+- Svuotamento automatico della *Junk* e del *Trash*, casella per casella, spento finché non lo si chiede: mai (il
+  predefinito) oppure dopo 7, 14, 30, 60 o 90 giorni, scelto dall'amministratore nella finestra della casella o
+  dall'utente nelle impostazioni della webmail (*Svuotamento automatico*). Dovecot cancella i messaggi che stanno nella
+  cartella da più tempo di così. Solo per le emergenze, dalla console del server, da root:
+  `java -jar daemoxcp-mail.jar --empty-folders junk|trash|both all|<casella>...` mostra quanti messaggi cancella e
+  chiede di scrivere quel numero prima di svuotare; resta nel registro di controllo.
 - Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
 - Una casella che si autentica spedisce solo dai suoi indirizzi: il suo e quelli degli alias che puntano a lei (un
   catch-all dà alla sua casella gli altri indirizzi del dominio). Ogni altro mittente, dello stesso dominio o no, riceve

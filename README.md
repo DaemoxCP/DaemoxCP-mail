@@ -90,6 +90,11 @@ It is **careful**. The panel never changes something it cannot check, and it say
   message in a spool as the mail user, and the panel's root part hands it to Rspamd's controller every minute and
   deletes it: the controller's password never leaves the root secrets. Rspamd's Bayes filter starts deciding after
   200 messages of each kind.
+- Automatic emptying of *Junk* and *Trash*, per mailbox, off until asked: never (the default) or after 7, 14, 30, 60 or
+  90 days, chosen by the administrator in the mailbox's window or by the user in the webmail's settings (*Automatic
+  emptying*). Dovecot deletes the messages that have been in the folder longer than that. For emergencies only, from
+  the server's console, as root: `java -jar daemoxcp-mail.jar --empty-folders junk|trash|both all|<mailbox>...` shows
+  how many messages it deletes and asks for that number before emptying; the audit log has it.
 - A mail queue you can inspect and act on; the maximum message size.
 - A mailbox that signs in sends only from its own addresses: its own and those of the aliases that point to it (a
   catch-all gives its mailbox the other addresses of the domain). Any other sender, of the same domain or not, gets
