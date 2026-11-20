@@ -164,6 +164,8 @@ public class SpamLearningTest {
                 && Files.isRegularFile(Path.of("/usr/local/etc/dovecot/sieve/learn-ham.svbin")));
         check("the parts are the panel's", SpamLearning.partsCurrent());
         check("the program writes as vmail", sh("su -m vmail -c '" + SpamLearning.PIPE_DIR + "/daemoxcp-learn check'").trim().equals("ok"));
+        check("its folders are root's and 0755 (vmail runs it)", sh("stat -f '%Su %Sp' /usr/local/libexec/daemoxcp-mail " + SpamLearning.PIPE_DIR)
+                .trim().equals("root drwxr-xr-x\nroot drwxr-xr-x"));
         String user = null;
         for (String u : sh("doveadm user '*'").trim().split("\\s+")) if (u.contains("@")) { user = u; break; }
         if (user == null) { check("a mailbox to try with", false); return; }

@@ -155,6 +155,8 @@ public final class SpamLearning {
     static Path spamScriptPath() { return ETC.resolve(SPAM_SCRIPT_IN_ETC); }
     static Path hamScriptPath() { return ETC.resolve(HAM_SCRIPT_IN_ETC); }
     static Path program() { return Path.of(PIPE_DIR, PROGRAM); }
+    /** La cartella del programma e quella sopra, che il pannello crea. */
+    static List<Path> pipeDirs() { return List.of(Path.of(PIPE_DIR).getParent(), Path.of(PIPE_DIR)); }
 
     public static void ensureAtBoot() {
         try {
@@ -187,6 +189,11 @@ public final class SpamLearning {
         try {
             if (!same(spamScriptPath(), spamScript()) || !same(hamScriptPath(), hamScript()) || !same(program(), programContent())) return false;
             if (!Files.isExecutable(program())) return false;
+            for (Path d : pipeDirs()) {
+                if (!Files.isDirectory(d, LinkOption.NOFOLLOW_LINKS)) return false;
+                PosixFileAttributes a = Files.readAttributes(d, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                if (!a.owner().getName().equals("root") || !PosixFilePermissions.toString(a.permissions()).equals("rwxr-xr-x")) return false;
+            }
             for (String k : KINDS) if (!spoolDirRight(Path.of(SPOOL, k))) return false;
             return spoolDirRight(Path.of(SPOOL));
         } catch (Exception e) {
@@ -231,7 +238,16 @@ public final class SpamLearning {
             LOGGER.warning("[SpamLearning] " + spool + ": learning from the users not set up");
             return false;
         }
-        Files.createDirectories(Path.of(PIPE_DIR), PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
+        // Le due cartelle del programma, di root e 0755: Dovecot lo lancia come vmail. Nascono con la umask della parte
+        // root (0700: misurato sulla VM, vmail non lo poteva lanciare), quindi i permessi si mettono dopo, espliciti.
+        for (Path d : pipeDirs()) {
+            if (Files.isSymbolicLink(d)) {
+                LOGGER.warning("[SpamLearning] " + d + " is a link: learning from the users not set up");
+                return false;
+            }
+            Files.createDirectories(d);
+            Files.setPosixFilePermissions(d, PosixFilePermissions.fromString("rwxr-xr-x"));
+        }
         write(program(), programContent(), "rwxr-xr-x");
         write(spamScriptPath(), spamScript(), "rw-r--r--");
         write(hamScriptPath(), hamScript(), "rw-r--r--");
