@@ -884,6 +884,10 @@ public class SSLMailServer {
             // Dovecot le ricompilava a ogni consegna con due errori nel maillog. Si sostituisce solo dove e' diverso
             // da quello che fa il sievec installato (reperto 241); al secondo avvio non scrive niente.
             org.daemoxcp.mail.system.SieveBinaries.ensureAtBoot();
+            // Le cartelle speciali (Bozze, Inviata, Cestino, Junk) segnate per i programmi di posta, e lo spam che Rspamd
+            // segna nella Junk prima di ogni regola: niente risposta automatica ne' inoltro sullo spam (SpecialFolders
+            // verifica con IMAP, e se non va torna com'era).
+            org.daemoxcp.mail.system.SpecialFolders.ensureAtBoot();
 
             // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.

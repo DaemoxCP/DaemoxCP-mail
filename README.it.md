@@ -81,6 +81,10 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   intanto si libera spazio. La pagina *Caselle* mostra quanto usa ogni casella. Con Dovecot 2.3 non si applicano, e la
   pagina lo dice: la pagina *Aggiornamenti* porta il server alla 2.4.
 - Filtri Sieve e risposte automatiche, compilati e controllati sul server.
+- Lo spam va nella Junk. La posta che Rspamd segna come spam (`X-Spam: Yes`) va nella cartella *Junk* della
+  casella prima di ogni altra regola: risposte automatiche, inoltri e filtri della casella non la toccano mai. Ogni
+  casella ha *Drafts*, *Sent*, *Trash* e *Junk*, segnate come cartelle speciali (RFC 6154): i programmi di posta usano
+  quelle invece di crearne di loro.
 - Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
 - Limiti d'invio per casella: messaggi all'ora, al giorno e destinatari per messaggio, globali o di una casella. Prima
   di ogni messaggio che una casella manda dopo essersi autenticata, Postfix chiede al pannello. Ogni destinatario conta

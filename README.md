@@ -81,6 +81,10 @@ It is **careful**. The panel never changes something it cannot check, and it say
   *Mailboxes* page shows how much each mailbox uses. With Dovecot 2.3 they are not applied, and the page says so: the
   *Updates* page moves the server to 2.4.
 - Sieve filters and vacation replies, compiled and checked server side.
+- Spam goes to Junk. Mail that Rspamd marks as spam (`X-Spam: Yes`) is filed into the mailbox's *Junk* folder
+  before any other rule, so vacation replies, forwarding and the mailbox's own filters never act on it. Every
+  mailbox gets *Drafts*, *Sent*, *Trash* and *Junk*, marked as special-use folders (RFC 6154), so mail programs use
+  them instead of creating their own.
 - A mail queue you can inspect and act on; the maximum message size.
 - Sending limits per mailbox: messages per hour, per day and recipients per message, global or for one mailbox.
   Before each message a mailbox sends after signing in, Postfix asks the panel. Each recipient counts as one message.

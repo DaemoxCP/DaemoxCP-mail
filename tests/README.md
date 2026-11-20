@@ -997,6 +997,19 @@ and the home.
 
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.UnusedMaildirTest
 
+**SpecialFoldersTest** — the special folders and spam in Junk (`SpecialFolders`): found on the VM installed from the
+README, mail that Rspamd marked (`X-Spam: Yes`) stayed in INBOX, and with the vacation reply on, a spam message got its
+reply (backscatter towards a forged sender); Dovecot had no namespace, so no special-use folders (RFC 6154). The
+conf.d file for 2.4 and 2.3 (Drafts, Sent, Trash and Junk with special_use and auto = subscribe; the spam script first:
+precedence 1 on 2.4, sieve_before with the panel's rules moved to sieve_before2 on 2.3), the Sieve script, the pure
+helpers, and the installer writing the same files. With `-De2e.vm=yes`, as root on the VM: Dovecot reads the script,
+it is precompiled, IMAP shows the four folders with their flags, and over LMTP with a vacation rule of the panel's spam
+goes to Junk with no reply while ordinary mail goes to INBOX with its reply; test mail and rule removed afterwards.
+Measured 20/11/2026 on Dovecot 2.4.5: all OK; with the conf.d file taken out 11 checks fail. The 2.3 file was checked
+with the real 2.3.21 doveconf and sieve-test in a separate root.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SpecialFoldersTest
+
 **DovecotHomeE2ETest** — the same with real deliveries and the VM's real configuration (it must start with the home of
 before), as root with `-De2e.vm=yes`. Before: an autoreply written by the panel and a script of the mailbox's own
 (ManageSieve), one delivery, and the false folders are in IMAP LIST; a second mailbox gets a message moved into its
