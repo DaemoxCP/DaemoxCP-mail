@@ -838,6 +838,8 @@ public class SSLMailServer {
             // AUTH solo sulle porte di invio (587, 465), non sulla 25: solo se master.cf la accende su tutte e due, con
             // la prova vera con STARTTLS; se no torna com'era (PostfixSubmissionAuth).
             org.daemoxcp.mail.system.PostfixSubmissionAuth.ensureAtBoot();
+            // DANE per la posta in uscita, col risolutore locale che convalida DNSSEC (PostfixDane).
+            org.daemoxcp.mail.system.PostfixDane.ensureAtBoot();
 
             // POP3 come l'ha scelto l'amministratore, spento se non ha scelto: nessuno lo usava, e le sue porte
             // erano solo bersagli (Pop3 verifica e torna indietro).

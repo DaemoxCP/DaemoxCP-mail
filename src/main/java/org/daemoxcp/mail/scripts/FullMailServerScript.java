@@ -824,7 +824,11 @@ smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_loglevel = 1
 
-smtp_tls_security_level = may
+# DANE for outgoing mail: where the destination publishes DNSSEC-signed TLSA records, TLS and a matching
+# certificate are required; elsewhere TLS stays opportunistic. local_unbound validates DNSSEC (PostfixDane does the
+# same on servers installed before).
+smtp_dns_support_level = dnssec
+smtp_tls_security_level = dane
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_loglevel = 1
 
