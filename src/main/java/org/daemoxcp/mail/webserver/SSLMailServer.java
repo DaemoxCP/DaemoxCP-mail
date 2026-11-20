@@ -924,6 +924,9 @@ public class SSLMailServer {
             org.daemoxcp.mail.system.RedisSocket.ensureAtBoot();
             org.daemoxcp.mail.system.ClamdSocket.ensureAtBoot();
             org.daemoxcp.mail.system.RspamdController.ensureAtBoot();
+            // Chi si autentica scrive nel From solo un indirizzo suo: la busta la controlla Postfix (SenderLoginMap),
+            // il From una regola di Rspamd, che dal milter sa chi si e' autenticato (HeaderFromCheck).
+            org.daemoxcp.mail.system.HeaderFromCheck.ensureAtBoot();
 
             // Auto-setup Postfix aliases: crea /etc/aliases (o /etc/mail/aliases) se manca
             // + compila il .db. Risolve l'errore comune "open database /etc/aliases.db: No such file".

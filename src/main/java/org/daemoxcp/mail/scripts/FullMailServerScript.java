@@ -1115,6 +1115,13 @@ clamav {
 }
 RSPAMD_AV
 
+# Chi si autentica scrive nell'intestazione From solo un indirizzo suo: la busta la controlla Postfix
+# (smtpd_sender_login_maps), il From questa regola di Rspamd, che dal milter sa chi si e' autenticato (HeaderFromCheck).
+mkdir -p /usr/local/etc/rspamd/lua.local.d
+cat > /usr/local/etc/rspamd/lua.local.d/daemoxcp-header-from.lua << 'RSPAMD_HEADER_FROM'
+""" + org.daemoxcp.mail.system.HeaderFromCheck.content() + """
+RSPAMD_HEADER_FROM
+
 sysrc rspamd_enable="YES"
 
 echo "${GREEN}  Rspamd configured${NC}"
