@@ -171,11 +171,13 @@ public class MailDbUsersMysqlTest {
                     && columns.size() == 16);
             columns = rows(root, "SELECT grantee, table_name, column_name, privilege_type FROM information_schema.column_privileges "
                     + "WHERE grantee = ? ORDER BY table_name, column_name", "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'");
-            check("Dovecot: SELECT on email, password, active, quota_mb of mailboxes, and nothing else: " + columns, columns.equals(List.of(
+            check("Dovecot: SELECT on email, password, active, quota_mb and the two emptying days of mailboxes, and nothing else: " + columns, columns.equals(List.of(
                     "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|active|SELECT",
                     "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|email|SELECT",
+                    "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|junk_expunge_days|SELECT",
                     "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|password|SELECT",
-                    "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|quota_mb|SELECT")));
+                    "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|quota_mb|SELECT",
+                    "'" + MailDbUsers.DOVECOT_USER + "'@'localhost'|mailboxes|trash_expunge_days|SELECT")));
             for (String u : List.of(MailDbUsers.POSTFIX_USER, MailDbUsers.DOVECOT_USER)) {
                 List<String> other = rows(root, "SELECT privilege_type FROM information_schema.table_privileges WHERE grantee LIKE ? "
                         + "UNION ALL SELECT privilege_type FROM information_schema.schema_privileges WHERE grantee LIKE ? "
@@ -225,9 +227,9 @@ public class MailDbUsersMysqlTest {
             // The quota userdb (DovecotQuota): its own query, with Dovecot's %{user} filled in.
             String quota = org.daemoxcp.mail.scripts.DovecotConfig.QUOTA_USERDB.lines().filter(l -> l.trim().startsWith("query = "))
                     .findFirst().orElse("").trim().substring("query = ".length());
-            check("Dovecot: the quota lookup gives a mailbox's limit in MB (" + rows(dc, quota.replace("%{user}", "ann@mdu-alpha.test")) + ")",
+            check("Dovecot: the quota lookup gives a mailbox's limit in MB, and no emptying while never (" + rows(dc, quota.replace("%{user}", "ann@mdu-alpha.test")) + ")",
                     rows(dc, quota.replace("%{user}", "ann@mdu-alpha.test")).size() == 1
-                            && rows(dc, quota.replace("%{user}", "ann@mdu-alpha.test")).get(0).endsWith("M"));
+                            && rows(dc, quota.replace("%{user}", "ann@mdu-alpha.test")).get(0).matches("[0-9]+M\\|null\\|null"));
             check("Dovecot: changing a password refused (1142)", refusal(dc, "UPDATE mailboxes SET password = 'x' WHERE email = 'ann@mdu-alpha.test'") == 1142);
         }
 

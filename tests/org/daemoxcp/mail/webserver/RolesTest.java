@@ -178,7 +178,8 @@ public class RolesTest {
                 // /vendor, but the handler gives those of the protected pages only to whoever signed
                 // in (LoginRoutesTest checks it).
                 pub.equals(Set.of("/autoconfig", "/mta-sts", "/fa", "/vendor", "/i18n/", "/assets/", "/api/language", "/", "/index", "/api/login",
-                        "/setup", "/api/logout", org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, "/api/internal/mailbox-vault")));
+                        "/setup", "/api/logout", org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, "/api/internal/mailbox-vault",
+                        "/api/internal/mailbox-cleanup")));
         StringBuilder mismatch = new StringBuilder();
         for (Layout.Section s : Layout.MENU)
             for (Layout.Item item : s.items()) {

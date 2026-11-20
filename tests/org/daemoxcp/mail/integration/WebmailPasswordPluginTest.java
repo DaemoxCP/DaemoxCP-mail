@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
  * config the panel writes, run by the real PHP, and the list of plugins Roundcube gets from it.
  *
  *  1. the full installation's list (archive, zipdownload, and the panel's SSO plugin): password added at the end, then
- *     the spam button (markasjunk, SpamLearning);
+ *     the spam button (markasjunk, SpamLearning) and the automatic emptying (daemoxcp_mail_cleanup);
  *  2. a list that already has them, in either syntax: never twice;
  *  3. no list in this file: none created (Roundcube merges files by replacing the whole list, so a list made here
  *     would drop the plugins written elsewhere);
@@ -44,13 +44,13 @@ public class WebmailPasswordPluginTest {
             System.out.println("== The list Roundcube gets ==");
             String full = "<?php\n$config = [];\n$config['plugins'] = array('daemoxcp_mail_sso', 'archive', 'zipdownload');\n";
             check("the full installation's list: password and the spam button added (" + plugins(php, dir, apply(full)) + ")",
-                    "daemoxcp_mail_sso,archive,zipdownload,password,markasjunk".equals(plugins(php, dir, apply(full))));
+                    "daemoxcp_mail_sso,archive,zipdownload,password,markasjunk,daemoxcp_mail_cleanup".equals(plugins(php, dir, apply(full))));
             String already = "<?php\n$config = [];\n$config['plugins'] = ['password', 'archive'];\n";
             check("a list that has password: password not added again (" + plugins(php, dir, apply(already)) + ")",
-                    "password,archive,markasjunk".equals(plugins(php, dir, apply(already))));
+                    "password,archive,markasjunk,daemoxcp_mail_cleanup".equals(plugins(php, dir, apply(already))));
             String both = "<?php\n$config = [];\n$config['plugins'] = ['markasjunk', 'password'];\n";
-            check("a list that has both: unchanged (" + plugins(php, dir, apply(both)) + ")",
-                    "markasjunk,password".equals(plugins(php, dir, apply(both))));
+            check("a list that has both: only the panel's cleanup plugin added (" + plugins(php, dir, apply(both)) + ")",
+                    "markasjunk,password,daemoxcp_mail_cleanup".equals(plugins(php, dir, apply(both))));
             String none = "<?php\n$config = [];\n$config['des_key'] = 'x';\n";
             check("no list in this file: none created (" + plugins(php, dir, apply(none)) + ")",
                     "(unset)".equals(plugins(php, dir, apply(none))));
@@ -58,8 +58,8 @@ public class WebmailPasswordPluginTest {
             System.out.println("\n== Applied again ==");
             String twice = WebmailPasswordConfig.apply(apply(full), 2096, KEY);
             check("one line, not two", twice.split(java.util.regex.Pattern.quote(WebmailPasswordConfig.PLUGIN_LINE), -1).length == 2);
-            check("still password and markasjunk once (" + plugins(php, dir, twice) + ")",
-                    "daemoxcp_mail_sso,archive,zipdownload,password,markasjunk".equals(plugins(php, dir, twice)));
+            check("still password, markasjunk and the cleanup plugin once (" + plugins(php, dir, twice) + ")",
+                    "daemoxcp_mail_sso,archive,zipdownload,password,markasjunk,daemoxcp_mail_cleanup".equals(plugins(php, dir, twice)));
             Path f = dir.resolve("lint.php");
             Files.writeString(f, twice);
             check("php -l: no syntax errors", run(php, "-l", f.toString()).startsWith("No syntax errors"));
