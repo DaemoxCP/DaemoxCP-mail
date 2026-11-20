@@ -827,6 +827,10 @@ public class SSLMailServer {
             // fermava solo pf. Riavvio verificato, e se qualcosa non torna si toglie il file (ManageSieveLocal).
             org.daemoxcp.mail.system.ManageSieveLocal.ensureAtBoot();
 
+            // nginx non dice la sua versione e la webmail manda HSTS, nosniff e Referrer-Policy: sui server installati prima
+            // si aggiungono solo le righe che mancano, con nginx -t, reload e una richiesta vera; se no torna com'era.
+            org.daemoxcp.mail.system.NginxMain.ensureAtBoot();
+
             // POP3 come l'ha scelto l'amministratore, spento se non ha scelto: nessuno lo usava, e le sue porte
             // erano solo bersagli (Pop3 verifica e torna indietro).
             org.daemoxcp.mail.system.Pop3.ensureAtBoot();
@@ -12963,66 +12967,10 @@ public class SSLMailServer {
             String rcRoot = "/usr/local/www/roundcube";
             if (Files.isDirectory(Path.of(rcRoot, "public_html"))) rcRoot = rcRoot + "/public_html";
 
-            String config = """
-worker_processes auto;
-error_log /var/log/nginx/error.log;
-pid /var/run/nginx.pid;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    include mime.types;
-    default_type application/octet-stream;
-    sendfile on;
-    keepalive_timeout 65;
-    client_max_body_size 50M;
-
-    # Default server: reject requests on non-matching hostnames
-    server {
-        listen %s ssl default_server;
-        server_name _;
-
-        ssl_certificate %s;
-        ssl_certificate_key %s;
-
-        return 444;
-    }
-
-    # Roundcube webmail: responds ONLY to the configured domain
-    server {
-        listen %s ssl;
-        server_name %s;
-        root %s;
-        index index.php;
-
-        ssl_certificate %s;
-        ssl_certificate_key %s;
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers HIGH:!aNULL:!MD5;
-
-        location / {
-            try_files $uri $uri/ /index.php?$args;
-        }
-
-        # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: uno script PHP
-        # con un percorso attaccato. Un location che chiede .php in fondo all'URI non lo prende,
-        # e il foglio di stile torna come pagina HTML: la webmail si apre senza grafica.
-        # Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La riga
-        location ~ \\.php {
-            include fastcgi_params;
-            fastcgi_index index.php;
-            fastcgi_split_path_info ^(.+\\.php)(/.+)$;
-            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-            fastcgi_param PATH_INFO $fastcgi_path_info;
-            fastcgi_pass %s;
-        }
-
-        location ~ /\\. { deny all; }
-    }
-}
-""".formatted(port, sslCert, sslKey, port, domain, rcRoot, sslCert, sslKey,
+            // Il file intero da una fonte sola (NginxMain, la stessa dell'installatore). Prima qui c'era un altro modello:
+            // riscriveva il file da capo togliendo l'include della 443 (MTA-STS, autoconfig), e lo scriveva senza
+            // nginx -t e senza copia (installazione dal README, 20/11/2026).
+            String config = org.daemoxcp.mail.system.NginxMain.content(domain, port, sslCert, sslKey, rcRoot,
                     // Il pool di Roundcube: il suo socket, o quello di prima se la migrazione non c'e' ancora.
                     org.daemoxcp.mail.system.RoundcubeUser.fastcgiPass());
             // Le righe listen della famiglia scelta nelle Impostazioni (IpFamily); senza scelta restano come sono.
@@ -13031,7 +12979,13 @@ http {
                         org.daemoxcp.mail.system.IpFamily.chosen());
 
             Path nginxConf = Path.of("/usr/local/etc/nginx/nginx.conf");
-            Files.writeString(nginxConf, config);
+            String current = Files.exists(nginxConf) ? Files.readString(nginxConf) : null;
+            config = org.daemoxcp.mail.system.NginxMain.keepIncludes(config, current);
+            String problem = org.daemoxcp.mail.system.NginxMain.write(config);
+            if (problem != null) {
+                LOGGER.warning("Nginx roundcube config not written: " + problem);
+                return false;
+            }
             return true;
         } catch (Exception e) {
             LOGGER.warning("Could not regenerate Nginx roundcube config: " + e.getMessage());

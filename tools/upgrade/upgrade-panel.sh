@@ -193,10 +193,29 @@ say "Panel upgrade: everything I see goes into $WORK"
 
 # Lo stato che deve restare uguale dopo il passaggio, una riga per cosa. Niente password ne'
 # contenuti: solo esiti.
+# I servizi dei pacchetti accesi in rc.conf: quelli di «service -e», con lo stesso calcolo (name, rcvar,
+# load_rc_config_var di rc.subr), ma senza checkyesno. Per gli script che danno il valore predefinito solo dentro di
+# se' (sentinel di redis, pkg_triggers, mysqlrouter, clamav_milter) checkyesno scrive «WARNING: $..._enable is not set
+# properly» nel registro di sistema a ogni chiamata, anche con 2>/dev/null: 4 righe per fotografia, 12 per
+# aggiornamento (misurato il 20/11/2026; stesso elenco di service -e, provato sulla VM).
+enabled_local() (
+    . /etc/rc.subr
+    for file in /usr/local/etc/rc.d/*; do
+        [ -f "$file" ] && grep -q '^rcvar' "$file" || continue
+        name=; rcvar=
+        eval "$(grep '^name=' "$file")"
+        eval "$(grep '^rcvar' "$file")"
+        [ -n "$rcvar" ] || continue
+        load_rc_config_var "$name" "$rcvar"
+        eval "v=\${$rcvar:-}"
+        case "$v" in [Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|[Oo][Nn]|1) echo "${file##*/}" ;; esac
+    done
+)
+
 state() {
     # In ordine di nome: service -e segue rcorder, che cambia quando un pacchetto si aggiunge.
     # Il pannello no, con tutti e due i nomi: il primo avvio lo rinomina.
-    for s in $(service -e | sed -n 's#^/usr/local/etc/rc.d/##p' | grep -vxE 'mailpanel|daemoxcp_mail' | sort); do
+    for s in $(enabled_local | grep -vxE 'mailpanel|daemoxcp_mail' | sort); do
         printf 'service %s: %s\n' "$s" "$(service "$s" status >/dev/null 2>&1 && echo up || echo DOWN)"
     done
     printf 'mysqld: %s\n' "$(pgrep -q mysqld && echo up || echo DOWN)"

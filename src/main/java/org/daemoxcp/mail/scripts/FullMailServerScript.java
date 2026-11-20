@@ -1225,62 +1225,23 @@ fi
 
 # Nginx
 mkdir -p /usr/local/etc/nginx /var/log/nginx
-cat > /usr/local/etc/nginx/nginx.conf << NGINX_CONF
-worker_processes auto;
-error_log /var/log/nginx/error.log;
-pid /var/run/nginx.pid;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    include mime.types;
-    default_type application/octet-stream;
-    sendfile on;
-    keepalive_timeout 65;
-    client_max_body_size 50M;
-
-    server {
-        listen $ROUNDCUBE_PORT ssl;
-        server_name $ROUNDCUBE_DOMAIN;
-        root /usr/local/www/roundcube;
-        index index.php;
-
-        ssl_certificate $RC_SSL_CERT;
-        ssl_certificate_key $RC_SSL_KEY;
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers HIGH:!aNULL:!MD5;
-
-        location / {
-            try_files \\$uri \\$uri/ /index.php?\\$args;
-        }
-
-        # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: uno script PHP
-        # con un percorso attaccato. Un location che chiede .php in fondo all'URI non lo prende,
-        # e il foglio di stile torna come pagina HTML: la webmail si apre senza grafica.
-        # Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La riga
-        location ~ \\\\.php {
-            include fastcgi_params;
-            fastcgi_index index.php;
-            fastcgi_split_path_info ^(.+\\\\.php)(/.+)\\$;
-            fastcgi_param SCRIPT_FILENAME \\$document_root\\$fastcgi_script_name;
-            fastcgi_param PATH_INFO \\$fastcgi_path_info;
-            fastcgi_pass unix:/var/run/php-fpm-roundcube.sock;
-        }
-
-        location ~ /\\\\. { deny all; }
-    }
-}
+# Il file e' quello che scrive anche il pannello (NginxMain, una fonte sola): il blocco default_server che risponde 444
+# agli altri nomi, server_tokens off e le intestazioni di sicurezza della webmail. I valori entrano al posto dei
+# segnaposto con sed; & | e \\ nei percorsi si proteggono, perche' per sed hanno un significato.
+cat > /usr/local/etc/nginx/nginx.conf << 'NGINX_CONF'
+""" + org.daemoxcp.mail.system.NginxMain.template() + """
 NGINX_CONF
-
-# Dalla 1.7 Roundcube non serve piu' i file dalla radice dell'applicazione ma dalla
-# sottocartella public_html: e' una protezione voluta, e con la radice vecchia la webmail
-# risponde 404 su tutto. Non lo si deduce dal numero di versione, si guarda se la cartella
-# c'e': cosi' la stessa riga vale per la 1.6 e per la 1.7 senza doverle distinguere.
+RC_ROOT=/usr/local/www/roundcube
 if [ -d /usr/local/www/roundcube/public_html ]; then
-    sed -i '' 's#root /usr/local/www/roundcube;#root /usr/local/www/roundcube/public_html;#' /usr/local/etc/nginx/nginx.conf
+    RC_ROOT=/usr/local/www/roundcube/public_html
     echo "  Roundcube 1.7 or later: nginx root set to public_html"
+fi
+sed_value() { printf '%s' "$1" | sed -e 's/[&|\\\\]/\\\\&/g'; }
+sed -i '' -e "s|__RC_DOMAIN__|$(sed_value "$ROUNDCUBE_DOMAIN")|g" -e "s|__RC_PORT__|$(sed_value "$ROUNDCUBE_PORT")|g" \\
+    -e "s|__RC_CERT__|$(sed_value "$RC_SSL_CERT")|g" -e "s|__RC_KEY__|$(sed_value "$RC_SSL_KEY")|g" \\
+    -e "s|__RC_ROOT__|$(sed_value "$RC_ROOT")|g" /usr/local/etc/nginx/nginx.conf
+if grep -q '__RC_' /usr/local/etc/nginx/nginx.conf; then
+    echo "${RED}  nginx.conf still has a placeholder${NC}"
 fi
 
 sysrc nginx_enable="YES"
