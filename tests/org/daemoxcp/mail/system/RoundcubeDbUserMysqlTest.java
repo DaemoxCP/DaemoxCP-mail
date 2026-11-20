@@ -174,7 +174,7 @@ public class RoundcubeDbUserMysqlTest {
             System.out.println("No MySQL given (-Dmysql.port=...): this test needs the test MySQL, and its root.");
             System.exit(1);
         }
-        // Prima di tutto: i segreti della prova (root senza password) e la porta del MySQL di prova per MysqlRoot.
+        // First of all: the test's secrets (root without a password) and the test MySQL's port for MysqlRoot.
         folder = Files.createTempDirectory("roundcube-db-user-mysql");
         System.setProperty("daemoxcp.mail.secrets.dir", Files.createDirectories(folder.resolve("secrets")).toString());
         System.setProperty("daemoxcp.mail.mysql.port", port);

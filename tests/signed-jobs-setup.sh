@@ -1,37 +1,33 @@
 #!/bin/sh
-# Prepara sulla VM di prova le tre situazioni vecchie per SignedJobsE2ETest, e le toglie.
+# Prepares on the test VM the three old situations for SignedJobsE2ETest, and removes them.
 #
-#   sh tests/signed-jobs-setup.sh roundcube        Roundcube registrato una versione indietro
-#   sh tests/signed-jobs-setup.sh python           py311-build installato e protetto
-#   sh tests/signed-jobs-setup.sh mysql84          MySQL 8.0 al posto della 8.4, coi dati ricaricati
-#   sh tests/signed-jobs-setup.sh restore-python   toglie cio' che il passaggio ha aggiunto
-#   sh tests/signed-jobs-setup.sh restore-mysql84  rimette il datadir 8.4 di prima e le dipendenze vere
-#   sh tests/signed-jobs-setup.sh cleanup          toglie i boot environment creati dai lavori
-#   sh tests/signed-jobs-setup.sh confirm          tiene confermata per un'ora la sessione piu' recente del pannello
-#   sh tests/signed-jobs-setup.sh confirm-stop     smette di confermarla
+#   sh tests/signed-jobs-setup.sh roundcube        Roundcube recorded one version behind
+#   sh tests/signed-jobs-setup.sh python           py311-build installed and locked
+#   sh tests/signed-jobs-setup.sh mysql84          MySQL 8.0 in place of 8.4, with the data loaded again
+#   sh tests/signed-jobs-setup.sh restore-python   removes what the move added
+#   sh tests/signed-jobs-setup.sh restore-mysql84  puts back the 8.4 datadir of before and the real dependencies
+#   sh tests/signed-jobs-setup.sh cleanup          removes the boot environments the jobs created
+#   sh tests/signed-jobs-setup.sh confirm          keeps the panel's most recent session confirmed for an hour
+#   sh tests/signed-jobs-setup.sh confirm-stop     stops confirming it
 #
-# La conferma recente (reauth_at) e' quella che il pannello vuole prima di avviare un lavoro, e che normalmente
-# arriva da una passkey o da un codice via email: sulla VM la si scrive in MySQL, come confirm_session di
-# separation-service-test.sh, per la sessione aperta col codice da console (signed-jobs-browser-test.js). Solo
-# sulla VM di prova: sul server vero sarebbe aggirarla.
+# The fresh confirmation (reauth_at) is what the panel wants before starting a job, and it normally comes from a
+# passkey or a code by email: on the VM it is written in MySQL, like confirm_session of separation-service-test.sh,
+# for the session opened with the console code (signed-jobs-browser-test.js). Only on the test VM: on the real server
+# it would be getting around it.
 #
-# Solo su una macchina di prova, come root. Non stampa mai password ne' contenuti del database:
-# le credenziali di root di MySQL vanno in un file di opzioni 0600 letto dai client, e i dati
-# passano da un file all'altro senza essere mostrati.
+# Only on a test machine, as root. It never prints passwords or database contents: MySQL's root credentials go in an
+# options file 0600 read by the clients, and the data goes from one file to another without being shown.
 #
-# Che cosa e' vero e che cosa e' costruito, perche' il reperto lo dica:
-#  - roundcube: il pacchetto vero resta quello installato; nel database di pkg la sua versione
-#    diventa quella precedente della serie, cosi' pkg lo aggiorna davvero (scarica, reinstalla i
-#    file, esegue gli script). Lo schema del database della webmail e' gia' quello nuovo:
-#    updatedb.sh non ha niente da fare.
-#  - python: tutto vero. py311-build dal catalogo, protetto come il resto della pila; hidapi e
-#    libevent, orfani rimasti da una prova vecchia, segnati per la durata come installati su
-#    richiesta, perche' autoremove tocchi solo la famiglia py311 (con loro il lavoro lo salta, ed e'
-#    giusto).
-#  - mysql84: server e client 8.0 veri, dal catalogo; il datadir 8.0 nuovo, coi database e gli
-#    account della 8.4 ricaricati (dump logico, account con l'hash, mai la password). Il datadir
-#    della 8.4 resta da parte. Nel database di pkg, postfix-mysql e dovecot-mysql dipendono dal
-#    client 8.0, come su un server installato con la 8.0.
+# What is real and what is built, so that the finding says it:
+#  - roundcube: the real package stays the one installed; in pkg's database its version becomes the previous one of
+#    the series, so pkg really updates it (downloads, reinstalls the files, runs the scripts). The webmail database's
+#    schema is already the new one: updatedb.sh has nothing to do.
+#  - python: all real. py311-build from the catalog, locked like the rest of the stack; hidapi and libevent, orphans
+#    left by an old test, marked as installed on request for the duration, so that autoremove touches only the py311
+#    family (with them the job skips it, and rightly).
+#  - mysql84: real 8.0 server and client, from the catalog; a new 8.0 datadir, with 8.4's databases and accounts
+#    loaded again (a logical dump, the accounts with their hash, never the password). 8.4's datadir is set aside. In
+#    pkg's database, postfix-mysql and dovecot-mysql depend on the 8.0 client, as on a server installed with 8.0.
 set -eu
 
 W=/var/tmp/signed-jobs
@@ -39,12 +35,12 @@ mkdir -p "$W"
 chmod 700 "$W"
 mode="${1:-}"
 
-# I boot environment di adesso, la prima volta: "cleanup" toglie solo quelli nati dopo.
+# The boot environments of now, the first time: "cleanup" removes only those born after.
 [ -f "$W/bes-before.txt" ] || bectl list -H | cut -f1 | sort > "$W/bes-before.txt"
 
 root_cnf() {
     umask 077
-    # Il file e' nel formato properties: "\!" vale "!", "\\" vale "\".
+    # The file is in the properties format: "\!" stands for "!", "\\" for "\".
     pw=$(sed -n 's/^mysql_root_password=//p' /usr/local/etc/daemoxcp-mail/root-secrets.properties | sed 's/\\\(.\)/\1/g')
     [ -n "$pw" ] || { echo "mysql_root_password is missing"; exit 1; }
     printf '[client]\nuser=root\npassword="%s"\nhost=localhost\n' "$pw" > "$W/root.cnf"
@@ -73,8 +69,8 @@ python)
     echo "autoremove would remove: $(pkg autoremove -n 2>/dev/null | sed -n 's/^	\([^:]*\):.*/\1/p' | tr '\n' ' ')"
     ;;
 restore-python)
-    # Cio' che il passaggio ha aggiunto (py312-build e le sue dipendenze nuove) se ne va; i flag
-    # di hidapi e libevent tornano com'erano.
+    # What the move added (py312-build and its new dependencies) goes; the flags of hidapi and libevent go back
+    # to what they were.
     new=$(pkg query %n | sort | comm -13 "$W/python-before.txt" -)
     for n in $new; do pkg unlock -y "$n" >/dev/null 2>&1 || true; done
     [ -z "$new" ] || pkg delete -y $new
@@ -86,7 +82,7 @@ mysql84)
     root_cnf
     service postfix stop || true
     service dovecot stop || true
-    # I database e gli account di adesso.
+    # The databases and accounts of now.
     dbs=$(mysql --defaults-file="$W/root.cnf" -N -e "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('mysql','information_schema','performance_schema','sys')")
     echo "databases: $(echo $dbs | wc -w)"
     mysqldump --defaults-file="$W/root.cnf" --single-transaction --routines --triggers --events \
@@ -96,7 +92,7 @@ mysql84)
     while read -r a; do
         mysql --defaults-file="$W/root.cnf" -N -e "SET print_identified_with_as_hex = ON; SHOW CREATE USER $a" \
             | sed -E 's/^CREATE USER /CREATE USER IF NOT EXISTS /; s/$/;/' >> "$W/accounts.sql"
-        # E la password anche per chi c'e' gia' (root, nel datadir nuovo): solo nome, plugin e hash.
+        # And the password also for who is already there (root, in the new datadir): only name, plugin and hash.
         mysql --defaults-file="$W/root.cnf" -N -e "SET print_identified_with_as_hex = ON; SHOW CREATE USER $a" \
             | sed -nE "s/^CREATE USER (\`[^\`]*\`@\`[^\`]*\`) IDENTIFIED WITH ('[^']*') AS (0x[0-9A-Fa-f]+) .*/ALTER USER \1 IDENTIFIED WITH \2 AS \3;/p" >> "$W/accounts.sql"
         case "$a" in "'root'@"*) continue ;; esac
@@ -108,7 +104,7 @@ mysql84)
     pkg unlock -y mysql84-server mysql84-client
     pkg delete -f -y mysql84-server mysql84-client
     pkg install -y -U mysql80-server mysql80-client
-    # Come su un server installato con la 8.0: postfix-mysql e dovecot-mysql dipendono dal suo client.
+    # As on a server installed with 8.0: postfix-mysql and dovecot-mysql depend on its client.
     cat <<'EOF' | pkg shell
 UPDATE deps SET name = 'mysql80-client', origin = 'databases/mysql80-client', version = (SELECT version FROM packages WHERE name = 'mysql80-client') WHERE name = 'mysql84-client';
 EOF
@@ -126,8 +122,8 @@ EOF
     echo "rdeps of mysql80-client: $(pkg query %rn mysql80-client | tr '\n' ' ')"
     ;;
 restore-mysql84)
-    # Dopo la migrazione: le dipendenze di postfix-mysql e dovecot-mysql tornano sul client 8.4, e il
-    # datadir della 8.4 di prima torna al suo posto (quello migrato dal lavoro va da parte e poi via).
+    # After the migration: the dependencies of postfix-mysql and dovecot-mysql go back to the 8.4 client, and the
+    # 8.4 datadir of before goes back in its place (the one the job migrated is set aside, then removed).
     [ -d "$W/datadir-84" ] || { echo "no 8.4 datadir set aside"; exit 1; }
     pkg info -e mysql84-server || { echo "mysql84-server is not installed: the migration did not finish"; exit 1; }
     cat <<'EOF' | pkg shell

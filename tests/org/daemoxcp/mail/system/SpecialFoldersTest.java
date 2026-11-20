@@ -144,10 +144,10 @@ public class SpecialFoldersTest {
         boolean madeDomain = !Files.exists(domainDir), madeUser = !Files.exists(rules.getParent());
         Files.createDirectories(rules.getParent());
         String stamp = String.valueOf(System.currentTimeMillis());
-        // Un :handle nuovo a ogni giro: la risposta automatica ricorda per un giorno a chi ha gia' risposto.
+        // A new :handle each run: the vacation reply remembers for a day whom it has already answered.
         Files.writeString(rules, "require [\"vacation\"];\nvacation :days 1 :handle \"" + stamp
                 + "\" :subject \"SpecialFoldersTest\" \"Away.\";\n");
-        // Compilata come le regole vere del pannello: senza, Dovecot la compila a ogni consegna e scrive errori nel maillog.
+        // Compiled like the panel's real rules: without it, Dovecot compiles it at each delivery and writes errors in the maillog.
         check("the test's vacation rule compiles", SieveCompiler.compile(rules).status() == SieveCompiler.Status.COMPILED);
         String sender = other != null ? other : "e2e-sender@" + user.substring(user.indexOf('@') + 1);
         String spamId = "special-folders-spam-" + stamp + "@e2e.test", hamId = "special-folders-ham-" + stamp + "@e2e.test";

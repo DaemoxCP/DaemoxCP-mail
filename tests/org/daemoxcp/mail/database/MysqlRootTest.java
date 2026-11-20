@@ -38,8 +38,8 @@ public class MysqlRootTest {
     }
 
     public static void main(String[] args) throws Exception {
-        // Prima di tutto: i segreti in una cartella della prova. PanelSecrets fissa la cartella la prima volta che
-        // si carica, e una prova da root che la carica con quella vera scrive nei segreti veri della macchina.
+        // First of all: the secrets in a folder of the test. PanelSecrets fixes its folder the first time it is
+        // loaded, and a test run as root that loads it with the real one writes in the machine's real secrets.
         base = Files.createTempDirectory(Path.of("/var/tmp"), "mysql-root-test");
         secrets = Files.createDirectories(base.resolve("secrets"));
         System.setProperty("daemoxcp.mail.secrets.dir", secrets.toString());
