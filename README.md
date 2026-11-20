@@ -81,7 +81,14 @@ It is **careful**. The panel never changes something it cannot check, and it say
   *Mailboxes* page shows how much each mailbox uses. With Dovecot 2.3 they are not applied, and the page says so: the
   *Updates* page moves the server to 2.4.
 - Sieve filters and vacation replies, compiled and checked server side.
+- Spam goes to Junk. Mail that Rspamd marks as spam (`X-Spam: Yes`) is filed into the mailbox's *Junk* folder
+  before any other rule, so vacation replies, forwarding and the mailbox's own filters never act on it. Every
+  mailbox gets *Drafts*, *Sent*, *Trash* and *Junk*, marked as special-use folders (RFC 6154), so mail programs use
+  them instead of creating their own.
 - A mail queue you can inspect and act on; the maximum message size.
+- A mailbox that signs in sends only from its own addresses: its own and those of the aliases that point to it (a
+  catch-all gives its mailbox the other addresses of the domain). Any other sender, of the same domain or not, gets
+  `553 5.7.1 … not owned by user`. Mail from other servers on port 25 is not affected.
 - Sending limits per mailbox: messages per hour, per day and recipients per message, global or for one mailbox.
   Before each message a mailbox sends after signing in, Postfix asks the panel. Each recipient counts as one message.
   Over a limit the sender gets a temporary refusal (`450 4.7.1`) that says why. Incoming mail is not counted, and with
@@ -419,7 +426,8 @@ freebsd-update fetch install
 pkg update && pkg upgrade
 ```
 
-The first time `pkg` runs it offers to install itself: answer yes. `freebsd-update` keeps the system as it was
+The first time `pkg` runs it offers to install itself: answer yes. `freebsd-update fetch` shows the list of the
+files it is going to change in a pager: press `q` to go on. `freebsd-update` keeps the system as it was
 in a boot environment (`bectl list` shows it) and may restart `sshd`: the SSH session you are in stays open.
 If it installed a new kernel, reboot (`shutdown -r now`) before going on.
 
@@ -509,7 +517,8 @@ cd /home/panel && java -jar daemoxcp-mail.jar
 ```
 
 Arrows to move, Enter to choose, Tab to go from a field to the next. Every option asks for a confirmation
-first, with *Cancel* selected: press Tab to reach *OK*. Go through the options in this order:
+first, with *Cancel* selected: press Tab to reach *OK*. In a window with one field, Enter confirms what you typed.
+Go through the options in this order:
 
 1. **1) Time zone, clock (NTP) and DNS resolver.** Write the server's time zone as an IANA name (for example
    `Europe/Rome` or `UTC`): names that do not exist are refused. It also turns on NTP.
@@ -532,7 +541,8 @@ first, with *Cancel* selected: press Tab to reach *OK*. Go through the options i
    nothing to lose.
 5. **5) Emergency access code.** There is no administrator yet: it asks for a name and an email, creates the
    first administrator, and shows an **8-digit code**, valid for 15 minutes.
-6. **>>> Start DaemoxCP Mail web server <<<.** The panel starts; leave the terminal open for now.
+6. **>>> Start the DaemoxCP Mail web server <<<**, the last item (option 6, going back to before the last
+   reinstallation, is not needed now). The panel starts; leave the terminal open for now.
 
 ### Step 7 — The first sign-in, and the panel's own set-up
 
@@ -698,7 +708,7 @@ everywhere, and `tools/upgrade/upgrade-panel.sh`, which replaces the real file, 
 ║  4) Install/Reinstall Mail Server                             ║
 ║  5) Emergency access code                                     ║
 ║  6) Go back to the server before the last reinstallation      ║
-║  >>> Start DaemoxCP Mail web server <<<                       ║
+║  >>> Start the DaemoxCP Mail web server <<<                   ║
 ║  Exit                                                         ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```

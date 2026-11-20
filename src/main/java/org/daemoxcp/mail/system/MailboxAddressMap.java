@@ -110,13 +110,18 @@ public final class MailboxAddressMap {
      * file degli alias non ha esattamente una riga query (non e' quello che scrive il pannello).
      */
     static String mapText(String aliasesText) {
+        return mapText(aliasesText, QUERY);
+    }
+
+    /** Lo stesso con un'altra domanda: la connessione della mappa degli alias (SenderLoginMap). */
+    static String mapText(String aliasesText, String query) {
         if (aliasesText == null) return null;
         StringBuilder out = new StringBuilder();
         int queries = 0;
         for (String line : aliasesText.split("\n", -1)) {
             if (QUERY_LINE.matcher(line).matches()) {
                 queries++;
-                out.append("query = ").append(QUERY);
+                out.append("query = ").append(query);
             } else {
                 out.append(line);
             }
@@ -245,7 +250,7 @@ public final class MailboxAddressMap {
     }
 
     /** Una casella qualunque, per la prova; null se non ce n'e' o il database non risponde. */
-    private static String anyMailbox() {
+    static String anyMailbox() {
         try {
             if (org.daemoxcp.mail.Main.mailDatabase == null) return null;
             for (var m : org.daemoxcp.mail.Main.mailDatabase.getAllMailboxes()) if (m.email != null && !m.email.isEmpty()) return m.email;
@@ -254,7 +259,7 @@ public final class MailboxAddressMap {
     }
 
     /** Scrittura atomica, con proprietario, gruppo e permessi di un altro file (la mappa degli alias). */
-    private static void writeLike(Path file, String text, PosixFileAttributes like) throws Exception {
+    static void writeLike(Path file, String text, PosixFileAttributes like) throws Exception {
         Path tmp = file.resolveSibling("." + file.getFileName() + ".tmp");
         Files.deleteIfExists(tmp);
         Files.writeString(tmp, text, StandardCharsets.UTF_8);
@@ -262,14 +267,14 @@ public final class MailboxAddressMap {
         Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 
-    private static void restoreAttributes(Path f, PosixFileAttributes attrs) throws Exception {
+    static void restoreAttributes(Path f, PosixFileAttributes attrs) throws Exception {
         PosixFileAttributeView view = Files.getFileAttributeView(f, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
         view.setOwner(attrs.owner());
         view.setGroup(attrs.group());
         view.setPermissions(attrs.permissions());
     }
 
-    private static String postconf(String... args) {
+    static String postconf(String... args) {
         String[] cmd = new String[args.length + 1];
         cmd[0] = POSTCONF;
         System.arraycopy(args, 0, cmd, 1, args.length);

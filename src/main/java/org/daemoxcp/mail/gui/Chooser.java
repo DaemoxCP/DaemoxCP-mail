@@ -31,7 +31,15 @@ import java.util.Arrays;
 public class Chooser {
     private Window window;
     private MultiWindowTextGUI gui;
+    private ActionListBox actionListBox;
     public int option = -1;
+
+    /**
+     * La voce scelta l'ultima volta. Il menu si ricrea da capo dopo ogni voce, e la selezione tornava sempre alla 1:
+     * dopo la 2 una persona scende di uno e riapre la 2, mentre dopo un Annulla restava dov'era (installazione dal
+     * README, 20/11/2026: cosi' si aprivano per sbaglio la 2 e la 4). Adesso resta sulla voce appena usata.
+     */
+    private static int lastSelected = 0;
 
     public Chooser() {
         this.window = new BasicWindow(org.daemoxcp.mail.i18n.I18n.tr("brand.name") + " - " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.choose"));
@@ -84,7 +92,7 @@ public class Chooser {
         selectionPanel.setLayoutManager(new LinearLayout(Direction.VERTICAL));
         selectionPanel.addComponent(new Label(org.daemoxcp.mail.i18n.I18n.tr("console.menu.chooseLabel")));
 
-        ActionListBox actionListBox = new ActionListBox();
+        actionListBox = new ActionListBox();
 
         // ============== SYSTEM CONFIGURATION ==============
         actionListBox.addItem("1) " + org.daemoxcp.mail.i18n.I18n.tr("console.menu.time"), () -> {
@@ -137,6 +145,7 @@ public class Chooser {
                 1,
                 1));
 
+        actionListBox.setSelectedIndex(Math.max(0, Math.min(lastSelected, actionListBox.getItemCount() - 1)));
         selectionPanel.addComponent(actionListBox);
 
         mainPanel.addComponent(selectionPanel.withBorder(Borders.singleLine(org.daemoxcp.mail.i18n.I18n.tr("console.menu.options"))));
@@ -164,6 +173,7 @@ public class Chooser {
 
     private void setOptionAndClose(int option) {
         this.option = option;
+        if (option != 0) lastSelected = actionListBox.getSelectedIndex();
         this.window.close();
     }
 }

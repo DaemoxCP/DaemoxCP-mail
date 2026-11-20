@@ -369,6 +369,19 @@ public final class DovecotConfig {
             __AUTH_WORKER__
             DOVECOT_AUTH_WORKER
 
+            cat > "$DOVECOT_ETC/conf.d/__MANAGESIEVE_LOCAL_NAME__" <<'DOVECOT_MANAGESIEVE_LOCAL'
+            __MANAGESIEVE_LOCAL__
+            DOVECOT_MANAGESIEVE_LOCAL
+
+            cat > "$DOVECOT_ETC/conf.d/__SPECIAL_FOLDERS_NAME__" <<'DOVECOT_SPECIAL_FOLDERS'
+            __SPECIAL_FOLDERS__
+            DOVECOT_SPECIAL_FOLDERS
+
+            mkdir -p "$DOVECOT_ETC/__SPAM_SCRIPT_DIR__"
+            cat > "$DOVECOT_ETC/__SPAM_SCRIPT_PATH__" <<'DOVECOT_SPAM_TO_JUNK'
+            __SPAM_SCRIPT__
+            DOVECOT_SPAM_TO_JUNK
+
             cat > "$DOVECOT_ETC/conf.d/auth-master.conf.ext" <<'DOVECOT_AUTH_MASTER'
             passdb {
               driver = passwd-file
@@ -395,7 +408,15 @@ public final class DovecotConfig {
             default_pass_scheme = BLF-CRYPT
             password_query = SELECT email as user, password FROM mailboxes WHERE email='%u' AND active=1
             DOVECOT_SQL
-            """.replace("__AUTH_WORKER__", AUTH_WORKER_FILE).replace("__SIEVE23__", SIEVE23.stripTrailing());
+            """.replace("__AUTH_WORKER__", AUTH_WORKER_FILE).replace("__SIEVE23__", SIEVE23.stripTrailing())
+            .replace("__MANAGESIEVE_LOCAL_NAME__", org.daemoxcp.mail.system.ManageSieveLocal.FILE_NAME)
+            .replace("__MANAGESIEVE_LOCAL__", org.daemoxcp.mail.system.ManageSieveLocal.fileContent(false).stripTrailing())
+            // Le cartelle speciali e lo spam nella Junk: gli stessi file della riparazione all'avvio (SpecialFolders)
+            .replace("__SPECIAL_FOLDERS_NAME__", org.daemoxcp.mail.system.SpecialFolders.FILE_NAME)
+            .replace("__SPECIAL_FOLDERS__", org.daemoxcp.mail.system.SpecialFolders.fileContent(false).stripTrailing())
+            .replace("__SPAM_SCRIPT_DIR__", SPAM_SCRIPT_DIR)
+            .replace("__SPAM_SCRIPT_PATH__", org.daemoxcp.mail.system.SpecialFolders.SCRIPT_IN_ETC)
+            .replace("__SPAM_SCRIPT__", org.daemoxcp.mail.system.SpecialFolders.scriptContent().stripTrailing());
     }
 
     /**
@@ -415,6 +436,9 @@ public final class DovecotConfig {
      * home/ (DovecotHome): ~/sieve e ~/dovecot.sieve stanno li', e il punto non darebbe piu' fastidio; il nome resta.
      * Se una regola del pannello toglie il messaggio dalla INBOX (fileinto, redirect
      * senza copia), gli script dell'utente su quel messaggio non girano: e' la regola di Pigeonhole, e qui ha senso.
+     *
+     * Prima ancora gira lo script dello spam (SpecialFolders, conf.d/15-special-folders.conf): quel file mette lo spam a
+     * sieve_before e queste regole a sieve_before2, e vale lui perche' viene dopo 10-master.conf.
      */
     public static final String SIEVE23 = """
               # Le regole del pannello (risposta automatica, inoltro, filtri) prima, e restano del pannello.
@@ -441,6 +465,10 @@ public final class DovecotConfig {
               active_path = ~/dovecot.sieve
             }
             """;
+
+    /** La cartella dello script dello spam (SpecialFolders), relativa a quella di Dovecot. */
+    static final String SPAM_SCRIPT_DIR = org.daemoxcp.mail.system.SpecialFolders.SCRIPT_IN_ETC
+            .substring(0, org.daemoxcp.mail.system.SpecialFolders.SCRIPT_IN_ETC.lastIndexOf('/'));
 
     /**
      * conf.d/10-auth-worker.conf, lo stesso file che la riparazione all'avvio scrive sui server
@@ -655,6 +683,14 @@ public final class DovecotConfig {
         // I socket aperti a tutti che il pannello non usa, chiusi: lo stesso file della riparazione all'avvio (DovecotSockets)
         f.add(new FileConf("conf.d/" + org.daemoxcp.mail.system.DovecotSockets.FILE_NAME,
                 org.daemoxcp.mail.system.DovecotSockets.fileContent(), false));
+        // ManageSieve solo su 127.0.0.1, dove la usa la webmail: lo stesso file della riparazione all'avvio (ManageSieveLocal)
+        f.add(new FileConf("conf.d/" + org.daemoxcp.mail.system.ManageSieveLocal.FILE_NAME,
+                org.daemoxcp.mail.system.ManageSieveLocal.fileContent(true), false));
+        // Le cartelle speciali e lo spam nella Junk prima di ogni regola: gli stessi file della riparazione (SpecialFolders)
+        f.add(new FileConf("conf.d/" + org.daemoxcp.mail.system.SpecialFolders.FILE_NAME,
+                org.daemoxcp.mail.system.SpecialFolders.fileContent(true), false));
+        f.add(new FileConf(org.daemoxcp.mail.system.SpecialFolders.SCRIPT_IN_ETC,
+                org.daemoxcp.mail.system.SpecialFolders.scriptContent(), false));
 
         f.add(new FileConf("conf.d/auth-master.conf.ext", """
             # Il nome del blocco e' obbligatorio nella 2.4, e "args" e' diventato
@@ -819,6 +855,10 @@ public final class DovecotConfig {
             String delim = "DOVECOT_" + f.path().replaceAll("[^A-Za-z0-9]", "_").toUpperCase();
             // Heredoc quotato quando NON ci sono variabili da espandere: cosi' un $ nel
             // contenuto (le %{...} non ne hanno, ma le query potrebbero) resta letterale.
+            // Un file in una sottocartella (sieve/): la cartella prima, conf.d c'e' gia'.
+            int slash = f.path().lastIndexOf('/');
+            if (slash > 0 && !f.path().startsWith("conf.d/"))
+                sb.append("\nmkdir -p \"$DOVECOT_ETC/").append(f.path(), 0, slash).append("\"");
             sb.append("\ncat > \"$DOVECOT_ETC/").append(f.path()).append("\" <<")
               .append(f.expand() ? delim : "'" + delim + "'").append("\n");
             sb.append(f.content());

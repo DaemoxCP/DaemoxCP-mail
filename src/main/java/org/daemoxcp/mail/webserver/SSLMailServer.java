@@ -823,6 +823,22 @@ public class SSLMailServer {
             // nella 2.4; serve un riavvio, verificato, e se Dovecot non riparte si toglie il file (DovecotSockets).
             org.daemoxcp.mail.system.DovecotSockets.ensureAtBoot();
 
+            // ManageSieve (4190) solo su 127.0.0.1, dove la usa la webmail: prima ascoltava su tutte le interfacce e la
+            // fermava solo pf. Riavvio verificato, e se qualcosa non torna si toglie il file (ManageSieveLocal).
+            org.daemoxcp.mail.system.ManageSieveLocal.ensureAtBoot();
+
+            // nginx non dice la sua versione e la webmail manda HSTS, nosniff e Referrer-Policy: sui server installati prima
+            // si aggiungono solo le righe che mancano, con nginx -t, reload e una richiesta vera; se no torna com'era.
+            org.daemoxcp.mail.system.NginxMain.ensureAtBoot();
+
+            // VRFY spento: diceva a chiunque sulla 25 quali caselle esistono (r6). postconf -e, postfix check, reload e un
+            // VRFY vero che deve ricevere 502; se no torna com'era (PostfixVrfy).
+            org.daemoxcp.mail.system.PostfixVrfy.ensureAtBoot();
+
+            // AUTH solo sulle porte di invio (587, 465), non sulla 25: solo se master.cf la accende su tutte e due, con
+            // la prova vera con STARTTLS; se no torna com'era (PostfixSubmissionAuth).
+            org.daemoxcp.mail.system.PostfixSubmissionAuth.ensureAtBoot();
+
             // POP3 come l'ha scelto l'amministratore, spento se non ha scelto: nessuno lo usava, e le sue porte
             // erano solo bersagli (Pop3 verifica e torna indietro).
             org.daemoxcp.mail.system.Pop3.ensureAtBoot();
@@ -842,6 +858,11 @@ public class SSLMailServer {
             // (la memoria delle risposte automatiche e degli inoltri) comparivano fra le cartelle della webmail (DovecotHome
             // li porta nella home come vmail, verifica con doveadm user, e se non va torna com'era).
             org.daemoxcp.mail.system.DovecotHome.ensureAtBoot();
+
+            // Le cartelle Maildir/ vuote che lo script delle caselle creava e Dovecot non usava (la posta sta nella radice della
+            // casella): via con rmdir come vmail, che non toglie niente che non sia vuoto (UnusedMaildir).
+            org.daemoxcp.mail.system.UnusedMaildir.ensureAtBoot();
+
             // Postfix consegna a Dovecot dal socket nella sua coda (0600 suo) e non piu' dalla porta 24 o dal socket 0666, da
             // cui qualunque processo della macchina consegnava in qualunque casella (reperto 234). In tre tempi, la posta
             // non resta mai senza strada; se qualcosa non va torna com'era.
@@ -863,6 +884,10 @@ public class SSLMailServer {
             // Dovecot le ricompilava a ogni consegna con due errori nel maillog. Si sostituisce solo dove e' diverso
             // da quello che fa il sievec installato (reperto 241); al secondo avvio non scrive niente.
             org.daemoxcp.mail.system.SieveBinaries.ensureAtBoot();
+            // Le cartelle speciali (Bozze, Inviata, Cestino, Junk) segnate per i programmi di posta, e lo spam che Rspamd
+            // segna nella Junk prima di ogni regola: niente risposta automatica ne' inoltro sullo spam (SpecialFolders
+            // verifica con IMAP, e se non va torna com'era).
+            org.daemoxcp.mail.system.SpecialFolders.ensureAtBoot();
 
             // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.
@@ -874,6 +899,9 @@ public class SSLMailServer {
             // Ogni casella punta a se stessa dopo gli alias (MailboxAddressMap): un catch-all prende solo gli indirizzi
             // che non sono ne' alias ne' caselle. Dopo MailDbUsers: la mappa copia la connessione di quella degli alias.
             org.daemoxcp.mail.system.MailboxAddressMap.ensureAtBoot();
+            // Chi si autentica spedisce solo dai suoi indirizzi (la casella, gli alias che puntano a lei): prima una
+            // casella poteva spedire come un'altra, firmata DKIM, o come chiunque (SenderLoginMap). Stessa connessione.
+            org.daemoxcp.mail.system.SenderLoginMap.ensureAtBoot();
 
             // Le quote delle caselle applicate da Dovecot 2.4, e chieste da Postfix prima di accettare (DovecotQuota). Dopo
             // MailDbUsers: l'utente MySQL di Dovecot deve gia' poter leggere quota_mb.
@@ -12752,6 +12780,23 @@ public class SSLMailServer {
                         return;
                     }
 
+                    // Lo stesso controllo del menu (voce 3, PemTls): il certificato si legge, vale adesso, copre il nome della
+                    // webmail, e la chiave e' proprio la sua. Prima si salvavano file e database anche con una chiave
+                    // sbagliata, e se ne accorgeva solo nginx (prova dal vivo sulla VM, 20/11/2026): il database restava
+                    // con dei certificati che non funzionano. Niente si scrive finche' il controllo non passa.
+                    if (!certContent.isEmpty() || !keyContent.isEmpty()) {
+                        String rcDomain = Main.dbManager != null ? Main.dbManager.getRoundcubeDomain() : null;
+                        org.daemoxcp.mail.security.PemTls.Check pair = org.daemoxcp.mail.security.PemTls.check("webmail",
+                                rcDomain == null ? "" : rcDomain,
+                                chainContent.isEmpty() ? certContent : certContent + "\n" + chainContent, keyContent, java.time.Instant.now());
+                        if (!pair.ok()) {
+                            response.put("success", false);
+                            response.put("error", String.join(" ", pair.errors()));
+                            sendJsonResponse(exchange, response);
+                            return;
+                        }
+                    }
+
                     JSONArray steps = new JSONArray();
 
                     // Determine file paths
@@ -12954,66 +12999,10 @@ public class SSLMailServer {
             String rcRoot = "/usr/local/www/roundcube";
             if (Files.isDirectory(Path.of(rcRoot, "public_html"))) rcRoot = rcRoot + "/public_html";
 
-            String config = """
-worker_processes auto;
-error_log /var/log/nginx/error.log;
-pid /var/run/nginx.pid;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    include mime.types;
-    default_type application/octet-stream;
-    sendfile on;
-    keepalive_timeout 65;
-    client_max_body_size 50M;
-
-    # Default server: reject requests on non-matching hostnames
-    server {
-        listen %s ssl default_server;
-        server_name _;
-
-        ssl_certificate %s;
-        ssl_certificate_key %s;
-
-        return 444;
-    }
-
-    # Roundcube webmail: responds ONLY to the configured domain
-    server {
-        listen %s ssl;
-        server_name %s;
-        root %s;
-        index index.php;
-
-        ssl_certificate %s;
-        ssl_certificate_key %s;
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers HIGH:!aNULL:!MD5;
-
-        location / {
-            try_files $uri $uri/ /index.php?$args;
-        }
-
-        # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: uno script PHP
-        # con un percorso attaccato. Un location che chiede .php in fondo all'URI non lo prende,
-        # e il foglio di stile torna come pagina HTML: la webmail si apre senza grafica.
-        # Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La riga
-        location ~ \\.php {
-            include fastcgi_params;
-            fastcgi_index index.php;
-            fastcgi_split_path_info ^(.+\\.php)(/.+)$;
-            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-            fastcgi_param PATH_INFO $fastcgi_path_info;
-            fastcgi_pass %s;
-        }
-
-        location ~ /\\. { deny all; }
-    }
-}
-""".formatted(port, sslCert, sslKey, port, domain, rcRoot, sslCert, sslKey,
+            // Il file intero da una fonte sola (NginxMain, la stessa dell'installatore). Prima qui c'era un altro modello:
+            // riscriveva il file da capo togliendo l'include della 443 (MTA-STS, autoconfig), e lo scriveva senza
+            // nginx -t e senza copia (installazione dal README, 20/11/2026).
+            String config = org.daemoxcp.mail.system.NginxMain.content(domain, port, sslCert, sslKey, rcRoot,
                     // Il pool di Roundcube: il suo socket, o quello di prima se la migrazione non c'e' ancora.
                     org.daemoxcp.mail.system.RoundcubeUser.fastcgiPass());
             // Le righe listen della famiglia scelta nelle Impostazioni (IpFamily); senza scelta restano come sono.
@@ -13022,7 +13011,13 @@ http {
                         org.daemoxcp.mail.system.IpFamily.chosen());
 
             Path nginxConf = Path.of("/usr/local/etc/nginx/nginx.conf");
-            Files.writeString(nginxConf, config);
+            String current = Files.exists(nginxConf) ? Files.readString(nginxConf) : null;
+            config = org.daemoxcp.mail.system.NginxMain.keepIncludes(config, current);
+            String problem = org.daemoxcp.mail.system.NginxMain.write(config);
+            if (problem != null) {
+                LOGGER.warning("Nginx roundcube config not written: " + problem);
+                return false;
+            }
             return true;
         } catch (Exception e) {
             LOGGER.warning("Could not regenerate Nginx roundcube config: " + e.getMessage());

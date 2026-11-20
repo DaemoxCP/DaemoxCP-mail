@@ -982,6 +982,47 @@ undo takes the copies away, finish moves what is left in the root and removes th
 never chooses between two different user scripts, never goes through a link, a second run does nothing. On the VM;
 with the fix taken out it fails.
 
+**ManageSieveLocalTest** — ManageSieve (4190) only on 127.0.0.1, where the webmail uses it (`ManageSieveLocal`): found
+installing from the README on a clean VM, Dovecot listened on `*:4190` even after the panel's first start. The file
+for 2.3 (`address`) and 2.4 (`listen`), the version read from `dovecot --version`, sockstat read and «only local» only
+when every address is 127.0.0.1, and the installer writing the same file (2.4 file list, 2.3 shell fragment).
+
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ManageSieveLocalTest
+
+**UnusedMaildirTest** — the empty `Maildir/` folders the mailbox script used to create, which Dovecot never used,
+removed at boot (`UnusedMaildir`, with rmdir as vmail). Nothing when Dovecot keeps the mail in a folder named Maildir;
+the script run for real on a throwaway tree: an empty one goes, one with a message or an extra folder stays untouched,
+links are not followed, a second run finds nothing; the mailbox script now creates the mail in the mailbox's own folder
+and the home.
+
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.UnusedMaildirTest
+
+**SpecialFoldersTest** — the special folders and spam in Junk (`SpecialFolders`): found on the VM installed from the
+README, mail that Rspamd marked (`X-Spam: Yes`) stayed in INBOX, and with the vacation reply on, a spam message got its
+reply (backscatter towards a forged sender); Dovecot had no namespace, so no special-use folders (RFC 6154). The
+conf.d file for 2.4 and 2.3 (Drafts, Sent, Trash and Junk with special_use and auto = subscribe; the spam script first:
+precedence 1 on 2.4, sieve_before with the panel's rules moved to sieve_before2 on 2.3), the Sieve script, the pure
+helpers, and the installer writing the same files. With `-De2e.vm=yes`, as root on the VM: Dovecot reads the script,
+it is precompiled, IMAP shows the four folders with their flags, and over LMTP with a vacation rule of the panel's spam
+goes to Junk with no reply while ordinary mail goes to INBOX with its reply; test mail and rule removed afterwards.
+Measured 20/11/2026 on Dovecot 2.4.5: all OK; with the conf.d file taken out 11 checks fail. The 2.3 file was checked
+with the real 2.3.21 doveconf and sieve-test in a separate root.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SpecialFoldersTest
+
+**SenderLoginMapTest** — a client that signs in sends only from its own addresses (`SenderLoginMap`): found on the VM
+installed from the README, Postfix had no `smtpd_sender_login_maps`, so a mailbox could send as another mailbox of the
+server (signed with the domain's DKIM key) or as anybody. The decision (the installer's settings are applied, ours
+with the file current is nothing, settings written by hand are left alone), the table (a mailbox owns its address even
+when it does not receive, an alias belongs to its destination), the map file with the aliases map's connection, the
+installer, MailDbUsers keeping the file and running its query, and the order at boot. With `-De2e.vm=yes`, as root on
+the VM: postmap answers a mailbox with itself; with XCLIENT LOGIN on port 587 (allowed from 127.0.0.1 only for the
+test, then removed) the mailbox's own address is accepted, another address of the domain and an outside one get `553
+5.7.1 … not owned by user`, and on port 25 without a login the same sender is not refused for it. Nothing is
+delivered. Measured 20/11/2026: all OK; with the check taken out of `smtpd_sender_restrictions` the refusals fail.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SenderLoginMapTest
+
 **DovecotHomeE2ETest** — the same with real deliveries and the VM's real configuration (it must start with the home of
 before), as root with `-De2e.vm=yes`. Before: an autoreply written by the panel and a script of the mailbox's own
 (ManageSieve), one delivery, and the false folders are in IMAP LIST; a second mailbox gets a message moved into its
@@ -1342,9 +1383,18 @@ purpose. Logs, journals and the output of other programs are not checked: they s
 
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.i18n.FixedTextsTest
 
+**CleanInstallFindingsTest** — what the installation from the README on a clean VM found on 20/11/2026, kept fixed:
+the installation ends with pf closed and MySQL on 127.0.0.1 (before, they waited for the panel's first start); option 1
+sets the time zone with tzsetup, never with cp through the /etc/localtime link; MySQL not installed yet does not read
+like a failure; every yes/no window has its own text and Upgrade asks once; the menu stays on the item just used and
+Enter confirms a window with one field; the README names the start item as the menu does and mentions freebsd-update's
+pager. On the sources before the fixes it fails on exactly those points.
+
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.CleanInstallFindingsTest
+
 **EnglishLogsTest** — the panel's log lines stay in English, the same for everyone. The texts written in a log call
 (a java.util.logging logger, `System.out`, `System.err`) and in the message of an exception created in the code have
-no Italian word: one of a short list English does not have (al, della, sono, gia', senza...). Comments and translation
+no Italian word: one of a short list English does not have (`al`, `della`, `sono`, `gia'`, `senza`...). Comments and translation
 keys are not read. The checks first find an Italian line in a sample made wrong on purpose; on the sources before
 this test they find «Auto-apply firewall config al boot», seen in the real server's log on 19/11/2026.
 

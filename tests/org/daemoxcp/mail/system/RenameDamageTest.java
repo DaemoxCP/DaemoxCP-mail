@@ -158,9 +158,12 @@ public class RenameDamageTest {
     /** A whole word: not a piece of rotate_start, daemoxcp-mail-auth, key.one or real(). */
     private static final Pattern WORD = Pattern.compile("(?<![A-Za-z0-9_.-])[A-Za-z][A-Za-z0-9]*(?![A-Za-z0-9_(-])");
     private static final Pattern CAMEL = Pattern.compile("[a-z]+[A-Z][A-Za-z0-9]*");
-    /** Words that are enough to say a sentence is Italian: two in a line. */
+    /**
+     * Words that are enough to say a sentence is Italian: two in a line. Not "per": English has it too, and "messages
+     * per hour, per day ... for one mailbox" in README.md made an English line Italian (20/11/2026).
+     */
     private static final Pattern ITALIAN = Pattern.compile(
-            "(?<![A-Za-z])(di|che|il|la|non|per|del|della|un|una|si|con|sono|gli|nel|e'|c'e'|perche'|anche|come|solo|piu'|cosi'|gia')(?![A-Za-z])");
+            "(?<![A-Za-z])(di|che|il|la|non|del|della|un|una|si|con|sono|gli|nel|e'|c'e'|perche'|anche|come|solo|piu'|cosi'|gia')(?![A-Za-z])");
     /** English function words: in an Italian sentence they never belong. */
     private static final Set<String> FUNCTION = Set.of("where", "when", "while", "still", "already",
             "stays", "one", "real", "only", "also");

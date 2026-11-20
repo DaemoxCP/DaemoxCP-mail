@@ -135,10 +135,22 @@ public class MailDatabase {
             if (again) System.out.println("Connected to MySQL again.");
             return true;
         } catch (SQLException e) {
-            System.err.println("MySQL not available: " + e.getMessage());
+            System.err.println(unavailableMessage(java.nio.file.Files.isExecutable(java.nio.file.Path.of(MYSQLD)), e.getMessage()));
             connected = false;
             return false;
         }
+    }
+
+    static final String MYSQLD = "/usr/local/libexec/mysqld";
+
+    /**
+     * Cosa dire quando MySQL non risponde. Su un server nuovo l'installazione comincia prima che MySQL ci sia, e
+     * «MySQL not available: Could not create connection... Giving up» sembrava un guasto a chi installava dal README
+     * (20/11/2026): se MySQL non e' installato lo si dice cosi'. Funzione pura, per provarla.
+     */
+    public static String unavailableMessage(boolean installed, String detail) {
+        return installed ? "MySQL not available: " + detail
+                         : "MySQL is not installed yet: nothing to read from it (normal on a new server, before the installation)";
     }
 
     private String databaseUrl() {

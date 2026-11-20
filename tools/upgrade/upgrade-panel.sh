@@ -193,10 +193,29 @@ say "Panel upgrade: everything I see goes into $WORK"
 
 # Lo stato che deve restare uguale dopo il passaggio, una riga per cosa. Niente password ne'
 # contenuti: solo esiti.
+# I servizi dei pacchetti accesi in rc.conf: quelli di «service -e», con lo stesso calcolo (name, rcvar,
+# load_rc_config_var di rc.subr), ma senza checkyesno. Per gli script che danno il valore predefinito solo dentro di
+# se' (sentinel di redis, pkg_triggers, mysqlrouter, clamav_milter) checkyesno scrive «WARNING: $..._enable is not set
+# properly» nel registro di sistema a ogni chiamata, anche con 2>/dev/null: 4 righe per fotografia, 12 per
+# aggiornamento (misurato il 20/11/2026; stesso elenco di service -e, provato sulla VM).
+enabled_local() (
+    . /etc/rc.subr
+    for file in /usr/local/etc/rc.d/*; do
+        [ -f "$file" ] && grep -q '^rcvar' "$file" || continue
+        name=; rcvar=
+        eval "$(grep '^name=' "$file")"
+        eval "$(grep '^rcvar' "$file")"
+        [ -n "$rcvar" ] || continue
+        load_rc_config_var "$name" "$rcvar"
+        eval "v=\${$rcvar:-}"
+        case "$v" in [Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|[Oo][Nn]|1) echo "${file##*/}" ;; esac
+    done
+)
+
 state() {
     # In ordine di nome: service -e segue rcorder, che cambia quando un pacchetto si aggiunge.
     # Il pannello no, con tutti e due i nomi: il primo avvio lo rinomina.
-    for s in $(service -e | sed -n 's#^/usr/local/etc/rc.d/##p' | grep -vxE 'mailpanel|daemoxcp_mail' | sort); do
+    for s in $(enabled_local | grep -vxE 'mailpanel|daemoxcp_mail' | sort); do
         printf 'service %s: %s\n' "$s" "$(service "$s" status >/dev/null 2>&1 && echo up || echo DOWN)"
     done
     printf 'mysqld: %s\n' "$(pgrep -q mysqld && echo up || echo DOWN)"
@@ -209,7 +228,10 @@ state() {
     # E la 24 e la 6379, su 127.0.0.1 e ::1: le chiude il pannello al primo avvio, quando Postfix consegna a Dovecot dal
     # socket nella sua coda (LmtpSocket, reperto 234) e rspamd parla con redis dal socket (RedisSocket, 235). Tutti e due
     # provano una consegna e una scansione prima e dopo, e se non va rimettono la porta.
-    sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:(33060|110|995)$/) next; if (a ~ /^(127\.0\.0\.1|\[::1\]):(24|6379)$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; print "listening port: " a}' | sort -u
+    # La 4190 (ManageSieve) conta per il suo nome e non per l'indirizzo: il primo avvio la porta da tutte le interfacce
+    # a 127.0.0.1, dove la usa la webmail (ManageSieveLocal, che dopo il riavvio di Dovecot verifica autenticazione,
+    # IMAP e il saluto di ManageSieve, e se no rimette com'era). Se Dovecot smettesse di ascoltarla, la riga sparisce.
+    sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:(33060|110|995)$/) next; if (a ~ /^(127\.0\.0\.1|\[::1\]):(24|6379)$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; if (a ~ /:4190$/) a = "ManageSieve 4190"; print "listening port: " a}' | sort -u
     printf 'nginx -t: %s\n' "$(nginx -t >/dev/null 2>&1 && echo ok || echo ERROR)"
     printf 'postfix check: %s\n' "$(postfix check >/dev/null 2>&1 && echo ok || echo ERROR)"
     printf 'doveconf: %s\n' "$(doveconf -n >/dev/null 2>&1 && echo ok || echo ERROR)"
