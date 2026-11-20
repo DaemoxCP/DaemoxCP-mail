@@ -1038,6 +1038,32 @@ rule removed 7 checks fail, the 554 through Postfix among them.
 
     java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.HeaderFromCheckTest
 
+**SpamLearningTest** — Rspamd learns from the users (`SpamLearning`, `SpamLearner`): a message moved or copied into
+Junk is spam, one moved out of it is ham, unless it goes to Trash; before, Rspamd learned only from rspamc run by hand.
+The decision (only Dovecot 2.4 with the panel's Junk; a configuration written by hand is left alone), the
+configuration, the two Sieve scripts and the program Dovecot pipes to (it only leaves the message in the spool as
+vmail, and always exits 0); a round of the root part on a throwaway spool with a fake Rspamd (whole messages learned
+and deleted oldest first, the ones still being written wait, empty, too big and week-old ones dropped unread, a link
+removed without reading its target, a 400 dropped, Rspamd not answering or refusing the password keeps them); the
+webmail's spam button (markasjunk) once in the panel's block; the order at boot. With `-De2e.vm=yes`, as root on the
+VM: the configuration in place and compiled, the program's folders 0755 and the program writing as vmail; real IMAP
+moves for the first mailbox: INBOX -> Junk leaves a spam message and Rspamd's «learned» counter grows when the root
+part's round hands it over, Junk -> INBOX the same as ham, Junk -> Trash leaves nothing; no Sieve error in the mail
+log; the test messages expunged. The VM's Bayes learns the test message (a new one each run). Measured 20/11/2026:
+all OK. The first live run found that Java's HTTP client, trying h2c on plain http, reached Rspamd's controller with
+no body («got zero length body»): the round now speaks HTTP/1.1.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SpamLearningTest
+
+**WebPartWaitTest** — the root part waits for the web part (`PanelSeparation.waitForWeb`): on the VM, once over many
+starts, the root part read daemon(8)'s pidfile right after daemon returned, before the new supervisor had written it,
+said «the web part stopped right away» and served everything as root. A pause before every check; the supervisor
+missing at the first checks and then answering: up; missing three checks in a row: stopped; missing now and then:
+still waited for; never answering: silent at the deadline. Measured 20/11/2026: all OK; then six real restarts on the
+VM, each with a new web part as daemoxcp_mail and no NOT_APPLIED.
+
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.WebPartWaitTest
+
 **DovecotHomeE2ETest** — the same with real deliveries and the VM's real configuration (it must start with the home of
 before), as root with `-De2e.vm=yes`. Before: an autoreply written by the panel and a script of the mailbox's own
 (ManageSieve), one delivery, and the false folders are in IMAP LIST; a second mailbox gets a message moved into its

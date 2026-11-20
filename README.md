@@ -85,6 +85,11 @@ It is **careful**. The panel never changes something it cannot check, and it say
   before any other rule, so vacation replies, forwarding and the mailbox's own filters never act on it. Every
   mailbox gets *Drafts*, *Sent*, *Trash* and *Junk*, marked as special-use folders (RFC 6154), so mail programs use
   them instead of creating their own.
+- Rspamd learns from the users (Dovecot 2.4). A message moved or copied into *Junk*, from a mail program or with the
+  webmail's *Spam* button, is learned as spam; one moved out of *Junk* (not into *Trash*) as ham. Dovecot leaves the
+  message in a spool as the mail user, and the panel's root part hands it to Rspamd's controller every minute and
+  deletes it: the controller's password never leaves the root secrets. Rspamd's Bayes filter starts deciding after
+  200 messages of each kind.
 - A mail queue you can inspect and act on; the maximum message size.
 - A mailbox that signs in sends only from its own addresses: its own and those of the aliases that point to it (a
   catch-all gives its mailbox the other addresses of the domain). Any other sender, of the same domain or not, gets

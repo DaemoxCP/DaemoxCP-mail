@@ -85,6 +85,11 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   casella prima di ogni altra regola: risposte automatiche, inoltri e filtri della casella non la toccano mai. Ogni
   casella ha *Drafts*, *Sent*, *Trash* e *Junk*, segnate come cartelle speciali (RFC 6154): i programmi di posta usano
   quelle invece di crearne di loro.
+- Rspamd impara dagli utenti (Dovecot 2.4). Un messaggio spostato o copiato nella *Junk*, da un programma di posta o
+  col pulsante *Spam* della webmail, viene imparato come spam; uno tolto dalla *Junk* (non verso il *Trash*) come
+  posta buona. Dovecot lascia il messaggio in una cartella di raccolta con l'utente della posta, e la parte root del
+  pannello lo consegna al controller di Rspamd ogni minuto e lo cancella: la password del controller non esce mai dai
+  segreti di root. Il filtro bayesiano di Rspamd comincia a decidere dopo 200 messaggi per tipo.
 - Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
 - Una casella che si autentica spedisce solo dai suoi indirizzi: il suo e quelli degli alias che puntano a lei (un
   catch-all dà alla sua casella gli altri indirizzi del dominio). Ogni altro mittente, dello stesso dominio o no, riceve
