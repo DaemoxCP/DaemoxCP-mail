@@ -67,9 +67,16 @@ public class ConfigRegeneratorScript {
                         script.append("echo '[WARNING] a mailbox with an invalid name was skipped (see the panel log)'\n");
                         continue;
                     }
-                    String maildir = "/var/vmail/" + domain.domain + "/" + user + "/Maildir/";
-                    script.append(AS_VMAIL).append("mkdir -p '").append(maildir).append("cur' '").append(maildir).append("new' '")
-                          .append(maildir).append("tmp'\n");
+                    // La casella come la legge Dovecot: la posta nella sua radice (mail_location maildir:/var/vmail/%d/%n),
+                    // e la home nella cartella home/ (DovecotHome). Prima si creava .../Maildir/{cur,new,tmp}, che Dovecot
+                    // non usa: restava vuota in ogni casella (12 su 12 sul server vero, 20/11/2026), e la home arrivava solo
+                    // al riavvio del pannello. Le cartelle vuote vecchie le toglie UnusedMaildir all'avvio.
+                    String box = "/var/vmail/" + domain.domain + "/" + user + "/";
+                    script.append(AS_VMAIL).append("mkdir -p '").append(box).append("cur' '").append(box).append("new' '")
+                          .append(box).append("tmp'");
+                    if (org.daemoxcp.mail.system.DovecotHome.configured())
+                        script.append(" '").append(box).append(org.daemoxcp.mail.system.DovecotHome.DIR).append("'");
+                    script.append("\n");
                 }
             }
             // Quello che le versioni di prima avevano creato da root torna a vmail: solo cartelle e file con un solo nome.

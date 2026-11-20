@@ -51,8 +51,14 @@ public class SetTimeOnSystem {
 
             echo ""
             echo "[1/5] Setting timezone to $TZ_NAME..."
-            cp "/usr/share/zoneinfo/$TZ_NAME" /etc/localtime
-            echo "$TZ_NAME" > /var/db/zoneinfo
+            # With FreeBSD's own tool, never cp: /etc/localtime is a link into /usr/share/zoneinfo (FreeBSD's installer
+            # makes it so), and cp writes THROUGH the link, overwriting the old zone's file with the new one's data
+            # (from UTC to Europe/Rome, /usr/share/zoneinfo/UTC became Rome's time; measured on 20/11/2026). tzsetup
+            # makes the link again and records the name in /var/db/zoneinfo; -s skips the question about the CMOS clock.
+            if ! tzsetup -s "$TZ_NAME"; then
+                echo "Error: tzsetup did not set $TZ_NAME"
+                exit 1
+            fi
 
             echo "New time after timezone setting:"
             date

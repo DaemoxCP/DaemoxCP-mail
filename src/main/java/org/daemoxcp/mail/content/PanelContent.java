@@ -13232,7 +13232,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function cleanClient(foreign, correct) {
-            if (!await updConfirm('', t('up.wRemove'))) return;
+            if (!await updConfirm(t('up.confirmCleanClient', { bad: foreign, good: correct }), t('up.wRemove'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
             const r = await updApi('clean_client', { confirm: 'REMOVE', foreign: foreign, correct: correct });
@@ -13248,30 +13248,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         // in alto, con cosa si ferma e quando (reperto 185).
         function rebPrev() { panelRebootOpen(); }
 
-        async function rebGo() {
-            if (!await updConfirm('', t('up.wReboot'))) return;
-            const el = document.getElementById('os-body');
-            const r = await updApi('reboot_now', { confirm: 'REBOOT THE SERVER', minutes: 1 });
-            if (!r.success) {
-                el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + escHtml(t('up.rebootNotScheduled')) + '</strong><br>'
-                    + updEsc(r.error) + (r.output ? '<br><code>' + updEsc(r.output) + '</code>' : '') + '</div>';
-                return;
-            }
-            el.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' + updEsc(r.note) + '</strong>'
-                + ' (' + escHtml(t('up.process', { pid: r.pid })) + ')'
-                + '<br>' + escHtml(t('up.pageWillStop'))
-                + '<br><button class="btn btn-light mt-2" data-on-click="rebCancel()">'
-                + '<i class="fas fa-ban me-1" aria-hidden="true"></i>' + escHtml(t('up.cancelReboot')) + '</button></div>';
-        }
-
-        // Su FreeBSD non esiste un'opzione per annullare: il manuale di shutdown(8) dice di
-        // terminare il processo. Attenzione, "shutdown -c" NON annulla: e' power cycle.
-        async function rebCancel() {
-            const el = document.getElementById('os-body');
-            const r = await updApi('reboot_cancel');
-            el.innerHTML = '<div class="alert alert-' + (r.success ? (r.existedBefore ? 'success' : 'secondary') : 'danger')
-                + ' py-2 mb-0">' + updEsc(r.note || r.error) + '</div>';
-        }
 
         // ---------- avvio automatico del pannello (rc.d) ----------
         async function rcPrev() {
@@ -13345,7 +13321,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcGo() {
-            if (!await updConfirm('', t('up.wInstallRc'))) return;
+            if (!await updConfirm(t('up.confirmInstallRc'), t('up.wInstallRc'))) return;
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
             const r = await updApi('rc_install', { confirm: 'INSTALL RC' });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error) + '</div>'; return; }
@@ -14021,7 +13997,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function libsRelink() {
-            if (!await updConfirm('', t('up.wRelink'))) return;
+            if (!await updConfirm(t('up.confirmRelink'), t('up.wRelink'))) return;
             const el = document.getElementById('libs-body');
             const pre = document.getElementById('libs-log');
             const r = await updApi('relink', { confirm: 'RELINK' });
@@ -14263,7 +14239,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function rcNginxGo() {
-            if (!await updConfirm('', t('up.wFixNginx'))) return;
+            if (!await updConfirm(t('up.confirmFixNginx'), t('up.wFixNginx'))) return;
             const pre = document.getElementById('rc-log');
             const el = document.getElementById('rc-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.inProgress')) + '';
@@ -14582,7 +14558,6 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                che nessuno ha visto il piano che si sta per eseguire. */
             if (!updUnprotectedSignature) { panelSay('warning', t('up.readFirst')); return; }
             if (!await panelConfirm(t('up.confirmApply'))) return;
-            if (!await updConfirm('', t('up.wUpgrade'))) return;
             const el = document.getElementById('upd-status');
             const pre = document.getElementById('upd-log');
             const r = await updApi('updates_apply', { confirm: 'UPDATE', signature: updUnprotectedSignature });

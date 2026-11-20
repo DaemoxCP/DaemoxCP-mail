@@ -369,6 +369,10 @@ public final class DovecotConfig {
             __AUTH_WORKER__
             DOVECOT_AUTH_WORKER
 
+            cat > "$DOVECOT_ETC/conf.d/__MANAGESIEVE_LOCAL_NAME__" <<'DOVECOT_MANAGESIEVE_LOCAL'
+            __MANAGESIEVE_LOCAL__
+            DOVECOT_MANAGESIEVE_LOCAL
+
             cat > "$DOVECOT_ETC/conf.d/auth-master.conf.ext" <<'DOVECOT_AUTH_MASTER'
             passdb {
               driver = passwd-file
@@ -395,7 +399,9 @@ public final class DovecotConfig {
             default_pass_scheme = BLF-CRYPT
             password_query = SELECT email as user, password FROM mailboxes WHERE email='%u' AND active=1
             DOVECOT_SQL
-            """.replace("__AUTH_WORKER__", AUTH_WORKER_FILE).replace("__SIEVE23__", SIEVE23.stripTrailing());
+            """.replace("__AUTH_WORKER__", AUTH_WORKER_FILE).replace("__SIEVE23__", SIEVE23.stripTrailing())
+            .replace("__MANAGESIEVE_LOCAL_NAME__", org.daemoxcp.mail.system.ManageSieveLocal.FILE_NAME)
+            .replace("__MANAGESIEVE_LOCAL__", org.daemoxcp.mail.system.ManageSieveLocal.fileContent(false).stripTrailing());
     }
 
     /**
@@ -655,6 +661,9 @@ public final class DovecotConfig {
         // I socket aperti a tutti che il pannello non usa, chiusi: lo stesso file della riparazione all'avvio (DovecotSockets)
         f.add(new FileConf("conf.d/" + org.daemoxcp.mail.system.DovecotSockets.FILE_NAME,
                 org.daemoxcp.mail.system.DovecotSockets.fileContent(), false));
+        // ManageSieve solo su 127.0.0.1, dove la usa la webmail: lo stesso file della riparazione all'avvio (ManageSieveLocal)
+        f.add(new FileConf("conf.d/" + org.daemoxcp.mail.system.ManageSieveLocal.FILE_NAME,
+                org.daemoxcp.mail.system.ManageSieveLocal.fileContent(true), false));
 
         f.add(new FileConf("conf.d/auth-master.conf.ext", """
             # Il nome del blocco e' obbligatorio nella 2.4, e "args" e' diventato

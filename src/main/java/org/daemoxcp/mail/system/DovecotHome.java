@@ -162,6 +162,18 @@ public final class DovecotHome {
         return conf.substring(0, start) + indent + replacement + conf.substring(end);
     }
 
+    /**
+     * Il server usa gia' la home nella sua cartella: per chi crea una casella nuova (ConfigRegeneratorScript), che
+     * cosi' la crea subito invece di aspettare il prossimo avvio del pannello.
+     */
+    public static boolean configured() {
+        try {
+            return Files.isRegularFile(authSql, LinkOption.NOFOLLOW_LINKS) && usesHome(Files.readString(authSql, StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /** La configurazione mette gia' la home nella sua cartella (2.3 o 2.4). */
     static boolean usesHome(String conf) {
         return conf != null && (conf.contains(NEW23) || conf.contains(NEW24));

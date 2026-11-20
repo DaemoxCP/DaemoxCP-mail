@@ -209,7 +209,10 @@ state() {
     # E la 24 e la 6379, su 127.0.0.1 e ::1: le chiude il pannello al primo avvio, quando Postfix consegna a Dovecot dal
     # socket nella sua coda (LmtpSocket, reperto 234) e rspamd parla con redis dal socket (RedisSocket, 235). Tutti e due
     # provano una consegna e una scansione prima e dopo, e se non va rimettono la porta.
-    sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:(33060|110|995)$/) next; if (a ~ /^(127\.0\.0\.1|\[::1\]):(24|6379)$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; print "listening port: " a}' | sort -u
+    # La 4190 (ManageSieve) conta per il suo nome e non per l'indirizzo: il primo avvio la porta da tutte le interfacce
+    # a 127.0.0.1, dove la usa la webmail (ManageSieveLocal, che dopo il riavvio di Dovecot verifica autenticazione,
+    # IMAP e il saluto di ManageSieve, e se no rimette com'era). Se Dovecot smettesse di ascoltarla, la riga sparisce.
+    sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:(33060|110|995)$/) next; if (a ~ /^(127\.0\.0\.1|\[::1\]):(24|6379)$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; if (a ~ /:4190$/) a = "ManageSieve 4190"; print "listening port: " a}' | sort -u
     printf 'nginx -t: %s\n' "$(nginx -t >/dev/null 2>&1 && echo ok || echo ERROR)"
     printf 'postfix check: %s\n' "$(postfix check >/dev/null 2>&1 && echo ok || echo ERROR)"
     printf 'doveconf: %s\n' "$(doveconf -n >/dev/null 2>&1 && echo ok || echo ERROR)"

@@ -176,7 +176,20 @@ public class Main {
             panel.addComponent(new EmptySpace());
         }
 
-        TextBox textBox = new TextBox(new TerminalSize(40, 1));
+        // Invio nel campo vale come OK. In Lanterna Invio in un campo di una riga sposta il fuoco al componente dopo,
+        // che qui e' Annulla: chi scriveva il valore e premeva Invio due volte, come si fa in ogni modulo, annullava
+        // quello che aveva scritto (installazione dal README, 20/11/2026). Annulla resta il primo pulsante.
+        TextBox textBox = new TextBox(new TerminalSize(40, 1)) {
+            @Override
+            public Result handleKeyStroke(com.googlecode.lanterna.input.KeyStroke key) {
+                if (key.getKeyType() == com.googlecode.lanterna.input.KeyType.Enter) {
+                    result[0] = getText();
+                    window.close();
+                    return Result.HANDLED;
+                }
+                return super.handleKeyStroke(key);
+            }
+        };
         if (defaultValue != null && !defaultValue.isEmpty()) {
             textBox.setText(defaultValue);
         }
@@ -1162,6 +1175,15 @@ public class Main {
             } catch (Exception e) {
                 System.out.println(ANSI_YELLOW + "[WARNING] Could not auto-load certificate: " + e.getMessage() + ANSI_RESET);
             }
+
+            // L'installazione finisce col server gia' chiuso (installazione dal README, 20/11/2026). Lo script lascia un
+            // pf.conf minimo che fa passare tutto, e MySQL in ascolto su ogni interfaccia anche col protocollo X (33060):
+            // fino a oggi li chiudeva solo il primo avvio del pannello, e chi installava senza avviarlo, o lo avviava
+            // ore dopo, restava aperto. Le stesse due chiusure del primo avvio, con lo stesso codice: dopo, l'avvio non
+            // trova niente da fare. Le porte del pannello e della webmail le leggono dalla configurazione appena scritta
+            // qui sopra. MySQL prima, perche' lo riavvia; poi pf.
+            org.daemoxcp.mail.system.MysqlListen.ensureAtBoot();
+            org.daemoxcp.mail.security.PfPolicy.ensureAtBoot();
 
             System.out.println(ANSI_GREEN + "Mail server installed successfully!" + ANSI_RESET);
             System.out.flush();

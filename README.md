@@ -419,7 +419,8 @@ freebsd-update fetch install
 pkg update && pkg upgrade
 ```
 
-The first time `pkg` runs it offers to install itself: answer yes. `freebsd-update` keeps the system as it was
+The first time `pkg` runs it offers to install itself: answer yes. `freebsd-update fetch` shows the list of the
+files it is going to change in a pager: press `q` to go on. `freebsd-update` keeps the system as it was
 in a boot environment (`bectl list` shows it) and may restart `sshd`: the SSH session you are in stays open.
 If it installed a new kernel, reboot (`shutdown -r now`) before going on.
 
@@ -509,7 +510,8 @@ cd /home/panel && java -jar daemoxcp-mail.jar
 ```
 
 Arrows to move, Enter to choose, Tab to go from a field to the next. Every option asks for a confirmation
-first, with *Cancel* selected: press Tab to reach *OK*. Go through the options in this order:
+first, with *Cancel* selected: press Tab to reach *OK*. In a window with one field, Enter confirms what you typed.
+Go through the options in this order:
 
 1. **1) Time zone, clock (NTP) and DNS resolver.** Write the server's time zone as an IANA name (for example
    `Europe/Rome` or `UTC`): names that do not exist are refused. It also turns on NTP.
@@ -532,7 +534,8 @@ first, with *Cancel* selected: press Tab to reach *OK*. Go through the options i
    nothing to lose.
 5. **5) Emergency access code.** There is no administrator yet: it asks for a name and an email, creates the
    first administrator, and shows an **8-digit code**, valid for 15 minutes.
-6. **>>> Start DaemoxCP Mail web server <<<.** The panel starts; leave the terminal open for now.
+6. **>>> Start the DaemoxCP Mail web server <<<**, the last item (option 6, going back to before the last
+   reinstallation, is not needed now). The panel starts; leave the terminal open for now.
 
 ### Step 7 — The first sign-in, and the panel's own set-up
 
@@ -698,7 +701,7 @@ everywhere, and `tools/upgrade/upgrade-panel.sh`, which replaces the real file, 
 ║  4) Install/Reinstall Mail Server                             ║
 ║  5) Emergency access code                                     ║
 ║  6) Go back to the server before the last reinstallation      ║
-║  >>> Start DaemoxCP Mail web server <<<                       ║
+║  >>> Start the DaemoxCP Mail web server <<<                   ║
 ║  Exit                                                         ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```

@@ -422,7 +422,8 @@ freebsd-update fetch install
 pkg update && pkg upgrade
 ```
 
-La prima volta `pkg` si offre di installarsi: rispondi sì. `freebsd-update` tiene il sistema com'era in un boot
+La prima volta `pkg` si offre di installarsi: rispondi sì. `freebsd-update fetch` mostra l'elenco dei file che
+sta per cambiare in un visualizzatore: premi `q` per andare avanti. `freebsd-update` tiene il sistema com'era in un boot
 environment (`bectl list` lo mostra) e può riavviare `sshd`: la sessione SSH in cui sei resta aperta. Se ha
 installato un kernel nuovo, riavvia (`shutdown -r now`) prima di andare avanti.
 
@@ -512,8 +513,9 @@ cd /home/panel && java -jar daemoxcp-mail.jar
 ```
 
 Frecce per muoverti, Invio per scegliere, Tab per passare da un campo al successivo. Ogni opzione chiede prima una
-conferma, con *Cancel* selezionato: premi Tab per arrivare a *OK*. Il menu è in inglese. Segui le opzioni in
-quest'ordine:
+conferma, con *Cancel* selezionato: premi Tab per arrivare a *OK*. In una finestra con un solo campo, Invio conferma
+quello che hai scritto. Il menu è in inglese; in italiano si apre con `--lang it` (vedi [Lingue](#lingue)): le voci qui sotto
+hanno il nome inglese. Segui le opzioni in quest'ordine:
 
 1. **1) Time zone, clock (NTP) and DNS resolver.** Scrivi il fuso orario del server come nome IANA (per esempio
    `Europe/Rome` o `UTC`): i nomi che non esistono vengono rifiutati. Accende anche NTP.
@@ -536,7 +538,8 @@ quest'ordine:
    perdere.
 5. **5) Emergency access code.** Non c'è ancora un amministratore: chiede un nome e un'email, crea il primo
    amministratore e mostra un **codice di 8 cifre**, valido 15 minuti.
-6. **>>> Start DaemoxCP Mail web server <<<.** Il pannello parte; per adesso lascia il terminale aperto.
+6. **>>> Start the DaemoxCP Mail web server <<<**, l'ultima voce (la 6, che torna a prima dell'ultima
+   reinstallazione, adesso non serve). Il pannello parte; per adesso lascia il terminale aperto.
 
 ### Passo 7 — Il primo accesso, e la configurazione dal pannello
 
@@ -711,7 +714,7 @@ dappertutto, e `tools/upgrade/upgrade-panel.sh`, che sostituisce il file vero, n
 ║  4) Install/Reinstall Mail Server                             ║
 ║  5) Emergency access code                                     ║
 ║  6) Go back to the server before the last reinstallation      ║
-║  >>> Start DaemoxCP Mail web server <<<                       ║
+║  >>> Start the DaemoxCP Mail web server <<<                   ║
 ║  Exit                                                         ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```

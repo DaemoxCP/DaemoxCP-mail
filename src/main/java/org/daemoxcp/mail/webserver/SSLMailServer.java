@@ -823,6 +823,10 @@ public class SSLMailServer {
             // nella 2.4; serve un riavvio, verificato, e se Dovecot non riparte si toglie il file (DovecotSockets).
             org.daemoxcp.mail.system.DovecotSockets.ensureAtBoot();
 
+            // ManageSieve (4190) solo su 127.0.0.1, dove la usa la webmail: prima ascoltava su tutte le interfacce e la
+            // fermava solo pf. Riavvio verificato, e se qualcosa non torna si toglie il file (ManageSieveLocal).
+            org.daemoxcp.mail.system.ManageSieveLocal.ensureAtBoot();
+
             // POP3 come l'ha scelto l'amministratore, spento se non ha scelto: nessuno lo usava, e le sue porte
             // erano solo bersagli (Pop3 verifica e torna indietro).
             org.daemoxcp.mail.system.Pop3.ensureAtBoot();
@@ -842,6 +846,11 @@ public class SSLMailServer {
             // (la memoria delle risposte automatiche e degli inoltri) comparivano fra le cartelle della webmail (DovecotHome
             // li porta nella home come vmail, verifica con doveadm user, e se non va torna com'era).
             org.daemoxcp.mail.system.DovecotHome.ensureAtBoot();
+
+            // Le cartelle Maildir/ vuote che lo script delle caselle creava e Dovecot non usava (la posta sta nella radice della
+            // casella): via con rmdir come vmail, che non toglie niente che non sia vuoto (UnusedMaildir).
+            org.daemoxcp.mail.system.UnusedMaildir.ensureAtBoot();
+
             // Postfix consegna a Dovecot dal socket nella sua coda (0600 suo) e non piu' dalla porta 24 o dal socket 0666, da
             // cui qualunque processo della macchina consegnava in qualunque casella (reperto 234). In tre tempi, la posta
             // non resta mai senza strada; se qualcosa non va torna com'era.
