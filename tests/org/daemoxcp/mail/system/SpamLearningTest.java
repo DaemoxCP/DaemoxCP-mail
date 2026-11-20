@@ -183,12 +183,14 @@ public class SpamLearningTest {
             SpamLearner.Round r = SpamLearner.round(Path.of(SpamLearning.SPOOL), SpamLearner.rspamd(password), Instant.now());
             long after = learned(password);
             check("  handed to Rspamd and deleted (round learned " + r.learned() + ", Rspamd learned " + before + " -> " + after + ")",
-                    count("spam") == 0 && after > before);
+                    count("spam") == 0 && r.learned() == 1 && after > before);
 
             move(user, "Junk", "INBOX");
             check("Junk -> INBOX: a ham message in the spool", waitFor(() -> count("ham") == 1));
             SpamLearner.Round h = SpamLearner.round(Path.of(SpamLearning.SPOOL), SpamLearner.rspamd(password), Instant.now());
-            check("  handed to Rspamd and deleted (round learned " + h.learned() + ")", count("ham") == 0 && !h.stopped());
+            long afterHam = learned(password);
+            check("  handed to Rspamd and deleted (round learned " + h.learned() + ", Rspamd learned " + after + " -> " + afterHam + ")",
+                    count("ham") == 0 && !h.stopped() && afterHam > after);
 
             move(user, "INBOX", "Junk");
             waitFor(() -> count("spam") == 1);
@@ -233,7 +235,7 @@ public class SpamLearningTest {
     static long learned(String password) throws Exception {
         HttpRequest r = HttpRequest.newBuilder(URI.create(SpamLearner.CONTROLLER + "stat")).header("Password", password)
                 .timeout(Duration.ofSeconds(20)).GET().build();
-        String body = HttpClient.newHttpClient().send(r, HttpResponse.BodyHandlers.ofString()).body();
+        String body = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build().send(r, HttpResponse.BodyHandlers.ofString()).body();
         Matcher m = LEARNED.matcher(body);
         return m.find() ? Long.parseLong(m.group(1)) : -1;
     }

@@ -104,7 +104,12 @@ public final class SpamLearner {
         }
     }
 
-    private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    /**
+     * HTTP/1.1: su http in chiaro il client di Java prova prima a passare a HTTP/2 (h2c), e il controller di Rspamd
+     * riceveva la richiesta senza il corpo («got zero length body», 400: misurato sulla VM il 20/11/2026).
+     */
+    private static final HttpClient HTTP = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(5)).build();
 
     /** Il controller di Rspamd sulla macchina stessa, con la password dei segreti di root. */
     static Teacher rspamd(String password) {
