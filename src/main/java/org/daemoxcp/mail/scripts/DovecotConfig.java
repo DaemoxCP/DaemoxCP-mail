@@ -799,8 +799,10 @@ public final class DovecotConfig {
     public static final String QUOTA_USERDB = """
             # Il limite di ogni casella (quota_mb in MB; 0 = nessun limite): si aggiunge ai campi di userdb static.
             # Se la domanda fallisce si va avanti senza quota (gia' cosi' nella 2.4, scritto per chiarezza).
+            # E dopo quanti giorni Dovecot svuota da solo la Junk e il Cestino (junk_expunge_days, trash_expunge_days;
+            # 0 = mai: il campo resta NULL, Dovecot non lo riceve e non svuota niente).
             userdb sql {
-              query = SELECT CONCAT(quota_mb, 'M') AS quota_storage_size FROM mailboxes WHERE email = '%{user}' AND active = 1
+              query = SELECT CONCAT(quota_mb, 'M') AS quota_storage_size, IF(junk_expunge_days > 0, CONCAT(junk_expunge_days, 'd'), NULL) AS 'namespace/inbox/mailbox/Junk/mailbox_autoexpunge', IF(trash_expunge_days > 0, CONCAT(trash_expunge_days, 'd'), NULL) AS 'namespace/inbox/mailbox/Trash/mailbox_autoexpunge' FROM mailboxes WHERE email = '%{user}' AND active = 1
               iterate_query = SELECT email AS user FROM mailboxes WHERE active = 1
               result_success = continue-ok
               result_failure = continue

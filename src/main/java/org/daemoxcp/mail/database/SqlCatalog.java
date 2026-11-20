@@ -134,6 +134,8 @@ public final class SqlCatalog {
             + "    quota_mb INT DEFAULT 1024,\n"
             + "    active BOOLEAN DEFAULT TRUE,\n"
             + "    receive_enabled BOOLEAN DEFAULT TRUE,\n"
+            + "    junk_expunge_days SMALLINT UNSIGNED NOT NULL DEFAULT 0,\n"
+            + "    trash_expunge_days SMALLINT UNSIGNED NOT NULL DEFAULT 0,\n"
             + "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n"
             + "    last_login TIMESTAMP NULL,\n"
             + "    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE\n"
@@ -547,7 +549,21 @@ public final class SqlCatalog {
     public static final String MAIL_UPDATE_MAILBOX_RECEIVE_ENABLED = "UPDATE mailboxes SET receive_enabled = ? WHERE id = ?";
 
     /** MailDatabase.updateMailbox */
-    public static final String MAIL_UPDATE_MAILBOX = "UPDATE mailboxes SET name = ?, quota_mb = ?, active = ?, receive_enabled = ? WHERE id = ?";
+    public static final String MAIL_UPDATE_MAILBOX = "UPDATE mailboxes SET name = ?, quota_mb = ?, active = ?, receive_enabled = ?,"
+            + " junk_expunge_days = ?, trash_expunge_days = ? WHERE id = ?";
+
+    /**
+     * MailDatabase.ensureMailboxCleanupColumns: dopo quanti giorni Dovecot svuota da solo la Junk e il Cestino della
+     * casella (mailbox_autoexpunge, dal userdb sql di DovecotQuota); 0 = mai, ed e' il predefinito: si accende solo a
+     * richiesta, dal pannello o dalla webmail.
+     */
+    public static final String MAIL_ADD_MAILBOXES_JUNK_EXPUNGE_DAYS = "ALTER TABLE mailboxes ADD COLUMN junk_expunge_days SMALLINT UNSIGNED NOT NULL DEFAULT 0";
+
+    /** MailDatabase.ensureMailboxCleanupColumns */
+    public static final String MAIL_ADD_MAILBOXES_TRASH_EXPUNGE_DAYS = "ALTER TABLE mailboxes ADD COLUMN trash_expunge_days SMALLINT UNSIGNED NOT NULL DEFAULT 0";
+
+    /** MailDatabase.setMailboxCleanup: la webmail (solo la root, la rotta interna di Roundcube) per la sua casella. */
+    public static final String MAIL_UPDATE_MAILBOX_CLEANUP = "UPDATE mailboxes SET junk_expunge_days = ?, trash_expunge_days = ? WHERE email = ? AND active = 1";
 
     /** MailDatabase.ensureMailboxReceiveEnabledColumn */
     public static final String MAIL_ENSURE_MAILBOX_RECEIVE_ENABLED_COLUMN = "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'mailboxes' AND column_name = 'receive_enabled'";
@@ -1367,7 +1383,7 @@ public final class SqlCatalog {
     public static final String WEB_DB_GRANT_ROUTINES_DOMAINS = "GRANT SELECT, INSERT, UPDATE (description), DELETE ON domains TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
-    public static final String WEB_DB_GRANT_ROUTINES_MAILBOXES = "GRANT SELECT, INSERT, UPDATE (name, quota_mb, active, receive_enabled, password, password_encrypted, password_encrypted_at), DELETE ON mailboxes TO 'daemoxcp_mail_routines'@'localhost'";
+    public static final String WEB_DB_GRANT_ROUTINES_MAILBOXES = "GRANT SELECT, INSERT, UPDATE (name, quota_mb, active, receive_enabled, junk_expunge_days, trash_expunge_days, password, password_encrypted, password_encrypted_at), DELETE ON mailboxes TO 'daemoxcp_mail_routines'@'localhost'";
 
     /** WebDbAccess */
     public static final String WEB_DB_GRANT_ROUTINES_ALIASES = "GRANT SELECT, INSERT, UPDATE (active), DELETE ON aliases TO 'daemoxcp_mail_routines'@'localhost'";
@@ -1566,7 +1582,7 @@ public final class SqlCatalog {
     public static final String MAILDB_GRANT_POSTFIX_ALIASES = "GRANT SELECT (source, destination, active) ON aliases TO 'daemoxcp_mail_postfix'@'localhost', 'daemoxcp_mail_postfix'@'127.0.0.1'";
 
     /** MailDbUsers: Dovecot, l'accesso alle caselle (passdb) e il loro limite (userdb sql, DovecotQuota) */
-    public static final String MAILDB_GRANT_DOVECOT_MAILBOXES = "GRANT SELECT (email, password, active, quota_mb) ON mailboxes TO 'daemoxcp_mail_dovecot'@'localhost', 'daemoxcp_mail_dovecot'@'127.0.0.1'";
+    public static final String MAILDB_GRANT_DOVECOT_MAILBOXES = "GRANT SELECT (email, password, active, quota_mb, junk_expunge_days, trash_expunge_days) ON mailboxes TO 'daemoxcp_mail_dovecot'@'localhost', 'daemoxcp_mail_dovecot'@'127.0.0.1'";
 
     /** MailDbUsers: i permessi di un utente che non sono quelli per colonna (ce ne devono essere zero) */
     public static final String MAILDB_OTHER_PRIVILEGES = "SELECT privilege_type FROM information_schema.user_privileges WHERE grantee IN (?, ?) AND privilege_type <> 'USAGE'\n"
@@ -1610,7 +1626,10 @@ public final class SqlCatalog {
     public static final String MAILDB_DOVECOT_PASSWORD_LOOKUP = "SELECT email AS user, password FROM mailboxes WHERE email = ? AND active = 1";
 
     /** MailDbUsers, da utente di Dovecot: la domanda del userdb delle quote (DovecotConfig.QUOTA_USERDB) */
-    public static final String MAILDB_DOVECOT_QUOTA_LOOKUP = "SELECT CONCAT(quota_mb, 'M') AS quota_storage_size FROM mailboxes WHERE email = ? AND active = 1";
+    public static final String MAILDB_DOVECOT_QUOTA_LOOKUP = "SELECT CONCAT(quota_mb, 'M') AS quota_storage_size,"
+            + " IF(junk_expunge_days > 0, CONCAT(junk_expunge_days, 'd'), NULL) AS 'namespace/inbox/mailbox/Junk/mailbox_autoexpunge',"
+            + " IF(trash_expunge_days > 0, CONCAT(trash_expunge_days, 'd'), NULL) AS 'namespace/inbox/mailbox/Trash/mailbox_autoexpunge'"
+            + " FROM mailboxes WHERE email = ? AND active = 1";
 
     /** MailDbUsers, da utente di Dovecot: un alias, che deve essere rifiutato */
     public static final String MAILDB_DOVECOT_ALIAS_REFUSED = "SELECT destination FROM aliases WHERE source = ?";
@@ -1997,7 +2016,7 @@ public final class SqlCatalog {
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
             + "    SELECT m.id, m.domain_id, d.domain AS domain_name, m.email, m.name, m.quota_mb, m.active, m.receive_enabled,\n"
-            + "            m.created_at, m.last_login\n"
+            + "            m.junk_expunge_days, m.trash_expunge_days, m.created_at, m.last_login\n"
             + "        FROM mailboxes m JOIN domains d ON m.domain_id = d.id WHERE m.domain_id = p_domain_id ORDER BY m.email;\n"
             + "END";
 
@@ -2015,7 +2034,7 @@ public final class SqlCatalog {
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
             + "    SELECT m.id, m.domain_id, d.domain AS domain_name, m.email, m.name, m.quota_mb, m.active, m.receive_enabled,\n"
-            + "            m.created_at, m.last_login,\n"
+            + "            m.junk_expunge_days, m.trash_expunge_days, m.created_at, m.last_login,\n"
             + "            (SELECT COUNT(*) FROM forwarding_rules fr WHERE fr.mailbox_id = m.id AND fr.enabled = 1) AS forwarding_count,\n"
             + "            (SELECT COUNT(*) FROM sieve_filters sf WHERE sf.mailbox_id = m.id AND sf.enabled = 1) AS filters_count,\n"
             + "            (SELECT COALESCE(ar.enabled, 0) FROM auto_responders ar WHERE ar.mailbox_id = m.id) AS autoresponder_enabled\n"
@@ -2037,7 +2056,7 @@ public final class SqlCatalog {
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
             + "    SELECT m.id, m.domain_id, d.domain AS domain_name, m.email, m.name, m.quota_mb, m.active, m.receive_enabled,\n"
-            + "            m.created_at, m.last_login\n"
+            + "            m.junk_expunge_days, m.trash_expunge_days, m.created_at, m.last_login\n"
             + "        FROM mailboxes m JOIN domains d ON m.domain_id = d.id WHERE m.id = p_id;\n"
             + "END";
 
@@ -2056,7 +2075,7 @@ public final class SqlCatalog {
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mail.view', v_admin);\n"
             + "    SELECT m.id, m.domain_id, d.domain AS domain_name, m.email, m.name, m.quota_mb, m.active, m.receive_enabled,\n"
-            + "            m.created_at, m.last_login\n"
+            + "            m.junk_expunge_days, m.trash_expunge_days, m.created_at, m.last_login\n"
             + "        FROM mailboxes m JOIN domains d ON m.domain_id = d.id WHERE m.email = p_email;\n"
             + "END";
 
@@ -2088,15 +2107,17 @@ public final class SqlCatalog {
     public static final String WEB_GRANT_ADD_MAILBOX = "GRANT EXECUTE ON PROCEDURE add_mailbox" + WEB_TO;
 
     /** MAIL_UPDATE_MAILBOX nella parte web, con mailboxes.manage: nome, spazio e stato di una casella. */
-    public static final String WEB_CALL_UPDATE_MAILBOX = "CALL update_mailbox(?, ?, ?, ?, ?, ?)";
+    public static final String WEB_CALL_UPDATE_MAILBOX = "CALL update_mailbox(?, ?, ?, ?, ?, ?, ?, ?)";
 
     /** WebDbAccess: la procedura di WEB_CALL_UPDATE_MAILBOX. */
     public static final String WEB_CREATE_UPDATE_MAILBOX = WEB_CREATE + "update_mailbox(" + WEB_SESSION
             + ", IN p_name VARCHAR(255), IN p_quota_mb INT, IN p_active BOOLEAN"
-            + ", IN p_receive_enabled BOOLEAN, IN p_id INT)" + WEB_BEGIN
+            + ", IN p_receive_enabled BOOLEAN, IN p_junk_expunge_days SMALLINT UNSIGNED, IN p_trash_expunge_days SMALLINT UNSIGNED"
+            + ", IN p_id INT)" + WEB_BEGIN
             + "    DECLARE v_admin INT;\n"
             + "    CALL web_session_admin(p_session, 'mailboxes.manage', v_admin);\n"
-            + "    UPDATE mailboxes SET name = p_name, quota_mb = p_quota_mb, active = p_active, receive_enabled = p_receive_enabled WHERE id = p_id;\n"
+            + "    UPDATE mailboxes SET name = p_name, quota_mb = p_quota_mb, active = p_active, receive_enabled = p_receive_enabled,\n"
+            + "        junk_expunge_days = p_junk_expunge_days, trash_expunge_days = p_trash_expunge_days WHERE id = p_id;\n"
             + "    SELECT ROW_COUNT() AS affected;\n"
             + "END";
 

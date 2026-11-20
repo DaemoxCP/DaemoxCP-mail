@@ -600,6 +600,8 @@ public class MailDatabase {
      */
     public void ensureColumnUpgrades() {
         ensureMailboxReceiveEnabledColumn();
+        // Lo svuotamento automatico della Junk e del Cestino di ogni casella, spento finche' non si chiede
+        ensureMailboxCleanupColumns();
         // Cifratura password mailbox per recovery dal pannello
         ensureMailboxPasswordVaultColumns();
         ensureThemeColumn();
@@ -1654,14 +1656,62 @@ public class MailDatabase {
      * @param active Account active status
      * @param receiveEnabled Can receive emails (false = no-reply)
      */
-    public boolean updateMailbox(int mailboxId, String name, int quotaMb, boolean active, boolean receiveEnabled) throws SQLException {
+    public boolean updateMailbox(int mailboxId, String name, int quotaMb, boolean active, boolean receiveEnabled,
+                                 int junkExpungeDays, int trashExpungeDays) throws SQLException {
+        if (!cleanupDaysAllowed(junkExpungeDays) || !cleanupDaysAllowed(trashExpungeDays))
+            throw new IllegalArgumentException("cleanup days not allowed");
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_UPDATE_MAILBOX)) {
             stmt.setString(1, name);
             stmt.setInt(2, quotaMb);
             stmt.setBoolean(3, active);
             stmt.setBoolean(4, receiveEnabled);
-            stmt.setInt(5, mailboxId);
+            stmt.setInt(5, junkExpungeDays);
+            stmt.setInt(6, trashExpungeDays);
+            stmt.setInt(7, mailboxId);
             return stmt.executeUpdate() > 0;
+        }
+    }
+
+    /**
+     * I giorni che si possono scegliere per lo svuotamento automatico della Junk e del Cestino: 0 = mai (il predefinito,
+     * si accende solo a richiesta). Lo stesso elenco per il pannello e per la webmail (plugin daemoxcp_mail_cleanup).
+     */
+    public static final java.util.List<Integer> CLEANUP_DAYS = java.util.List.of(0, 7, 14, 30, 60, 90);
+
+    public static boolean cleanupDaysAllowed(int days) {
+        return CLEANUP_DAYS.contains(days);
+    }
+
+    /**
+     * La webmail per la sua casella (la rotta interna di Roundcube, solo la root): i giorni della Junk e del Cestino.
+     * Falso se la casella non c'e' o non e' attiva.
+     */
+    public boolean setMailboxCleanup(String email, int junkExpungeDays, int trashExpungeDays) throws SQLException {
+        if (!cleanupDaysAllowed(junkExpungeDays) || !cleanupDaysAllowed(trashExpungeDays))
+            throw new IllegalArgumentException("cleanup days not allowed");
+        try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_UPDATE_MAILBOX_CLEANUP)) {
+            stmt.setInt(1, junkExpungeDays);
+            stmt.setInt(2, trashExpungeDays);
+            stmt.setString(3, email.toLowerCase(java.util.Locale.ROOT));
+            return stmt.executeUpdate() > 0;
+        }
+    }
+
+    /** Le due colonne dello svuotamento automatico, sulle installazioni di prima (0 = mai). */
+    public void ensureMailboxCleanupColumns() {
+        String[][] cols = {
+            {"junk_expunge_days", SqlCatalog.MAIL_ADD_MAILBOXES_JUNK_EXPUNGE_DAYS},
+            {"trash_expunge_days", SqlCatalog.MAIL_ADD_MAILBOXES_TRASH_EXPUNGE_DAYS}
+        };
+        try (Statement stmt = getConnection().createStatement()) {
+            for (String[] col : cols) {
+                if (columnType(getConnection(), "mailboxes", col[0]) == null) {
+                    stmt.executeUpdate(col[1]);
+                    LOGGER.info("Added the " + col[0] + " column to mailboxes (automatic emptying, off until asked)");
+                }
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Cannot add the automatic emptying columns to mailboxes", e);
         }
     }
 
@@ -1827,6 +1877,9 @@ public class MailDatabase {
         } catch (SQLException ignored) {
             m.receiveEnabled = true; // Default for old databases
         }
+        // Lo svuotamento automatico: 0 = mai, anche quando le colonne non ci sono ancora
+        m.junkExpungeDays = hasColumn(rs, "junk_expunge_days") ? rs.getInt("junk_expunge_days") : 0;
+        m.trashExpungeDays = hasColumn(rs, "trash_expunge_days") ? rs.getInt("trash_expunge_days") : 0;
         // Additional UI counts (may not be present in all queries)
         try {
             m.forwardingCount = rs.getInt("forwarding_count");
@@ -2212,6 +2265,8 @@ public class MailDatabase {
         public int quotaMb;  // 0 = unlimited
         public boolean active;
         public boolean receiveEnabled;  // false = no-reply (send only)
+        public int junkExpungeDays;     // dopo quanti giorni Dovecot svuota la Junk; 0 = mai
+        public int trashExpungeDays;    // dopo quanti giorni Dovecot svuota il Cestino; 0 = mai
         public Timestamp createdAt;
         public Timestamp lastLogin;
         // Additional counts for UI display

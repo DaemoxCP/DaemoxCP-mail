@@ -473,6 +473,7 @@ public class Main {
         //   java -jar daemoxcp-mail.jar --create-admin <nome> <email>   il primo amministratore
         //   java -jar daemoxcp-mail.jar --access-code [nome]            un codice di accesso monouso
         //   java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6|ipv6out   IPv4, IPv6, tutte e due, o IPv6 solo in uscita (da root)
+        //   java -jar daemoxcp-mail.jar --empty-folders junk|trash|both all|<casella>...   svuotamento d'emergenza (da root)
         // Il primo amministratore non si crea dal pannello web: chi raggiungesse per primo la
         // pagina diventerebbe amministratore.
         for (int i = 0; i < args.length; i++) {
@@ -496,6 +497,9 @@ public class Main {
             }
             if ("--addresses".equals(args[i])) {
                 System.exit(addresses(i + 1 < args.length ? args[i + 1] : null));
+            }
+            if ("--empty-folders".equals(args[i])) {
+                System.exit(emptyFolders(java.util.Arrays.copyOfRange(args, i + 1, args.length)));
             }
             // La reinstallazione completa staccata dal menu (ReinstallJob): la lancia la voce del
             // menu con daemon(8), in una sessione sua, e la segue. Chi chiude il terminale o uccide
@@ -1940,6 +1944,86 @@ public class Main {
      * controlli (indirizzo e rotta nella famiglia che resta) e lo stesso ritorno a com'era se un servizio non regge.
      * Da root: riscrive le configurazioni di Postfix, Dovecot e nginx e ricarica pf.
      */
+    /**
+     * --empty-folders: lo svuotamento d'emergenza della Junk e/o del Cestino, di tutte le caselle (all) o di quelle
+     * date, subito (EmergencyEmpty). Solo da root e da un terminale: mostra quanti messaggi toglie e chiede di scrivere
+     * quel numero. Lo svuotamento di tutti i giorni e' automatico, casella per casella, dal pannello o dalla webmail.
+     */
+    static int emptyFolders(String[] rest) {
+        String usage = org.daemoxcp.mail.i18n.I18n.tr("console.usage", java.util.Map.of("cmd",
+                "java -jar daemoxcp-mail.jar --empty-folders junk|trash|both all|<mailbox>..."));
+        java.util.List<String> folders = rest.length < 2 ? null : org.daemoxcp.mail.system.EmergencyEmpty.folders(rest[0]);
+        if (folders == null) {
+            System.err.println(usage);
+            return 2;
+        }
+        if (!"root".equals(System.getProperty("user.name"))) {
+            System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.asRoot"));
+            return 2;
+        }
+        java.io.Console terminal = System.console();
+        if (terminal == null) {
+            System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.terminal"));
+            return 2;
+        }
+        java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");
+        rootLogger.setLevel(java.util.logging.Level.WARNING);
+        for (java.util.logging.Handler h : rootLogger.getHandlers()) h.setLevel(java.util.logging.Level.WARNING);
+        String notConnected = connectFromConfig();
+        if (notConnected != null) {
+            System.err.println(notConnected);
+            return 2;
+        }
+        org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
+        try {
+            java.util.List<String> mailboxes = new java.util.ArrayList<>();
+            java.util.List<org.daemoxcp.mail.database.MailDatabase.Mailbox> all = mailDatabase.getAllMailboxes();
+            java.util.Set<String> known = new java.util.HashSet<>();
+            for (org.daemoxcp.mail.database.MailDatabase.Mailbox m : all) if (m.active) known.add(m.email.toLowerCase(java.util.Locale.ROOT));
+            if (rest.length == 2 && rest[1].equals("all")) {
+                for (org.daemoxcp.mail.database.MailDatabase.Mailbox m : all) if (m.active) mailboxes.add(m.email.toLowerCase(java.util.Locale.ROOT));
+            } else {
+                for (int k = 1; k < rest.length; k++) {
+                    String mb = rest[k].trim().toLowerCase(java.util.Locale.ROOT);
+                    if (!known.contains(mb)) {
+                        System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.unknown", java.util.Map.of("mailbox", mb)));
+                        return 2;
+                    }
+                    if (!mailboxes.contains(mb)) mailboxes.add(mb);
+                }
+            }
+            java.util.Map<String, java.util.Map<String, Integer>> plan = org.daemoxcp.mail.system.EmergencyEmpty.plan(mailboxes, folders,
+                    org.daemoxcp.mail.system.EmergencyEmpty::countWithDovecot);
+            int total = org.daemoxcp.mail.system.EmergencyEmpty.total(plan);
+            if (total == 0) {
+                System.out.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.nothing"));
+                return 0;
+            }
+            for (java.util.Map.Entry<String, java.util.Map<String, Integer>> e : plan.entrySet())
+                for (java.util.Map.Entry<String, Integer> f : e.getValue().entrySet())
+                    System.out.println("  " + e.getKey() + "  " + f.getKey() + ": " + f.getValue());
+            String answer = terminal.readLine("%s", org.daemoxcp.mail.i18n.I18n.tr("console.empty.confirm",
+                    java.util.Map.of("n", String.valueOf(total), "mailboxes", String.valueOf(plan.size()))) + " ");
+            if (answer == null || !answer.trim().equals(String.valueOf(total))) {
+                System.out.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.cancelled"));
+                return 1;
+            }
+            org.daemoxcp.mail.system.EmergencyEmpty.Result r = org.daemoxcp.mail.system.EmergencyEmpty.run(plan,
+                    org.daemoxcp.mail.system.EmergencyEmpty::expungeWithDovecot);
+            mailDatabase.logAuditEvent("EMERGENCY_EMPTY", "127.0.0.1", String.join("+", folders) + " of " + plan.size()
+                    + " mailbox(es), " + total + " message(s), " + r.emptied() + " folder(s) emptied"
+                    + (r.failed().isEmpty() ? "" : ", failed: " + String.join(", ", r.failed())) + " (console)", "console");
+            System.out.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.done", java.util.Map.of("folders", String.valueOf(r.emptied()))));
+            for (String f : r.failed()) System.out.println("  " + org.daemoxcp.mail.i18n.I18n.tr("console.empty.failed", java.util.Map.of("what", f)));
+            return r.failed().isEmpty() ? 0 : 1;
+        } catch (java.sql.SQLException e) {
+            System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.noMailboxes"));
+            return 1;
+        } finally {
+            org.daemoxcp.mail.i18n.I18n.clearCurrent();
+        }
+    }
+
     static int setIpFamily(String value) {
         org.daemoxcp.mail.system.IpFamily.Family f = org.daemoxcp.mail.system.IpFamily.Family.of(value);
         if (f == null) {

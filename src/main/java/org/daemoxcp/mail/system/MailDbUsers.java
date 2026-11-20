@@ -102,7 +102,8 @@ public final class MailDbUsers {
 
     static final Account DOVECOT = new Account(DOVECOT_USER, SqlCatalog.MAILDB_CREATE_DOVECOT_USER,
             SqlCatalog.MAILDB_SET_DOVECOT_PASSWORD, SqlCatalog.MAILDB_REVOKE_DOVECOT, List.of(
-                    new Grant("mailboxes", Set.of("email", "password", "active", "quota_mb"), SqlCatalog.MAILDB_GRANT_DOVECOT_MAILBOXES)));
+                    new Grant("mailboxes", Set.of("email", "password", "active", "quota_mb", "junk_expunge_days", "trash_expunge_days"),
+                            SqlCatalog.MAILDB_GRANT_DOVECOT_MAILBOXES)));
 
     /**
      * Da root di MySQL: i due utenti, solo i loro permessi, le loro password. Quello che ha fatto finisce in done;

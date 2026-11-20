@@ -2623,6 +2623,211 @@ public class PanelContent {
      * Modal "Cambia password massivo" della pagina /mailboxes.
      * Estratto come metodo per non gonfiare il text block constante della pagina.
      */
+
+
+    /**
+     * Le finestre della pagina Caselle dopo quella della configurazione dei client: una costante a parte. Nella stessa
+     * espressione della pagina tutte le parti fisse finiscono in una sola «ricetta» di invokedynamic, che non puo'
+     * superare i 64 KB (raggiunti il 20/11/2026).
+     */
+    static String mailboxPageModals() {
+        return """
+
+    <!-- Auto-Responder Modal -->
+    <div class="modal fade" id="autoResponderModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-reply-all me-2" aria-hidden="true"></i>{{t:mbx.arTitle}}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="arMailboxId">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2" aria-hidden="true"></i>{{t:mbx.arHint}}
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="arEnabled">
+                        <label class="form-check-label" for="arEnabled">{{t:mbx.arEnable}}</label>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="arSubject">{{t:mbx.subject}}</label>
+                        <input type="text" class="form-control" id="arSubject" placeholder="{{t:mbx.arSubjectPh}}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="arBody">{{t:mbx.message}}</label>
+                        <textarea class="form-control" id="arBody" rows="5" placeholder="{{t:mbx.arBodyPh}}"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="arStartDate">{{t:mbx.arStart}}</label>
+                            <input type="date" class="form-control" id="arStartDate">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label" for="arEndDate">{{t:mbx.arEnd}}</label>
+                            <input type="date" class="form-control" id="arEndDate">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="arInterval">{{t:mbx.arInterval}}</label>
+                        <input type="number" class="form-control" id="arInterval" value="24" min="1" max="168">
+                        <small class="text-muted">{{t:mbx.arIntervalHint}}</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-warning" data-on-click="resetVacationTracking()" title="{{t:mbx.resetHint}}">
+                        <i class="fas fa-redo me-1" aria-hidden="true"></i>{{t:mbx.resetTracking}}
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
+                    <button type="button" class="btn btn-primary" data-on-click="saveAutoResponder()">{{t:common.save}}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Forwarding Modal -->
+    <div class="modal fade" id="forwardingModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-share me-2" aria-hidden="true"></i>{{t:mbx.fwTitle}}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="fwMailboxId">
+                    <div id="forwardingRules"></div>
+                    <hr>
+                    <h6>{{t:mbx.fwAdd}}</h6>
+                    <div class="mb-3">
+                        <label class="form-label" for="fwDestination">{{t:mbx.fwDest}}</label>
+                        <input type="email" class="form-control" id="fwDestination" placeholder="{{t:mbx.fwDestPh}}">
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="fwKeepCopy" checked>
+                        <label class="form-check-label" for="fwKeepCopy">{{t:mbx.fwKeep}}</label>
+                    </div>
+                    <button class="btn btn-success" data-on-click="addForwarding()">
+                        <i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:mbx.fwAdd}}
+                    </button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.close}}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sieve Filters Modal -->
+    <div class="modal fade" id="sieveModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-filter me-2" aria-hidden="true"></i>{{t:mbx.svTitle}}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="svMailboxId">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6>{{t:mbx.svActive}}</h6>
+                            <div id="sieveFiltersList" class="mb-3"></div>
+                            <button class="btn btn-primary btn-sm" data-on-click="newSieveFilter()">
+                                <i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:mbx.svNew}}
+                            </button>
+                        </div>
+                        <div class="col-md-8">
+                            <div id="sieveEditor" data-style="display:none;">
+                                <input type="hidden" id="svFilterId">
+                                <div class="mb-3">
+                                    <label class="form-label" for="svName">{{t:mbx.svName}}</label>
+                                    <input type="text" class="form-control" id="svName" placeholder="{{t:mbx.svNamePh}}">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">{{t:mbx.svConditions}}</label>
+                                    <div id="svConditions"></div>
+                                    <button class="btn btn-outline-secondary btn-sm mt-2" data-on-click="addSieveCondition()">
+                                        <i class="fas fa-plus" aria-hidden="true"></i> {{t:mbx.svAddCondition}}
+                                    </button>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">{{t:home.colActions}}</label>
+                                    <div id="svActions"></div>
+                                    <button class="btn btn-outline-secondary btn-sm mt-2" data-on-click="addSieveAction()">
+                                        <i class="fas fa-plus" aria-hidden="true"></i> {{t:mbx.svAddAction}}
+                                    </button>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="svEnabled" checked>
+                                    <label class="form-check-label" for="svEnabled">{{t:mbx.svEnabled}}</label>
+                                </div>
+                                <button type="button" class="btn btn-success" data-on-click="saveSieveFilter()">
+                                    <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:mbx.svSave}}
+                                </button>
+                                <button type="button" id="svDelete" class="btn btn-outline-danger ms-2" data-style="display:none;" data-on-click="deleteSieveFilter()">
+                                    <i class="fas fa-trash me-1" aria-hidden="true"></i>{{t:mbx.svDelete}}
+                                </button>
+                            </div>
+                            <div id="sieveHelp">
+                                <div class="alert alert-secondary">
+                                    <h6>{{t:mbx.svHowTitle}}</h6>
+                                    <p>{{t:mbx.svHow}}</p>
+                                    <ul>
+                                        <li>{{t:mbx.svHowCond.html}}</li>
+                                        <li>{{t:mbx.svHowAct.html}}</li>
+                                    </ul>
+                                    <p>{{t:mbx.svHowPick}}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.close}}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+""";
+    }
+
+    /**
+     * Lo svuotamento automatico della Junk e del Cestino nella finestra della casella: mai (il predefinito) o dopo 7-90
+     * giorni, come MailDatabase.CLEANUP_DAYS. Un metodo a parte: col resto della pagina la costante superava i 64 KB.
+     */
+    static String mailboxCleanupFields() {
+        return """
+                    <fieldset class="mb-3" aria-describedby="editMbCleanupHelp">
+                        <legend class="form-label fs-6 mb-2">{{t:mbx.cleanupTitle}}</legend>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label small" for="editMbJunkDays">{{t:mbx.cleanupJunk}}</label>
+                                <select class="form-select" id="editMbJunkDays">
+                                <option value="0">{{t:mbx.cleanupNever}}</option>
+                                <option value="7">{{t:mbx.cleanupDays7}}</option>
+                                <option value="14">{{t:mbx.cleanupDays14}}</option>
+                                <option value="30">{{t:mbx.cleanupDays30}}</option>
+                                <option value="60">{{t:mbx.cleanupDays60}}</option>
+                                <option value="90">{{t:mbx.cleanupDays90}}</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small" for="editMbTrashDays">{{t:mbx.cleanupTrash}}</label>
+                                <select class="form-select" id="editMbTrashDays">
+                                <option value="0">{{t:mbx.cleanupNever}}</option>
+                                <option value="7">{{t:mbx.cleanupDays7}}</option>
+                                <option value="14">{{t:mbx.cleanupDays14}}</option>
+                                <option value="30">{{t:mbx.cleanupDays30}}</option>
+                                <option value="60">{{t:mbx.cleanupDays60}}</option>
+                                <option value="90">{{t:mbx.cleanupDays90}}</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-text" id="editMbCleanupHelp">{{t:mbx.cleanupHelp}}</div>
+                    </fieldset>
+                """;
+    }
+
     private static String getBulkRotateMailboxesModal() {
         return """
     <!-- Bulk rotate passwords modal -->
@@ -3134,6 +3339,7 @@ public class PanelContent {
                             <option value="102400">100 GB</option>
                         </select>
                     </div>
+""" + mailboxCleanupFields() + """
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-check form-switch mb-3">
@@ -3163,164 +3369,7 @@ public class PanelContent {
 
 """ + getBulkRotateMailboxesModal() + getPasswordGeneratorModal() + getMailboxToAliasModal() + """
     <!-- Mail Client Config Modal -->
-""" + getMailConfigModal() + """
-
-    <!-- Auto-Responder Modal -->
-    <div class="modal fade" id="autoResponderModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-reply-all me-2" aria-hidden="true"></i>{{t:mbx.arTitle}}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="arMailboxId">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2" aria-hidden="true"></i>{{t:mbx.arHint}}
-                    </div>
-                    <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" id="arEnabled">
-                        <label class="form-check-label" for="arEnabled">{{t:mbx.arEnable}}</label>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="arSubject">{{t:mbx.subject}}</label>
-                        <input type="text" class="form-control" id="arSubject" placeholder="{{t:mbx.arSubjectPh}}">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="arBody">{{t:mbx.message}}</label>
-                        <textarea class="form-control" id="arBody" rows="5" placeholder="{{t:mbx.arBodyPh}}"></textarea>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label" for="arStartDate">{{t:mbx.arStart}}</label>
-                            <input type="date" class="form-control" id="arStartDate">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label" for="arEndDate">{{t:mbx.arEnd}}</label>
-                            <input type="date" class="form-control" id="arEndDate">
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="arInterval">{{t:mbx.arInterval}}</label>
-                        <input type="number" class="form-control" id="arInterval" value="24" min="1" max="168">
-                        <small class="text-muted">{{t:mbx.arIntervalHint}}</small>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-warning" data-on-click="resetVacationTracking()" title="{{t:mbx.resetHint}}">
-                        <i class="fas fa-redo me-1" aria-hidden="true"></i>{{t:mbx.resetTracking}}
-                    </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.cancel}}</button>
-                    <button type="button" class="btn btn-primary" data-on-click="saveAutoResponder()">{{t:common.save}}</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Forwarding Modal -->
-    <div class="modal fade" id="forwardingModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-share me-2" aria-hidden="true"></i>{{t:mbx.fwTitle}}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="fwMailboxId">
-                    <div id="forwardingRules"></div>
-                    <hr>
-                    <h6>{{t:mbx.fwAdd}}</h6>
-                    <div class="mb-3">
-                        <label class="form-label" for="fwDestination">{{t:mbx.fwDest}}</label>
-                        <input type="email" class="form-control" id="fwDestination" placeholder="{{t:mbx.fwDestPh}}">
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="fwKeepCopy" checked>
-                        <label class="form-check-label" for="fwKeepCopy">{{t:mbx.fwKeep}}</label>
-                    </div>
-                    <button class="btn btn-success" data-on-click="addForwarding()">
-                        <i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:mbx.fwAdd}}
-                    </button>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.close}}</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Sieve Filters Modal -->
-    <div class="modal fade" id="sieveModal" tabindex="-1">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-filter me-2" aria-hidden="true"></i>{{t:mbx.svTitle}}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="svMailboxId">
-                    <div class="row">
-                        <div class="col-md-4">
-                            <h6>{{t:mbx.svActive}}</h6>
-                            <div id="sieveFiltersList" class="mb-3"></div>
-                            <button class="btn btn-primary btn-sm" data-on-click="newSieveFilter()">
-                                <i class="fas fa-plus me-1" aria-hidden="true"></i>{{t:mbx.svNew}}
-                            </button>
-                        </div>
-                        <div class="col-md-8">
-                            <div id="sieveEditor" data-style="display:none;">
-                                <input type="hidden" id="svFilterId">
-                                <div class="mb-3">
-                                    <label class="form-label" for="svName">{{t:mbx.svName}}</label>
-                                    <input type="text" class="form-control" id="svName" placeholder="{{t:mbx.svNamePh}}">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">{{t:mbx.svConditions}}</label>
-                                    <div id="svConditions"></div>
-                                    <button class="btn btn-outline-secondary btn-sm mt-2" data-on-click="addSieveCondition()">
-                                        <i class="fas fa-plus" aria-hidden="true"></i> {{t:mbx.svAddCondition}}
-                                    </button>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">{{t:home.colActions}}</label>
-                                    <div id="svActions"></div>
-                                    <button class="btn btn-outline-secondary btn-sm mt-2" data-on-click="addSieveAction()">
-                                        <i class="fas fa-plus" aria-hidden="true"></i> {{t:mbx.svAddAction}}
-                                    </button>
-                                </div>
-                                <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="svEnabled" checked>
-                                    <label class="form-check-label" for="svEnabled">{{t:mbx.svEnabled}}</label>
-                                </div>
-                                <button type="button" class="btn btn-success" data-on-click="saveSieveFilter()">
-                                    <i class="fas fa-save me-1" aria-hidden="true"></i>{{t:mbx.svSave}}
-                                </button>
-                                <button type="button" id="svDelete" class="btn btn-outline-danger ms-2" data-style="display:none;" data-on-click="deleteSieveFilter()">
-                                    <i class="fas fa-trash me-1" aria-hidden="true"></i>{{t:mbx.svDelete}}
-                                </button>
-                            </div>
-                            <div id="sieveHelp">
-                                <div class="alert alert-secondary">
-                                    <h6>{{t:mbx.svHowTitle}}</h6>
-                                    <p>{{t:mbx.svHow}}</p>
-                                    <ul>
-                                        <li>{{t:mbx.svHowCond.html}}</li>
-                                        <li>{{t:mbx.svHowAct.html}}</li>
-                                    </ul>
-                                    <p>{{t:mbx.svHowPick}}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t:common.close}}</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-""" + getFooterSection() + """
+""" + getMailConfigModal() + mailboxPageModals() + getFooterSection() + """
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
         let domains = [];
@@ -3522,6 +3571,8 @@ public class PanelContent {
                     document.getElementById('editMbQuota').value = m.quota_mb;
                     document.getElementById('editMbActive').checked = m.active;
                     document.getElementById('editMbReceive').checked = m.receive_enabled;
+                    document.getElementById('editMbJunkDays').value = String(m.junk_expunge_days || 0);
+                    document.getElementById('editMbTrashDays').value = String(m.trash_expunge_days || 0);
                     // Reset stato del campo password (sempre nascosto all'apertura)
                     pwShow('editMbPass', false);
                     pwCheck('editMbPass');
@@ -3594,6 +3645,8 @@ public class PanelContent {
                 quota_mb: parseInt(document.getElementById('editMbQuota').value),
                 active: document.getElementById('editMbActive').checked,
                 receive_enabled: document.getElementById('editMbReceive').checked,
+                junk_expunge_days: parseInt(document.getElementById('editMbJunkDays').value, 10),
+                trash_expunge_days: parseInt(document.getElementById('editMbTrashDays').value, 10),
                 csrf_token: csrfToken
             };
 
