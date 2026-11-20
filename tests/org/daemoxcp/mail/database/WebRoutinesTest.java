@@ -313,8 +313,9 @@ public class WebRoutinesTest {
                 refusal(() -> webDb.getMailboxPasswordEncrypted(mid)).startsWith("42000")
                 && refusal(() -> webDb.mailboxPasswordMatches(mid, "Wr-Test-Password-2026x")).startsWith("42000"));
         check("an update with the same values says the same as the panel user's connection (rows found, not changed)",
-                webDb.updateMailbox(mid, "Probe", 10, true, true) == db.updateMailbox(mid, "Probe", 10, true, true));
-        check("  and a real one is written", webDb.updateMailbox(mid, "Probe Two", 20, true, true) && db.getMailbox(mid).quotaMb == 20);
+                webDb.updateMailbox(mid, "Probe", 10, true, true, 0, 0) == db.updateMailbox(mid, "Probe", 10, true, true, 0, 0));
+        check("  and a real one is written, automatic emptying included", webDb.updateMailbox(mid, "Probe Two", 20, true, true, 7, 0)
+                && db.getMailbox(mid).quotaMb == 20 && db.getMailbox(mid).junkExpungeDays == 7 && db.getMailbox(mid).trashExpungeDays == 0);
         check("a new password: hash and copy", webDb.updateMailboxPassword(mid, "Wr-Other-Password-2026y")
                 && db.mailboxPasswordMatches(mid, "Wr-Other-Password-2026y"));
         check("a webmail sign-in token", webDb.createAutoLoginToken(mid) != null
@@ -339,7 +340,7 @@ public class WebRoutinesTest {
                 && refusal(() -> webDb.deleteMailbox(mid)).startsWith("45000") && db.getMailbox(mid) != null);
         CatalogGuard.useSession(ottoHash);
         check("the operator: mailboxes yes, domains no", refusal(() -> webDb.addDomain("wr-o.example", "x")).startsWith("45000")
-                && refusal(() -> webDb.updateMailbox(mid, "By Otto", 20, true, true)).isEmpty());
+                && refusal(() -> webDb.updateMailbox(mid, "By Otto", 20, true, true, 0, 0)).isEmpty());
 
         CatalogGuard.useSession(bossHash);
         check("the superadmin removes the mailbox and the domain", webDb.deleteMailbox(mid) && webDb.deleteDomain(did)
