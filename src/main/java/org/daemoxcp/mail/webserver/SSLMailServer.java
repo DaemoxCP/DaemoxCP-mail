@@ -899,6 +899,9 @@ public class SSLMailServer {
             // Ogni casella punta a se stessa dopo gli alias (MailboxAddressMap): un catch-all prende solo gli indirizzi
             // che non sono ne' alias ne' caselle. Dopo MailDbUsers: la mappa copia la connessione di quella degli alias.
             org.daemoxcp.mail.system.MailboxAddressMap.ensureAtBoot();
+            // Chi si autentica spedisce solo dai suoi indirizzi (la casella, gli alias che puntano a lei): prima una
+            // casella poteva spedire come un'altra, firmata DKIM, o come chiunque (SenderLoginMap). Stessa connessione.
+            org.daemoxcp.mail.system.SenderLoginMap.ensureAtBoot();
 
             // Le quote delle caselle applicate da Dovecot 2.4, e chieste da Postfix prima di accettare (DovecotQuota). Dopo
             // MailDbUsers: l'utente MySQL di Dovecot deve gia' poter leggere quota_mb.

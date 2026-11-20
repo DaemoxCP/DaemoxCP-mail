@@ -1010,6 +1010,19 @@ with the real 2.3.21 doveconf and sieve-test in a separate root.
 
     java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SpecialFoldersTest
 
+**SenderLoginMapTest** — a client that signs in sends only from its own addresses (`SenderLoginMap`): found on the VM
+installed from the README, Postfix had no `smtpd_sender_login_maps`, so a mailbox could send as another mailbox of the
+server (signed with the domain's DKIM key) or as anybody. The decision (the installer's settings are applied, ours
+with the file current is nothing, settings written by hand are left alone), the table (a mailbox owns its address even
+when it does not receive, an alias belongs to its destination), the map file with the aliases map's connection, the
+installer, MailDbUsers keeping the file and running its query, and the order at boot. With `-De2e.vm=yes`, as root on
+the VM: postmap answers a mailbox with itself; with XCLIENT LOGIN on port 587 (allowed from 127.0.0.1 only for the
+test, then removed) the mailbox's own address is accepted, another address of the domain and an outside one get `553
+5.7.1 … not owned by user`, and on port 25 without a login the same sender is not refused for it. Nothing is
+delivered. Measured 20/11/2026: all OK; with the check taken out of `smtpd_sender_restrictions` the refusals fail.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SenderLoginMapTest
+
 **DovecotHomeE2ETest** — the same with real deliveries and the VM's real configuration (it must start with the home of
 before), as root with `-De2e.vm=yes`. Before: an autoreply written by the panel and a script of the mailbox's own
 (ManageSieve), one delivery, and the false folders are in IMAP LIST; a second mailbox gets a message moved into its

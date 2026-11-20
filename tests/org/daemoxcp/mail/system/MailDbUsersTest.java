@@ -220,10 +220,11 @@ public class MailDbUsersTest {
         check("the 2.3 auth-sql.conf.ext is untouched", snapshot(at).stream().anyMatch(s -> s.startsWith("auth-sql.conf.ext"))
                 && before.stream().filter(s -> s.startsWith("auth-sql.conf.ext")).toList()
                 .equals(snapshot(at).stream().filter(s -> s.startsWith("auth-sql.conf.ext")).toList()));
-        // Every map of the list, the mailbox addresses' one included (MailboxAddressMap): before and after.
+        // Every map of the list, the mailbox addresses' one (MailboxAddressMap) and the senders' one (SenderLoginMap)
+        // included: before and after.
         int maps = MailDbUsers.POSTFIX_MAPS.size();
         check("each map probed before and after (" + 2 * maps + ", " + f.postmaps + "), Postfix and Dovecot reloaded once each",
-                maps == 4 && f.postmaps == 2 * maps && f.postfixReloads == 1 && f.dovecotReloads == 1);
+                maps == 5 && f.postmaps == 2 * maps && f.postfixReloads == 1 && f.dovecotReloads == 1);
         check("no temporary file left next to the maps", snapshot(at).size() == before.size());
 
         List<String> switched = snapshot(at);
@@ -254,7 +255,8 @@ public class MailDbUsersTest {
             List<String> now = snapshot(p);
             List<String> mine = new ArrayList<>(), mineWas = new ArrayList<>();
             for (int i = 0; i < now.size(); i++) {
-                boolean postfixFile = now.get(i).startsWith("mysql-virtual-");
+                // Postfix's maps are mysql-virtual-*.cf and mysql-sender-login-maps.cf (SenderLoginMap).
+                boolean postfixFile = now.get(i).startsWith("mysql-");
                 if (postfixFile == c.service().equals("Postfix")) { mine.add(now.get(i)); mineWas.add(was.get(i)); }
             }
             check(c.what() + ": rolled back (" + String.join(" | ", r.rolledBack()) + ")",

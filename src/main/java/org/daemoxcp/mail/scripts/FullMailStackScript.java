@@ -435,6 +435,9 @@ smtpd_sasl_local_domain = $myhostname
 # Restrictions. reject_non_fqdn_recipient tiene fuori da Internet root@localhost, che con la
 # consegna locale accesa per localhost reject_unauth_destination lascerebbe passare.
 smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination, reject_non_fqdn_recipient
+# Chi si autentica spedisce solo dai suoi indirizzi (SenderLoginMap): lo stesso di FullMailServerScript
+smtpd_sender_login_maps = mysql:/usr/local/etc/postfix/""" + PostfixMaps.SENDER_LOGIN_FILE + "\n" + """
+smtpd_sender_restrictions = """ + PostfixMaps.SENDER_RESTRICTIONS + "\n" + """
 
 # Rspamd milter
 smtpd_milters = inet:127.0.0.1:11332
@@ -477,6 +480,14 @@ password = ${MAILSERVER_PASS}
 hosts = 127.0.0.1
 dbname = daemoxcp_mail
 """ + "query = " + PostfixMaps.MAILBOX_ADDRESSES_QUERY + "\n" + """
+MYSQLCONF
+
+            cat > /usr/local/etc/postfix/""" + PostfixMaps.SENDER_LOGIN_FILE + " << MYSQLCONF\n" + """
+user = daemoxcp_mail
+password = ${MAILSERVER_PASS}
+hosts = 127.0.0.1
+dbname = daemoxcp_mail
+""" + "query = " + PostfixMaps.SENDER_LOGIN_QUERY + "\n" + """
 MYSQLCONF
 
             chmod 640 /usr/local/etc/postfix/mysql-*.cf

@@ -849,7 +849,12 @@ smtpd_helo_restrictions =
     reject_invalid_helo_hostname,
     reject_non_fqdn_helo_hostname
 
+# Who signs in sends only from its own addresses (its mailbox, the aliases that point to it): first, before
+# permit_mynetworks, because the webmail sends from 127.0.0.1 signed in. SenderLoginMap does the same on servers
+# installed before.
+smtpd_sender_login_maps = mysql:/usr/local/etc/postfix/""" + PostfixMaps.SENDER_LOGIN_FILE + "\n" + """
 smtpd_sender_restrictions =
+    reject_authenticated_sender_login_mismatch,
     permit_mynetworks,
     permit_sasl_authenticated,
     reject_non_fqdn_sender,
@@ -972,6 +977,15 @@ hosts = 127.0.0.1
 dbname = $MYSQL_DATABASE
 """ + "query = " + PostfixMaps.MAILBOX_ADDRESSES_QUERY + "\n" + """
 MYSQL_MAILBOX_ADDRESSES
+
+# Chi possiede ogni indirizzo mittente (smtpd_sender_login_maps): la casella stessa, e la destinazione di un alias
+cat > /usr/local/etc/postfix/""" + PostfixMaps.SENDER_LOGIN_FILE + " << MYSQL_SENDER_LOGIN\n" + """
+user = $MYSQL_USER
+password = $MYSQL_PASSWORD
+hosts = 127.0.0.1
+dbname = $MYSQL_DATABASE
+""" + "query = " + PostfixMaps.SENDER_LOGIN_QUERY + "\n" + """
+MYSQL_SENDER_LOGIN
 
 # Set permissions
 chmod 640 /usr/local/etc/postfix/mysql-*.cf
