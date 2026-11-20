@@ -831,7 +831,9 @@ smtp_tls_loglevel = 1
 # SASL authentication via Dovecot
 smtpd_sasl_type = dovecot
 smtpd_sasl_path = private/auth
-smtpd_sasl_auth_enable = yes
+# AUTH only on the sending ports: master.cf turns it on for submission (587) and smtps (465); port 25 is where the
+# other servers deliver (PostfixSubmissionAuth does the same on servers installed before).
+smtpd_sasl_auth_enable = no
 smtpd_sasl_security_options = noanonymous
 smtpd_sasl_local_domain = \\$myhostname
 broken_sasl_auth_clients = yes
