@@ -263,6 +263,7 @@ public class SSLMailServer {
         // Solo per la webmail sullo stesso server (loopback + chiave): cambio password e copia nel vault
         context(org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, Access.PUBLIC, webmail::handlePasswordChange);
         context(org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH, Access.PUBLIC, webmail::handleVaultCopy);
+        context(org.daemoxcp.mail.integration.WebmailPasswordConfig.CLEANUP_PATH, Access.PUBLIC, webmail::handleCleanup);
 
         // ---------- Home e account ----------
         context("/home", Access.page(HOME), this::handleProtectedPage);
@@ -663,7 +664,7 @@ public class SSLMailServer {
     private static final java.util.Set<String> CSRF_EXEMPT = java.util.Set.of(
         "/api/login", "/api/language",
         // Le chiama la webmail, non un browser: niente cookie, si autentica con la sua chiave
-        org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH);
+        org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.CLEANUP_PATH);
 
     /**
      * Le rotte che un Host diverso da quello del pannello lo ricevono per mestiere.
@@ -684,14 +685,14 @@ public class SSLMailServer {
      */
     private static final java.util.Set<String> HOST_CHECK_EXEMPT = java.util.Set.of(
         "/autoconfig", "/mta-sts",
-        org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH);
+        org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.CLEANUP_PATH);
 
     /**
      * Le due rotte della webmail: col pannello separato le serve la root, che sola scrive le password delle caselle
      * (forwardWebmail, serveWebmail).
      */
     static final java.util.Set<String> WEBMAIL_ROUTES = java.util.Set.of(
-        org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH);
+        org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.CLEANUP_PATH);
 
     /**
      * L'Host della richiesta raggiunge questo pannello? Vedi {@link HostCheck} per il perche'
@@ -1477,6 +1478,7 @@ public class SSLMailServer {
                 return;
             }
             if (r.route().equals(org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH)) webmail.handlePasswordChange(exchange, false);
+            else if (r.route().equals(org.daemoxcp.mail.integration.WebmailPasswordConfig.CLEANUP_PATH)) webmail.handleCleanup(exchange, false);
             else webmail.handleVaultCopy(exchange, false);
         } finally {
             I18n.clearCurrent();
@@ -2320,6 +2322,8 @@ public class SSLMailServer {
                             mbox.put("quota_mb", m.quotaMb);
                             mbox.put("active", m.active);
                             mbox.put("receive_enabled", m.receiveEnabled);
+                            mbox.put("junk_expunge_days", m.junkExpungeDays);
+                            mbox.put("trash_expunge_days", m.trashExpungeDays);
                             mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : I18n.tr("server.never"));
                             // Flag: la casella ha una password archiviata nel vault?
                             // Usato dalla UI per mostrare/nascondere l'icona "rivela password".
@@ -2347,6 +2351,8 @@ public class SSLMailServer {
                             mbox.put("quota_mb", m.quotaMb);
                             mbox.put("active", m.active);
                             mbox.put("receive_enabled", m.receiveEnabled);
+                            mbox.put("junk_expunge_days", m.junkExpungeDays);
+                            mbox.put("trash_expunge_days", m.trashExpungeDays);
                             mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : I18n.tr("server.never"));
                             mbox.put("autoresponder_enabled", m.autoresponderEnabled);
                             mbox.put("forwarding_count", m.forwardingCount);
@@ -2553,9 +2559,20 @@ public class SSLMailServer {
                         boolean active = req.optBoolean("active", true);
                         boolean receiveEnabled = req.optBoolean("receive_enabled", true);
                         String newPassword = req.optString("password", "");
+                        // Lo svuotamento automatico: solo i giorni dell'elenco (0 = mai); se la richiesta non li porta,
+                        // restano quelli di adesso, cosi' un client di prima non li azzera.
+                        MailDatabase.Mailbox current = Main.mailDatabase.getMailboxById(id);
+                        int junkDays = req.has("junk_expunge_days") ? req.optInt("junk_expunge_days", -1) : current != null ? current.junkExpungeDays : 0;
+                        int trashDays = req.has("trash_expunge_days") ? req.optInt("trash_expunge_days", -1) : current != null ? current.trashExpungeDays : 0;
+                        if (!MailDatabase.cleanupDaysAllowed(junkDays) || !MailDatabase.cleanupDaysAllowed(trashDays)) {
+                            response.put("success", false);
+                            response.put("error", I18n.tr("server.mailbox.badCleanupDays"));
+                            sendJsonResponse(exchange, response);
+                            return;
+                        }
 
                         // Update mailbox
-                        boolean updated = Main.mailDatabase.updateMailbox(id, name, quotaMb, active, receiveEnabled);
+                        boolean updated = Main.mailDatabase.updateMailbox(id, name, quotaMb, active, receiveEnabled, junkDays, trashDays);
 
                         // If password provided, update it too
                         if (updated && !newPassword.isEmpty()) {
@@ -2569,6 +2586,10 @@ public class SSLMailServer {
                         if (updated) {
                             response.put("success", true);
                             response.put("message", I18n.tr("server.mailbox.updated"));
+                            // Lo svuotamento automatico nel registro di controllo, col prima e il dopo (r22)
+                            if (current != null && (current.junkExpungeDays != junkDays || current.trashExpungeDays != trashDays))
+                                logAudit("MAILBOX_CLEANUP_CHANGED", getClientIp(exchange), "mailbox_id=" + id + " email=" + current.email
+                                        + " junk_days=" + current.junkExpungeDays + "->" + junkDays + " trash_days=" + current.trashExpungeDays + "->" + trashDays);
                             regenerateMailConfigs();
                         } else {
                             response.put("success", false);

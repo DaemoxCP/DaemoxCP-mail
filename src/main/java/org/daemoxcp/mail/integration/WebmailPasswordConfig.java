@@ -39,6 +39,11 @@ public final class WebmailPasswordConfig {
     public static final String PATH = "/api/internal/mailbox-password";
     /** La rotta della copia nel vault dopo un accesso alla webmail (RoundcubeSsoManager, plugin daemoxcp_mail_sso). */
     public static final String VAULT_PATH = "/api/internal/mailbox-vault";
+    /**
+     * La rotta dello svuotamento automatico della Junk e del Cestino, dalle impostazioni della webmail (il plugin
+     * daemoxcp_mail_cleanup): leggere e scegliere i giorni della propria casella.
+     */
+    public static final String CLEANUP_PATH = "/api/internal/mailbox-cleanup";
 
     /** Le righe del plugin password che il blocco sostituisce, scritte da noi o a mano. */
     private static final Pattern OLD_LINE = Pattern.compile(
@@ -57,6 +62,13 @@ public final class WebmailPasswordConfig {
      */
     static final String JUNK_PLUGIN_LINE = "if (isset($config['plugins']) && is_array($config['plugins']) && !in_array('markasjunk', $config['plugins'], true)) "
             + "{ $config['plugins'][] = 'markasjunk'; }";
+
+    /**
+     * Lo svuotamento automatico della Junk e del Cestino nelle impostazioni della webmail (WebmailCleanupPlugin): il
+     * plugin del pannello, acceso come gli altri due, solo se l'elenco e' in questo file e una volta sola.
+     */
+    static final String CLEANUP_PLUGIN_LINE = "if (isset($config['plugins']) && is_array($config['plugins']) && !in_array('"
+            + WebmailCleanupPlugin.NAME + "', $config['plugins'], true)) { $config['plugins'][] = '" + WebmailCleanupPlugin.NAME + "'; }";
 
     /** L'intestazione con cui Roundcube manda la chiave della webmail (WebmailPasswordHandler la legge). */
     public static final String KEY_HEADER = "X-DaemoxCP-Key";
@@ -110,6 +122,10 @@ public final class WebmailPasswordConfig {
                 + "// The spam button (markasjunk), on the same terms: it moves a message into Junk or back to INBOX, and Rspamd\n"
                 + "// learns from the move (SpamLearning)\n"
                 + JUNK_PLUGIN_LINE + "\n"
+                + "// The automatic emptying of Junk and Trash in the webmail's settings (daemoxcp_mail_cleanup): the panel keeps it\n"
+                + "$config['daemoxcp_mail_cleanup_url'] = 'https://127.0.0.1:" + port + CLEANUP_PATH + "';\n"
+                + "$config['daemoxcp_mail_cleanup_key'] = '" + key + "';\n"
+                + CLEANUP_PLUGIN_LINE + "\n"
                 + END + "\n";
     }
 

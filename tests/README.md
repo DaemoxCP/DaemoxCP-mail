@@ -1067,6 +1067,32 @@ no body («got zero length body»): the round now speaks HTTP/1.1.
 
     java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SpamLearningTest
 
+**MailboxCleanupTest** — automatic emptying of Junk and Trash per mailbox, off until asked, and the emergency
+emptying from the console. The days (never, 7, 14, 30, 60, 90, the same for the panel and the webmail); MySQL (the two
+columns for new installs and as a migration, the panel's update and its web-part procedure in the same order, the
+procedures that read mailboxes, the grants of the routines and of Dovecot's user); Dovecot's userdb query
+(`namespace/inbox/mailbox/{Junk,Trash}/mailbox_autoexpunge` only above 0, NULL otherwise, the same query MailDbUsers runs
+as Dovecot's user, its first line unchanged so DovecotQuota replaces the block of before); the panel's window and what
+it sends, the audit log line; the webmail's block, the plugin (the same days, the mailbox before the star of a single
+sign-on, the panel's answer read strictly) and its texts; the route in every list; the emergency emptying's words,
+count, plan and run. With `-De2e.vm=yes`, as root on the VM: the route as Roundcube calls it (set, get, Dovecot's
+userdb, 400 and 404 refusals, back to never), the plugin's PHP read by PHP, the console refusing without a terminal,
+and the emergency emptying of a test mailbox's Junk. Measured 20/11/2026: all OK; then by hand through `script(1)`,
+a real terminal: a wrong number cancels and deletes nothing, the right one empties and writes `EMERGENCY_EMPTY` in
+the audit log. Measured on the VM before writing it: a NULL userdb field reaches Dovecot as nothing, and the value is
+applied after each session (a message older than the time goes).
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.MailboxCleanupTest
+
+**mailbox-cleanup-browser-test.js** — the same in the browser, on the VM through ssh tunnels: a mailbox of this run,
+never by default; in the panel's window the two choices with labels and help, Junk 30 and Trash 14 saved, opened again,
+Dovecot's userdb 30d and 14d; in the webmail the spam button, Preferences with «Automatic emptying» showing 30 and 14,
+Junk 7 and Trash never saved, the panel reading 7 and 0, Dovecot 7d and nothing for Trash; no script errors; everything
+removed. Measured 20/11/2026: all OK.
+
+    HOST=<panel name> WEBMAIL=<webmail name> CHROMIUM=<chrome> REMOTE=root@<test machine> REMOTE_KEY=<key> \
+      NODE_PATH=<playwright> node tests/mailbox-cleanup-browser-test.js
+
 **WebPartWaitTest** — the root part waits for the web part (`PanelSeparation.waitForWeb`): on the VM, once over many
 starts, the root part read daemon(8)'s pidfile right after daemon returned, before the new supervisor had written it,
 said «the web part stopped right away» and served everything as root. A pause before every check; the supervisor

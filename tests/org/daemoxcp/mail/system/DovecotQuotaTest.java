@@ -55,7 +55,8 @@ public class DovecotQuotaTest {
         check("a query that fails goes on to userdb static (the mail does not stop)",
                 DovecotConfig.QUOTA_USERDB.contains("result_internalfail = continue") && DovecotConfig.QUOTA_USERDB.startsWith(DovecotConfig.QUOTA_USERDB_MARK));
         check("the limit is quota_mb in MB, only for an active mailbox",
-                DovecotConfig.QUOTA_USERDB.contains("CONCAT(quota_mb, 'M') AS quota_storage_size FROM mailboxes WHERE email = '%{user}' AND active = 1")
+                DovecotConfig.QUOTA_USERDB.contains("query = SELECT CONCAT(quota_mb, 'M') AS quota_storage_size, ")
+                        && DovecotConfig.QUOTA_USERDB.contains(" FROM mailboxes WHERE email = '%{user}' AND active = 1\n")
                         && DovecotConfig.QUOTA_USERDB.contains("result_success = continue-ok") && DovecotConfig.QUOTA_USERDB.contains("result_failure = continue"));
 
         System.out.println("\n== 2. What the start does ==");

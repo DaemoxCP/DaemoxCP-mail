@@ -28,6 +28,11 @@ import java.util.logging.Logger;
  *    webmail. Il plugin password di Roundcube (driver httpapi, vedi WebmailPasswordConfig) la
  *    manda qui invece di scrivere da se' nel database: il pannello controlla la password attuale
  *    e scrive insieme l'hash bcrypt e la copia cifrata, cosi' la password si puo' sempre rivedere.
+ *  - POST /api/internal/mailbox-cleanup (user, action get|set, junk, trash): lo svuotamento automatico della Junk e
+ *    del Cestino della propria casella, dalle impostazioni della webmail (il plugin daemoxcp_mail_cleanup). L'utente
+ *    e' quello della sessione di Roundcube: la chiave dice che chiama la webmail, che ha gia' l'utente master di
+ *    Dovecot e quindi ogni casella; da qui non ottiene niente di piu'. Solo i giorni dell'elenco
+ *    (MailDatabase.CLEANUP_DAYS, 0 = mai), e solo per una casella attiva. Il cambio va nel registro di controllo.
  *  - POST /api/internal/mailbox-vault (user, pass): dopo un accesso alla webmail con la password
  *    della casella, il plugin daemoxcp_mail_sso la manda qui. Se il pannello non ne ha la copia (casella
  *    di prima del vault) o la copia e' vecchia, e la password corrisponde all'hash, la copia si scrive.
@@ -102,6 +107,59 @@ final class WebmailPasswordHandler {
 
     void handleVaultCopy(HttpExchange ex) throws IOException {
         handleVaultCopy(ex, true);
+    }
+
+    void handleCleanup(HttpExchange ex) throws IOException {
+        handleCleanup(ex, true);
+    }
+
+    /**
+     * checkCaller false: la parte root, con la richiesta che la web ha gia' controllato (callerRefused). Risponde
+     * «junk=N trash=N» (i giorni di adesso, anche dopo un cambio), 404 «not found» se la casella non c'e' o non e'
+     * attiva, 400 «invalid» per un utente o dei giorni che non vanno.
+     */
+    void handleCleanup(HttpExchange ex, boolean checkCaller) throws IOException {
+        Map<String, String> form = authorizedForm(ex, checkCaller);
+        if (form == null) return;
+        String user = form.getOrDefault("user", "").trim().toLowerCase(java.util.Locale.ROOT);
+        String action = form.getOrDefault("action", "get");
+        if (!SecurityUtils.isValidEmail(user) || !(action.equals("get") || action.equals("set"))) {
+            reply(ex, 400, "invalid");
+            return;
+        }
+        try {
+            MailDatabase.Mailbox box = Main.mailDatabase.getMailboxByEmail(user);
+            if (box == null || !box.active) {
+                reply(ex, 404, "not found");
+                return;
+            }
+            if (action.equals("set")) {
+                int junk = days(form.get("junk")), trash = days(form.get("trash"));
+                if (!MailDatabase.cleanupDaysAllowed(junk) || !MailDatabase.cleanupDaysAllowed(trash)) {
+                    reply(ex, 400, "invalid");
+                    return;
+                }
+                if (junk != box.junkExpungeDays || trash != box.trashExpungeDays) {
+                    if (!Main.mailDatabase.setMailboxCleanup(user, junk, trash)) {
+                        reply(ex, 500, "error");
+                        return;
+                    }
+                    server.logAudit("WEBMAIL_CLEANUP_CHANGED", remoteIp(ex), "mailbox_id=" + box.id + " email=" + user
+                            + " junk_days=" + box.junkExpungeDays + "->" + junk + " trash_days=" + box.trashExpungeDays + "->" + trash);
+                }
+                reply(ex, 200, "junk=" + junk + " trash=" + trash);
+                return;
+            }
+            reply(ex, 200, "junk=" + box.junkExpungeDays + " trash=" + box.trashExpungeDays);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Webmail automatic emptying failed for " + user, e);
+            reply(ex, 500, "error");
+        }
+    }
+
+    /** I giorni di un campo del modulo: solo cifre, al massimo tre; -1 altrimenti (e il controllo dell'elenco lo rifiuta). */
+    static int days(String value) {
+        return value != null && value.matches("[0-9]{1,3}") ? Integer.parseInt(value) : -1;
     }
 
     /** checkCaller false: la parte root, con la richiesta che la web ha gia' controllato (callerRefused). */

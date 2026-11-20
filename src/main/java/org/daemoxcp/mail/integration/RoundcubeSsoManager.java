@@ -402,13 +402,21 @@ public class RoundcubeSsoManager {
             enablePluginInConfig();
             System.out.println("[SSO] Plugin enabled in Roundcube config");
 
+            // Lo svuotamento automatico nelle impostazioni della webmail: prima i file del plugin, poi il blocco che lo accende
+            boolean cleanupChanged = false;
+            try {
+                cleanupChanged = WebmailCleanupPlugin.install(Paths.get(SSO_PLUGIN_PATH).getParent());
+            } catch (IOException e) {
+                System.err.println("[SSO] The automatic emptying plugin could not be written: " + e.getMessage());
+            }
+
             // Webmail password changes go through the panel (hash + encrypted copy together)
             if (panelPort > 0) {
                 boolean changed = WebmailPasswordConfig.ensure(Paths.get(ROUNDCUBE_CONFIG), panelPort,
                         org.daemoxcp.mail.security.PanelSecrets.webmailKey());
                 System.out.println("[SSO] Webmail password changes routed through the panel" + (changed ? " (config updated)" : ""));
                 // Con opcache.validate_timestamps=0 PHP-FPM terrebbe la configurazione di prima
-                if (changed) executeCommand("service php_fpm reload >/dev/null 2>&1 || true");
+                if (changed || cleanupChanged) executeCommand("service php_fpm reload >/dev/null 2>&1 || true");
             }
 
             // Set permissions. Il codice e' di root: chi gira come la webmail non lo puo' cambiare.

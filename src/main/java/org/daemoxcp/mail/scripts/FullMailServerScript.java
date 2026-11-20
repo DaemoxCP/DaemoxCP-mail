@@ -340,401 +340,7 @@ pw useradd vmail -u 5000 -g vmail -d /var/vmail -s /usr/sbin/nologin -c "Virtual
 mkdir -p /var/vmail
 """
             // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
-            + org.daemoxcp.mail.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + """
-chmod 770 /var/vmail
-
-echo "${GREEN}  Packages installed${NC}"
-
-# =============================================================================
-# pf, il firewall: senza, i blocchi di fail2ban non fermano niente
-# =============================================================================
-# Misurato su una FreeBSD 15.1 appena installata: /etc/pf.conf NON esiste, il modulo pf non
-# e' caricato e pf_enable non e' impostato. La jail del pannello ha "action = pf[...]", quindi
-# fail2ban scrive le sue regole nell'anchor "f2b/*" e, senza niente di tutto questo,
-# fail2ban-client dichiara bloccato un indirizzo mentre in pf non c'e' nulla. "Blocca e dice
-# di aver bloccato" e' il caso peggiore: non lascia tracce da cui accorgersi.
-#
-# Qui si puo' fare perche' installare un server di posta e' un'azione esplicita. Il pannello
-# all'AVVIO non lo fa: quello ricorre a ogni riavvio, su una macchina che intanto puo' aver
-# cambiato configurazione per mano d'altri, e li' si limita a dirlo.
-echo ""
-echo "${YELLOW}Setting up pf, so that a ban actually blocks...${NC}"
-
-if [ "$(sysctl -n security.jail.jailed 2>/dev/null)" = 1 ]; then
-    # Dentro una jail i moduli non si caricano e il firewall e' dell'host: non e' un guasto.
-    echo "${YELLOW}  Inside a FreeBSD jail: pf belongs to the host, leaving it alone.${NC}"
-elif kldstat 2>/dev/null | grep -q ipfw.ko; then
-    # Questa macchina ha gia' un firewall. Accenderne un secondo non si fa a sorpresa.
-    echo "${YELLOW}  ipfw is loaded: this machine already has a firewall, leaving pf alone.${NC}"
-    echo "  To use fail2ban's bans, add an ipfw rule for its table, or switch to pf."
-else
-    if ! kldstat 2>/dev/null | grep -q pf.ko; then
-        # Senza il modulo, pfctl non parla col kernel: nemmeno la prova di sintassi parte
-        # ("pfctl: /dev/pf: No such file or directory").
-        kldload pf 2>/dev/null || true
-    fi
-    if ! kldstat 2>/dev/null | grep -q pf.ko; then
-        echo "${RED}  WARNING: cannot load the pf kernel module. Fail2ban will record bans"
-        echo "  that block nothing. Check 'kldload pf' by hand.${NC}"
-    elif [ -f /etc/pf.conf ]; then
-        # C'e' gia': quelle regole le ha scritte qualcun altro e non si riscrivono, e pf NON
-        # si accende, perche' non si sa che cosa bloccherebbero. Il pannello al proprio avvio
-        # aggiunge l'anchor con una prova di sintassi e una copia di sicurezza.
-        echo "${YELLOW}  /etc/pf.conf already exists: left untouched, and pf NOT enabled.${NC}"
-        echo "  The panel adds 'anchor \\"f2b/*\\"' to it at startup; enable pf yourself when"
-        echo "  you have checked those rules: sysrc pf_enable=YES && service pf start"
-    else
-        # Il file minimo: non blocca NESSUN servizio, quindi accendere pf non chiude fuori
-        # nessuno. L'unico blocco arriva dall'anchor, cioe' dagli indirizzi che fail2ban
-        # mette in tabella, e dalla tabella <permaban> del pannello.
-        cat > /etc/pf.conf << 'PFCONF'
-# /etc/pf.conf, scritto dall'installazione di DaemoxCP Mail.
-#
-# Configurazione MINIMA e SICURA per fail2ban + pf:
-#  - nessun servizio viene bloccato, quindi accendere pf non chiude fuori nessuno;
-#  - l'unico blocco arriva dagli indirizzi che fail2ban mette nel suo anchor e dalla
-#    tabella <permaban> del pannello.
-#
-# Per personalizzarla: si modifica questo file e poi 'pfctl -f /etc/pf.conf'.
-
-# Il loopback non si filtra.
-set skip on lo
-
-# La lista dei blocchi permanenti del pannello.
-table <permaban> persist file "/var/db/daemoxcp-mail/permaban.list"
-block in quick from <permaban>
-
-# L'anchor di fail2ban: ci mette le sue "block in quick" l'azione pf della jail.
-# Deve venire PRIMA del pass, e le sue regole hanno "quick".
-anchor "f2b/*"
-
-# Predefinito: passa tutto. Niente e' bloccato a parte quanto sopra.
-pass
-PFCONF
-        chmod 644 /etc/pf.conf
-        mkdir -p /var/db/daemoxcp-mail
-        [ -f /var/db/daemoxcp-mail/permaban.list ] || : > /var/db/daemoxcp-mail/permaban.list
-        chmod 640 /var/db/daemoxcp-mail/permaban.list
-        # Prova di sintassi prima di accendere: un pf.conf rifiutato lascia pf spento, non
-        # a meta'.
-        if pfctl -nf /etc/pf.conf 2>&1; then
-            sysrc pf_enable="YES" >/dev/null
-            service pf start 2>/dev/null || pfctl -e -f /etc/pf.conf 2>/dev/null || true
-            if pfctl -s info 2>/dev/null | grep -q "Status: Enabled"; then
-                echo "${GREEN}  pf is on, with a ruleset that blocks nothing by itself.${NC}"
-            else
-                echo "${RED}  WARNING: pf did not come up. Fail2ban will record bans that block"
-                echo "  nothing. Check 'service pf start' by hand.${NC}"
-            fi
-        else
-            echo "${RED}  WARNING: the generated /etc/pf.conf was refused by pfctl: pf left off.${NC}"
-        fi
-    fi
-fi
-
-# =============================================================================
-# PHASE 3: CONFIGURE MySQL
-# =============================================================================
-echo ""
-echo "${YELLOW}[PHASE 3/10] Configuring MySQL...${NC}"
-
-sysrc mysql_enable="YES"
-service mysql-server start 2>/dev/null || service mysql-server restart 2>/dev/null || true
-
-# Il server deve rispondere davvero, non basta avere lanciato il comando di avvio.
-# Senza questo controllo le fasi 3, 9 e 10 fallivano una per una e l'installazione
-# si dichiarava comunque riuscita, lasciando un sistema senza database.
-mysql_ready=no
-attempt=0
-while [ $attempt -lt 30 ]; do
-    if mysqladmin ping >/dev/null 2>&1; then
-        mysql_ready=yes
-        break
-    fi
-    attempt=$((attempt + 1))
-    sleep 1
-done
-if [ "$mysql_ready" != yes ]; then
-    echo "${RED}  ERROR: the MySQL server is not answering.${NC}"
-    echo "  Postfix, Dovecot and Roundcube all need the database: stopping here."
-    echo "  Check that the server package is installed: pkg info | grep mysql"
-    exit 1
-fi
-
-# Una cartella privata per i due file che contengono un segreto: il file di credenziali di
-# root e lo script SQL. mktemp -d la crea 700 qualunque sia la maschera, quindi nessun altro
-# utente ci entra, e il contenuto e' al riparo dal momento in cui nasce. Prima lo script SQL
-# stava in /tmp e veniva portato a 600 DOPO essere stato scritto: in mezzo c'era una finestra
-# in cui chiunque poteva leggerlo. Non si tocca la maschera globale: piu' avanti lo script
-# scrive file che devono restare leggibili da roundcube e da postfix.
-MYSQL_WORK=$(mktemp -d /var/tmp/daemoxcp-mail-mysql.XXXXXXXX) || {
-    echo "${RED}Error: cannot create the temporary folder${NC}"; exit 1; }
-trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
-MYSQL_ROOT_CNF="$MYSQL_WORK/root.cnf"
-MYSQL_SETUP_SQL="$MYSQL_WORK/setup.sql"
-
-# La password di root. Un MySQL appena installato su FreeBSD lascia root SENZA password, e
-# finche' resta cosi' qualunque utente locale -- roundcube compreso, che fa girare la webmail -- ha
-# i pieni poteri sul database. Prima nessuno la impostava: lo script faceva "mysql -u root"
-# e, se falliva, "mysql -u root --password=".
-#
-# Se si entra senza password, questo MySQL e' nuovo e la password si imposta adesso. Se non
-# si entra, una password c'e' gia' e deve essere quella del pannello: non si va a indovinare.
-# Senza nessuna opzione di password e senza file di opzioni (--no-defaults): cosi' si prova
-# davvero "root senza password", e MySQL non stampa "Using a password on the command line
-# interface can be insecure", che con --password= vuoto compariva nel registro dell'installazione.
-if mysql --no-defaults -u root -e "SELECT 1" >/dev/null 2>&1; then
-    echo "  Fresh MySQL: setting the root password"
-    # Here-document NON quotato: $MYSQL_ROOT_PASSWORD si espande una volta sola, quindi un
-    # dollaro DENTRO la password non viene riespanso. L'alfabeto del generatore non ha
-    # apice, virgolette, barra rovescia ne' accento grave, che qui spezzerebbero la riga.
-    if ! mysql --no-defaults -u root << EOROOT
-ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASSWORD';
-FLUSH PRIVILEGES;
-EOROOT
-    then
-        echo "${RED}  ERROR: cannot set the MySQL root password.${NC}"
-        exit 1
-    fi
-fi
-
-# Da qui in poi root si usa SEMPRE cosi': la password in un file 600 letto da mysql, mai
-# in "-p..." sulla riga di comando, che "ps" mostra a tutti. Le virgolette intorno al
-# valore servono perche' nei file di opzioni di MySQL un '#' non quotato apre un commento.
-cat > "$MYSQL_ROOT_CNF" << EOCNF
-[client]
-user=root
-password="$MYSQL_ROOT_PASSWORD"
-EOCNF
-
-if ! mysql --defaults-extra-file="$MYSQL_ROOT_CNF" -e "SELECT 1" >/dev/null 2>&1; then
-    echo "${RED}  ERROR: the MySQL root password does not work.${NC}"
-    echo "  MySQL was already here with a root password that the panel does not know."
-    echo "  Set it to the one in the panel secrets file, or let the panel install MySQL."
-    exit 1
-fi
-
-# Create database and tables
-cat > "$MYSQL_SETUP_SQL" << EOSQL
-CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';
-CREATE USER IF NOT EXISTS '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
-ALTER USER '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';
-ALTER USER '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
-GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost';
-GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'127.0.0.1';
-FLUSH PRIVILEGES;
-USE $MYSQL_DATABASE;
-
-SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS audit_log, rspamd_training, email_statistics, roundcube_tokens;
-DROP TABLE IF EXISTS auto_responders, sieve_filters, forwarding_rules, rate_limits;
-DROP TABLE IF EXISTS admin_passkeys, panel_sessions, login_code_email, login_code_console, stepup_code, email_change_code;
-DROP TABLE IF EXISTS panel_settings, panel_admin, installed_components;
-DROP TABLE IF EXISTS aliases, mailboxes, domains;
-SET FOREIGN_KEY_CHECKS = 1;
-
--- Domains
-CREATE TABLE domains (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    domain VARCHAR(255) NOT NULL UNIQUE,
-    description TEXT,
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    dkim_selector VARCHAR(50) DEFAULT 'mail',
-    dkim_private_key TEXT,
-    dkim_public_key TEXT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Mailboxes
-CREATE TABLE mailboxes (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    domain_id INT NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    name VARCHAR(255),
-    quota_mb INT DEFAULT 1024,
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_login TIMESTAMP NULL,
-    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Aliases
-CREATE TABLE aliases (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    domain_id INT NOT NULL,
-    source VARCHAR(255) NOT NULL,
-    destination VARCHAR(255) NOT NULL,
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_alias (source, destination)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Panel admin
--- No password: passkeys and email codes. The panel adds its login tables when it starts.
-CREATE TABLE panel_admin (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(50) NOT NULL UNIQUE,
-    email_enc VARCHAR(512) NULL,
-    email_index CHAR(64) CHARACTER SET ascii NULL,
-    user_handle VARCHAR(64) CHARACTER SET ascii NULL,
-    created_at DATETIME NULL,
-    last_login DATETIME NULL,
-    active BOOLEAN DEFAULT TRUE,
-    role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin',
-    theme VARCHAR(10) DEFAULT 'auto',
-    language VARCHAR(5) NULL,
-    UNIQUE KEY uq_admin_email_index (email_index),
-    UNIQUE KEY uq_admin_user_handle (user_handle)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Panel settings
-CREATE TABLE panel_settings (
-    setting_key VARCHAR(64) PRIMARY KEY,
-    setting_value TEXT NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Rate limits
-CREATE TABLE rate_limits (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    target_type ENUM('global', 'domain', 'mailbox') NOT NULL,
-    target_id INT NULL,
-    max_per_hour INT DEFAULT 100,
-    max_per_day INT DEFAULT 1000,
-    max_recipients INT DEFAULT 50,
-    enabled BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_target (target_type, target_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Auto-responders
-CREATE TABLE auto_responders (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    mailbox_id INT NOT NULL UNIQUE,
-    enabled BOOLEAN DEFAULT FALSE,
-    subject VARCHAR(255) NOT NULL DEFAULT 'Out of Office',
-    body TEXT NOT NULL,
-    start_date DATE NULL,
-    end_date DATE NULL,
-    interval_hours INT DEFAULT 24,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Forwarding rules
-CREATE TABLE forwarding_rules (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    mailbox_id INT NOT NULL,
-    destination VARCHAR(255) NOT NULL,
-    keep_copy BOOLEAN DEFAULT TRUE,
-    enabled BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Installed components
-CREATE TABLE installed_components (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    component_name VARCHAR(50) NOT NULL UNIQUE,
-    version VARCHAR(20),
-    installed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status ENUM('installed', 'uninstalled', 'failed') DEFAULT 'installed'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Sieve filters
-CREATE TABLE sieve_filters (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    mailbox_id INT NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    priority INT DEFAULT 0,
-    enabled BOOLEAN DEFAULT TRUE,
-    conditions JSON NOT NULL,
-    actions JSON NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Roundcube tokens
-CREATE TABLE roundcube_tokens (
-    token VARCHAR(64) PRIMARY KEY,
-    mailbox_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL,
-    used BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Email statistics
-CREATE TABLE email_statistics (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    stat_date DATE NOT NULL,
-    mailbox_id INT NULL,
-    domain_id INT NULL,
-    sent_count INT DEFAULT 0,
-    received_count INT DEFAULT 0,
-    spam_count INT DEFAULT 0,
-    virus_count INT DEFAULT 0,
-    bounced_count INT DEFAULT 0,
-    bytes_sent BIGINT DEFAULT 0,
-    bytes_received BIGINT DEFAULT 0,
-    UNIQUE KEY unique_daily_stat (stat_date, mailbox_id, domain_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Rspamd training
-CREATE TABLE rspamd_training (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    message_id VARCHAR(255) NOT NULL,
-    trained_as ENUM('spam', 'ham') NOT NULL,
-    trained_by INT NOT NULL,
-    trained_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (trained_by) REFERENCES panel_admin(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Audit log
-CREATE TABLE audit_log (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    action VARCHAR(100) NOT NULL,
-    username VARCHAR(255),
-    ip_address VARCHAR(45) NOT NULL,
-    details TEXT,
-    user_agent VARCHAR(512),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_action (action),
-    INDEX idx_username (username),
-    INDEX idx_ip (ip_address),
-    INDEX idx_created (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-EOSQL
-
-# "-p''" collassava a "-p" nudo e faceva chiedere la password all'operatore, con il
-# messaggio di errore nascosto da 2>/dev/null. Adesso root ha una password e la si passa
-# dal file di credenziali, quindi non c'e' piu' niente da indovinare e niente da nascondere.
-# E niente "|| true": se il database non si crea non c'e' nulla su cui appoggiarsi.
-if ! mysql --defaults-extra-file="$MYSQL_ROOT_CNF" < "$MYSQL_SETUP_SQL"; then
-    echo "${RED}  ERROR: cannot create the database and its tables.${NC}"
-    exit 1
-fi
-rm -f "$MYSQL_SETUP_SQL"
-
-echo "${GREEN}  MySQL configured${NC}"
-
-# =============================================================================
-# PHASE 4: CREATE DIRECTORIES
-# =============================================================================
-echo ""
-echo "${YELLOW}[PHASE 4/10] Creating directories...${NC}"
-
-mkdir -p /usr/local/etc/ssl/mail
-mkdir -p /usr/local/etc/postfix
-mkdir -p /var/vmail
-mkdir -p /var/run/dovecot
-mkdir -p /var/db/daemoxcp-mail
-
-"""
+            + org.daemoxcp.mail.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + middle()
             // Le cartelle della posta a vmail senza dargli file di altri: niente hard link, niente collegamenti (reperto 252)
             + org.daemoxcp.mail.security.SafeOwnership.shell("/var/vmail", "vmail", "vmail") + """
 chmod 770 /var/vmail
@@ -1388,6 +994,412 @@ echo ""
 
 exit 0
         """;
+
+    /**
+     * Il pezzo centrale dello script, dalla cartella della posta in poi: una costante a parte. Nella stessa espressione
+     * tutte le parti fisse finiscono in una sola «ricetta» di invokedynamic, che non puo' superare i 64 KB (raggiunti il
+     * 20/11/2026).
+     */
+    private static String middle() {
+        return """
+chmod 770 /var/vmail
+
+echo "${GREEN}  Packages installed${NC}"
+
+# =============================================================================
+# pf, il firewall: senza, i blocchi di fail2ban non fermano niente
+# =============================================================================
+# Misurato su una FreeBSD 15.1 appena installata: /etc/pf.conf NON esiste, il modulo pf non
+# e' caricato e pf_enable non e' impostato. La jail del pannello ha "action = pf[...]", quindi
+# fail2ban scrive le sue regole nell'anchor "f2b/*" e, senza niente di tutto questo,
+# fail2ban-client dichiara bloccato un indirizzo mentre in pf non c'e' nulla. "Blocca e dice
+# di aver bloccato" e' il caso peggiore: non lascia tracce da cui accorgersi.
+#
+# Qui si puo' fare perche' installare un server di posta e' un'azione esplicita. Il pannello
+# all'AVVIO non lo fa: quello ricorre a ogni riavvio, su una macchina che intanto puo' aver
+# cambiato configurazione per mano d'altri, e li' si limita a dirlo.
+echo ""
+echo "${YELLOW}Setting up pf, so that a ban actually blocks...${NC}"
+
+if [ "$(sysctl -n security.jail.jailed 2>/dev/null)" = 1 ]; then
+    # Dentro una jail i moduli non si caricano e il firewall e' dell'host: non e' un guasto.
+    echo "${YELLOW}  Inside a FreeBSD jail: pf belongs to the host, leaving it alone.${NC}"
+elif kldstat 2>/dev/null | grep -q ipfw.ko; then
+    # Questa macchina ha gia' un firewall. Accenderne un secondo non si fa a sorpresa.
+    echo "${YELLOW}  ipfw is loaded: this machine already has a firewall, leaving pf alone.${NC}"
+    echo "  To use fail2ban's bans, add an ipfw rule for its table, or switch to pf."
+else
+    if ! kldstat 2>/dev/null | grep -q pf.ko; then
+        # Senza il modulo, pfctl non parla col kernel: nemmeno la prova di sintassi parte
+        # ("pfctl: /dev/pf: No such file or directory").
+        kldload pf 2>/dev/null || true
+    fi
+    if ! kldstat 2>/dev/null | grep -q pf.ko; then
+        echo "${RED}  WARNING: cannot load the pf kernel module. Fail2ban will record bans"
+        echo "  that block nothing. Check 'kldload pf' by hand.${NC}"
+    elif [ -f /etc/pf.conf ]; then
+        # C'e' gia': quelle regole le ha scritte qualcun altro e non si riscrivono, e pf NON
+        # si accende, perche' non si sa che cosa bloccherebbero. Il pannello al proprio avvio
+        # aggiunge l'anchor con una prova di sintassi e una copia di sicurezza.
+        echo "${YELLOW}  /etc/pf.conf already exists: left untouched, and pf NOT enabled.${NC}"
+        echo "  The panel adds 'anchor \\"f2b/*\\"' to it at startup; enable pf yourself when"
+        echo "  you have checked those rules: sysrc pf_enable=YES && service pf start"
+    else
+        # Il file minimo: non blocca NESSUN servizio, quindi accendere pf non chiude fuori
+        # nessuno. L'unico blocco arriva dall'anchor, cioe' dagli indirizzi che fail2ban
+        # mette in tabella, e dalla tabella <permaban> del pannello.
+        cat > /etc/pf.conf << 'PFCONF'
+# /etc/pf.conf, scritto dall'installazione di DaemoxCP Mail.
+#
+# Configurazione MINIMA e SICURA per fail2ban + pf:
+#  - nessun servizio viene bloccato, quindi accendere pf non chiude fuori nessuno;
+#  - l'unico blocco arriva dagli indirizzi che fail2ban mette nel suo anchor e dalla
+#    tabella <permaban> del pannello.
+#
+# Per personalizzarla: si modifica questo file e poi 'pfctl -f /etc/pf.conf'.
+
+# Il loopback non si filtra.
+set skip on lo
+
+# La lista dei blocchi permanenti del pannello.
+table <permaban> persist file "/var/db/daemoxcp-mail/permaban.list"
+block in quick from <permaban>
+
+# L'anchor di fail2ban: ci mette le sue "block in quick" l'azione pf della jail.
+# Deve venire PRIMA del pass, e le sue regole hanno "quick".
+anchor "f2b/*"
+
+# Predefinito: passa tutto. Niente e' bloccato a parte quanto sopra.
+pass
+PFCONF
+        chmod 644 /etc/pf.conf
+        mkdir -p /var/db/daemoxcp-mail
+        [ -f /var/db/daemoxcp-mail/permaban.list ] || : > /var/db/daemoxcp-mail/permaban.list
+        chmod 640 /var/db/daemoxcp-mail/permaban.list
+        # Prova di sintassi prima di accendere: un pf.conf rifiutato lascia pf spento, non
+        # a meta'.
+        if pfctl -nf /etc/pf.conf 2>&1; then
+            sysrc pf_enable="YES" >/dev/null
+            service pf start 2>/dev/null || pfctl -e -f /etc/pf.conf 2>/dev/null || true
+            if pfctl -s info 2>/dev/null | grep -q "Status: Enabled"; then
+                echo "${GREEN}  pf is on, with a ruleset that blocks nothing by itself.${NC}"
+            else
+                echo "${RED}  WARNING: pf did not come up. Fail2ban will record bans that block"
+                echo "  nothing. Check 'service pf start' by hand.${NC}"
+            fi
+        else
+            echo "${RED}  WARNING: the generated /etc/pf.conf was refused by pfctl: pf left off.${NC}"
+        fi
+    fi
+fi
+
+# =============================================================================
+# PHASE 3: CONFIGURE MySQL
+# =============================================================================
+echo ""
+echo "${YELLOW}[PHASE 3/10] Configuring MySQL...${NC}"
+
+sysrc mysql_enable="YES"
+service mysql-server start 2>/dev/null || service mysql-server restart 2>/dev/null || true
+
+# Il server deve rispondere davvero, non basta avere lanciato il comando di avvio.
+# Senza questo controllo le fasi 3, 9 e 10 fallivano una per una e l'installazione
+# si dichiarava comunque riuscita, lasciando un sistema senza database.
+mysql_ready=no
+attempt=0
+while [ $attempt -lt 30 ]; do
+    if mysqladmin ping >/dev/null 2>&1; then
+        mysql_ready=yes
+        break
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+done
+if [ "$mysql_ready" != yes ]; then
+    echo "${RED}  ERROR: the MySQL server is not answering.${NC}"
+    echo "  Postfix, Dovecot and Roundcube all need the database: stopping here."
+    echo "  Check that the server package is installed: pkg info | grep mysql"
+    exit 1
+fi
+
+# Una cartella privata per i due file che contengono un segreto: il file di credenziali di
+# root e lo script SQL. mktemp -d la crea 700 qualunque sia la maschera, quindi nessun altro
+# utente ci entra, e il contenuto e' al riparo dal momento in cui nasce. Prima lo script SQL
+# stava in /tmp e veniva portato a 600 DOPO essere stato scritto: in mezzo c'era una finestra
+# in cui chiunque poteva leggerlo. Non si tocca la maschera globale: piu' avanti lo script
+# scrive file che devono restare leggibili da roundcube e da postfix.
+MYSQL_WORK=$(mktemp -d /var/tmp/daemoxcp-mail-mysql.XXXXXXXX) || {
+    echo "${RED}Error: cannot create the temporary folder${NC}"; exit 1; }
+trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
+MYSQL_ROOT_CNF="$MYSQL_WORK/root.cnf"
+MYSQL_SETUP_SQL="$MYSQL_WORK/setup.sql"
+
+# La password di root. Un MySQL appena installato su FreeBSD lascia root SENZA password, e
+# finche' resta cosi' qualunque utente locale -- roundcube compreso, che fa girare la webmail -- ha
+# i pieni poteri sul database. Prima nessuno la impostava: lo script faceva "mysql -u root"
+# e, se falliva, "mysql -u root --password=".
+#
+# Se si entra senza password, questo MySQL e' nuovo e la password si imposta adesso. Se non
+# si entra, una password c'e' gia' e deve essere quella del pannello: non si va a indovinare.
+# Senza nessuna opzione di password e senza file di opzioni (--no-defaults): cosi' si prova
+# davvero "root senza password", e MySQL non stampa "Using a password on the command line
+# interface can be insecure", che con --password= vuoto compariva nel registro dell'installazione.
+if mysql --no-defaults -u root -e "SELECT 1" >/dev/null 2>&1; then
+    echo "  Fresh MySQL: setting the root password"
+    # Here-document NON quotato: $MYSQL_ROOT_PASSWORD si espande una volta sola, quindi un
+    # dollaro DENTRO la password non viene riespanso. L'alfabeto del generatore non ha
+    # apice, virgolette, barra rovescia ne' accento grave, che qui spezzerebbero la riga.
+    if ! mysql --no-defaults -u root << EOROOT
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASSWORD';
+FLUSH PRIVILEGES;
+EOROOT
+    then
+        echo "${RED}  ERROR: cannot set the MySQL root password.${NC}"
+        exit 1
+    fi
+fi
+
+# Da qui in poi root si usa SEMPRE cosi': la password in un file 600 letto da mysql, mai
+# in "-p..." sulla riga di comando, che "ps" mostra a tutti. Le virgolette intorno al
+# valore servono perche' nei file di opzioni di MySQL un '#' non quotato apre un commento.
+cat > "$MYSQL_ROOT_CNF" << EOCNF
+[client]
+user=root
+password="$MYSQL_ROOT_PASSWORD"
+EOCNF
+
+if ! mysql --defaults-extra-file="$MYSQL_ROOT_CNF" -e "SELECT 1" >/dev/null 2>&1; then
+    echo "${RED}  ERROR: the MySQL root password does not work.${NC}"
+    echo "  MySQL was already here with a root password that the panel does not know."
+    echo "  Set it to the one in the panel secrets file, or let the panel install MySQL."
+    exit 1
+fi
+
+# Create database and tables
+cat > "$MYSQL_SETUP_SQL" << EOSQL
+CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';
+CREATE USER IF NOT EXISTS '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
+ALTER USER '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD';
+ALTER USER '$MYSQL_USER'@'127.0.0.1' IDENTIFIED BY '$MYSQL_PASSWORD';
+GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost';
+GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'127.0.0.1';
+FLUSH PRIVILEGES;
+USE $MYSQL_DATABASE;
+
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS audit_log, rspamd_training, email_statistics, roundcube_tokens;
+DROP TABLE IF EXISTS auto_responders, sieve_filters, forwarding_rules, rate_limits;
+DROP TABLE IF EXISTS admin_passkeys, panel_sessions, login_code_email, login_code_console, stepup_code, email_change_code;
+DROP TABLE IF EXISTS panel_settings, panel_admin, installed_components;
+DROP TABLE IF EXISTS aliases, mailboxes, domains;
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- Domains
+CREATE TABLE domains (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    domain VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    dkim_selector VARCHAR(50) DEFAULT 'mail',
+    dkim_private_key TEXT,
+    dkim_public_key TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Mailboxes
+CREATE TABLE mailboxes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    domain_id INT NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    name VARCHAR(255),
+    quota_mb INT DEFAULT 1024,
+    active BOOLEAN DEFAULT TRUE,
+    receive_enabled BOOLEAN DEFAULT TRUE,
+    junk_expunge_days SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    trash_expunge_days SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP NULL,
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Aliases
+CREATE TABLE aliases (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    domain_id INT NOT NULL,
+    source VARCHAR(255) NOT NULL,
+    destination VARCHAR(255) NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_alias (source, destination)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Panel admin
+-- No password: passkeys and email codes. The panel adds its login tables when it starts.
+CREATE TABLE panel_admin (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email_enc VARCHAR(512) NULL,
+    email_index CHAR(64) CHARACTER SET ascii NULL,
+    user_handle VARCHAR(64) CHARACTER SET ascii NULL,
+    created_at DATETIME NULL,
+    last_login DATETIME NULL,
+    active BOOLEAN DEFAULT TRUE,
+    role ENUM('superadmin', 'admin', 'operator', 'viewer') DEFAULT 'admin',
+    theme VARCHAR(10) DEFAULT 'auto',
+    language VARCHAR(5) NULL,
+    UNIQUE KEY uq_admin_email_index (email_index),
+    UNIQUE KEY uq_admin_user_handle (user_handle)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Panel settings
+CREATE TABLE panel_settings (
+    setting_key VARCHAR(64) PRIMARY KEY,
+    setting_value TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Rate limits
+CREATE TABLE rate_limits (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    target_type ENUM('global', 'domain', 'mailbox') NOT NULL,
+    target_id INT NULL,
+    max_per_hour INT DEFAULT 100,
+    max_per_day INT DEFAULT 1000,
+    max_recipients INT DEFAULT 50,
+    enabled BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_target (target_type, target_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Auto-responders
+CREATE TABLE auto_responders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    mailbox_id INT NOT NULL UNIQUE,
+    enabled BOOLEAN DEFAULT FALSE,
+    subject VARCHAR(255) NOT NULL DEFAULT 'Out of Office',
+    body TEXT NOT NULL,
+    start_date DATE NULL,
+    end_date DATE NULL,
+    interval_hours INT DEFAULT 24,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Forwarding rules
+CREATE TABLE forwarding_rules (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    mailbox_id INT NOT NULL,
+    destination VARCHAR(255) NOT NULL,
+    keep_copy BOOLEAN DEFAULT TRUE,
+    enabled BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Installed components
+CREATE TABLE installed_components (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    component_name VARCHAR(50) NOT NULL UNIQUE,
+    version VARCHAR(20),
+    installed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('installed', 'uninstalled', 'failed') DEFAULT 'installed'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Sieve filters
+CREATE TABLE sieve_filters (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    mailbox_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    priority INT DEFAULT 0,
+    enabled BOOLEAN DEFAULT TRUE,
+    conditions JSON NOT NULL,
+    actions JSON NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Roundcube tokens
+CREATE TABLE roundcube_tokens (
+    token VARCHAR(64) PRIMARY KEY,
+    mailbox_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (mailbox_id) REFERENCES mailboxes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Email statistics
+CREATE TABLE email_statistics (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    stat_date DATE NOT NULL,
+    mailbox_id INT NULL,
+    domain_id INT NULL,
+    sent_count INT DEFAULT 0,
+    received_count INT DEFAULT 0,
+    spam_count INT DEFAULT 0,
+    virus_count INT DEFAULT 0,
+    bounced_count INT DEFAULT 0,
+    bytes_sent BIGINT DEFAULT 0,
+    bytes_received BIGINT DEFAULT 0,
+    UNIQUE KEY unique_daily_stat (stat_date, mailbox_id, domain_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Rspamd training
+CREATE TABLE rspamd_training (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    message_id VARCHAR(255) NOT NULL,
+    trained_as ENUM('spam', 'ham') NOT NULL,
+    trained_by INT NOT NULL,
+    trained_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (trained_by) REFERENCES panel_admin(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Audit log
+CREATE TABLE audit_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    action VARCHAR(100) NOT NULL,
+    username VARCHAR(255),
+    ip_address VARCHAR(45) NOT NULL,
+    details TEXT,
+    user_agent VARCHAR(512),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_action (action),
+    INDEX idx_username (username),
+    INDEX idx_ip (ip_address),
+    INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+EOSQL
+
+# "-p''" collassava a "-p" nudo e faceva chiedere la password all'operatore, con il
+# messaggio di errore nascosto da 2>/dev/null. Adesso root ha una password e la si passa
+# dal file di credenziali, quindi non c'e' piu' niente da indovinare e niente da nascondere.
+# E niente "|| true": se il database non si crea non c'e' nulla su cui appoggiarsi.
+if ! mysql --defaults-extra-file="$MYSQL_ROOT_CNF" < "$MYSQL_SETUP_SQL"; then
+    echo "${RED}  ERROR: cannot create the database and its tables.${NC}"
+    exit 1
+fi
+rm -f "$MYSQL_SETUP_SQL"
+
+echo "${GREEN}  MySQL configured${NC}"
+
+# =============================================================================
+# PHASE 4: CREATE DIRECTORIES
+# =============================================================================
+echo ""
+echo "${YELLOW}[PHASE 4/10] Creating directories...${NC}"
+
+mkdir -p /usr/local/etc/ssl/mail
+mkdir -p /usr/local/etc/postfix
+mkdir -p /var/vmail
+mkdir -p /var/run/dovecot
+mkdir -p /var/db/daemoxcp-mail
+
+""";
+    }
 
     /** Sempre, tutto o niente, con l'impronta del jar (InstallScripts): mai uno script di una versione di prima. */
     public void write_file() {
