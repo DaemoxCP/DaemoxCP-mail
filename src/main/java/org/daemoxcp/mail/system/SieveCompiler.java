@@ -120,7 +120,21 @@ public final class SieveCompiler {
      * sievec di root, ma con sievec che gira come {@link #USER}.
      */
     public static Outcome compile(Path script) {
-        return compile(script, false);
+        return compile(script, false, List.of());
+    }
+
+    /**
+     * Come {@link #compile(Path)}, con opzioni di sievec prima dello script: per gli script che usano estensioni che
+     * sievec non carica da solo, come quelli di IMAPSieve (-P sieve_imapsieve -P sieve_extprograms -x "+vnd.dovecot.pipe
+     * +imapsieve": SpamLearning). Le opzioni sono costanti del pannello, mai testo che arriva da fuori.
+     */
+    public static Outcome compile(Path script, List<String> options) {
+        return compile(script, false, options);
+    }
+
+    /** Come {@link #refresh(Path)}, con le opzioni di {@link #compile(Path, List)}. */
+    public static Outcome refresh(Path script, List<String> options) {
+        return compile(script, true, options);
     }
 
     /**
@@ -128,10 +142,10 @@ public final class SieveCompiler {
      * sievec installato fa adesso: UNCHANGED se era gia' quello (reperto 241). Il compilato e' deterministico.
      */
     public static Outcome refresh(Path script) {
-        return compile(script, true);
+        return compile(script, true, List.of());
     }
 
-    private static Outcome compile(Path script, boolean onlyIfDifferent) {
+    private static Outcome compile(Path script, boolean onlyIfDifferent, List<String> options) {
         String sievec = sievec();
         if (sievec == null) return notCompiled("sievec is not installed");
         Path s = script.toAbsolutePath().normalize();
@@ -153,7 +167,10 @@ public final class SieveCompiler {
         try {
             work = workDir();
             Path compiled = work.resolve(OUT).resolve(BINARY);
-            Run c = run(asCompiler(sievec, "-c", work.resolve(CONF).toString(), s.toString(), compiled.toString()), MAX_TEXT, true);
+            List<String> cmd = new ArrayList<>(List.of(sievec, "-c", work.resolve(CONF).toString()));
+            cmd.addAll(options);
+            cmd.addAll(List.of(s.toString(), compiled.toString()));
+            Run c = run(asCompiler(cmd.toArray(new String[0])), MAX_TEXT, true);
             if (c.timedOut()) return notCompiled("sievec did not finish in " + TIMEOUT.toSeconds() + " s");
             if (c.exit() != 0) return failed(c.text());
             Run cat = run(asCompiler(CAT, compiled.toString()), MAX_BINARY, false);
