@@ -2586,6 +2586,10 @@ public class SSLMailServer {
                         if (updated) {
                             response.put("success", true);
                             response.put("message", I18n.tr("server.mailbox.updated"));
+                            // Lo svuotamento automatico nel registro di controllo, col prima e il dopo (r22)
+                            if (current != null && (current.junkExpungeDays != junkDays || current.trashExpungeDays != trashDays))
+                                logAudit("MAILBOX_CLEANUP_CHANGED", getClientIp(exchange), "mailbox_id=" + id + " email=" + current.email
+                                        + " junk_days=" + current.junkExpungeDays + "->" + junkDays + " trash_days=" + current.trashExpungeDays + "->" + trashDays);
                             regenerateMailConfigs();
                         } else {
                             response.put("success", false);

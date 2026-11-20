@@ -96,6 +96,7 @@ public class MailboxCleanupTest {
         check("the API refuses other days, and keeps them when a client of before does not send them",
                 server.contains("if (!MailDatabase.cleanupDaysAllowed(junkDays) || !MailDatabase.cleanupDaysAllowed(trashDays)) {")
                 && server.contains("req.has(\"junk_expunge_days\") ? req.optInt(\"junk_expunge_days\", -1) : current != null ? current.junkExpungeDays : 0"));
+        check("  a change goes to the audit log, before and after", server.contains("logAudit(\"MAILBOX_CLEANUP_CHANGED\", getClientIp(exchange), \"mailbox_id=\" + id"));
 
         System.out.println("\n== 5. The webmail");
         String block = WebmailPasswordConfig.apply("<?php\n$config['plugins'] = ['archive'];\n", 2096, "TestKey_0123456789-abcdefgh");
