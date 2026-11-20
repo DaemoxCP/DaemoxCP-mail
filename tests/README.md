@@ -1023,6 +1023,21 @@ delivered. Measured 20/11/2026: all OK; with the check taken out of `smtpd_sende
 
     java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SenderLoginMapTest
 
+**HeaderFromCheckTest** — a client that signs in writes in the `From:` header only its own sender address
+(`HeaderFromCheck`): with `SenderLoginMap` the envelope was checked, but on the VM a mailbox signed in on port 587 with its
+own envelope and `From: boss@` of the same domain went through, signed with the domain's DKIM key. The decision (only
+on the panel's milter Rspamd; a file of the same name written by hand is left alone), the Lua rule (only signed-in
+clients, a prefilter that rejects; one address in one From header, the envelope or the mailbox), the installer writing
+the same file, the order at boot and the verdict on the two probe scans. With `-De2e.vm=yes`, as root on the VM: rspamc
+as a signed-in user (own From, capitals, an alias as envelope, an empty envelope with the mailbox pass; another
+address, an outside one, an empty envelope with another address, two From headers, two addresses in one From are
+rejected; mail that does not sign in is not looked at); through Postfix with XCLIENT LOGIN on port 587 the own From is
+queued and another address gets `554 5.7.1` with the panel's text; on port 25 without a login the same From is not
+refused for it. What gets through is delivered to the test mailbox and expunged. Measured 20/11/2026: all OK; with the
+rule removed 7 checks fail, the 554 through Postfix among them.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.HeaderFromCheckTest
+
 **DovecotHomeE2ETest** — the same with real deliveries and the VM's real configuration (it must start with the home of
 before), as root with `-De2e.vm=yes`. Before: an autoreply written by the panel and a script of the mailbox's own
 (ManageSieve), one delivery, and the false folders are in IMAP LIST; a second mailbox gets a message moved into its

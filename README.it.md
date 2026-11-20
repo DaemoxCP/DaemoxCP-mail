@@ -88,7 +88,9 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 - Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
 - Una casella che si autentica spedisce solo dai suoi indirizzi: il suo e quelli degli alias che puntano a lei (un
   catch-all dà alla sua casella gli altri indirizzi del dominio). Ogni altro mittente, dello stesso dominio o no, riceve
-  `553 5.7.1 … not owned by user`. La posta che arriva dagli altri server sulla porta 25 non cambia.
+  `553 5.7.1 … not owned by user`. Anche l'intestazione `From:`: un indirizzo solo, quello della busta o la casella
+  stessa, altrimenti Rspamd risponde `554 5.7.1` prima di ogni altro controllo. La posta che arriva dagli altri server
+  sulla porta 25 non cambia.
 - Limiti d'invio per casella: messaggi all'ora, al giorno e destinatari per messaggio, globali o di una casella. Prima
   di ogni messaggio che una casella manda dopo essersi autenticata, Postfix chiede al pannello. Ogni destinatario conta
   come un messaggio. Oltre un limite chi manda riceve un rifiuto temporaneo (`450 4.7.1`) che dice il perché. La posta

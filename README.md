@@ -88,7 +88,8 @@ It is **careful**. The panel never changes something it cannot check, and it say
 - A mail queue you can inspect and act on; the maximum message size.
 - A mailbox that signs in sends only from its own addresses: its own and those of the aliases that point to it (a
   catch-all gives its mailbox the other addresses of the domain). Any other sender, of the same domain or not, gets
-  `553 5.7.1 … not owned by user`. Mail from other servers on port 25 is not affected.
+  `553 5.7.1 … not owned by user`. The `From:` header too: one address, the envelope's or the mailbox's own, otherwise
+  Rspamd answers `554 5.7.1` before any other check. Mail from other servers on port 25 is not affected.
 - Sending limits per mailbox: messages per hour, per day and recipients per message, global or for one mailbox.
   Before each message a mailbox sends after signing in, Postfix asks the panel. Each recipient counts as one message.
   Over a limit the sender gets a temporary refusal (`450 4.7.1`) that says why. Incoming mail is not counted, and with

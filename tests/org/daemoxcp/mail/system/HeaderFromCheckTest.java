@@ -91,7 +91,8 @@ public class HeaderFromCheckTest {
 
     static void live() throws Exception {
         System.out.println("\n== 4. Live, on the VM");
-        check("the file is the panel's", HeaderFromCheck.content().equals(Files.readString(Path.of(HeaderFromCheck.PATH))));
+        Path file = Path.of(HeaderFromCheck.PATH);
+        check("the file is the panel's", Files.isRegularFile(file) && HeaderFromCheck.content().equals(Files.readString(file)));
         String user = null;
         for (String u : sh("doveadm user '*'").trim().split("\\s+")) if (u.contains("@")) { user = u; break; }
         if (user == null) { check("a mailbox to try with", false); return; }
