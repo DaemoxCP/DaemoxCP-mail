@@ -831,6 +831,10 @@ public class SSLMailServer {
             // si aggiungono solo le righe che mancano, con nginx -t, reload e una richiesta vera; se no torna com'era.
             org.daemoxcp.mail.system.NginxMain.ensureAtBoot();
 
+            // VRFY spento: diceva a chiunque sulla 25 quali caselle esistono (r6). postconf -e, postfix check, reload e un
+            // VRFY vero che deve ricevere 502; se no torna com'era (PostfixVrfy).
+            org.daemoxcp.mail.system.PostfixVrfy.ensureAtBoot();
+
             // POP3 come l'ha scelto l'amministratore, spento se non ha scelto: nessuno lo usava, e le sue porte
             // erano solo bersagli (Pop3 verifica e torna indietro).
             org.daemoxcp.mail.system.Pop3.ensureAtBoot();

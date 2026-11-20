@@ -837,6 +837,9 @@ smtpd_sasl_local_domain = \\$myhostname
 broken_sasl_auth_clients = yes
 
 # Restrictions
+# VRFY off: it told anyone on port 25 which mailboxes exist (rule r6; PostfixVrfy does the same on servers
+# installed before).
+disable_vrfy_command = yes
 smtpd_helo_required = yes
 smtpd_helo_restrictions =
     permit_mynetworks,
