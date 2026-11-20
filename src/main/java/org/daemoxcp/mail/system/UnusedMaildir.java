@@ -18,6 +18,10 @@ import java.util.logging.Logger;
  * non la usava nessuno. Trovata installando dal README sulla VM il 20/11/2026; sul server vero c'era in 12 caselle su 12,
  * vuota in tutte. Adesso lo script crea la casella come la legge Dovecot; qui, all'avvio, si tolgono quelle vecchie.
  *
+ * Lo script le creava con /bin/sh, che su FreeBSD non espande le graffe: dentro Maildir/ non c'erano cur, new e tmp, ma
+ * una cartella sola che si chiama proprio {cur,new,tmp}. Cosi' era sul server vero (12 su 12, visto al passaggio del
+ * 20/11/2026, quando questa riparazione le ha lasciate tutte): quel nome vale come cur, new e tmp, alle stesse condizioni.
+ *
  * Solo con rmdir, come vmail: rmdir toglie una cartella solo se e' vuota, quindi una Maildir/ con dentro anche un solo
  * file (o un collegamento) resta com'e', e il registro lo dice. E solo se Dovecot non tiene la posta proprio in una
  * cartella che si chiama Maildir: allora sarebbe la sua, anche vuota. Al secondo avvio non trova niente da fare (una
@@ -30,7 +34,8 @@ public final class UnusedMaildir {
     static Path vmail = Path.of("/var/vmail");
 
     /**
-     * Il lavoro come vmail: per ogni casella, la sua Maildir/ solo se dentro ha al piu' cur, new e tmp vuote, e con rmdir,
+     * Il lavoro come vmail: per ogni casella, la sua Maildir/ solo se dentro ha al piu' cur, new e tmp vuote (o
+     * {cur,new,tmp} vuota), e con rmdir,
      * che comunque non toglie niente che non sia vuoto.
      */
     static final String SCRIPT = """
@@ -40,16 +45,17 @@ public final class UnusedMaildir {
               [ -d "$m" ] && [ ! -L "$m" ] && [ ! -L "${m%/*}" ] || continue
               d="$m/Maildir"
               [ -d "$d" ] && [ ! -L "$d" ] || continue
-              # Solo se dentro ci sono al piu' cur, new e tmp, cartelle vere e vuote: altrimenti non si tocca niente.
+              # Solo se dentro ci sono al piu' cur, new e tmp (o la cartella {cur,new,tmp} che /bin/sh creava senza
+              # espandere le graffe), cartelle vere e vuote: altrimenti non si tocca niente.
               ok=1
-              for e in $(ls -A "$d"); do case "$e" in cur|new|tmp) ;; *) ok=0 ;; esac; done
-              for s in cur new tmp; do
+              for e in $(ls -A "$d"); do case "$e" in cur|new|tmp|'{cur,new,tmp}') ;; *) ok=0 ;; esac; done
+              for s in cur new tmp '{cur,new,tmp}'; do
                 if [ -e "$d/$s" ] || [ -L "$d/$s" ]; then
                   { [ -d "$d/$s" ] && [ ! -L "$d/$s" ] && [ -z "$(ls -A "$d/$s")" ]; } || ok=0
                 fi
               done
               if [ "$ok" = 1 ]; then
-                rmdir "$d/cur" "$d/new" "$d/tmp" 2>/dev/null
+                rmdir "$d/cur" "$d/new" "$d/tmp" "$d/{cur,new,tmp}" 2>/dev/null
                 if rmdir "$d" 2>/dev/null; then echo "REMOVED $d"; continue; fi
               fi
               echo "KEPT $d"
