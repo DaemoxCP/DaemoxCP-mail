@@ -96,6 +96,9 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   `553 5.7.1 … not owned by user`. Anche l'intestazione `From:`: un indirizzo solo, quello della busta o la casella
   stessa, altrimenti Rspamd risponde `554 5.7.1` prima di ogni altro controllo. La posta che arriva dagli altri server
   sulla porta 25 non cambia.
+- La posta in uscita controlla DANE (RFC 7672): dove il dominio di destinazione pubblica record TLSA firmati DNSSEC,
+  Postfix pretende TLS e un certificato che corrisponda; altrove il TLS resta opportunistico. Il risolutore locale
+  (local_unbound) convalida DNSSEC.
 - Limiti d'invio per casella: messaggi all'ora, al giorno e destinatari per messaggio, globali o di una casella. Prima
   di ogni messaggio che una casella manda dopo essersi autenticata, Postfix chiede al pannello. Ogni destinatario conta
   come un messaggio. Oltre un limite chi manda riceve un rifiuto temporaneo (`450 4.7.1`) che dice il perché. La posta

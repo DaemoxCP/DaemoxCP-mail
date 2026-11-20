@@ -95,6 +95,9 @@ It is **careful**. The panel never changes something it cannot check, and it say
   catch-all gives its mailbox the other addresses of the domain). Any other sender, of the same domain or not, gets
   `553 5.7.1 … not owned by user`. The `From:` header too: one address, the envelope's or the mailbox's own, otherwise
   Rspamd answers `554 5.7.1` before any other check. Mail from other servers on port 25 is not affected.
+- Outgoing mail checks DANE (RFC 7672): where the destination publishes DNSSEC-signed TLSA records, Postfix requires
+  TLS and a matching certificate; elsewhere TLS stays opportunistic. The local resolver (local_unbound) validates
+  DNSSEC.
 - Sending limits per mailbox: messages per hour, per day and recipients per message, global or for one mailbox.
   Before each message a mailbox sends after signing in, Postfix asks the panel. Each recipient counts as one message.
   Over a limit the sender gets a temporary refusal (`450 4.7.1`) that says why. Incoming mail is not counted, and with

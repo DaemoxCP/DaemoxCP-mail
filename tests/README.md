@@ -1038,6 +1038,18 @@ rule removed 7 checks fail, the 554 through Postfix among them.
 
     java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.HeaderFromCheckTest
 
+**PostfixDaneTest** — DANE for outgoing mail (`PostfixDane`): `smtp_tls_security_level = dane` with
+`smtp_dns_support_level = dnssec`; before, Postfix sent with opportunistic TLS and never checked whose certificate it
+got. The decision (the installer's old values with a local validating resolver: apply; values set by hand: left
+alone; no validating resolver on this machine: left as it is, and said), reading `/etc/resolv.conf` and drill's ad
+flag, the installer, the order at boot. With `-De2e.vm=yes`, as root on the VM: Postfix reads dane and dnssec, the
+local resolver answers the root's DNSKEY with ad, and posttls-finger with main.cf's level asks for the TLSA records of
+the MX of ietf.org and posteo.de and for none of gmail.com (unsigned). Port 25 out is closed on the VM: only the DNS
+part is measured. Measured 20/11/2026: all OK; with the old values (may, default) 4 checks fail, the TLSA lookups among
+them. posttls-finger on its own uses dane: the test gives it main.cf's level, or it would prove nothing.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PostfixDaneTest
+
 **SpamLearningTest** — Rspamd learns from the users (`SpamLearning`, `SpamLearner`): a message moved or copied into
 Junk is spam, one moved out of it is ham, unless it goes to Trash; before, Rspamd learned only from rspamc run by hand.
 The decision (only Dovecot 2.4 with the panel's Junk; a configuration written by hand is left alone), the

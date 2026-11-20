@@ -77,8 +77,14 @@ public class PostfixDaneTest {
         check("gmail.com (unsigned): no TLSA asked, TLS stays opportunistic", !finger("gmail.com").contains("(TLSA)"));
     }
 
+    /**
+     * posttls-finger with the level and the DNS support of main.cf: on its own it uses dane and asks for TLSA anyway
+     * (measured: with may in main.cf it still asked), which would prove nothing about Postfix's settings.
+     */
     static String finger(String domain) {
-        return sh("timeout -f 60 posttls-finger -t 3 -vv -o inet_protocols=ipv4 " + domain + " 2>&1 | grep -e 'TLSA' -e 'Failed' | head -20");
+        return sh("timeout -f 60 posttls-finger -t 3 -vv -l \"$(postconf -h smtp_tls_security_level)\""
+                + " -o smtp_dns_support_level=\"$(postconf -h smtp_dns_support_level)\" -o inet_protocols=ipv4 " + domain
+                + " 2>&1 | grep -e 'TLSA' -e 'Failed' | head -20");
     }
 
     static String sh(String command) {
