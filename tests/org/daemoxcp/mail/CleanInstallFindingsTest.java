@@ -19,6 +19,8 @@ import java.util.regex.Pattern;
  *     with one field Enter confirms (it moved the focus to Cancel, and a second Enter cancelled what was typed).
  *  6. The README (EN and IT) names the start item as the menu does, says freebsd-update shows a pager, and the
  *     fixes have something to find: each check first finds the old text in a sample.
+ *  7. The webmail's certificate saved from the page is checked like the menu's before anything is written (a key that
+ *     was not the certificate's was saved, with the database, and only nginx refused it); nginx.conf from NginxMain.
  *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.CleanInstallFindingsTest
  */
 public class CleanInstallFindingsTest {
@@ -106,6 +108,17 @@ public class CleanInstallFindingsTest {
         check("Enter in the field confirms", input.contains("KeyType.Enter") && input.contains("result[0] = getText();"));
         check("  and Cancel is still the first button",
                 input.indexOf("I18n.tr(\"console.cancel\")") > 0 && input.indexOf("I18n.tr(\"console.cancel\")") < input.indexOf("I18n.tr(\"console.ok\")"));
+
+        System.out.println("\n== 7. The webmail's certificate from the page");
+        String server = read("src/main/java/org/daemoxcp/mail/webserver/SSLMailServer.java");
+        int update = server.indexOf("\"update_ssl\".equals(action)");
+        int pairCheck = server.indexOf("PemTls.check(\"webmail\"", update);
+        int firstWrite = server.indexOf("Files.createDirectories(Path.of(sslDir))", update);
+        check("checked like the menu's (PemTls: readable, valid, covers the name, the key is its own) before anything is written",
+                update > 0 && pairCheck > update && firstWrite > pairCheck);
+        check("  and nginx.conf is written from NginxMain, keeping the include, only if nginx -t accepts it",
+                server.contains("NginxMain.content(domain, port, sslCert, sslKey, rcRoot,") && server.contains("NginxMain.keepIncludes(config, current)")
+                && server.contains("NginxMain.write(config)"));
 
         System.out.println("\n== 6. The README");
         org.json.JSONObject en = new org.json.JSONObject(read("src/main/resources/lang/en.json"));

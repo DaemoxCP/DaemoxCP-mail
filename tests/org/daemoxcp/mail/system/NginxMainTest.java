@@ -10,8 +10,9 @@ import java.nio.file.Path;
  * both said nginx's version, and the webmail had no HSTS, nosniff or Referrer-Policy.
  *  1. the file: default_server 444 first, server_tokens off in http, the three headers in the webmail's block and no
  *     add_header in any location (it would cancel the block's);
- *  2. the repair of an existing file: the installer's old file gets server_tokens and the headers, once; the panel's
- *     own file needs nothing; a file whose webmail block already has headers keeps them; a file without the webmail's
+ *  2. the repair of an existing file: the installer's old file gets server_tokens, the default_server block (with the
+ *     webmail's listen lines and certificate) and the headers, once; a file that has its default_server keeps one; the
+ *     panel's own file needs nothing; a file whose webmail block already has headers keeps them; a file without the webmail's
  *     name is not touched;
  *  3. the include of the public surface survives a rewrite, and is not doubled;
  *  4. the installer writes the same file: its shell fragment, run for real with paths full of & | and \, gives exactly
@@ -50,6 +51,9 @@ public class NginxMainTest {
                     root /usr/local/www/roundcube/public_html;
                     index index.php;
 
+                    ssl_certificate /usr/local/etc/ssl/webmail/webmail-origin.pem;
+                    ssl_certificate_key /usr/local/etc/ssl/webmail/webmail-origin.key;
+
                     location / {
                         try_files $uri $uri/ /index.php?$args;
                     }
@@ -79,9 +83,24 @@ public class NginxMainTest {
         String fixed = NginxMain.harden(OLD_INSTALLER, "webmail.example.com");
         check("the installer's old file gets server_tokens off and the three headers", fixed != null && fixed.contains("server_tokens off;")
                 && fixed.contains("add_header X-Content-Type-Options \"nosniff\" always;"));
+        check("  and the default_server block, before the webmail's, with its listen and its certificate", fixed != null
+                && fixed.contains("    server {\n        listen 8443 ssl default_server;\n        server_name _;\n\n"
+                        + "        ssl_certificate /usr/local/etc/ssl/webmail/webmail-origin.pem;\n"
+                        + "        ssl_certificate_key /usr/local/etc/ssl/webmail/webmail-origin.key;\n\n        return 444;\n    }\n")
+                && fixed.indexOf("return 444;") < fixed.indexOf("server_name webmail.example.com;"));
         check("  once: a second pass finds nothing", fixed != null && NginxMain.harden(fixed, "webmail.example.com") == null);
-        check("  the rest of the file is the same", fixed != null && fixed.replaceAll("(?m)^\\s*(# .*|server_tokens off;|add_header .*)\\n", "")
+        check("  the rest of the file is the same", fixed != null && fixed.replaceAll("(?s)    # Default server.*?return 444;\\n    }\\n\\n", "")
+                .replaceAll("(?m)^\\s*(# .*|server_tokens off;|add_header .*)\\n", "")
                 .replaceAll("\\n{2,}", "\n").equals(OLD_INSTALLER.replaceAll("\\n{2,}", "\n")));
+        String dual = OLD_INSTALLER.replace("listen 8443 ssl;", "listen 8443 ssl;\n        listen [::]:8443 ssl;");
+        String dualFixed = NginxMain.harden(dual, "webmail.example.com");
+        check("IPv4 and IPv6: the default_server listens on both", dualFixed != null && dualFixed.contains(
+                "listen 8443 ssl default_server;\n        listen [::]:8443 ssl default_server;\n"));
+        String withDefault = c.replace("    server_tokens off;\n", "").replaceAll("(?m)^\\s*add_header .*\\n", "");
+        String prodFixed = NginxMain.harden(withDefault, "webmail.example.com");
+        check("a file that already has its default_server (the real server's) gets only server_tokens and the headers",
+                prodFixed != null && prodFixed.indexOf("default_server") == prodFixed.lastIndexOf("default_server")
+                && prodFixed.contains("server_tokens off;") && prodFixed.contains("nosniff"));
         check("the panel's own file needs nothing", NginxMain.harden(c, "webmail.example.com") == null);
         String own = OLD_INSTALLER.replace("server_name webmail.example.com;", "server_name webmail.example.com;\n        add_header X-Frame-Options DENY;");
         String ownFixed = NginxMain.harden(own, "webmail.example.com");

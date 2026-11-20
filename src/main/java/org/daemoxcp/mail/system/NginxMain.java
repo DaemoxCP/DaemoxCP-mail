@@ -138,45 +138,71 @@ __HEADERS__
     }
 
     /**
-     * Le righe che mancano a un file del pannello gia' sul server: server_tokens off nel blocco http, e le intestazioni
-     * nel blocco della webmail (quello col suo server_name), se quel blocco non ne ha gia'. Null se non c'e' niente da
-     * aggiungere, o se il file non ha la forma che il pannello scrive. Funzione pura.
+     * Le righe che mancano a un file del pannello gia' sul server: server_tokens off nel blocco http; il blocco
+     * default_server che risponde 444 agli altri nomi, se nessun listen della porta della webmail lo e' gia' (con le
+     * stesse righe listen e lo stesso certificato del blocco della webmail); le intestazioni nel blocco della webmail,
+     * se non ne ha gia'. Null se non c'e' niente da aggiungere, o se il file non ha la forma che il pannello scrive (un
+     * blocco http e un server col nome della webmail). Funzione pura.
      */
     static String harden(String current, String webmailDomain) {
         if (current == null || webmailDomain == null || webmailDomain.isBlank()) return null;
         String[] lines = current.split("\n", -1);
-        StringBuilder out = new StringBuilder();
-        boolean changed = false, seenTokens = current.matches("(?s).*(^|\\n)\\s*server_tokens\\s.*");
-        boolean webmailHasHeaders = false, headersAdded = false;
-        // Prima passata: il blocco della webmail ha gia' degli add_header?
-        int d = 0;
-        boolean in = false;
+        String nameLine = "server_name " + webmailDomain + ";";
+        // Il blocco della webmail: dalla riga «server {» che lo apre alla graffa che lo chiude.
+        int name = -1;
+        for (int i = 0; i < lines.length; i++) if (lines[i].trim().equals(nameLine)) { name = i; break; }
+        if (name < 0 || !current.matches("(?s).*(^|\\n)\\s*http\\s*\\{.*")) return null;
+        int open = -1;
+        for (int i = name; i >= 0; i--) if (lines[i].trim().matches("server\\s*\\{")) { open = i; break; }
+        if (open < 0) return null;
+        int depth = 0, close = -1;
+        for (int i = open; i < lines.length; i++) {
+            depth += count(lines[i], '{') - count(lines[i], '}');
+            if (depth == 0) { close = i; break; }
+        }
+        if (close < 0) return null;
+        java.util.List<String> listens = new java.util.ArrayList<>();
+        String cert = null, key = null;
+        boolean headers = false;
+        for (int i = open; i <= close; i++) {
+            String t = lines[i].trim();
+            if (t.startsWith("#")) continue;
+            if (t.startsWith("listen ")) listens.add(t);
+            if (t.startsWith("ssl_certificate ")) cert = t;
+            if (t.startsWith("ssl_certificate_key ")) key = t;
+            if (t.startsWith("add_header")) headers = true;
+        }
+        boolean tokens = current.matches("(?s).*(^|\\n)\\s*server_tokens\\s.*");
+        boolean defaultServer = false;
         for (String l : lines) {
             String t = l.trim();
-            if (t.startsWith("#")) continue;
-            if (t.equals("server_name " + webmailDomain + ";")) in = true;
-            if (in && t.startsWith("add_header")) webmailHasHeaders = true;
-            d += count(t, '{') - count(t, '}');
-            if (in && d < 2) in = false;
+            if (t.startsWith("listen ") && t.contains("default_server")) defaultServer = true;
         }
+        boolean addDefault = !defaultServer && !listens.isEmpty() && cert != null && key != null;
+        if (tokens && headers && !addDefault) return null;
+
+        StringBuilder out = new StringBuilder();
         for (int i = 0; i < lines.length; i++) {
             String l = lines[i], t = l.trim();
+            if (i == open && addDefault) {
+                out.append("    # Default server: reject requests on non-matching hostnames\n    server {\n");
+                for (String li : listens) out.append("        ").append(li.replaceAll("\\s*;\\s*$", "")).append(" default_server;\n");
+                out.append("        server_name _;\n\n        ").append(cert).append("\n        ").append(key)
+                   .append("\n\n        return 444;\n    }\n\n");
+            }
             out.append(l);
             if (i < lines.length - 1) out.append("\n");
             if (t.startsWith("#")) continue;
-            if (!seenTokens && (t.equals("http {") || t.equals("http{"))) {
+            if (!tokens && (t.equals("http {") || t.equals("http{"))) {
                 out.append("\n").append(TOKENS.stripTrailing()).append("\n");
-                seenTokens = true;
-                changed = true;
+                tokens = true;
             }
-            if (!webmailHasHeaders && !headersAdded && t.equals("server_name " + webmailDomain + ";")) {
+            if (!headers && i == name) {
                 out.append("\n").append(HEADERS.stripTrailing()).append("\n");
-                headersAdded = true;
-                changed = true;
+                headers = true;
             }
         }
-        boolean shaped = current.contains("server_name " + webmailDomain + ";") && current.matches("(?s).*(^|\\n)\\s*http\\s*\\{.*");
-        return changed && shaped ? out.toString() : null;
+        return out.toString();
     }
 
     private static int count(String s, char c) {
@@ -237,8 +263,8 @@ __HEADERS__
                 LOGGER.warning("[NginxMain] ROLLED_BACK: " + check + "; nginx.conf put back as it was");
                 return;
             }
-            LOGGER.info("[NginxMain] DONE: nginx no longer says its version, and the webmail sends HSTS, nosniff and"
-                    + " Referrer-Policy (" + conf + ")");
+            LOGGER.info("[NginxMain] DONE: nginx no longer says its version, other names get no answer on the webmail's"
+                    + " port, and the webmail sends HSTS, nosniff and Referrer-Policy (" + conf + ")");
         } catch (Throwable t) {
             LOGGER.warning("[NginxMain] ensureAtBoot exception: " + t.getMessage());
         }
@@ -256,6 +282,12 @@ __HEADERS__
             if (!h.startsWith("http/")) { last = "the webmail did not answer"; continue; }
             if (!h.contains("x-content-type-options: nosniff")) { last = "the webmail's answer has no nosniff header"; continue; }
             if (h.matches("(?s).*\\nserver: nginx/[0-9].*")) { last = "nginx still says its version"; continue; }
+            // Un altro nome sulla stessa porta: il blocco default_server chiude senza risposta (444), niente Roundcube.
+            Shell.Result other = Shell.run(Duration.ofSeconds(15), "curl", "-skI", "--max-time", "8", "--resolve",
+                    "not-the-webmail.invalid:" + port + ":127.0.0.1", "https://not-the-webmail.invalid:" + port + "/");
+            if (other.output().toLowerCase(java.util.Locale.ROOT).startsWith("http/")) {
+                last = "another name still gets an answer on port " + port; continue;
+            }
             return null;
         }
         return last;

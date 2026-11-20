@@ -12765,6 +12765,23 @@ public class SSLMailServer {
                         return;
                     }
 
+                    // Lo stesso controllo del menu (voce 3, PemTls): il certificato si legge, vale adesso, copre il nome della
+                    // webmail, e la chiave e' proprio la sua. Prima si salvavano file e database anche con una chiave
+                    // sbagliata, e se ne accorgeva solo nginx (prova dal vivo sulla VM, 20/11/2026): il database restava
+                    // con dei certificati che non funzionano. Niente si scrive finche' il controllo non passa.
+                    if (!certContent.isEmpty() || !keyContent.isEmpty()) {
+                        String rcDomain = Main.dbManager != null ? Main.dbManager.getRoundcubeDomain() : null;
+                        org.daemoxcp.mail.security.PemTls.Check pair = org.daemoxcp.mail.security.PemTls.check("webmail",
+                                rcDomain == null ? "" : rcDomain,
+                                chainContent.isEmpty() ? certContent : certContent + "\n" + chainContent, keyContent, java.time.Instant.now());
+                        if (!pair.ok()) {
+                            response.put("success", false);
+                            response.put("error", String.join(" ", pair.errors()));
+                            sendJsonResponse(exchange, response);
+                            return;
+                        }
+                    }
+
                     JSONArray steps = new JSONArray();
 
                     // Determine file paths
