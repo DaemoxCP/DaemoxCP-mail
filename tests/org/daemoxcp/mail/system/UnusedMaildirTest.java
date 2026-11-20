@@ -7,12 +7,14 @@ import java.util.stream.Stream;
 
 /**
  * The empty Maildir/ folders the mailbox script used to create, and Dovecot never used, removed (UnusedMaildir). Found
- * on 20/11/2026 installing from the README on a clean VM; on the real server 12 mailboxes out of 12 had one, all empty.
+ * on 20/11/2026 installing from the README on a clean VM; on the real server 12 mailboxes out of 12 had one, all empty,
+ * holding a single folder literally named {cur,new,tmp} (FreeBSD's /bin/sh does not expand braces).
  *  1. when Dovecot keeps the mail in a folder named Maildir, the folder is its own: nothing is removed;
  *  2. the script, run for real on a throwaway tree (as the user running the test; at boot it runs as vmail): an empty
  *     Maildir/ with cur, new and tmp goes; one with a message inside stays, with the message; one with an extra empty
- *     folder stays; a Maildir that is a link, and a mailbox that is a link, are not followed; a mailbox without
- *     Maildir/ is not touched; a second run finds nothing;
+ *     folder stays; the real server's case, an empty Maildir/ holding only an empty {cur,new,tmp} folder, goes, and
+ *     the same with a message inside stays; a Maildir that is a link, and a mailbox that is a link, are not followed;
+ *     a mailbox without Maildir/ is not touched; a second run finds nothing;
  *  3. the mailbox script creates the mailbox as Dovecot reads it: the mail in the mailbox's own folder, no Maildir/.
  *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.UnusedMaildirTest
  */
@@ -52,10 +54,19 @@ public class UnusedMaildirTest {
             Files.createDirectories(linked);
             Files.createSymbolicLink(linked.resolve("Maildir"), elsewhere.resolve("Maildir"));
             Files.createSymbolicLink(root.resolve("example.test/frank"), elsewhere);
+            Path brace = root.resolve("example.test/gina"), braceFull = root.resolve("example.test/hugo");
+            Files.createDirectories(brace.resolve("Maildir/{cur,new,tmp}"));
+            Files.createDirectories(braceFull.resolve("Maildir/{cur,new,tmp}"));
+            Files.writeString(braceFull.resolve("Maildir/{cur,new,tmp}/1700000001.M2.host"), "Subject: kept\n\nhello\n");
 
             UnusedMaildir.Outcome o = UnusedMaildir.run(root);
-            check("the empty one is removed (" + o.removed() + ")", o.removed().equals(java.util.List.of(empty.resolve("Maildir").toString()))
+            check("the empty one is removed (" + o.removed() + ")", o.removed().contains(empty.resolve("Maildir").toString())
                     && !Files.exists(empty.resolve("Maildir")));
+            check("the real server's case: only an empty {cur,new,tmp} folder inside, removed", o.removed().contains(brace.resolve("Maildir").toString())
+                    && !Files.exists(brace.resolve("Maildir")) && Files.isDirectory(brace));
+            check("nothing else removed", o.removed().size() == 2);
+            check("{cur,new,tmp} with a message inside stays, message and all", o.kept().contains(braceFull.resolve("Maildir").toString())
+                    && Files.readString(braceFull.resolve("Maildir/{cur,new,tmp}/1700000001.M2.host")).contains("kept"));
             check("the one with a message stays, message and all", o.kept().contains(full.resolve("Maildir").toString())
                     && Files.readString(full.resolve("Maildir/new/1700000000.M1.host")).contains("kept"));
             check("the one with an extra folder stays, untouched: cur, new and tmp are still there",
@@ -68,7 +79,7 @@ public class UnusedMaildirTest {
             check("a mailbox that is a link is not followed", !o.removed().toString().contains("frank") && !o.kept().toString().contains("frank"));
             check("a mailbox without Maildir/ is not touched", Files.isDirectory(none.resolve("cur")));
             UnusedMaildir.Outcome again = UnusedMaildir.run(root);
-            check("a second run removes nothing", again.removed().isEmpty() && again.kept().size() == 2);
+            check("a second run removes nothing", again.removed().isEmpty() && again.kept().size() == 3);
             deleteTree(elsewhere);
         } finally {
             deleteTree(root);
