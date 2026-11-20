@@ -97,7 +97,7 @@ public class SafeOwnershipTest {
             String regen = Files.readString(Path.of("src/main/java/org/daemoxcp/mail/scripts/ConfigRegeneratorScript.java"));
             check("the mail folders' regeneration: created as vmail, given back with SafeOwnership, no chown -R",
                     regen.contains("script.append(AS_VMAIL).append(\"mkdir -p '/var/vmail/\")")
-                    && regen.contains("script.append(AS_VMAIL).append(\"mkdir -p '\").append(maildir)")
+                    && regen.contains("script.append(AS_VMAIL).append(\"mkdir -p '\").append(box)")
                     && regen.contains("SafeOwnership.shell(\"/var/vmail\", \"vmail\", \"vmail\")") && !regen.contains("append(\"chown -R"));
             check("Roundcube's folders in the installation: no chown -R", !RoundcubeUser.shellOwnership().contains("chown -R"));
             String acme = Files.readString(Path.of("src/main/java/org/daemoxcp/mail/security/AcmeUser.java"));

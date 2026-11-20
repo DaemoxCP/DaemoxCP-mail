@@ -982,6 +982,21 @@ undo takes the copies away, finish moves what is left in the root and removes th
 never chooses between two different user scripts, never goes through a link, a second run does nothing. On the VM;
 with the fix taken out it fails.
 
+**ManageSieveLocalTest** — ManageSieve (4190) only on 127.0.0.1, where the webmail uses it (`ManageSieveLocal`): found
+installing from the README on a clean VM, Dovecot listened on `*:4190` even after the panel's first start. The file
+for 2.3 (`address`) and 2.4 (`listen`), the version read from `dovecot --version`, sockstat read and «only local» only
+when every address is 127.0.0.1, and the installer writing the same file (2.4 file list, 2.3 shell fragment).
+
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ManageSieveLocalTest
+
+**UnusedMaildirTest** — the empty `Maildir/` folders the mailbox script used to create, which Dovecot never used,
+removed at boot (`UnusedMaildir`, with rmdir as vmail). Nothing when Dovecot keeps the mail in a folder named Maildir;
+the script run for real on a throwaway tree: an empty one goes, one with a message or an extra folder stays untouched,
+links are not followed, a second run finds nothing; the mailbox script now creates the mail in the mailbox's own folder
+and the home.
+
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.UnusedMaildirTest
+
 **DovecotHomeE2ETest** — the same with real deliveries and the VM's real configuration (it must start with the home of
 before), as root with `-De2e.vm=yes`. Before: an autoreply written by the panel and a script of the mailbox's own
 (ManageSieve), one delivery, and the false folders are in IMAP LIST; a second mailbox gets a message moved into its
@@ -1342,9 +1357,18 @@ purpose. Logs, journals and the output of other programs are not checked: they s
 
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.i18n.FixedTextsTest
 
+**CleanInstallFindingsTest** — what the installation from the README on a clean VM found on 20/11/2026, kept fixed:
+the installation ends with pf closed and MySQL on 127.0.0.1 (before, they waited for the panel's first start); option 1
+sets the time zone with tzsetup, never with cp through the /etc/localtime link; MySQL not installed yet does not read
+like a failure; every yes/no window has its own text and Upgrade asks once; the menu stays on the item just used and
+Enter confirms a window with one field; the README names the start item as the menu does and mentions freebsd-update's
+pager. On the sources before the fixes it fails on exactly those points.
+
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.CleanInstallFindingsTest
+
 **EnglishLogsTest** — the panel's log lines stay in English, the same for everyone. The texts written in a log call
 (a java.util.logging logger, `System.out`, `System.err`) and in the message of an exception created in the code have
-no Italian word: one of a short list English does not have (al, della, sono, gia', senza...). Comments and translation
+no Italian word: one of a short list English does not have (`al`, `della`, `sono`, `gia'`, `senza`...). Comments and translation
 keys are not read. The checks first find an Italian line in a sample made wrong on purpose; on the sources before
 this test they find «Auto-apply firewall config al boot», seen in the real server's log on 19/11/2026.
 

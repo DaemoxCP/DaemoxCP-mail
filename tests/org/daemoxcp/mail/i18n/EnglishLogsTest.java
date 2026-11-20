@@ -21,8 +21,8 @@ import java.util.stream.Stream;
  *  3. The same for the message of an exception created in the code: it ends up in the log.
  *
  * Only the strings written in the code are read, never the comments (they stay in Italian) nor the translation keys
- * (al.sourceDomain is a name). An Italian word is one of a short list that English does not have (al, della, sono,
- * gia', senza...), so an English text never trips it.
+ * (al.sourceDomain is a name). An Italian word is one of a short list that English does not have (`al`, `della`,
+ * `sono`, `gia'`, `senza`...), so an English text never trips it.
  *
  * Usage (from the project root):
  *   java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.i18n.EnglishLogsTest

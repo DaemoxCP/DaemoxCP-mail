@@ -106,8 +106,13 @@ public class RootDistrustsDataTest {
             check("the script says both were skipped", script.contains("a domain with an invalid name was skipped")
                     && script.contains("a mailbox with an invalid name was skipped"));
             check("the good domain is there, between quotes", script.contains("mkdir -p '/var/vmail/good-test.example'"));
-            check("its mailbox: cur, new and tmp one by one", script.contains("'/var/vmail/good-test.example/john/Maildir/cur' '/var/vmail/good-test.example/john/Maildir/new' '/var/vmail/good-test.example/john/Maildir/tmp'")
-                    && !script.contains("{cur,new,tmp}"));
+            // The mailbox as Dovecot reads it (clean install from the README, 20/11/2026): the mail in the mailbox's own
+            // folder, no Maildir/ under it, and the home when Dovecot uses one.
+            check("its mailbox: cur, new and tmp one by one, in the mailbox's own folder",
+                    script.contains("'/var/vmail/good-test.example/john/cur' '/var/vmail/good-test.example/john/new' '/var/vmail/good-test.example/john/tmp'")
+                    && !script.contains("{cur,new,tmp}") && !script.contains("/john/Maildir"));
+            check("  and its home when Dovecot keeps it in home/", !org.daemoxcp.mail.system.DovecotHome.configured()
+                    || script.contains("'/var/vmail/good-test.example/john/tmp' '/var/vmail/good-test.example/john/home'"));
             Path f = dir.resolve("regen.sh");
             Files.writeString(f, script);
             check("sh -n accepts the script", org.daemoxcp.mail.util.Shell.run("sh", "-n", f.toString()).success());
