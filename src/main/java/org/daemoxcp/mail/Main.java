@@ -1961,8 +1961,9 @@ public class Main {
             System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.asRoot"));
             return 2;
         }
+        // Da Java 22 System.console() c'e' anche senza un terminale: isTerminal() dice se dall'altra parte c'e' qualcuno.
         java.io.Console terminal = System.console();
-        if (terminal == null) {
+        if (terminal == null || !terminal.isTerminal()) {
             System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.terminal"));
             return 2;
         }
