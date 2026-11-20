@@ -85,10 +85,19 @@ It is **careful**. The panel never changes something it cannot check, and it say
   before any other rule, so vacation replies, forwarding and the mailbox's own filters never act on it. Every
   mailbox gets *Drafts*, *Sent*, *Trash* and *Junk*, marked as special-use folders (RFC 6154), so mail programs use
   them instead of creating their own.
+- Rspamd learns from the users (Dovecot 2.4). A message moved or copied into *Junk*, from a mail program or with the
+  webmail's *Spam* button, is learned as spam; one moved out of *Junk* (not into *Trash*) as ham. Dovecot leaves the
+  message in a spool as the mail user, and the panel's root part hands it to Rspamd's controller every minute and
+  deletes it: the controller's password never leaves the root secrets. Rspamd's Bayes filter starts deciding after
+  200 messages of each kind.
 - A mail queue you can inspect and act on; the maximum message size.
 - A mailbox that signs in sends only from its own addresses: its own and those of the aliases that point to it (a
   catch-all gives its mailbox the other addresses of the domain). Any other sender, of the same domain or not, gets
-  `553 5.7.1 … not owned by user`. Mail from other servers on port 25 is not affected.
+  `553 5.7.1 … not owned by user`. The `From:` header too: one address, the envelope's or the mailbox's own, otherwise
+  Rspamd answers `554 5.7.1` before any other check. Mail from other servers on port 25 is not affected.
+- Outgoing mail checks DANE (RFC 7672): where the destination publishes DNSSEC-signed TLSA records, Postfix requires
+  TLS and a matching certificate; elsewhere TLS stays opportunistic. The local resolver (local_unbound) validates
+  DNSSEC.
 - Sending limits per mailbox: messages per hour, per day and recipients per message, global or for one mailbox.
   Before each message a mailbox sends after signing in, Postfix asks the panel. Each recipient counts as one message.
   Over a limit the sender gets a temporary refusal (`450 4.7.1`) that says why. Incoming mail is not counted, and with

@@ -352,18 +352,60 @@ public final class PanelSeparation {
         List<String> cmd = command(javaPath(), jarPath());
         Shell.Result r = Shell.run(Duration.ofSeconds(30), cmd.toArray(new String[0]));
         if (!r.success()) return "daemon(8) could not start the web part: " + r.outputTrim();
-        long deadline = System.currentTimeMillis() + ANSWER_SECONDS * 1000;
-        while (System.currentTimeMillis() < deadline) {
-            if (supervisor() <= 0) return "the web part stopped right away: see " + webLog;
-            String who = listener(port);
-            if (USER.equals(who) && answers(port)) {
-                LOGGER.info("Panel web part started as " + USER + " (pid " + readPid(webPid()) + ") on port " + port
-                        + "; the root part answers only on " + socket());
-                return null;
-            }
-            try { Thread.sleep(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return "interrupted"; }
+        String why = waitForWeb(new Probe() {
+            @Override public int supervisor() { return PanelSeparation.supervisor(); }
+            @Override public boolean answering() { return USER.equals(listener(port)) && answers(port); }
+        }, ANSWER_SECONDS, () -> Thread.sleep(1000));
+        if (why == null) {
+            LOGGER.info("Panel web part started as " + USER + " (pid " + readPid(webPid()) + ") on port " + port
+                    + "; the root part answers only on " + socket());
+            return null;
         }
-        return "the web part did not answer on port " + port + " within " + ANSWER_SECONDS + " seconds: see " + webLog;
+        return why.equals(GONE) ? "the web part stopped right away: see " + webLog
+                : why.equals(SILENT) ? "the web part did not answer on port " + port + " within " + ANSWER_SECONDS + " seconds: see " + webLog
+                : why;
+    }
+
+    /** Quello che serve per aspettare la web: il pid del supervisore (o -1) e se la web risponde sulla porta. */
+    interface Probe {
+        int supervisor();
+        boolean answering();
+    }
+
+    /** Una pausa fra un controllo e l'altro (un secondo; nelle prove niente). */
+    @FunctionalInterface
+    interface Pause {
+        void pause() throws InterruptedException;
+    }
+
+    static final String GONE = "gone", SILENT = "silent";
+    /** Quanti controlli di fila senza supervisore prima di dire che la web si e' fermata. */
+    static final int GONE_CHECKS = 3;
+
+    /**
+     * Aspetta che la web risponda: null se risponde, GONE se il supervisore manca per GONE_CHECKS controlli di fila,
+     * SILENT se non risponde entro seconds. Prima di ogni controllo una pausa: daemon(8) torna quando il padre esce, e
+     * il supervisore scrive il suo pidfile un attimo dopo; controllare subito leggeva un pidfile vuoto, o quello del
+     * supervisore di prima, gia' morto, e dava la web per fermata mentre partiva (misurato sulla VM il 20/11/2026: una
+     * volta su molti avvii, e il pannello restava tutto da root). Pura rispetto a Probe e Pause.
+     */
+    static String waitForWeb(Probe probe, long seconds, Pause pause) {
+        int gone = 0;
+        for (long i = 0; i < seconds; i++) {
+            try {
+                pause.pause();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return "interrupted";
+            }
+            if (probe.supervisor() <= 0) {
+                if (++gone >= GONE_CHECKS) return GONE;
+                continue;
+            }
+            gone = 0;
+            if (probe.answering()) return null;
+        }
+        return SILENT;
     }
 
     /**

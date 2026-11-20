@@ -1023,6 +1023,59 @@ delivered. Measured 20/11/2026: all OK; with the check taken out of `smtpd_sende
 
     java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SenderLoginMapTest
 
+**HeaderFromCheckTest** — a client that signs in writes in the `From:` header only its own sender address
+(`HeaderFromCheck`): with `SenderLoginMap` the envelope was checked, but on the VM a mailbox signed in on port 587 with its
+own envelope and `From: boss@` of the same domain went through, signed with the domain's DKIM key. The decision (only
+on the panel's milter Rspamd; a file of the same name written by hand is left alone), the Lua rule (only signed-in
+clients, a prefilter that rejects; one address in one From header, the envelope or the mailbox), the installer writing
+the same file, the order at boot and the verdict on the two probe scans. With `-De2e.vm=yes`, as root on the VM: rspamc
+as a signed-in user (own From, capitals, an alias as envelope, an empty envelope with the mailbox pass; another
+address, an outside one, an empty envelope with another address, two From headers, two addresses in one From are
+rejected; mail that does not sign in is not looked at); through Postfix with XCLIENT LOGIN on port 587 the own From is
+queued and another address gets `554 5.7.1` with the panel's text; on port 25 without a login the same From is not
+refused for it. What gets through is delivered to the test mailbox and expunged. Measured 20/11/2026: all OK; with the
+rule removed 7 checks fail, the 554 through Postfix among them.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.HeaderFromCheckTest
+
+**PostfixDaneTest** — DANE for outgoing mail (`PostfixDane`): `smtp_tls_security_level = dane` with
+`smtp_dns_support_level = dnssec`; before, Postfix sent with opportunistic TLS and never checked whose certificate it
+got. The decision (the installer's old values with a local validating resolver: apply; values set by hand: left
+alone; no validating resolver on this machine: left as it is, and said), reading `/etc/resolv.conf` and drill's ad
+flag, the installer, the order at boot. With `-De2e.vm=yes`, as root on the VM: Postfix reads dane and dnssec, the
+local resolver answers the root's DNSKEY with ad, and posttls-finger with main.cf's level asks for the TLSA records of
+the MX of ietf.org and posteo.de and for none of gmail.com (unsigned). Port 25 out is closed on the VM: only the DNS
+part is measured. Measured 20/11/2026: all OK; with the old values (may, default) 4 checks fail, the TLSA lookups among
+them. posttls-finger on its own uses dane: the test gives it main.cf's level, or it would prove nothing.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PostfixDaneTest
+
+**SpamLearningTest** — Rspamd learns from the users (`SpamLearning`, `SpamLearner`): a message moved or copied into
+Junk is spam, one moved out of it is ham, unless it goes to Trash; before, Rspamd learned only from rspamc run by hand.
+The decision (only Dovecot 2.4 with the panel's Junk; a configuration written by hand is left alone), the
+configuration, the two Sieve scripts and the program Dovecot pipes to (it only leaves the message in the spool as
+vmail, and always exits 0); a round of the root part on a throwaway spool with a fake Rspamd (whole messages learned
+and deleted oldest first, the ones still being written wait, empty, too big and week-old ones dropped unread, a link
+removed without reading its target, a 400 dropped, Rspamd not answering or refusing the password keeps them); the
+webmail's spam button (markasjunk) once in the panel's block; the order at boot. With `-De2e.vm=yes`, as root on the
+VM: the configuration in place and compiled, the program's folders 0755 and the program writing as vmail; real IMAP
+moves for the first mailbox: INBOX -> Junk leaves a spam message and Rspamd's «learned» counter grows when the root
+part's round hands it over, Junk -> INBOX the same as ham, Junk -> Trash leaves nothing; no Sieve error in the mail
+log; the test messages expunged. The VM's Bayes learns the test message (a new one each run). Measured 20/11/2026:
+all OK. The first live run found that Java's HTTP client, trying h2c on plain http, reached Rspamd's controller with
+no body («got zero length body»): the round now speaks HTTP/1.1.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.SpamLearningTest
+
+**WebPartWaitTest** — the root part waits for the web part (`PanelSeparation.waitForWeb`): on the VM, once over many
+starts, the root part read daemon(8)'s pidfile right after daemon returned, before the new supervisor had written it,
+said «the web part stopped right away» and served everything as root. A pause before every check; the supervisor
+missing at the first checks and then answering: up; missing three checks in a row: stopped; missing now and then:
+still waited for; never answering: silent at the deadline. Measured 20/11/2026: all OK; then six real restarts on the
+VM, each with a new web part as daemoxcp_mail and no NOT_APPLIED.
+
+    java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.WebPartWaitTest
+
 **DovecotHomeE2ETest** — the same with real deliveries and the VM's real configuration (it must start with the home of
 before), as root with `-De2e.vm=yes`. Before: an autoreply written by the panel and a script of the mailbox's own
 (ManageSieve), one delivery, and the false folders are in IMAP LIST; a second mailbox gets a message moved into its

@@ -838,6 +838,8 @@ public class SSLMailServer {
             // AUTH solo sulle porte di invio (587, 465), non sulla 25: solo se master.cf la accende su tutte e due, con
             // la prova vera con STARTTLS; se no torna com'era (PostfixSubmissionAuth).
             org.daemoxcp.mail.system.PostfixSubmissionAuth.ensureAtBoot();
+            // DANE per la posta in uscita, col risolutore locale che convalida DNSSEC (PostfixDane).
+            org.daemoxcp.mail.system.PostfixDane.ensureAtBoot();
 
             // POP3 come l'ha scelto l'amministratore, spento se non ha scelto: nessuno lo usava, e le sue porte
             // erano solo bersagli (Pop3 verifica e torna indietro).
@@ -888,6 +890,9 @@ public class SSLMailServer {
             // segna nella Junk prima di ogni regola: niente risposta automatica ne' inoltro sullo spam (SpecialFolders
             // verifica con IMAP, e se non va torna com'era).
             org.daemoxcp.mail.system.SpecialFolders.ensureAtBoot();
+            // Rspamd impara dagli utenti: spostato nella Junk e' spam, tolto dalla Junk e' posta buona (SpamLearning, Dovecot 2.4:
+            // IMAPSieve deposita il messaggio, la parte root lo consegna a Rspamd con SpamLearner, dopo RspamdController).
+            org.daemoxcp.mail.system.SpamLearning.ensureAtBoot();
 
             // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
             // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.
@@ -924,6 +929,11 @@ public class SSLMailServer {
             org.daemoxcp.mail.system.RedisSocket.ensureAtBoot();
             org.daemoxcp.mail.system.ClamdSocket.ensureAtBoot();
             org.daemoxcp.mail.system.RspamdController.ensureAtBoot();
+            // Chi si autentica scrive nel From solo un indirizzo suo: la busta la controlla Postfix (SenderLoginMap),
+            // il From una regola di Rspamd, che dal milter sa chi si e' autenticato (HeaderFromCheck).
+            org.daemoxcp.mail.system.HeaderFromCheck.ensureAtBoot();
+            // I messaggi che gli utenti spostano nella Junk o fuori, a Rspamd con la password del controller (SpamLearning).
+            org.daemoxcp.mail.system.SpamLearner.start();
 
             // Auto-setup Postfix aliases: crea /etc/aliases (o /etc/mail/aliases) se manca
             // + compila il .db. Risolve l'errore comune "open database /etc/aliases.db: No such file".

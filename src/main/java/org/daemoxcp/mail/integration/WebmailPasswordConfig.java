@@ -50,6 +50,14 @@ public final class WebmailPasswordConfig {
     static final String PLUGIN_LINE = "if (isset($config['plugins']) && is_array($config['plugins']) && !in_array('password', $config['plugins'], true)) "
             + "{ $config['plugins'][] = 'password'; }";
 
+    /**
+     * Il pulsante «Spam» / «Non spam» della webmail (il plugin markasjunk di Roundcube): sposta il messaggio nella Junk o
+     * nella INBOX, e da quello spostamento Rspamd impara (SpamLearning). Senza driver di apprendimento il plugin sposta e
+     * basta (il suo config.inc.php.dist). Stessa regola del plugin password: solo se l'elenco e' in questo file, una volta.
+     */
+    static final String JUNK_PLUGIN_LINE = "if (isset($config['plugins']) && is_array($config['plugins']) && !in_array('markasjunk', $config['plugins'], true)) "
+            + "{ $config['plugins'][] = 'markasjunk'; }";
+
     /** L'intestazione con cui Roundcube manda la chiave della webmail (WebmailPasswordHandler la legge). */
     public static final String KEY_HEADER = "X-DaemoxCP-Key";
 
@@ -99,6 +107,9 @@ public final class WebmailPasswordConfig {
                 + "$config['password_confirm_current'] = true;\n"
                 + "// The password plugin on, if the list of plugins is in this file and does not have it yet\n"
                 + PLUGIN_LINE + "\n"
+                + "// The spam button (markasjunk), on the same terms: it moves a message into Junk or back to INBOX, and Rspamd\n"
+                + "// learns from the move (SpamLearning)\n"
+                + JUNK_PLUGIN_LINE + "\n"
                 + END + "\n";
     }
 

@@ -824,7 +824,11 @@ smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_loglevel = 1
 
-smtp_tls_security_level = may
+# DANE for outgoing mail: where the destination publishes DNSSEC-signed TLSA records, TLS and a matching
+# certificate are required; elsewhere TLS stays opportunistic. local_unbound validates DNSSEC (PostfixDane does the
+# same on servers installed before).
+smtp_dns_support_level = dnssec
+smtp_tls_security_level = dane
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_loglevel = 1
 
@@ -1114,6 +1118,13 @@ clamav {
   servers = "/var/run/clamav/clamd.sock";
 }
 RSPAMD_AV
+
+# Chi si autentica scrive nell'intestazione From solo un indirizzo suo: la busta la controlla Postfix
+# (smtpd_sender_login_maps), il From questa regola di Rspamd, che dal milter sa chi si e' autenticato (HeaderFromCheck).
+mkdir -p /usr/local/etc/rspamd/lua.local.d
+cat > /usr/local/etc/rspamd/lua.local.d/daemoxcp-header-from.lua << 'RSPAMD_HEADER_FROM'
+""" + org.daemoxcp.mail.system.HeaderFromCheck.content() + """
+RSPAMD_HEADER_FROM
 
 sysrc rspamd_enable="YES"
 
