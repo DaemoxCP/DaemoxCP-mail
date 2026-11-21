@@ -63,7 +63,8 @@ function portOpen(port) {
         await page.waitForSelector('#panelConfirmConsoleCode', { state: 'visible' });
         const command = (await page.locator('#panelConfirmConsoleCommand').innerText()).trim();
         check('it shows the command with the name (' + command + ')',
-            command === 'java -jar daemoxcp-mail.jar --lang en --access-code ' + account.username);
+            // No --lang: since #213 the console speaks the language of the administrator named after --access-code.
+            command === 'java -jar daemoxcp-mail.jar --access-code ' + account.username);
         check('the field has focus', await page.evaluate(() => document.activeElement && document.activeElement.id === 'panelConfirmConsoleCode'));
 
         console.log('\n== 3. A wrong code ==');

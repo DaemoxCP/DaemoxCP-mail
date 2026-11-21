@@ -45,7 +45,7 @@ public class MailDbUsersTest {
         String tag = m.group(1);
         String[] lines = script.substring(m.end()).split("\n", -1);
         StringBuilder b = new StringBuilder();
-        // lines[0] e' il resto della riga di cat.
+        // lines[0] is the rest of cat's line.
         for (int i = 1; i < lines.length; i++) {
             if (lines[i].trim().equals(tag)) return b.toString();
             b.append(lines[i]).append("\n");
@@ -114,7 +114,7 @@ public class MailDbUsersTest {
         } else {
             Files.writeString(d.resolve("dovecot-sql.conf"), dovecot23);
             Files.setPosixFilePermissions(d.resolve("dovecot-sql.conf"), PosixFilePermissions.fromString("rw-------"));
-            // Nella 2.3 il file della passdb c'e', senza la connessione.
+            // With 2.3 the passdb file is there, without the connection.
             Files.writeString(d.resolve("conf.d/auth-sql.conf.ext"), "passdb {\n  driver = sql\n  args = /usr/local/etc/dovecot/dovecot-sql.conf\n}\n");
         }
         Files.setPosixFilePermissions(d.resolve("conf.d/auth-sql.conf.ext"), PosixFilePermissions.fromString("rw-------"));
@@ -235,7 +235,7 @@ public class MailDbUsersTest {
                         && second.postfixReloads == 0 && second.dovecotReloads == 0 && second.lookups == 0);
         check("second run: the files are identical", snapshot(at).equals(switched));
 
-        // Le prove che devono fallire: ognuna rimette i file byte per byte.
+        // The checks that must fail: each puts the files back byte for byte.
         record Case(String what, java.util.function.Consumer<Fake> breakIt, String service) {}
         List<Case> cases = List.of(
                 new Case("postmap answers an error after the change", x -> x.postmapAfter = new Shell.Result(1,

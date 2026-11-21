@@ -128,7 +128,7 @@ public class MailDbUsersMysqlTest {
             @Override public void close() { }
         });
 
-        // Le tabelle come le crea il pannello (domains, mailboxes con receive_enabled, aliases).
+        // The tables as the panel creates them (domains, mailboxes with receive_enabled, aliases).
         MailDatabase db = new MailDatabase();
         db.setCredentials(System.getProperty("mysql.user", "daemoxcp_mail"), System.getProperty("mysql.password", ""));
         db.setConnection("127.0.0.1", Integer.parseInt(port), database);
@@ -235,7 +235,7 @@ public class MailDbUsersMysqlTest {
 
         System.out.println("== 3. Put back");
         try (Connection root = as("root", "")) {
-            // A tutti e due i nomi: MySQL risolve 127.0.0.1 in localhost, e chi si collega in TCP entra come @localhost.
+            // To both names: MySQL resolves 127.0.0.1 to localhost, and who connects over TCP gets in as @localhost.
             exec(root, "GRANT SELECT ON mailboxes TO '" + MailDbUsers.POSTFIX_USER + "'@'127.0.0.1', '" + MailDbUsers.POSTFIX_USER + "'@'localhost'");
         }
         String why = MailDbUsers.verifyUsers(url, POSTFIX_PW, DOVECOT_PW);

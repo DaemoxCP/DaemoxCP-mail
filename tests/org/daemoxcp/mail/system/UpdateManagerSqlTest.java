@@ -45,7 +45,7 @@ public class UpdateManagerSqlTest {
         mail.createSchema();
         mail.ensureColumnUpgrades();
 
-        // I dati della prova, con una connessione propria (come chiunque abbia il database).
+        // The test's data, with a connection of its own (as anyone with the database).
         try (Connection root = DriverManager.getConnection("jdbc:mysql://127.0.0.1:" + port + "/" + db
                 + "?useSSL=true&requireSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC", "root", "")) {
             for (String sql : List.of(
