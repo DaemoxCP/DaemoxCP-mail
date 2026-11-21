@@ -6,7 +6,7 @@
 
     <groupId>org.daemoxcp.mail</groupId>
     <artifactId>daemoxcp-mail</artifactId>
-    <version>0.9.0</version>
+    <version>1.0.0</version>
 
     <name>FreeBSD Mail Panel</name>
     <description>Native mail server control panel for FreeBSD 15+</description>

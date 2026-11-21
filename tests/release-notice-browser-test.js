@@ -33,7 +33,8 @@ function portOpen(port) {
     return new Promise(resolve => { const s = net.connect(port, '127.0.0.1', () => { s.destroy(); resolve(true); }); s.on('error', () => resolve(false)); });
 }
 
-const NEWER = { version: '1.0.0', tag: 'v1.0.0', url: 'https://github.com/DaemoxCP/mail/releases/tag/v1.0.0',
+// Newer than the panel that runs (1.0.0 is the first release): a 1.0.0 here would be the same version, not a newer one.
+const NEWER = { version: '1.1.0', tag: 'v1.1.0', url: 'https://github.com/DaemoxCP/mail/releases/tag/v1.1.0',
     publishedAt: '2026-12-01T10:00:00Z', preRelease: false };
 
 (async () => {
@@ -133,11 +134,11 @@ const NEWER = { version: '1.0.0', tag: 'v1.0.0', url: 'https://github.com/Daemox
         await page.reload();
         await page.waitForSelector('#relOutcome .alert', { timeout: 60000 });
         const said = (await page.locator('#relOutcome .alert').innerText()).trim();
-        check('the card says it (' + said + ')', /Version 1\.0\.0 is out, published on (1 December 2026|December 1, 2026)\./.test(said));
+        check('the card says it (' + said + ')', new RegExp('Version ' + NEWER.version.replace(/\./g, '\\.') + ' is out, published on (1 December 2026|December 1, 2026)\\.').test(said));
         const link = page.locator('#relOutcome .alert a');
         check('with the link to the release page (' + await link.getAttribute('href') + ')', await link.getAttribute('href') === NEWER.url);
         await page.unroute('**/api/updates');
-        await page.route('**/api/updates', fake(Object.assign({}, NEWER, { url: 'https://attacker.example/releases/tag/v1.0.0' })));
+        await page.route('**/api/updates', fake(Object.assign({}, NEWER, { url: 'https://attacker.example/releases/tag/v1.1.0' })));
         await page.reload();
         await page.waitForSelector('#relOutcome .alert', { timeout: 60000 });
         check('a link that is not a GitHub release page is not shown', await page.locator('#relOutcome .alert a').count() === 0);
@@ -154,7 +155,7 @@ const NEWER = { version: '1.0.0', tag: 'v1.0.0', url: 'https://github.com/Daemox
         await page.waitForSelector('#panelReleaseNotice:not([hidden])', { timeout: 30000 });
         const notice = (await page.locator('#panelReleaseNotice').innerText()).trim();
         check('with one, the Dashboard says it (' + notice.replace(/\s+/g, ' ') + ')',
-            notice.includes('DaemoxCP Mail 1.0.0 is out: this panel runs ' + realStatus.current + '.'));
+            notice.includes('DaemoxCP Mail ' + NEWER.version + ' is out: this panel runs ' + realStatus.current + '.'));
         check('and links the release page', await page.locator('#panelReleaseLink').getAttribute('href') === NEWER.url);
         // The link and the text against the notice, in both themes: at least 4.5:1 (WCAG 1.4.3).
         for (const theme of ['light', 'dark']) {
