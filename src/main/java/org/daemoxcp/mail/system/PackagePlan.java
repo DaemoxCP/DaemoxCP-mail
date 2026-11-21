@@ -76,7 +76,12 @@ public final class PackagePlan {
     private static final String VULNERABLE = " (vulnerable!)";
 
     private static final Pattern FROM_TO = Pattern.compile("^(\\S+): (\\S+) -> (\\S+)(?: \\[([^\\]]+)\\])?$");
-    private static final Pattern REPO_VERSION_NAME = Pattern.compile("^(\\S+): (\\S+)(?: \\[([^\\]]+)\\])?$");
+    // Una nuova installazione: "nome: versione", il repository se ce n'e' piu' d'uno e il motivo se pkg lo sa. pkg 2.9
+    // (src/utils.c, display_summary_item, PKG_DISPLAY_INSTALL) scrive il motivo per le dipendenze tirate dentro:
+    // "py312-pyproject-hooks: 1.3.3 [FreeBSD-ports] (required by py312-build)". Senza il motivo nel modello, sulla VM
+    // il 21/11/2026 il passaggio di Python si fermava con «una riga che non so leggere», e cosi' ogni piano che
+    // installa una dipendenza nuova, «Aggiorna tutto» compreso.
+    private static final Pattern REPO_VERSION_NAME = Pattern.compile("^(\\S+): (\\S+)(?: \\[([^\\]]+)\\])?(?: \\((.*)\\))?$");
     private static final Pattern REINSTALL = Pattern.compile("^(\\S+)-([^\\s-]+)(?: \\[([^\\]]+)\\])?(?: \\((.*)\\))?$");
     private static final Pattern REMOVES = Pattern.compile("^(\\S+): (\\S+)(?: \\((.*)\\))?$");
     private static final Pattern PROTECTED_IN_PLAN = Pattern.compile(
@@ -176,7 +181,7 @@ public final class PackagePlan {
             case "install" -> {
                 m = REPO_VERSION_NAME.matcher(s);
                 if (!m.find()) return false;
-                changes.put(entry(section, m.group(1), "", m.group(2), "", m.group(3), vulnerable));
+                changes.put(entry(section, m.group(1), "", m.group(2), m.group(4), m.group(3), vulnerable));
             }
             case "reinstall" -> {
                 m = REINSTALL.matcher(s);

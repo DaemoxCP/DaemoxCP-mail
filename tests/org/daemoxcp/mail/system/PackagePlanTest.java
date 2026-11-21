@@ -143,6 +143,39 @@ public class PackagePlanTest {
             "Number of packages to be upgraded: 1"));
         real("with more repositories: the repository's name", "FreeBSD-latest".equals(find(p, "nginx").getString("repo")));
 
+        // pkg 2.9.2 on the VM, 21/11/2026 (pkg install -n -U py312-build): a dependency pulled in carries its reason,
+        // after the repository and before " (vulnerable!)" (src/utils.c, display_summary_item, PKG_DISPLAY_INSTALL).
+        p = PackagePlan.readPlan(String.join("\n",
+            "The following 2 package(s) will be affected (of 0 checked):",
+            "",
+            "New packages to be INSTALLED:",
+            "\tpy312-build: 1.6.1 [FreeBSD-ports]",
+            "\tpy312-pyproject-hooks: 1.3.3 [FreeBSD-ports] (required by py312-build)",
+            "",
+            "Number of packages to be installed: 2",
+            "",
+            "89 KiB to be downloaded."));
+        real("pkg 2.9 install with its reason: measured, two installations", p.getBoolean("measured") && p.getJSONArray("changes").length() == 2);
+        real("pkg 2.9 install with its reason: version, repository and reason apart",
+            "1.3.3".equals(find(p, "py312-pyproject-hooks").getString("to"))
+            && "FreeBSD-ports".equals(find(p, "py312-pyproject-hooks").getString("repo"))
+            && "required by py312-build".equals(find(p, "py312-pyproject-hooks").getString("reason")));
+        real("pkg 2.9 install without a reason: the reason stays empty", find(p, "py312-build").getString("reason").isEmpty());
+        p = PackagePlan.readPlan(String.join("\n",
+            "New packages to be INSTALLED:",
+            "\tlibfoo: 2.1 (required by bar) (vulnerable!)",
+            "",
+            "Number of packages to be installed: 1"));
+        real("pkg 2.9 install with reason and still vulnerable: both read",
+            p.getBoolean("measured") && find(p, "libfoo").getBoolean("stillVulnerable")
+            && "required by bar".equals(find(p, "libfoo").getString("reason")) && "2.1".equals(find(p, "libfoo").getString("to")));
+        p = PackagePlan.readPlan(String.join("\n",
+            "New packages to be INSTALLED:",
+            "\tlibfoo: 2.1 required by bar",
+            "",
+            "Number of packages to be installed: 1"));
+        real("an install line with words outside the brackets: still unreadable", !p.getBoolean("measured") && p.getJSONArray("unreadable").length() == 1);
+
         // Totals that do not add up do not become a "complete" plan.
         p = PackagePlan.readPlan(String.join("\n",
             "Installed packages to be UPGRADED:",

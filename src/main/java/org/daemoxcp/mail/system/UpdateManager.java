@@ -3835,6 +3835,14 @@ public final class UpdateManager {
     /** I pacchetti che la migrazione installa. */
     static final java.util.List<String> MYSQL84_PACKAGES = java.util.List.of("mysql84-server", "mysql84-client");
 
+    /**
+     * I pacchetti della posta legati al client MySQL: Postfix e Dovecot nel sapore MySQL, che per Dovecot cambia nome
+     * con la versione (dovecot-mysql la 2.3, dovecot24-mysql la 2.4). Dopo la sostituzione del client devono esserci
+     * ancora quelli che c'erano prima: sulla VM installata da zero (Dovecot 2.4) il 21/11/2026 la migrazione cercava
+     * solo dovecot-mysql, lo dava per «MANCANTE» e chiudeva con un errore su una posta che funzionava.
+     */
+    static final java.util.List<String> MAIL_MYSQL_PACKAGES = java.util.List.of("postfix-mysql", "dovecot-mysql", "dovecot24-mysql");
+
     /** Il piano esatto della migrazione: togliere server e client di adesso, poi installare la 8.4. */
     private static JSONObject mysql84Plan(String srvPkg, String cliPkg) {
         return judged(PackagePlan.planRemoveThenInstall(java.util.List.of(srvPkg, cliPkg), MYSQL84_PACKAGES,
@@ -4039,6 +4047,9 @@ public final class UpdateManager {
             // L'inventario, la configurazione e gli indirizzi in ascolto adesso, con tutto in
             // servizio: e' cio' con cui si confronta alla fine.
             PlanWatch watch = PlanWatch.take(sideEffects);
+            // I pacchetti della posta legati al client MySQL che ci sono adesso: quelli che il passo 6 cerca dopo.
+            java.util.List<String> mailMysqlBefore = new ArrayList<>();
+            for (String d : MAIL_MYSQL_PACKAGES) if (ok("pkg info -e " + d, 20)) mailMysqlBefore.add(d);
             job.write(I18n.tr("server.um.runMigration84.5", java.util.Map.of("schemasBefore", String.valueOf(schemesBefore), "tablesBefore", String.valueOf(tablesBefore), "mailboxesBefore", String.valueOf(mailboxesBefore))));
             job.write("  " + (testMailbox.isEmpty()
                     ? I18n.tr("server.um.x.testBoxNone")
@@ -4131,7 +4142,7 @@ public final class UpdateManager {
             job.write("");
             job.write(I18n.tr("server.um.runMigration84.14", java.util.Map.of("total", String.valueOf(TOT))));
             boolean lost = false;
-            for (String d : new String[]{"postfix-mysql", "dovecot-mysql"}) {
+            for (String d : mailMysqlBefore) {
                 boolean c = ok("pkg info -e " + d, 20);
                 job.write("    " + d + ": " + (c ? I18n.tr("server.um.x.present") : I18n.tr("server.um.x.missing")));
                 if (!c) lost = true;
@@ -10381,7 +10392,7 @@ public final class UpdateManager {
         r.put("mysqlPackages", client);
 
         JSONArray dependents = new JSONArray();
-        for (String pk : new String[]{"postfix-mysql", "dovecot-mysql", "dovecot24-mysql"}) {
+        for (String pk : MAIL_MYSQL_PACKAGES) {
             if (!ok("pkg info -e " + pk, 20)) continue;
             dependents.put(new JSONObject().put("name", pk)
                     .put("version", sh("pkg query %v " + pk, 20))
