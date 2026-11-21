@@ -125,6 +125,7 @@ REDISCONF
 # Keys are generated per-domain by the panel
 
 allow_username_mismatch = true;
+try_fallback = false;
 
 domain {
     # Domains will be added here by the panel
