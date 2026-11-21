@@ -40,7 +40,13 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(String(e)));
-    page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+    // While MySQL is down (the 8.4 migration stops it), the panel answers the page's requests with 503 and
+    // X-Panel-Database: unavailable, and the page asks again: Chrome logs each one as "Failed to load resource ... 503".
+    // That is the panel working as designed, so those lines are not page errors; any 503 without that header is a
+    // failure of its own, counted below.
+    let databaseWait = 0, other503 = 0;
+    page.on('response', r => { if (r.status() === 503) { if (r.headers()['x-panel-database'] === 'unavailable') databaseWait++; else other503++; } });
+    page.on('console', m => { if (m.type() === 'error' && !/status of 503 \(Service Unavailable\)/.test(m.text())) errors.push(m.text()); });
 
     await page.goto(BASE + '/index');
     await page.click('#linkConsole');
@@ -106,6 +112,7 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
         await page.waitForTimeout(3000);
     }
     check('no JavaScript error on the page (' + errors.length + ')', errors.length === 0);
+    check('every 503 was "the database is restarting" (' + databaseWait + '), none of another kind (' + other503 + ')', other503 === 0);
     errors.slice(0, 5).forEach(e => console.log('    ' + e.slice(0, 200)));
     await browser.close();
     console.log(failed === 0 ? '\nALL OK' : '\n' + failed + ' CHECKS FAILED');
