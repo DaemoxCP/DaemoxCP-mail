@@ -65,7 +65,17 @@ const rowReady = page => page.waitForFunction(() => {
         console.log('    ' + row);
         check('no separate Packages card, no separate row for the mail server packages',
             await page.$('#packages') === null && await page.$('#uc-stack') === null);
-        check('the row says what there is to do, in words', /All up to date|to update|has an update|have an update|not locked/.test(row));
+        check('the row says what there is to do, in words',
+            /All up to date|to update|has an update|have an update|not locked|ha(s|ve) a known vulnerability that the update does not fix yet/.test(row));
+        // Packages with a known vulnerability and no fixed version in the catalog (uc.pkVulnOpen): on the VM, 21/11/2026,
+        // VuXML listed five (clamav, nginx, roundcube, python312, libfontenc) and the test did not know that row yet.
+        // The number the row says must be one pkg audit agrees with: at least one, at most the packages it lists.
+        const open = row.match(/(\d+) packages? ha(?:s|ve) a known vulnerability that the update does not fix yet/);
+        if (open) {
+            const audited = Number(vm('pkg audit -q 2>/dev/null | wc -l'));
+            check('  the vulnerable packages without a fix (' + open[1] + ') are among the ones pkg audit lists (' + audited + ')',
+                Number(open[1]) > 0 && Number(open[1]) <= audited);
+        }
         check('  and the state in words, not only by colour', /\((up to date|to do|error|information)\)/.test(row));
         const buttons = await page.$$eval('#uc-packages .uc-head button', b => b.map(x => x.textContent.trim()));
         check('at most one button, the step after' + (buttons.length ? ': ' + buttons.join(', ') : ''), buttons.length <= 1);
