@@ -720,10 +720,11 @@ Ogni servizio viene controllato e ricaricato.
 
 I comandi da console vanno lanciati da `/home/panel`: il database del pannello è in `database/` accanto al jar.
 
-Dalla 0.9.0 il jar si chiama `daemoxcp-mail.jar`, senza la versione (la versione è dentro, e nella dashboard). Sui
-server installati prima il file si chiama ancora `daemoxcp-mail-1.0.jar` e il servizio continua a usare quello: al
-primo avvio il pannello aggiunge accanto il collegamento `daemoxcp-mail.jar`, così i comandi qui sopra sono uguali
-dappertutto, e `tools/upgrade/upgrade-panel.sh`, che sostituisce il file vero, non lascia mai indietro il collegamento.
+Il jar si chiama `daemoxcp-mail.jar`, senza la versione (la versione è dentro, e nella dashboard). Sui server
+installati con una build precedente il file si chiama ancora `daemoxcp-mail-1.0.jar` e il servizio continua a usare
+quello: al primo avvio il pannello aggiunge accanto il collegamento `daemoxcp-mail.jar`, così i comandi qui sopra sono
+uguali dappertutto, e `tools/upgrade/upgrade-panel.sh`, che sostituisce il file vero, non lascia mai indietro il
+collegamento.
 
 ### Il menu nel terminale
 

@@ -705,8 +705,8 @@ in the services' files are updated along the way, and each service is checked an
 
 The console commands must run from `/home/panel`: the panel's database is in `database/` next to the jar.
 
-From 0.9.0 the jar is called `daemoxcp-mail.jar`, without the version (the version is inside it, and on the
-dashboard). On servers installed before, the file is still `daemoxcp-mail-1.0.jar` and the service keeps using it:
+The jar is called `daemoxcp-mail.jar`, without the version (the version is inside it, and on the dashboard). On
+servers installed with an earlier build, the file is still `daemoxcp-mail-1.0.jar` and the service keeps using it:
 at its first start the panel adds `daemoxcp-mail.jar` next to it as a link, so the commands above are the same
 everywhere, and `tools/upgrade/upgrade-panel.sh`, which replaces the real file, never leaves the link behind.
 
