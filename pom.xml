@@ -105,6 +105,19 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <!-- La Public Suffix List che httpclient5 si porta dietro non entra nel jar. Il pannello
+                                 non costruisce client HTTP di httpclient5: l'unico uso della libreria e' il controllo
+                                 del nome host nelle attestazioni Android SafetyNet di webauthn-server-core, che crea
+                                 DefaultHostnameVerifier() senza elenco (PublicSuffixMatcher null) e non lo legge mai.
+                                 Il file lo caricano solo CookieSpecSupport e HttpsSupport, cioe' i client HTTP. -->
+                            <filters>
+                                <filter>
+                                    <artifact>org.apache.httpcomponents.client5:httpclient5</artifact>
+                                    <excludes>
+                                        <exclude>org/publicsuffix/**</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>org.daemoxcp.mail.Main</mainClass>
