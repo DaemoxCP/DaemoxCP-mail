@@ -1038,6 +1038,19 @@ rule removed 7 checks fail, the 554 through Postfix among them.
 
     java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.HeaderFromCheckTest
 
+**DkimFallbackTest** — Rspamd signs only the domains that have their own DKIM key (`DkimFallback`): `try_fallback = false`
+in `local.d/dkim_signing.conf`. On the real server root's nightly reports (the machine's own name, not a mail domain)
+made Rspamd log «cannot load dkim key /var/db/rspamd/dkim/…» every night; on the VM installed from the README the file
+did not exist and every local or signed-in message of a domain without a key did the same. The decision (only on the
+panel's milter Rspamd: a missing file is written, the panel's file gets the line, `try_fallback` already set or a file
+written by hand is left alone), the line right after `allow_username_mismatch` with the rest byte for byte, the
+configdump reading, DkimManager and the Rspamd installer writing the line, the order at boot. With `-De2e.vm=yes`, as
+root on the VM after the repair: configdump says `false`; a signed-in scan of a domain without a key is not signed and
+adds no «cannot load dkim key» line to Rspamd's log; a domain given a key for a moment (then the file put back) is still
+signed. Measured 21/11/2026: before the repair 2 checks red (configdump `true`, one more error line), after it all OK.
+
+    java [-De2e.vm=yes] -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.DkimFallbackTest
+
 **PostfixDaneTest** — DANE for outgoing mail (`PostfixDane`): `smtp_tls_security_level = dane` with
 `smtp_dns_support_level = dnssec`; before, Postfix sent with opportunistic TLS and never checked whose certificate it
 got. The decision (the installer's old values with a local validating resolver: apply; values set by hand: left
