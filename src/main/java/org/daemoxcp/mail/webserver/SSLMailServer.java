@@ -933,6 +933,8 @@ public class SSLMailServer {
             // Chi si autentica scrive nel From solo un indirizzo suo: la busta la controlla Postfix (SenderLoginMap),
             // il From una regola di Rspamd, che dal milter sa chi si e' autenticato (HeaderFromCheck).
             org.daemoxcp.mail.system.HeaderFromCheck.ensureAtBoot();
+            // Rspamd firma solo i domini con la loro chiave DKIM: niente piu' «cannot load dkim key» per gli altri (DkimFallback).
+            org.daemoxcp.mail.system.DkimFallback.ensureAtBoot();
             // I messaggi che gli utenti spostano nella Junk o fuori, a Rspamd con la password del controller (SpamLearning).
             org.daemoxcp.mail.system.SpamLearner.start();
 
