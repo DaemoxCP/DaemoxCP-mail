@@ -309,7 +309,10 @@ only; with the panel stopped Postfix lets the mail pass, and started again the c
 without the real log: a message a mailbox sent (received by the local mailbox, sent once per recipient, outside too),
 incoming mail, a bounce of incoming and of sent mail, a deferral (nothing), Rspamd's refusals (spam, virus), the queue
 entry dropped at «removed»; the UTC day of syslog dates (00:30 in Rome, a single-digit day, December read in January,
-RFC 5424); the sums once per group; complete lines from a position; the rest of a turned-over file from its .bz2.
+RFC 5424); the sums once per group; complete lines from a position; the rest of a turned-over file from maillog.0
+while newsyslog has not compressed it (same inode, even with a half-written .bz2 beside it), from its .bz2 once
+maillog.0 is gone, and a wait while neither is there (the real server at 00:00:02 on 21/11/2026), given up after 10
+minutes.
 
 `mail-stats-browser-test.js` (Playwright, VM) is the counts with real mail, on a domain of its own: two messages from
 A to B on 587, one from outside to B, one from A to an address that does not exist (it bounces, and Postfix's notice

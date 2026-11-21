@@ -14,6 +14,8 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -40,8 +42,8 @@ import java.util.regex.Pattern;
  * pagina Statistiche la leggeva, e nessuno la scriveva.
  *
  * <p>Ogni minuto la parte root legge le righe nuove di /var/log/maillog (dalla posizione salvata in {@link #STATE};
- * dopo la rotazione di mezzanotte, il resto del file vecchio da maillog.0.bz2) e conta, per giorno (UTC, r13), casella
- * e dominio:
+ * dopo la rotazione di mezzanotte, il resto del file vecchio: da maillog.0 finche' newsyslog non l'ha compresso, poi da
+ * maillog.0.bz2) e conta, per giorno (UTC, r13), casella e dominio:
  * <ul>
  *   <li>ricevuti: le consegne riuscite a una casella (lmtp, status=sent);</li>
  *   <li>mandati: le consegne riuscite, a chiunque, di un messaggio mandato da una casella autenticata
@@ -60,6 +62,10 @@ public final class MailLogStats {
 
     static final Path LOG = Path.of("/var/log/maillog");
     static final Path ROTATED = Path.of("/var/log/maillog.0.bz2");
+    /** Il file vecchio appena girato, prima che newsyslog lo comprima (flag J: aspetta circa 10 s, poi bzip2). */
+    static final Path ROTATED_PLAIN = Path.of("/var/log/maillog.0");
+    /** Quanto si aspetta il file vecchio, intero o compresso, prima di lasciar perdere il suo resto. */
+    static final Duration ROTATION_WAIT = Duration.ofMinutes(10);
     static final Path STATE = Path.of("/var/db/daemoxcp-mail/maillog-position.txt");
     static final int KEEP_DAYS = 400;
     static final long MAX_READ = 64L * 1024 * 1024;
@@ -226,8 +232,25 @@ public final class MailLogStats {
         }
         List<String> lines = new ArrayList<>();
         long offset = saved[1];
-        if (saved[0] != inode || size < offset) {
-            lines.addAll(rotatedRest(ROTATED, offset));
+        if (saved[0] == inode && size < offset) {
+            // Lo stesso file, svuotato sul posto: non c'e' un file vecchio da finire (prima si leggeva il .bz2 di ieri
+            // da quella posizione, righe gia' contate o d'altri giorni).
+            offset = 0;
+        } else if (saved[0] != inode) {
+            // Il file e' girato. Il resto di quello vecchio, se c'e' gia' (intero o compresso); se no si riprova al giro
+            // dopo, senza toccare la posizione: misurato sulla VM il 21/11/2026, newsyslog lascia maillog.0 intero per
+            // circa 10 s e solo dopo lo comprime, e alle 00:00:02 del server vero il .bz2 non c'era ancora.
+            List<String> rest = rotatedRest(ROTATED_PLAIN, ROTATED, saved[0], offset);
+            Instant now = Instant.now();
+            if (rest == null) {
+                if (rotationWaitSince == null) rotationWaitSince = now;
+                if (!gaveUpWaiting(rotationWaitSince, now)) return;
+                LOGGER.warning("[MailLogStats] " + LOG + " was turned over and after " + ROTATION_WAIT.toMinutes()
+                        + " minutes neither " + ROTATED_PLAIN + " nor " + ROTATED + " is there: the rest of the old file is not counted");
+                rest = List.of();
+            }
+            rotationWaitSince = null;
+            lines.addAll(rest);
             offset = 0;
         }
         long end = Math.min(size, offset + MAX_READ);
@@ -256,13 +279,42 @@ public final class MailLogStats {
         return last + 1;
     }
 
-    /** Il resto del file di ieri, da maillog.0.bz2, dopo i byte gia' letti. Niente se il file non c'e'. */
-    static List<String> rotatedRest(Path rotated, long skip) {
-        List<String> out = new ArrayList<>();
-        if (!Files.isRegularFile(rotated, LinkOption.NOFOLLOW_LINKS)) {
-            LOGGER.warning("[MailLogStats] " + LOG + " was turned over and " + rotated + " is not there: the rest of the old file is not counted");
-            return out;
+    /** Da quando si aspetta il file vecchio dopo una rotazione (null: non si aspetta). */
+    private static volatile Instant rotationWaitSince;
+
+    /** Si smette di aspettare il file vecchio dopo {@link #ROTATION_WAIT}. */
+    static boolean gaveUpWaiting(Instant since, Instant now) {
+        return !now.isBefore(since.plus(ROTATION_WAIT));
+    }
+
+    /**
+     * Il resto del file di ieri dopo i byte gia' letti, o null se non c'e' ancora: si riprova al giro dopo.
+     * <ul>
+     *   <li>plain c'e' ed e' proprio il file che si leggeva (stesso inode): da li', anche se bzip2 sta gia' scrivendo un
+     *       .bz2 a meta';</li>
+     *   <li>plain non c'e' piu' e c'e' il .bz2: bzip2 ha finito (toglie l'originale solo alla fine), dal .bz2;</li>
+     *   <li>altrimenti null.</li>
+     * </ul>
+     */
+    static List<String> rotatedRest(Path plain, Path bz2, long oldInode, long skip) {
+        if (Files.isRegularFile(plain, LinkOption.NOFOLLOW_LINKS)) {
+            try {
+                if (((Number) Files.getAttribute(plain, "unix:ino", LinkOption.NOFOLLOW_LINKS)).longValue() != oldInode) return null;
+                List<String> out = new ArrayList<>();
+                long size = Files.size(plain);
+                if (size > skip) readLines(plain, skip, Math.min(size, skip + MAX_READ), out);
+                return out;
+            } catch (IOException | UnsupportedOperationException | IllegalArgumentException e) {
+                return null;
+            }
         }
+        if (!Files.isRegularFile(bz2, LinkOption.NOFOLLOW_LINKS)) return null;
+        return bz2Rest(bz2, skip);
+    }
+
+    /** Il resto di un file compresso, dopo i byte gia' letti. */
+    static List<String> bz2Rest(Path rotated, long skip) {
+        List<String> out = new ArrayList<>();
         try {
             Process p = new ProcessBuilder("/usr/bin/bzcat", rotated.toString()).redirectErrorStream(false).start();
             try (InputStream in = p.getInputStream()) {

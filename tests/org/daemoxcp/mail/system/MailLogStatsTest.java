@@ -13,7 +13,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * The sent and received counts read from Postfix's log (MailLogStats), without the real log: which line counts what,
  * the day in UTC of a syslog date, the sums written once per group, the complete lines read from a position, and the
- * rest of a turned-over file from its .bz2 (where bzcat is). The real mail is in mail-stats-browser-test.js.
+ * rest of a turned-over file: from maillog.0 while newsyslog has not compressed it yet, from its .bz2 once it has (where
+ * bzip2 is), and a wait (not «nothing») while neither is there. The real mail is in mail-stats-browser-test.js.
  *
  *   java -cp "tests:daemoxcp-mail.jar" org.daemoxcp.mail.system.MailLogStatsTest
  */
@@ -101,12 +102,48 @@ public class MailLogStatsTest {
                 Files.writeString(dir.resolve("old"), "first\nsecond\nthird\n");
                 Process z = new ProcessBuilder("/usr/bin/bzip2", "-k", dir.resolve("old").toString()).start();
                 z.waitFor(30, TimeUnit.SECONDS);
-                List<String> rest = MailLogStats.rotatedRest(dir.resolve("old.bz2"), 6);
-                check("a turned-over file: what was not read yet, from its .bz2 (" + rest + ")", rest.equals(List.of("second", "third")));
+                List<String> rest = MailLogStats.bz2Rest(dir.resolve("old.bz2"), 6);
+                check("a compressed file: what was not read yet (" + rest + ")", rest.equals(List.of("second", "third")));
             } else {
                 System.out.println("  SKIPPED the .bz2 part: no bzip2 here");
             }
-            check("no .bz2: nothing, and no error", MailLogStats.rotatedRest(dir.resolve("missing.bz2"), 0).isEmpty());
+        } finally {
+            new ProcessBuilder("rm", "-rf", dir.toString()).start().waitFor(10, TimeUnit.SECONDS);
+        }
+
+        System.out.println("\n== The old file after the midnight turn-over ==");
+        // Measured on the VM on 21/11/2026: newsyslog renames maillog to maillog.0 (same inode), leaves it whole for
+        // about 10 s, then bzip2 writes maillog.0.bz2 and removes maillog.0 only when done. At 00:00:02 the real server
+        // found no .bz2 yet, gave up on the rest of the old file and logged a WARNING.
+        dir = Files.createTempDirectory("mail-log-stats-turn");
+        try {
+            Path plain = dir.resolve("maillog.0"), bz2 = dir.resolve("maillog.0.bz2");
+            Files.writeString(plain, "first\nsecond\nthird\n");
+            long inode = ((Number) Files.getAttribute(plain, "unix:ino")).longValue();
+            List<String> rest = MailLogStats.rotatedRest(plain, bz2, inode, 6);
+            check("not compressed yet: the rest from maillog.0 itself (" + rest + ")", List.of("second", "third").equals(rest));
+            check("all of it already read: nothing, not a wait", List.of().equals(MailLogStats.rotatedRest(plain, bz2, inode, 19)));
+            Files.writeString(bz2, "half-written by bzip2");
+            check("bzip2 still writing (both there): still maillog.0, never the half .bz2",
+                    List.of("second", "third").equals(MailLogStats.rotatedRest(plain, bz2, inode, 6)));
+            Files.delete(bz2);
+            check("maillog.0 is another file (other inode), no .bz2: wait", MailLogStats.rotatedRest(plain, bz2, inode + 1, 6) == null);
+            Files.delete(plain);
+            check("neither there yet (the 00:00:02 case): wait, not «nothing»", MailLogStats.rotatedRest(plain, bz2, inode, 6) == null);
+            if (Files.isExecutable(Path.of("/usr/bin/bzip2"))) {
+                Files.writeString(plain, "first\nsecond\nthird\n");
+                new ProcessBuilder("/usr/bin/bzip2", plain.toString()).start().waitFor(30, TimeUnit.SECONDS);
+                check("compressed and maillog.0 gone: the rest from the .bz2",
+                        !Files.exists(plain) && List.of("second", "third").equals(MailLogStats.rotatedRest(plain, bz2, inode, 6)));
+            } else {
+                System.out.println("  SKIPPED the compressed case: no bzip2 here");
+            }
+            java.time.Instant t = java.time.Instant.parse("2026-11-21T00:00:02Z");
+            check("still waiting after 9 minutes", !MailLogStats.gaveUpWaiting(t, t.plusSeconds(9 * 60)));
+            check("given up after " + MailLogStats.ROTATION_WAIT.toMinutes() + " minutes",
+                    MailLogStats.gaveUpWaiting(t, t.plus(MailLogStats.ROTATION_WAIT)) && MailLogStats.ROTATION_WAIT.toMinutes() == 10);
+            check("the real paths", MailLogStats.ROTATED_PLAIN.toString().equals("/var/log/maillog.0")
+                    && MailLogStats.ROTATED.toString().equals("/var/log/maillog.0.bz2"));
         } finally {
             new ProcessBuilder("rm", "-rf", dir.toString()).start().waitFor(10, TimeUnit.SECONDS);
         }
