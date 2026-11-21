@@ -435,7 +435,8 @@ smtpd_sasl_local_domain = $myhostname
 # Restrictions. reject_non_fqdn_recipient tiene fuori da Internet root@localhost, che con la
 # consegna locale accesa per localhost reject_unauth_destination lascerebbe passare.
 smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination, reject_non_fqdn_recipient
-# Chi si autentica spedisce solo dai suoi indirizzi (SenderLoginMap): lo stesso di FullMailServerScript
+# Chi si autentica spedisce solo dai suoi indirizzi (SenderLoginMap): lo stesso di FullMailServerScript; il controllo
+# sta sulle porte di invio, in master.cf
 smtpd_sender_login_maps = mysql:/usr/local/etc/postfix/""" + PostfixMaps.SENDER_LOGIN_FILE + "\n" + """
 smtpd_sender_restrictions = """ + PostfixMaps.SENDER_RESTRICTIONS + "\n" + """
 
@@ -501,11 +502,13 @@ submission inet n       -       n       -       -       smtpd
   -o smtpd_tls_security_level=encrypt
   -o smtpd_sasl_auth_enable=yes
   -o smtpd_client_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_sender_restrictions=""" + PostfixMaps.SUBMISSION_SENDER_RESTRICTIONS + "\n" + """
 smtps     inet  n       -       n       -       -       smtpd
   -o syslog_name=postfix/smtps
   -o smtpd_tls_wrappermode=yes
   -o smtpd_sasl_auth_enable=yes
-pickup    unix  n       -       n       60      1       pickup
+  -o smtpd_sender_restrictions=""" + PostfixMaps.SUBMISSION_SENDER_RESTRICTIONS + "\n" + """
+pickup   unix  n       -       n       60      1       pickup
 cleanup   unix  n       -       n       -       0       cleanup
 qmgr      unix  n       -       n       300     1       qmgr
 tlsmgr    unix  -       -       n       1000?   1       tlsmgr
