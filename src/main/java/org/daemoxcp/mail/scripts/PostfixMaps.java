@@ -25,9 +25,20 @@ public final class PostfixMaps {
      */
     public static final String SENDER_LOGIN_QUERY = "SELECT email FROM mailboxes WHERE email='%s' AND active=1"
             + " UNION SELECT destination FROM aliases WHERE source='%s' AND active=1";
-    /** smtpd_sender_restrictions come la scrivono gli installatori, col controllo del mittente davanti. */
-    public static final String SENDER_RESTRICTIONS = "reject_authenticated_sender_login_mismatch, permit_mynetworks,"
-            + " permit_sasl_authenticated, reject_non_fqdn_sender, reject_unknown_sender_domain";
+    /**
+     * smtpd_sender_restrictions in main.cf, quindi anche sulla 25: senza il controllo del mittente, che vale solo per chi
+     * si autentica. Sulla 25 l'autenticazione e' spenta (PostfixSubmissionAuth) e Postfix, per ogni messaggio in arrivo,
+     * scriveva «restriction `reject_authenticated_sender_login_mismatch' ignored: no SASL support» (server vero, 20/11).
+     */
+    public static final String SENDER_RESTRICTIONS = "permit_mynetworks, permit_sasl_authenticated, reject_non_fqdn_sender,"
+            + " reject_unknown_sender_domain";
+    /**
+     * smtpd_sender_restrictions sulle porte di invio (587, 465), con -o in master.cf: il controllo del mittente davanti
+     * (prima di permit_mynetworks: la webmail spedisce da 127.0.0.1 autenticata), poi le stesse di main.cf. Senza spazi,
+     * come le altre righe -o.
+     */
+    public static final String SUBMISSION_SENDER_RESTRICTIONS = "reject_authenticated_sender_login_mismatch,"
+            + SENDER_RESTRICTIONS.replace(", ", ",");
 
     private PostfixMaps() {}
 }

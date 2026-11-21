@@ -459,12 +459,11 @@ smtpd_helo_restrictions =
     reject_invalid_helo_hostname,
     reject_non_fqdn_helo_hostname
 
-# Who signs in sends only from its own addresses (its mailbox, the aliases that point to it): first, before
-# permit_mynetworks, because the webmail sends from 127.0.0.1 signed in. SenderLoginMap does the same on servers
-# installed before.
+# Who signs in sends only from its own addresses (its mailbox, the aliases that point to it): the check is on the
+# submission ports in master.cf (587, 465), where clients sign in; on port 25 nobody signs in. SenderLoginMap does the
+# same on servers installed before.
 smtpd_sender_login_maps = mysql:/usr/local/etc/postfix/""" + PostfixMaps.SENDER_LOGIN_FILE + "\n" + """
 smtpd_sender_restrictions =
-    reject_authenticated_sender_login_mismatch,
     permit_mynetworks,
     permit_sasl_authenticated,
     reject_non_fqdn_sender,
@@ -514,6 +513,7 @@ submission inet n       -       n       -       -       smtpd
   -o smtpd_tls_auth_only=yes
   -o smtpd_reject_unlisted_recipient=no
   -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_sender_restrictions=""" + PostfixMaps.SUBMISSION_SENDER_RESTRICTIONS + "\n" + """
   -o milter_macro_daemon_name=ORIGINATING
 
 # SMTPS (port 465)
@@ -523,6 +523,7 @@ smtps     inet  n       -       n       -       -       smtpd
   -o smtpd_sasl_auth_enable=yes
   -o smtpd_reject_unlisted_recipient=no
   -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_sender_restrictions=""" + PostfixMaps.SUBMISSION_SENDER_RESTRICTIONS + "\n" + """
   -o milter_macro_daemon_name=ORIGINATING
 
 # Local services
