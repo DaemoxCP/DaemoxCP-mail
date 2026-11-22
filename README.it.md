@@ -128,7 +128,9 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   si configurano da soli. Provati con Apple Mail su macOS su un server in produzione: il profilo configura l'account, e la
   posta parte e arriva. Anche un iPhone configurato a mano con le impostazioni di [I programmi di posta](#i-programmi-di-posta)
   riceve e spedisce. Il profilo su iPhone e iPad, e Thunderbird, non sono ancora stati provati con un programma di
-  posta vero.
+  posta vero. Il profilo è firmato col certificato del server di posta quando è quello di Let's Encrypt, e i
+  dispositivi Apple lo mostrano come verificato; prima non è firmato, risulta non verificato e si installa lo stesso.
+  La finestra dice quale dei due.
 
 **Sicurezza**
 - Accesso senza password: **passkey** (WebAuthn), codici monouso via email, o un codice dalla console del server.
@@ -678,7 +680,9 @@ telefono) con queste impostazioni:
 - **Nome utente**: l'indirizzo completo della casella, per esempio `alice@example.com`, sia per la posta in arrivo
   sia per quella in uscita. **Password**: quella della casella.
 - **Apple Mail** (Mac, iPhone, iPad): in *Caselle*, il pulsante *Configurazione dei client* della casella (l'icona del
-  telefono), scheda *iPhone/Mac*, **Scarica il profilo**. Aprilo sul dispositivo e l'account si configura da solo. Provato su macOS. Su un iPhone funzionano anche le impostazioni qui
+  telefono), scheda *iPhone/Mac*, **Scarica il profilo**. Aprilo sul dispositivo e l'account si configura da solo. Provato su macOS. È firmato col
+  certificato del server di posta quando è quello di Let's Encrypt, e i dispositivi Apple lo mostrano come verificato;
+  col certificato che si fa l'installazione non è firmato, risulta non verificato e si installa lo stesso. Su un iPhone funzionano anche le impostazioni qui
   sopra scritte a mano: provato, in ricezione e in invio.
 - **Thunderbird** trova le impostazioni da solo partendo dall'indirizzo, grazie ai record di autoconfig che scrive
   *Configura tutto*. Non ancora provato con un Thunderbird vero.

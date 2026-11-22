@@ -1730,7 +1730,7 @@
   "p465.safe": "restrictions are evaluated after authentication, so the line is safe",
   "p465.unsafe": "with this value the line would refuse legitimate users too, and the panel refuses to apply it",
   "p465.wApply": "APPLY",
-  "pa.after.html": "<strong>After downloading:</strong> on a <strong>Mac</strong> open the file, then confirm it in System Settings → General → VPN &amp; Device Management. On <strong>iPhone or iPad</strong> «Profile Downloaded» shows at the top of Settings. The profile is not signed, so it is marked as unverified: that is normal for a profile you generated yourself.",
+  "pa.after.html": "<strong>After downloading:</strong> on a <strong>Mac</strong> open the file, then confirm it in System Settings → General → VPN &amp; Device Management. On <strong>iPhone or iPad</strong> «Profile Downloaded» shows at the top of Settings.",
   "pa.download": "Download the profile",
   "pa.generating": "Generating the profile...",
   "pa.intro2.html": "You download the file, open it, and the mailbox is created with server, ports and encryption already right. <strong>The password is not in the file</strong> — it would end up in the Downloads folder in plain text: Mail asks for it once, the same for incoming and outgoing.",
@@ -7573,5 +7573,12 @@
   "server.sso.noRoundcube": "Roundcube is not in {path}.",
   "server.sso.installed": "The webmail sign-in plugin is installed.",
   "server.sso.installFailed": "The webmail sign-in plugin was not installed: {e}",
-  "server.f2bm.installFailed": "Installation failed: {e}"
+  "server.f2bm.installFailed": "Installation failed: {e}",
+  "pa.signed.html": "<strong>Signed</strong> with the mail server's certificate for <code>{name}</code>, valid until {until}: the iPhone, the iPad and the Mac show the profile as verified.",
+  "pa.unsigned.html": "<strong>Not signed:</strong> {why} The iPhone, the iPad and the Mac show the profile as not verified, and it installs all the same.",
+  "server.appleprof.sign.expired": "the mail server's certificate has expired.",
+  "server.appleprof.sign.notTrusted": "the mail server's certificate does not lead to an authority that phones and computers trust.",
+  "server.appleprof.sign.otherName": "the mail server's certificate does not cover {h}.",
+  "server.appleprof.sign.selfSigned": "the mail server's certificate is still the one the installation made itself. Once the Let's Encrypt one is in place (SSL certificates page), the profile is signed.",
+  "server.appleprof.sign.unreadable": "the mail server's certificate cannot be read."
 }

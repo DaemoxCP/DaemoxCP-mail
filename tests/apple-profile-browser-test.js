@@ -4,9 +4,11 @@
 //
 //  1. Mailboxes has no separate profile card any more.
 //  2. The window of a mailbox, tab iPhone/Mac: the profile comes first, before the steps by hand; its buttons turn on
-//     once the panel has checked the profile can be made, and the line under them names the IMAP and SMTP ports.
-//  3. "Download the profile" downloads that mailbox's .mobileconfig: its address, IMAP 993 and SMTP 465 with SSL, and
-//     no password inside. "See what it contains" shows the same profile.
+//     once the panel has checked the profile can be made, and the line under them names the IMAP and SMTP ports; a
+//     line says whether the profile is signed with the mail server's certificate, or why not (23/11/2026).
+//  3. "Download the profile" downloads that mailbox's .mobileconfig, signed exactly when the window says so: its
+//     address, IMAP 993 and SMTP 465 with SSL, and no password inside. "See what it contains" shows the same profile.
+//     On the test VM the mail certificate is the installation's self-signed one: the profile is not signed there.
 //  4. The window opened for another mailbox gives that mailbox's profile, not the previous one.
 //  5. At 375 px: no horizontal scrolling in the window, and the profile buttons are 44 px.
 //
@@ -65,6 +67,19 @@ const plistValue = (xml, key) => {
     return m ? (m[1] === 'true' || m[1] === 'false' ? m[1] : m[2]) : null;
 };
 
+// The profile in a downloaded file. Signed (23/11/2026) it is CMS in DER, starting with 0x30: the content comes out
+// with `security cms -D` on macOS (openssl elsewhere) and gets the same checks; unsigned it is the XML itself.
+const readProfile = file => {
+    const buf = fs.readFileSync(file);
+    if (buf.length === 0 || buf[0] !== 0x30) return { xml: buf.toString('utf8'), signed: false };
+    let xml = '';
+    try {
+        xml = execSync(process.platform === 'darwin' ? 'security cms -D -i "' + file + '"'
+            : 'openssl cms -verify -noverify -binary -inform DER -in "' + file + '"').toString('utf8');
+    } catch (e) { xml = ''; }
+    return { xml, signed: true };
+};
+
 (async () => {
     const browser = await chromium.launch({ headless: true, channel: 'chrome', args: HOST === '127.0.0.1' ? [] : ['--host-resolver-rules=MAP ' + HOST + ' 127.0.0.1'] });
     const errors = [], dialogs = [];
@@ -98,13 +113,20 @@ const plistValue = (xml, key) => {
         check('the download button is on', !(await page.$eval('#cfgAppleProfileBtn', b => b.disabled)));
         const sets = await page.innerText('#cfgAppleProfileSets');
         check('the line under it names IMAP 993 and SMTP 465', /:993\b/.test(sets) && /:465\b/.test(sets));
+        const signedLine = (await page.innerText('#cfgAppleProfileSigned')).trim();
+        const saysSigned = /^Signed\b/.test(signedLine);
+        check('a line says whether the profile is signed, and why not (' + signedLine.slice(0, 60) + '...)',
+            saysSigned || /^Not signed: \S/.test(signedLine));
         if (OUT) await page.locator('#mailConfigModal .modal-content').screenshot({ path: OUT + '/apple-profile-window.png' });
 
         console.log('\n== 3. Download and preview ==');
         const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#cfgAppleProfileBtn')]);
         const file = path.join(tmp, 'first.mobileconfig');
         await dl.saveAs(file);
-        const xml = fs.readFileSync(file, 'utf8');
+        const got = readProfile(file);
+        const xml = got.xml;
+        check('the file is signed exactly when the window says so (' + (got.signed ? 'signed' : 'not signed') + ')',
+            got.signed === saysSigned);
         check('the file is a .mobileconfig named after the mailbox', dl.suggestedFilename() === email.toLowerCase().replace(/[^a-z0-9._-]/g, '-') + '.mobileconfig');
         check('  its address is the mailbox', plistValue(xml, 'EmailAddress') === email);
         check('  IMAP 993 with SSL', plistValue(xml, 'IncomingMailServerPortNumber') === '993' && plistValue(xml, 'IncomingMailServerUseSSL') === 'true');
@@ -112,7 +134,9 @@ const plistValue = (xml, key) => {
         check('  no password inside', !/<key>(IncomingPassword|OutgoingPassword)<\/key>/.test(xml));
         if (process.platform === 'darwin') {
             let lint = '';
-            try { lint = execSync('plutil -lint "' + file + '"').toString(); } catch (e) { lint = String(e.stdout || e); }
+            const plain = path.join(tmp, 'first.xml');
+            fs.writeFileSync(plain, xml);
+            try { lint = execSync('plutil -lint "' + plain + '"').toString(); } catch (e) { lint = String(e.stdout || e); }
             check('  plutil accepts it', /: OK\s*$/.test(lint.trim()));
         }
         await page.click('#cfgAppleProfileLookBtn');
@@ -129,7 +153,7 @@ const plistValue = (xml, key) => {
             const file2 = path.join(tmp, 'second.mobileconfig');
             await dl2.saveAs(file2);
             check('the profile is the one of ' + (other === email ? 'the same' : 'the other') + ' mailbox', other !== email
-                && plistValue(fs.readFileSync(file2, 'utf8'), 'EmailAddress') === other);
+                && plistValue(readProfile(file2).xml, 'EmailAddress') === other);
             await closeWindow(page);
         } else {
             console.log('  (only one mailbox: skipped)');

@@ -60,6 +60,8 @@ final class RootGate {
             Map.entry("/api/ssh-keys", GET_POST),
             // «Mostra password»: la copia dal vault la legge solo la root (0.8, punto 3).
             Map.entry("/api/mailbox-password", POST),
+            // Il profilo Apple da scaricare: lo firma la root, con la chiave del certificato della posta (23/11/2026).
+            Map.entry("/apple-profile", GET),
             // La webmail: cambio password e copia nel vault, senza sessione (la web ha controllato chi chiama).
             Map.entry(org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, POST),
             Map.entry(org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH, POST),

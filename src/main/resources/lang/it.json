@@ -1730,7 +1730,7 @@
   "p465.safe": "le restrizioni si valutano dopo l'autenticazione, quindi la riga è sicura",
   "p465.unsafe": "con questo valore la riga rifiuterebbe anche gli utenti legittimi, e il pannello si rifiuta di applicarla",
   "p465.wApply": "APPLICA",
-  "pa.after.html": "<strong>Dopo aver scaricato:</strong> su <strong>Mac</strong> il file va aperto e poi confermato in Impostazioni di Sistema → Generali → VPN e gestione dispositivi. Su <strong>iPhone o iPad</strong> compare «Profilo scaricato» in Impostazioni, in cima. Il profilo non è firmato, quindi viene indicato come non verificato: è normale per un profilo che ti sei generato da solo.",
+  "pa.after.html": "<strong>Dopo aver scaricato:</strong> su <strong>Mac</strong> il file va aperto e poi confermato in Impostazioni di Sistema → Generali → VPN e gestione dispositivi. Su <strong>iPhone o iPad</strong> compare «Profilo scaricato» in Impostazioni, in cima.",
   "pa.download": "Scarica il profilo",
   "pa.generating": "Genero il profilo...",
   "pa.intro2.html": "Scarichi il file, lo apri, e la casella viene creata con server, porte e cifratura già giusti. <strong>La password non è dentro il file</strong> — finirebbe nella cartella Download in chiaro: Mail la chiede una volta sola, la stessa per entrata e uscita.",
@@ -7573,5 +7573,12 @@
   "server.sso.noRoundcube": "Roundcube non c'è in {path}.",
   "server.sso.installed": "Il plugin di accesso alla webmail è installato.",
   "server.sso.installFailed": "Il plugin di accesso alla webmail non si è installato: {e}",
-  "server.f2bm.installFailed": "Installazione non riuscita: {e}"
+  "server.f2bm.installFailed": "Installazione non riuscita: {e}",
+  "pa.signed.html": "<strong>Firmato</strong> col certificato del server di posta per <code>{name}</code>, valido fino al {until}: iPhone, iPad e Mac mostrano il profilo come verificato.",
+  "pa.unsigned.html": "<strong>Non firmato:</strong> {why} iPhone, iPad e Mac mostrano il profilo come non verificato, e si installa lo stesso.",
+  "server.appleprof.sign.expired": "il certificato del server di posta è scaduto.",
+  "server.appleprof.sign.notTrusted": "il certificato del server di posta non porta a un'autorità di cui telefoni e computer si fidano.",
+  "server.appleprof.sign.otherName": "il certificato del server di posta non copre {h}.",
+  "server.appleprof.sign.selfSigned": "il certificato del server di posta è ancora quello che si è fatta l'installazione. Quando c'è quello di Let's Encrypt (pagina Certificati SSL), il profilo si firma.",
+  "server.appleprof.sign.unreadable": "il certificato del server di posta non si legge."
 }

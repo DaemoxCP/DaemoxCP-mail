@@ -24,11 +24,13 @@
             const btn = document.getElementById('cfgAppleProfileBtn');
             const look = document.getElementById('cfgAppleProfileLookBtn');
             const sets = document.getElementById('cfgAppleProfileSets');
+            const signedLine = document.getElementById('cfgAppleProfileSigned');
             const out = document.getElementById('cfgAppleProfileOutcome');
             if (!btn || !look || !sets || !out) return;
             btn.disabled = true;
             look.disabled = true;
             sets.innerHTML = '';
+            if (signedLine) signedLine.innerHTML = '';
             out.innerHTML = '';
             let r;
             try {
@@ -47,6 +49,16 @@
                 return;
             }
             sets.innerHTML = t('pa.sets.html', { imap: paEsc(r.mailHost + ':' + r.imapPort), smtp: paEsc(r.mailHost + ':' + r.smtpPort) });
+            // Firmato o no (23/11/2026): un profilo non firmato l'iPhone lo mostra «Non verificato», e chi lo vede
+            // deve sapere che e' previsto, e cosa manca perche' sia firmato. Con l'icona e la parola, non col colore.
+            const s = r.signing || {};
+            if (signedLine) {
+                signedLine.innerHTML = s.signed
+                    ? '<i class="fas fa-certificate text-success me-1" aria-hidden="true"></i>'
+                      + t('pa.signed.html', { name: paEsc(s.name), until: paEsc(s.notAfter) })
+                    : '<i class="fas fa-circle-exclamation text-warning me-1" aria-hidden="true"></i>'
+                      + t('pa.unsigned.html', { why: paEsc(s.why || '') });
+            }
             btn.disabled = false;
             look.disabled = false;
         }
