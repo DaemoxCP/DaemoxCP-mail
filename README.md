@@ -485,7 +485,7 @@ mount | grep -q ' on /proc ' || mount /proc; java -version
 ### Step 5 — The panel and the certificates on the server
 
 1. **Get the panel's jar.** On your computer, download `daemoxcp-mail.jar` from the latest
-   [release](https://github.com/DaemoxCP/mail/releases) and check that its SHA-256 is the one in the release notes:
+   [release](https://github.com/DaemoxCP/DaemoxCP-mail/releases) and check that its SHA-256 is the one in the release notes:
 
    ```bash
    shasum -a 256 daemoxcp-mail.jar
@@ -685,7 +685,7 @@ settings:
 - **FreeBSD and the mail software**: the *Updates* page. It says what is new and does every step in order, with
   its checks. The mail packages are locked against a plain `pkg upgrade`, so the panel updates them itself, one
   at a time, after checking that the new version would not break the mail.
-- **The panel itself**: from the new [release](https://github.com/DaemoxCP/mail/releases), copy
+- **The panel itself**: from the new [release](https://github.com/DaemoxCP/DaemoxCP-mail/releases), copy
   `daemoxcp-mail.jar` and the two scripts in `tools/upgrade/` to `/root/panel-upgrade/` on the server (create it
   first with `install -d -m 700 /root/panel-upgrade`), then, as root, with the SHA-256 written in the release
   notes:
@@ -709,7 +709,7 @@ settings:
   signs in again; the mail is not interrupted.
 
   When a new version is out, the panel tells you. Once a day it reads the list of releases of
-  [DaemoxCP/mail](https://github.com/DaemoxCP/mail/releases) on GitHub. If one is newer than the panel, it says so,
+  [DaemoxCP/DaemoxCP-mail](https://github.com/DaemoxCP/DaemoxCP-mail/releases) on GitHub. If one is newer than the panel, it says so,
   with the link to the release page:
   - on the *Dashboard*;
   - on the *Updates* page, which also has *Check now*;

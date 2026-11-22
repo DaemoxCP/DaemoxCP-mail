@@ -7,7 +7,7 @@
 Per favore non aprire una issue pubblica per un problema di sicurezza: tutti potrebbero leggerla prima che esista una
 correzione.
 
-Segnalalo in privato su GitHub: nella pagina di [DaemoxCP/mail](https://github.com/DaemoxCP/mail), *Security*, poi
+Segnalalo in privato su GitHub: nella pagina di [DaemoxCP/DaemoxCP-mail](https://github.com/DaemoxCP/DaemoxCP-mail), *Security*, poi
 *Report a vulnerability*. La segnalazione la vede solo chi mantiene il progetto, e la conversazione resta lì finché
 non esce la correzione.
 
