@@ -124,7 +124,8 @@ It is **careful**. The panel never changes anything it cannot check, and it says
   DNS challenge on Cloudflare.
 - Apple Mail configuration profiles (Mac, iPhone, iPad) and Thunderbird autoconfig: clients set themselves up.
   Tested with Apple Mail on macOS on a production server: the profile sets up the account, and mail is sent and
-  received. iPhone, iPad and Thunderbird have not been tried with a real client yet.
+  received. An iPhone set up by hand with the settings in [Mail programs](#mail-programs) receives and sends too.
+  The profile on iPhone and iPad, and Thunderbird, have not been tried with a real client yet.
 
 **Security**
 - Sign-in without passwords: **passkeys** (WebAuthn), one-time codes by email, or a code from the server
@@ -666,7 +667,8 @@ settings:
 - **User name**: the mailbox's full address, for example `alice@example.com`, both for incoming and outgoing mail.
   **Password**: the mailbox's password.
 - **Apple Mail** (Mac, iPhone, iPad): on *Mailboxes*, the mailbox's Apple configuration profile. Open it on the
-  device and the account sets itself up. Tested on macOS.
+  device and the account sets itself up. Tested on macOS. On an iPhone, the settings above entered by hand work
+  too: tested, receiving and sending.
 - **Thunderbird** finds the settings by itself from the mail address, through the autoconfig records that *Set up
   everything* writes. Not tried with a real Thunderbird yet.
 - **The webmail**: `https://webmail.example.com:8443`, or **Open the webmail** from a mailbox in the panel.

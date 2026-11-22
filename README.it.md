@@ -126,7 +126,9 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
   verifica DNS su Cloudflare.
 - Profili di configurazione di Apple Mail (Mac, iPhone, iPad) e autoconfig di Thunderbird: i programmi di posta
   si configurano da soli. Provati con Apple Mail su macOS su un server in produzione: il profilo configura l'account, e la
-  posta parte e arriva. iPhone, iPad e Thunderbird non sono ancora stati provati con un programma di posta vero.
+  posta parte e arriva. Anche un iPhone configurato a mano con le impostazioni di [I programmi di posta](#i-programmi-di-posta)
+  riceve e spedisce. Il profilo su iPhone e iPad, e Thunderbird, non sono ancora stati provati con un programma di
+  posta vero.
 
 **Sicurezza**
 - Accesso senza password: **passkey** (WebAuthn), codici monouso via email, o un codice dalla console del server.
@@ -675,7 +677,8 @@ telefono) con queste impostazioni:
 - **Nome utente**: l'indirizzo completo della casella, per esempio `alice@example.com`, sia per la posta in arrivo
   sia per quella in uscita. **Password**: quella della casella.
 - **Apple Mail** (Mac, iPhone, iPad): in *Caselle*, il profilo di configurazione Apple della casella. Aprilo sul
-  dispositivo e l'account si configura da solo. Provato su macOS.
+  dispositivo e l'account si configura da solo. Provato su macOS. Su un iPhone funzionano anche le impostazioni qui
+  sopra scritte a mano: provato, in ricezione e in invio.
 - **Thunderbird** trova le impostazioni da solo partendo dall'indirizzo, grazie ai record di autoconfig che scrive
   *Configura tutto*. Non ancora provato con un Thunderbird vero.
 - **La webmail**: `https://webmail.example.com:8443`, oppure **Apri la webmail** da una casella nel pannello.
