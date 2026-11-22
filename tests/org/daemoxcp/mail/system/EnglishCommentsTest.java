@@ -189,10 +189,12 @@ public class EnglishCommentsTest {
         Files.writeString(admin, adminText);
         paths.add(admin);
         paths.add(dir.resolve("does-not-exist.conf"));
-        // The copies keep the file as it was: ConfigBackups, Fail2banManager, BanActionRepair, and the older ones.
+        // The copies keep the file as it was: ConfigBackups, Fail2banManager, BanActionRepair, and the older ones, whose
+        // prefix is the old name of "before-" (taken from the data file: the test writes no old name).
+        String oldBefore = LegacyNames.oldNamesOf("bootEnvironmentPrefix", "before-").get(0);
         List<Path> copies = new ArrayList<>();
         for (String name : List.of("mail.local.bak.1779137852481", "mail.local.bak.20260903-174305", "jail.conf.before-pf-20261101",
-                "public.conf.prima-di-pf-20260903-125720", "dovecot-sql.conf.pre-2.4", "pf.conf.orig")) {
+                "public.conf." + oldBefore + "pf-20260903-125720", "dovecot-sql.conf.pre-2.4", "pf.conf.orig")) {
             Path c = dir.resolve(name);
             Files.writeString(c, italian(WebProtection.jail()));
             copies.add(c);
@@ -210,7 +212,7 @@ public class EnglishCommentsTest {
                 .equals("# a comment of my own\n# The loopback is not filtered.\nset skip on lo\n"));
         boolean copiesKept = true;
         for (Path c : copies) copiesKept &= Files.readString(c).equals(italian(WebProtection.jail()));
-        check("  the copies (.bak, .before-pf-, .prima-di-pf-, .pre-2.4, .orig) stay as they were", copiesKept);
+        check("  the copies (.bak, .before-pf-, the old-named ones, .pre-2.4, .orig) stay as they were", copiesKept);
         try (var s = Files.list(dir)) {
             check("  no temporary file left", s.noneMatch(p -> p.getFileName().toString().endsWith(".tmp")));
         }
