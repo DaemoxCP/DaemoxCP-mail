@@ -63,12 +63,19 @@ public final class EnglishComments {
 
     /**
      * Le copie di un file, del pannello o di chi amministra: ConfigBackups («file.bak.MILLISECONDI»), Fail2banManager
-     * («.bak.AAAAMMGG-HHMMSS»), BanActionRepair («.before-pf-»), quelle di prima ancora («.prima-di-pf-»), e .pre-2.4,
+     * («.bak.AAAAMMGG-HHMMSS»), BanActionRepair («.before-pf-»), quelle di prima ancora col prefisso vecchio di «before-»
+     * (sezione "bootEnvironmentPrefix" di legacy-names.json: i nomi vecchi non si scrivono nel codice), e .pre-2.4,
      * .orig, .old, .sample. Una copia conserva il file com'era: non si traduce. Visto sul server vero il 22/11/2026, dove
      * jail.d e pf.anchors ne hanno una ventina.
      */
-    static final java.util.regex.Pattern COPY = java.util.regex.Pattern.compile(
-            ".*(\\.bak(\\..*)?|\\.before-.*|\\.prima-di-.*|\\.pre-2\\.4|\\.orig|\\.old|\\.sample|~)");
+    static final java.util.regex.Pattern COPY = copyPattern();
+
+    private static java.util.regex.Pattern copyPattern() {
+        StringBuilder alternatives = new StringBuilder("\\.bak(\\..*)?|\\.before-.*|\\.pre-2\\.4|\\.orig|\\.old|\\.sample|~");
+        for (String old : LegacyNames.oldNamesOf("bootEnvironmentPrefix", "before-"))
+            alternatives.append("|\\.").append(java.util.regex.Pattern.quote(old)).append(".*");
+        return java.util.regex.Pattern.compile(".*(" + alternatives + ")");
+    }
 
     static boolean copy(Path p) {
         Path name = p.getFileName();
