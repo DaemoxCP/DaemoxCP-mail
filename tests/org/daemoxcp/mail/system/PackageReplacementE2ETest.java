@@ -22,9 +22,11 @@ import java.util.TreeSet;
  *
  *   harmless       fakeapp 1.0 + fakelib: each of the three jobs removes fakelib by itself, puts
  *                  in fakelib0, fakeapp 1.1 runs, and the job's log has the evidence;
- *   other user     fakeother too, which still uses fakelib: pkg would remove it silently. Each of
- *                  the three jobs stops and changes nothing; the card, with the packages
- *                  downloaded, shows the two removals, which the panel does not run;
+ *   other user     fakeother too, which still uses fakelib. Before 2.9 pkg would remove it silently;
+ *                  pkg 2.9.2 holds fakeapp back instead (measured 22/11/2026). Each of the three jobs
+ *                  stops and changes nothing; the card, with the packages downloaded, says why: the two
+ *                  removals the panel does not run, or what pkg holds back, what is in the way and who
+ *                  still needs it;
  *   started        the same with the packages downloaded, with the go given anyway with the card's
  *                  signature: the card does not let it start, the job refuses, fakeother stays;
  *   broken plugin  fakeplugin uses libfake.so.1 without declaring fakelib: pkg would remove fakelib
@@ -148,22 +150,55 @@ public class PackageReplacementE2ETest {
         if (r == null) return;
         String label = flow + " other user: ";
         check(label + "the job stops (" + r.optString("status") + ")", "error".equals(r.optString("status")));
-        check(label + "and the reason for the stop says which removals the panel does not run", r.optString("errorMessage").contains("fakeother 1.0")
-                && r.optString("errorMessage").contains("fakelib 1.0"));
         check(label + "no package changed", sh("pkg query %n-%v | sort").equals(before));
         check(label + "fake-other still runs", sh("/usr/local/bin/fake-other; echo $?").trim().equals("0"));
         check(label + "fakeapp protected again as before", flow.equals("unprotected") || locked().contains("fakeapp"));
-        // With the packages downloaded the card sees the two removals, and says it does not run them.
+        // With the packages downloaded, what pkg does. Before 2.9 it planned to remove fakelib and fakeother too, and the
+        // panel refused; pkg 2.9.2 holds fakeapp back instead and removes nothing (measured on the VM, 22/11/2026): the
+        // plan is empty, and the panel must say why instead of showing nothing.
+        boolean heldBack = pkgHoldsFakeappBack();
         JSONObject preview = preview(flow);
-        JSONArray v = preview.optJSONObject("plan") == null ? null : preview.getJSONObject("plan").optJSONArray("replacements");
-        Set<String> never = new TreeSet<>();
-        for (int i = 0; v != null && i < v.length(); i++)
-            if (!v.getJSONObject(i).optBoolean("safe"))
-                never.add(v.getJSONObject(i).optString("name"));
-        check(label + "the card shows fakelib and fakeother, which the panel does not remove (found " + never + ")",
-                never.equals(Set.of("fakelib", "fakeother")));
         boolean blocked = flow.equals("guided") ? !preview.optBoolean("canProceed") : !preview.optString("blockedReason").isEmpty();
+        String why = r.optString("errorMessage");
+        if (heldBack) {
+            check(label + "pkg holds fakeapp back: the reason for the stop says so, what is in the way and who still needs it",
+                    why.contains("fakeapp 1.1") && why.contains("fakelib 1.0") && why.contains("fakeother"));
+            JSONArray hb = preview.optJSONObject("plan") == null ? null : preview.getJSONObject("plan").optJSONArray("heldBack");
+            check(label + "the card knows pkg holds fakeapp back (" + hb + ")",
+                    hb != null && hb.length() == 1 && "fakeapp".equals(hb.getJSONObject(0).optString("name")));
+            String shown = flow.equals("guided") ? checkDetail(preview, "plan-held-back") : preview.optString("blockedReason");
+            check(label + "and the card says why: fakelib 1.0 is still needed by fakeother",
+                    shown.contains("fakelib 1.0") && shown.contains("fakeother"));
+        } else {
+            check(label + "and the reason for the stop says which removals the panel does not run",
+                    why.contains("fakeother 1.0") && why.contains("fakelib 1.0"));
+            // With the packages downloaded the card sees the two removals, and says it does not run them.
+            JSONArray v = preview.optJSONObject("plan") == null ? null : preview.getJSONObject("plan").optJSONArray("replacements");
+            Set<String> never = new TreeSet<>();
+            for (int i = 0; v != null && i < v.length(); i++)
+                if (!v.getJSONObject(i).optBoolean("safe"))
+                    never.add(v.getJSONObject(i).optString("name"));
+            check(label + "the card shows fakelib and fakeother, which the panel does not remove (found " + never + ")",
+                    never.equals(Set.of("fakelib", "fakeother")));
+        }
         check(label + "and it does not let it start", blocked);
+    }
+
+    /** pkg's own answer, with the packages downloaded: does it hold fakeapp 1.1 back (pkg 2.9) instead of removing? */
+    static boolean pkgHoldsFakeappBack() {
+        boolean wasLocked = locked().contains("fakeapp");
+        String out = sh("pkg unlock -y fakeapp >/dev/null 2>&1; pkg upgrade -n fakeapp 2>&1");
+        if (wasLocked) sh("pkg lock -y fakeapp >/dev/null 2>&1");
+        System.out.println("     pkg with the packages downloaded: " + (out.contains("is held back") ? "holds fakeapp back" : "would remove"));
+        return out.contains("fakeapp-1.1 is held back to solve the problem");
+    }
+
+    /** The text of one check of the guided card, "" if it is not there. */
+    static String checkDetail(JSONObject preview, String id) {
+        JSONArray ck = preview.optJSONArray("checks");
+        for (int i = 0; ck != null && i < ck.length(); i++)
+            if (id.equals(ck.getJSONObject(i).optString("id"))) return ck.getJSONObject(i).optString("detail");
+        return "";
     }
 
     /**

@@ -1019,7 +1019,7 @@ public final class UpdateManager {
         // gemello di famiglia da sbloccare, per la stessa ragione: qui non si sblocca niente.
         JSONObject unprotectedPlan = judged(PackagePlan.fullPlan(java.util.Set.of(), lockedNames(),
                 b -> I18n.tr("server.um.x.staysLockedHere")));
-        String blocked = destructivePlanReason(unprotectedPlan);
+        String blocked = cardBlockedReason(unprotectedPlan);
         r.put("plan", planForCard(unprotectedPlan))
          .put("signature", unprotectedPlan.optString("signature"))
          .put("blockedReason", blocked == null ? "" : blocked);
@@ -1254,7 +1254,7 @@ public final class UpdateManager {
         // con gli stessi sblocchi che fara' il lavoro vero. La tabella qui sopra dice i pacchetti
         // protetti; questo dice TUTTO cio' che cambiera', dipendenze comprese.
         JSONObject plan = judged(maintenancePlan(arr).getJSONObject("plan"));
-        String blocked = destructivePlanReason(plan);
+        String blocked = cardBlockedReason(plan);
         return new JSONObject().put("success", true).put("packages", arr)
                 .put("blockedReason", blocked == null ? "" : blocked)
                 .put("plan", planForCard(plan)).put("signature", plan.optString("signature", ""))
@@ -3094,6 +3094,16 @@ public final class UpdateManager {
             LOGGER.warning("Plan grew after fetching by removals the panel refuses: " + before + " -> " + after + "; " + now.getJSONArray("replacements"));
             return new Recheck(why, approved);
         }
+        // pkg 2.9 trattiene l'aggiornamento (un conflitto sui file che si vede solo coi pacchetti scaricati): il motivo
+        // e' quello, e lo si dice; se nel piano resta altro, va comunque riapprovato.
+        String held = heldBackReason(now);
+        if (held != null) {
+            JSONArray left = now == null ? null : now.optJSONArray("changes");
+            String why = (left == null || left.isEmpty()) ? held : held + " " + I18n.tr("server.um.x.planGrewStop");
+            job.write("  " + why);
+            LOGGER.warning("pkg held back after fetching the packages: " + before + " -> " + after + "; " + now.optJSONArray("heldBack"));
+            return new Recheck(why, approved);
+        }
         job.write("  " + I18n.tr("server.um.x.planGrew", java.util.Map.of("before", String.valueOf(before), "after", String.valueOf(after))));
         job.write("  " + I18n.tr("server.um.x.planApproved"));
         for (String r : PackagePlan.changesInLines(approved)) job.write("      " + r);
@@ -3221,6 +3231,56 @@ public final class UpdateManager {
         java.util.List<String> refused = removalsRefused(plan);
         return refused.isEmpty() ? null
                 : I18n.tr("server.um.x.planRemovesNever", java.util.Map.of("list", String.join(", ", refused)));
+    }
+
+    /**
+     * Perche' pkg trattiene degli aggiornamenti (pkg 2.9, «is held back to solve the problem»: PackagePlan.readPlan), in
+     * parole, o null se non ne trattiene. Per ogni conflitto il pacchetto nuovo, quello installato che ingombra col file in
+     * comune, e chi ha ancora bisogno di quello installato (pkg query %rn: e' il motivo per cui pkg non lo toglie).
+     * Misurato sulla VM il 22/11/2026 con pkg 2.9.2: senza questo la scheda mostrava un piano vuoto senza dire perche', e
+     * il lavoro si fermava col generico «il piano e' cambiato».
+     */
+    static String heldBackReason(JSONObject plan) {
+        JSONArray held = plan == null ? null : plan.optJSONArray("heldBack");
+        if (held == null || held.isEmpty()) return null;
+        java.util.List<String> heldShown = new ArrayList<>();
+        java.util.Set<String> heldNames = new java.util.HashSet<>();
+        for (int i = 0; i < held.length(); i++) {
+            JSONObject h = held.getJSONObject(i);
+            heldShown.add(h.optString("name") + " " + h.optString("version"));
+            heldNames.add(h.optString("name"));
+        }
+        java.util.List<String> parts = new ArrayList<>();
+        JSONArray conflicts = plan.optJSONArray("conflicts");
+        for (int i = 0; conflicts != null && i < conflicts.length(); i++) {
+            JSONObject c = conflicts.getJSONObject(i);
+            String installed = c.optString("installed");
+            java.util.List<String> users = new ArrayList<>();
+            if (isValidName(installed))
+                for (String u : sh("pkg query %rn " + installed + " 2>/dev/null", 30).split("\n"))
+                    if (!u.isBlank() && !heldNames.contains(u.trim()) && !u.trim().equals(installed)) users.add(u.trim());
+            java.util.Map<String, String> v = java.util.Map.of(
+                    "new", c.optString("name") + " " + c.optString("version"),
+                    "installed", installed + " " + c.optString("installedVersion"),
+                    "file", c.optString("file"),
+                    "users", String.join(", ", users));
+            parts.add(I18n.tr(users.isEmpty() ? "server.um.x.pkgHeldBackConflict" : "server.um.x.pkgHeldBackConflictUsers", v));
+        }
+        String heldList = String.join(", ", heldShown);
+        return parts.isEmpty()
+                ? I18n.tr("server.um.x.pkgHeldBackPlain", java.util.Map.of("held", heldList))
+                : I18n.tr("server.um.x.pkgHeldBack", java.util.Map.of("held", heldList, "conflicts", String.join("; ", parts)));
+    }
+
+    /**
+     * Il motivo da mostrare nelle schede dei pacchetti non protetti e della manutenzione: quello delle modifiche
+     * distruttive; se non ce n'e' e il piano non ha niente da fare perche' pkg trattiene tutto, quello di pkg.
+     */
+    static String cardBlockedReason(JSONObject plan) {
+        String destructive = destructivePlanReason(plan);
+        if (destructive != null) return destructive;
+        JSONArray ch = plan == null ? null : plan.optJSONArray("changes");
+        return ch == null || ch.isEmpty() ? heldBackReason(plan) : null;
     }
 
     /**
@@ -3366,6 +3426,14 @@ public final class UpdateManager {
             }
             java.util.List<String> stoppedAsked = new ArrayList<>(asked);
             stoppedAsked.retainAll(jsonArrayToList(plan.getJSONArray("unchangedPackages")));
+            // pkg 2.9 che trattiene l'aggiornamento per un conflitto sui file: il perche' al posto di «non cambia».
+            String heldBack = heldBackReason(plan);
+            if (heldBack != null) {
+                addCheck(checks, "plan-held-back", I18n.tr("server.um.x.pkgHeldBackCheck"), "block", heldBack);
+                block = true;
+                JSONArray hb = plan.getJSONArray("heldBack");
+                for (int i = 0; i < hb.length(); i++) stoppedAsked.remove(hb.getJSONObject(i).optString("name"));
+            }
             if (!stoppedAsked.isEmpty()) {
                 addCheck(checks, "plan-stopped", I18n.tr("server.um.packagePreflight.20"), "block",
                         I18n.tr("server.um.packagePreflight.21", java.util.Map.of("name", String.join(", ", stoppedAsked))));
