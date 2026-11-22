@@ -65,6 +65,8 @@ public class PackageTurnAcrossProcessesTest {
         Main.mailDatabase = null;
         check("the locks rule is not applied while the other works, and it says so",
                 policy.contains("not applied") && policy.contains("pid " + h.pid));
+        check("the log names the other's job and pid",
+                PackageQueue.holderForLog().equals("job holder-" + h.pid + ", pid " + h.pid));
         h.release();
         check("released by the other, here it is taken", PackageQueue.take("here", "guided update") == null);
         check("and the lock says who holds it now", Files.readString(PackageQueue.turnLock).startsWith("pid " + me + ", "));
@@ -95,11 +97,34 @@ public class PackageTurnAcrossProcessesTest {
         PackageQueue.release("here");
         Files.deleteIfExists(PackageRecovery.notice);
 
+        // As in M4 of UpdaterRobustnessE2ETest on the VM (22/11/2026): the killed job's trace stays on disk, and the
+        // service's watch takes the turn to put the locks back. The log must name the process holding the turn, not
+        // the killed job.
+        System.out.println("\n== A killed job's trace on disk, the turn held by another process putting locks back ==");
+        long dead = deadPid();
+        Files.writeString(PackageQueue.running(), new JSONObject().put("id", "killed-job").put("pid", dead)
+                .put("description", "killed job").toString());
+        Holder w = Holder.startForLocks(list, "putting locks back");
+        check("the other process holds the turn for the locks", w.pid > 0);
+        Files.writeString(list, "e2e-turn-probe-a\n");
+        String who = PackageQueue.holderForLog();
+        System.out.println("    (in the log: " + who + ")");
+        check("the log names the process that holds the turn", who.contains("pid " + w.pid));
+        check("and not the killed job, whose trace is still on disk", !who.contains("killed-job") && !who.contains("pid " + dead));
+        restore = UpdateManager.restoreLocksAfterCrash();
+        check("the start leaves the list alone and says who holds the turn",
+                restore.contains("another panel process holds the package turn") && restore.contains("pid " + w.pid)
+                && !restore.contains("killed-job") && !restore.contains("a job is running there"));
+        w.release();
+        Files.deleteIfExists(list);
+        Files.deleteIfExists(PackageQueue.running());
+
         lockfAgainstThePanel();
         scriptTurn();
 
         for (String f : new String[]{"package-turn.lock", "daemoxcp-mail-maintenance-locks",
-                "daemoxcp-mail-maintenance-locks.job.json", "package-job-interrupted.json", "stop", "turn-part.sh"})
+                "daemoxcp-mail-maintenance-locks.job.json", "package-job-interrupted.json", "package-job-running.json",
+                "stop", "turn-part.sh"})
             Files.deleteIfExists(d.resolve(f));
         Files.delete(d);
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
@@ -253,9 +278,19 @@ public class PackageTurnAcrossProcessesTest {
         private Holder(Process p, long pid) { this.p = p; this.pid = pid; }
 
         static Holder start(Path list, String description, String... packages) throws Exception {
+            return start(false, list, description, packages);
+        }
+
+        /** The turn taken as the restore of the locks takes it (takeForLocks): no job trace of its own. */
+        static Holder startForLocks(Path list, String description) throws Exception {
+            return start(true, list, description);
+        }
+
+        private static Holder start(boolean forLocks, Path list, String description, String... packages) throws Exception {
             String java = ProcessHandle.current().info().command().orElse("java");
-            List<String> cmd = new ArrayList<>(List.of(java, "-cp", System.getProperty("java.class.path"),
-                    "org.daemoxcp.mail.system.TurnHolder", list.toString(), description));
+            List<String> cmd = new ArrayList<>(List.of(java, "-cp", System.getProperty("java.class.path")));
+            if (forLocks) cmd.add("-Dturnholder.forLocks=yes");
+            cmd.addAll(List.of("org.daemoxcp.mail.system.TurnHolder", list.toString(), description));
             cmd.addAll(List.of(packages));
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             BufferedReader out = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
@@ -274,6 +309,13 @@ public class PackageTurnAcrossProcessesTest {
             p.destroyForcibly();   // SIGKILL: no finally, no shutdown hook
             p.waitFor();
         }
+    }
+
+    /** The pid of a process that has just ended: nobody holds anything with it. */
+    static long deadPid() throws Exception {
+        Process p = new ProcessBuilder("true").start();
+        p.waitFor();
+        return p.pid();
     }
 
     private static void check(String what, boolean ok) {

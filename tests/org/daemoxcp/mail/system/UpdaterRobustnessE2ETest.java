@@ -269,6 +269,7 @@ public class UpdaterRobustnessE2ETest {
             child.destroyForcibly();
             return;
         }
+        long serviceLogStart = serviceLogSize();
         sh("kill -9 " + child.pid());
         child.waitFor();
         Thread.sleep(2000);
@@ -281,7 +282,17 @@ public class UpdaterRobustnessE2ETest {
         System.out.println("  " + PKG + " at the end: " + sh("pkg query '%v locked=%k' " + PKG).trim()
                 + ", list: " + (PackageQueue.statePresent() ? "still there" : "removed"));
         System.out.println("  the notice: " + n);
-        check("M4 the restart says pkg is still working and that it retries", restart.contains("retrying every"));
+        // The panel service watches too, every minute (UpdateManager.startInterruptionWatch): when it finds the killed
+        // job first, it holds the turn while it puts the locks back, and the restart finds the turn taken and leaves the
+        // list to it. Seen on the VM on 22/11/2026: the service took the turn 6 seconds after the kill. Then it is the
+        // service's log that says pkg is still working and that it retries.
+        String serviceLog = serviceLogSince(serviceLogStart);
+        boolean serviceFirst = restart.contains("another panel process holds the package turn")
+                && serviceLog.contains("Interrupted package job detected") && serviceLog.contains("pkg is still working")
+                && serviceLog.contains("retrying every");
+        if (serviceFirst) System.out.println("  the panel service found the killed job first, and its log says it retries");
+        check("M4 the restart (or the panel service, when it finds it first) says pkg is still working and that it retries",
+                restart.contains("retrying every") || serviceFirst);
         check("M4 locked again as soon as pkg finished, without another restart",
                 sh("pkg query '%v locked=%k' " + PKG).trim().equals("1.1 locked=1") && !PackageQueue.statePresent()
                 && restart.contains("PROTECTED AGAIN IN THE BACKGROUND"));
@@ -702,6 +713,25 @@ public class UpdaterRobustnessE2ETest {
 
     static void removeOwnBootEnvironments(String before) {
         for (String n : newOwn(before)) PackageWayBack.destroy(n);
+    }
+
+    /** The panel service's log: what its watch of interrupted jobs writes. */
+    static final Path SERVICE_LOG = Path.of(PanelRcScript.LOG);
+
+    static long serviceLogSize() {
+        try { return Files.size(SERVICE_LOG); } catch (Exception e) { return 0; }
+    }
+
+    /** What the service wrote in its log after 'offset' (all of it if the log was rotated in between). */
+    static String serviceLogSince(long offset) {
+        try (java.nio.channels.FileChannel c = java.nio.channels.FileChannel.open(SERVICE_LOG)) {
+            long size = c.size(), from = size < offset ? 0 : offset;
+            java.nio.ByteBuffer b = java.nio.ByteBuffer.allocate((int) Math.min(size - from, 4_000_000));
+            c.read(b, from);
+            return new String(b.array(), 0, b.position(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     static String runChild(int seconds, String... mode) throws Exception {

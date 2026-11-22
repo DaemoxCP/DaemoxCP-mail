@@ -169,24 +169,38 @@ public final class PackageQueue {
     }
 
     /**
-     * Chi tiene il turno, per il registro: l'id del lavoro e il pid, in inglese per tutti. La descrizione resta fuori:
-     * e' nella lingua del pannello e serve a chi legge la pagina, e i registri sono in inglese (EnglishLogsTest; visto
-     * sulla VM il 22/11/2026, «aggiornamento di …» nel registro di un pannello in italiano).
+     * Chi tiene il turno, per il registro: il pid di chi ha preso il lock e, se e' suo, l'id del lavoro; in inglese per
+     * tutti. La descrizione resta fuori: e' nella lingua del pannello e serve a chi legge la pagina, e i registri sono in
+     * inglese (EnglishLogsTest; visto sulla VM il 22/11/2026, «aggiornamento di …» nel registro di un pannello in
+     * italiano).
+     *
+     * <p>Chi tiene il turno lo dice il file del lock, che scrive solo chi l'ha appena preso. La traccia del lavoro no:
+     * quella di un lavoro ucciso resta su disco finche' qualcuno non lo completa, e intanto il turno puo' averlo preso
+     * un altro, per esempio il guardiano del servizio che rimette le protezioni. Visto sulla VM il 22/11/2026 (prova M4
+     * di UpdaterRobustnessE2ETest): il registro diceva «job guid-…, pid 95770; a job is running there», cioe' il lavoro
+     * appena ucciso, mentre il turno l'aveva il servizio. Il lavoro si nomina solo se la sua traccia e' di quel pid.
      */
     public static String holderForLog() {
         Turn t = IN_PROGRESS.get();
         if (t != null) return "job " + t.id() + " in this process";
+        long pid = lockPid();
+        if (pid <= 0) return "another panel process";
         JSONObject r = runningRecord();
-        if (!r.optString("id", "").isEmpty()) return "job " + r.optString("id") + ", pid " + r.optLong("pid", 0);
+        String id = r.optString("id", "");
+        if (!id.isEmpty() && r.optLong("pid", 0) == pid) return "job " + id + ", pid " + pid;
+        return "another panel process, pid " + pid;
+    }
+
+    private static final java.util.regex.Pattern LOCK_PID = java.util.regex.Pattern.compile("^pid ([0-9]{1,10}),");
+
+    /** Il pid scritto nel file del lock da chi l'ha preso per ultimo («pid N, …», takeFileLock); 0 se non si legge. */
+    static long lockPid() {
         try {
-            // Il lock comincia con «pid N, »: quello si', il resto e' la descrizione.
-            String who = new String(Files.readAllBytes(turnLock), StandardCharsets.UTF_8).trim();
-            int comma = who.indexOf(',');
-            if (who.startsWith("pid ") && comma > 4) return "another panel process, " + who.substring(0, comma);
-        } catch (Exception ignored) {
-            // Senza il file si dice solo che e' un altro processo.
+            java.util.regex.Matcher m = LOCK_PID.matcher(new String(Files.readAllBytes(turnLock), StandardCharsets.UTF_8).trim());
+            return m.find() ? Long.parseLong(m.group(1)) : 0;
+        } catch (Exception e) {
+            return 0;     // senza il file si dice solo che e' un altro processo
         }
-        return "another panel process";
     }
 
     /** La traccia del lavoro che tiene (o teneva) il turno, o un oggetto vuoto se non c'e'. */
