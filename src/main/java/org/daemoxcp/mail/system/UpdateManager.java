@@ -377,7 +377,10 @@ public final class UpdateManager {
         // c'e' niente da fare, chi legge il log del servizio non sapeva che la regola era saltata.
         String refusal = PackageQueue.takeForLocks("startup-lock-policy", I18n.tr("server.recovery.turnLockPolicy"));
         if (refusal != null) {
-            String msg = "Package lock rule not applied at this start (it is applied at the next one): " + refusal;
+            // Chi lo chiama lo stampa nel registro del servizio: in inglese, con chi tiene il turno, non col motivo
+            // tradotto (EnglishLogsTest).
+            String msg = "Package lock rule not applied at this start (it is applied at the next one): the package turn is held by "
+                    + PackageQueue.holderForLog();
             LOGGER.info(msg);
             return msg;
         }
@@ -2603,8 +2606,9 @@ public final class UpdateManager {
         if (!Files.exists(f)) return "";
         String refusal = PackageQueue.takeForLocks("startup-restore", turnDescription);
         if (refusal != null) {
-            String msg = "A list of unlocked packages is on disk, but another panel process holds the package turn "
-                    + "(a job is running there): the list is not touched. " + refusal;
+            // In inglese, come sopra: chi lo chiama lo stampa nel registro.
+            String msg = "A list of unlocked packages is on disk, but the package turn is held by " + PackageQueue.holderForLog()
+                    + " (a job is running there): the list is not touched.";
             LOGGER.info(msg);
             return msg;
         }
