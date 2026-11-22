@@ -177,12 +177,12 @@ public final class PackageQueue {
         Turn t = IN_PROGRESS.get();
         if (t != null) return "job " + t.id() + " in this process";
         JSONObject r = runningRecord();
-        if (!r.optString("id", "").isEmpty()) return "job " + r.optString("id") + " (pid " + r.optLong("pid", 0) + ")";
+        if (!r.optString("id", "").isEmpty()) return "job " + r.optString("id") + ", pid " + r.optLong("pid", 0);
         try {
             // Il lock comincia con «pid N, »: quello si', il resto e' la descrizione.
             String who = new String(Files.readAllBytes(turnLock), StandardCharsets.UTF_8).trim();
             int comma = who.indexOf(',');
-            if (who.startsWith("pid ") && comma > 4) return "another panel process (" + who.substring(0, comma) + ")";
+            if (who.startsWith("pid ") && comma > 4) return "another panel process, " + who.substring(0, comma);
         } catch (Exception ignored) {
             // Senza il file si dice solo che e' un altro processo.
         }

@@ -2607,8 +2607,8 @@ public final class UpdateManager {
         String refusal = PackageQueue.takeForLocks("startup-restore", turnDescription);
         if (refusal != null) {
             // In inglese, come sopra: chi lo chiama lo stampa nel registro.
-            String msg = "A list of unlocked packages is on disk, but the package turn is held by " + PackageQueue.holderForLog()
-                    + " (a job is running there): the list is not touched.";
+            String msg = "A list of unlocked packages is on disk, but another panel process holds the package turn ("
+                    + PackageQueue.holderForLog() + "; a job is running there): the list is not touched.";
             LOGGER.info(msg);
             return msg;
         }
