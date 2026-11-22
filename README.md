@@ -553,13 +553,14 @@ How to move around:
 - In a window with one field, Enter confirms what you typed.
 - In a form (options 2 and 3), some fields already hold a value: an example or the current one. The *Clear*
   button next to a field empties it. *Save* shows what the panel found, with *Cancel* and *OK*: Tab to *OK* and
-  Enter. *Exit* asks you to confirm, because changes not saved are lost.
+  Enter. *Exit* (in option 3, *Cancel*) asks you to confirm, because changes not saved are lost.
 
 Go through the options in this order:
 
 1. **1) Time zone, clock (NTP) and DNS resolver.** Write the server's time zone as an IANA name (for example
    `Europe/Rome` or `UTC`): names that do not exist are refused. The field already holds the server's current
-   zone. It also turns on NTP and the local DNS resolver.
+   zone. It also turns on NTP and sets Cloudflare's DNS servers (1.1.1.1 and 1.0.0.1); option 4 then gives the
+   server its own local resolver.
 2. **2) Edit Panel Configuration.**
    - *PANEL PORT*: `2096` (already there);
    - *PANEL HOST*: the panel's name, `panel.example.com`, in place of the `127.0.0.1` already there (not an IP
@@ -569,7 +570,8 @@ Go through the options in this order:
 
    Before saving, the panel checks that the certificate is readable, valid now, covers the panel's name and
    that the key is its own, and shows what it covers and when it expires. It keeps the certificate and the key
-   in its own configuration: after saving, the field shows the PEM text instead of the path.
+   in its own configuration: after saving, the menu comes back, and the form opened again shows the PEM text
+   instead of the path.
 3. **3) Edit Roundcube Configuration.** *DOMAIN* `webmail.example.com` (in place of the example already there),
    *PORT* `8443`, *SSL CERT PATH* and *SSL KEY PATH* `/usr/local/etc/ssl/webmail/webmail-origin.pem` and
    `…/webmail-origin.key`. Same checks; when saved it shows the webmail's address.

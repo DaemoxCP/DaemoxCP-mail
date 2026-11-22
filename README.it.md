@@ -558,14 +558,15 @@ Come ci si muove:
 - In una finestra con un solo campo, Invio conferma quello che hai scritto.
 - In un modulo (opzioni 2 e 3) alcuni campi hanno già un valore: un esempio o quello attuale. Il pulsante *Clear*
   accanto a un campo lo svuota. *Save* mostra cosa ha trovato il pannello, con *Cancel* e *OK*: Tab fino a *OK* e
-  Invio. *Exit* chiede di confermare, perché le modifiche non salvate si perdono.
+  Invio. *Exit* (nell'opzione 3, *Cancel*) chiede di confermare, perché le modifiche non salvate si perdono.
 
 Su un server nuovo il menu è di solito in inglese; in italiano si apre con `--lang it` (vedi [Lingue](#lingue)): le voci qui sotto hanno il nome
 inglese. Segui le opzioni in quest'ordine:
 
 1. **1) Time zone, clock (NTP) and DNS resolver.** Scrivi il fuso orario del server come nome IANA (per esempio
    `Europe/Rome` o `UTC`): i nomi che non esistono vengono rifiutati. Il campo ha già il fuso attuale del server.
-   Accende anche NTP e il risolutore DNS locale.
+   Accende anche NTP e imposta i DNS di Cloudflare (1.1.1.1 e 1.0.0.1); poi l'opzione 4 dà al server il suo
+   risolutore locale.
 2. **2) Edit Panel Configuration.**
    - *PANEL PORT*: `2096` (c'è già);
    - *PANEL HOST*: il nome del pannello, `panel.example.com`, al posto del `127.0.0.1` che c'è già (non un indirizzo
@@ -575,7 +576,7 @@ inglese. Segui le opzioni in quest'ordine:
 
    Prima di salvare il pannello controlla che il certificato si legga, sia valido adesso, copra il nome del
    pannello e che la chiave sia la sua, e mostra cosa copre e quando scade. Certificato e chiave li tiene nella sua
-   configurazione: dopo il salvataggio il campo mostra il testo PEM invece del percorso.
+   configurazione: dopo il salvataggio torna il menu, e il modulo riaperto mostra il testo PEM invece del percorso.
 3. **3) Edit Roundcube Configuration.** *DOMAIN* `webmail.example.com` (al posto dell'esempio che c'è già),
    *PORT* `8443`, *SSL CERT PATH* e *SSL KEY PATH* `/usr/local/etc/ssl/webmail/webmail-origin.pem` e
    `…/webmail-origin.key`. Stessi controlli; dopo il salvataggio mostra l'indirizzo della webmail.
