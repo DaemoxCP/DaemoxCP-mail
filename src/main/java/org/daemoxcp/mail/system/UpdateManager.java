@@ -3526,9 +3526,10 @@ public final class UpdateManager {
      *
      * @param restartFollows vero se il lavoro riavvia i servizi subito dopo (vedi InstallSideEffects)
      */
-    // Il testo delle mappe (PostfixMaps.Outcome.problem, gia' tradotto) arriva alla pagina con ShownException.translated:
-    // con IllegalStateException ErrorText lo sostituiva con «i dettagli sono nel log del pannello», e la pagina non
-    // diceva piu' quale mappa (trovato da PostfixMapsJobsE2ETest sulla 1.0.0 build 793, 22/11/2026).
+    // I motivi d'arresto gia' tradotti (il testo delle mappe, PostfixMaps.Outcome.problem, e quello di fetchAndRecheck,
+    // Recheck.stop) arrivano alla pagina con ShownException.translated: con IllegalStateException ErrorText li
+    // sostituiva con «i dettagli sono nel log del pannello», e la pagina non diceva piu' quale mappa ne' che il piano
+    // era cambiato (trovato da PostfixMapsJobsE2ETest e PackageReplacementE2ETest sulla 1.0.0 build 793, 22/11/2026).
     static PlanOutcome checkPlanOutcome(Job job, PlanWatch watch, JSONObject plan, String who, boolean restartFollows) {
         JSONArray outside = compareWithInventory(job, watch.inventoryBefore(), plan, who);
         watch.sideEffects().checkConfig(job, plan, outside, restartFollows);
@@ -4044,7 +4045,7 @@ public final class UpdateManager {
             if (!downloads.isEmpty()) {
                 Recheck grown = fetchAndRecheck(job, "pkg fetch -y -U " + String.join(" ", downloads) + " 2>&1", plan,
                         () -> mysql84Plan(srv0, cli0));
-                if (grown.stop() != null) throw new IllegalStateException(grown.stop());
+                if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
                 plan = grown.plan();
             }
             // L'inventario, la configurazione e gli indirizzi in ascolto adesso, con tutto in
@@ -6057,7 +6058,7 @@ public final class UpdateManager {
             // i conflitti sui file (vedi fetchAndRecheck). -U: lo stesso catalogo del piano.
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U " + pkg + " 2>&1", plan,
                     () -> roundcubePlan(rcPkg));
-            if (grown.stop() != null) throw new IllegalStateException(grown.stop());
+            if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
             plan = grown.plan();
             PlanWatch watch = PlanWatch.take(sideEffects);
             StringBuilder cat = new StringBuilder();
@@ -7372,7 +7373,7 @@ public final class UpdateManager {
             if (!downloads.isEmpty()) {
                 Recheck grown = fetchAndRecheck(job, "pkg fetch -y -U " + String.join(" ", downloads) + " 2>&1", plan,
                         () -> pythonPlan(reverseClosure(leaf), newOnes));
-                if (grown.stop() != null) throw new IllegalStateException(grown.stop());
+                if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
                 plan = grown.plan();
             }
             // L'inventario, la configurazione e gli indirizzi in ascolto adesso, prima di fermare i
@@ -8844,7 +8845,7 @@ public final class UpdateManager {
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U" + list + " 2>&1", plan,
                     () -> PackagePlan.planFor(family, lockedNames(), UpdateManager::reasonNotToUnlock,
                             UpdateManager::installedFamilyTwin));
-            if (grown.stop() != null) throw new IllegalStateException(grown.stop());
+            if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
             plan = grown.plan();
             // L'output serve due volte: mostrato mentre scorre, e riletto alla fine per
             // ripescare i messaggi che chiedono un'azione.
@@ -13015,7 +13016,7 @@ public final class UpdateManager {
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U 2>&1", plan,
                     () -> PackagePlan.fullPlan(java.util.Set.of(), lockedNames(),
                             b -> I18n.tr("server.um.x.staysLockedHere")));
-            if (grown.stop() != null) throw new IllegalStateException(grown.stop());
+            if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
             plan = grown.plan();
 
             Map<String, String> inventoryBefore = PackagePlan.versionsOnly(PackagePlan.installed());
@@ -13241,7 +13242,7 @@ public final class UpdateManager {
             // piano dipende da cio' che e' nella cache di pkg (vedi fetchAndRecheck).
             Recheck grown = fetchAndRecheck(job, "pkg upgrade -F -y -U 2>&1", plan,
                     () -> maintenancePlan(lockedUpdates()).getJSONObject("plan"));
-            if (grown.stop() != null) throw new IllegalStateException(grown.stop());
+            if (grown.stop() != null) throw org.daemoxcp.mail.util.ShownException.translated(grown.stop());
             plan = grown.plan();
 
             // L'inventario PRIMA, per accorgersi di cio' che cambia senza essere nel piano.
