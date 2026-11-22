@@ -184,7 +184,7 @@ It is **careful**. The panel never changes anything it cannot check, and it says
 <table>
 <tr>
 <td width="50%"><img src="docs/screenshots/en/login.png" alt="Sign-in page: passkey, a code by email, or a code from the server console"><br><sub>Sign-in: a passkey, a code by email, or a code from the server console. No passwords.</sub></td>
-<td width="50%"><img src="docs/screenshots/en/mailboxes.png" alt="Mailboxes page with the Apple Mail configuration profile card"><br><sub>Mailboxes, with the Apple Mail configuration profile.</sub></td>
+<td width="50%"><img src="docs/screenshots/en/mailboxes.png" alt="Mailboxes page with a mailbox's client configuration window on the iPhone/Mac tab, the Apple Mail profile first"><br><sub>Mailboxes: a mailbox's client configuration, with the Apple Mail profile first.</sub></td>
 </tr>
 <tr>
 <td><img src="docs/screenshots/en/dns.png" alt="DNS page: Set up everything and the MTA-STS sequence"><br><sub>DNS: one button writes the records on Cloudflare; MTA-STS in the right order.</sub></td>
@@ -666,8 +666,8 @@ settings:
 
 - **User name**: the mailbox's full address, for example `alice@example.com`, both for incoming and outgoing mail.
   **Password**: the mailbox's password.
-- **Apple Mail** (Mac, iPhone, iPad): on *Mailboxes*, the mailbox's Apple configuration profile. Open it on the
-  device and the account sets itself up. Tested on macOS. On an iPhone, the settings above entered by hand work
+- **Apple Mail** (Mac, iPhone, iPad): on *Mailboxes*, the mailbox's *Client configuration* button (the phone icon),
+  tab *iPhone/Mac*, **Download the profile**. Open it on the device and the account sets itself up. Tested on macOS. On an iPhone, the settings above entered by hand work
   too: tested, receiving and sending.
 - **Thunderbird** finds the settings by itself from the mail address, through the autoconfig records that *Set up
   everything* writes. Not tried with a real Thunderbird yet.
