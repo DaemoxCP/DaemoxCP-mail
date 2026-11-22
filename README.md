@@ -6,7 +6,7 @@
 
 Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx · fail2ban · pf
 
-`FreeBSD 15.1+ only` · `arm64 (amd64 not yet tested)` · `Java 25` · `AGPL-3.0` · `no Docker, no Linux layer` · `passwordless sign-in`
+`FreeBSD 15.1+ only` · `tested on arm64 only` · `Java 25` · `AGPL-3.0` · `no Docker, no Linux layer` · `passwordless sign-in`
 
 <a href="https://buymeacoffee.com/pietrogdamico"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black" /></a>
 <a href="https://www.paypal.com/paypalme/pietrogdamico28"><img alt="Donate with PayPal" src="https://img.shields.io/badge/PayPal-donate-00457C?logo=paypal&logoColor=white" /></a>
@@ -209,7 +209,7 @@ documentation (`203.0.113.0/24`, `2001:db8::/32`).</sub>
 | What | Needed |
 |---|---|
 | Operating system | **FreeBSD 15.1-RELEASE or later**. Nothing else. FreeBSD 15.0 reached its end of life on 30 September 2026 and no longer gets security fixes. |
-| Processor | **arm64**: tested, on Hetzner Cloud and on a test machine. amd64 uses the same FreeBSD packages and should work the same, but it has not been tested yet. |
+| Processor | **arm64**. Tested only on arm64, on Hetzner Cloud and on a test machine; amd64 has not been tested. |
 | File system | **ZFS**, for boot environments: the installation, updates and the panel's own upgrades keep a way back with `bectl`. |
 | Memory | **4 GB of RAM**. Measured on a running server: ClamAV 1–1.3 GB, the panel's two Java processes about 0.5 GB, MySQL 0.1–0.5 GB; 2.5–3 GB in all. |
 | Disk | at least 20 GB, plus the mail. |
@@ -359,7 +359,7 @@ minutes. Opening outgoing port 25 (step 1) depends on your provider and can take
 
 ### What you need before you start
 
-- **A server** with FreeBSD 15.1 or later (arm64; amd64 not yet tested) on **ZFS**, a public IPv4 address, a public
+- **A server** with FreeBSD 15.1 or later (tested on arm64 only) on **ZFS**, a public IPv4 address, a public
   IPv6 one or both, **4 GB of RAM** and at least 20 GB of disk.
 - **Root access over SSH with a key.**
 - **Your domains on Cloudflare** (their DNS is managed by Cloudflare).
