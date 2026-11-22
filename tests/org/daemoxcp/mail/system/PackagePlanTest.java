@@ -176,6 +176,39 @@ public class PackagePlanTest {
             "Number of packages to be installed: 1"));
         real("an install line with words outside the brackets: still unreadable", !p.getBoolean("measured") && p.getJSONArray("unreadable").length() == 1);
 
+        // pkg 2.9.2 holding an upgrade back (measured on the VM, 22/11/2026, PackageReplacementE2ETest's "other user"):
+        // with the packages downloaded the file conflict shows, pkg does not remove what is in the way, and the plan is empty.
+        p = PackagePlan.readPlan(String.join("\n",
+            "Updating replacement repository catalogue...",
+            "replacement repository is up to date.",
+            "All repositories are up to date.",
+            "Checking integrity... done (1 conflicting)",
+            "  - fakelib0-0.9 [replacement] conflicts with fakelib-1.0 [installed] on /usr/local/bin/fake-tool",
+            "fakeapp-1.1 is held back to solve the problem",
+            "Checking integrity... done (0 conflicting)",
+            "Your packages are up to date."));
+        real("pkg 2.9 holding back: measured, nothing to do, no change", p.getBoolean("measured") && p.getBoolean("nothingToDo")
+            && p.getJSONArray("changes").isEmpty());
+        JSONArray held = p.getJSONArray("heldBack"), conflicts = p.getJSONArray("conflicts");
+        real("pkg 2.9 holding back: the package held back, with its version", held.length() == 1
+            && "fakeapp".equals(held.getJSONObject(0).getString("name")) && "1.1".equals(held.getJSONObject(0).getString("version")));
+        real("pkg 2.9 holding back: the conflict, the package in the way and the file", conflicts.length() == 1
+            && "fakelib0".equals(conflicts.getJSONObject(0).getString("name")) && "0.9".equals(conflicts.getJSONObject(0).getString("version"))
+            && "fakelib".equals(conflicts.getJSONObject(0).getString("installed")) && "1.0".equals(conflicts.getJSONObject(0).getString("installedVersion"))
+            && "/usr/local/bin/fake-tool".equals(conflicts.getJSONObject(0).getString("file")));
+        p = PackagePlan.readPlan(String.join("\n",
+            "  - py312-foo-bar-2.1_1 [FreeBSD-ports] conflicts with py312-foo-1.9 [installed] on /usr/local/lib/python3.12/x.py",
+            "  - py312-foo-bar-2.1_1 [FreeBSD-ports] conflicts with py312-foo-1.9 [installed] on /usr/local/lib/python3.12/x.py",
+            "py312-app-3.0,1 is held back to solve the problem",
+            "Your packages are up to date."));
+        real("pkg 2.9 holding back: names with dashes, a version with _ and , and a conflict printed twice counted once",
+            p.getJSONArray("conflicts").length() == 1 && "py312-foo-bar".equals(p.getJSONArray("conflicts").getJSONObject(0).getString("name"))
+            && "2.1_1".equals(p.getJSONArray("conflicts").getJSONObject(0).getString("version"))
+            && "py312-app".equals(p.getJSONArray("heldBack").getJSONObject(0).getString("name"))
+            && "3.0,1".equals(p.getJSONArray("heldBack").getJSONObject(0).getString("version")));
+        p = PackagePlan.readPlan("Checking for upgrades (1 candidates): 100%\nYour packages are up to date.");
+        real("nothing held back: empty lists", p.getJSONArray("heldBack").isEmpty() && p.getJSONArray("conflicts").isEmpty());
+
         // Totals that do not add up do not become a "complete" plan.
         p = PackagePlan.readPlan(String.join("\n",
             "Installed packages to be UPGRADED:",

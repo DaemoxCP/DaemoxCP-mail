@@ -87,6 +87,15 @@ public final class PackagePlan {
     private static final Pattern PROTECTED_IN_PLAN = Pattern.compile(
             "^Package (\\S+)-([^\\s-]+) is locked and may not be (\\S+)(?: to version (\\S+))?");
     private static final Pattern PROTECTED_EVENT = Pattern.compile("^(\\S+)-([^\\s-]+) is locked and may not be modified$");
+    // pkg 2.9: quando un conflitto sui file non si risolve togliendo il pacchetto che ingombra (perche' a un altro serve
+    // ancora), pkg trattiene l'aggiornamento e lo dice dopo il controllo d'integrita', coi pacchetti gia' scaricati:
+    //   "  - fakelib0-0.9 [replacement] conflicts with fakelib-1.0 [installed] on /usr/local/bin/fake-tool"
+    //   "fakeapp-1.1 is held back to solve the problem"
+    // e poi "Your packages are up to date.". Misurato sulla VM il 22/11/2026 con pkg 2.9.2 (PackageReplacementE2ETest):
+    // prima pkg proponeva di togliere anche l'altro pacchetto, adesso non toglie niente e il piano resta vuoto.
+    private static final Pattern CONFLICT = Pattern.compile(
+            "^- (\\S+)-([^\\s-]+) \\[[^\\]]*\\] conflicts with (\\S+)-([^\\s-]+) \\[installed\\] on (\\S+)$");
+    private static final Pattern HELD_BACK = Pattern.compile("^(\\S+)-([^\\s-]+) is held back to solve the problem$");
 
     /**
      * Il piano come lo stampa {@code pkg upgrade -n}, letto sezione per sezione.
@@ -99,6 +108,8 @@ public final class PackagePlan {
     static JSONObject readPlan(String output) {
         JSONArray changes = new JSONArray(), lockedPackages = new JSONArray();
         JSONArray errors = new JSONArray(), warnings = new JSONArray(), unreadable = new JSONArray();
+        JSONArray heldBack = new JSONArray(), conflicts = new JSONArray();
+        Set<String> seenConflicts = new LinkedHashSet<>();
         Map<String, Integer> counted = new HashMap<>(), declared = new HashMap<>();
         Set<String> alreadyLocked = new LinkedHashSet<>();
         boolean updated = false, hasConflicts = false;
@@ -121,6 +132,18 @@ public final class PackagePlan {
             section = null;   // una riga vuota o non rientrata chiude la sezione
             if (t.isEmpty()) continue;
 
+            Matcher held = HELD_BACK.matcher(t);
+            if (held.find()) {
+                heldBack.put(new JSONObject().put("name", held.group(1)).put("version", held.group(2)));
+                continue;
+            }
+            Matcher cf = CONFLICT.matcher(t);
+            if (cf.find()) {
+                if (seenConflicts.add(t))
+                    conflicts.put(new JSONObject().put("name", cf.group(1)).put("version", cf.group(2))
+                            .put("installed", cf.group(3)).put("installedVersion", cf.group(4)).put("file", cf.group(5)));
+                continue;
+            }
             Matcher ev = PROTECTED_EVENT.matcher(t);
             if (ev.find()) {
                 if (alreadyLocked.add(ev.group(1)))
@@ -149,7 +172,8 @@ public final class PackagePlan {
         JSONObject r = new JSONObject().put("changes", changes).put("lockedPackages", lockedPackages)
                 .put("pkgErrors", errors).put("pkgWarnings", warnings)
                 .put("nothingToDo", updated || (changes.isEmpty() && lockedPackages.isEmpty() && errors.isEmpty()))
-                .put("hasConflicts", hasConflicts);
+                .put("hasConflicts", hasConflicts)
+                .put("heldBack", heldBack).put("conflicts", conflicts);
 
         if (unreadable.length() > 0)
             return r.put("measured", false).put("unreadable", unreadable)
