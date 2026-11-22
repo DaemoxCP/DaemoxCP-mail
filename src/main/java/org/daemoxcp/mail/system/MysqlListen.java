@@ -45,7 +45,7 @@ public final class MysqlListen {
     private static final Pattern SECTION = Pattern.compile("^\\s*\\[([^\\]]+)\\]\\s*$");
     private static final Pattern OPTION = Pattern.compile("^\\s*(?:loose[-_])?([A-Za-z0-9_-]+)\\s*(=.*)?$");
 
-    static final String COMMENT = "# Aggiunto dal pannello: MySQL solo da questa macchina, e niente protocollo X (porta 33060).";
+    static final String COMMENT = "# Added by the panel: MySQL only from this machine, and no X protocol (port 33060).";
 
     private MysqlListen() {}
 

@@ -114,13 +114,13 @@ public class WebProtection {
 
     public static String configuration(String cert, String key) {
         String text = """
-            # Superficie pubblica di DaemoxCP Mail sulla porta 443.
-            # Written by DaemoxCP Mail: non modificare a mano, verrebbe sovrascritto.
+            # DaemoxCP Mail's public surface on port 443.
+            # Written by DaemoxCP Mail: do not edit by hand, it would be overwritten.
             #
-            # Qui si servono DUE file e nient'altro:
-            #   /.well-known/mta-sts.txt   la politica MTA-STS, file statico
-            #   /mail/config-v1.1.xml      la configurazione per Thunderbird, dal pannello
-            # Qualunque altro percorso riceve 404 senza corpo.
+            # TWO files are served here and nothing else:
+            #   /.well-known/mta-sts.txt   the MTA-STS policy, a static file
+            #   /mail/config-v1.1.xml      the configuration for Thunderbird, from the panel
+            # Any other path gets 404 without a body.
 
             limit_req_zone  $binary_remote_addr zone=mailpub_req:1m rate=5r/s;
             limit_conn_zone $binary_remote_addr zone=mailpub_conn:1m;
@@ -133,33 +133,33 @@ public class WebProtection {
                 ssl_certificate     %s;
                 ssl_certificate_key %s;
 
-                # Non si annuncia la versione: non aiuta nessuno tranne chi cerca un bersaglio.
+                # The version is not announced: it helps nobody but whoever looks for a target.
                 server_tokens off;
 
-                # Sono due GET di poche centinaia di byte: tutto il resto e' fuori misura.
+                # These are two GETs of a few hundred bytes: anything else is out of proportion.
                 client_max_body_size 1k;
                 client_body_timeout   5s;
                 client_header_timeout 5s;
                 send_timeout          5s;
                 keepalive_timeout    10s;
 
-                # Larghi rispetto all'uso vero (una richiesta ogni tanto), stretti rispetto
-                # a un'inondazione.
+                # Wide compared with real use (a request now and then), narrow compared
+                # with a flood.
                 limit_req  zone=mailpub_req burst=10 nodelay;
                 limit_conn mailpub_conn 8;
 
                 access_log %s;
 
-                # Due file da leggere: nessun altro metodo ha senso qui.
+                # Two files to read: no other method makes sense here.
                 if ($request_method !~ ^(GET|HEAD)$) { return 405; }
 
-                # File statico: una richiesta qui non raggiunge mai il pannello.
+                # Static file: a request here never reaches the panel.
                 location = /.well-known/mta-sts.txt {
                     default_type text/plain;
                     alias %s;
                 }
 
-                # L'unica cosa che passa al pannello, e solo su questo percorso esatto.
+                # The only thing passed to the panel, and only on this exact path.
                 location = /mail/config-v1.1.xml {
                     proxy_pass https://127.0.0.1:2096/autoconfig/mail/config-v1.1.xml;
                     proxy_set_header Host $host;
@@ -168,7 +168,7 @@ public class WebProtection {
                     proxy_send_timeout    5s;
                 }
 
-                # Tutto il resto non esiste.
+                # Everything else does not exist.
                 location / { return 404; }
             }
             """.formatted(cert, key, ACCESS_LOG, POLICY_FILE);
@@ -360,8 +360,8 @@ public class WebProtection {
             if (!opensHttp) continue;
             StringBuilder sb = new StringBuilder();
             for (int j = 0; j <= i; j++) sb.append(lines[j]).append("\n");
-            sb.append("\n    # Aggiunto da " + Product.NAME + ": senza questa riga i file di\n");
-            sb.append("    # configurazione aggiuntivi non verrebbero letti da nginx.\n");
+            sb.append("\n    # Added by " + Product.NAME + ": without this line the additional\n");
+            sb.append("    # configuration files would not be read by nginx.\n");
             sb.append("    include ").append(folder).append("/*.conf;\n");
             for (int j = i + 1; j < lines.length; j++) {
                 sb.append(lines[j]);
@@ -451,7 +451,7 @@ public class WebProtection {
      */
     public static String filter() {
         return """
-            # Written by DaemoxCP Mail. Guarda il solo log della superficie pubblica 443.
+            # Written by DaemoxCP Mail. It watches only the log of the 443 public surface.
             [Definition]
             failregex = ^<HOST> .* "(GET|HEAD|POST|PUT|DELETE|OPTIONS|PATCH|TRACE|CONNECT)[^"]*" (404|405|429) 
             ignoreregex =
@@ -468,31 +468,31 @@ public class WebProtection {
             maxretry = 10
             findtime = 600
             bantime  = 3600
-            # L'azione si dichiara, non si eredita. Senza questa riga la jail prendeva il valore
-            # predefinito di jail.conf, che e' basato su iptables: un comando che su FreeBSD non
-            # esiste. La jail rilevava e contava i ban regolarmente — 14.370 tentativi e 46 ban —
-            # e non ne bloccava nessuno, perche' il comando falliva ogni volta e nessuno lo
-            # guardava. Qui si usa pf, come tutte le altre jail scritte dal pannello.
+            # The action is declared, not inherited. Without this line the jail took the default
+            # of jail.conf, which is based on iptables: a command that does not exist on
+            # FreeBSD. The jail detected and counted bans regularly — 14,370 attempts and 46 bans —
+            # and blocked none of them, because the command failed every time and nobody
+            # looked. pf is used here, like all the other jails the panel writes.
             #
-            # actiontype=any non e' un dettaglio: l'azione pf costruisce la regola come
-            # "block quick proto tcp from <tabella> to <actiontype>", e il valore predefinito e'
-            # "any port $port". Senza una porta quella riga finisce con "port " e pf la rifiuta:
-            # la tabella verrebbe creata lo stesso — e' il comando prima — ma la regola che la
-            # usa no, e gli indirizzi bannati finirebbero in una tabella che nessuna regola
-            # legge. Sarebbe stato lo stesso guasto di prima con un nome diverso.
+            # actiontype=any is not a detail: the pf action builds the rule as
+            # "block quick proto tcp from <table> to <actiontype>", and the default value is
+            # "any port $port". Without a port that line ends with "port " and pf refuses it:
+            # the table would be created anyway — it is the command before — but the rule using
+            # it would not, and the banned addresses would end up in a table no rule
+            # reads. It would have been the same fault as before under another name.
             #
-            # Si dichiara una PORTA, non un actiontype. Ci sono arrivato per esclusione, e la
-            # strada sbagliata merita di restare scritta: "actiontype=<allports>" e poi
-            # "actiontype=any" sono la forma che la documentazione dell'azione mostra, ma fail2ban
-            # su questo sistema non li accetta come parametro di una jail — la risposta a
-            # "get <jail> actions" diventa "No actions for jail ...", cioe' la jail viene caricata
-            # SENZA nessuna azione e non banna affatto. Peggio del difetto di partenza, dove
-            # almeno un'azione c'era, per quanto inservibile.
+            # A PORT is declared, not an actiontype. It was found by elimination, and the
+            # wrong road deserves to stay written: "actiontype=<allports>" and then
+            # "actiontype=any" are the form the action's documentation shows, but fail2ban
+            # on this system does not accept them as a jail parameter — the answer to
+            # "get <jail> actions" becomes "No actions for jail ...", that is the jail is loaded
+            # WITHOUT any action and does not ban at all. Worse than the starting fault, where
+            # at least an action was there, however useless.
             #
-            # Questa forma invece e' dimostrata funzionare proprio qui: e' identica a quella delle
-            # quattro jail di posta, che il confronto con pf mostra avere tabella E regola. Fra
-            # cio' che la documentazione lascia intendere e cio' che il server fa vedere, vince
-            # il server.
+            # This form instead is proven to work right here: it is the same as that of the
+            # four mail jails, which the comparison with pf shows to have a table AND a rule. Between
+            # what the documentation implies and what the server shows, the server
+            # wins.
             action   = pf[name=%1$s, port="http,https"]
             """.formatted(NAME, ACCESS_LOG);
     }

@@ -50,13 +50,13 @@ public final class RspamdController {
     static final Path LOCAL = Path.of("/usr/local/etc/rspamd/local.d/worker-controller.inc");
     /** Le chiavi del controller che il pannello decide: se l'amministratore le ha messe in local.d, sono sue. */
     static final Pattern ADMIN_KEYS = Pattern.compile("(?m)^\\s*(password|enable_password|secure_ip)\\b");
-    static final String MARK = "# daemoxcp-mail (reperto 236): il controller di rspamd solo con la password del pannello.\n";
+    static final String MARK = "# daemoxcp-mail (finding 236): rspamd's controller only with the panel's password.\n";
     static final Pattern HASH = Pattern.compile("\\$2\\$[a-z0-9]{8,64}\\$[a-z0-9]{16,128}");
 
     static String text(String hash) {
         return MARK
-                + "# La password sta nei segreti di root del pannello (rspamd_controller_password); qui solo il suo hash\n"
-                + "# (rspamadm pw). secure_ip vuoto: prima 127.0.0.1 e ::1 entravano senza password. Lo riscrive il pannello.\n"
+                + "# The password is in the panel's root secrets (rspamd_controller_password); here only its hash\n"
+                + "# (rspamadm pw). secure_ip empty: before, 127.0.0.1 and ::1 got in without a password. The panel rewrites it.\n"
                 + "password = \"" + hash + "\";\n"
                 + "enable_password = \"" + hash + "\";\n"
                 + "secure_ip = [];\n";
@@ -115,7 +115,8 @@ public final class RspamdController {
     static Result run(Services sv, Path override, Path local, int waitSeconds) {
         String cur, admin;
         try {
-            cur = sv.read(override);
+        // Il blocco scritto in italiano dalle versioni di prima vale come quello di adesso (EnglishComments).
+            cur = EnglishComments.english(sv.read(override));
             admin = sv.read(local);
         } catch (IOException e) {
             return new Result(Outcome.LEFT, "worker-controller.inc cannot be read: " + e.getClass().getSimpleName());

@@ -40,7 +40,7 @@ public final class ClamdSocket {
     static final String GROUP = "clamav";
     static final String RSPAMD = "rspamd";
 
-    static final String MARK = "# daemoxcp-mail: il socket di clamd solo del gruppo clamav, in cui sta rspamd (reperto 237)\n";
+    static final String MARK = "# daemoxcp-mail: clamd's socket only for the clamav group, which rspamd is in (finding 237)\n";
     public static final String BLOCK = MARK + "LocalSocketGroup clamav\nLocalSocketMode 660\n";
 
     /** Quello che serve, per provarlo senza clamd e rspamd. */
@@ -86,7 +86,8 @@ public final class ClamdSocket {
     static Result run(Services sv, Path clamdConf) {
         String conf;
         try {
-            conf = sv.read(clamdConf);
+        // Il blocco scritto in italiano dalle versioni di prima vale come quello di adesso (EnglishComments).
+            conf = EnglishComments.english(sv.read(clamdConf));
         } catch (IOException e) {
             return new Result(Outcome.LEFT, "clamd.conf cannot be read: " + e.getClass().getSimpleName());
         }

@@ -78,8 +78,8 @@ public final class SpecialFolders {
     /** Lo script Sieve: lo stesso per l'installatore e per la riparazione. */
     public static String scriptContent() {
         return "# " + PanelMarker.WRITTEN + ".\n"
-             + "# Lo spam che Rspamd segna (" + SPAM_HEADER + ": Yes) nella " + JUNK + ", prima di ogni altra regola: niente\n"
-             + "# risposta automatica, inoltro o regole della casella sullo spam.\n"
+             + "# Spam that Rspamd marks (" + SPAM_HEADER + ": Yes) into " + JUNK + ", before any other rule: no\n"
+             + "# automatic reply, forward or mailbox rules on spam.\n"
              + "require [\"fileinto\", \"mailbox\"];\n"
              + "\n"
              + "if header :is \"" + SPAM_HEADER + "\" \"Yes\" {\n"
@@ -92,8 +92,8 @@ public final class SpecialFolders {
     public static String fileContent(boolean dovecot24) {
         StringBuilder s = new StringBuilder();
         s.append("# ").append(PanelMarker.WRITTEN).append(".\n")
-         .append("# Le cartelle speciali (IMAP SPECIAL-USE, RFC 6154): i programmi di posta le trovano qui invece di\n")
-         .append("# crearne di loro. Dovecot le crea e le sottoscrive per ogni casella, coi nomi che usa la webmail.\n")
+         .append("# The special folders (IMAP SPECIAL-USE, RFC 6154): mail programs find them here instead of\n")
+         .append("# creating their own. Dovecot creates and subscribes them for every mailbox, with the webmail's names.\n")
          .append("namespace inbox {\n")
          .append("  inbox = yes\n");
         for (String[] f : FOLDERS) {
@@ -103,20 +103,20 @@ public final class SpecialFolders {
              .append("  }\n");
         }
         s.append("}\n\n")
-         .append("# Lo spam (").append(SPAM_HEADER).append(": Yes, da Rspamd) nella ").append(JUNK)
-         .append(" prima delle regole del pannello e della casella.\n");
+         .append("# Spam (").append(SPAM_HEADER).append(": Yes, from Rspamd) into ").append(JUNK)
+         .append(" before the panel's and the mailbox's rules.\n");
         if (dovecot24) {
             s.append("sieve_script ").append(SCRIPT_BLOCK).append(" {\n")
              .append("  type = before\n")
              .append("  driver = file\n")
              .append("  path = ").append(SCRIPT).append("\n")
-             .append("  # Piu' bassa prima: le altre hanno quella predefinita (infinita).\n")
+             .append("  # Lowest first: the others have the default one (infinite).\n")
              .append("  precedence = 1\n")
              .append("}\n");
         } else {
             s.append("plugin {\n")
              .append("  sieve_before = ").append(SCRIPT).append("\n")
-             .append("  # Le regole del pannello dopo: questa riga sostituisce il loro sieve_before di 10-master.conf.\n")
+             .append("  # The panel's rules after: this line replaces their sieve_before of 10-master.conf.\n")
              .append("  sieve_before2 = ").append(PANEL_RULES_23).append("\n")
              .append("}\n");
         }

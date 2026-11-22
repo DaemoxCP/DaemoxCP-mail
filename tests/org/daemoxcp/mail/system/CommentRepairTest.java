@@ -14,13 +14,15 @@ import java.util.Map;
 
 /**
  * The comments damaged by the renames made on the text are put right at start
- * (CommentRepair.repair), in a temporary folder.
+ * (CommentRepair.repair), in a temporary folder, and then go to English (EnglishComments.migrate):
+ * the right lines of the data file are the Italian ones the code wrote before 22/11/2026.
  *
  * The "old" files are built from those today's code writes, putting back the damaged lines taken
- * from the data file: the test writes no damaged line. After the repair every file must be
- * identical byte for byte to today's, with the same permissions; a second pass must find nothing;
- * the administrator's lines, a file that is not there and a damaged line that is not a comment stay
- * as they are. The effect on the real files is measured by the test on the VM (reperti).
+ * from the data file in place of their English: the test writes no damaged line. After the repair
+ * and the move to English every file must be identical byte for byte to today's, with the same
+ * permissions; a second pass must find nothing; the administrator's lines, a file that is not there
+ * and a damaged line that is not a comment stay as they are. The effect on the real files is
+ * measured by the test on the VM (reperti).
  *
  *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.CommentRepairTest
  */
@@ -48,10 +50,10 @@ public class CommentRepairTest {
         return script.substring(start, stop + 1);
     }
 
-    /** The old text: every right line, with its indentation, goes back to the damaged one. */
+    /** The old text: the English of every right line, with its indentation, goes back to the damaged one. */
     static String damaged(String today, Map<String, String> pairs) {
         Map<String, String> back = new LinkedHashMap<>();
-        pairs.forEach((bad, good) -> back.put(good, bad));
+        pairs.forEach((bad, good) -> back.put(EnglishComments.english(good), bad));
         return CommentRepair.repaired(today, back);
     }
 
@@ -67,12 +69,12 @@ public class CommentRepairTest {
         String today = full + roundcube + Fail2banManager.PERMABAN_HEADER;
         List<String> missing = new ArrayList<>(), stillThere = new ArrayList<>();
         pairs.forEach((bad, good) -> {
-            if (!today.lines().map(String::strip).toList().contains(good)) missing.add(good);
+            if (!today.lines().map(String::strip).toList().contains(EnglishComments.english(good))) missing.add(good);
             if (today.lines().map(String::strip).toList().contains(bad)) stillThere.add(bad);
         });
         missing.forEach(x -> System.out.println("        not written by the code: " + x));
         stillThere.forEach(x -> System.out.println("        still written by the code: " + x));
-        check("every right line is the one today's code writes", missing.isEmpty());
+        check("every right line, in English, is the one today's code writes", missing.isEmpty());
         check("no damaged line is still written by the code", stillThere.isEmpty());
 
         // The files as today's code writes them, with the names they have on the server.
@@ -119,6 +121,10 @@ public class CommentRepairTest {
         List<String> done = CommentRepair.repair(paths, problems);
         problems.forEach(x -> System.out.println("        " + x));
         check("repaired " + done.size() + " files, without errors", done.size() == files.size() && problems.isEmpty());
+        EnglishComments.Report english = EnglishComments.migrate(paths);
+        english.problems().forEach(x -> System.out.println("        " + x));
+        check("then in English: " + english.done().size() + " files, without errors",
+                english.done().size() == files.size() && english.problems().isEmpty());
         for (Map.Entry<String, String> e : files.entrySet()) {
             if (e.getKey().equals("php.ini")) continue;
             Path p = dir.resolve(e.getKey());
@@ -138,7 +144,8 @@ public class CommentRepairTest {
 
         System.out.println("\n== At the second start ==");
         List<String> again = CommentRepair.repair(paths, problems);
-        check("a second pass finds nothing", again.isEmpty() && problems.isEmpty());
+        check("a second pass finds nothing", again.isEmpty() && problems.isEmpty()
+                && EnglishComments.migrate(paths).done().isEmpty());
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);

@@ -104,26 +104,26 @@ public class PostfixScript {
 # Basic settings
 myhostname = localhost
 mydomain = localhost
-# Indirizzi senza dominio (root, postmaster: cron, periodic) consegnati qui, e solo localhost
-# e' locale. Esplicito perche' il pannello riscrive myhostname e mydomain con il nome vero
-# del server: con $mydomain la posta di sistema finirebbe a quel nome e rimbalzerebbe, con
-# il mydestination predefinito quel nome diventerebbe locale e raggiungibile da Internet.
-# Il perche' misurato e' in FullMailServerScript, accanto allo stesso myorigin.
+# Addresses without a domain (root, postmaster: cron, periodic) delivered here, and only localhost
+# is local. Explicit because the panel rewrites myhostname and mydomain with the server's real
+# name: with $mydomain system mail would go to that name and bounce, with the default
+# mydestination that name would become local and reachable from the Internet.
+# The measured reason is in FullMailServerScript, next to the same myorigin.
 myorigin = localhost
 mydestination = localhost
-# Quando la posta di sistema esce dalla macchina (root inoltrato a un indirizzo esterno, un
-# MAILTO di cron) root@localhost diventa root@<nome del server>: localhost i server altrui lo
-# rifiutano. Solo nel client SMTP, quindi la consegna locale non cambia; $myhostname si legge
-# a ogni uso, e segue il nome che il pannello scrive.
+# When system mail leaves the machine (root forwarded to an outside address, a cron
+# MAILTO) root@localhost becomes root@<server name>: other servers refuse localhost.
+# Only in the SMTP client, so local delivery does not change; $myhostname is read
+# at every use, and follows the name the panel writes.
 smtp_generic_maps = inline:{ @localhost=@$myhostname }
 inet_interfaces = all
 inet_protocols = all
 
-# Solo questa macchina spedisce senza autenticarsi. Senza compatibility_level Postfix usa il
-# livello 0, dove mynetworks_style = subnet: tutta la rete del server diventava fidata, cioe'
-# un relay aperto a chiunque le stia accanto (misurato con postconf -c sulla VM:
-# mynetworks = 192.168.64.0/24 ... e a quel livello nessuna restrizione sul relay). Gli stessi
-# valori dell'installazione completa.
+# Only this machine sends without authenticating. Without compatibility_level Postfix uses
+# level 0, where mynetworks_style = subnet: the server's whole network became trusted, that is
+# an open relay for anyone next to it (measured with postconf -c on the VM:
+# mynetworks = 192.168.64.0/24 ... and at that level no restriction on relaying). The same
+# values as the full installation.
 compatibility_level = 3.6
 mynetworks = 127.0.0.0/8 [::1]/128
 smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
@@ -137,8 +137,8 @@ virtual_gid_maps = static:5000
 
 # TLS settings (will be configured with certificates)
 smtpd_tls_security_level = none
-# La posta in uscita cifrata quando l'altro server lo permette, come nell'installazione completa. Deciso qui e non
-# lasciato al predefinito, che dal livello 3.11 passa da vuoto a may: cosi' il livello non cambia niente (reperto 251).
+# Outgoing mail encrypted when the other server allows it, as in the full installation. Decided here and not
+# left to the default, which from level 3.11 goes from empty to may: so the level changes nothing (finding 251).
 smtp_tls_security_level = may
 
 # Mailbox size limits

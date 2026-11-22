@@ -81,7 +81,7 @@ public class ClamdSocketTest {
         System.out.println("== 1. What the installer writes, and the probe");
         String installer = new org.daemoxcp.mail.scripts.FullMailServerScript().getScriptContent();
         check("clamd.conf gets ClamdSocket.BLOCK once, guarded", installer.contains("\n" + ClamdSocket.BLOCK + "CLAMD_SOCKET\n")
-                && installer.contains("grep -qF 'reperto 237' /usr/local/etc/clamd.conf"));
+                && installer.contains("grep -qE '(reperto|finding) 237[)]' /usr/local/etc/clamd.conf"));
         int member = installer.indexOf("pw groupmod clamav -m rspamd");
         check("rspamd in the group clamav before clamd and rspamd start", member > 0 && member < installer.indexOf("service clamav_clamd start")
                 && member < installer.indexOf("service rspamd start"));

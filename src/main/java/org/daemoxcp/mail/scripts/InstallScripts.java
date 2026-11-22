@@ -94,9 +94,9 @@ public final class InstallScripts {
     static String stamped(String content) {
         String guard = """
                 # --- Written by DaemoxCP Mail (InstallScripts) --------------------------------------------
-                # L'impronta del jar che ha scritto questo script. Lanciato a mano (non dal pannello), lo
-                # script la confronta col jar che il servizio del pannello usa: se sono diversi, lo script e'
-                # di un'altra versione del pannello e si ferma prima di cambiare qualunque cosa.
+                # The fingerprint of the jar that wrote this script. Started by hand (not by the panel), the
+                # script compares it with the jar the panel's service uses: if they differ, the script belongs
+                # to another version of the panel and stops before changing anything.
                 DAEMOXCP_MAIL_WRITTEN_BY_JAR="%s"
                 if [ -z "${DAEMOXCP_MAIL_FROM_PANEL:-}" ] && [ -n "$DAEMOXCP_MAIL_WRITTEN_BY_JAR" ]; then
                     daemoxcp_mail_jar=$(sysrc -n daemoxcp_mail_jar 2>/dev/null) || daemoxcp_mail_jar=""

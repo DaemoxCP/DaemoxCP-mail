@@ -249,12 +249,12 @@ public final class PkgBranch {
         StringBuilder b = new StringBuilder();
         b.append(MARK).append(" on ").append(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(when.atZone(ZoneOffset.UTC)))
          .append(" (UTC).\n")
-         .append("# Ramo \"").append(target).append("\" dei pacchetti.\n")
-         .append("# pkg legge i file di questa cartella in ordine alfabetico e per ogni campo vale\n")
-         .append("# l'ultimo: per questo il nome comincia con \"zz\". Cambia solo l'indirizzo dei\n")
-         .append("# repository ufficiali; il resto della configurazione resta quello di\n")
-         .append("# /etc/pkg/FreeBSD.conf e degli altri file. Si cambia dal pannello\n")
-         .append("# (Ramo dei pacchetti); cancellando questo file si torna al ramo di serie.\n");
+         .append("# Package branch \"").append(target).append("\".\n")
+         .append("# pkg reads the files of this folder in alphabetical order and for each field the\n")
+         .append("# last one wins: that is why the name starts with \"zz\". Only the address of the\n")
+         .append("# official repositories changes; the rest of the configuration stays that of\n")
+         .append("# /etc/pkg/FreeBSD.conf and the other files. It is changed from the panel\n")
+         .append("# (Package branch); deleting this file goes back to the default branch.\n");
         for (String type : List.of("packages", "modules")) {
             Repo r = enabled(repos, type);
             if (r == null) continue;

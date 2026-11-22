@@ -530,8 +530,8 @@ public class PfFirewallManager {
     public String generateAnchorContent() {
         StringBuilder sb = new StringBuilder();
         sb.append("# Anchor panel-fw — written by DaemoxCP Mail\n");
-        sb.append("# Generato: ").append(Instant.now()).append("\n");
-        sb.append("# NON modificare a mano: viene sovrascritto.\n\n");
+        sb.append("# Generated: ").append(Instant.now()).append("\n");
+        sb.append("# Do NOT edit by hand: it is overwritten.\n\n");
         if (state.mode == Mode.DISABLED) return sb.append(anchorBody(state, List.of(), null)).toString();
         List<String> geoFiles = new ArrayList<>();
         if (state.mode == Mode.GEO_WHITELIST || state.mode == Mode.GEO_BLACKLIST) {
@@ -574,9 +574,9 @@ public class PfFirewallManager {
                 }
                 sb.append("\n");
             } else {
-                sb.append("# ATTENZIONE: modalita' ").append(state.mode)
-                  .append(" ma nessun zone file scaricato. Regole geo IGNORATE per evitare lockout.\n");
-                sb.append("# Per attivare la modalita' geo: 1) seleziona paesi, 2) clicca 'Sincronizza ora', 3) Applica.\n");
+                sb.append("# WARNING: mode ").append(state.mode)
+                  .append(" but no zone file downloaded. Geo rules IGNORED to avoid a lockout.\n");
+                sb.append("# To turn the geo mode on: 1) choose countries, 2) click 'Sync now', 3) Apply.\n");
             }
         }
 
@@ -588,16 +588,16 @@ public class PfFirewallManager {
         //    entrava anche con la posta in IPv6 solo in uscita, e quello degli altri spariva in silenzio invece del «no».
         //    SSH non c'e': la sua regola non la cambia il pannello, e da li' si torna sempre indietro.
         if (refusal != null) {
-            sb.append("# La famiglia chiusa dalla scelta IPv4/IPv6: rifiutata subito, prima di liste e paesi\n");
+            sb.append("# The family closed by the IPv4/IPv6 choice: refused at once, before lists and countries\n");
             sb.append(refusal).append("\n");
         }
 
         // 1. CIDR whitelist: sempre pass (override tutto)
-        sb.append("# Whitelist CIDR: sempre permesso\n");
+        sb.append("# CIDR allow list: always allowed\n");
         sb.append("pass in quick from <panel_wl_cidrs> to any keep state\n");
 
         // 2. CIDR blacklist: sempre block
-        sb.append("# Blacklist CIDR: sempre bloccato\n");
+        sb.append("# CIDR block list: always blocked\n");
         sb.append("block in quick from <panel_bl_cidrs> to any\n");
 
         // 3. Geo rules — solo se geoActive (zone files presenti)
@@ -605,14 +605,14 @@ public class PfFirewallManager {
             String ports = state.applyGeoToPort25
                 ? mailPorts()
                 : authPorts();
-            sb.append("# Geo whitelist: solo paesi selezionati su porte AUTH\n");
+            sb.append("# Geo allow list: only the chosen countries on the AUTH ports\n");
             sb.append("pass in quick proto tcp from <panel_geo_wl> to any port ")
               .append(ports).append(" keep state\n");
             sb.append("block in quick proto tcp to any port ")
               .append(ports).append("\n");
         } else if (geoActive && state.mode == Mode.GEO_BLACKLIST) {
             String ports = mailPorts();
-            sb.append("# Geo blacklist: paesi selezionati bloccati su tutte le porte mail\n");
+            sb.append("# Geo block list: the chosen countries blocked on all the mail ports\n");
             sb.append("block in quick proto tcp from <panel_geo_bl> to any port ")
               .append(ports).append("\n");
         }
@@ -678,7 +678,7 @@ public class PfFirewallManager {
             }
             // Rimuovi trailing newline doppi
             String cleanedStr = cleaned.toString().replaceAll("\n+$", "\n");
-            cleanedStr += "# Pannello: aumentato per tabelle pf con molti CIDR (GeoIP)\n";
+            cleanedStr += "# Panel: raised for pf tables with many CIDRs (GeoIP)\n";
             cleanedStr += "net.pf.request_maxcount=" + target + "\n";
 
             // Backup
@@ -809,7 +809,7 @@ public class PfFirewallManager {
             for (String line : newContent.split("\n", -1)) {
                 String t = line.trim();
                 if (t.startsWith("load anchor \"panel-fw\"") || t.startsWith("load anchor panel-fw")) {
-                    out.append("# (rimosso da panel) ").append(line).append("\n");
+                    out.append("# (removed by the panel) ").append(line).append("\n");
                 } else {
                     out.append(line).append("\n");
                 }
@@ -824,7 +824,7 @@ public class PfFirewallManager {
             boolean inserted = false;
             for (String line : lines) {
                 if (!inserted && !line.trim().startsWith("#") && !line.trim().isEmpty()) {
-                    out.append("# Panel firewall: aumenta limit tabelle per geo CIDR\n");
+                    out.append("# Panel firewall: raises the table limit for the geo CIDRs\n");
                     out.append("set limit table-entries ").append(targetLimit).append("\n\n");
                     inserted = true;
                 }
@@ -839,7 +839,7 @@ public class PfFirewallManager {
         // 3. Aggiungi "anchor panel-fw" (senza load anchor!) se mancante
         if (!hasAnchor) {
             if (!newContent.endsWith("\n")) newContent += "\n";
-            newContent += "\n# Panel firewall anchor (caricato dal pannello via pfctl -a)\n";
+            newContent += "\n# Panel firewall anchor (loaded by the panel with pfctl -a)\n";
             newContent += "anchor \"panel-fw\"\n";
         }
 

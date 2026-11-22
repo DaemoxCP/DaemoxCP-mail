@@ -193,9 +193,26 @@ public final class PanelMarker {
      * (rewrite): il servizio legge lo stesso file di prima, quindi non serve ricaricare niente.
      */
     public static void productCommentsAtBoot() {
+        List<String> done = new ArrayList<>(), problems = new ArrayList<>();
+        for (Path p : serviceFiles(List.of(), List.of())) {
+            if (!stale(p, "productComments")) continue;
+            rewrite(p, "productComments", done, problems);
+        }
+        if (!done.isEmpty()) LOGGER.info("[PanelMarker] DONE: the product name updated in the comments of " + String.join(", ", done));
+        if (!problems.isEmpty()) LOGGER.warning("[PanelMarker] PARTIAL: " + String.join("; ", problems));
+    }
+
+    /**
+     * I file dei servizi in cui il pannello scrive commenti: PRODUCT_FILES, i file (non le sottocartelle) di
+     * PRODUCT_FOLDERS e delle cartelle che nginx include, e quelli in piu' chiesti da chi chiama. Solo file regolari
+     * fino a 4 MB, nell'ordine in cui sono elencati.
+     */
+    static java.util.Set<Path> serviceFiles(java.util.Collection<String> moreFiles, java.util.Collection<String> moreFolders) {
         java.util.Set<Path> files = new LinkedHashSet<>();
         for (String f : PRODUCT_FILES) files.add(Path.of(f));
+        for (String f : moreFiles) files.add(Path.of(f));
         java.util.Set<String> folders = new LinkedHashSet<>(PRODUCT_FOLDERS);
+        folders.addAll(moreFolders);
         if (Shell.resolve("nginx") != null) {
             Shell.Result t = Shell.run(Duration.ofSeconds(20), "nginx", "-T");
             if (t.success()) folders.addAll(WebProtection.includedFolders(t.output()));
@@ -209,37 +226,46 @@ public final class PanelMarker {
                 LOGGER.warning("[PanelMarker] " + d + " cannot be read: " + e.getMessage());
             }
         }
-        List<String> done = new ArrayList<>(), problems = new ArrayList<>();
-        for (Path p : files) {
+        files.removeIf(p -> {
             try {
-                if (!Files.isRegularFile(p) || Files.size(p) > 4L * 1024 * 1024) continue;
+                return !Files.isRegularFile(p) || Files.size(p) > 4L * 1024 * 1024;
             } catch (IOException e) {
-                continue;
+                return true;
             }
-            if (!stale(p, "productComments")) continue;
-            rewrite(p, "productComments", done, problems);
-        }
-        if (!done.isEmpty()) LOGGER.info("[PanelMarker] DONE: the product name updated in the comments of " + String.join(", ", done));
-        if (!problems.isEmpty()) LOGGER.warning("[PanelMarker] PARTIAL: " + String.join("; ", problems));
+        });
+        return files;
     }
 
     /** Il file c'e' e ha ancora un marcatore di prima in una riga di commento. */
     static boolean stale(Path p, String section) {
+        return stale(p, s -> current(s, section));
+    }
+
+    /** Il file c'e' e la funzione ne cambierebbe il testo (solo righe di commento, per chi la passa). */
+    static boolean stale(Path p, java.util.function.UnaryOperator<String> now) {
         try {
             if (!Files.isRegularFile(p)) return false;
             String s = Files.readString(p, StandardCharsets.UTF_8);
-            return !current(s, section).equals(s);
+            return !now.apply(s).equals(s);
         } catch (IOException e) {
             return false;
         }
     }
 
     static boolean rewrite(Path p, String section, List<String> done, List<String> problems) {
+        return rewrite(p, s -> current(s, section), done, problems);
+    }
+
+    /**
+     * Il file con il testo che da' la funzione, se cambiano soltanto righe di commento: altrimenti non si tocca e lo si
+     * dice in problems. Scrittura atomica, con permessi, proprietario e flag di prima.
+     */
+    static boolean rewrite(Path p, java.util.function.UnaryOperator<String> now, List<String> done, List<String> problems) {
         try {
             // Un collegamento si segue: il file del pannello e' quello a cui punta.
             Path real = p.toRealPath();
             String before = Files.readString(real, StandardCharsets.UTF_8);
-            String after = current(before, section);
+            String after = now.apply(before);
             if (after.equals(before)) return true;
             if (!withoutComments(after).equals(withoutComments(before))) {
                 problems.add(p + ": more than comments would change, not touched");

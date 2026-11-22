@@ -93,6 +93,9 @@ public final class DovecotQuota {
     /** Funzione pura: la versione di Dovecot, auth-sql.conf.ext e il file delle quote come sono adesso (null se mancano). */
     static Decision decide(String version, String authSql, String quotaFile) {
         if (version == null || !version.trim().startsWith("2.4")) return new Decision(Action.NOT_24, null, "Dovecot is not 2.4");
+        // I blocchi scritti in italiano dalle versioni di prima valgono come quelli di adesso (EnglishComments).
+        authSql = org.daemoxcp.mail.system.EnglishComments.english(authSql);
+        quotaFile = org.daemoxcp.mail.system.EnglishComments.english(quotaFile);
         String wanted = withQuotaUserdb(authSql);
         if (wanted == null)
             return new Decision(Action.LEFT_ALONE, null, AUTH_SQL.getFileName() + " is not the one the panel writes (or has its own userdb sql): quotas left as they are");

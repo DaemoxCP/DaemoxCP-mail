@@ -105,7 +105,7 @@ public class RedisSocketTest {
         System.out.println("== 1. What the installer writes");
         String installer = new org.daemoxcp.mail.scripts.FullMailServerScript().getScriptContent();
         check("redis.conf gets RedisSocket.FINAL (socket, 0770, port 0) once, guarded", installer.contains("\n" + RedisSocket.FINAL + "REDIS_SOCKET\n")
-                && installer.contains("grep -qF 'reperto 235' /usr/local/etc/redis.conf"));
+                && installer.contains("grep -qE '(reperto|finding) 235[)]' /usr/local/etc/redis.conf"));
         int joins = installer.indexOf("\npw groupmod redis -m rspamd\n");
         check("rspamd in the group redis before redis and rspamd start", joins > 0 && joins < installer.indexOf("service redis start")
                 && joins < installer.indexOf("service rspamd start"));

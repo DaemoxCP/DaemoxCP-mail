@@ -88,15 +88,15 @@ public final class LmtpSocket {
     /** Il blocco di adesso, lo stesso che scrive DovecotConfig. */
     static final String NEW = """
             service lmtp {
-              # Consegna solo Postfix: il socket sta nella sua coda, 0600 suo (doc.dovecot.org, «Postfix and Dovecot
-              # LMTP»; virtual_transport = lmtp:unix:private/dovecot-lmtp). Niente piu' porta 24 su 127.0.0.1 ne'
-              # socket 0666, da cui qualunque processo della macchina consegnava in qualunque casella (reperto 234).
+              # Only Postfix delivers: the socket is in its queue, 0600 and its own (doc.dovecot.org, "Postfix and Dovecot
+              # LMTP"; virtual_transport = lmtp:unix:private/dovecot-lmtp). No more port 24 on 127.0.0.1 nor the
+              # 0666 socket, through which any process of the machine delivered into any mailbox (finding 234).
               unix_listener /var/spool/postfix/private/dovecot-lmtp {
                 mode = 0600
                 user = postfix
                 group = postfix
               }
-              # Il socket di Dovecot in /var/run/dovecot e' 0666 per impostazione predefinita: solo root.
+              # Dovecot's socket in /var/run/dovecot is 0666 by default: root only.
               unix_listener lmtp {
                 mode = 0600
               }
@@ -106,13 +106,13 @@ public final class LmtpSocket {
     /** Lo stato di mezzo: il blocco nuovo piu' la porta 24 di prima, nella sintassi della versione. */
     static String transition(boolean v24) {
         String inet = v24 ? """
-                  # Solo mentre Postfix passa al socket: poi si toglie (LmtpSocket).
+                  # Only while Postfix moves to the socket: removed afterwards (LmtpSocket).
                   inet_listener lmtp {
                     listen = 127.0.0.1
                     port = 24
                   }
                 """ : """
-                  # Solo mentre Postfix passa al socket: poi si toglie (LmtpSocket).
+                  # Only while Postfix moves to the socket: removed afterwards (LmtpSocket).
                   inet_listener lmtp {
                     address = 127.0.0.1
                     port = 24
@@ -193,7 +193,9 @@ public final class LmtpSocket {
     static Result run(Services sv, Path master, Path main) {
         String m, d;
         try {
-            m = sv.read(master);
+            // I blocchi scritti in italiano dalle versioni di prima valgono come quelli di adesso (EnglishComments);
+            // OLD23 e OLD24 descrivono server di prima e restano come sono.
+            m = EnglishComments.english(sv.read(master));
             d = sv.read(main);
         } catch (IOException e) {
             return new Result(Outcome.LEFT, "Dovecot's configuration cannot be read: " + e.getClass().getSimpleName());
@@ -234,7 +236,7 @@ public final class LmtpSocket {
         // 3. Via la porta 24 e il socket 0666. Da qui lo stato di mezzo funziona: un errore lo lascia, l'avvio dopo riprende.
         String withMid;
         try {
-            withMid = sv.read(master);
+            withMid = EnglishComments.english(sv.read(master));
             sv.write(master, withMid.replace(mid, NEW));
         } catch (IOException e) {
             return new Result(Outcome.INCOMPLETE, "Postfix delivers through the socket, Dovecot still also listens on port 24: "

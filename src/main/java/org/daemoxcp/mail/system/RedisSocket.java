@@ -48,7 +48,7 @@ public final class RedisSocket {
     static final String RSPAMD = "rspamd";
 
     /** Le righe che il pannello aggiunge in fondo a redis.conf: in redis.conf vince l'ultima. */
-    static final String MARK = "# daemoxcp-mail: redis solo sul socket Unix, del gruppo redis, in cui sta rspamd (reperto 235)\n";
+    static final String MARK = "# daemoxcp-mail: redis only on the Unix socket, of the redis group, which rspamd is in (finding 235)\n";
     static final String SOCKET_LINES = "unixsocket " + SOCKET + "\nunixsocketperm 770\n";
     static final String MID = MARK + SOCKET_LINES;
     public static final String FINAL = MID + "port 0\n";
@@ -105,7 +105,8 @@ public final class RedisSocket {
     static Result run(Services sv, Path redisConf, Path rspamdRedis) {
         String conf, rs;
         try {
-            conf = sv.read(redisConf);
+        // Il blocco scritto in italiano dalle versioni di prima vale come quello di adesso (EnglishComments).
+            conf = EnglishComments.english(sv.read(redisConf));
             rs = sv.read(rspamdRedis);
         } catch (IOException e) {
             return new Result(Outcome.LEFT, "redis.conf cannot be read: " + e.getClass().getSimpleName());
@@ -151,7 +152,7 @@ public final class RedisSocket {
         // 3. Via la porta. Da qui lo stato di mezzo funziona: un errore ci torna, l'avvio dopo riprende.
         String withMid;
         try {
-            withMid = sv.read(redisConf);
+            withMid = EnglishComments.english(sv.read(redisConf));
             if (!withMid.contains(FINAL)) sv.write(redisConf, withMid.replace(MID, FINAL));
         } catch (IOException e) {
             return new Result(Outcome.INCOMPLETE, "rspamd talks to redis through the socket; redis still also listens on port 6379: "

@@ -49,7 +49,7 @@ public final class ManageSieveLocal {
     /** Il contenuto del file: lo stesso per l'installatore (DovecotConfig) e per la riparazione. */
     public static String fileContent(boolean dovecot24) {
         return "# " + PanelMarker.WRITTEN + ".\n"
-             + "# ManageSieve (4190) solo sulla macchina stessa: la usa soltanto la webmail, su " + ADDRESS + ".\n"
+             + "# ManageSieve (4190) only on the machine itself: only the webmail uses it, on " + ADDRESS + ".\n"
              + "service managesieve-login {\n"
              + "  inet_listener sieve {\n"
              + "    " + (dovecot24 ? "listen" : "address") + " = " + ADDRESS + "\n"

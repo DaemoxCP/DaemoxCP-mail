@@ -28,16 +28,16 @@ public final class PackageInstall {
     }
 
     private static final String FUNCTION = """
-# install_packages: "pkg install -y" sui pacchetti dati, e poi la prova che ci sono TUTTI.
+# install_packages: "pkg install -y" on the given packages, then the proof that ALL of them are there.
 #
-# pkg puo' togliere dal piano un pacchetto chiesto, per risolvere un conflitto, e uscire lo
-# stesso con 0 (misurato il 24/10/2026: dovecot-mysql tolto in silenzio, e il Dovecot rimasto
-# non sapeva leggere le caselle da MySQL). Quindi dopo pkg si chiede al suo database, uno per
-# uno, se c'e' ognuno dei pacchetti chiesti: "pkg info -e" risponde 0 solo se e' installato,
-# e accetta sia il nome (dovecot-mysql) sia l'origine (security/py-fail2ban).
+# pkg can drop a requested package from the plan, to solve a conflict, and still exit
+# with 0 (measured on 24/10/2026: dovecot-mysql silently dropped, and the Dovecot left behind
+# could not read the mailboxes from MySQL). So after pkg its database is asked, one by
+# one, whether each requested package is there: "pkg info -e" answers 0 only if it is installed,
+# and accepts both the name (dovecot-mysql) and the origin (security/py-fail2ban).
 #
-# Se ne manca anche uno, o pkg e' uscito diverso da zero, ci si ferma qui: andare avanti
-# vorrebbe dire configurare servizi che non ci sono e dichiarare riuscita alla fine.
+# If even one is missing, or pkg exited non-zero, it stops here: going on would
+# mean configuring services that are not there and declaring success at the end.
 install_packages() {
     pkg install -y "$@"
     pkg_status=$?

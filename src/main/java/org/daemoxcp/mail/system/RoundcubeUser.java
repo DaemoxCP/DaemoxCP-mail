@@ -104,9 +104,9 @@ public final class RoundcubeUser {
         String rest = otherLines == null || otherLines.isBlank() ? DEFAULT_PM : otherLines;
         if (!rest.endsWith("\n")) rest += "\n";
         return "; " + PanelMarker.WRITTEN + "\n"
-             + "; Il pool di Roundcube, col suo utente: non quello di nginx (www), non root.\n"
-             + "; nginx apre il socket perche' sta nel gruppo www (listen.group); i file della\n"
-             + "; webmail li legge solo roundcube.\n"
+             + "; Roundcube's pool, with its own user: not nginx's (www), not root.\n"
+             + "; nginx opens the socket because it is in the www group (listen.group); only\n"
+             + "; roundcube reads the webmail's files.\n"
              + "[" + POOL + "]\n"
              + "user = " + USER + "\n"
              + "group = " + GROUP + "\n"
@@ -121,18 +121,18 @@ public final class RoundcubeUser {
     /** www.conf senza pool: c'e' solo perche' il pacchetto di PHP non lo ricrei. */
     public static String wwwPlaceholder() {
         return "; " + PanelMarker.WRITTEN + "\n"
-             + "; Qui c'era il pool \"www\", con cui Roundcube girava come l'utente di nginx.\n"
-             + "; Adesso Roundcube ha il suo pool, in " + POOL + ".conf, col suo utente.\n"
-             + "; Il file resta, senza pool, di proposito: se www.conf manca, installare o\n"
-             + "; aggiornare php84 ricopia qui www.conf.default, e php-fpm farebbe ripartire\n"
-             + "; un pool che gira come www. I commenti cominciano con ';': php-fpm rifiuta '#'.\n";
+             + "; Here was the \"www\" pool, with which Roundcube ran as nginx's user.\n"
+             + "; Now Roundcube has its own pool, in " + POOL + ".conf, with its own user.\n"
+             + "; The file stays, without a pool, on purpose: if www.conf is missing, installing or\n"
+             + "; upgrading php84 copies www.conf.default here again, and php-fpm would start\n"
+             + "; a pool running as www again. Comments start with ';': php-fpm refuses '#'.\n";
     }
 
     /** La rotazione dei log di Roundcube, come quella del pacchetto ma col proprietario giusto. */
     static String roundcubeRotation() {
         return "# " + PanelMarker.WRITTEN + "\n"
-             + "# La rotazione dei log di Roundcube: quella del pacchetto li ricreava come www:www,\n"
-             + "# e dopo la prima rotazione la webmail non avrebbe piu' potuto scriverli.\n"
+             + "# The rotation of Roundcube's logs: the package's one recreated them as www:www,\n"
+             + "# and after the first rotation the webmail could no longer have written them.\n"
              + "# logfilename                 [owner:group] mode count size when  flags [/pid_file] [sig_num]\n"
              + ROUNDCUBE_DIR + "/logs/errors.log    " + USER + ":" + GROUP + "  640  10    1000 *     XCBN\n"
              + ROUNDCUBE_DIR + "/logs/sendmail.log  " + USER + ":" + GROUP + "  640  10    1000 *     XCBN\n";
@@ -144,7 +144,7 @@ public final class RoundcubeUser {
      * dopo che i file ci sono.
      */
     public static String shellPool() {
-        return "\n# Roundcube col suo utente e il suo pool di php-fpm, non quello di nginx (www).\n"
+        return "\n# Roundcube with its own user and its own php-fpm pool, not nginx's (www).\n"
              + "pw groupshow " + GROUP + " >/dev/null 2>&1 || pw groupadd " + GROUP + "\n"
              + "pw usershow " + USER + " >/dev/null 2>&1 || pw useradd " + USER + " -g " + GROUP
              + " -d /nonexistent -s /usr/sbin/nologin -c \"Roundcube webmail\"\n"
@@ -155,7 +155,7 @@ public final class RoundcubeUser {
 
     /** Il pezzo degli script d'installazione che da' a roundcube i suoi file. */
     public static String shellOwnership() {
-        StringBuilder b = new StringBuilder("\n# I file di Roundcube: suoi, e di nessun altro.\n");
+        StringBuilder b = new StringBuilder("\n# Roundcube's files: its own, and nobody else's.\n");
         for (Ownership o : ownershipPlan(Places.real())) {
             String p = o.path().toString();
             // Il contenuto senza i file con piu' nomi: logs, temp e le sessioni li scrive roundcube, e «chown -R» gli dava
