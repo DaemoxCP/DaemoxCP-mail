@@ -3526,6 +3526,9 @@ public final class UpdateManager {
      *
      * @param restartFollows vero se il lavoro riavvia i servizi subito dopo (vedi InstallSideEffects)
      */
+    // Il testo delle mappe (PostfixMaps.Outcome.problem, gia' tradotto) arriva alla pagina con ShownException.translated:
+    // con IllegalStateException ErrorText lo sostituiva con «i dettagli sono nel log del pannello», e la pagina non
+    // diceva piu' quale mappa (trovato da PostfixMapsJobsE2ETest sulla 1.0.0 build 793, 22/11/2026).
     static PlanOutcome checkPlanOutcome(Job job, PlanWatch watch, JSONObject plan, String who, boolean restartFollows) {
         JSONArray outside = compareWithInventory(job, watch.inventoryBefore(), plan, who);
         watch.sideEffects().checkConfig(job, plan, outside, restartFollows);
@@ -4136,7 +4139,7 @@ public final class UpdateManager {
             if (insCode != 0 || !ok("pkg info -e mysql84-server", 20) || !ok("pkg info -e mysql84-client", 20)) {
                 throw new IllegalStateException("the 8.4 installation did not succeed: the data is intact, the copy is in " + backupDir);
             }
-            if (outcome.mapsProblem() != null) throw new IllegalStateException(outcome.mapsProblem());
+            if (outcome.mapsProblem() != null) throw org.daemoxcp.mail.util.ShownException.translated(outcome.mapsProblem());
 
             job.advance(6, TOT);
             job.write("");
@@ -4850,7 +4853,7 @@ public final class UpdateManager {
             if (delCode != 0) throw new IllegalStateException("pkg delete exited with code " + delCode);
             for (String n : install)
                 if (insCode != 0 || !ok("pkg info -e " + n, 20)) throw org.daemoxcp.mail.util.ShownException.of("server.um.dv24move.notInstalled", Map.of("n", n));
-            if (outcome.mapsProblem() != null) throw new IllegalStateException(outcome.mapsProblem());
+            if (outcome.mapsProblem() != null) throw org.daemoxcp.mail.util.ShownException.translated(outcome.mapsProblem());
 
             job.advance(5, TOT);
             job.write("");
@@ -6068,7 +6071,7 @@ public final class UpdateManager {
             // cui la macchina puo' essere rimasta a meta'. php-fpm si riavvia piu' sotto.
             outcome = checkPlanOutcome(job, watch, plan, "Roundcube update", true);
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
-            if (outcome.mapsProblem() != null) throw new IllegalStateException(outcome.mapsProblem());
+            if (outcome.mapsProblem() != null) throw org.daemoxcp.mail.util.ShownException.translated(outcome.mapsProblem());
             for (String m : messagesAskingForAction(cat.toString())) {
                 job.write("    " + I18n.tr("server.um.x.pkgAsks", java.util.Map.of("m", String.valueOf(m.replace("\n", " | ")))));
             }
@@ -7438,7 +7441,7 @@ public final class UpdateManager {
                 job.write(I18n.tr("server.um.x.toGoBack", java.util.Map.of("cmd", String.valueOf("pkg install -y " + String.join(" ", leaf)))));
                 throw new IllegalStateException("pkg install exited with code " + ci);
             }
-            if (outcome.mapsProblem() != null) throw new IllegalStateException(outcome.mapsProblem());
+            if (outcome.mapsProblem() != null) throw org.daemoxcp.mail.util.ShownException.translated(outcome.mapsProblem());
             installedNew = true;
             for (String m : messagesAskingForAction(catIns.toString()))
                 job.write("    " + I18n.tr("server.um.x.pkgAsks", java.util.Map.of("m", String.valueOf(m.replace("\n", " | ")))));
@@ -8882,7 +8885,7 @@ public final class UpdateManager {
             String mapsProblem = PostfixMaps.afterUpgrade(mapsBefore, l -> job.write("  " + l)).problem();
 
             if (code != 0) throw new IllegalStateException("pkg upgrade exited with code " + code);
-            if (mapsProblem != null) throw new IllegalStateException(mapsProblem);
+            if (mapsProblem != null) throw org.daemoxcp.mail.util.ShownException.translated(mapsProblem);
 
             String versionAfter = sh("pkg query %v " + name + " 2>/dev/null", 20);
             job.write(I18n.tr("server.um.runGuidedUpdate.11", java.util.Map.of("versionAfter", String.valueOf(versionAfter))));
