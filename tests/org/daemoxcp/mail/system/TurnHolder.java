@@ -15,6 +15,8 @@ import java.util.List;
  * Usage: java -cp tests:<jar> org.daemoxcp.mail.system.TurnHolder <list> <description> [package...]
  *        <list> is the list's path ("-" for the real one, /var/db/daemoxcp-mail-maintenance-locks):
  *        the turn file sits next to it.
+ *        With -Dturnholder.forLocks=yes it takes the turn as the restore of the locks does
+ *        (PackageQueue.takeForLocks): no job trace, like the service's watch putting locks back.
  */
 public class TurnHolder {
     public static void main(String[] args) throws Exception {
@@ -23,7 +25,8 @@ public class TurnHolder {
             PackageQueue.turnLock = PackageQueue.list.resolveSibling("package-turn.lock");
         }
         String id = "holder-" + ProcessHandle.current().pid();
-        String refusal = PackageQueue.take(id, args[1]);
+        boolean forLocks = "yes".equals(System.getProperty("turnholder.forLocks"));
+        String refusal = forLocks ? PackageQueue.takeForLocks(id, args[1]) : PackageQueue.take(id, args[1]);
         if (refusal != null) {
             System.out.println("REFUSED " + refusal);
             System.exit(3);

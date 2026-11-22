@@ -2607,8 +2607,10 @@ public final class UpdateManager {
         String refusal = PackageQueue.takeForLocks("startup-restore", turnDescription);
         if (refusal != null) {
             // In inglese, come sopra: chi lo chiama lo stampa nel registro.
+            // Senza «a job is running there», che c'era prima: chi tiene il turno puo' anche essere il guardiano di un
+            // altro processo che sta rimettendo le protezioni (prova M4, 22/11/2026). Chi e' lo dice holderForLog.
             String msg = "A list of unlocked packages is on disk, but another panel process holds the package turn ("
-                    + PackageQueue.holderForLog() + "; a job is running there): the list is not touched.";
+                    + PackageQueue.holderForLog() + "): the list is not touched.";
             LOGGER.info(msg);
             return msg;
         }
