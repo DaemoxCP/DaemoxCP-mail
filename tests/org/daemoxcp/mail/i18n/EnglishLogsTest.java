@@ -19,6 +19,10 @@ import java.util.stream.Stream;
  *  2. The texts written in a log call (a java.util.logging logger: info, warning, severe, fine, config, log; and
  *     System.out / System.err, which go to the service's log) have no Italian word.
  *  3. The same for the message of an exception created in the code: it ends up in the log.
+ *  4. No translated text reaches a logger (java.util.logging) through its arguments: no I18n.tr(...), and no job's
+ *     description, which is written in the panel's language for the page (found on the VM on 22/11/2026: «Interrupted
+ *     package job recorded …: aggiornamento di nginx-robust-probe» on an Italian panel). System.out is left out of this
+ *     check: the console prints translated texts to the person in front of it.
  *
  * Only the strings written in the code are read, never the comments (they stay in Italian) nor the translation keys
  * (al.sourceDomain is a name). An Italian word is one of a short list that English does not have (`al`, `della`,
@@ -92,6 +96,55 @@ public class EnglishLogsTest {
                 if (c == '(') depth++;
                 else if (c == ')') depth--;
                 i++;
+            }
+        }
+        return out;
+    }
+
+    /** A call to a java.util.logging logger: what follows is its '('. */
+    static final Pattern LOGGER_CALL = Pattern.compile(
+            "\\b(?:LOGGER|LOG|log|logger)\\s*\\.\\s*(?:info|warning|severe|fine|finer|finest|config|log)\\s*\\(");
+
+    /** Translated text in code: a call to I18n.tr or trn, or a job's description (a turn's, or read from a record). */
+    static final Pattern TRANSLATED = Pattern.compile(
+            "\\bI18n\\s*\\.\\s*trn?\\s*\\(|\\.description\\s*\\(\\s*\\)|optString\\s*\\(\\s*\"description\"");
+
+    /** The code inside the parentheses that open at src[from - 1] (comments already blanked out). */
+    static String arguments(String src, int from) {
+        int depth = 1, i = from, n = src.length();
+        while (i < n && depth > 0) {
+            char c = src.charAt(i);
+            if (src.startsWith("\"\"\"", i)) {
+                int end = src.indexOf("\"\"\"", i + 3);
+                i = end < 0 ? n : end + 3;
+            } else if (c == '"') {
+                int j = i + 1;
+                while (j < n && src.charAt(j) != '"' && src.charAt(j) != '\n') j += src.charAt(j) == '\\' ? 2 : 1;
+                i = j + 1;
+            } else if (c == '\'') {
+                int j = i + 1;
+                if (j < n && src.charAt(j) == '\\') j += 2; else j++;
+                int end = src.indexOf('\'', j);
+                i = end < 0 ? n : end + 1;
+            } else {
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                i++;
+            }
+        }
+        return src.substring(from, Math.max(from, i - 1));
+    }
+
+    /** The logger calls of a source file that get a translated text through their arguments, with their line. */
+    static List<String> translatedLogLines(String file, String src) {
+        List<String> out = new ArrayList<>();
+        String code = withoutComments(src);
+        Matcher m = LOGGER_CALL.matcher(code);
+        while (m.find()) {
+            String args = arguments(code, m.end());
+            if (TRANSLATED.matcher(args).find()) {
+                String shown = args.replaceAll("\\s+", " ").trim();
+                out.add(file + ":" + line(code, m.start()) + " «" + (shown.length() > 90 ? shown.substring(0, 90) + "…" : shown) + "»");
             }
         }
         return out;
@@ -187,6 +240,12 @@ public class EnglishLogsTest {
                 italianLogLines("x", "// il pannello al boot\nLOGGER.info(\"started\"); // al boot\n/* LOGGER.info(\"al boot\"); */\n"
                         + "System.out.println(I18n.tr(\"console.al.boot\"));\nLOGGER.info(\"non-empty, per day, e.g. a file\");").isEmpty());
         check("«e'» is Italian, a lone «e» is not", italianWords("x e' y").size() == 1 && italianWords("x e y").isEmpty());
+        check("a translated text or a job's description in a logger call is found",
+                translatedLogLines("x", "LOGGER.warning(\"Interrupted package job: \" + n.optString(\"description\"));\n"
+                        + "LOGGER.info(\"[X] \" + I18n.tr(\"server.x\"));\nLOG.info(\"turn \" + t.description());").size() == 3);
+        check("the job's id, a translated text in System.out and a commented-out call are not",
+                translatedLogLines("x", "LOGGER.warning(\"Interrupted package job: job \" + job.optString(\"turnId\"));\n"
+                        + "System.out.println(I18n.tr(\"console.x\"));\n// LOGGER.info(I18n.tr(\"x\"));").isEmpty());
 
         System.out.println("\n== 2-3. The log lines and exception messages of the panel ==");
         List<String> found = new ArrayList<>();
@@ -198,6 +257,14 @@ public class EnglishLogsTest {
             }
         }
         check("no Italian word in a log line or an exception message (" + files + " files read)" + show(found), found.isEmpty() && files > 100);
+
+        System.out.println("\n== 4. No translated text reaches a logger ==");
+        List<String> translated = new ArrayList<>();
+        try (Stream<Path> s = Files.walk(Path.of("src/main/java"))) {
+            for (Path p : s.filter(x -> x.toString().endsWith(".java")).sorted().toList())
+                translated.addAll(translatedLogLines(p.toString().replaceFirst("^src/main/java/org/daemoxcp/mail/", ""), Files.readString(p)));
+        }
+        check("no logger call gets I18n.tr or a job's description" + show(translated), translated.isEmpty());
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         System.exit(failed == 0 ? 0 : 1);

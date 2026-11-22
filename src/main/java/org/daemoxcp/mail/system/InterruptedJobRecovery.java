@@ -154,7 +154,7 @@ public final class InterruptedJobRecovery {
         for (Map.Entry<String, Boolean> e : servicesBefore.entrySet())
             if (e.getValue() && !Boolean.TRUE.equals(servicesNow.get(e.getKey()))) fell = true;
         if (changed.isEmpty() && !fell) {
-            LOGGER.info("[InterruptedJobRecovery] " + description + " stopped before changing anything: nothing to complete");
+            LOGGER.info("[InterruptedJobRecovery] job " + rec.optString("id", "?") + " stopped before changing anything: nothing to complete");
             return null;
         }
 
@@ -164,6 +164,8 @@ public final class InterruptedJobRecovery {
             changedJson.put(new JSONObject().put("name", e.getKey()).put("from", e.getValue()[0]).put("to", e.getValue()[1]));
         r.put("changed", changedJson);
         List<String> problems = new ArrayList<>();
+        // Gli stessi problemi in inglese, per il registro: i registri sono in inglese per tutti (EnglishLogsTest).
+        List<String> problemsLog = new ArrayList<>();
 
         if (reinstallJob) {
             // La reinstallazione completa: niente riavvii automatici, la via di ritorno la dice gia' l'avviso.
@@ -182,11 +184,11 @@ public final class InterruptedJobRecovery {
             String err = m.reinstall(broken);
             r.put("reinstalled", new JSONArray(broken));
             if (err != null) {
-                problems.add(I18n.tr("server.recovery.complete.reinstallFailed", Map.of("list", String.join(" ", broken), "err", err)));
+                problem(problems, problemsLog, "server.recovery.complete.reinstallFailed", Map.of("list", String.join(" ", broken), "err", err));
             } else {
                 List<String> still = m.checksumFailures(broken);
                 if (!still.isEmpty())
-                    problems.add(I18n.tr("server.recovery.complete.stillBroken", Map.of("list", String.join(" ", still))));
+                    problem(problems, problemsLog, "server.recovery.complete.stillBroken", Map.of("list", String.join(" ", still)));
             }
         }
 
@@ -210,8 +212,7 @@ public final class InterruptedJobRecovery {
             if (a != Action.CHECK) {
                 Shell.Result test = m.configTest(s);
                 if (test != null && !test.success()) {
-                    o.put("ok", false).put("why", I18n.tr("server.recovery.complete.configRefused", Map.of("s", s)));
-                    problems.add(o.getString("why"));
+                    o.put("ok", false).put("why", problem(problems, problemsLog, "server.recovery.complete.configRefused", Map.of("s", s)));
                     services.put(o);
                     continue;
                 }
@@ -219,14 +220,12 @@ public final class InterruptedJobRecovery {
                 String pidAfter = m.running(s) ? m.pid(s) : "";
                 o.put("pidBefore", pidBefore).put("pidAfter", pidAfter);
                 if (!done || pidAfter.isEmpty()) {
-                    o.put("ok", false).put("why", I18n.tr("server.recovery.complete.notRunning", Map.of("s", s)));
-                    problems.add(o.getString("why"));
+                    o.put("ok", false).put("why", problem(problems, problemsLog, "server.recovery.complete.notRunning", Map.of("s", s)));
                     services.put(o);
                     continue;
                 }
                 if (a == Action.RESTART && !pidBefore.isEmpty() && pidBefore.equals(pidAfter)) {
-                    o.put("ok", false).put("why", I18n.tr("server.recovery.complete.samePid", Map.of("s", s, "pid", pidAfter)));
-                    problems.add(o.getString("why"));
+                    o.put("ok", false).put("why", problem(problems, problemsLog, "server.recovery.complete.samePid", Map.of("s", s, "pid", pidAfter)));
                     services.put(o);
                     continue;
                 }
@@ -235,6 +234,7 @@ public final class InterruptedJobRecovery {
             if (data != null && !data.isEmpty()) {
                 o.put("ok", false).put("why", data);
                 problems.add(data);
+                problemsLog.add(data);
             } else {
                 o.put("ok", true);
             }
@@ -246,18 +246,30 @@ public final class InterruptedJobRecovery {
         Map<String, Boolean> after = m.servicesState();
         for (Map.Entry<String, Boolean> e : servicesBefore.entrySet())
             if (e.getValue() && !Boolean.TRUE.equals(after.get(e.getKey())))
-                problems.add(I18n.tr("server.recovery.complete.notRunning", Map.of("s", e.getKey())));
+                problem(problems, problemsLog, "server.recovery.complete.notRunning", Map.of("s", e.getKey()));
         String lookups = m.mailLookups();
-        if (lookups != null) problems.add(I18n.tr("server.recovery.complete.lookups", Map.of("why", lookups)));
+        if (lookups != null) problem(problems, problemsLog, "server.recovery.complete.lookups", Map.of("why", lookups));
 
         LinkedHashSet<String> unique = new LinkedHashSet<>(problems);
         r.put("problems", new JSONArray(new ArrayList<>(unique))).put("ok", unique.isEmpty()).put("finishedUtc", iso(m.now()));
         PackageRecovery.recordRecovery(rec, r);
         String summary = description + ": " + changed.size() + " packages changed, " + services.length()
                 + " services handled, " + (unique.isEmpty() ? "all verified" : "problems: " + String.join("; ", unique));
-        if (unique.isEmpty()) LOGGER.info("[InterruptedJobRecovery] DONE: " + summary);
-        else LOGGER.warning("[InterruptedJobRecovery] " + summary);
+        // Nel registro l'id del lavoro e i problemi in inglese; il riepilogo tradotto va all'avviso.
+        String logLine = "job " + rec.optString("id", "?") + ": " + changed.size() + " packages changed, " + services.length()
+                + " services handled, " + (unique.isEmpty() ? "all verified"
+                : "problems: " + String.join("; ", new LinkedHashSet<>(problemsLog)));
+        if (unique.isEmpty()) LOGGER.info("[InterruptedJobRecovery] DONE: " + logLine);
+        else LOGGER.warning("[InterruptedJobRecovery] " + logLine);
         return r.put("summary", summary);
+    }
+
+    /** Un problema: nella lingua di chi legge l'avviso, e in inglese per il registro. Restituisce il testo tradotto. */
+    private static String problem(List<String> problems, List<String> forLog, String key, Map<String, ?> params) {
+        String text = I18n.tr(key, params);
+        problems.add(text);
+        forLog.add(I18n.t("en", key, params));
+        return text;
     }
 
     private static String iso(long epochSeconds) {

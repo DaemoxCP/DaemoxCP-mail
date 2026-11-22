@@ -82,7 +82,9 @@ public final class PackageRecovery {
         JSONObject old = notice();
         if (!old.isEmpty()) n.put("earlier", old);
         write(n);
-        LOGGER.warning("Interrupted package job recorded in " + notice + ": " + n.optString("description"));
+        // Nel registro l'id del lavoro e i pacchetti, in inglese: la descrizione e' nella lingua del pannello (avviso).
+        LOGGER.warning("Interrupted package job recorded in " + notice + ": job " + (job.optString("turnId", "").isEmpty()
+                ? "of unknown id" : job.optString("turnId")) + ", packages " + packages);
     }
 
     /**

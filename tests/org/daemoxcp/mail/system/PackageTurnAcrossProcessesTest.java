@@ -64,7 +64,7 @@ public class PackageTurnAcrossProcessesTest {
         String policy = UpdateManager.applyLockPolicy();
         Main.mailDatabase = null;
         check("the locks rule is not applied while the other works, and it says so",
-                policy.contains("not applied") && policy.contains("test maintenance"));
+                policy.contains("not applied") && policy.contains("pid " + h.pid));
         h.release();
         check("released by the other, here it is taken", PackageQueue.take("here", "guided update") == null);
         check("and the lock says who holds it now", Files.readString(PackageQueue.turnLock).startsWith("pid " + me + ", "));

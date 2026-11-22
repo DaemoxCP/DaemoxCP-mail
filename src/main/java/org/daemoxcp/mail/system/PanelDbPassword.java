@@ -408,7 +408,7 @@ public final class PanelDbPassword {
             if (nz(state.get()).startsWith(DONE)) return new Result(Outcome.NOTHING, "");
             String refusal = PackageQueue.takeForLocks("db-password", I18n.tr("server.dbPassword.rotationTurn"));
             if (refusal != null) {
-                LOGGER.info("[PanelDbPassword] not now, another panel process holds the turn: " + refusal);
+                LOGGER.info("[PanelDbPassword] not now, the package turn is held by " + PackageQueue.holderForLog());
                 return new Result(Outcome.NOT_NOW, refusal);
             }
             Result r;
