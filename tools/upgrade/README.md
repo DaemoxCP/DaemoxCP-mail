@@ -25,7 +25,7 @@ The script checks all of this before it changes anything, and stops if something
 ## 1. The jar and its SHA-256
 
 - **From a release**: download `daemoxcp-mail.jar` from the
-  [release](https://github.com/DaemoxCP/mail/releases) and take its SHA-256 from the release notes. The script
+  [release](https://github.com/DaemoxCP/DaemoxCP-mail/releases) and take its SHA-256 from the release notes. The script
   compares the two, so the SHA-256 must come from the release notes, never from the downloaded file.
 - **Built by you**: on any computer with Java 25 and Maven, from the repository at the commit you want:
 

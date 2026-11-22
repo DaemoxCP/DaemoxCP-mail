@@ -46,7 +46,7 @@ public final class ReleaseCheck {
     private static final Logger LOGGER = Logger.getLogger(ReleaseCheck.class.getName());
 
     /** Il repository pubblico del pannello. */
-    public static final String REPOSITORY = "DaemoxCP/mail";
+    public static final String REPOSITORY = "DaemoxCP/DaemoxCP-mail";
     static final URI API = URI.create("https://api.github.com/repos/" + REPOSITORY + "/releases?per_page=30");
     static final String RELEASE_PAGE = "https://github.com/" + REPOSITORY + "/releases/tag/";
 

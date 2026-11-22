@@ -490,7 +490,7 @@ mount | grep -q ' on /proc ' || mount /proc; java -version
 ### Passo 5 — Il pannello e i certificati sul server
 
 1. **Prendi il jar del pannello.** Sul tuo computer, scarica `daemoxcp-mail.jar` dall'ultima
-   [release](https://github.com/DaemoxCP/mail/releases) e controlla che il suo SHA-256 sia quello delle note della
+   [release](https://github.com/DaemoxCP/DaemoxCP-mail/releases) e controlla che il suo SHA-256 sia quello delle note della
    release:
 
    ```bash
@@ -694,7 +694,7 @@ telefono) con queste impostazioni:
 - **FreeBSD e i programmi della posta**: la pagina *Aggiornamenti*. Dice cosa c'è di nuovo e fa ogni passo in
   ordine, coi suoi controlli. I pacchetti della posta sono bloccati contro un semplice `pkg upgrade`: li aggiorna il
   pannello, uno alla volta, dopo aver controllato che la versione nuova non rompa la posta.
-- **Il pannello stesso**: dalla [release](https://github.com/DaemoxCP/mail/releases) nuova copia
+- **Il pannello stesso**: dalla [release](https://github.com/DaemoxCP/DaemoxCP-mail/releases) nuova copia
   `daemoxcp-mail.jar` e i due script di `tools/upgrade/` in `/root/panel-upgrade/` sul server (creala prima con
   `install -d -m 700 /root/panel-upgrade`), poi, da root, con lo SHA-256 scritto nelle note della release:
 
@@ -717,7 +717,7 @@ telefono) con queste impostazioni:
   rientra tutti; la posta non si ferma.
 
   Quando esce una versione nuova, il pannello te lo dice. Una volta al giorno legge l'elenco delle release di
-  [DaemoxCP/mail](https://github.com/DaemoxCP/mail/releases) su GitHub. Se una è più nuova del pannello, lo dice,
+  [DaemoxCP/DaemoxCP-mail](https://github.com/DaemoxCP/DaemoxCP-mail/releases) su GitHub. Se una è più nuova del pannello, lo dice,
   col link alla pagina della release:
   - nella *Dashboard*;
   - nella pagina *Aggiornamenti*, che ha anche *Controlla adesso*;

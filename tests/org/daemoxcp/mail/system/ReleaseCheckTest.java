@@ -70,7 +70,7 @@ public class ReleaseCheckTest {
         JSONArray list = new JSONArray()
                 .put(release("v0.8.0", false, false, "2026-10-01T10:00:00Z", ""))
                 .put(release("v0.9.0", false, true, "2026-11-18T10:00:00Z", ""))
-                .put(release("v1.0.0", false, false, "2026-12-01T10:00:00Z", "https://github.com/DaemoxCP/mail/releases/tag/v1.0.0"))
+                .put(release("v1.0.0", false, false, "2026-12-01T10:00:00Z", "https://github.com/DaemoxCP/DaemoxCP-mail/releases/tag/v1.0.0"))
                 .put(release("v1.0.1", false, false, "2026-12-05T10:00:00Z", "https://attacker.example/releases/tag/v1.0.1"))
                 .put(release("v1.1.0", true, false, "2026-12-10T10:00:00Z", ""))
                 .put(release("v1.2.0", false, true, "2026-12-11T10:00:00Z", ""))
@@ -88,7 +88,7 @@ public class ReleaseCheckTest {
                 + (forStable == null ? null : forStable.optString("version")) + ")",
                 forStable != null && "1.0.1".equals(forStable.optString("version")) && !forStable.optBoolean("preRelease"));
         check("its link is built from the tag, never taken from the answer (" + (forStable == null ? null : forStable.optString("url")) + ")",
-                forStable != null && "https://github.com/DaemoxCP/mail/releases/tag/v1.0.1".equals(forStable.optString("url")));
+                forStable != null && "https://github.com/DaemoxCP/DaemoxCP-mail/releases/tag/v1.0.1".equals(forStable.optString("url")));
         check("its date is ISO 8601 UTC (" + (forStable == null ? null : forStable.optString("publishedAt")) + ")",
                 forStable != null && "2026-12-05T10:00:00Z".equals(forStable.optString("publishedAt")));
         check("the release's name and text are not carried", forStable != null && !forStable.has("name") && !forStable.has("body"));
@@ -187,7 +187,7 @@ public class ReleaseCheckTest {
         System.out.println("\n== The address the panel asks ==");
         check("api.github.com over HTTPS, the panel's repository (" + ReleaseCheck.API + ")",
                 "https".equals(ReleaseCheck.API.getScheme()) && "api.github.com".equals(ReleaseCheck.API.getHost())
-                        && ReleaseCheck.API.getPath().equals("/repos/DaemoxCP/mail/releases"));
+                        && ReleaseCheck.API.getPath().equals("/repos/DaemoxCP/DaemoxCP-mail/releases"));
 
         System.out.println(failed == 0 ? "\nALL OK" : "\n" + failed + " CHECKS FAILED");
         if (failed > 0) System.exit(1);

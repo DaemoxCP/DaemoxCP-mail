@@ -6,7 +6,7 @@
 
 Please do not open a public issue for a security problem: everyone could read it before a fix exists.
 
-Report it privately on GitHub: on the [DaemoxCP/mail](https://github.com/DaemoxCP/mail) page, *Security*, then
+Report it privately on GitHub: on the [DaemoxCP/DaemoxCP-mail](https://github.com/DaemoxCP/DaemoxCP-mail) page, *Security*, then
 *Report a vulnerability*. Only the maintainer sees the report, and the conversation stays there until a fix is out.
 
 Please include:

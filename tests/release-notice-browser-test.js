@@ -34,7 +34,7 @@ function portOpen(port) {
 }
 
 // Newer than the panel that runs (1.0.0 is the first release): a 1.0.0 here would be the same version, not a newer one.
-const NEWER = { version: '1.1.0', tag: 'v1.1.0', url: 'https://github.com/DaemoxCP/mail/releases/tag/v1.1.0',
+const NEWER = { version: '1.1.0', tag: 'v1.1.0', url: 'https://github.com/DaemoxCP/DaemoxCP-mail/releases/tag/v1.1.0',
     publishedAt: '2026-12-01T10:00:00Z', preRelease: false };
 
 (async () => {
