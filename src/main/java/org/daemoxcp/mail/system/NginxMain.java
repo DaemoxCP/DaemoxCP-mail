@@ -34,15 +34,15 @@ public final class NginxMain {
 
     /** Le intestazioni di sicurezza della webmail, con always: anche sulle risposte di errore. */
     static final String HEADERS = """
-                    # Sicurezza della webmail (r15): solo HTTPS per un anno, niente indovinare il tipo dei file, e
-                    # l'indirizzo della webmail non esce verso i siti che si aprono dai messaggi.
+                    # Webmail security (r15): HTTPS only for a year, no guessing of file types, and
+                    # the webmail's address does not leak to the sites opened from messages.
                     add_header Strict-Transport-Security "max-age=31536000" always;
                     add_header X-Content-Type-Options "nosniff" always;
                     add_header Referrer-Policy "same-origin" always;
             """;
 
     static final String TOKENS = """
-                # La versione di nginx non si dice a nessuno (r19).
+                # nginx's version is told to nobody (r19).
                 server_tokens off;
             """;
 
@@ -96,10 +96,10 @@ __HEADERS__
             try_files $uri $uri/ /index.php?$args;
         }
 
-        # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: uno script PHP
-        # con un percorso attaccato. Un location che chiede .php in fondo all'URI non lo prende,
-        # e il foglio di stile torna come pagina HTML: la webmail si apre senza grafica.
-        # Configurazione dal wiki ufficiale di Roundcube (pagina Installation).
+        # Roundcube 1.7 serves its assets as /static.php/path/to/file.css: a PHP script
+        # with a path attached. A location that wants .php at the end of the URI does not catch it,
+        # and the style sheet comes back as an HTML page: the webmail opens without its look.
+        # Configuration from Roundcube's official wiki (Installation page).
         location ~ \\.php {
             include fastcgi_params;
             fastcgi_index index.php;

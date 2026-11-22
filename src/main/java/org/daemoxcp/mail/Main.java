@@ -397,6 +397,9 @@ public class Main {
         // servizio, jar, jail. Solo il servizio o il menu, da root, e prima che qualcuno legga quei nomi.
         boolean renameApplies = org.daemoxcp.mail.system.ProductRename.applies(args);
         if (renameApplies) org.daemoxcp.mail.system.ProductRename.atServiceStart();
+        // I commenti che le versioni di prima scrivevano in italiano nei file del server, in inglese (22/11/2026): dopo
+        // il nome del prodotto, e prima delle riparazioni che riconoscono i loro blocchi dal commento.
+        if (renameApplies) org.daemoxcp.mail.system.EnglishComments.atBoot();
         // Lo script di avvio scritto dal pannello cita i file che PathMigration ha appena rinominato.
         org.daemoxcp.mail.system.RcScriptRepair.ensureAtBoot();
         // I segreti solo di root (le password di root di MySQL e dell'utente MySQL di Roundcube) escono dal

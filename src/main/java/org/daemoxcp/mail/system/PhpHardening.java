@@ -51,7 +51,7 @@ public final class PhpHardening {
             output_buffering = 4096
             zend.enable_gc = On
             zend.exception_ignore_args = On
-            ; r19: ne' la versione di PHP negli header, ne' un errore sotto gli occhi di chi passa.
+            ; r19: neither PHP's version in the headers nor an error in front of whoever passes by.
             expose_php = Off
             display_errors = Off
             display_startup_errors = Off
@@ -78,19 +78,19 @@ public final class PhpHardening {
             default_socket_timeout = 60
 
             [Date]
-            ; UTC, non il fuso di chi amministra: quello che si memorizza e' sempre UTC, e la
-            ; conversione la fa chi mostra (r13). Roundcube converte da se' nel fuso dell'utente.
-            ; Senza questa riga PHP non ha nessun fuso e lo dice a ogni funzione sulle date.
+            ; UTC, not the administrator's time zone: what is stored is always UTC, and the
+            ; conversion is done by whoever shows it (r13). Roundcube converts to the user's zone itself.
+            ; Without this line PHP has no time zone and says so at every date function.
             date.timezone = UTC
 
             [Session]
             session.save_handler = files
-            ; NON /tmp, che e' il predefinito: li' i file di sessione di Roundcube sarebbero
-            ; leggibili da qualunque utente locale. Questa cartella la crea lo script, 700 e di roundcube.
+            ; NOT /tmp, which is the default: there Roundcube's session files would be
+            ; readable by any local user. The script creates this folder, 700 and owned by roundcube.
             session.save_path = "/var/db/daemoxcp-mail/php_sessions"
             session.use_strict_mode = 1
-            ; Nessun avanzamento dei caricamenti nella sessione: Roundcube non lo usa, e sono dati scelti da chi
-            ; carica scritti nel file di sessione (reperto 238).
+            ; No upload progress in the session: Roundcube does not use it, and it is data chosen by whoever
+            ; uploads, written into the session file (finding 238).
             session.upload_progress.enabled = Off
             session.use_cookies = 1
             session.use_only_cookies = 1
@@ -115,7 +115,7 @@ public final class PhpHardening {
             opcache.validate_timestamps = 1
             """;
 
-    static final String LIMIT_COMMENT = "; Solo .php: il predefinito di php-fpm e' \".php .phar\" (reperto 238).\n";
+    static final String LIMIT_COMMENT = "; Only .php: php-fpm's default is \".php .phar\" (finding 238).\n";
     public static final String LIMIT = "security.limit_extensions = .php\n";
     private static final Pattern HAS_LIMIT = Pattern.compile("(?m)^\\s*security\\.limit_extensions\\s*=");
 
@@ -185,7 +185,7 @@ public final class PhpHardening {
                 sv.create(ini, INI);
                 if (rot == null) {
                     rotationNew = true;
-                    sv.create(rotation, "# Registro degli errori di PHP (scritto da " + Product.NAME + ", reperto 238)\n"
+                    sv.create(rotation, "# PHP's error log (written by " + Product.NAME + ", finding 238)\n"
                             + RoundcubeUser.phpErrorsRotationLine() + "\n");
                 }
             }

@@ -31,18 +31,18 @@ public class RoundcubeScript {
                 exit 1
             fi
 
-            # La password dell'utente MySQL della webmail (roundcube) la passa il pannello
-            # nell'ambiente, dal suo file dei segreti. Prima lo script la prendeva da
-            # /usr/local/etc/mail/mysql_password, la password dell'utente del pannello, che
-            # il pannello non scrive piu': senza file non creava ne' il database ne' l'utente.
+            # The password of the webmail's MySQL user (roundcube) is passed by the panel
+            # in the environment, from its secrets file. Before, the script took it from
+            # /usr/local/etc/mail/mysql_password, the password of the panel's user, which
+            # the panel no longer writes: without the file it created neither the database nor the user.
             if [ -z "${ROUNDCUBE_DB_PASSWORD}" ]; then
                 echo "Error: ROUNDCUBE_DB_PASSWORD not in the environment"
                 exit 1
             fi
 
-            # MySQL da root: con la password che il pannello passa nell'ambiente (MYSQL_ROOT_PASSWORD,
-            # quando MySQL l'ha installato lui) in un file di opzioni in una cartella 700, mai
-            # sulla riga di comando; senza, dal socket come un MySQL appena installato.
+            # MySQL as root: with the password the panel passes in the environment (MYSQL_ROOT_PASSWORD,
+            # when the panel installed MySQL) in an options file in a 700 folder, never
+            # on the command line; without it, through the socket like a freshly installed MySQL.
             MYSQL_WORK=$(mktemp -d /var/tmp/daemoxcp-mail-roundcube.XXXXXXXX) || exit 1
             trap 'rm -rf "$MYSQL_WORK"' EXIT HUP INT TERM
             if [ -n "${MYSQL_ROOT_PASSWORD}" ]; then
@@ -102,7 +102,7 @@ EOCNF
             mkdir -p /usr/local/etc/php
             mkdir -p /usr/local/etc/php-fpm.d
 
-            # PHP-FPM: il pool di Roundcube col suo utente e il suo socket (lo stesso di nginx sotto)
+            # PHP-FPM: Roundcube's pool with its own user and its own socket (the same as nginx's below)
 """ + org.daemoxcp.mail.system.RoundcubeUser.shellPool() + """
 
             # Configure PHP for Roundcube
@@ -121,8 +121,8 @@ PHPINI
 
             # Create Roundcube database
             echo "[3/5] Creating Roundcube database..."
-            # L'utente roundcube ha i privilegi sul solo database della webmail. Prima la GRANT
-            # aveva "IDENTIFIED BY", che MySQL 8 rifiuta: l'utente non nasceva affatto.
+            # The roundcube user has privileges on the webmail's database only. Before, the GRANT
+            # had "IDENTIFIED BY", which MySQL 8 refuses: the user was not created at all.
             if ! mysql_root << SQLEOF
 CREATE DATABASE IF NOT EXISTS roundcubemail CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 """ + org.daemoxcp.mail.scripts.RoundcubeDbAccountScript.sql("${ROUNDCUBE_DB_PASSWORD}", "daemoxcp_mail") + """
@@ -132,7 +132,7 @@ SQLEOF
                 echo "Error: cannot create the webmail database or its MySQL user"
                 exit 1
             fi
-            # Le tabelle le fa root: la password di roundcube non va sulla riga di comando
+            # root creates the tables: roundcube's password does not go on the command line
             mysql_root roundcubemail < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
 
             # Generate random DES key
@@ -184,7 +184,7 @@ SQLEOF
 \\$config['enable_installer'] = false;
 \\$config['support_url'] = '';
 
-// Logging (richiesto da Fail2ban per la jail roundcube-auth)
+// Logging (required by Fail2ban for the roundcube-auth jail)
 \\$config['log_driver'] = 'file';
 \\$config['log_dir'] = '/usr/local/www/roundcube/logs/';
 \\$config['log_logins'] = true;
@@ -228,10 +228,10 @@ server {
         try_files $uri $uri/ /index.php?$args;
     }
 
-    # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: uno script PHP
-    # con un percorso attaccato. Un location che chiede .php in fondo all'URI non lo prende,
-    # e il foglio di stile torna come pagina HTML: la webmail si apre senza grafica.
-    # Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La riga
+    # Roundcube 1.7 serves its assets as /static.php/path/to/file.css: a PHP script
+    # with a path attached. A location that wants .php at the end of the URI does not catch it,
+    # and the style sheet comes back as an HTML page: the webmail opens without its look.
+    # Configuration from Roundcube's official wiki (Installation page).
     location ~ \\.php {
         include fastcgi_params;
         fastcgi_index index.php;
@@ -251,16 +251,16 @@ server {
 }
 NGINXCONF
 
-            # Dalla 1.7 Roundcube non serve piu' i file dalla radice dell'applicazione ma dalla
-            # sottocartella public_html: e' una protezione voluta, e con la radice vecchia la webmail
-            # risponde 404 su tutto. Non lo si deduce dal numero di versione, si guarda se la cartella
-            # c'e': cosi' la stessa riga vale per la 1.6 e per la 1.7 senza doverle distinguere.
+            # From 1.7 Roundcube no longer serves the files from the application's root but from the
+            # public_html subfolder: it is a deliberate protection, and with the old root the webmail
+            # answers 404 to everything. It is not inferred from the version number, it looks whether the folder
+            # is there: so the same line works for 1.6 and 1.7 without telling them apart.
             if [ -d /usr/local/www/roundcube/public_html ]; then
                 sed -i '' 's#root /usr/local/www/roundcube;#root /usr/local/www/roundcube/public_html;#' /usr/local/etc/nginx/sites-enabled/roundcube.conf
                 echo "  Roundcube 1.7 or later: nginx root set to public_html"
             fi
 
-            # Set permissions: i file della webmail sono di roundcube, non dell'utente di nginx
+            # Set permissions: the webmail's files belong to roundcube, not to nginx's user
 """ + org.daemoxcp.mail.system.RoundcubeUser.shellOwnership() + """
 
             # Restart services

@@ -45,8 +45,8 @@ public final class UnusedMaildir {
               [ -d "$m" ] && [ ! -L "$m" ] && [ ! -L "${m%/*}" ] || continue
               d="$m/Maildir"
               [ -d "$d" ] && [ ! -L "$d" ] || continue
-              # Solo se dentro ci sono al piu' cur, new e tmp (o la cartella {cur,new,tmp} che /bin/sh creava senza
-              # espandere le graffe), cartelle vere e vuote: altrimenti non si tocca niente.
+              # Only if it holds at most cur, new and tmp (or the {cur,new,tmp} folder /bin/sh created without
+              # expanding the braces), real and empty folders: otherwise nothing is touched.
               ok=1
               for e in $(ls -A "$d"); do case "$e" in cur|new|tmp|'{cur,new,tmp}') ;; *) ok=0 ;; esac; done
               for s in cur new tmp '{cur,new,tmp}'; do

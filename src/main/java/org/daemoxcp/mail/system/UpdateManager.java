@@ -3935,7 +3935,7 @@ public final class UpdateManager {
             for (String r : lines) {
                 fresh.add(r);
                 if (!put && r.trim().equalsIgnoreCase("[mysqld]")) {
-                    fresh.add("# aggiunta dal pannello: nella 8.4 mysql_native_password non e' attivo di default");
+                    fresh.add("# added by the panel: in 8.4 mysql_native_password is not active by default");
                     fresh.add(line);
                     put = true;
                 }
@@ -5817,10 +5817,10 @@ public final class UpdateManager {
             // di PHP non ripiega su una stringa vuota, ogni foglio di stile diventa un 404.
             // Riprodotto con nginx e un PHP veri: e' esattamente il guasto del 31/08/2026.
             java.util.List<String> fresh = new ArrayList<>(java.util.List.of(
-                ind + "# Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css:",
-                ind + "# uno script PHP con un percorso attaccato. Un location che chiede .php",
-                ind + "# in fondo all'URI non lo prende, e il foglio di stile torna come HTML.",
-                ind + "# Configurazione dal wiki ufficiale di Roundcube (pagina Installation).",
+                ind + "# Roundcube 1.7 serves its assets as /static.php/path/to/file.css:",
+                ind + "# a PHP script with a path attached. A location that wants .php",
+                ind + "# at the end of the URI does not catch it, and the style sheet comes back as HTML.",
+                ind + "# Configuration from Roundcube's official wiki (Installation page).",
                 ind + "location ~ \\.php {"));
             if (safeUrls) fresh.add(i2 + "rewrite \"^/[a-zA-Z0-9]{16}/(.*)$\" /$1;");
             fresh.addAll(java.util.List.of(
@@ -6362,9 +6362,9 @@ public final class UpdateManager {
             Path f = Paths.get(jar).getParent().resolve("run.sh");
             if (Files.exists(f)) return "";
             Files.writeString(f, "#!/bin/sh\n"
-                + "# Creato dal pannello: rispecchia come e' stato avviato davvero.\n"
-                + "# Senza argomenti: menu a schermo (serve un terminale).\n"
-                + "# Con --web: solo il server web, senza menu e senza terminale.\n"
+                + "# Created by the panel: it mirrors how the panel was really started.\n"
+                + "# Without arguments: the on-screen menu (a terminal is needed).\n"
+                + "# With --web: only the web server, without menu and without terminal.\n"
                 // La cartella non e' quella del jar ma quella da cui il pannello e' PARTITO:
                 // "./database" e "./install_scripts" sono relativi a quella. Nel caso normale
                 // coincidono, ma se non coincidessero un run.sh che entra nella cartella del jar

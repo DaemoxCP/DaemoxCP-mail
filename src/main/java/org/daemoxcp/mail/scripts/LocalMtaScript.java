@@ -32,14 +32,14 @@ public final class LocalMtaScript {
     private LocalMtaScript() {}
 
     public static final String SHELL = """
-        # --- Postfix come MTA locale (LocalMtaScript.java) ---
-        # mailer.conf si installa solo se il sendmail di Postfix c'e' davvero: un mailer.conf
-        # che punta a un programma assente farebbe fallire ogni invio locale, peggio di dma.
+        # --- Postfix as the local MTA (LocalMtaScript.java) ---
+        # mailer.conf is installed only if Postfix's sendmail is really there: a mailer.conf
+        # pointing to a missing program would make every local send fail, worse than dma.
         LOCAL_MAILER_CONF=/usr/local/etc/mail/mailer.conf
         POSTFIX_MAILER_CONF=/usr/local/share/postfix/mailer.conf.postfix
         if [ -f "$POSTFIX_MAILER_CONF" ] && [ -x /usr/local/sbin/sendmail ]; then
             if ! cmp -s "$POSTFIX_MAILER_CONF" "$LOCAL_MAILER_CONF"; then
-                # Un mailer.conf diverso non si butta: resta accanto, con data e ora UTC.
+                # A different mailer.conf is not thrown away: it stays next to it, with the UTC date and time.
                 if [ -f "$LOCAL_MAILER_CONF" ]; then
                     cp -p "$LOCAL_MAILER_CONF" "$LOCAL_MAILER_CONF.before-postfix.$(date -u +%Y%m%dT%H%M%SZ)"
                 fi
@@ -47,25 +47,25 @@ public final class LocalMtaScript {
                 install -m 0644 "$POSTFIX_MAILER_CONF" "$LOCAL_MAILER_CONF"
             fi
             echo "  sendmail(8) hands over to Postfix ($LOCAL_MAILER_CONF)"
-            # Il database degli alias. dma non ne aveva bisogno, legge /etc/mail/aliases cosi'
-            # com'e'; Postfix si', e su una macchina appena installata non c'e': ogni consegna
-            # locale restava in coda con "alias database unavailable" finche' il pannello, al
-            # primo avvio, non lo costruiva da se'. Misurato sulla VM pulita il 29/10/2026. Lo
-            # costruisce il newaliases di Postfix, nel formato che dice alias_database.
+            # The alias database. dma did not need it, it reads /etc/mail/aliases as
+            # it is; Postfix does, and on a freshly installed machine it is not there: every local
+            # delivery stayed queued with "alias database unavailable" until the panel, at its
+            # first start, built it by itself. Measured on the clean VM on 29/10/2026. Postfix's
+            # newaliases builds it, in the format alias_database says.
             /usr/local/bin/newaliases || echo "  WARNING: newaliases failed: local mail stays queued until the alias database exists"
         else
             echo "  ERROR: Postfix's sendmail not found: sendmail(8) still hands over to dma"
         fi
 
-        # I quattro lavori giornalieri di sendmail che il messaggio del pacchetto di Postfix dice
-        # di spegnere. Con Postfix non servono, e 440.status-mailq riporterebbe ogni giorno una
-        # coda "submit" che con Postfix non esiste, chiudendo come se ci fosse qualcosa da dire.
+        # The four daily sendmail jobs that the message of Postfix's package says to turn
+        # off. With Postfix they are not needed, and 440.status-mailq would report every day a
+        # "submit" queue that does not exist with Postfix, ending as if there were something to say.
         sysrc -f /etc/periodic.conf daily_clean_hoststat_enable="NO" daily_status_mail_rejects_enable="NO" daily_status_include_submit_mailq="NO" daily_submit_queuerun="NO"
 
-        # dma resta nel sistema base e non ha un interruttore da spegnere: non e' un demone, parte
-        # solo quando qualcuno lo chiama, e da qui in avanti mailwrapper non lo chiama piu'. Quello
-        # che e' rimasto nella SUA coda pero' non partira' mai: lo si dice, e non lo si spedisce
-        # da qui, perche' dma consegnerebbe proprio come non deve (senza DKIM, senza TLS).
+        # dma stays in the base system and has no switch to turn off: it is not a daemon, it starts
+        # only when someone calls it, and from here on mailwrapper no longer calls it. What
+        # stayed in ITS queue will never leave, though: it is said, and not sent from
+        # here, because dma would deliver exactly as it must not (without DKIM, without TLS).
         DMA_QUEUED=$(find /var/spool/dma -type f -name 'Q*' 2>/dev/null | wc -l | tr -d ' ')
         if [ "${DMA_QUEUED:-0}" -gt 0 ]; then
             echo "  WARNING: $DMA_QUEUED message(s) left in the dma queue (/var/spool/dma) will not be sent"

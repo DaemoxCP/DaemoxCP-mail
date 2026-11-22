@@ -27,9 +27,9 @@ public final class PostfixLevelScript {
 
     public static String shell() {
         return """
-        # --- Il livello di compatibilita' di Postfix (PostfixLevelScript.java) ---
-        # Quello che chiede il Postfix installato, se il pannello lo ha esaminato: main.cf decide gia'
-        # ogni parametro che a quel livello cambia, quindi salire toglie solo l'avviso.
+        # --- Postfix's compatibility level (PostfixLevelScript.java) ---
+        # The one the installed Postfix asks for, if the panel has reviewed it: main.cf already decides
+        # every parameter that changes at that level, so going up only removes the warning.
         PF_SBIN="${PF_SBIN:-/usr/local/sbin}"
         PF_ASKED=$("$PF_SBIN/postfix" check 2>&1 | sed -n 's/.*compatibility_level=\\([0-9][0-9.]*\\).*/\\1/p' | head -n 1)
         PF_LEVEL_NOW=$("$PF_SBIN/postconf" -h compatibility_level 2>/dev/null)
@@ -38,7 +38,7 @@ public final class PostfixLevelScript {
         else
             case " __REVIEWED__ " in
                 *" $PF_ASKED "*)
-                    # Solo in su: Postfix chiede un livello piu' alto di quello scritto, mai uno piu' basso
+                    # Only upwards: Postfix asks for a level higher than the written one, never a lower one
                     if ! awk -v a="$PF_ASKED" -v n="$PF_LEVEL_NOW" 'BEGIN { split(a, x, "."); split(n, y, ".");
                             exit !((x[1] + 0 > y[1] + 0) || (x[1] + 0 == y[1] + 0 && x[2] + 0 > y[2] + 0)) }'; then
                         echo "  Postfix compatibility level: $PF_LEVEL_NOW (this Postfix asks for $PF_ASKED, not higher)"

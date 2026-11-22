@@ -30,9 +30,9 @@ public final class LocalResolverScript {
     private LocalResolverScript() {}
 
     public static final String SHELL = """
-        # --- Risolutore DNS ricorsivo locale per rspamd (LocalResolverScript.java) ---
-        # Prima di toccare il DNS se ne tiene una copia: se il risolutore locale non risponde si
-        # torna esattamente com'era, perche' un server di posta senza DNS non consegna niente.
+        # --- Local recursive DNS resolver for rspamd (LocalResolverScript.java) ---
+        # Before touching DNS a copy is kept: if the local resolver does not answer, everything
+        # goes back exactly as it was, because a mail server without DNS delivers nothing.
         RESOLV_SAVED=$(mktemp /tmp/daemoxcp-mail-resolv.XXXXXX)
         cp -p /etc/resolv.conf "$RESOLV_SAVED"
         RESOLVCONF_SAVED=""
@@ -42,16 +42,16 @@ public final class LocalResolverScript {
         fi
         LOCAL_UNBOUND_WAS=$(sysrc -n local_unbound_enable 2>/dev/null)
         sysrc local_unbound_enable="YES" local_unbound_forwarders="none"
-        # Una configurazione che inoltra (il local_unbound predefinito di FreeBSD inoltra ai server
-        # di resolv.conf) si rifa' ricorsiva; una gia' ricorsiva non si tocca.
+        # A configuration that forwards (FreeBSD's default local_unbound forwards to the servers
+        # of resolv.conf) is made recursive again; one already recursive is not touched.
         if [ ! -f /var/unbound/unbound.conf ] || grep -qs "forward-zone" /var/unbound/forward.conf; then
             service local_unbound setup
         fi
-        # Da ricorsivo, le zone inverse degli indirizzi privati si risolvono qui (NXDOMAIN, RFC 6303).
-        # local-unbound-setup scrive unblock-lan-zones: yes, pensato per chi inoltra al DNS della LAN:
-        # da ricorsivo quelle domande vanno su Internet e non tornano. Misurato sulla VM il
-        # 29/10/2026: ogni login ssh dalla LAN impiegava 30 secondi (sshd fa la ricerca inversa del
-        # client), con questo file 0. conf.d si include dopo lan-zones.conf, e il setup non lo tocca.
+        # When recursive, the reverse zones of private addresses are resolved here (NXDOMAIN, RFC 6303).
+        # local-unbound-setup writes unblock-lan-zones: yes, meant for forwarding to the LAN's DNS:
+        # when recursive those queries go out to the Internet and never come back. Measured on the VM on
+        # 29/10/2026: every ssh login from the LAN took 30 seconds (sshd looks up the client's
+        # reverse name), with this file 0. conf.d is included after lan-zones.conf, and the setup does not touch it.
         mkdir -p /var/unbound/conf.d
         printf 'server:\\n\\tunblock-lan-zones: no\\n\\tinsecure-lan-zones: no\\n' > /var/unbound/conf.d/daemoxcp-mail.conf
         if service local_unbound status >/dev/null 2>&1; then
@@ -59,19 +59,19 @@ public final class LocalResolverScript {
         else
             service local_unbound start
         fi
-        # Appena riavviato, con la cache vuota, la prima domanda puo' fallire: misurato sulla VM il
-        # 30/10/2026, nella seconda installazione Spamhaus ha dato SERVFAIL e il pezzo ha stampato
-        # un avviso falso (alla fine dell'installazione lo stesso controllo dava OK). Quindi si
-        # riprova, fino a 10 volte a 2 secondi: un falso "non risponde" qui rimetterebbe il DNS di
-        # prima senza motivo.
+        # Just restarted, with an empty cache, the first query can fail: measured on the VM on
+        # 30/10/2026, in the second installation Spamhaus gave SERVFAIL and this piece printed
+        # a false warning (at the end of the installation the same check gave OK). So it
+        # retries, up to 10 times 2 seconds apart: a false "does not answer" here would put the DNS
+        # of before back for no reason.
         RESOLVER_ANSWERS=no
         for attempt in 1 2 3 4 5 6 7 8 9 10; do
             if drill @127.0.0.1 freebsd.org A 2>/dev/null | grep -q "rcode: NOERROR"; then RESOLVER_ANSWERS=yes; break; fi
             sleep 2
         done
         if [ "$RESOLVER_ANSWERS" = "yes" ]; then
-            # Risponde. Che risponda da ricorsivo lo dice Spamhaus: alla domanda di prova da' 127.0.0.x;
-            # 127.255.255.x e' il rifiuto riservato ai risolutori pubblici.
+            # It answers. Spamhaus says whether it answers as a recursive resolver: to the test query it gives 127.0.0.x;
+            # 127.255.255.x is the refusal reserved for public resolvers.
             SPAMHAUS_ANSWERS=no
             for attempt in 1 2 3 4 5 6 7 8 9 10; do
                 if drill @127.0.0.1 2.0.0.127.zen.spamhaus.org A 2>/dev/null | grep -Eq "IN[[:space:]]+A[[:space:]]+127[.]0[.]0[.][0-9]+"; then SPAMHAUS_ANSWERS=yes; break; fi

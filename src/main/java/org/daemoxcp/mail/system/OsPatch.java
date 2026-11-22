@@ -100,7 +100,7 @@ public final class OsPatch {
             out.append(line).append('\n');
         }
         while (out.length() > 1 && out.charAt(out.length() - 1) == '\n' && out.charAt(out.length() - 2) == '\n') out.setLength(out.length() - 1);
-        out.append("# Il pannello crea il suo ambiente di avvio prima di installare (reperto 185).\n");
+        out.append("# The panel creates its own boot environment before installing (finding 185).\n");
         out.append("CreateBootEnv no\n");
         return out.toString();
     }

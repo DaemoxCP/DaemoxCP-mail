@@ -20,7 +20,10 @@ import java.util.logging.Logger;
  * hanno cambiato parole italiane anche dentro i commenti degli script d'installazione: "che" e'
  * diventato "whichLabel", "riga" "lineItem", "gia'" "already'", "bloccati" "lockedPackages".
  * Non rompono niente, ma chi apre php.ini, nginx.conf o la lista permaban sul server trova frasi
- * senza senso. Il codice di oggi scrive di nuovo l'italiano; qui si sistemano i file scritti prima.
+ * senza senso. Qui si sistemano i file scritti prima, con l'italiano giusto di allora; dal 22/11/2026 il codice
+ * scrive quei commenti in inglese, e EnglishComments, che all'avvio passa prima di qui e conosce anche le righe
+ * rovinate, li porta direttamente all'inglese: questa riparazione resta per un file che quel passaggio non ha potuto
+ * riscrivere.
  *
  * <p>Le righe rovinate e quelle giuste stanno nella sezione "damagedComments" di
  * legacy-names.json, non nel codice: sono testo di prima, e una rinomina futura fatta sul testo

@@ -600,10 +600,10 @@ public final class Fail2banAutoSetup {
     public static String filterContent() {
         return MARKER + "\n"
         + "#\n"
-        + "# Il pannello scrive su " + LOG_FILE + " righe cosi':\n"
+        + "# The panel writes lines like these to " + LOG_FILE + ":\n"
         + "#   2026-10-17T21:20:28Z [LOGIN_FAILURE] ip=1.2.3.4 user=admin details=\"...\"\n"
         + "#\n"
-        + "# Prova:  fail2ban-regex " + LOG_FILE + " " + FILTER_FILE + "\n"
+        + "# Test:  fail2ban-regex " + LOG_FILE + " " + FILTER_FILE + "\n"
         + "\n"
         + "[Definition]\n"
         + "\n"

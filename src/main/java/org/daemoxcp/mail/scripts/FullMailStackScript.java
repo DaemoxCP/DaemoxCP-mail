@@ -29,9 +29,9 @@ public class FullMailStackScript {
                 exit 1
             fi
 
-            # La password dell'utente MySQL della webmail (roundcube): la passa il pannello
-            # nell'ambiente, dal suo file dei segreti. Prima la webmail usava la stessa password
-            # dell'utente del pannello, e chi la leggeva in config.inc.php entrava anche come lui.
+            # The password of the webmail's MySQL user (roundcube): the panel passes it
+            # in the environment, from its secrets file. Before, the webmail used the same password
+            # as the panel's user, and whoever read it in config.inc.php also got in as the panel.
             if [ -z "${ROUNDCUBE_DB_PASSWORD}" ]; then
                 echo "Error: ROUNDCUBE_DB_PASSWORD not in the environment"
                 exit 1
@@ -137,15 +137,15 @@ public class FullMailStackScript {
 
             echo "[CLEANUP] Removing the vmail user (packages keep their own users)..."
 
-            # Si toglie solo vmail, l'utente del pannello: la fase 2 lo ricrea subito, con uid 5000.
-            # Gli utenti dei pacchetti restano, come li lascia pkg delete, e il pre-install di ogni
-            # pacchetto riusa quello che trova. Misurato sulla VM FreeBSD 15.1 il 01/11/2026:
-            #  - www e' del sistema base (uid 80), e pw userdel si porta via anche il gruppo www,
-            #    quello con cui nginx apre il socket di Roundcube, e la crontab di www;
-            #  - col pannello acceso i pacchetti dello stack sono bloccati: pkg delete li rifiuta,
-            #    restano installati senza il loro utente e non partono piu' (nginx: getpwnam("www")
-            #    failed), e il pkg install piu' avanti non li ricrea;
-            #  - mysql e' di mysql84-server, che questa pulizia non toglie.
+            # Only vmail is removed, the panel's user: phase 2 creates it again at once, with uid 5000.
+            # The packages' users stay, as pkg delete leaves them, and the pre-install of every
+            # package reuses what it finds. Measured on the FreeBSD 15.1 VM on 01/11/2026:
+            #  - www belongs to the base system (uid 80), and pw userdel also takes away the www group,
+            #    the one nginx opens Roundcube's socket with, and www's crontab;
+            #  - with the panel on, the stack's packages are locked: pkg delete refuses them,
+            #    they stay installed without their user and no longer start (nginx: getpwnam("www")
+            #    failed), and the pkg install further on does not recreate them;
+            #  - mysql belongs to mysql84-server, which this cleanup does not remove.
             pw userdel vmail 2>/dev/null || true
             pw groupdel vmail 2>/dev/null || true
 
@@ -203,11 +203,11 @@ public class FullMailStackScript {
                 sleep 2
             done
 
-            # MySQL da root: la password viene dal pannello (MYSQL_ROOT_PASSWORD, dal file dei segreti) e
-            # sta in un file di opzioni 600 in una cartella 700, mai sulla riga di comando che "ps" mostra
-            # a tutti. Un MySQL appena installato lascia root SENZA password, e finche' resta cosi' entra
-            # come root chiunque abbia un utente sulla macchina: la si imposta adesso, prima di creare
-            # qualunque cosa, come fa l'installazione completa (FullMailServerScript).
+            # MySQL as root: the password comes from the panel (MYSQL_ROOT_PASSWORD, from the secrets file) and
+            # sits in a 600 options file in a 700 folder, never on the command line that "ps" shows
+            # to everyone. A freshly installed MySQL leaves root WITHOUT a password, and while it stays so
+            # anyone with a user on the machine gets in as root: it is set now, before creating
+            # anything, as the full installation does (FullMailServerScript).
             if [ -z "${MYSQL_ROOT_PASSWORD}" ]; then
                 echo "Error: MYSQL_ROOT_PASSWORD not in the environment"
                 exit 1
@@ -392,26 +392,26 @@ mydomain = localhost
 inet_interfaces = all
 inet_protocols = all
 
-# Consegna locale solo per localhost: ci arrivano gli indirizzi senza dominio (root,
-# postmaster: cron e periodic), che ora passano da Postfix e non da dma. Spenta del tutto,
-# com'era, quella posta rimbalzava. myorigin esplicito perche' il pannello riscrive mydomain
-# con il nome vero del server. Il perche' misurato e' in FullMailServerScript.
+# Local delivery only for localhost: the addresses without a domain arrive there (root,
+# postmaster: cron and periodic), which now go through Postfix and not dma. Turned off entirely,
+# as it was, that mail bounced. myorigin explicit because the panel rewrites mydomain
+# with the server's real name. The measured reason is in FullMailServerScript.
 myorigin = localhost
 mydestination = localhost
-# In uscita root@localhost diventa root@<nome del server>: vedi FullMailServerScript.
+# Outgoing, root@localhost becomes root@<server name>: see FullMailServerScript.
 smtp_generic_maps = inline:{ @localhost=@$myhostname }
 
-# Solo questa macchina spedisce senza autenticarsi. Senza compatibility_level Postfix usa il
-# livello 0, dove mynetworks_style = subnet: tutta la rete del server diventava fidata, cioe'
-# un relay aperto (misurato con postconf -c: mynetworks = 192.168.64.0/24 ...). Gli stessi
-# valori dell'installazione completa.
+# Only this machine sends without authenticating. Without compatibility_level Postfix uses
+# level 0, where mynetworks_style = subnet: the server's whole network became trusted, that is
+# an open relay (measured with postconf -c: mynetworks = 192.168.64.0/24 ...). The same
+# values as the full installation.
 compatibility_level = 3.6
 mynetworks = 127.0.0.0/8 [::1]/128
 
 # Virtual mailbox settings
 virtual_mailbox_domains = mysql:/usr/local/etc/postfix/mysql-virtual-domains.cf
 virtual_mailbox_maps = mysql:/usr/local/etc/postfix/mysql-virtual-mailboxes.cf
-# Gli alias, poi ogni casella che punta a se stessa: un catch-all prende solo gli indirizzi che non esistono
+# The aliases, then every mailbox pointing to itself: a catch-all takes only the addresses that do not exist
 virtual_alias_maps = mysql:/usr/local/etc/postfix/mysql-virtual-aliases.cf, mysql:/usr/local/etc/postfix/""" + PostfixMaps.MAILBOX_ADDRESSES_FILE + "\n" + """
 virtual_transport = lmtp:unix:private/dovecot-lmtp
 virtual_mailbox_base = /var/vmail
@@ -432,11 +432,11 @@ smtpd_sasl_auth_enable = yes
 smtpd_sasl_security_options = noanonymous
 smtpd_sasl_local_domain = $myhostname
 
-# Restrictions. reject_non_fqdn_recipient tiene fuori da Internet root@localhost, che con la
-# consegna locale accesa per localhost reject_unauth_destination lascerebbe passare.
+# Restrictions. reject_non_fqdn_recipient keeps root@localhost out of the Internet, which with
+# local delivery on for localhost reject_unauth_destination would let through.
 smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination, reject_non_fqdn_recipient
-# Chi si autentica spedisce solo dai suoi indirizzi (SenderLoginMap): lo stesso di FullMailServerScript; il controllo
-# sta sulle porte di invio, in master.cf
+# Whoever authenticates sends only from their own addresses (SenderLoginMap): the same as FullMailServerScript; the check
+# is on the submission ports, in master.cf
 smtpd_sender_login_maps = mysql:/usr/local/etc/postfix/""" + PostfixMaps.SENDER_LOGIN_FILE + "\n" + """
 smtpd_sender_restrictions = """ + PostfixMaps.SENDER_RESTRICTIONS + "\n" + """
 
@@ -551,10 +551,10 @@ MASTERCONF
             # ============ 4. Dovecot ============
             echo ""
             echo "[4/8] Installing Dovecot..."
-            # dovecot-pigeonhole-mysql, non dovecot-pigeonhole: quest'ultimo dipende da
-            # "dovecot" senza MySQL, e pkg risolve il conflitto togliendo dovecot-mysql in
-            # silenzio (misurato il 24/10/2026, vedi PackageInstall e FullMailServerScript).
-            # Dove il catalogo offre la 2.4 (ramo latest) si installa quella (DovecotConfig.packagesShell, reperto 215).
+            # dovecot-pigeonhole-mysql, not dovecot-pigeonhole: the latter depends on
+            # "dovecot" without MySQL, and pkg solves the conflict by silently removing
+            # dovecot-mysql (measured on 24/10/2026, see PackageInstall and FullMailServerScript).
+            # Where the catalog offers 2.4 (latest branch) that one is installed (DovecotConfig.packagesShell, finding 215).
             """
             + DovecotConfig.packagesShell() + """
             pkg install -y $DOVECOT_PACKAGES
@@ -613,8 +613,8 @@ EOF
             // non rispondono. Lo stesso pezzo e' in FullMailServerScript e RspamdScript.
             + LocalResolverScript.SHELL + """
 
-            # dig: il pannello lo usa per i controlli DNS e il sistema base non ce l'ha
-            # (vedi FullMailServerScript).
+            # dig: the panel uses it for the DNS checks and the base system does not have it
+            # (see FullMailServerScript).
             pkg install -y dns/bind-tools
 
             sysrc rspamd_enable="YES"
@@ -680,10 +680,10 @@ http {
             try_files $uri $uri/ /index.php?$query_string;
         }
 
-        # Roundcube 1.7 serve gli asset come /static.php/percorso/al/file.css: uno script PHP
-        # con un percorso attaccato. Un location che chiede .php in fondo all'URI non lo prende,
-        # e il foglio di stile torna come pagina HTML: la webmail si apre senza grafica.
-        # Configurazione dal wiki ufficiale di Roundcube (pagina Installation). La riga
+        # Roundcube 1.7 serves its assets as /static.php/path/to/file.css: a PHP script
+        # with a path attached. A location that wants .php at the end of the URI does not catch it,
+        # and the style sheet comes back as an HTML page: the webmail opens without its look.
+        # Configuration from Roundcube's official wiki (Installation page).
         location ~ \\.php {
             include fastcgi_params;
             fastcgi_index index.php;
@@ -698,16 +698,16 @@ http {
 }
 NGINXCONF
 
-            # Dalla 1.7 Roundcube non serve piu' i file dalla radice dell'applicazione ma dalla
-            # sottocartella public_html: e' una protezione voluta, e con la radice vecchia la webmail
-            # risponde 404 su tutto. Non lo si deduce dal numero di versione, si guarda se la cartella
-            # c'e': cosi' la stessa riga vale per la 1.6 e per la 1.7 senza doverle distinguere.
+            # From 1.7 Roundcube no longer serves the files from the application's root but from the
+            # public_html subfolder: it is a deliberate protection, and with the old root the webmail
+            # answers 404 to everything. It is not inferred from the version number, it looks whether the folder
+            # is there: so the same line works for 1.6 and 1.7 without telling them apart.
             if [ -d /usr/local/www/roundcube/public_html ]; then
                 sed -i '' 's#root /usr/local/www/roundcube;#root /usr/local/www/roundcube/public_html;#' /usr/local/etc/nginx/nginx.conf
                 echo "  Roundcube 1.7 or later: nginx root set to public_html"
             fi
 
-            # Il pool di Roundcube col suo utente e il suo socket, non il pool www sulla 9000
+            # Roundcube's pool with its own user and its own socket, not the www pool on 9000
 """ + org.daemoxcp.mail.system.RoundcubeUser.shellPool() + """
 
             sysrc nginx_enable="YES"
@@ -747,7 +747,7 @@ NGINXCONF
 \\$config['managesieve_port'] = 4190;
 RCCONF
 
-            # Prima tutta la webmail, codice compreso, era di www: scrivibile da nginx.
+            # Before, the whole webmail, code included, belonged to www: writable by nginx.
 """ + org.daemoxcp.mail.system.RoundcubeUser.shellOwnership() + """
             mysql_root roundcubemail < /usr/local/www/roundcube/SQL/mysql.initial.sql 2>/dev/null || true
 

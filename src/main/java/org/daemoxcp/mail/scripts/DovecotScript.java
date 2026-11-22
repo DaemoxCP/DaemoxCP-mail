@@ -98,7 +98,7 @@ public class DovecotScript {
 
             # Install Dovecot with MySQL and Sieve support
             echo "[1/7] Installing Dovecot..."
-            # Dove il catalogo offre la 2.4 (ramo latest) si installa quella (DovecotConfig.packagesShell, reperto 215).
+            # Where the catalog offers 2.4 (latest branch) that one is installed (DovecotConfig.packagesShell, finding 215).
             """
             + DovecotConfig.packagesShell() + """
             pkg install -y $DOVECOT_PACKAGES

@@ -53,8 +53,8 @@ public final class PfPolicy {
     static final String PFCTL = "/sbin/pfctl";
 
     /** La prima riga del pf.conf scritto da qui. */
-    static final String HEADER = "# /etc/pf.conf, scritto da " + org.daemoxcp.mail.system.Product.NAME
-            + ": entra solo quello che serve.";
+    static final String HEADER = "# /etc/pf.conf, written by " + org.daemoxcp.mail.system.Product.NAME
+            + ": only what is needed gets in.";
     /**
      * La stessa riga col nome di prima del prodotto (fino al 17/11/2026): il file e' gia' quello scritto da qui, e al
      * primo avvio cambia solo la prima riga.
@@ -62,6 +62,7 @@ public final class PfPolicy {
     static final String PREVIOUS_HEADER = "# /etc/pf.conf, scritto dal pannello mail: entra solo quello che serve.";
     /** Le prime righe dei pf.conf che il pannello scriveva prima (l'installazione, il pulsante della pagina). */
     static final List<String> OLD_HEADERS = List.of(
+            "# /etc/pf.conf, written by the " + org.daemoxcp.mail.system.Product.NAME + " installation.",
             "# /etc/pf.conf, scritto dall'installazione di " + org.daemoxcp.mail.system.Product.NAME + ".",
             "# /etc/pf.conf, scritto dall'installazione del pannello mail.",
             "# /etc/pf.conf — generato automaticamente dal mail panel",
@@ -148,37 +149,37 @@ public final class PfPolicy {
         StringBuilder b = new StringBuilder();
         b.append(HEADER).append('\n');
         b.append("#\n");
-        b.append("# In ingresso passa solo l'elenco in fondo, il resto si scarta; in uscita passa tutto.\n");
-        b.append("# Prima dell'elenco i blocchi: fail2ban, la tabella permaban, le regole del pannello (paesi,\n");
-        b.append("# liste), che decidono subito (quick). Lo riscrive il pannello a ogni avvio dalla sua\n");
-        b.append("# configurazione (PfPolicy); se ci aggiungi regole tue, non lo tocca piu' e lo dice nel registro.\n\n");
-        if (tableLimit != null) b.append("# Le tabelle dei paesi sono grandi.\nset limit table-entries ").append(tableLimit).append("\n\n");
-        b.append("# Il loopback non si filtra.\nset skip on lo\n\n");
-        b.append("# I blocchi di fail2ban (block in quick, dall'azione pf delle sue jail).\nanchor \"f2b/*\"\n\n");
-        b.append("# I blocchi permanenti del pannello.\n");
+        b.append("# Incoming, only the list at the bottom passes, the rest is dropped; outgoing, everything passes.\n");
+        b.append("# Before the list, the blocks: fail2ban, the permaban table, the panel's rules (countries,\n");
+        b.append("# lists), which decide at once (quick). The panel rewrites it at every start from its\n");
+        b.append("# configuration (PfPolicy); if you add rules of your own, it no longer touches it and says so in the log.\n\n");
+        if (tableLimit != null) b.append("# The country tables are big.\nset limit table-entries ").append(tableLimit).append("\n\n");
+        b.append("# The loopback is not filtered.\nset skip on lo\n\n");
+        b.append("# fail2ban's blocks (block in quick, from the pf action of its jails).\nanchor \"f2b/*\"\n\n");
+        b.append("# The panel's permanent blocks.\n");
         b.append("table <permaban> persist file \"/var/db/daemoxcp-mail/permaban.list\"\nblock in quick from <permaban>\n\n");
-        b.append("# Le regole del pannello: liste di indirizzi e paesi (PfFirewallManager).\nanchor \"panel-fw\"\n\n");
-        b.append("# Il resto: in ingresso solo quello che serve.\n");
+        b.append("# The panel's rules: address lists and countries (PfFirewallManager).\nanchor \"panel-fw\"\n\n");
+        b.append("# The rest: incoming, only what is needed.\n");
         b.append("block in all\n");
         b.append("pass out all keep state\n\n");
-        b.append("# Il servizio dei metadati del provider solo per root: dentro c'e' la configurazione con cui il server\n");
-        b.append("# e' nato, password di root compresa. Gli altri utenti ricevono subito un rifiuto.\n");
+        b.append("# The provider's metadata service for root only: it holds the configuration the server was\n");
+        b.append("# created with, root password included. Other users get a refusal at once.\n");
         b.append(METADATA_RULE).append("\n\n");
-        b.append("# Senza questi la macchina perde la rete: ICMP essenziale, IPv6 (vicini, router), le risposte DHCP.\n");
+        b.append("# Without these the machine loses the network: essential ICMP, IPv6 (neighbours, routers), DHCP replies.\n");
         b.append("pass in inet proto icmp icmp-type { echoreq, unreach, timex, paramprob }\n");
         b.append("pass in inet6 proto icmp6\n");
         b.append("pass in inet proto udp from port 67 to port 68\n\n");
-        b.append("# SSH: le porte di sshd, aperte a tutti come prima.\n");
+        b.append("# SSH: sshd's ports, open to everyone as before.\n");
         b.append("pass in proto tcp to port ").append(list(p.ssh())).append(" keep state\n\n");
-        b.append("# Posta, web (sfida HTTP dei certificati, MTA-STS), webmail, pannello.\n");
+        b.append("# Mail, web (the certificates' HTTP challenge, MTA-STS), webmail, panel.\n");
         b.append("pass in ").append(family == null ? "" : family).append("proto tcp to port ").append(list(p.services())).append(" keep state\n");
         String refusal = closedRefusal(p, family, false);
         if (refusal != null) {
-            b.append("\n# La famiglia chiusa: un rifiuto subito, non il silenzio (chi prova passa all'altra senza attese).\n");
+            b.append("\n# The closed family: a refusal at once, not silence (whoever tries moves to the other without waiting).\n");
             b.append(refusal).append('\n');
         }
         if (smtpOut6Blocked) {
-            b.append("\n# La posta non esce in IPv6: Postfix prova l'IPv6, riceve subito un rifiuto e spedisce in IPv4.\n");
+            b.append("\n# Mail does not go out over IPv6: Postfix tries IPv6, gets a refusal at once and sends over IPv4.\n");
             b.append(SMTP_OUT6_RULE).append('\n');
         }
         return b.toString();
@@ -225,8 +226,10 @@ public final class PfPolicy {
     static String transform(String current, Ports p, String family, boolean smtpOut6Blocked) {
         if (current == null) return null;
         String first = current.lines().filter(l -> !l.isBlank()).findFirst().orElse("").trim();
-        boolean ours = first.equals(HEADER) || first.equals(PREVIOUS_HEADER);
-        if (!ours && !OLD_HEADERS.contains(first)) return null;
+        // La prima riga scritta in italiano dalle versioni di prima vale come quella di adesso (EnglishComments).
+        String firstEnglish = org.daemoxcp.mail.system.EnglishComments.english(first);
+        boolean ours = firstEnglish.equals(HEADER) || first.equals(PREVIOUS_HEADER);
+        if (!ours && !OLD_HEADERS.contains(first) && !OLD_HEADERS.contains(firstEnglish)) return null;
         String tableLimit = null;
         for (String line : current.split("\n")) {
             String t = line.trim().replaceAll("\\s+", " ");

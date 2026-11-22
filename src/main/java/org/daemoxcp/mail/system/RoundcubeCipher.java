@@ -43,8 +43,8 @@ public final class RoundcubeCipher {
     /** Le righe che prendono il posto di quella di des_key. Pura. */
     static String lines(String key) {
         return "$config['des_key'] = '" + key + "';\n"
-                + "// AES-256-CBC con una chiave di 32 caratteri, come consiglia defaults.inc.php: DES-EDE3-CBC c'e' solo per\n"
-                + "// compatibilita' (reperto 239).\n"
+                + "// AES-256-CBC with a 32-character key, as defaults.inc.php advises: DES-EDE3-CBC is there only for\n"
+                + "// compatibility (finding 239).\n"
                 + "$config['cipher_method'] = '" + METHOD + "';\n";
     }
 

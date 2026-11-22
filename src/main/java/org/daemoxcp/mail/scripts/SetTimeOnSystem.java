@@ -84,9 +84,9 @@ public class SetTimeOnSystem {
             echo ""
             echo "[5/5] Configuring DNS settings (Cloudflare)..."
 
-            # Con il risolutore ricorsivo locale acceso (LocalResolverScript, lo accende
-            # l'installazione) il DNS resta com'e': rimettere 1.1.1.1 farebbe rifiutare da Spamhaus
-            # ogni domanda di rspamd (DBL_BLOCKED_OPENRESOLVER, misurato il 29/10/2026).
+            # With the local recursive resolver on (LocalResolverScript, the installation
+            # turns it on) DNS stays as it is: putting 1.1.1.1 back would make Spamhaus refuse
+            # every query of rspamd (DBL_BLOCKED_OPENRESOLVER, measured on 29/10/2026).
             DNS_SUMMARY="1.1.1.1, 1.0.0.1 (Cloudflare)"
             if [ "$(sysrc -n local_unbound_enable 2>/dev/null)" = "YES" ] && grep -q "^nameserver 127.0.0.1" /etc/resolv.conf; then
                 DNS_SUMMARY="127.0.0.1 (local_unbound, left as it is)"

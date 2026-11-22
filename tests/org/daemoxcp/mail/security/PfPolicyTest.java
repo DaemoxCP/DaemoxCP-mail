@@ -146,7 +146,7 @@ public class PfPolicyTest {
                 refusalAt > 0 && firstPass > refusalAt && countries > firstPass);
         String anchorBoth = PfFirewallManager.anchorBody(geo, List.of("/var/db/daemoxcp-mail/geoip/it.zone"), null);
         check("  with both families open the anchor has no refusal, and the rest is the same as before",
-                !anchorBoth.contains("block return") && anchor.replace("# La famiglia chiusa dalla scelta IPv4/IPv6: rifiutata subito, prima di liste e paesi\n" + quick6 + "\n", "").equals(anchorBoth));
+                !anchorBoth.contains("block return") && anchor.replace("# The family closed by the IPv4/IPv6 choice: refused at once, before lists and countries\n" + quick6 + "\n", "").equals(anchorBoth));
         PfFirewallManager.FirewallState off = new PfFirewallManager.FirewallState();
         off.mode = PfFirewallManager.Mode.DISABLED;
         check("  a disabled panel firewall stays empty, refusal or not (pf.conf refuses on its own)",

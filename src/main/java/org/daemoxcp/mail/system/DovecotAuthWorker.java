@@ -67,9 +67,9 @@ public final class DovecotAuthWorker {
     /** Il contenuto del file: lo stesso per l'installatore (DovecotConfig) e per la riparazione. */
     public static String fileContent(String user) {
         return "# " + PanelMarker.WRITTEN + ".\n"
-             + "# Il processo che cerca le password (auth-worker) non ha bisogno di root: le password\n"
-             + "# stanno in MySQL e l'utente master in un file di Dovecot. Root servirebbe solo per PAM,\n"
-             + "# /etc/passwd o /etc/shadow, che qui non si usano.\n"
+             + "# The process that looks up passwords (auth-worker) does not need root: the passwords\n"
+             + "# are in MySQL and the master user in a Dovecot file. Root would only be needed for PAM,\n"
+             + "# /etc/passwd or /etc/shadow, which are not used here.\n"
              + "service auth-worker {\n"
              + "  user = " + user + "\n"
              + "}\n";

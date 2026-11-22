@@ -55,8 +55,8 @@ public final class DovecotSockets {
     /** Il contenuto del file: lo stesso per l'installatore (DovecotConfig) e per la riparazione. */
     public static String fileContent() {
         return "# " + PanelMarker.WRITTEN + ".\n"
-             + "# Socket che Dovecot crea aperti a tutti (0666) e che il pannello non usa: indexer serve alla ricerca\n"
-             + "# nel testo (fts, non configurata), imap-urlauth e auth-token a IMAP URLAUTH (spento).\n"
+             + "# Sockets Dovecot creates open to everyone (0666) that the panel does not use: indexer is for full-text\n"
+             + "# search (fts, not configured), imap-urlauth and auth-token for IMAP URLAUTH (off).\n"
              + "service indexer {\n"
              + "  unix_listener indexer {\n"
              + "    mode = 0660\n"

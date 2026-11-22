@@ -105,7 +105,7 @@ public class PostfixLevelTest {
         }
 
         System.out.println("\n== 2. The level piece, after main.cf and before Postfix starts");
-        String marker = "# --- Il livello di compatibilita' di Postfix (PostfixLevelScript.java) ---";
+        String marker = "# --- Postfix's compatibility level (PostfixLevelScript.java) ---";
         for (Map.Entry<String, String> sc : scripts.entrySet()) {
             String s = sc.getValue();
             Matcher m = MAIN_CF.matcher(s);

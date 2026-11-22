@@ -99,14 +99,14 @@ public final class DovecotMasterUser {
     /** Lo stesso, con altri percorsi: la prova lo esegue in una cartella sua, col doveadm vero. */
     static String shell(String keyFile, String masterUsers) {
         return """
-            # --- L'utente master di Dovecot, per «Apri webmail» del pannello (DovecotMasterUser.java) ---
-            # La chiave la legge il pannello e la mette nel gettone dell'SSO; Dovecot ne conosce solo
-            # l'hash, in master-users. "doveadm -O pw" non legge dovecot.conf: senza -O, con lo script
-            # che passa di qui prima di scriverla, doveadm usciva con 75 senza stampare niente, e
-            # master-users restava "admin:" senza hash (05/11/2026, tre installazioni su tre).
-            # La password passa dallo standard input, non fra gli argomenti, dove la vedrebbe ps. Ma
-            # se le due righe non coincidono doveadm la richiede, legge la fine del file e stampa con
-            # 0 l'hash della password VUOTA: per questo l'hash si controlla con "pw -t" contro la chiave.
+            # --- Dovecot's master user, for the panel's "Open webmail" (DovecotMasterUser.java) ---
+            # The panel reads the key and puts it in the SSO token; Dovecot only knows its
+            # hash, in master-users. "doveadm -O pw" does not read dovecot.conf: without -O, with the script
+            # passing here before writing it, doveadm exited with 75 without printing anything, and
+            # master-users stayed "admin:" without a hash (05/11/2026, three installations out of three).
+            # The password goes through standard input, not among the arguments, where ps would see it. But
+            # if the two lines differ doveadm asks again, reads the end of the file and prints, with
+            # 0, the hash of the EMPTY password: that is why the hash is checked with "pw -t" against the key.
             MASTER_KEY_FILE='__KEY__'
             MASTER_USERS_FILE='__USERS__'
             MASTER_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)
@@ -125,7 +125,7 @@ public final class DovecotMasterUser {
                 echo "[ERROR] doveadm gave no hash of the Dovecot master user's key: the webmail SSO of the"
                 echo "        panel cannot log in. The panel writes the hash itself at its next start."
             fi
-            # Il processo auth di Dovecot gira come dovecot: con root:wheel non potrebbe leggerlo.
+            # Dovecot's auth process runs as dovecot: with root:wheel it could not read it.
             ( umask 027; printf '%s:%s\\n' '__USER__' "$MASTER_PASSWORD_HASH" > "$MASTER_USERS_FILE.new" )
             chown __OWNER__:__GROUP__ "$MASTER_USERS_FILE.new"
             chmod 640 "$MASTER_USERS_FILE.new"
