@@ -906,7 +906,10 @@ before): `nobody` is greeted on /var/run/dovecot/lmtp before (the fault) and on 
 postfix's 0600, port 24 closed, /var/run/dovecot/lmtp root's 0600, last_valid_uid/gid in doveconf; a real delivery
 through Postfix arrives through the socket; back to before, then Postfix refusing the transport: ROLLED_BACK, port 24
 again and a delivery still arrives; the move again. Measured on 16/11/2026 on Dovecot 2.3.21: all OK, and
-mail-login-probe.sh passes afterwards.
+mail-login-probe.sh passes afterwards; on 22/11/2026 on Dovecot 2.4.5, from the state of before rebuilt by hand on a
+fresh installation: all OK, and the files and Postfix's transport at the end are those of the start. It needs a server installed before finding 234: on one already on the socket
+(every fresh installation) it stops with `STOPPED` and exit code 2 before changing anything, since putting Postfix
+back on port 24 there would leave mail waiting in the queue.
 
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.LmtpSocketTest
     java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.LmtpSocketE2ETest   (VM, as root, real deliveries)
