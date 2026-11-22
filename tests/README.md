@@ -1461,7 +1461,17 @@ Mail profile is in a mailbox's *Client configuration* window, tab iPhone/Mac, fi
 longer in a separate card at the bottom of Mailboxes. Its buttons turn on once the panel has checked the profile can be
 made; "Download the profile" gives that mailbox's `.mobileconfig` (its address, IMAP 993 and SMTP 465 with SSL, no
 password, accepted by `plutil` on the Mac), and "See what it contains" shows the same profile. Opened for another
-mailbox, the window gives that mailbox's profile. At 375 px no horizontal scrolling and the two buttons 44 px.
+mailbox, the window gives that mailbox's profile. At 375 px no horizontal scrolling and the two buttons 44 px. Since 23/11/2026 a line in the window says whether the profile is signed with the mail server's certificate, or why
+not, and the downloaded file is signed exactly when it says so (a signed one is opened with `security cms -D` before
+the checks). On the VM the mail certificate is the installation's self-signed one, so there the profile is not signed.
+
+**AppleProfileSigningTest** — the Apple profile signed with the mail server's certificate (23/11/2026), with a test
+authority made by openssl in a test folder: a self-signed, an expired, an unknown-authority or an unreadable
+certificate does not sign, and the reason is the translated one; with the authority trusted the mail name signs (a
+wildcard covers one label, not two). The signed file is DER, verifies against the authority and gives back exactly the
+profile, carries the certificate chain, and a changed byte makes the verification fail; a key that is not the
+certificate's, or that cannot be read, signs nothing. Needs `/usr/bin/openssl` (the expired case OpenSSL 3.4 or later):
+on the VM.
 
 **fingerprint-routes-browser-test.js** — on the real panel of the test VM (finding 204): the two features that send the
 root part a fingerprint the panel computed itself go through the root's closed list. The package branch to latest and

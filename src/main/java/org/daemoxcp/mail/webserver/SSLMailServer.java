@@ -65,8 +65,10 @@ public class SSLMailServer {
      * sessioni li scrive solo la root (0.8.2, A).
      */
     static final java.util.Set<String> WEB_LOCAL_API = java.util.Set.of("/api/theme", "/api/domains",
-            "/api/mailboxes", "/api/mailconfig", "/api/webmail", "/api/statistics", "/api/apple-profile", "/apple-profile",
+            "/api/mailboxes", "/api/mailconfig", "/api/webmail", "/api/statistics", "/api/apple-profile",
             "/api/blacklist_check");
+    // /apple-profile (lo scaricamento) non c'e' piu' dal 23/11/2026: il profilo si firma con la chiave del certificato
+    // della posta, che legge solo root (AppleProfile.sign). Lo stato e l'anteprima (/api/apple-profile) restano qui.
 
     /**
      * Le operazioni che la parte web chiede alla root per nome, senza parametri, invece di passarle una
@@ -3805,12 +3807,21 @@ public class SSLMailServer {
                 return;
             }
             byte[] data = profile.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            // Firmato col certificato della posta quando un telefono se ne fida (AppleProfile.signer): l'iPhone lo
+            // mostra «Verificato». Se la firma non riesce si consegna quello non firmato, e lo si dice nel registro.
+            boolean signed = false;
+            if (org.daemoxcp.mail.system.AppleProfile.signer(host).ok()) {
+                byte[] der = org.daemoxcp.mail.system.AppleProfile.sign(data);
+                if (der != null) { data = der; signed = true; }
+                else LOGGER.warning("[AppleProfile] signing the profile for " + mailbox.email()
+                        + " failed: it goes out unsigned");
+            }
             String name = org.daemoxcp.mail.system.AppleProfile.fileName(mailbox.email());
             exchange.getResponseHeaders().set("Content-Type", "application/x-apple-aspen-config");
             exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"" + name + "\"");
             exchange.sendResponseHeaders(200, data.length);
             try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(data); }
-            logAudit("APPLE_PROFILE", getClientIp(exchange), "downloaded for " + mailbox.email());
+            logAudit("APPLE_PROFILE", getClientIp(exchange), "downloaded for " + mailbox.email() + (signed ? ", signed" : ", unsigned"));
         } catch (Exception e) {
             try { exchange.sendResponseHeaders(500, -1); } catch (Exception ignore) {}
         } finally {

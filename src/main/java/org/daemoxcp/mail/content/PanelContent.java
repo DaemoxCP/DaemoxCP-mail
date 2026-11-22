@@ -1892,6 +1892,7 @@ public class PanelContent {
                                         <button type="button" class="btn btn-sm btn-outline-secondary touch-target" id="cfgAppleProfileLookBtn" data-on-click="cfgAppleProfilePreview()" disabled><i class="fas fa-eye me-1" aria-hidden="true"></i>{{t:pa.look}}</button>
                                     </div>
                                     <div class="small text-muted mb-2" id="cfgAppleProfileSets"></div>
+                                    <div class="small mb-2" id="cfgAppleProfileSigned"></div>
                                     <div class="alert alert-secondary py-2 small mb-0"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>{{t:pa.after.html}}</div>
                                     <div id="cfgAppleProfileOutcome" class="mt-2" aria-live="polite"></div>
                                 </div>
