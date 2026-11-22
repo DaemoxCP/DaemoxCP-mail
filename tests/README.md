@@ -3,6 +3,9 @@
 They are not part of the build: Maven does not look at this folder, and the jar does not contain
 them. They are classes with a `main`, compiled against the jar already built and run by hand.
 
+Numbers such as «finding 183» refer to the list of problems found on the test machine during development, which is
+kept outside this repository.
+
 The jar is compiled for Java 25 (`<release>25</release>` in the pom). With a newer JDK on the Mac,
 the tests must be compiled with `--release 25`, otherwise they do not start on the VM:
 «has been compiled by a more recent version of the Java Runtime (class file version 70.0),
@@ -130,7 +133,7 @@ folder (not in `/var/db`, like `PackageQueueTest` with its list). `AuditReportTe
 about the installed packages and changes nothing. They are fine on a test machine, not on a real
 mail server.
 
-`InstallScriptDriftTest` is the test of reperto 42 (postfix's install script removing IPv6 from
+`InstallScriptDriftTest` is the test of finding 42 (postfix's install script removing IPv6 from
 main.cf) and has two parts. The first reads the real output of that update and runs anywhere. The
 second runs the three real jobs — guided update, unprotected packages, full maintenance — on a fake
 package, `drift-probe`, which it builds by itself with `pkg create`: it is turned on only with
@@ -170,7 +173,7 @@ installed and protected; `mysql84`: MySQL 8.0 in place of the 8.4, with the data
 loaded back), and puts it back with `restore-python` / `restore-mysql84`; `cleanup` removes the
 `packages-before-*` boot environments the jobs created. It starts from the panel's folder, because
 the jobs read the panel's configuration (read-only here). Only on a test machine; the full log of
-each job goes to `/var/tmp/signed-jobs-<mode>-<attempt>.log`. How it went on the VM: reperto 189.
+each job goes to `/var/tmp/signed-jobs-<mode>-<attempt>.log`. How it went on the VM: finding 189.
 
     sh tests/signed-jobs-setup.sh roundcube
     cd /home/panel && java -De2e.vm=yes -cp "<compiled tests>:<jar>" org.daemoxcp.mail.system.SignedJobsE2ETest roundcube
@@ -178,29 +181,29 @@ each job goes to `/var/tmp/signed-jobs-<mode>-<attempt>.log`. How it went on the
 With `-Doutside=tree` the real run also gets a change outside its plan: a real package installed between the
 inventory photo and pkg (`UpdateManager.PlanWatch.afterTaken`, null in the service), as someone running pkg from SSH.
 The job must end in error naming it, with every line of the plan still where it said; with `-Doutside.when=before`
-the package goes in before the job instead, and those three checks must fail (reperto 190).
+the package goes in before the job instead, and those three checks must fail (finding 190).
 
-`signed-jobs-browser-test.js` uses two of the same procedures, Python's move and the move to MySQL 8.4 (from their rows of "Update the server", reperto 197; Roundcube is a step of "Update everything" since reperto 207) in a real browser (Playwright with the Chrome installed on
+`signed-jobs-browser-test.js` uses two of the same procedures, Python's move and the move to MySQL 8.4 (from their rows of "Update the server", finding 197; Roundcube is a step of "Update everything" since finding 207) in a real browser (Playwright with the Chrome installed on
 the Mac), against the panel of the test VM through an SSH tunnel: "Check prerequisites", the plan and its
 fingerprint in the card, start from the panel's window (the word goes in the request), the log to the end. It checks that the start request
 carries the fingerprint the card showed and that the job ran that one. It signs in with a console code and gives
 its session the fresh confirmation with the `confirm` mode of `signed-jobs-setup.sh` (VM only). It also reports
 every JavaScript error of the pages it opens.
 
-`os-patch-browser-test.js` does the FreeBSD patches on the test VM as a person would (reperto 196), in two phases:
+`os-patch-browser-test.js` does the FreeBSD patches on the test VM as a person would (finding 196), in two phases:
 `install` (check for updates if none is known; the FreeBSD row with the patches ready and no button of its own, the
-patches as the first step of "Update everything" at the top, reperto 207; the confirmation, the progress in one line
+patches as the first step of "Update everything" at the top, finding 207; the confirmation, the progress in one line
 with the details closed, the outcome with what is installed and the restart left, the FreeBSD row with the restart's
 button; the operation logs in Diagnostics with the job's log on disk; the restart from the panel's window) and
 `after` (once the VM is back: nothing left in the FreeBSD row, the logs written before the restart still there). It
 changes the VM: patches, a boot environment, a restart.
 
-`everything-browser-test.js` does "Update everything" on the test VM as a person would (reperto 207): the row at
+`everything-browser-test.js` does "Update everything" on the test VM as a person would (finding 207): the row at
 the top with the steps in order and one button, "Cancel" that leaves the button where it is, the confirmation with
 every step numbered, the request with the fingerprints read and the changes shown, the one job to its end with the
 end as the last line of its log. With the panel's Java last (it took the place of `java-update-browser-test.js`): the
 page reloaded while the Java script works says "In progress: the update of the panel's Java", where it is ("Now: [n/7]
-..."), offers nothing and warns of no job that did not finish (reperto 210); then the
+..."), offers nothing and warns of no job that did not finish (finding 210); then the
 page that reloads by itself on the sign-in page when the panel comes back (a restart ends every session), the sign-in
 again, the Java report in Diagnostics, and on the VM through `java-update-state.sh` the service that sees the panel
 again (its pidfile is the root part), the web part as daemoxcp_mail holding the port, the JVM new and protected again.
@@ -208,7 +211,7 @@ Afterwards: nothing left to update, Update everything completed in the operation
 protected packages protected again, postfix's `inet_protocols` written and postfix listening as before. It needs
 updates waiting on the VM; the way back is the boot environment the job makes before the first step.
 
-`dovecot24-move-browser-test.js` does the move to Dovecot 2.4 on the test VM from the page (reperto 213): Diagnostics
+`dovecot24-move-browser-test.js` does the move to Dovecot 2.4 on the test VM from the page (finding 213): Diagnostics
 before (Dovecot to look at, pointing to Updates), the row "Dovecot 2.4" with Prepare, the checks with the exact plan
 (2.3 removed first, 2.4 installed, no second MySQL client), the tests and the mailbox they run on, one confirmation,
 the job to its end with its eight steps and the same mail tests passing on 2.3 before and on 2.4 after (IMAP login,
@@ -216,18 +219,18 @@ LMTP delivery, the password process not root, Dovecot's own MySQL user), no way 
 the compatibility card saying 2.4 is installed. It needs Dovecot 2.3 on the VM and it changes it; the way back is the
 boot environment the job makes, or the one made before.
 
-`database-restart-browser-test.js` stops MySQL on the test VM for about 25 seconds with the panel open (reperto 209):
+`database-restart-browser-test.js` stops MySQL on the test VM for about 25 seconds with the panel open (finding 209):
 a read asked meanwhile waits with the strip that says the database is restarting and gets its answer when it is back;
 a page opened in that moment answers 503 "the database is restarting" and reloads by itself into the page, not the
 sign-in; afterwards the session is the same. With the jar of main three of its checks fail (the page opened during the
 stop lands on the sign-in page).
 
-`diagnostics-browser-test.js` presses "Check everything" in Diagnostics on the panel of the test VM (reperto 199):
+`diagnostics-browser-test.js` presses "Check everything" in Diagnostics on the panel of the test VM (finding 199):
 the ten read-only checks one after the other, each with its verdict, what needs a look first and the most important
 first, its state in words and at most one button, what is fine closed below; "Open the details" brings its card into
 view. Read only.
 
-`restart-lock-browser-test.js` schedules a restart on the test VM with a stand-in (reperto 200): a program called
+`restart-lock-browser-test.js` schedules a restart on the test VM with a stand-in (finding 200): a program called
 `shutdown` that only sleeps, compiled with cc and started as `shutdown -r +7`, so nothing can restart the VM. On the
 real panel: the strip with the time and "only reads", a button of the page that does nothing and says why; 409 on a
 route of the web part, on one of the root and on one that asks for a recent confirmation (without asking for it
@@ -327,7 +330,7 @@ daemon(8) and follows its log) on a server where the panel has already started: 
 protected packages, runs the script with the panel's turn, locks them again. It stops the mail,
 empties `/var/vmail` and changes the panel's MySQL password: only on a clone of a boot environment,
 and from a COPY of the panel folder if that is in `/home` (outside the boot environments). How it
-was used on the VM, with the concurrency attempts halfway: reperto 154.
+was used on the VM, with the concurrency attempts halfway: finding 154.
 
     cd <copy of the panel folder> && java -De2e.vm=yes -cp "<compiled tests>:daemoxcp-mail.jar" org.daemoxcp.mail.system.MenuReinstall
 
@@ -339,8 +342,8 @@ without it, they say which checks they skipped and why.
 
 ## The full installation
 
-`InstallPackagesTest` is the test of reperto 52 (the installer put in a Dovecot without MySQL and
-declared itself successful). Since reperto 215 the script picks Dovecot 2.4 or 2.3 itself
+`InstallPackagesTest` is the test of finding 52 (the installer put in a Dovecot without MySQL and
+declared itself successful). Since finding 215 the script picks Dovecot 2.4 or 2.3 itself
 (`install_packages $DOVECOT_PACKAGES`): part 0 reads the two choices from the script, A and B run on
 the script as it runs with each, C on the one this machine's catalog would pick. Parts 0, A, B and D
 run anywhere: the script's text, its real install
@@ -353,7 +356,7 @@ touch the real database; it is turned on with `-De2e.vm=yes`, as root, on FreeBS
 
     java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InstallPackagesTest
 
-`PostfixLevelTest` (reperto 251), as root on the VM (part 3 needs Postfix): the three scripts that write main.cf write
+`PostfixLevelTest` (finding 251), as root on the VM (part 3 needs Postfix): the three scripts that write main.cf write
 the 3.6 floor and decide every parameter a reviewed level above it changes (smtp_tls_security_level; TLS-RPT is off,
 so its change does not apply); the level piece runs once, after main.cf and before Postfix starts; every default that
 the real `postconf -d` shows as depending on the level is listed in PostfixLevels at that level, and the level this
@@ -369,7 +372,7 @@ migration seals the tokens in clear row by row, only where the row still has the
 stays, PARTIAL), and a second start has nothing to do; MailDatabase seals on every write and opens on the one read.
 
 `SafeOwnershipTest` (as root on the VM, from the project root): root giving a folder to a user without giving it
-other people's files (reperto 252). On FreeBSD anyone can hard-link another user's file on the same file system, and
+other people's files (finding 252). On FreeBSD anyone can hard-link another user's file on the same file system, and
 /var/vmail is on the file system of /etc: "chown -R vmail:vmail /var/vmail" gave vmail a root file linked in there.
 What is safe to change (a folder, a file with one name; not a file with two names, a link, a FIFO); the script piece
 on a real tree with a root file hard-linked and one behind a link (both stay root's, the hard link is said); names
@@ -397,17 +400,17 @@ After an installation from scratch (`InstallFromScratch`), `mail-login-probe.sh`
 it creates a test mailbox in `login-probe.test`, tries `doveadm auth test`, an IMAP LOGIN on 993 and
 an AUTH PLAIN on 587, shows the maillog lines and removes mailbox and domain. On 24/10/2026, with
 the installer of before, the services were all running and it failed on all three entrances. Since
-reperto 214 it also tries Sieve: a script of the mailbox's own through ManageSieve on 4190
+finding 214 it also tries Sieve: a script of the mailbox's own through ManageSieve on 4190
 (PUTSCRIPT, SETACTIVE) and a rule of the panel written as the panel writes it, then a real delivery
 through Postfix: the panel's rule must run first and the mailbox's own script after it, `doveadm
 sieve list` must open the scripts, and no "dovecot.sieve" may show among the folders. With the Sieve
-layout of before it fails there (ManageSieve: "BYE Internal error"). Since reperto 216 a second delivery
+layout of before it fails there (ManageSieve: "BYE Internal error"). Since finding 216 a second delivery
 with a panel's rule that moves, written with no keep at the end as the panel writes it now: the message
 only in the panel's folder, not in INBOX, and the mailbox's own script does not run on it (with a `keep;`
-put back at the end, measured, the own script runs too and it fails). Since reperto 217 the mailbox's
+put back at the end, measured, the own script runs too and it fails). Since finding 217 the mailbox's
 script uses the Sieve "duplicate" test, which writes Dovecot's duplicate database in the home as
 autoreplies and forwards do: with the home of before (the mail root) "dovecot", "dovecot.lda-dupes"
-and "dovecot.lda-dupes.locks" show among the folders and it fails (measured on the VM). Since reperto 239 a real
+and "dovecot.lda-dupes.locks" show among the folders and it fails (measured on the VM). Since finding 239 a real
 Roundcube login on the webmail's nginx site, then the mailbox page: it must carry the folder list, which comes from
 IMAP, so Roundcube decrypted the IMAP password from its session (des_key, cipher_method). "task mail" and the logout
 link are not enough: with IMAP refused Roundcube still draws the mail page, with an error and no folders (measured on
@@ -454,7 +457,7 @@ leaves), LoginSecurityTest drops them and creates them again as an old installat
 passwords, and ResetDatabaseTest empties it completely, tables that are not the panel's included.
 SoftwareVersionsTest instead only reads (SELECT VERSION()).
 
-### The guided installation (reperti 242-250)
+### The guided installation (findings 242-250)
 
 **GuidedInstallTest** — no system: the time zone of menu option 1 (an IANA name known to Java and present as a
 plain file in zoneinfo, never a path, a link or a made-up name; the current one from /var/db/zoneinfo, UTC when
@@ -471,7 +474,7 @@ current, changed, unknown; the rules from the ports, POP3 included; a confirmati
 refused, a good one written 0600; a short list from cloudflare.com not believed).
 
 **SetUpEverythingTest** — as root on the VM, with the service's umask (`sh -c 'umask 077; java ...'`): "Set up
-everything" on a server installed from scratch (reperto 250). The MTA-STS policy written readable by nginx (folder
+everything" on a server installed from scratch (finding 250). The MTA-STS policy written readable by nginx (folder
 0755, file 0644, also over 0700 and 0600), through a file beside it renamed in place, a link planted there removed
 and its target untouched, a link in place of the folder refused; the boot repair (DONE, then nothing to do; links in
 place of the folder or the policy left as they are); the Cloudflare account checked before touching anything (the
@@ -488,7 +491,7 @@ reaching the panel directly from this computer's address in the VM's private net
 like Cloudflare: another name with Cloudflare's headers gets 421, the panel's own name answers, and a sign-in with a
 forged CF-Connecting-IP leaves this computer's real address in the session. Red on the panel before the fix in all three.
 
-`acme-install-browser-test.js` (Playwright, VM, reperto 247): on a server installed from scratch acme.sh is not
+`acme-install-browser-test.js` (Playwright, VM, finding 247): on a server installed from scratch acme.sh is not
 there, and nothing in the pages installed it. The SSL page shows the card "Let's Encrypt is not ready" while acme.sh or
 its Let's Encrypt account is missing; a malformed address is refused in the page; "Install acme.sh" installs the
 package (user acme) and asks for the account. With a test address Let's Encrypt refuses the account, and the panel
@@ -562,7 +565,7 @@ country folder removed if the run created it.
 The pages generated by the panel in Chromium, with Playwright and the simulated server.
 PageGenerator writes them complete as the server sends them, with the frame and the texts:
 name.html in Italian and name.en.html in English, plus the scripts' dictionaries in i18n/ (to serve
-as /i18n/it.js and /i18n/en.js). Since 07/11/2026 (reperto 178) the pages have no inline scripts
+as /i18n/it.js and /i18n/en.js). Since 07/11/2026 (finding 178) the pages have no inline scripts
 or styles any more: they are files in assets/ (to serve as /assets/...), and csp.txt is the panel's
 Content-Security-Policy. Every test serves them and sends the policy with `tests/browser-csp.js`,
 and a violation is a page error.
@@ -589,7 +592,7 @@ copied to the Mac, and the browser tests run there (also with the installed Chro
     NODE_PATH=$(npm root -g) node tests/update-center-browser-test.js $D [screenshot-folder]
 
 On the Mac the Playwright package is enough, without its Chromium: with `CHROMIUM` the tests use
-the installed Chrome (all of them read it since 07/11/2026, reperto 177). The package can be kept
+the installed Chrome (all of them read it since 07/11/2026, finding 177). The package can be kept
 outside the project:
 
     mkdir -p $PW && (cd $PW && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts playwright)
@@ -655,7 +658,7 @@ catalog is said, without catalogs it says where it looked, all repositories disa
 not know", the old name is still recognised, a name with `../` does not end up in a path, a clock
 running behind does not give negative ages. Then the real line of the report, from `ReportMail`.
 
-**JavaUpdateScriptTest** — the detached script that upgrades the JVM the panel runs on (reperto
+**JavaUpdateScriptTest** — the detached script that upgrades the JVM the panel runs on (finding
 195). The script is generated as the panel does and RUN, with fake pkg, sockstat, curl, ps and java
 in front of the PATH, a sleeping process as the panel and another as the web part's supervisor;
 the panel log, the backup folder and the pidfiles are in a temporary folder. As text, in English and
@@ -666,41 +669,41 @@ again, the port checked); the download fails and the job is cancelled with the p
 the panel restarted to close it; no way back; the port held by root instead of daemoxcp_mail (TO
 CHECK); the new java does not start and the way back goes in. Plus the service detection (rc script
 and pidfile). FreeBSD only (`stat -f`): on the VM. The same flow from the browser, on the real VM
-panel, is in reperto 195.
+panel, is in finding 195.
 
-**RestartLockTest** — the rules behind "no change while a restart is scheduled" (`RestartLock`, reperto 200): which
+**RestartLockTest** — the rules behind "no change while a restart is scheduled" (`RestartLock`, finding 200): which
 requests change something (`Access.changes`: a GET never; a POST unless its action only reads or its permission only
 views; the DKIM reads), what stays possible (cancelling, restarting now, the state, nothing else), the time of the
 restart from ps ("+N" minutes and "now"; any other form unknown), the time the panel records and that cancelling
 removes it. Pure, on the VM.
 
-**Dovecot24MoveE2ETest** — the move to Dovecot 2.4 going back by itself (reperto 213), on the VM with Dovecot 2.3, as
+**Dovecot24MoveE2ETest** — the move to Dovecot 2.4 going back by itself (finding 213), on the VM with Dovecot 2.3, as
 root with `-De2e.vm=yes`: the job runs for real (packages replaced, 2.4 configuration written, tests on 2.4), then a
 problem the test adds makes it put 2.3 back. Afterwards the job is in error saying 2.3 is back and passes the tests of
 before; the packages, their versions and protections are those of before; the configuration is the one of before file
 by file, the refused 2.4 one kept in the copy (0700); Dovecot runs and listens where it did; the tests again on 2.3
 all pass; no list of unlocked packages left.
 
-**FreshInstallDovecotTest** — an installation from scratch puts in Dovecot 2.4 where the catalog offers it (reperto
+**FreshInstallDovecotTest** — an installation from scratch puts in Dovecot 2.4 where the catalog offers it (finding
 215): the three installers use the one choice (`DovecotConfig.packagesShell`) and install `$DOVECOT_PACKAGES`, never the
 2.3 names written out, and still parse with `sh -n`; the choice with a fake pkg: 2.4 offered -> 2.4, not offered ->
 2.3, 2.4 already installed -> stays 2.4, always the MySQL flavor and its Pigeonhole. On the VM.
 
-**SieveStorageTest** — users' Sieve scripts in their mail folder, the panel's rules before them (reperto 214): what
+**SieveStorageTest** — users' Sieve scripts in their mail folder, the panel's rules before them (finding 214): what
 the panel writes on 2.3 and 2.4 (`sieve_before` / a `before` script from /var/mail/sieve, the users' storage in
 `~/sieve`, the active script `~/dovecot.sieve` without a dot, which Maildir++ would take for a mail folder); the
 migration of servers installed before (the exact block the panel wrote becomes the new one, the rest untouched; done,
 hand-written or twice: nothing); a ManageSieve link made by hand under /var/mail/sieve is seen and left; the mailbox to
 try `doveadm sieve list` on. On the VM.
 
-**SieveGeneratorTest** — the panel's Sieve rules with no keep forced at the end (reperto 216): until 09/11/2026 every
+**SieveGeneratorTest** — the panel's Sieve rules with no keep forced at the end (finding 216): until 09/11/2026 every
 script ended with an explicit `keep;`, so "move" left the message in INBOX too, a forward without a copy kept one and
 "delete" deleted nothing. Rule by rule (move, copy, delete, forward with and without a copy, a filter's forward,
 autoresponder, all together): the action as Sieve means it and no top-level keep; a script without rules is just the
 require line. With `-De2e.vm=yes` every script also goes through the real sievec. With the forced keep put back in the
 jar: 10 checks fail.
 
-**SieveForcedKeepTest** — the boot repair of the scripts written before (reperto 216, SieveForcedKeep): a script with
+**SieveForcedKeepTest** — the boot repair of the scripts written before (finding 216, SieveForcedKeep): a script with
 either require line the panel ever wrote loses only the tail and becomes what the generator writes now; already fixed,
 hand-written, another require or the tail not at the end: nothing. On a folder like /var/mail/sieve only
 domain/user/.dovecot.sieve regular files, owner and mode kept, compiled once, a ManageSieve link and other depths left,
@@ -717,7 +720,7 @@ before is fixed by SieveForcedKeep.repair and then the move moves. Measured on 0
 pass; with the forced keep put back in the jar 7 fail (move, forward without a copy, delete and reject keep INBOX, the
 own script runs after a move, and in the last part the faulty generator writes the keep again).
 
-**SieveCompilerTest** — Pigeonhole's sievec run as the user `sievec`, never as root (reperto 218, SieveCompiler). Without a
+**SieveCompilerTest** — Pigeonhole's sievec run as the user `sievec`, never as root (finding 218, SieveCompiler). Without a
 system: the binary's name beside the script; the minimal configuration passed with `-c` (empty for Dovecot 2.3, the two
 version lines of the panel's own 2.4 dovecot.conf, nothing that is not a version number); sievec's output read as a
 refusal only when it names a line of the script (an unreadable or missing script exits 89 like a syntax error, and is
@@ -740,7 +743,7 @@ neither the script nor the binary nor add a file beside them; `lastcomm` says ev
 10/11/2026 on Dovecot 2.3.21: all pass; with SieveGenerator put back as it was (sievec as root) 2 fail: "sievec ran 5
 times, as [root]".
 
-**SieveFolderOwnerTest** — the folder of the panel's Sieve rules, `/var/mail/sieve`, stays root's (reperto 220). Until
+**SieveFolderOwnerTest** — the folder of the panel's Sieve rules, `/var/mail/sieve`, stays root's (finding 220). Until
 10/11/2026 the Dovecot component's script (DovecotScript) gave it to vmail with `chown -R vmail:vmail`: vmail could then
 rename a domain's folder of root's and make its own in its place, with rules of its own. Without a system: every command
 of the script that touches `/var/mail/sieve` gives it to root and no write to group or others (and the checks can
@@ -755,7 +758,7 @@ the rule or its binary, nor rewrite them or add a folder, and the next delivery 
 the real folder, which the panel makes root's, and passes on both). The script itself runs on no path today: the route
 `/api/install` is gone since the first commit and `install_dovecot.sh` is retired (InstallScripts.RETIRED).
 
-**SieveGroupMailTest** — the panel's Sieve rules out of reach of the group `mail` (reperto 221). `/var/mail` is
+**SieveGroupMailTest** — the panel's Sieve rules out of reach of the group `mail` (finding 221). `/var/mail` is
 root:mail 0775: a process with the group `mail` (postfix, clamav, dma which is setgid mail, Dovecot's mail processes
 through `mail_privileged_group`) could rename `/var/mail/sieve` and put its own in its place, and `saveSieveScript`
 wrote as root following links. Without a system: the sticky mode; the line `mail_privileged_group = mail` taken out of
@@ -771,12 +774,12 @@ the panel moves a real delivery; a link planted at the rule's and at the binary'
 (nobody's, 0600) as they were, the rule is root's again, the next delivery still follows it. At the end dovecot.conf
 and the mode of `/var/mail` go back as they were. Measured on 10/11/2026 on Dovecot 2.3.21: all pass; with the three
 fixes taken out (saveSieveScript as before, no sticky, the line kept in DovecotConfig and dovecot.conf) 20 fail.
-Since this reperto root writes rules only under a sticky `/var/mail`, as the panel leaves it at boot: SieveActionsE2ETest,
+Since this finding root writes rules only under a sticky `/var/mail`, as the panel leaves it at boot: SieveActionsE2ETest,
 SieveCompilerE2ETest and SieveFolderOwnerTest give `/var/mail` that state in their setUp (MailSpoolSticky) and put its
 mode back at the end.
 
-**SieveRulesNotWrittenTest** — the page is told when the panel's Sieve rules were not written (reperto 223).
-`saveSieveScript` returns false when it writes nothing (since reperto 221 also while a folder from / to
+**SieveRulesNotWrittenTest** — the page is told when the panel's Sieve rules were not written (finding 223).
+`saveSieveScript` returns false when it writes nothing (since finding 221 also while a folder from / to
 `/var/mail/sieve` can be changed by others, `/var/mail` without the sticky bit for one), and its callers dropped it: the
 page said "done" while Dovecot kept the earlier rules. On the real server over HTTPS, with the test MySQL and a
 SieveGenerator that refuses or accepts on request: forwarding (create, update, delete), filters (create, update,
@@ -789,7 +792,7 @@ the alias part is skipped, saying so (otherwise folders in `/var/vmail` and Post
 test gives the vault a public key of its own in its temporary secrets folder, as root writes it for the web part.
 Measured on 10/11/2026 on the VM: 36 OK; with SSLMailServer as before 8 fail, one for each place that saves rules.
 
-**SieveRulesRefreshTest** — a Sieve filter that moves or copies to a folder that is not there yet creates it (reperto
+**SieveRulesRefreshTest** — a Sieve filter that moves or copies to a folder that is not there yet creates it (finding
 229), and the panel's rules already written are written again from the database at start, where they differ from what
 the panel writes now. Before, «Move» to a new folder (also the dialog's own suggestion, INBOX.Filtered) moved nothing:
 Dovecot answered «Mailbox doesn't exist» and the message stayed in INBOX (seen on the real server and on the VM). The
@@ -800,7 +803,7 @@ rules in the database written; a refused write counted by the mailbox's number. 
 does it with real deliveries: the text of before leaves the message in INBOX and makes no folder, the refresh writes
 it again (compiled by sievec), then the folder is made and the message is only there; a copy too.
 
-**SieveBinariesTest** — the panel's Sieve rules compiled by the Pigeonhole installed now (reperto 241). After the move
+**SieveBinariesTest** — the panel's Sieve rules compiled by the Pigeonhole installed now (finding 241). After the move
 to Dovecot 2.4 the binaries next to the panel's rules were still 2.3's (header version 02 against 03): Dovecot compiled
 the rules again at every message and logged two errors each time («binary ... save: failed to create temporary file»,
 «The LDA Sieve plugin does not have permission to save global Sieve script binaries»), and neither the move nor the
@@ -811,7 +814,7 @@ made by the test: only domain/name/.dovecot.sieve starting with the panel's requ
 folder or a file, never a file too big. On the VM the move to Dovecot 2.4 from the page and upgrade-panel.sh do it with
 real deliveries: no Sieve error in the maillog after the move, and the binaries compiled again once.
 
-**DovecotMasterUserTest** — Dovecot's master user, the one «Open webmail» logs in with, gets a real hash (reperto 227).
+**DovecotMasterUserTest** — Dovecot's master user, the one «Open webmail» logs in with, gets a real hash (finding 227).
 FullMailServerScript asked `doveadm pw` for the hash before dovecot.conf existed: doveadm exited with 75 and
 master-users stayed "admin:" without a hash, so the single sign-on never got in on a fresh installation;
 FullMailStackScript wrote the hash in a root:wheel file that Dovecot's auth process (user dovecot) cannot read. The
@@ -825,7 +828,7 @@ alone (a hand-written {PLAIN}, two users, a comment, a link, another key's hash)
 doveadm, also without a configuration, where main's piece of before leaves "admin:" without a hash. As root on the VM.
 
 **FullMailStackCleanupTest** — the cleanup of the «all» installation (FullMailStackScript, phase 1) removes only the
-users phase 2 creates again (reperto 226). It used to run pw userdel on www, a base system user (uid 80), and on the
+users phase 2 creates again (finding 226). It used to run pw userdel on www, a base system user (uid 80), and on the
 users of clamav, redis, mysql and rspamd: with www went its group, the one nginx opens Roundcube's socket with, and its
 crontab, and nothing created them again (nginx locked by the panel, or the later pkg install failing), so nginx said
 getpwnam("www") failed. The test reads the script's text (every user and group removed is created again by phase 2 and
@@ -833,8 +836,8 @@ none is of the base system, with the line recogniser tried first on a known text
 pw -R on a copy of the stock users plus the users of the packages and vmail: www, its group and the users of the packages stay, exactly
 what the lines name goes away, the machine's own files unchanged. As root on the VM.
 
-**SieveRulesOwnerTest** — the panel's Sieve rules folder given back to root at start (reperto 225). On the real server
-`/var/mail/sieve` belonged to vmail (the installation of 11/10/2026): since reperto 221 root does not write rules where
+**SieveRulesOwnerTest** — the panel's Sieve rules folder given back to root at start (finding 225). On the real server
+`/var/mail/sieve` belonged to vmail (the installation of 11/10/2026): since finding 221 root does not write rules where
 somebody else can change the path, so the first start of the new panel stopped (MailSpoolSticky warned, SieveForcedKeep
 left the rules as they were) and every save for those mailboxes would have answered "not written". In a test folder
 under /var/tmp, as root, with real owners (vmail, nobody): the real server's layout copied (owners, groups, modes):
@@ -849,7 +852,7 @@ three warnings), with this one six migrations and SieveRulesOwner say DONE, the 
 mail-login-probe.sh, SieveActionsE2ETest and sieve-dialogs-browser-test.js on the real panel pass.
 
 **SieveDialogFieldsTest** — the Sieve dialogs of the Mailboxes page and their routes speak the same language
-(reperto 224). The Filters dialog sent conditions and actions as JSON text, which `/api/sieve` reads with optJSONArray
+(finding 224). The Filters dialog sent conditions and actions as JSON text, which `/api/sieve` reads with optJSONArray
 (null for a text): creating a filter ended in a NullPointerException whose English text reached the page. Editing asked
 `GET /api/sieve?id=`, which the route did not know, and sent `id` where it reads `filter_id`; deleting a forward sent
 `id` where `/api/forwarding` reads `rule_id`, and no `mailbox_id`. And the routes rewrote the rules of the mailbox named
@@ -859,15 +862,15 @@ writes nothing and remembers the address it was asked for, the requests as the f
 alone, deleted; a forward deleted by `rule_id` alone; each time the rules written are those of the row's mailbox, also
 when the request names another one. Conditions or actions as text, empty, or not objects: refused with
 `server.filter.badRules` (English and Italian), nothing changed; a number that is not a row: `server.filter.notFound` /
-`server.forward.notFound`; `mailbox_id=abc` gives no exception text. Reperto 223 still holds (success false, saved,
+`server.forward.notFound`; `mailbox_id=abc` gives no exception text. Finding 223 still holds (success false, saved,
 `server.sieve.notWritten`). It uses only what MailDatabase had before, so it runs against the jar of before too. Run it
 as nobody, as SieveRulesNotWrittenTest. Measured on 10/11/2026 on the VM: 43 OK; with SSLMailServer, MailDatabase and
 SqlCatalog as before 25 fail (among them the NullPointerException text and `For input string: "abc"` in the answer).
 
-**VacationTrackingTest** — "reset tracking" of the autoresponder and the boot repair of what it left (reperto 219,
+**VacationTrackingTest** — "reset tracking" of the autoresponder and the boot repair of what it left (finding 219,
 VacationTracking). Until 10/11/2026 the reset also deleted the binary beside the panel's rules and restarted Dovecot;
 Pigeonhole keeps the senders already answered only in `.dovecot.lda-dupes` in the mailbox's home. Without a system:
-the file is vmail/domain/user/home/.dovecot.lda-dupes (Dovecot's home since reperto 217), and an address that is not one
+the file is vmail/domain/user/home/.dovecot.lda-dupes (Dovecot's home since finding 217), and an address that is not one
 (`../../x@...`, `a/b@...`, `al..ice@...`) gives nothing; on a folder like /var/vmail only that file goes, with the one of
 before in the mailbox's root (mail, the `.locks` folder and other mailboxes stay,
 twice is fine, nothing outside the folder is touched); a binary missing, older, as old as the script or a link is stale;
@@ -888,13 +891,13 @@ binaries" on the deliveries after the reset, and no repair at boot.
 
 **LmtpSocketTest** — Postfix delivers to Dovecot through a socket in its own queue, `private/dovecot-lmtp`, 0600
 postfix's, and no longer through port 24 or the 0666 socket in /var/run/dovecot, from which any process of the machine
-could deliver into any mailbox, bypassing Postfix and rspamd (reperto 234; Dovecot's "Postfix and Dovecot LMTP" guide,
+could deliver into any mailbox, bypassing Postfix and rspamd (finding 234; Dovecot's "Postfix and Dovecot LMTP" guide,
 2.3 and 2.4). Against a fake Postfix and a fake Dovecot that listens where its configuration says: what the panel writes
 now (2.3 and 2.4, no TCP listener, last_valid_uid/gid 5000, the installers' transport); the move from the block of
 before in three steps (socket opened beside port 24, Postfix moved, port 24 closed), DONE then nothing; a block that is
 not the panel's or Postfix delivering elsewhere: left alone; a fault in the first two steps: everything back, mail
 flowing on port 24; a fault in the last: the middle state, which works both ways, finished by the next run; killed
-after each step: the next run finishes. A reload that takes effect a few seconds late, as Dovecot's does (reperto
+after each step: the next run finishes. A reload that takes effect a few seconds late, as Dovecot's does (finding
 240): the run waits for port 24 to close and for the probe to answer, and ends DONE instead of INCOMPLETE; listeners
 that never come within the wait still put everything back. No system.
 
@@ -909,7 +912,7 @@ mail-login-probe.sh passes afterwards.
     java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.LmtpSocketE2ETest   (VM, as root, real deliveries)
 
 **RedisSocketTest** — redis only on its Unix socket, `/var/run/redis/redis.sock`, 0770 of the group redis, with rspamd
-in that group (reperto 235). The package's redis.conf listens on 127.0.0.1:6379 and ::1 without a password: any process
+in that group (finding 235). The package's redis.conf listens on 127.0.0.1:6379 and ::1 without a password: any process
 of the machine read and wrote rspamd's data (Bayes, greylist, limits, history). Against a fake redis that listens where
 its redis.conf says (the last line wins) and a fake rspamd that reaches it only if started in the group and pointed at
 the socket: what the installer writes (RedisSocket.FINAL, rspamd in the group before both start); the move from the
@@ -920,7 +923,7 @@ the middle state, finished by the next run. And `socketClients` on real `CLIENT 
 and counting the text `addr=...` made the asker's own connection count twice, so the check passed with rspamd refused
 (found by RspamdBackendsE2ETest's fault on the real redis, 16/11/2026). No system.
 
-**ClamdSocketTest** — clamd's socket only for the group clamav, 0660, with rspamd in that group (reperto 237; the
+**ClamdSocketTest** — clamd's socket only for the group clamav, 0660, with rspamd in that group (finding 237; the
 package's clamd.conf leaves it 0666, "socket is world accessible"). The installer's lines; the move from the VM's
 clamd.conf (LocalSocket twice), DONE then nothing; a group or mode already set, another socket: left alone; rspamd not
 really in the group, clamd not coming back, rspamd not scanning after joining: everything back. The EICAR probe is the
@@ -928,7 +931,7 @@ real test string with 1 to 40 random trailing blanks: rspamd caches the antiviru
 VM: the same attachment a second time never reaches clamd), so a fixed probe would pass with clamd unreachable. The
 class file does not carry the string in clear. No system.
 
-**RspamdControllerTest** — rspamd's controller (11334) only with the panel's password (reperto 236). The package's
+**RspamdControllerTest** — rspamd's controller (11334) only with the panel's password (finding 236). The package's
 worker-controller.inc has `password = "q1"` in clear and `secure_ip` 127.0.0.1 and ::1: any local process got in with no
 password. The panel writes override.d/worker-controller.inc (the hash of a generated password, kept in root's secrets,
 in password and enable_password; `secure_ip = []`). Against a fake controller: DONE then nothing; a file the panel did
@@ -951,7 +954,7 @@ left alone. Measured on 16/11/2026 (redis 8.10.3, ClamAV 1.5.4, rspamd 4.1.0).
     java -De2e.vm=yes -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RspamdBackendsE2ETest   (VM, as root)
 
 **PhpHardeningTest** — php.ini written when it is missing, and `security.limit_extensions = .php` in the panel's
-Roundcube pool (reperto 238). The real server had no php.ini (installed before the installer wrote one): PHP ran on its
+Roundcube pool (finding 238). The real server had no php.ini (installed before the installer wrote one): PHP ran on its
 built-in defaults, `expose_php` On and "X-Powered-By: PHP/8.4" in every webmail answer, errors to the output, sessions
 in /tmp. The text is PhpHardening.INI, the installer's own, plus `session.upload_progress.enabled = Off`. Against a fake
 php-fpm that sends X-Powered-By until it has read a php.ini: DONE (the file, the sessions folder, the log and its
@@ -961,7 +964,7 @@ the file, a file not writable: everything back. No system.
 
 **RoundcubeCipherTest** — Roundcube encrypts the IMAP password in its session with AES-256-CBC and a 32-character key,
 no longer DES-EDE3-CBC ("for backward compatibility", says defaults.inc.php, which calls AES-256-CBC "a better choice")
-(reperto 239). Only the installer's des_key line is replaced, only if cipher_method is not set; before and after, the
+(finding 239). Only the installer's des_key line is replaced, only if cipher_method is not set; before and after, the
 webmail answers, PHP encrypts and decrypts with the file's method and key, and a real login through the panel's SSO
 (RoundcubeDbUser.realLogin, which now also wants the folder list) opens the mailbox. No system.
 
@@ -975,7 +978,7 @@ DONE, the real login after (AES-256-CBC, folders from IMAP); PHP refusing the ci
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RoundcubeCipherTest
     java -De2e.vm=yes -De2e.probe=tests/mail-login-probe.sh -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PhpRoundcubeE2ETest   (VM, as root)
 
-**DovecotHomeTest** — every mailbox's Dovecot home in its own folder, `home/`, not the mail root (reperto 217): with
+**DovecotHomeTest** — every mailbox's Dovecot home in its own folder, `home/`, not the mail root (finding 217): with
 home = the Maildir root, the files Dovecot keeps in the home showed up as mail folders ("dovecot", "dovecot.lda-dupes",
 "dovecot.lda-dupes.locks" after one autoreply, measured on the VM; Dovecot's documentation says the home should not be
 the Maildir, and lists "home under mail" among its layouts). What the panel writes on 2.3 and 2.4 (the home in `home/`,
@@ -1134,7 +1137,7 @@ before the first delivery, and no "duplicate db" error. The second run changes n
 goes back, the VM's other mailboxes get their files back in the root, and the test domain is removed. Measured
 10/11/2026 on Dovecot 2.3.21: all OK; with the fix taken out 8 checks fail.
 
-**AddressTransformLinksTest** — setting aside the old mail of an address without following vmail's links (reperto
+**AddressTransformLinksTest** — setting aside the old mail of an address without following vmail's links (finding
 222). When an alias becomes a mailbox and the old mail is set aside, `AddressTransform.archive` moved it as root inside
 `/var/vmail`, which with everything under it is vmail's: vmail could plant a link at `.panel-archive` or at the
 domain's folder, and root's mkdir and rename followed it. Now vmail moves its mail (chroot -u vmail, only the group
@@ -1151,7 +1154,7 @@ is not, and put back. Measured on 10/11/2026: all pass; with the jar before the 
 setting aside of a mailbox with rules: `/var/mail` and `/var/vmail` are two ZFS datasets on the VM, and Java does not
 move a full folder from one to the other (DirectoryNotEmptyException), so that choice always failed there.
 
-**DovecotMoveTest** — the move to Dovecot 2.4 (reperto 213), what can be proven without a Dovecot: the 2.4
+**DovecotMoveTest** — the move to Dovecot 2.4 (finding 213), what can be proven without a Dovecot: the 2.4
 configuration with the two lines a real 2.4.5 refused written the way it accepts them; the packages by origin and what
 replaces them (MySQL flavor only); the protected dependencies used as they are; a second MySQL client in the plan
 named; where Postfix delivers with LMTP; before against after (a failed test, a port lost or new, a Sieve extension
@@ -1159,7 +1162,7 @@ gone, a test not run, the password process back to root); the probes against ser
 only with the pinned certificate, EXAMINE and never SELECT, the password quoted; LMTP never reaching DATA; ManageSieve;
 the authentication socket that greets, the silent one and the missing one. On the VM.
 
-**JobJournalTest** — the jobs' log on disk (`JobJournal`, reperto 196): one file per job in
+**JobJournalTest** — the jobs' log on disk (`JobJournal`, finding 196): one file per job in
 `/var/db/daemoxcp-mail/jobs` (here a temporary folder), that survives a restart of the panel or of the server and is
 read from Diagnostics, Operation logs. The start line, every line with its UTC time, the end with status, error and
 duration written once only; folder 0700 and files 0600; only the newest KEEP stay; the list newest first, with the
@@ -1237,10 +1240,10 @@ start, does not apply the locks rule (and says so); with the other killed by kil
 locked again with the notice naming the interrupted job. Then `lockf(1)` against the panel, in both
 directions, and the turn part of `install_mail_server.sh` (from the real text, up to the check of
 the protected packages: it never reaches phase 1) from the menu, by hand, with the variables set by
-hand. As root, on the VM: everything in a folder of `/var/tmp`, pkg read-only. Reperto 153.
+hand. As root, on the VM: everything in a folder of `/var/tmp`, pkg read-only. Finding 153.
 
 **PendingDbPasswordTest** — the panel's new MySQL password stays pending until MySQL knows it
-(`PendingDbPassword`, reperto 157), with a fake MySQL: the script that exits before MySQL (the old
+(`PendingDbPassword`, finding 157), with a fake MySQL: the script that exits before MySQL (the old
 one is kept), the one that gets there (the new one is adopted), MySQL silent (nothing is decided,
 and the next installation reuses the pending one), the pending password that cannot be written,
 Postfix's copy for the servers broken by the previous version (adopted only if MySQL accepts it and
@@ -1256,12 +1259,12 @@ test user (`e2e_pending`) removed at the end; it reads root's password from the 
 It is turned on only with `-De2e.vm=yes`, as root, with MySQL running.
 
 **SqliteSharedTest** — the panel's SQLite database used by two processes together, like the
-`--web` service and the menu from the same folder (reperto 160): one process does the service's
+`--web` service and the menu from the same folder (finding 160): one process does the service's
 reads and stays up, another writes what the reinstallation writes, all at once and without
 `SQLITE_BUSY`; then a write held 6 seconds by one and the other waiting and succeeding (6 and not
 3: sqlite-jdbc already waits 3 seconds on its own). It does NOT see the ResultSet that
 `startWebServer` kept open for the whole life of the service: only the reinstallation from the menu
-with the real service running sees that, on the clone (reperto 161).
+with the real service running sees that, on the clone (finding 161).
 
 **FreshConfigTableTest** — the panel's configuration table on a server where it does not exist yet, the first
 start of the menu (step 6 of the README). Found in the clean-install rehearsal of 18/11/2026 with the 0.9.0 jar: the
@@ -1284,21 +1287,21 @@ is removed, and at the end the same boot environments and snapshots as before. I
 removes boot environments: only on a clone, and it refuses to start (code 2) if there are already
 ways back of package jobs, which the pruning would remove.
 
-**ReinstallJobTest** — the full reinstallation detached from the menu (`ReinstallJob`, reperto
+**ReinstallJobTest** — the full reinstallation detached from the menu (`ReinstallJob`, finding
 163): the menu killed, the menu's terminal closing (SIGHUP to its group), a second menu opened
 halfway, the reinstallation itself killed (and a "service" with the watcher that notices by itself,
-reperto 166). Planted script, the rest real (detached JVM, turn, pkg, bectl): only on a clone,
+finding 166). Planted script, the rest real (detached JVM, turn, pkg, bectl): only on a clone,
 `-De2e.vm=yes`, as root; it refuses to start if there are already ways back of reinstallations or a
 list of unlocked packages.
 
-**InterruptionWatchTest** — the running service's watcher (`UpdateManager.watchOnce`, reperto 166):
+**InterruptionWatchTest** — the running service's watcher (`UpdateManager.watchOnce`, finding 166):
 when it does NOT touch the list of unlocked packages (the list of the JVM's update, whoever wrote it
 still alive, a job of this process, the turn held by another process) and the text of the notice of
 an interrupted reinstallation. Without pkg: the case that really locks again is `ReinstallJobTest`
 J4.
 
 **InterruptedJobRecoveryTest** — a package job that died halfway completed by the panel (InterruptedJobRecovery,
-reperto 188), with a fake system: the trace the package turn writes and removes (and the relock does not); what to do
+finding 188), with a fake system: the trace the package turn writes and removes (and the relock does not); what to do
 with a service (restart on the old files, start if it fell, only check if it already started after the change, leave
 it if it was off); the completion with every fault said in the notice (configuration refused, same pid, not running,
 files still broken, mail lookups); the complete reinstallation not touched; when it waits (a live job, the list still
@@ -1307,7 +1310,7 @@ on disk, pkg still working, a restart by design).
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.InterruptedJobRecoveryTest
 
 **InstallScriptsTest** — the install scripts on disk are always those of the running jar
-(`InstallScripts`, reperto 169): all-or-nothing writing, the old script rewritten, those nobody
+(`InstallScripts`, finding 169): all-or-nothing writing, the old script rewritten, those nobody
 writes any more set aside, the jar's fingerprint after the `#!`; with `-De2e.vm=yes` also a real
 start of the panel doing it.
 
@@ -1316,26 +1319,26 @@ different panel version from the service's, before changing anything. Real scrip
 VM: it always stops before phase 1, and puts rc.conf back.
 
 **ReinstallReturnE2ETest** — going back to the way back of a reinstallation with the mail that
-arrived afterwards merged in (`ReinstallReturn`, reperto 170), with real bectl and without
+arrived afterwards merged in (`ReinstallReturn`, finding 170), with real bectl and without
 rebooting; everything put back in the right order (bectl activate promotes). Only on a clone.
 
 **NoBootEnvironmentTest** — a system without boot environments (a fake bectl first in the PATH that
 always fails): the way back is not created and it is said, the space is not measured, the return
-refuses every name, the tab says there are none (reperto 172).
+refuses every name, the tab says there are none (finding 172).
 
 **InterruptionReportTest** — the interrupted reinstallation in the periodic report: the most urgent
 thing, with its title and the command to go back; any other job stays as it was. With
-`-De2e.vm=yes` also the report's real data (`UpdateManager.reportData`). Reperto 172.
+`-De2e.vm=yes` also the report's real data (`UpdateManager.reportData`). Finding 172.
 
 **LockMarksTest** — the "locked by the panel" sign on all and only the locked packages. With
 `-De2e.vm=yes` also check 5, which unlocks ALL packages (only on a clone) and puts locks and signs
 back as it found them: with no locked package `pkg lock -l` exits with 1, and the signs left never
-went away (reperto 173).
+went away (finding 173).
 
 **menu-way-back.exp** — entry 6 of the on-screen menu, in a real terminal (`ssh -tt`), with expect:
 a copy of the panel, a real way back (`MakeReinstallWayBack`) and the notice of an interrupted
 reinstallation must be prepared on the clone; afterwards, the way back is the one of the next boot
-and the mail is stopped, and everything must be put back (reperto 174). Lanterna redraws only the
+and the mail is stopped, and everything must be put back (finding 174). Lanterna redraws only the
 cells that change: it waits for a line that arrives whole, not just any line.
 
 `ReinstallJobTest` wants the shadow class of `FullMailServerScript` (`tests/planted`) in front of
@@ -1429,12 +1432,12 @@ written, a configuration changed after the preview. At the end the real file on 
 rw-r--r--, no temporary file left, the .conf files listed as pkg reads them.
 
 **pkg-branch-browser-test.js** — the "Package branch" row of the Updates page (its panel opens in place
-under the row, reperto 193): it reads by itself,
+under the row, finding 193): it reads by itself,
 names and addresses only as text, the preview, the branch name typed by hand to confirm,
 fingerprint and CSRF token in the request, the job followed to its outcome, the error of a change
 that does not start; dark theme and phone.
 
-**packages-browser-test.js** — the packages on the Updates page, with the simulated server (reperti 202, 203, 207): one
+**packages-browser-test.js** — the packages on the Updates page, with the simulated server (findings 202, 203, 207): one
 row says the state (how many in one plan, how many of the mail server and in how many steps, the fixes, the
 vulnerabilities not fixed yet, the held ones with their reason) with no button; "Update everything" at the top has the
 one button: first protecting a mail server package that is not locked, then the steps in order (the PHP family one
@@ -1445,18 +1448,18 @@ lock them, for every package installed and catalog version, verdict on the vulne
 "held" where the advisory says to wait, the JDK saying it has its own procedure, no update button; Lock with name and
 CSRF token.
 
-**packages-row-browser-test.js** — on the real panel of the test VM, only reads (reperto 202): the packages are
+**packages-row-browser-test.js** — on the real panel of the test VM, only reads (finding 202): the packages are
 one row of "Update the server" with at most one button, no separate card and no separate mail server row; the list
 under the row is closed, and opened shows the packages with version and lock in words and no update button; at 375 px
 no horizontal scrolling with the list open and every visible button 44 px; no request that changes anything.
 
-**fingerprint-routes-browser-test.js** — on the real panel of the test VM (reperto 204): the two features that send the
+**fingerprint-routes-browser-test.js** — on the real panel of the test VM (finding 204): the two features that send the
 root part a fingerprint the panel computed itself go through the root's closed list. The package branch to latest and
 back to quarterly (16 hex digits, each job followed to the end; the VM put back on quarterly in any case), and "Turn
 into mailbox" on a test alias (64 hex digits), with the mailbox deleted after; no forwarded request refused in the
 root's log while it ran.
 
-**running-job-browser-test.js** — on the real panel of the test VM (reperto 206): "Check for updates" started in one
+**running-job-browser-test.js** — on the real panel of the test VM (finding 206): "Check for updates" started in one
 tab, and in a second tab the Updates page says what is running and since when, with its log, while the buttons of the steps
 and "Check for updates" wait; a job asked meanwhile is refused and leaves no log in the jobs folder; when the search ends
 the line goes and the buttons come back. The search only downloads the lists.
@@ -1573,12 +1576,12 @@ old version wins at the next start; the PEM key comes back identical; with the f
 the value stays in SQLite and is read all the same; database/ 700 and daemoxcp-mail.db 600.
 
 **csp-browser-test.js** — every generated page in Chromium with the panel's
-Content-Security-Policy (without 'unsafe-inline', reperto 178): no violation, no on...= handler or
+Content-Security-Policy (without 'unsafe-inline', finding 178): no violation, no on...= handler or
 inline style in the DOM, every data-on-* in panel-actions.js's language and only with the panel's
 functions, every data-style applied, and the functions called from the HTML the scripts build later
 exist.
 
-**SessionRunTest** — sessions last for one start of the jar, with Strict cookies (reperto 184), with
+**SessionRunTest** — sessions last for one start of the jar, with Strict cookies (finding 184), with
 the test MySQL: the cookies (Strict, the session one without expiry), the fingerprint in the
 database that is not the token's SHA-256, a second process on the same database (the restarted
 jar) that does not recognise the token and computes another CSRF token for it, `beginRun` removing
@@ -1592,39 +1595,39 @@ the server sets them, a link from another site arriving without the session, the
 after the restart goes to the sign-in page and says why, the old cookie going away, the new start's
 session getting in.
 
-**update-center-browser-test.js** — updating from the panel (reperti 185-187), with a simulated
+**update-center-browser-test.js** — updating from the panel (findings 185-187), with a simulated
 server: the restart banner on every page (and the Italian text taken from it.json), the "Update the
 server" card with its rows in words (a dedicated procedure only when it applies; every row acts in place,
-reperto 193; one button at most per row, reperto 197; one row for all the packages and no separate Packages card,
-reperto 202), the package update confirmed in the panel's window with the exact plan and its signature and its outcome
+finding 193; one button at most per row, finding 197; one row for all the packages and no separate Packages card,
+finding 202), the package update confirmed in the panel's window with the exact plan and its signature and its outcome
 under the row, after which the same row's step is the mail server package by name, the FreeBSD patches with their outcome
-and the restart left (reperto 196), a new FreeBSD release in four steps with only the current one's button,
+and the restart left (finding 196), a new FreeBSD release in four steps with only the current one's button,
 the checks that stop a preparation, a dedicated procedure guided (Roundcube: one line on the checks, what to
 know before, the plan, one button, the panel's window, the outcome that stays in the row; and when the checks
 stop it), the restart window (what stops, the chosen delay, the time, cancelling, Escape), reads that queue
 up instead of failing, 44 px touch buttons at 375 px, and no browser dialog at all. Diagnostics, "Check everything"
-(reperto 199): one button, every check run, what needs a look first with one button each (the failed job's log, the
+(finding 199): one button, every check run, what needs a look first with one button each (the failed job's log, the
 patches on Updates), what is fine closed below with how many, and the compatibility verdict saying what and whose,
-component by component, with the card's own rules. A restart scheduled (reperto 200): the strip with the time and
+component by component, with the card's own rules. A restart scheduled (finding 200): the strip with the time and
 "only reads", a button of the page that does nothing and says why (once), a refused change (409) that makes the strip
 read again, cancelling that unlocks the page; with a job running, the restart window says which and has no button.
-A job in progress started elsewhere (reperto 206): the card says what and since when with its log, the buttons of the steps
+A job in progress started elsewhere (finding 206): the card says what and since when with its log, the buttons of the steps
 wait saying why, and when it ends the card reads itself again.
 
-**panel-dialogs-browser-test.js** — on the real panel of the test VM (reperto 198): every page of the menu loads with
+**panel-dialogs-browser-test.js** — on the real panel of the test VM (finding 198): every page of the menu loads with
 no page error and no browser dialog; on Domains and Mailboxes "Delete" opens the panel's window with the red button,
 and cancelling it changes nothing. Read only.
 
 **check-pages.sh** — the pages generated by PageGenerator (the folder as argument, or built here): every page and
 every script file it loads (`/assets`, `/i18n`) parses, every element is closed, and no script calls the browser's
-dialogs, `alert`, `confirm` or `prompt` (reperto 198: confirmations are the panel's window, messages its notices). A
+dialogs, `alert`, `confirm` or `prompt` (finding 198: confirmations are the panel's window, messages its notices). A
 folder given as argument is left as it is. Usage: `sh tests/check-pages.sh <folder>`.
 
 **OsPatchTest** — the decisions behind installing FreeBSD patches (OsPatch): the target version from
 freebsd-update's tag file, its outputs (nothing to fetch, nothing to install, reboot then install
 again), whether a restart is needed or advised, and the install configuration with CreateBootEnv no.
 
-**home-panel-browser-test.js** — the panel card at the top of the dashboard (reperto 183), with the
+**home-panel-browser-test.js** — the panel card at the top of the dashboard (finding 183), with the
 simulated server two hours ahead of the browser: how long it has been running (counted with the
 server's time) and since when, with the time zone; the eye closed at first and the details asked
 for only when it is opened, with the mouse and with the keyboard; the ten rows of details and the
@@ -1634,7 +1637,7 @@ horizontal scrolling and with 44 px touch buttons. With `REMOTE` it runs on the 
 (**HomePanelE2EServer**, on the VM) and compares the card with the machine's data: the jar's
 fingerprint, commit, FreeBSD, port.
 
-**sieve-rules-browser-test.js** — the page when the mail server did not get the rules (reperto 223), only against the
+**sieve-rules-browser-test.js** — the page when the mail server did not get the rules (finding 223), only against the
 real server: **SieveRulesE2EServer** on the VM (as root, the test MySQL, the REAL SieveGenerator; it seeds
 `sieve-rules-shown.test` with alice, the alias bob and bob's filters left on the disk, and starts only with a plain file
 `install_scripts` next to the jar, so the alias conversion cannot run the mail configuration script). The port through
@@ -1648,7 +1651,7 @@ forwards and the auto-reply saved while refused. At the end `rm -r /var/mail/sie
 5 (the forward missing from the list, the dialog of bob still open).
 
 **sieve-dialogs-browser-test.js** — the Filters and Forwarding dialogs of the Mailboxes page work from the browser
-(reperto 224), only against the real server: **SieveDialogsE2EServer** on the VM (as root, the test MySQL, the REAL
+(finding 224), only against the real server: **SieveDialogsE2EServer** on the VM (as root, the test MySQL, the REAL
 SieveGenerator; it seeds `sieve-dialog-fields.test` with alice, no filters and one forward put straight in the database,
 `seeded@elsewhere.example`). Each phase on a freshly started server. The port through an SSH tunnel,
 `REMOTE=https://panel.localhost:PORT MAP=127.0.0.1 SESSION=...`, and `RULES` the command that prints alice's rules file
@@ -1665,7 +1668,7 @@ found"), with the server as before 8 (the filter does not open, the forward's de
 It also runs on the REAL panel of the VM (separated, with RootGate between its parts), signing in with a console code:
 `REMOTE=https://127.0.0.1:2096 VM_LOGIN="ssh ... root@192.168.1.20" DOMAIN=rehearsal.test FORWARD=bob@rehearsal.test`
 and `RULES` on alice's file there; alice must have no filters and that one forward. All OK on 10/11/2026, after the
-upgrade of the whole Sieve chain (reperti 212-224) with `tools/upgrade/upgrade-panel.sh`.
+upgrade of the whole Sieve chain (findings 212-224) with `tools/upgrade/upgrade-panel.sh`.
 
 SieveDialogsE2EServer, SieveRulesE2EServer and HomePanelE2EServer keep the panel's secrets and the vault's old key in
 their working folder unless `-Ddaemoxcp.mail.secrets.dir` / `-Ddaemoxcp.mail.vault.key` say otherwise. Before 10/11/2026 they
@@ -1761,8 +1764,7 @@ mailbox's webmail, a service, the reboot, the vault, the firewall; the body put 
 the handler; the changed role holding at once; the removed administrator out; the refusals in the
 log.
 
-**RootChannelTest** — the channel between the two parts of the separated panel,
-without a database: a request goes and comes back the same; the
+**RootChannelTest** — the channel between the two parts of the separated panel, without a database: a request goes and comes back the same; the
 headers outside the short list (Cookie, X-CSRF-Token, Authorization, Host, the proxies' ones) never
 pass; a field out of shape refuses the whole request (".." or an encoded dot, an unknown method, a
 client address that is not an IP, no administrator or session, a body over the limit); the socket is
@@ -1868,7 +1870,7 @@ with only part of the database, are left alone. A way back that forgets the pane
 
     java -Dmysql.port=33062 -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.RoundcubeDbUserMysqlTest
 
-**PanelDbPasswordTest** — the password of the panel's MySQL user changed once (reperto 232): on old servers it sat for
+**PanelDbPasswordTest** — the password of the panel's MySQL user changed once (finding 232): on old servers it sat for
 years in Roundcube's config.inc.php. Against a fake MySQL with a primary and a secondary password per account (RETAIN
 CURRENT PASSWORD, DISCARD OLD PASSWORD, 127.0.0.1 landing on localhost) and the real PendingDbPassword.settle: the
 change (both local accounts, the old password refused, another host's account untouched, the copies rewritten, the
@@ -1956,8 +1958,8 @@ aria-label and placeholder, has no Italian words left. For the DNS page a domain
 check, the time diagnostics and the autodns, autoconfig and MTA-STS tabs. Every API the page calls
 must have a simulated reply: an unknown call still gets `{ success: true }`, but the page fails. A
 bare reply hides the fields the page reads, and the error that follows looks like the page's fault
-(Settings and `GET /api/ssh-keys`, red from #116 until it was added; reperto 194). On the Security page the Fail2ban
-checks answer a second time with a jail that could not be read (reperto 200): the reason and what to do, no "if you
+(Settings and `GET /api/ssh-keys`, red from #116 until it was added; finding 194). On the Security page the Fail2ban
+checks answer a second time with a jail that could not be read (finding 200): the reason and what to do, no "if you
 do not fix it", no fix and no "fix all", "Not everything could be checked" on top, and "not checked" in words.
 
 **pkg-simulation-test.sh** — the simulation on a COPY of pkg's database, against a fake pkg that
@@ -1992,8 +1994,8 @@ saying so. **As root, on the VM.**
 **ServiceUsersTest** — the check of who runs every service (ServiceUsers.examine) on the VM's `ps`
 output before and after, with a planted fault for every warning and the cases that must NOT warn
 (Postfix's `local`, Dovecot's `auth`). Dovecot's `anvil` as root warns on 2.3 and not on 2.4, which needs it to reach
-every session's process (measured on the VM, reperto 213); `auth-worker` as root warns on both. And what every user of
-a service does (reperto 228, the owner asked for it on 15/11/2026): the processes of each user by a short name (Dovecot:
+every session's process (measured on the VM, finding 213); `auth-worker` as root warns on both. And what every user of
+a service does (finding 228, the owner asked for it on 15/11/2026): the processes of each user by a short name (Dovecot:
 root master/log/config/lmtp, dovecot anvil/auth/auth-worker, dovenull imap-login, vmail imap; Postfix: root master and
 local, postfix the rest; the panel's root part and web part; mysqld and mysqld_safe, not sh), root first on the page,
 sievec listed although it runs only when rules are saved, and a sentence in both languages for every user the panel
@@ -2003,7 +2005,7 @@ installs (none for a user it does not know). It calls nothing.
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.security.AcmeUserTest
     java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.ServiceUsersTest
 
-**ErrorTextTest** — what an exception says to the page (ErrorText, reperto 231). The routes used to put
+**ErrorTextTest** — what an exception says to the page (ErrorText, finding 231). The routes used to put
 `e.getMessage()` of any exception in the answer: a MySQL duplicate showed the table and the key, a missing file its
 path. Now only an error already translated for the page passes: ShownException (and ShownException.Argument, an
 IllegalArgumentException, both TranslatedError) and PasskeyException's key. Any other exception, also an
