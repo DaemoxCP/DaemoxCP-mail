@@ -6,7 +6,7 @@
 
 Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx · fail2ban · pf
 
-`solo FreeBSD 15.1+` · `amd64 / arm64` · `Java 25` · `AGPL-3.0` · `niente Docker, niente strato Linux` · `accesso senza password`
+`solo FreeBSD 15.1+` · `arm64 (amd64 non ancora provato)` · `Java 25` · `AGPL-3.0` · `niente Docker, niente strato Linux` · `accesso senza password`
 
 <a href="https://buymeacoffee.com/pietrogdamico"><img alt="Offrimi un caffè" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black" /></a>
 <a href="https://www.paypal.com/paypalme/pietrogdamico28"><img alt="Dona con PayPal" src="https://img.shields.io/badge/PayPal-donate-00457C?logo=paypal&logoColor=white" /></a>
@@ -30,12 +30,12 @@ Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx �
 - [Che cosa fa](#che-cosa-fa)
 - [Screenshot](#screenshot)
 - [Requisiti](#requisiti)
-- [I programmi della posta](#i-programmi-della-posta)
+- [I servizi della posta](#i-servizi-della-posta)
 - [Sicurezza: chi gira da root, e perché](#sicurezza-chi-gira-da-root-e-perché)
 - [Installazione](#installazione)
 - [L'uso di tutti i giorni](#luso-di-tutti-i-giorni)
+- [I programmi di posta](#i-programmi-di-posta)
 - [Tenerlo aggiornato](#tenerlo-aggiornato)
-- [Da FreeBSD Mail Panel](#da-freebsd-mail-panel)
 - [Riferimento](#riferimento)
 - [Se qualcosa non va](#se-qualcosa-non-va)
 - [Sostieni il progetto](#sostieni-il-progetto)
@@ -54,11 +54,11 @@ possono rompere la posta, firewall, ban, diagnostica.
 servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione dove FreeBSD se l'aspetta
 (`/usr/local/etc`). Un amministratore che conosce FreeBSD non trova niente di strano sulla macchina.
 
-È **prudente**. Il pannello non cambia mai qualcosa che non può controllare, e quando si rifiuta dice perché:
+È **prudente**. Il pannello non cambia mai niente che non può controllare, e quando si rifiuta dice perché:
 
 - ogni configurazione che scrive viene provata prima di essere usata (`postfix check`, `doveconf`, `nginx -t`,
   `pfctl -nf`, `fail2ban-client -t`);
-- un aggiornamento dei pacchetti della posta viene provato prima di farlo;
+- un aggiornamento dei pacchetti della posta viene provato prima di essere applicato;
 - ogni operazione rischiosa tiene una strada per tornare indietro, come boot environment ZFS o come copia del file.
 
 ---
@@ -93,9 +93,9 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 - Svuotamento automatico della *Junk* e del *Trash*, casella per casella, spento finché non lo si chiede: mai (il
   predefinito) oppure dopo 7, 14, 30, 60 o 90 giorni, scelto dall'amministratore nella finestra della casella o
   dall'utente nelle impostazioni della webmail (*Svuotamento automatico*). Dovecot cancella i messaggi che stanno nella
-  cartella da più tempo di così. Solo per le emergenze, dalla console del server, da root:
+  cartella da più tempo di così. Solo per le emergenze, dalla console del server, da root, da `/home/panel`:
   `java -jar daemoxcp-mail.jar --empty-folders junk|trash|both all|<casella>...` mostra quanti messaggi cancella e
-  chiede di scrivere quel numero prima di svuotare; resta nel registro di controllo.
+  chiede di scrivere quel numero prima di svuotare; resta nel registro delle azioni.
 - Coda di posta da guardare e da gestire; la dimensione massima dei messaggi.
 - Una casella che si autentica spedisce solo dai suoi indirizzi: il suo e quelli degli alias che puntano a lei (un
   catch-all dà alla sua casella gli altri indirizzi del dominio). Ogni altro mittente, dello stesso dominio o no, riceve
@@ -125,7 +125,7 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 - Certificati Let's Encrypt con `acme.sh` (il pacchetto di FreeBSD, che gira col suo utente `acme`), con la
   verifica DNS su Cloudflare.
 - Profili di configurazione di Apple Mail (Mac, iPhone, iPad) e autoconfig di Thunderbird: i programmi di posta
-  si configurano da soli. Provati con Apple Mail su macOS sul server vero: il profilo configura l'account, e la
+  si configurano da soli. Provati con Apple Mail su macOS su un server in produzione: il profilo configura l'account, e la
   posta parte e arriva. iPhone, iPad e Thunderbird non sono ancora stati provati con un programma di posta vero.
 
 **Sicurezza**
@@ -133,23 +133,23 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 - Le operazioni delicate (impostazioni, chiavi, la cassaforte) chiedono una conferma recente, valida 5 minuti: la
   passkey, un codice via email o un codice dalla console del server (`--access-code`), così un amministratore senza
   passkey su un server che non riesce ancora a spedire posta non resta mai bloccato.
-- Amministratori con ruoli, e un registro di ogni azione.
+- Amministratori con ruoli, e un registro delle azioni.
 - Jail di **fail2ban** per Postfix, Dovecot, Roundcube, Rspamd e il pannello stesso, con ban permanenti e la jail
   recidive.
 - Firewall **pf**:
   - tutto chiuso tranne quello che serve;
   - blocco per paese, in IPv4 e in IPv6;
   - una scheda che tiene il firewall del fornitore al passo con gli indirizzi di Cloudflare.
-- **IPv4, IPv6 o tutte e due**: una scelta in *Impostazioni* che Postfix, Dovecot, la webmail, la superficie sulla
+- **IPv4, IPv6 o tutte e due**: una scelta in *Impostazioni* che Postfix, Dovecot, la webmail, il sito pubblico sulla
   443 e pf seguono; SSH non cambia mai. Prima di cambiare qualcosa il pannello controlla che il server abbia un
   indirizzo e una rotta predefinita nella famiglia che resta, e dice cosa smetterebbe di funzionare: record DNS,
   Cloudflare, la posta con i server che hanno solo IPv4, la tua stessa connessione al pannello. Finché non scegli,
   non tocca niente.
 - **Gli indirizzi del server, con una guida in tutte e due le direzioni** (*Impostazioni*, *Indirizzi del server*):
-  cosa ha il server (indirizzo, strada, se arriva davvero su internet, i record A/AAAA del nome della posta, il DNS
+  cosa ha il server (indirizzo, rotta predefinita, se arriva davvero su internet, i record A/AAAA del nome della posta, il DNS
   inverso di ogni famiglia) e i passi per arrivare a IPv4 e IPv6, solo IPv4 o solo IPv6, e tornare indietro. L'IPv6 si
   aggiunge solo se il provider ne ha dato uno (su Hetzner il pannello lo legge da solo), mentre il server gira e senza
-  toccare l'IPv4, e resta solo se una prova vera mostra il server arrivare su internet; altrimenti tutto torna com'era.
+  toccare l'IPv4, e resta solo se una prova vera mostra che il server arriva su internet; altrimenti tutto torna com'era.
   La posta passa all'IPv6 solo col DNS inverso IPv6 a posto (Gmail e Microsoft lo pretendono). Un IPv4 che funziona il
   pannello non lo toglie mai: lo toglie il provider (su Hetzner a server spento), poi il pannello pulisce quello che
   resta. Una famiglia che stai usando per arrivare al pannello non si toglie mai, e SSH non si tocca.
@@ -208,19 +208,21 @@ documentazione (`203.0.113.0/24`, `2001:db8::/32`).</sub>
 
 | Cosa | Serve |
 |---|---|
-| Sistema operativo | **FreeBSD 15.1-RELEASE o successivo**, amd64 o arm64. Nient'altro. FreeBSD 15.0 è arrivato a fine vita il 30 settembre 2026 e non riceve più correzioni di sicurezza. |
+| Sistema operativo | **FreeBSD 15.1-RELEASE o successivo**. Nient'altro. FreeBSD 15.0 è arrivato a fine vita il 30 settembre 2026 e non riceve più correzioni di sicurezza. |
+| Processore | **arm64**: provato, su Hetzner Cloud e su una macchina di prova. amd64 usa gli stessi pacchetti di FreeBSD e dovrebbe funzionare allo stesso modo, ma non è ancora stato provato. |
 | File system | **ZFS**, per i boot environment: installazione, aggiornamenti e passaggi del pannello tengono una strada per tornare indietro con `bectl`. |
 | Memoria | **4 GB di RAM**. Misurato su un server in uso: ClamAV 1–1,3 GB, i due processi Java del pannello circa 0,5 GB, MySQL 0,1–0,5 GB; 2,5–3 GB in tutto. |
 | Disco | almeno 20 GB, più la posta. |
 | Rete | un indirizzo IPv4 pubblico, uno IPv6 pubblico, o tutti e due (con solo IPv6 la posta con i tanti server che hanno ancora solo IPv4 non passa), con un DNS inverso che puoi impostare, e la porta 25 in uscita aperta (molti fornitori la chiudono sugli account nuovi). |
 | Accesso | root via SSH con una chiave. **Il pannello non tocca mai la configurazione di SSH.** |
-| DNS | i domini di posta su **Cloudflare**, e un token API limitato alle loro zone. |
+| DNS | i domini di posta su **Cloudflare** (basta il piano gratuito), e un token API limitato alle loro zone. |
 | Java | OpenJDK 25 (`pkg install openjdk25`). |
 | Nomi | tre nomi: uno per la posta, uno per la webmail, uno per il pannello ([dettagli](#cosa-serve-prima-di-cominciare)). |
+| Browser | un qualsiasi browser aggiornato. Per le passkey, uno che le supporta: Safari, Chrome, Edge o Firefox. |
 
 ---
 
-## I programmi della posta
+## I servizi della posta
 
 Tutti dai pacchetti di FreeBSD, configurati dal pannello, avviati da `rc.d`.
 
@@ -244,7 +246,7 @@ Tutti dai pacchetti di FreeBSD, configurati dal pannello, avviati da `rc.d`.
 ## Sicurezza: chi gira da root, e perché
 
 Niente gira da root se non è indispensabile, e dove root resta il pannello dice perché, nella pagina
-*Aggiornamenti*, sotto gli utenti dei servizi.
+*Diagnostica*, nella scheda *Gli utenti dei servizi*.
 
 ### I processi
 
@@ -316,9 +318,10 @@ Ognuno può fare esattamente il suo lavoro, e niente di più.
   - un **codice di 8 cifre** dalla console del server.
 - **Nessuna enumerazione degli account.** Chiedere un codice dà la stessa risposta che l'indirizzo esista o no.
 - **Sessioni.**
-  - Stanno in MySQL come SHA-256 del loro token.
+  - Stanno in MySQL come HMAC-SHA256 del loro token, con una chiave che esiste solo nella memoria del pannello.
   - Il cookie ha il prefisso `__Host-` ed è `Secure`, `HttpOnly`, `SameSite=Strict`.
   - Scadono dopo 30 minuti di inattività e comunque dopo 12 ore, e si possono revocare.
+  - Un riavvio del pannello chiude tutte le sessioni, perché la chiave cambia: si rientra tutti.
   - Ogni richiesta che cambia qualcosa porta un token CSRF.
 - **Le email degli amministratori** sono cifrate con AES-256-GCM e cercate tramite un blind index (HMAC-SHA256).
   Le chiavi stanno fuori dal database.
@@ -327,7 +330,7 @@ Ognuno può fare esattamente il suo lavoro, e niente di più.
   - con una chiave AES-256-GCM nuova;
   - chiave a sua volta avvolta con RSA-OAEP 3072 nella chiave pubblica della parte root.
 
-  Chi prendesse la parte web non potrebbe leggerle.
+  Chi prendesse il controllo della parte web non potrebbe leggerle.
 - **Le risposte del pannello** portano:
   - una Content-Security-Policy stretta: niente script in linea, ogni file servito dal pannello stesso, nessuna CDN;
   - HSTS, `nosniff`, `frame-ancestors 'none'`.
@@ -351,10 +354,13 @@ Tutta l'installazione, da un server FreeBSD appena creato a un server di posta i
 un riavvio. Fai i passi in quest'ordine: ognuno si appoggia ai precedenti. Gli esempi usano `example.com`,
 `203.0.113.10` e `2001:db8::10`: al loro posto metti i tuoi nomi e i tuoi indirizzi.
 
+Sul server ci vuole circa mezz'ora; l'installazione del server di posta vero e proprio, al passo 6, dura pochi
+minuti. L'apertura della porta 25 in uscita (passo 1) dipende dal fornitore e può volerci di più: comincia da lì.
+
 ### Cosa serve prima di cominciare
 
-- **Un server** con FreeBSD 15.1 o successivo (amd64 o arm64) su **ZFS**, un indirizzo IPv4 pubblico, uno IPv6
-  pubblico o tutti e due, **4 GB di RAM** e almeno 20 GB di disco.
+- **Un server** con FreeBSD 15.1 o successivo (arm64; amd64 non ancora provato) su **ZFS**, un indirizzo IPv4
+  pubblico, uno IPv6 pubblico o tutti e due, **4 GB di RAM** e almeno 20 GB di disco.
 - **Accesso root via SSH con una chiave.**
 - **I tuoi domini su Cloudflare** (il loro DNS è gestito da Cloudflare).
 - **Tre nomi**, ognuno con un ruolo preciso:
@@ -396,7 +402,7 @@ un riavvio. Fai i passi in quest'ordine: ognuno si appoggia ai precedenti. Gli e
    del tuo provider» con l'elenco pronto da incollare e le stesse regole calcolate dalle porte vere del server.
 
    Non serve nessun'altra regola in ingresso: in particolare **nessuna per la 53 (DNS) e nessuna per la 123
-   (NTP)**. Il firewall di Hetzner Cloud tiene lo stato, quindi le risposte alle domande del server rientrano da
+   (NTP)**. Il firewall di Hetzner Cloud tiene lo stato, quindi le risposte alle richieste del server rientrano da
    sole, e una 123 aperta esporrebbe soltanto il servizio dell'orologio.
 
    **L'elenco di Cloudflare cambia ogni tanto, e lo aggiorni tu.** I token di Hetzner Cloud sono «Read» o
@@ -420,18 +426,22 @@ un riavvio. Fai i passi in quest'ordine: ognuno si appoggia ai precedenti. Gli e
    | A | `webmail` | `203.0.113.10` | **Proxy** |
    | A | `panel` | `203.0.113.10` | **Proxy** |
 
+   Con solo IPv6, `mail`, `webmail` e `panel` sono record AAAA con l'IPv6 del server, e non c'è nessun record A.
+
    Ripeti il record MX in ogni dominio di cui questo server riceve la posta. SPF, DKIM, DMARC, MTA-STS, autoconfig
    e i record SRV li scrive dopo il pannello stesso (passo 7): non li scrivi tu.
 2. **Modalità di cifratura SSL/TLS: Full (strict).** Cloudflare parla al server in HTTPS e ne controlla il
    certificato.
 3. **Certificati d'origine.** *SSL/TLS*, *Origin Server*, *Create Certificate*: tipo di chiave RSA (2048), i nomi
    (per esempio `panel.example.com` e `webmail.example.com`, oppure `*.example.com` ed `example.com`), validità fino
-   a 15 anni. Cloudflare mostra certificato e chiave privata una volta sola: salvali in due file, per esempio
-   `panel-origin.pem` e `panel-origin.key`. Un certificato d'origine copre i nomi di una sola zona: se pannello e
-   webmail stanno in due domini, creane uno in ciascuno.
-4. **Un token API per il pannello.** *My Profile*, *API Tokens*, *Create Token*, modello *Edit zone DNS*, con
-   **Zone › DNS › Edit** e **Zone › Zone › Read**, e in *Zone Resources* › *Include* › *Specific zone* ogni dominio
-   di posta. Mai la Global API Key. Lo inserisci nel pannello al passo 7.
+   a 15 anni. Cloudflare mostra certificato e chiave privata una volta sola: salvali in due file,
+   `panel-origin.pem` e `panel-origin.key`. Al passo 5 serve anche la coppia della webmail, `webmail-origin.pem` e
+   `webmail-origin.key`: se lo stesso certificato copre anche la webmail, salvane una seconda copia con quei due
+   nomi. Un certificato d'origine copre i nomi di una sola zona: se pannello e webmail stanno in due domini, creane
+   uno in ciascuno.
+4. **Un token API per il pannello.** *My Profile*, *API Tokens*, *Create Token*, modello *Edit zone DNS*. Ha già
+   **Zone › DNS › Edit**: aggiungi **Zone › Zone › Read**, e in *Zone Resources* › *Include* › *Specific zone*
+   scegli ogni dominio di posta. Mai la Global API Key. Lo inserisci nel pannello al passo 7.
 
 ### Passo 3 — Il sistema base
 
@@ -473,7 +483,7 @@ mount | grep -q ' on /proc ' || mount /proc; java -version
 
 ### Passo 5 — Il pannello e i certificati sul server
 
-1. **Prendi il jar del pannello.** Scarica `daemoxcp-mail.jar` dall'ultima
+1. **Prendi il jar del pannello.** Sul tuo computer, scarica `daemoxcp-mail.jar` dall'ultima
    [release](https://github.com/DaemoxCP/mail/releases) e controlla che il suo SHA-256 sia quello delle note della
    release:
 
@@ -481,9 +491,8 @@ mount | grep -q ' on /proc ' || mount /proc; java -version
    shasum -a 256 daemoxcp-mail.jar
    ```
 
-   (`sha256 -q daemoxcp-mail.jar` su FreeBSD). Su un server **solo IPv6** GitHub non si raggiunge dal server (non ha
-   ancora l'IPv6): scarica il jar sul tuo computer e copialo con `scp`. Oppure costruiscilo tu, su un qualsiasi computer
-   con Java 25 e Maven, da questo repository:
+   (`sha256sum daemoxcp-mail.jar` su Linux). Il punto 2 lo copia sul server. Oppure costruiscilo tu, su un qualsiasi
+   computer con Java 25 e Maven, da questo repository:
 
    ```bash
    tools/build-jar.sh
@@ -535,42 +544,58 @@ Apri il menu dalla cartella del pannello, in un terminale di almeno 120 × 40 ca
 cd /home/panel && java -jar daemoxcp-mail.jar
 ```
 
-Frecce per muoverti, Invio per scegliere, Tab per passare da un campo al successivo. Ogni opzione chiede prima una
-conferma, con *Cancel* selezionato: premi Tab per arrivare a *OK*. In una finestra con un solo campo, Invio conferma
-quello che hai scritto. Il menu è in inglese; in italiano si apre con `--lang it` (vedi [Lingue](#lingue)): le voci qui sotto
-hanno il nome inglese. Segui le opzioni in quest'ordine:
+Come ci si muove:
+
+- Frecce per muoverti, Invio per scegliere, Tab per passare da un campo o da un pulsante al successivo.
+- Le opzioni da 1 a 4, la 6 e l'ultima voce chiedono prima una conferma, con *Cancel* selezionato: premi Tab per
+  arrivare a *OK*, poi Invio.
+- In una finestra con un solo campo, Invio conferma quello che hai scritto.
+- In un modulo (opzioni 2 e 3) alcuni campi hanno già un valore: un esempio o quello attuale. Il pulsante *Clear*
+  accanto a un campo lo svuota. *Save* mostra cosa ha trovato il pannello, con *Cancel* e *OK*: Tab fino a *OK* e
+  Invio. *Exit* chiede di confermare, perché le modifiche non salvate si perdono.
+
+Su un server nuovo il menu è di solito in inglese; in italiano si apre con `--lang it` (vedi [Lingue](#lingue)): le voci qui sotto hanno il nome
+inglese. Segui le opzioni in quest'ordine:
 
 1. **1) Time zone, clock (NTP) and DNS resolver.** Scrivi il fuso orario del server come nome IANA (per esempio
-   `Europe/Rome` o `UTC`): i nomi che non esistono vengono rifiutati. Accende anche NTP.
+   `Europe/Rome` o `UTC`): i nomi che non esistono vengono rifiutati. Il campo ha già il fuso attuale del server.
+   Accende anche NTP e il risolutore DNS locale.
 2. **2) Edit Panel Configuration.**
-   - *PANEL PORT*: `2096`;
-   - *PANEL HOST*: il nome del pannello, `panel.example.com` (non un indirizzo IP: passkey e Cloudflare vogliono un
-     nome);
+   - *PANEL PORT*: `2096` (c'è già);
+   - *PANEL HOST*: il nome del pannello, `panel.example.com`, al posto del `127.0.0.1` che c'è già (non un indirizzo
+     IP: passkey e Cloudflare vogliono un nome);
    - *SSL CERTIFICATE* e *SSL PRIVATE KEY*: `/root/certs/panel-origin.pem` e `/root/certs/panel-origin.key`
      (funziona anche incollare il testo PEM).
 
    Prima di salvare il pannello controlla che il certificato si legga, sia valido adesso, copra il nome del
-   pannello e che la chiave sia la sua, e mostra cosa copre e quando scade.
-3. **3) Edit Roundcube Configuration.** *DOMAIN* `webmail.example.com`, *PORT* `8443`, *SSL CERT PATH* e
-   *SSL KEY PATH* `/usr/local/etc/ssl/webmail/webmail-origin.pem` e `…/webmail-origin.key`. Stessi controlli.
-4. **4) Install/Reinstall Mail Server.** Chiede il nome della posta, `mail.example.com`, controlla i tre nomi, poi
-   installa e configura MySQL, Postfix, Dovecot, Rspamd, ClamAV, Redis, nginx, PHP e Roundcube, fail2ban e il
-   firewall. Ci vogliono alcuni minuti e va avanti anche se il terminale si chiude; il suo registro è in
-   `/var/log/daemoxcp-mail/`. Prima di cominciare tiene il server com'era in un boot environment. **Cancella ogni
-   configurazione di posta, casella e account del pannello già presente**: su un server nuovo non c'è niente da
-   perdere.
-5. **5) Emergency access code.** Non c'è ancora un amministratore: chiede un nome e un'email, crea il primo
-   amministratore e mostra un **codice di 8 cifre**, valido 15 minuti.
+   pannello e che la chiave sia la sua, e mostra cosa copre e quando scade. Certificato e chiave li tiene nella sua
+   configurazione: dopo il salvataggio il campo mostra il testo PEM invece del percorso.
+3. **3) Edit Roundcube Configuration.** *DOMAIN* `webmail.example.com` (al posto dell'esempio che c'è già),
+   *PORT* `8443`, *SSL CERT PATH* e *SSL KEY PATH* `/usr/local/etc/ssl/webmail/webmail-origin.pem` e
+   `…/webmail-origin.key`. Stessi controlli; dopo il salvataggio mostra l'indirizzo della webmail.
+4. **4) Install/Reinstall Mail Server.** Chiede il nome della posta: al posto dell'esempio `mail.example.com`
+   scrivi il tuo. Controlla i tre nomi, poi installa e configura MySQL, Postfix, Dovecot, Rspamd, ClamAV, Redis,
+   nginx, PHP e Roundcube, fail2ban e il firewall. Ci vogliono pochi minuti e va avanti anche se il terminale si
+   chiude; il suo registro è in `/var/log/daemoxcp-mail/`. Prima di cominciare tiene il server com'era in un boot
+   environment. **Cancella ogni configurazione di posta, casella e account del pannello già presente**: su un
+   server nuovo non c'è niente da perdere. Alla fine dice «Mail server installed successfully!»: premi Invio.
+5. **5) Emergency access code.** Non c'è ancora un amministratore: chiede un nome e un'email (senza conferma
+   prima), crea il primo amministratore e mostra un **codice di 8 cifre**, valido 15 minuti, una volta sola.
+   Scrivitelo. Se scade o lo perdi, uno nuovo te lo dà `java -jar daemoxcp-mail.jar --access-code` (da
+   `/home/panel`, in un secondo terminale).
 6. **>>> Start the DaemoxCP Mail web server <<<**, l'ultima voce (la 6, che torna a prima dell'ultima
-   reinstallazione, adesso non serve). Il pannello parte; per adesso lascia il terminale aperto.
+   reinstallazione, adesso non serve). Il pannello parte e scrive nel terminale quello che fa; per adesso
+   lascialo aperto.
 
 ### Passo 7 — Il primo accesso, e la configurazione dal pannello
 
 1. Apri `https://panel.example.com:2096`. Nella pagina di accesso scegli **Codice dalla console del server** e
-   scrivi il codice di 8 cifre.
+   scrivi il codice di 8 cifre. Il pannello ti porta in *Account*.
 2. **Passkey.** In *Account* registra una passkey (impronta, volto, PIN del dispositivo o una chiave hardware),
    meglio due su due dispositivi diversi. Da qui in poi entri con una passkey, o con un codice di 6 cifre via email.
-3. **Avvio all'accensione.** *Diagnostica*, scheda *Sistema operativo*, **Avvio all'accensione**, poi **Installa e
+   Il codice via email vuole che il server possa spedire posta (porta 25 in uscita, passo 1); fino ad allora, una
+   passkey o un codice dalla console.
+3. **Avvio automatico.** *Diagnostica*, scheda *Sistema operativo*, **Avvio automatico**, poi **Installa e
    abilita**. Scrive `/usr/local/etc/rc.d/daemoxcp_mail` e lo accende, senza avviare una seconda copia del
    pannello.
 4. Torna al terminale e premi **Invio**: il pannello avviato dal menu si ferma. Avvialo come servizio, come girerà
@@ -584,8 +609,8 @@ hanno il nome inglese. Segui le opzioni in quest'ordine:
    service daemoxcp_mail status
    ```
 
-   Da adesso parte da solo a ogni accensione. Provalo: `shutdown -r now`, e dopo un minuto o due il pannello
-   risponde di nuovo.
+   Rientra nel pannello: il riavvio ha chiuso la tua sessione. Da adesso parte da solo a ogni accensione. Provalo:
+   `shutdown -r now`, e dopo un minuto o due il pannello risponde di nuovo.
 5. **Cloudflare.** Nella pagina *Cloudflare* aggiungi l'account col token del passo 2 (prima **Verifica token**),
    poi sceglilo per il certificato del server di posta.
 6. **Let's Encrypt.** Nella pagina *Certificati SSL*, scheda «Let's Encrypt non è pronto: manca acme.sh o il suo account»: scrivi l'email per
@@ -603,8 +628,12 @@ hanno il nome inglese. Segui le opzioni in quest'ordine:
    - metti l'elenco di Cloudflare nella regola di pannello e webmail;
    - premi **Ho messo questa lista nel firewall del mio provider**.
 9. **Controlla tutto.** *Diagnostica*, **Controlla tutto**: ciò che va guardato viene prima, ognuno col suo passo
-   successivo. Poi crea le caselle (*Caselle*, **Aggiungi Casella**) e manda e ricevi un messaggio di prova, per
-   esempio dalla webmail.
+   successivo.
+10. **Le caselle e un messaggio di prova.** Crea le caselle (*Caselle*, **Aggiungi Casella**). Poi apri la webmail,
+    `https://webmail.example.com:8443`, entra con l'indirizzo completo di una casella e la sua password, manda un
+    messaggio a un tuo indirizzo altrove (Gmail, iCloud…) e rispondi da lì. Di solito arrivano tutti e due entro un
+    minuto; un messaggio che Rspamd trova dubbio può essere invitato a ripassare qualche minuto dopo
+    (greylisting). Per configurare i programmi di posta, vedi [I programmi di posta](#i-programmi-di-posta).
 
 ---
 
@@ -623,9 +652,32 @@ hanno il nome inglese. Segui le opzioni in quest'ordine:
 | **Fail2ban**, **Firewall** | jail e ban, politica di pf, paesi, il firewall del fornitore |
 | **Aggiornamenti** | FreeBSD, pacchetti, riavvii, il ramo dei pacchetti |
 | **Diagnostica** | *Controlla tutto*, col passo successivo per ogni cosa trovata |
-| **Registri**, **Percorsi di sistema** | cosa scrivono i servizi, e dove sta ogni cosa |
+| **Log**, **Percorsi di sistema** | cosa scrivono i servizi, e dove sta ogni cosa |
 | **Amministratori** | chi può entrare e con quale ruolo; il registro delle azioni |
 | **Impostazioni**, **Account** | le opzioni del pannello, fra cui IPv4, IPv6 o tutte e due; le tue passkey e le tue sessioni |
+
+---
+
+## I programmi di posta
+
+Ogni casella funziona con qualsiasi programma di posta (Apple Mail, Thunderbird, Outlook, l'app di posta del
+telefono) con queste impostazioni:
+
+| | Server | Porta | Sicurezza |
+|---|---|---|---|
+| Posta in arrivo (IMAP) | `mail.example.com` | 993 | SSL/TLS |
+| Posta in uscita (SMTP) | `mail.example.com` | 465, oppure 587 | SSL/TLS sulla 465, STARTTLS sulla 587 |
+
+- **Nome utente**: l'indirizzo completo della casella, per esempio `alice@example.com`, sia per la posta in arrivo
+  sia per quella in uscita. **Password**: quella della casella.
+- **Apple Mail** (Mac, iPhone, iPad): in *Caselle*, il profilo di configurazione Apple della casella. Aprilo sul
+  dispositivo e l'account si configura da solo. Provato su macOS.
+- **Thunderbird** trova le impostazioni da solo partendo dall'indirizzo, grazie ai record di autoconfig che scrive
+  *Configura tutto*. Non ancora provato con un Thunderbird vero.
+- **La webmail**: `https://webmail.example.com:8443`, oppure **Apri la webmail** da una casella nel pannello.
+- **POP3** (995, SSL/TLS) solo se è acceso in *Impostazioni*.
+- Una casella spedisce solo dai suoi indirizzi: il suo e quelli degli alias che puntano a lei.
+- Chi usa la posta cambia la sua password dalla webmail: *Impostazioni* → *Password*.
 
 ---
 
@@ -634,8 +686,17 @@ hanno il nome inglese. Segui le opzioni in quest'ordine:
 - **FreeBSD e i programmi della posta**: la pagina *Aggiornamenti*. Dice cosa c'è di nuovo e fa ogni passo in
   ordine, coi suoi controlli. I pacchetti della posta sono bloccati contro un semplice `pkg upgrade`: li aggiorna il
   pannello, uno alla volta, dopo aver controllato che la versione nuova non rompa la posta.
-- **Il pannello stesso**: costruisci il jar nuovo e lancia `tools/upgrade/upgrade-panel.sh` sul server (vedi
-  [`tools/upgrade/README.md`](tools/upgrade/README.md)). Prima di toccare qualsiasi cosa:
+- **Il pannello stesso**: dalla [release](https://github.com/DaemoxCP/mail/releases) nuova copia
+  `daemoxcp-mail.jar` e i due script di `tools/upgrade/` in `/root/panel-upgrade/` sul server (creala prima con
+  `install -d -m 700 /root/panel-upgrade`), poi, da root, con lo SHA-256 scritto nelle note della release:
+
+  ```bash
+  sh /root/panel-upgrade/upgrade-panel.sh /root/panel-upgrade/daemoxcp-mail.jar <SHA-256>
+  ```
+
+  Un jar costruito da te funziona allo stesso modo, col suo SHA-256. La guida completa, con la casella di prova,
+  cosa controlla ogni passo e come tornare indietro, è in [`tools/upgrade/README.it.md`](tools/upgrade/README.it.md).
+  Prima di toccare qualsiasi cosa, lo script:
   - controlla lo SHA-256 del jar;
   - fotografa lo stato del server;
   - tiene un boot environment e una copia del pannello.
@@ -644,7 +705,8 @@ hanno il nome inglese. Segui le opzioni in quest'ordine:
   - il primo avvio può fare solo le migrazioni della versione nuova;
   - il secondo non deve avere più niente da fare.
 
-  `rollback-panel.sh` rimette tutto com'era senza perdere la posta.
+  `rollback-panel.sh` rimette tutto com'era, MySQL compreso, senza perdere la posta. Un aggiornamento riavvia il pannello, quindi si
+  rientra tutti; la posta non si ferma.
 
   Quando esce una versione nuova, il pannello te lo dice. Una volta al giorno legge l'elenco delle release di
   [DaemoxCP/mail](https://github.com/DaemoxCP/mail/releases) su GitHub. Se una è più nuova del pannello, lo dice,
@@ -655,7 +717,7 @@ hanno il nome inglese. Segui le opzioni in quest'ordine:
 
   Non scarica e non installa niente: l'aggiornamento resta il passo qui sopra. Il controllo non manda a GitHub
   nient'altro che la richiesta stessa (GitHub vede l'indirizzo del server). Si spegne dalla pagina *Aggiornamenti*.
-  Un pannello in beta (0.x) sente anche delle pre-release; uno 1.x solo delle release.
+  Un pannello in beta (0.x) viene avvisato anche delle pre-release; uno 1.x solo delle release.
 - **Gli indirizzi di Cloudflare**: quando la *Diagnostica* dice che Cloudflare ha cambiato il suo elenco, aggiorna
   la regola di pannello e webmail nel firewall del fornitore e confermalo nella pagina *Firewall*.
 
@@ -665,42 +727,8 @@ hanno il nome inglese. Segui le opzioni in quest'ordine:
 ### I test
 
 `tests/` contiene i test del pannello, una classe Java ciascuno, più le prove nel browser con Playwright. Si lanciano a
-mano su una macchina FreeBSD di prova prima di ogni release: come, in [`tests/README.md`](tests/README.md).
-
----
-
-## Da FreeBSD Mail Panel
-
-DaemoxCP Mail si chiamava *FreeBSD Mail Panel* fino al 17 novembre 2026. Un server installato con quel nome passa al
-nuovo **da solo, al primo avvio di questa versione**, con `upgrade-panel.sh` come sempre. Ogni passo:
-
-- viene provato;
-- se non riesce rimette le cose com'erano;
-- dice nel registro cosa ha fatto.
-
-Un secondo avvio non ha niente da fare.
-
-| Cosa | Prima | Adesso |
-|---|---|---|
-| servizio | `service mailpanel …` | `service daemoxcp_mail …` |
-| jar | `freebsd-mail-panel-1.0.jar` | `daemoxcp-mail.jar` |
-| utente e gruppo della parte web | `mailpanel` | `daemoxcp_mail` (stesso uid e gid) |
-| segreti | `/usr/local/etc/mail-panel/` | `/usr/local/etc/daemoxcp-mail/` |
-| dati | `/var/db/mailpanel/`, `/var/db/mail-panel/` | `/var/db/daemoxcp-mail/` |
-| database MySQL | `mailserver` | `daemoxcp_mail` |
-| utenti MySQL | `mailpanel`, `mailpanel_web`, `mailpanel_routines`, `mailpanel_postfix`, `mailpanel_dovecot` | `daemoxcp_mail`, `daemoxcp_mail_web`, `daemoxcp_mail_routines`, `daemoxcp_mail_postfix`, `daemoxcp_mail_dovecot` |
-| jail di fail2ban | `mail-panel-auth`, `mailpanel-public` | `daemoxcp-mail-auth`, `daemoxcp-mail-public` (i ban passano) |
-| registro degli accessi | `/var/log/mail-panel-auth.log` | `/var/log/daemoxcp-mail-auth.log` |
-| plugin di Roundcube | `mailpanel_sso` | `daemoxcp_mail_sso` |
-| segno sui pacchetti bloccati | `mail_panel_lock` | `daemoxcp_mail_lock` |
-
-Lungo la strada cambiano anche:
-
-- le mappe di Postfix, l'SQL di Dovecot e la configurazione di Roundcube;
-- i file di nginx e di pf;
-- i commenti che il pannello aveva scritto nei file dei servizi.
-
-Ogni servizio viene controllato e ricaricato.
+mano su una macchina FreeBSD di prova prima di ogni release, insieme a un'installazione da zero che segue questo
+README: come, in [`tests/README.md`](tests/README.md).
 
 ---
 
@@ -716,15 +744,12 @@ Ogni servizio viene controllato e ricaricato.
 | `java -jar daemoxcp-mail.jar --create-admin <nome> <email>` | il primo amministratore, quando non ce n'è nessuno |
 | `java -jar daemoxcp-mail.jar --ip-family both\|ipv4\|ipv6\|ipv6out` | IPv4, IPv6, tutte e due, o tutte e due con la posta in IPv6 solo in uscita, come in *Impostazioni*, da root: la strada per tornare indietro quando una scelta ti ha chiuso fuori dal pannello |
 | `java -jar daemoxcp-mail.jar --addresses show\|ipv6-off\|ipv4-dhcp` | gli indirizzi del server, da root: vederli, togliere l'IPv6 aggiunto dal pannello (tornano le righe di `rc.conf` di prima), o riprendere l'IPv4 col DHCP |
+| `java -jar daemoxcp-mail.jar --empty-folders junk\|trash\|both all\|<casella>...` | svuota *Junk*, *Trash* o tutte e due, in ogni casella o in quelle indicate, da root: mostra quanti messaggi cancella e chiede di scrivere quel numero |
 | `service daemoxcp_mail start\|stop\|restart\|status` | il pannello come servizio |
 
 I comandi da console vanno lanciati da `/home/panel`: il database del pannello è in `database/` accanto al jar.
 
-Il jar si chiama `daemoxcp-mail.jar`, senza la versione (la versione è dentro, e nella dashboard). Sui server
-installati con una build precedente il file si chiama ancora `daemoxcp-mail-1.0.jar` e il servizio continua a usare
-quello: al primo avvio il pannello aggiunge accanto il collegamento `daemoxcp-mail.jar`, così i comandi qui sopra sono
-uguali dappertutto, e `tools/upgrade/upgrade-panel.sh`, che sostituisce il file vero, non lascia mai indietro il
-collegamento.
+Il jar si chiama `daemoxcp-mail.jar`, senza la versione: la versione è dentro, e nella dashboard.
 
 ### Il menu nel terminale
 
@@ -793,7 +818,7 @@ suo codice in un elenco:
    CLDR: `I18n.pluralCategory` sul server, `Intl.PluralRules` nel browser. Per una lingua che non è in
    `I18n.PLURAL_RULES` prima va scritta lì la sua regola.
 3. Aggiungi il codice all'elenco della procedura del database `set_admin_language` (`SqlCatalog.java`): il
-   database salva solo le lingue del pannello. La procedura si aggiorna da sola al primo avvio.
+   database salva solo le lingue del pannello. La procedura si aggiorna da sola al prossimo avvio.
 4. Ricostruisci il jar (`tools/build-jar.sh`) e fai girare `I18nTest` e `layout-browser-test.js`
    ([tests/README.md](tests/README.md)). Rifiutano una chiave che l'italiano non ha, un `{valore}` che manca, una
    forma del plurale che la lingua non ha e una lingua che manca dall'elenco della procedura.
@@ -812,10 +837,11 @@ al terminale. Prende, in quest'ordine:
 3. per un comando che riguarda un amministratore (`--access-code nome`), la lingua che quell'amministratore ha scelto
    nel pannello;
 4. la lingua del pannello: quella scelta dal primo amministratore attivo;
-5. l'inglese. I pulsanti delle finestre del menu vengono da Lanterna,
-che ha le sue traduzioni; quelle italiane stanno in `src/main/resources/multilang/lanterna-ui_it.properties`, e una
-lingua nuova può volere il suo file anche lì. I registri e i giornali delle operazioni restano in inglese, uguali per
-tutti.
+5. l'inglese.
+
+I pulsanti delle finestre del menu vengono da Lanterna, che ha le sue traduzioni; quelle italiane stanno in
+`src/main/resources/multilang/lanterna-ui_it.properties`, e una lingua nuova può volere il suo file anche lì. I
+log e i registri delle operazioni restano in inglese, uguali per tutti.
 
 `FixedTextsTest` tiene vero tutto questo: un testo fisso in una pagina, in uno script, in un attributo, in una
 risposta del server o in una finestra della console la fa fallire.
@@ -835,10 +861,15 @@ importanza. Poi:
 |---|---|
 | la posta non esce | *Diagnostica*, «Posta in uscita (porta 25)»: quasi sempre il fornitore blocca ancora la 25; poi il DNS inverso |
 | la posta non arriva | il record MX, la *Coda di posta*, `/var/log/maillog` |
-| un programma di posta non entra | *Fail2ban*: l'indirizzo può essere bannato; la casella può essere disattivata |
+| dall'altra parte la posta finisce nello spam | *DNS*: DKIM, SPF e DMARC a posto (*Configura tutto*); il DNS inverso dell'indirizzo del server è il nome della posta |
+| un programma di posta non entra | il nome utente è l'indirizzo completo; *Fail2ban*: l'indirizzo può essere bannato; la casella può essere disattivata |
+| la webmail o il pannello non si aprono | il nome è in **Proxy** su Cloudflare, SSL/TLS è **Full (strict)**, e il firewall del fornitore lascia arrivare gli indirizzi di Cloudflare sulla 2096 e sulla 8443 |
 | il pannello non risponde | `service daemoxcp_mail status`, poi `/var/db/daemoxcp-mail/panel.log` |
 | `421 Misdirected Request` | il pannello è stato chiamato per IP o con un altro nome: usa il suo nome |
-| nessun amministratore riesce a entrare | `java -jar daemoxcp-mail.jar --access-code` da `/home/panel` |
+| il codice di 8 cifre è scaduto, o si è perso | uno nuovo, da `/home/panel`: `java -jar daemoxcp-mail.jar --access-code [nome]` (il nome quando gli amministratori sono più d'uno) |
+| il codice via email non arriva | il server non riesce ancora a spedire (porta 25 in uscita): entra con una passkey o con un codice dalla console |
+| sono usciti tutti dal pannello | il pannello è ripartito (un aggiornamento, un riavvio): chiude tutte le sessioni, apposta |
+| nessun amministratore riesce a entrare | `java -jar daemoxcp-mail.jar --access-code [nome]` da `/home/panel` |
 | il pannello non risponde più dopo aver scelto solo IPv4 o solo IPv6 | da root, da `/home/panel`: `java -jar daemoxcp-mail.jar --ip-family both` |
 | il pannello non risponde più dopo un passo di *Indirizzi del server* | da root, da `/home/panel`: `java -jar daemoxcp-mail.jar --addresses show`, poi `--addresses ipv6-off` o `--addresses ipv4-dhcp`; la console web del provider funziona anche senza rete |
 
@@ -868,7 +899,7 @@ DaemoxCP Mail è software libero, distribuito con la **GNU Affero General Public
 la fai usare ad altri attraverso la rete, devi dare loro il suo codice sorgente con la stessa licenza, insieme a
 questa nota di copyright.
 
-FreeBSD è un marchio registrato della FreeBSD Foundation; DaemoxCP non è affiliato né approvato da lei. Il 😈 è
+FreeBSD è un marchio registrato della FreeBSD Foundation; DaemoxCP non è affiliato alla FreeBSD Foundation né approvato da essa. Il 😈 è
 una semplice emoji, un omaggio al BSD Daemon: il disegno ufficiale del BSD Daemon è © Marshall Kirk McKusick e qui
 non è incluso. Tutti gli altri programmi che DaemoxCP Mail installa appartengono ai loro autori, con la loro
 licenza.

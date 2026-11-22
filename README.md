@@ -6,7 +6,7 @@
 
 Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx · fail2ban · pf
 
-`FreeBSD 15.1+ only` · `amd64 / arm64` · `Java 25` · `AGPL-3.0` · `no Docker, no Linux layer` · `passwordless sign-in`
+`FreeBSD 15.1+ only` · `arm64 (amd64 not yet tested)` · `Java 25` · `AGPL-3.0` · `no Docker, no Linux layer` · `passwordless sign-in`
 
 <a href="https://buymeacoffee.com/pietrogdamico"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black" /></a>
 <a href="https://www.paypal.com/paypalme/pietrogdamico28"><img alt="Donate with PayPal" src="https://img.shields.io/badge/PayPal-donate-00457C?logo=paypal&logoColor=white" /></a>
@@ -34,8 +34,8 @@ Postfix · Dovecot · Rspamd · ClamAV · Redis · MySQL · Roundcube · nginx �
 - [Security model: who runs as root, and why](#security-model-who-runs-as-root-and-why)
 - [Installation](#installation)
 - [Daily use](#daily-use)
+- [Mail programs](#mail-programs)
 - [Keeping it up to date](#keeping-it-up-to-date)
-- [Coming from FreeBSD Mail Panel](#coming-from-freebsd-mail-panel)
 - [Reference](#reference)
 - [Troubleshooting](#troubleshooting)
 - [Support the project](#support-the-project)
@@ -54,7 +54,7 @@ It is **native**: no containers, no Linux compatibility layer, no hidden copies 
 the FreeBSD package, running under FreeBSD's `rc.d`, with its configuration where FreeBSD expects it
 (`/usr/local/etc`). An administrator who knows FreeBSD finds nothing unusual on the machine.
 
-It is **careful**. The panel never changes something it cannot check, and it says why when it refuses:
+It is **careful**. The panel never changes anything it cannot check, and it says why when it refuses:
 
 - every configuration it writes is tested (`postfix check`, `doveconf`, `nginx -t`, `pfctl -nf`,
   `fail2ban-client -t`) before it is used;
@@ -93,8 +93,8 @@ It is **careful**. The panel never changes something it cannot check, and it say
 - Automatic emptying of *Junk* and *Trash*, per mailbox, off until asked: never (the default) or after 7, 14, 30, 60 or
   90 days, chosen by the administrator in the mailbox's window or by the user in the webmail's settings (*Automatic
   emptying*). Dovecot deletes the messages that have been in the folder longer than that. For emergencies only, from
-  the server's console, as root: `java -jar daemoxcp-mail.jar --empty-folders junk|trash|both all|<mailbox>...` shows
-  how many messages it deletes and asks for that number before emptying; the audit log has it.
+  the server's console, as root, from `/home/panel`: `java -jar daemoxcp-mail.jar --empty-folders junk|trash|both all|<mailbox>...` shows
+  how many messages it deletes and asks you to type that number before emptying; the audit log has it.
 - A mail queue you can inspect and act on; the maximum message size.
 - A mailbox that signs in sends only from its own addresses: its own and those of the aliases that point to it (a
   catch-all gives its mailbox the other addresses of the domain). Any other sender, of the same domain or not, gets
@@ -123,7 +123,7 @@ It is **careful**. The panel never changes something it cannot check, and it say
 - Let's Encrypt certificates through `acme.sh` (the FreeBSD package, running as its own `acme` user), with the
   DNS challenge on Cloudflare.
 - Apple Mail configuration profiles (Mac, iPhone, iPad) and Thunderbird autoconfig: clients set themselves up.
-  Tested with Apple Mail on macOS on the real server: the profile sets up the account, and mail is sent and
+  Tested with Apple Mail on macOS on a production server: the profile sets up the account, and mail is sent and
   received. iPhone, iPad and Thunderbird have not been tried with a real client yet.
 
 **Security**
@@ -139,7 +139,7 @@ It is **careful**. The panel never changes something it cannot check, and it say
   - a default-deny policy;
   - blocking by country, over IPv4 and IPv6;
   - a card that keeps your provider's firewall in step with Cloudflare's address list.
-- **IPv4, IPv6 or both**: one choice in *Settings* that Postfix, Dovecot, the webmail, the 443 surface and pf
+- **IPv4, IPv6 or both**: one choice in *Settings* that Postfix, Dovecot, the webmail, the public site on 443 and pf
   follow; SSH never changes. Before anything changes the panel checks that the server has an address and a
   default route in the family that stays, and says what would stop working: DNS records, Cloudflare, mail with
   servers that have only IPv4, your own connection to the panel. Until you choose, nothing is touched.
@@ -208,15 +208,17 @@ documentation (`203.0.113.0/24`, `2001:db8::/32`).</sub>
 
 | What | Needed |
 |---|---|
-| Operating system | **FreeBSD 15.1-RELEASE or later**, amd64 or arm64. Nothing else. FreeBSD 15.0 reached its end of life on 30 September 2026 and no longer gets security fixes. |
+| Operating system | **FreeBSD 15.1-RELEASE or later**. Nothing else. FreeBSD 15.0 reached its end of life on 30 September 2026 and no longer gets security fixes. |
+| Processor | **arm64**: tested, on Hetzner Cloud and on a test machine. amd64 uses the same FreeBSD packages and should work the same, but it has not been tested yet. |
 | File system | **ZFS**, for boot environments: the installation, updates and the panel's own upgrades keep a way back with `bectl`. |
 | Memory | **4 GB of RAM**. Measured on a running server: ClamAV 1–1.3 GB, the panel's two Java processes about 0.5 GB, MySQL 0.1–0.5 GB; 2.5–3 GB in all. |
 | Disk | at least 20 GB, plus the mail. |
 | Network | a public IPv4 address, a public IPv6 one, or both (with IPv6 only, mail to and from the many servers that still have only IPv4 does not get through), with a reverse DNS you can set, and outgoing port 25 open (many providers close it on new accounts). |
 | Access | root over SSH with a key. **The panel never touches the SSH configuration.** |
-| DNS | your mail domains on **Cloudflare**, and an API token limited to their zones. |
+| DNS | your mail domains on **Cloudflare** (the free plan is enough), and an API token limited to their zones. |
 | Java | OpenJDK 25 (`pkg install openjdk25`). |
 | Names | three host names: one for mail, one for the webmail, one for the panel ([details](#what-you-need-before-you-start)). |
+| Browser | any current browser. For passkeys, one that supports them: Safari, Chrome, Edge or Firefox. |
 
 ---
 
@@ -243,8 +245,8 @@ All from FreeBSD packages, configured by the panel, started by `rc.d`.
 
 ## Security model: who runs as root, and why
 
-Nothing runs as root unless it has to, and where root stays the panel says why, on the *Updates* page,
-under the service users.
+Nothing runs as root unless it has to, and where root stays the panel says why, on the *Diagnostics* page,
+in the *Service users* card.
 
 ### The processes
 
@@ -314,9 +316,11 @@ Each user can do exactly its job, and no more.
   required), with a **6-digit code** sent by email (valid 10 minutes, 5 attempts, only its HMAC is stored),
   or with an **8-digit code** from the server console.
 - **No account enumeration.** Asking for a code gives the same answer whether the address exists or not.
-- **Sessions** are kept in MySQL as the SHA-256 of their token. The cookie is `__Host-` prefixed, `Secure`,
-  `HttpOnly`, `SameSite=Strict`. A session expires after 30 minutes idle and 12 hours at most, and can be
-  revoked. Every request that changes state carries a CSRF token.
+- **Sessions** are kept in MySQL as an HMAC-SHA256 of their token, with a key that exists only in the panel's
+  memory. The cookie is `__Host-` prefixed, `Secure`, `HttpOnly`, `SameSite=Strict`. A session expires after 30
+  minutes idle and 12 hours at most, and can be revoked. A restart of the panel ends every session, because the
+  key changes: everyone signs in again. Every request that changes state
+  carries a CSRF token.
 - **Administrators' emails** are encrypted with AES-256-GCM and searched through a blind index (HMAC-SHA256).
   The keys are kept outside the database.
 - **Mailbox passwords** are stored as BLF-CRYPT hashes, the form Dovecot reads. The copy the administrator can
@@ -346,10 +350,13 @@ The whole installation, from a FreeBSD server that has just been created to a ma
 back by itself after a reboot. Do the steps in this order: each relies on the ones before. The examples use
 `example.com`, `203.0.113.10` and `2001:db8::10`: put your own names and addresses in their place.
 
+On the server it takes about half an hour; the installation of the mail server itself, step 6, takes a few
+minutes. Opening outgoing port 25 (step 1) depends on your provider and can take longer: start with it.
+
 ### What you need before you start
 
-- **A server** with FreeBSD 15.1 or later (amd64 or arm64) on **ZFS**, a public IPv4 address, a public IPv6 one or
-  both, **4 GB of RAM** and at least 20 GB of disk.
+- **A server** with FreeBSD 15.1 or later (arm64; amd64 not yet tested) on **ZFS**, a public IPv4 address, a public
+  IPv6 one or both, **4 GB of RAM** and at least 20 GB of disk.
 - **Root access over SSH with a key.**
 - **Your domains on Cloudflare** (their DNS is managed by Cloudflare).
 - **Three host names**, each with a precise role:
@@ -415,6 +422,8 @@ back by itself after a reboot. Do the steps in this order: each relies on the on
    | A | `webmail` | `203.0.113.10` | **Proxied** |
    | A | `panel` | `203.0.113.10` | **Proxied** |
 
+   With IPv6 only, `mail`, `webmail` and `panel` are AAAA records with the server's IPv6, and there is no A record.
+
    Repeat the MX record in every domain whose mail this server receives. SPF, DKIM, DMARC, MTA-STS, autoconfig
    and the SRV records are written later by the panel itself (step 7): you do not type them.
 2. **SSL/TLS encryption mode: Full (strict).** Cloudflare then talks to the server over HTTPS and checks its
@@ -422,11 +431,13 @@ back by itself after a reboot. Do the steps in this order: each relies on the on
 3. **Origin certificates.** *SSL/TLS*, *Origin Server*, *Create Certificate*: key type RSA (2048), the host
    names (for example `panel.example.com` and `webmail.example.com`, or `*.example.com` and `example.com`),
    validity up to 15 years. Cloudflare shows the certificate and the private key once: save them as two files,
-   for example `panel-origin.pem` and `panel-origin.key`. An origin certificate covers the names of one zone
-   only: if the panel and the webmail are in two domains, create one in each.
-4. **An API token for the panel.** *My Profile*, *API Tokens*, *Create Token*, template *Edit zone DNS*, with
-   **Zone › DNS › Edit** and **Zone › Zone › Read**, and *Zone Resources* › *Include* › *Specific zone* for
-   each mail domain. Never the Global API Key. You enter it in the panel in step 7.
+   `panel-origin.pem` and `panel-origin.key`. Step 5 also needs the webmail's pair, `webmail-origin.pem` and
+   `webmail-origin.key`: if the same certificate covers the webmail too, save a second copy of it with those two
+   names. An origin certificate covers the names of one zone only: if the panel and the webmail are in two domains,
+   create one in each.
+4. **An API token for the panel.** *My Profile*, *API Tokens*, *Create Token*, template *Edit zone DNS*. It
+   already has **Zone › DNS › Edit**: add **Zone › Zone › Read**, and in *Zone Resources* › *Include* › *Specific
+   zone* choose each mail domain. Never the Global API Key. You enter it in the panel in step 7.
 
 ### Step 3 — The base system
 
@@ -468,16 +479,15 @@ mount | grep -q ' on /proc ' || mount /proc; java -version
 
 ### Step 5 — The panel and the certificates on the server
 
-1. **Get the panel's jar.** Download `daemoxcp-mail.jar` from the latest
+1. **Get the panel's jar.** On your computer, download `daemoxcp-mail.jar` from the latest
    [release](https://github.com/DaemoxCP/mail/releases) and check that its SHA-256 is the one in the release notes:
 
    ```bash
    shasum -a 256 daemoxcp-mail.jar
    ```
 
-   (`sha256 -q daemoxcp-mail.jar` on FreeBSD). On a server with **IPv6 only**, GitHub cannot be reached from the
-   server (it has no IPv6 yet): download the jar on your computer and copy it with `scp`. Or build it yourself, on
-   any computer with Java 25 and Maven, from this repository:
+   (`sha256sum daemoxcp-mail.jar` on Linux). Point 2 copies it to the server. Or build it yourself, on any computer
+   with Java 25 and Maven, from this repository:
 
    ```bash
    tools/build-jar.sh
@@ -530,40 +540,56 @@ Open the menu from the panel's folder, in a terminal of at least 120 × 40 chara
 cd /home/panel && java -jar daemoxcp-mail.jar
 ```
 
-Arrows to move, Enter to choose, Tab to go from a field to the next. Every option asks for a confirmation
-first, with *Cancel* selected: press Tab to reach *OK*. In a window with one field, Enter confirms what you typed.
+How to move around:
+
+- Arrows to move, Enter to choose, Tab to go from a field or button to the next.
+- Options 1 to 4, option 6 and the last item ask for a confirmation first, with *Cancel* selected: press Tab to reach
+  *OK*, then Enter.
+- In a window with one field, Enter confirms what you typed.
+- In a form (options 2 and 3), some fields already hold a value: an example or the current one. The *Clear*
+  button next to a field empties it. *Save* shows what the panel found, with *Cancel* and *OK*: Tab to *OK* and
+  Enter. *Exit* asks you to confirm, because changes not saved are lost.
+
 Go through the options in this order:
 
 1. **1) Time zone, clock (NTP) and DNS resolver.** Write the server's time zone as an IANA name (for example
-   `Europe/Rome` or `UTC`): names that do not exist are refused. It also turns on NTP.
+   `Europe/Rome` or `UTC`): names that do not exist are refused. The field already holds the server's current
+   zone. It also turns on NTP and the local DNS resolver.
 2. **2) Edit Panel Configuration.**
-   - *PANEL PORT*: `2096`;
-   - *PANEL HOST*: the panel's name, `panel.example.com` (not an IP address: passkeys and Cloudflare need a
-     name);
+   - *PANEL PORT*: `2096` (already there);
+   - *PANEL HOST*: the panel's name, `panel.example.com`, in place of the `127.0.0.1` already there (not an IP
+     address: passkeys and Cloudflare need a name);
    - *SSL CERTIFICATE* and *SSL PRIVATE KEY*: `/root/certs/panel-origin.pem` and
      `/root/certs/panel-origin.key` (pasting the PEM text works too).
 
    Before saving, the panel checks that the certificate is readable, valid now, covers the panel's name and
-   that the key is its own, and shows what it covers and when it expires.
-3. **3) Edit Roundcube Configuration.** *DOMAIN* `webmail.example.com`, *PORT* `8443`, *SSL CERT PATH* and
-   *SSL KEY PATH* `/usr/local/etc/ssl/webmail/webmail-origin.pem` and `…/webmail-origin.key`. Same checks.
-4. **4) Install/Reinstall Mail Server.** It asks for the mail name, `mail.example.com`, checks the three names,
-   then installs and configures MySQL, Postfix, Dovecot, Rspamd, ClamAV, Redis, nginx, PHP and Roundcube,
-   fail2ban and the firewall. It takes several minutes and goes on even if the terminal closes; its log is in
-   `/var/log/daemoxcp-mail/`. Before starting it keeps the server as it was in a boot environment.
-   **It erases any existing mail configuration, mailboxes and panel accounts**: on a new server there is
-   nothing to lose.
-5. **5) Emergency access code.** There is no administrator yet: it asks for a name and an email, creates the
-   first administrator, and shows an **8-digit code**, valid for 15 minutes.
+   that the key is its own, and shows what it covers and when it expires. It keeps the certificate and the key
+   in its own configuration: after saving, the field shows the PEM text instead of the path.
+3. **3) Edit Roundcube Configuration.** *DOMAIN* `webmail.example.com` (in place of the example already there),
+   *PORT* `8443`, *SSL CERT PATH* and *SSL KEY PATH* `/usr/local/etc/ssl/webmail/webmail-origin.pem` and
+   `…/webmail-origin.key`. Same checks; when saved it shows the webmail's address.
+4. **4) Install/Reinstall Mail Server.** It asks for the mail name: replace the example `mail.example.com` with
+   yours. It checks the three names, then installs and configures MySQL, Postfix, Dovecot, Rspamd, ClamAV, Redis,
+   nginx, PHP and Roundcube, fail2ban and the firewall. It takes a few minutes and goes on even if the terminal
+   closes; its log is in `/var/log/daemoxcp-mail/`. Before starting it keeps the server as it was in a boot
+   environment. **It erases any existing mail configuration, mailboxes and panel accounts**: on a new server
+   there is nothing to lose. At the end it says "Mail server installed successfully!": press Enter.
+5. **5) Emergency access code.** There is no administrator yet: it asks for a name and an email (no
+   confirmation first), creates the first administrator, and shows an **8-digit code**, valid for 15 minutes,
+   once. Write it down. If it expires or you lose it, a new one comes from
+   `java -jar daemoxcp-mail.jar --access-code` (from `/home/panel`, in a second terminal).
 6. **>>> Start the DaemoxCP Mail web server <<<**, the last item (option 6, going back to before the last
-   reinstallation, is not needed now). The panel starts; leave the terminal open for now.
+   reinstallation, is not needed now). The panel starts and writes what it does in the terminal; leave it open
+   for now.
 
 ### Step 7 — The first sign-in, and the panel's own set-up
 
 1. Open `https://panel.example.com:2096`. On the sign-in page choose **Code from the server console** and type
-   the 8-digit code.
+   the 8-digit code. The panel takes you to *Account*.
 2. **Passkeys.** In *Account*, register a passkey (fingerprint, face, device PIN or a hardware key), better two
    on two different devices. From now on you sign in with a passkey, or with a 6-digit code sent to your email.
+   The code by email needs the server to send mail (outgoing port 25, step 1); until then, a passkey or a code
+   from the console.
 3. **Start at boot.** *Diagnostics*, card *Operating system*, **Start at boot**, then **Install and enable**.
    It writes `/usr/local/etc/rc.d/daemoxcp_mail` and turns it on, without starting a second copy of the panel.
 4. Back in the terminal, press **Enter**: the panel started from the menu stops. Start it as a service, the
@@ -577,11 +603,11 @@ Go through the options in this order:
    service daemoxcp_mail status
    ```
 
-   From now on it starts by itself at every boot. Try it: `shutdown -r now`, and after a minute or two the
-   panel answers again.
+   Sign in to the panel again: the restart ended your session. From now on it starts by itself at every boot.
+   Try it: `shutdown -r now`, and after a minute or two the panel answers again.
 5. **Cloudflare.** On the *Cloudflare* page add the account with the token of step 2 (**Test token** first),
    then choose it for the mail server's certificate.
-6. **Let's Encrypt.** On the *SSL certificates* page, card "Let's Encrypt is not ready": write the email for the
+6. **Let's Encrypt.** On the *SSL certificates* page, card "Let's Encrypt is not ready: acme.sh or its account is missing": write the email for the
    Let's Encrypt account and press **Install acme.sh**. It installs the FreeBSD package `security/acme.sh`,
    which runs as its own user `acme`, and creates the account.
 7. **Domains.** On *Domains*, **Add domain** for each mail domain. Then on *DNS* choose the domain (*Change
@@ -593,8 +619,12 @@ Go through the options in this order:
    of step 1, put Cloudflare's list in the panel and webmail rule, then press **I have put this list in my
    provider's firewall**.
 9. **Check everything.** *Diagnostics*, **Check everything**: what needs a look comes first, each with its next
-   step. Then create the mailboxes (*Mailboxes*, **Add mailbox**) and send and receive a test message, for
-   example from the webmail.
+   step.
+10. **Mailboxes and a test message.** Create the mailboxes (*Mailboxes*, **Add mailbox**). Then open the webmail,
+    `https://webmail.example.com:8443`, sign in with a mailbox's full address and its password, send a message to
+    an address of yours elsewhere (Gmail, iCloud…) and answer it from there. Both messages usually arrive within a
+    minute; a message Rspamd finds doubtful may be asked to come back a few minutes later (greylisting). To set
+    up mail programs, see [Mail programs](#mail-programs).
 
 ---
 
@@ -619,13 +649,46 @@ Go through the options in this order:
 
 ---
 
+## Mail programs
+
+Every mailbox works with any mail program (Apple Mail, Thunderbird, Outlook, a phone's mail app) with these
+settings:
+
+| | Server | Port | Security |
+|---|---|---|---|
+| Incoming mail (IMAP) | `mail.example.com` | 993 | SSL/TLS |
+| Outgoing mail (SMTP) | `mail.example.com` | 465, or 587 | SSL/TLS on 465, STARTTLS on 587 |
+
+- **User name**: the mailbox's full address, for example `alice@example.com`, both for incoming and outgoing mail.
+  **Password**: the mailbox's password.
+- **Apple Mail** (Mac, iPhone, iPad): on *Mailboxes*, the mailbox's Apple configuration profile. Open it on the
+  device and the account sets itself up. Tested on macOS.
+- **Thunderbird** finds the settings by itself from the mail address, through the autoconfig records that *Set up
+  everything* writes. Not tried with a real Thunderbird yet.
+- **The webmail**: `https://webmail.example.com:8443`, or **Open the webmail** from a mailbox in the panel.
+- **POP3** (995, SSL/TLS) only if it is turned on in *Settings*.
+- A mailbox sends only from its own addresses: its own and those of the aliases that point to it.
+- Users change their password in the webmail: *Settings* → *Password*.
+
+---
+
 ## Keeping it up to date
 
 - **FreeBSD and the mail software**: the *Updates* page. It says what is new and does every step in order, with
   its checks. The mail packages are locked against a plain `pkg upgrade`, so the panel updates them itself, one
   at a time, after checking that the new version would not break the mail.
-- **The panel itself**: build the new jar and run `tools/upgrade/upgrade-panel.sh` on the server (see
-  [`tools/upgrade/README.md`](tools/upgrade/README.md)). Before touching anything it:
+- **The panel itself**: from the new [release](https://github.com/DaemoxCP/mail/releases), copy
+  `daemoxcp-mail.jar` and the two scripts in `tools/upgrade/` to `/root/panel-upgrade/` on the server (create it
+  first with `install -d -m 700 /root/panel-upgrade`), then, as root, with the SHA-256 written in the release
+  notes:
+
+  ```bash
+  sh /root/panel-upgrade/upgrade-panel.sh /root/panel-upgrade/daemoxcp-mail.jar <SHA-256>
+  ```
+
+  A jar you built yourself works the same, with its own SHA-256. The whole guide, with the test mailbox, what each
+  step checks and how to go back, is in [`tools/upgrade/README.md`](tools/upgrade/README.md). Before touching
+  anything, the script:
   - checks the jar's SHA-256;
   - photographs the server's state;
   - keeps a boot environment and a copy of the panel.
@@ -634,7 +697,8 @@ Go through the options in this order:
   - the first start may only run the new version's migrations;
   - the second must have nothing left to do.
 
-  `rollback-panel.sh` puts everything back without losing the mail.
+  `rollback-panel.sh` puts everything back, MySQL included, without losing the mail. An upgrade restarts the panel, so everyone
+  signs in again; the mail is not interrupted.
 
   When a new version is out, the panel tells you. Once a day it reads the list of releases of
   [DaemoxCP/mail](https://github.com/DaemoxCP/mail/releases) on GitHub. If one is newer than the panel, it says so,
@@ -655,37 +719,8 @@ Go through the options in this order:
 ### The tests
 
 `tests/` holds the panel's tests, one Java class each, plus browser tests with Playwright. They are run by hand on a
-FreeBSD test machine before every release: how, in [`tests/README.md`](tests/README.md).
-
----
-
-## Coming from FreeBSD Mail Panel
-
-DaemoxCP Mail was called *FreeBSD Mail Panel* until 17 November 2026. A server installed with that name moves
-to the new one **by itself, at the first start of this version**, with `upgrade-panel.sh` as usual. Every step:
-
-- is tested;
-- puts things back as they were if it fails;
-- says what it did in the log.
-
-A second start has nothing to do.
-
-| What | Before | Now |
-|---|---|---|
-| service | `service mailpanel …` | `service daemoxcp_mail …` |
-| jar | `freebsd-mail-panel-1.0.jar` | `daemoxcp-mail.jar` |
-| web part's user and group | `mailpanel` | `daemoxcp_mail` (same uid and gid) |
-| secrets | `/usr/local/etc/mail-panel/` | `/usr/local/etc/daemoxcp-mail/` |
-| data | `/var/db/mailpanel/`, `/var/db/mail-panel/` | `/var/db/daemoxcp-mail/` |
-| MySQL database | `mailserver` | `daemoxcp_mail` |
-| MySQL users | `mailpanel`, `mailpanel_web`, `mailpanel_routines`, `mailpanel_postfix`, `mailpanel_dovecot` | `daemoxcp_mail`, `daemoxcp_mail_web`, `daemoxcp_mail_routines`, `daemoxcp_mail_postfix`, `daemoxcp_mail_dovecot` |
-| fail2ban jails | `mail-panel-auth`, `mailpanel-public` | `daemoxcp-mail-auth`, `daemoxcp-mail-public` (bans carried over) |
-| sign-in log | `/var/log/mail-panel-auth.log` | `/var/log/daemoxcp-mail-auth.log` |
-| Roundcube plugin | `mailpanel_sso` | `daemoxcp_mail_sso` |
-| package lock mark | `mail_panel_lock` | `daemoxcp_mail_lock` |
-
-Postfix maps, Dovecot's SQL, Roundcube's configuration, the nginx and pf files and the comments the panel wrote
-in the services' files are updated along the way, and each service is checked and reloaded.
+FreeBSD test machine before every release, together with an installation from scratch that follows this README: how,
+in [`tests/README.md`](tests/README.md).
 
 ---
 
@@ -701,14 +736,12 @@ in the services' files are updated along the way, and each service is checked an
 | `java -jar daemoxcp-mail.jar --create-admin <name> <email>` | the first administrator, when there is none |
 | `java -jar daemoxcp-mail.jar --ip-family both\|ipv4\|ipv6\|ipv6out` | IPv4, IPv6, both, or both with mail over IPv6 only going out, as in *Settings*, as root: the way back when a choice cut you off from the panel |
 | `java -jar daemoxcp-mail.jar --addresses show\|ipv6-off\|ipv4-dhcp` | the server's addresses, as root: show them, remove the IPv6 the panel added (the previous `rc.conf` lines come back), or take IPv4 again by DHCP |
+| `java -jar daemoxcp-mail.jar --empty-folders junk\|trash\|both all\|<mailbox>...` | empties *Junk*, *Trash* or both, in every mailbox or in the ones named, as root: it shows how many messages it deletes and asks you to type that number |
 | `service daemoxcp_mail start\|stop\|restart\|status` | the panel as a service |
 
 The console commands must run from `/home/panel`: the panel's database is in `database/` next to the jar.
 
-The jar is called `daemoxcp-mail.jar`, without the version (the version is inside it, and on the dashboard). On
-servers installed with an earlier build, the file is still `daemoxcp-mail-1.0.jar` and the service keeps using it:
-at its first start the panel adds `daemoxcp-mail.jar` next to it as a link, so the commands above are the same
-everywhere, and `tools/upgrade/upgrade-panel.sh`, which replaces the real file, never leaves the link behind.
+The jar is called `daemoxcp-mail.jar`, without the version: the version is inside it, and on the dashboard.
 
 ### The terminal menu
 
@@ -796,8 +829,9 @@ know who is at the terminal. It takes, in this order:
    `C.UTF-8` is no language;
 3. for a command about one administrator (`--access-code name`), the language that administrator chose in the panel;
 4. the panel's language: the one chosen by the first active administrator;
-5. English. The buttons of the menu's
-windows come from Lanterna, which has its own translations; the Italian ones are in
+5. English.
+
+The buttons of the menu's windows come from Lanterna, which has its own translations; the Italian ones are in
 `src/main/resources/multilang/lanterna-ui_it.properties`, and a new language may need its file there too.
 Logs and operation journals stay in English, the same for everyone.
 
@@ -819,10 +853,15 @@ next, in order of importance. Then:
 |---|---|
 | mail does not go out | *Diagnostics*, "Outgoing mail (port 25)": most often the provider still blocks port 25; then the reverse DNS |
 | mail does not arrive | the MX record, the *Mail queue*, `/var/log/maillog` |
-| a client cannot sign in | *Fail2ban*: the address may be banned; the mailbox may be disabled |
+| mail arrives as spam at the other side | *DNS*: DKIM, SPF and DMARC in place (*Set up everything*); the reverse DNS of the server's address is the mail name |
+| a client cannot sign in | the user name is the full address; *Fail2ban*: the address may be banned; the mailbox may be disabled |
+| the webmail or the panel does not open | the name is **Proxied** in Cloudflare, SSL/TLS is **Full (strict)**, and the provider's firewall lets Cloudflare's addresses reach 2096 and 8443 |
 | the panel does not answer | `service daemoxcp_mail status`, then `/var/db/daemoxcp-mail/panel.log` |
 | `421 Misdirected Request` | the panel was reached by IP or by another name: use its own name |
-| no administrator can sign in | `java -jar daemoxcp-mail.jar --access-code` from `/home/panel` |
+| the 8-digit code expired, or was lost | a new one, from `/home/panel`: `java -jar daemoxcp-mail.jar --access-code [name]` (the name when there are several administrators) |
+| the code by email does not arrive | the server cannot send mail yet (outgoing port 25): sign in with a passkey or a code from the console |
+| everyone was signed out | the panel was restarted (an upgrade, a reboot): it ends every session, by design |
+| no administrator can sign in | `java -jar daemoxcp-mail.jar --access-code [name]` from `/home/panel` |
 | the panel stopped answering after choosing IPv4 only or IPv6 only | as root, from `/home/panel`: `java -jar daemoxcp-mail.jar --ip-family both` |
 | the panel stopped answering after a step of *Server addresses* | as root, from `/home/panel`: `java -jar daemoxcp-mail.jar --addresses show`, then `--addresses ipv6-off` or `--addresses ipv4-dhcp`; your provider's web console works even without network |
 
@@ -831,7 +870,7 @@ next, in order of importance. Then:
 ## Support the project
 
 DaemoxCP Mail is free software, with no ads and no paid tier. Donations pay for the FreeBSD servers and test machines it is
-built and tested on, and for the time to keep it careful.
+built and tested on, and for the time it takes to maintain it.
 
 - [Buy me a coffee](https://buymeacoffee.com/pietrogdamico)
 - [PayPal](https://www.paypal.com/paypalme/pietrogdamico28)

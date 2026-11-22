@@ -1,208 +1,194 @@
-# Il passaggio del pannello a una versione nuova, sul server
+# Upgrading the panel
 
-La procedura per mettere il jar di `main` sul server di posta vero (pannello dell'11/10 in
-`/home/panel`). È stata provata sulla VM, su un banco uguale al server, e con dei guasti piantati
-(reperti, punti 135-139). Il pannello dell'11/10 non sa aggiornarsi da dentro, quindi il primo
-passaggio si fa a mano. Dopo, le migrazioni all'avvio sistemano il resto da sole.
+**English** · [Italiano](README.it.md)
 
-Due script, da copiare sul server insieme al jar:
+How to replace the panel running on a server with a newer release, and how to go back. There are two scripts:
 
-- `upgrade-panel.sh` fa il passaggio e si ferma al primo segnale storto;
-- `rollback-panel.sh` riporta tutto a prima del passaggio, senza perdere la posta.
+- `upgrade-panel.sh` puts the new jar in place and stops at the first sign that something is wrong;
+- `rollback-panel.sh` puts the server back as it was before the upgrade, without losing the mail that arrived
+  in the meantime.
 
-Sulla VM il passaggio intero dura meno di un minuto (46 s con `main`, 33 s con la #91). Il pannello
-resta fermo una decina di secondi; la posta resta sempre accesa.
+The mail keeps working for the whole upgrade: only the panel stops while it restarts. An upgrade restarts the
+panel, so everyone signs in to it again. Some versions also reload nginx, PHP or Postfix while they start, and
+the webmail may not answer for an instant.
 
-## Prima
+## What you need
 
-1. **Il jar e la sua impronta.** Il jar si costruisce dal commit deciso, e l'impronta si prende
-   sulla macchina dove è stato costruito, non sul server:
+The script checks all of this before it changes anything, and stops if something is missing:
 
-   ```sh
-   tools/build-jar.sh -o
-   ```
+- a server installed as the main [README](../../README.md) describes, with the panel running as the service
+  `daemoxcp_mail`;
+- FreeBSD on ZFS boot environments (`bectl check` must succeed), with at least 1 GiB free in the pool;
+- no `pkg` running at the same time;
+- a root shell on the server.
 
-   Lo script costruisce col numero di build e il commit dentro il jar (la dashboard li mostra dietro
-   l'occhio, reperto 183) e stampa l'impronta; con `mvn package` da solo il pannello dice «build non
-   registrata». Se nei sorgenti ci sono modifiche fuori dal commit, il jar lo dice.
+## 1. The jar and its SHA-256
 
-   Poi si copiano sul server il jar e i due script, per esempio in `/root/panel-upgrade/`. Prima di
-   toccare qualsiasi cosa, lo script confronta l'impronta. Un jar arrivato a metà, o un altro jar,
-   non passa: il jar troncato della prova l'ha fermato l'impronta e, con la sua impronta, il
-   controllo dell'archivio.
-2. **Una casella di prova (consigliato).** Con `-m` e `-p` lo script prova, prima e dopo:
-   - l'accesso IMAP;
-   - una consegna (il messaggio di prova poi lo cancella);
-   - l'accesso alla webmail con mail e password.
+- **From a release**: download `daemoxcp-mail.jar` from the
+  [release](https://github.com/DaemoxCP/mail/releases) and take its SHA-256 from the release notes. The script
+  compares the two, so the SHA-256 must come from the release notes, never from the downloaded file.
+- **Built by you**: on any computer with Java 25 and Maven, from the repository at the commit you want:
 
-   Conviene una casella creata apposta dal pannello vecchio, per esempio
-   `upgrade-test@example.com`, da togliere dopo. La password va in un file di root, `chmod 600`,
-   su una riga.
-3. **Quando.** Il passaggio ferma solo il pannello. Il primo avvio della versione nuova sposta
-   però Roundcube nel suo pool e ricarica nginx, php-fpm e Postfix: per un istante la webmail può
-   non rispondere. Sulla VM non l'ho misurato.
+  ```bash
+  tools/build-jar.sh
+  ```
 
-## Il passaggio
+  It writes `target/daemoxcp-mail.jar`, with the build number and the commit inside (the *Dashboard* shows them),
+  and prints the jar's SHA-256. Take the SHA-256 on the computer where you built it, not on the server. A jar built
+  with a plain `mvn package` works too, but the *Dashboard* then says that the build is not recorded.
 
-```sh
-sh /root/panel-upgrade/upgrade-panel.sh -m upgrade-test@example.com -p /root/panel-upgrade/test.pass \
-    /root/panel-upgrade/daemoxcp-mail.jar IMPRONTA
+## 2. Copy the jar and the two scripts to the server
+
+Use the two scripts of the same version as the jar: from the release's tag, or from your copy of the repository.
+They must stay in the same folder, because `upgrade-panel.sh` tells you to run `rollback-panel.sh` from it.
+
+On the server:
+
+```bash
+install -d -m 700 /root/panel-upgrade
 ```
 
-| Passo | Cosa fa | Si ferma se |
+From your computer, in the folder of your copy of the repository (write `target/daemoxcp-mail.jar` if you built
+the jar):
+
+```bash
+scp daemoxcp-mail.jar tools/upgrade/upgrade-panel.sh tools/upgrade/rollback-panel.sh root@203.0.113.10:/root/panel-upgrade/
+```
+
+## 3. A test mailbox (recommended)
+
+With `-m` and `-p` the script also tries, before and after the upgrade:
+
+- the sign-in to the mailbox;
+- a delivery to it (the test message is then deleted);
+- the sign-in to the webmail with its address and password.
+
+Create a mailbox for this on *Mailboxes*, for example `upgrade-test@example.com`. Put its password on one line in
+a file that only root can read:
+
+```bash
+install -m 600 /dev/null /root/panel-upgrade/test.pass
+```
+
+```bash
+ee /root/panel-upgrade/test.pass
+```
+
+The password never leaves that file: the script reads it from there and does not print it.
+
+## 4. The upgrade
+
+As root, with the SHA-256 from step 1:
+
+```bash
+sh /root/panel-upgrade/upgrade-panel.sh -m upgrade-test@example.com -p /root/panel-upgrade/test.pass /root/panel-upgrade/daemoxcp-mail.jar <SHA-256>
+```
+
+Without a test mailbox:
+
+```bash
+sh /root/panel-upgrade/upgrade-panel.sh /root/panel-upgrade/daemoxcp-mail.jar <SHA-256>
+```
+
+It takes a few minutes. What it does, in order:
+
+| Step | What it does | It stops if |
 |---|---|---|
-| 1 | i controlli | non è root; l'impronta non torna o l'archivio è rotto; il pannello non è acceso come servizio; manca il boot environment; c'è meno di 1 GiB libero; c'è un `pkg` in corso |
-| 2 | la fotografia: servizi, porte, `nginx -t`, `postfix check`, `doveconf`, fail2ban, pannello, MTA-STS sulla 443, webmail, casella, pacchetti protetti | qualcosa è già spento o rifiutato: prima si sistema quello |
-| 3 | ferma il pannello, `bectl create before-panel-upgrade-<data>`, copia di `/home/panel` | il pannello non si ferma, oppure falliscono `bectl` o la copia; in questi casi riaccende il pannello di prima |
-| 4 | mette il jar nuovo e fa il primo avvio | il pannello si spegne; l'avvio non finisce in 15 minuti; il log ha un avviso, un errore o un'eccezione |
-| 5 | confronta lo stato con la fotografia | una riga è diversa, oppure un pacchetto protetto non lo è più (quelli nuovi si elencano e basta) |
-| 6 | fa il secondo avvio | il log ha una migrazione qualsiasi o un avviso: al secondo avvio non ci deve essere niente da fare |
-| 7 | confronta di nuovo lo stato | come al passo 5 |
+| 1 | the checks | it is not run as root, or not on FreeBSD; the jar's SHA-256 is not the expected one, or the jar is not an intact archive; the panel is not running as a service; this jar is already running; there is no ZFS boot environment, or less than 1 GiB free; a `pkg` is running |
+| 2 | the snapshot of the server's state: the services turned on in `rc.conf`, MySQL, the listening ports, `nginx -t`, `postfix check`, `doveconf`, fail2ban, the panel on port 2096, MTA-STS on 443, the webmail's login page, the test mailbox, the locked packages | something is already down or refused: fix that first |
+| 3 | stops the panel, creates the boot environment `before-panel-upgrade-<date>`, copies the panel's folder | the panel does not stop, or `bectl` or the copy fails: it starts the previous panel again |
+| 4 | puts the new jar in place and starts it, then reads the log of the start | the panel stops while starting, the start does not finish within 15 minutes, or the log has a warning, an error or an exception |
+| 5 | compares the state with the snapshot | a line changed, or a package that was locked is not any more (newly locked packages are only listed) |
+| 6 | restarts the panel | the log of the second start has a migration or a warning: a second start must have nothing left to do |
+| 7 | compares the state with the snapshot again | as in step 5 |
 
-Lo script considera finito un avvio quando il log ha le due righe che `main` scrive alla fine:
-- «DaemoxCP Mail server started on port» (o «root part ready», col pannello separato; «Mail Panel ...» nei jar di
-  prima), dopo le migrazioni del thread principale;
-- «[ACME] Checking certificate status at startup», dopo `AcmeUser` e `ServiceUsers`.
+The first start of a new version may run its migrations: the changes that bring an existing server in line with
+the new version. The script lists them. They must all succeed, and the second start must find nothing left to do.
 
-Il log lo segue per inode: il primo avvio lo rinomina da `pannello.log` a `panel.log`, e il passaggio al nome DaemoxCP
-Mail lo sposta da `/var/db/mailpanel` a `/var/db/daemoxcp-mail` (stesso file: lo si cerca in tutte e due le cartelle).
+At the end it prints `DONE`, and what it leaves for the way back.
 
-## Il passaggio al nome DaemoxCP Mail (17/11/2026)
+### The record of the upgrade
 
-Il primo avvio del jar che porta il nome nuovo cambia il servizio sotto i piedi dello script: parte con
-`service mailpanel start` e, a meta' dell'avvio, il servizio diventa `daemoxcp_mail` (`/usr/local/etc/rc.d/daemoxcp_mail`,
-variabili `daemoxcp_mail_*`, `/var/run/daemoxcp_mail.pid`). Lo script rilegge il nome ogni volta (`service_name`), e
-la fotografia lascia fuori il pannello con tutti e due i nomi. Provato sulla VM dal pannello della produzione (build
-666): al primo avvio queste migrazioni, e nient'altro di nuovo; il secondo avvio muto e lo stato uguale.
+Everything the script sees goes into a folder next to the panel's, `/home/panel-upgrade-<date>/` (the date is in
+UTC, and the script prints the folder's name when it begins). `/home` is outside the boot environments, so the
+folder stays even after going back. It holds:
 
-```
-INFO: [ProductRename] DONE: /usr/local/etc/mail-panel -> /usr/local/etc/daemoxcp-mail
-INFO: [ProductRename] DONE: /var/log/mailpanel -> /var/log/daemoxcp-mail
-INFO: [ProductRename] DONE: /var/run/mailpanel -> /var/run/daemoxcp-mail
-INFO: [ProductRename] DONE: /var/unbound/conf.d/mail-panel.conf -> /var/unbound/conf.d/daemoxcp-mail.conf
-INFO: [ProductRename] DONE: database/mail_panel.db -> database/daemoxcp-mail.db
-INFO: [DataFolderRename] DONE: /var/db/mailpanel -> /var/db/daemoxcp-mail, /var/db/mail-panel -> /var/db/daemoxcp-mail; paths updated in ...; reloaded [PHP, NGINX]
-INFO: [PanelMarker] DONE: the product name updated in the comments of ...
-INFO: [PanelUserRename] DONE: the user and group mailpanel are now daemoxcp_mail (uid ..., gid ..., comment 'DaemoxCP Mail web part')
-INFO: [PanelServiceRename] DONE: /usr/local/etc/rc.d/mailpanel -> /usr/local/etc/rc.d/daemoxcp_mail (...), rc.conf [enable] now daemoxcp_mail_*, pidfile ..., jar also /home/panel/daemoxcp-mail.jar (the same file: the old name goes at the next start), run.sh updated
-INFO: [AuthJailRename] DONE: mail-panel-auth -> daemoxcp-mail-auth: log /var/log/daemoxcp-mail-auth.log, filter, jail.local, newsyslog; fail2ban reloaded
-INFO: [PublicSurfaceRename] DONE: moved /var/log/nginx/mailpanel-public-access.log -> daemoxcp-mail-public-access.log; ...
-INFO: [MysqlRename] DONE: database mailserver -> daemoxcp_mail (... tables), users [mailpanel@localhost -> daemoxcp_mail@localhost, ...]; ... rewritten, Postfix and Dovecot reloaded and checked, the empty database mailserver removed; ...
-INFO: [WebDbAccess] DONE: all 38 procedures; EXECUTE to daemoxcp_mail_web on ...
-INFO: [Fail2banAutoSetup] DONE: /usr/local/etc/newsyslog.conf.d/daemoxcp-mail-auth.conf recreates the log as daemoxcp_mail:wheel
+- `summary.txt`: the jars before and after, the boot environment, the outcome and the migrations;
+- the snapshot and the state after each start, with their differences;
+- the log of each start, and the migrations it ran;
+- the copy of the panel's folder (`panel-dir.tar`) and the previous jar.
+
+To read a log again with the same rules as the script:
+
+```bash
+sh /root/panel-upgrade/upgrade-panel.sh --check-log /home/panel-upgrade-<date>/first-start.log first
 ```
 
-Sul server vero in piu', probabilmente: i commenti su Cloudflare (`[CloudflareComments]`, i record col commento di
-prima) e la superficie pubblica con la sua jail. Il ritorno indietro rimette anche i nomi di prima in `/var/log`
-(registro degli accessi con le copie, cartella delle reinstallazioni, log di nginx); provato sulla VM il 17/11/2026.
+(`second` for the second start). It ends with `outcome: go` or `outcome: STOPPED`.
 
-Tutto quello che vede va in `/home/panel-upgrade-<data>/`, che sta fuori dal boot environment e
-quindi resta anche tornando indietro:
-- `summary.txt`;
-- la fotografia e gli stati dopo i due avvii, coi loro `diff`;
-- i due pezzi di log, con le migrazioni elencate;
-- la copia della cartella del pannello e il jar di prima.
+### If it stops
 
-Con `--check-log FILE first|second` si rilegge un pezzo di log con le stesse regole.
+It prints `STOPPED`, the step and the reason, and then how to go back, with the real names of this upgrade:
 
-## Cosa guardare nel log
+- **in steps 1 to 3** the jar was not changed and there is nothing to put back. If the panel is stopped:
+  `service daemoxcp_mail start`;
+- **from step 4 on**, go back with `rollback-panel.sh`, as described below.
 
-Il primo avvio sul server deve scrivere queste righe, e nessun altro avviso. Le ha scritte così
-sulla VM, con gli stessi nomi italiani del server:
+## Going back
 
-```
-INFO: Renamed /var/db/mailpanel/pannello.log to /var/db/mailpanel/panel.log
-INFO: Renamed /var/db/mailpanel/riavvio.log to /var/db/mailpanel/reboot.log
-INFO: Renamed /var/db/mailpanel/ssl-precedente to /var/db/mailpanel/ssl-previous
-INFO: Renamed /var/db/mailpanel/nginx.conf-prima-di-include to /var/db/mailpanel/nginx.conf-before-include
-INFO: Renamed /var/db/mailpanel/sistema to /var/db/mailpanel/system
-INFO: Renamed /var/db/mailpanel/system/salto.json to /var/db/mailpanel/system/version-jump.json
-INFO: [RcScriptRepair] DONE: /usr/local/etc/rc.d/mailpanel: [/var/db/mailpanel/pannello.log] now with the current names
-INFO: [PublicSurfaceRename] DONE: moved /var/log/nginx/mailpanel-pubblico-access.log -> mailpanel-public-access.log; /var/db/mailpanel/pubblico -> public; ...
-INFO: [PanelMarker] DONE: signature updated in /usr/local/etc/dovecot/dovecot.conf
-WARNING: [LocalMta] myorigin mail.example.com is not in mydestination: it becomes localhost first
-INFO: [LocalMta] Postfix is now the local MTA (/usr/local/etc/mail/mailer.conf)
-INFO: [RoundcubeUser] DONE: Roundcube runs in the pool roundcube as roundcube, nginx passes to /var/run/php-fpm-roundcube.sock (1 site), ...
-INFO: [RoundcubeDbUser] DONE: ...                 (solo se la #91 e' nel jar)
-INFO: [AcmeUser] DONE: acme.sh runs as acme from /var/db/acme/.acme.sh: 2 certificates moved to /var/db/acme/certs, root's crontab no longer runs it, ...
+Once the new jar has started, put the previous jar back only with `rollback-panel.sh`. Copying the old jar over
+the new one is not a way back, because the new version's migrations may have changed the system in ways the
+previous panel does not know.
+
+As root, with the folder the upgrade printed:
+
+```bash
+sh /root/panel-upgrade/rollback-panel.sh /home/panel-upgrade-<date>
 ```
 
-- **L'unico WARNING ammesso** è quello di `LocalMta`: annuncia il cambiamento di `myorigin` che
-  la #60 aveva previsto per questo server, e la riga dopo dice che è fatto. Lo script lo conta
-  fra le migrazioni.
-- **Al secondo avvio** queste righe non devono esserci più. Restano solo i controlli che passano:
-  «Alias map OK», «sendmail(8) already hands over to Postfix», «Roundcube SSO plugin
-  installed/updated successfully».
-- **Sul server ci sono probabilmente due righe in più rispetto alla VM:**
-  - «Mail stack packages locked at startup: ...», se `main` trova pacchetti dello stack non
-    ancora protetti;
-  - la riga delle annotazioni `mail_panel_lock` («Lock marks: N added»).
-
-  Sono ammesse al primo avvio. Sulla VM fail2ban scriveva in più `jail.d/mail.local`; sul server
-  il file c'è già.
-
-## Tornare indietro
-
-**Dopo che il jar nuovo è partito, si torna indietro solo con `rollback-panel.sh`.** Rimettere il
-jar di prima non basta. Provato sulla VM su un server già migrato, il jar dell'11/10 parte senza
-avvisi, ma:
-- **niente più SSO della webmail.** Il suo installatore del plugin riscrive
-  `plugins/mailpanel_sso/config.inc.php` (oggi `daemoxcp_mail_sso`) come `www:www 600`, e Roundcube, che adesso gira come
-  `roundcube`, non lo legge più: «Failed to load config» a ogni richiesta;
-- **niente più rinnovi.** Cerca acme.sh in `/root/.acme.sh`, che non c'è più, e lo considera non
-  installato: i certificati scadrebbero.
-
-Il jar di prima va bene solo se lo script si è fermato ai passi 1-3. Ma in quel caso il jar non è
-stato cambiato, e basta `service mailpanel start` (o `service daemoxcp_mail start`, sui server gia' passati al nome
-nuovo) se il pannello è fermo.
-
-Il ritorno completo:
-
-```sh
-sh /root/panel-upgrade/rollback-panel.sh /home/panel-upgrade-<data>
+```bash
 shutdown -r now
 ```
 
-Cosa fa:
-- **la posta di adesso nel boot environment di prima.** `/var/vmail` sta DENTRO il boot
-  environment, sul server come sulla VM (visto in sola lettura), quindi un `bectl activate` nudo
-  perderebbe la posta arrivata dopo il passaggio. Lo script ferma Postfix e Dovecot, monta il boot
-  environment di prima, ci copia la posta di adesso (quella di allora resta accanto, in
-  `/var/vmail.before-rollback-<data>`) e lo smonta;
-- **`bectl activate` del boot environment** creato dal passaggio;
-- **la cartella del pannello dalla copia.** `/home` sta fuori dal boot environment; quella di
-  dopo resta accanto, in `/home/panel.after-upgrade-<data>`;
-- **i log di nginx della 443 col nome di prima.** `/var/log` sta fuori dal boot environment, e
-  con due nomi insieme il passaggio successivo si fermerebbe su `BOTH_NAMES`;
-- **le caselle vuote di `/var/mail`** (`roundcube`, `acme`) degli utenti che prima non c'erano.
+It does not reboot by itself, so that you choose the moment; Postfix and Dovecot stay stopped until you do.
+What it does:
 
-Cosa torna al momento del passaggio: tutto il sistema, compreso **MySQL**. Domini, caselle e
-alias creati dopo vanno rifatti, quindi conviene decidere presto. La coda di Postfix, se non è
-vuota, torna quella di prima, e lo script lo dice. Resta solo `/var/log/acme.sh.log`, di un
-utente che non esiste più (uid 169): non fa danni.
+- **It keeps the mail.** `/var/vmail` is inside the boot environment, so a plain `bectl activate` would lose the
+  mail that arrived after the upgrade. The script stops Postfix and Dovecot and copies the current mail into the
+  previous boot environment; the mail that was there at the time of the upgrade stays next to it, in
+  `/var/vmail.before-rollback-<date>`.
+- **It activates the boot environment** created by the upgrade, for the next start.
+- **It puts the panel's folder back** from its copy. The one from after the upgrade stays next to it, in
+  `/home/panel.after-upgrade-<date>`.
+- **It puts back what the migrations changed outside the boot environment**: the names of a few logs in
+  `/var/log` and the owner of two of them. It also removes the empty system mailboxes in `/var/mail` of users
+  that did not exist before.
 
-Sulla VM il ritorno è stato provato cinque volte, e ogni volta lo stato tornava uguale alla
-fotografia e la posta arrivata dopo c'era ancora:
-- dopo un passaggio fermato al primo avvio;
-- dopo un passaggio completo seguito dal jar di prima;
-- col pannello che non partiva;
-- dopo il jar senza la #89;
-- dopo `BOTH_NAMES`.
+After the restart, the whole system is back as it was at the moment of the upgrade, **MySQL included**: domains,
+mailboxes and aliases created after the upgrade must be created again, so it is best to decide early. If Postfix's
+queue is not empty, it goes back to the queue of that moment, and the script says so.
 
-Dopo un ritorno, il passaggio si rifà identico.
+The way back has been tried several times on a test machine: each time the state matched the snapshot again and
+the mail that arrived after the upgrade was still there. After going back, the same upgrade can be run again.
 
-## Dopo
+## Afterwards
 
-- **Un rinnovo del certificato a mano**, dalla pagina dei certificati del pannello. È l'unica cosa
-  che il banco non può provare: sul server i due certificati usano la sfida DNS (`dns_cf` e `dns`)
-  e adesso acme.sh gira come `acme`. Sulla VM `acme` vede entrambi i certificati con la sfida di
-  prima, ma senza un DNS pubblico non c'è niente da rinnovare.
-- **La scheda «Gli utenti dei servizi»** non deve avere avvisi. Sulla VM erano zero, sia con
-  `main` sia con la #91.
-- **I residui.** Il boot environment `before-panel-upgrade-<data>` e la cartella
-  `/home/panel-upgrade-<data>` restano finché servono. Quando il pannello nuovo ha girato qualche
-  giorno senza problemi:
-  - `bectl destroy -o before-panel-upgrade-<data>`;
-  - si toglie la cartella;
-  - si toglie `/root/.acme.sh.moved-to-var-db-acme`, che `AcmeUser` lascia apposta.
-- **La casella di prova** si toglie dal pannello.
+- The *Dashboard* shows the new version and build.
+- *Diagnostics* → *Check everything* has nothing new to report.
+- On the *Diagnostics* page, *Service users* has no warnings.
+
+When the new panel has worked for a few days, remove what the upgrade left for the way back:
+
+```bash
+bectl destroy -o before-panel-upgrade-<date>
+```
+
+```bash
+rm -r /home/panel-upgrade-<date>
+```
+
+Then remove the test mailbox on *Mailboxes*, and its password file:
+
+```bash
+rm /root/panel-upgrade/test.pass
+```
