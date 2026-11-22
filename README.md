@@ -342,6 +342,10 @@ Each user can do exactly its job, and no more.
   *Firewall* page keeps your provider's firewall rule limited to Cloudflare's addresses.
 - **fail2ban** reads the panel's own sign-in log, `/var/log/daemoxcp-mail-auth.log`, along with the mail logs.
 
+### Reporting a vulnerability
+
+Privately, never in a public issue: how, in [SECURITY.md](SECURITY.md).
+
 ---
 
 ## Installation

@@ -346,6 +346,10 @@ Ognuno può fare esattamente il suo lavoro, e niente di più.
 - **fail2ban** legge, insieme ai registri della posta, il registro degli accessi del pannello,
   `/var/log/daemoxcp-mail-auth.log`.
 
+### Segnalare una vulnerabilità
+
+In privato, mai in una issue pubblica: come, in [SECURITY.it.md](SECURITY.it.md).
+
 ---
 
 ## Installazione
