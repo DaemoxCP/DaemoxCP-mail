@@ -185,7 +185,7 @@ servizio è il pacchetto di FreeBSD, gira sotto `rc.d`, con la configurazione do
 <table>
 <tr>
 <td width="50%"><img src="docs/screenshots/it/login.png" alt="Pagina di accesso: passkey, un codice via email, o un codice dalla console del server"><br><sub>Accesso: una passkey, un codice via email, o un codice dalla console del server. Nessuna password.</sub></td>
-<td width="50%"><img src="docs/screenshots/it/mailboxes.png" alt="Pagina delle caselle con la scheda del profilo di Apple Mail"><br><sub>Caselle, col profilo di configurazione di Apple Mail.</sub></td>
+<td width="50%"><img src="docs/screenshots/it/mailboxes.png" alt="Pagina delle caselle con la finestra della configurazione dei client di una casella, scheda iPhone/Mac, col profilo di Apple Mail per primo"><br><sub>Caselle: la configurazione dei client di una casella, col profilo di Apple Mail per primo.</sub></td>
 </tr>
 <tr>
 <td><img src="docs/screenshots/it/dns.png" alt="Pagina DNS: Configura tutto e la sequenza di MTA-STS"><br><sub>DNS: un pulsante scrive i record su Cloudflare; MTA-STS nell'ordine giusto.</sub></td>
@@ -676,8 +676,8 @@ telefono) con queste impostazioni:
 
 - **Nome utente**: l'indirizzo completo della casella, per esempio `alice@example.com`, sia per la posta in arrivo
   sia per quella in uscita. **Password**: quella della casella.
-- **Apple Mail** (Mac, iPhone, iPad): in *Caselle*, il profilo di configurazione Apple della casella. Aprilo sul
-  dispositivo e l'account si configura da solo. Provato su macOS. Su un iPhone funzionano anche le impostazioni qui
+- **Apple Mail** (Mac, iPhone, iPad): in *Caselle*, il pulsante *Configurazione dei client* della casella (l'icona del
+  telefono), scheda *iPhone/Mac*, **Scarica il profilo**. Aprilo sul dispositivo e l'account si configura da solo. Provato su macOS. Su un iPhone funzionano anche le impostazioni qui
   sopra scritte a mano: provato, in ricezione e in invio.
 - **Thunderbird** trova le impostazioni da solo partendo dall'indirizzo, grazie ai record di autoconfig che scrive
   *Configura tutto*. Non ancora provato con un Thunderbird vero.

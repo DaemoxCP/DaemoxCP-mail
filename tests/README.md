@@ -1453,6 +1453,13 @@ one row of "Update the server" with at most one button, no separate card and no 
 under the row is closed, and opened shows the packages with version and lock in words and no update button; at 375 px
 no horizontal scrolling with the list open and every visible button 44 px; no request that changes anything.
 
+**apple-profile-browser-test.js** — on the real panel of the test VM, only reads and downloads (22/11/2026): the Apple
+Mail profile is in a mailbox's *Client configuration* window, tab iPhone/Mac, first and before the steps by hand, and no
+longer in a separate card at the bottom of Mailboxes. Its buttons turn on once the panel has checked the profile can be
+made; "Download the profile" gives that mailbox's `.mobileconfig` (its address, IMAP 993 and SMTP 465 with SSL, no
+password, accepted by `plutil` on the Mac), and "See what it contains" shows the same profile. Opened for another
+mailbox, the window gives that mailbox's profile. At 375 px no horizontal scrolling and the two buttons 44 px.
+
 **fingerprint-routes-browser-test.js** — on the real panel of the test VM (finding 204): the two features that send the
 root part a fingerprint the panel computed itself go through the root's closed list. The package branch to latest and
 back to quarterly (16 hex digits, each job followed to the end; the VM put back on quarterly in any case), and "Turn

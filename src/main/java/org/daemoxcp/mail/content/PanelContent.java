@@ -1881,7 +1881,23 @@ public class PanelContent {
                         <!-- ===== Tab APPLE ===== -->
                         <div class="tab-pane fade" id="configApple">
                             <h6><i class="fab fa-apple me-2" aria-hidden="true"></i>iPhone / iPad / Mac</h6>
-                            <ol class="mt-3 small">
+                            <!-- Il profilo di configurazione della casella: il modo piu' semplice, quindi per primo, qui
+                                 dove si configura la casella e non in una scheda a parte in fondo alla pagina. -->
+                            <div class="card mt-3 mb-3 border-success">
+                                <div class="card-body">
+                                    <p class="fw-bold mb-1">{{t:cfg.apProfile}}</p>
+                                    <p class="small text-muted mb-2">{{t:pa.intro2.html}}</p>
+                                    <div class="d-flex gap-2 flex-wrap mb-2">
+                                        <button type="button" class="btn btn-sm btn-mail touch-target" id="cfgAppleProfileBtn" data-on-click="cfgAppleProfile()" disabled><i class="fas fa-download me-1" aria-hidden="true"></i>{{t:pa.download}}</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary touch-target" id="cfgAppleProfileLookBtn" data-on-click="cfgAppleProfilePreview()" disabled><i class="fas fa-eye me-1" aria-hidden="true"></i>{{t:pa.look}}</button>
+                                    </div>
+                                    <div class="small text-muted mb-2" id="cfgAppleProfileSets"></div>
+                                    <div class="alert alert-secondary py-2 small mb-0"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>{{t:pa.after.html}}</div>
+                                    <div id="cfgAppleProfileOutcome" class="mt-2" aria-live="polite"></div>
+                                </div>
+                            </div>
+                            <p class="fw-bold small mb-1">{{t:cfg.apByHand}}</p>
+                            <ol class="small">
                                 <li class="mb-2">{{t:cfg.ap1.html}}</li>
                                 <li class="mb-2">{{t:cfg.ap2.html}}</li>
                                 <li class="mb-3">{{t:cfg.setValues}}
@@ -3225,7 +3241,6 @@ public class PanelContent {
                     </tbody>
                 </table>
             </div>
-""" + resource("pages/apple-profile-card.html") + """
         </div>
     </main>
 
@@ -3698,6 +3713,9 @@ public class PanelContent {
                 pwReveal.innerHTML = '<i class="fas fa-unlock me-1" aria-hidden="true"></i>' + escMbx(t('mbx.reveal'));
             }
             if (pwHint) pwHint.textContent = t('mbx.revealHint');
+
+            // Il profilo Apple di questa casella (scheda iPhone/Mac)
+            cfgAppleProfileState(__cfgCurrentEmail);
 
             // Carica server config
             fetch('/api/mailconfig').then(r => r.json()).then(data => {
@@ -4175,7 +4193,6 @@ public class PanelContent {
 """ + resource("pages/apple-profile.js") + """
         loadDomains();
         loadMailboxes();
-        paLoad();
     </script>
 </body>
 </html>
