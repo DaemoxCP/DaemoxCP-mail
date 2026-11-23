@@ -87,14 +87,19 @@ mysql84)
     echo "databases: $(echo $dbs | wc -w)"
     mysqldump --defaults-file="$W/root.cnf" --single-transaction --routines --triggers --events \
         --set-gtid-purged=OFF --databases $dbs > "$W/data.sql"
-    : > "$W/accounts.sql"; : > "$W/grants.sql"
-    mysql --defaults-file="$W/root.cnf" -N -e "SELECT CONCAT(QUOTE(user),'@',QUOTE(host)) FROM mysql.user WHERE user NOT IN ('mysql.infoschema','mysql.session','mysql.sys')" > "$W/account-names.txt"
+    : > "$W/grants.sql"
+    users="FROM mysql.user WHERE user NOT IN ('mysql.infoschema','mysql.session','mysql.sys')"
+    mysql --defaults-file="$W/root.cnf" -N -e "SELECT CONCAT(QUOTE(user),'@',QUOTE(host)) $users" > "$W/account-names.txt"
+    # The accounts, written from mysql.user with the hash always in hexadecimal. SHOW CREATE USER writes the hash as a
+    # quoted string when its bytes happen to be all printable, and such a string can break the file: on 23/11/2026 one
+    # did, root's line after it was lost, and the new datadir kept root without its password (the preparation stopped
+    # there, with Postfix and Dovecot down). Plugin, hash and lock are all the panel's accounts set; the rest is
+    # MySQL's default. CREATE for the accounts the new datadir lacks, then ALTER for all, root included, who is
+    # already there.
+    auth="' IDENTIFIED WITH ', QUOTE(plugin), IF(authentication_string = '', '', CONCAT(' AS 0x', HEX(authentication_string)))"
+    mysql --defaults-file="$W/root.cnf" -N -e "SELECT CONCAT('CREATE USER IF NOT EXISTS ', QUOTE(user), '@', QUOTE(host), $auth, IF(account_locked = 'Y', ' ACCOUNT LOCK', ''), ';') $users" > "$W/accounts.sql"
+    mysql --defaults-file="$W/root.cnf" -N -e "SELECT CONCAT('ALTER USER ', QUOTE(user), '@', QUOTE(host), $auth, ';') $users" >> "$W/accounts.sql"
     while read -r a; do
-        mysql --defaults-file="$W/root.cnf" -N -e "SET print_identified_with_as_hex = ON; SHOW CREATE USER $a" \
-            | sed -E 's/^CREATE USER /CREATE USER IF NOT EXISTS /; s/$/;/' >> "$W/accounts.sql"
-        # And the password also for who is already there (root, in the new datadir): only name, plugin and hash.
-        mysql --defaults-file="$W/root.cnf" -N -e "SET print_identified_with_as_hex = ON; SHOW CREATE USER $a" \
-            | sed -nE "s/^CREATE USER (\`[^\`]*\`@\`[^\`]*\`) IDENTIFIED WITH ('[^']*') AS (0x[0-9A-Fa-f]+) .*/ALTER USER \1 IDENTIFIED WITH \2 AS \3;/p" >> "$W/accounts.sql"
         case "$a" in "'root'@"*) continue ;; esac
         mysql --defaults-file="$W/root.cnf" -N -e "SHOW GRANTS FOR $a" | sed 's/$/;/' >> "$W/grants.sql"
     done < "$W/account-names.txt"

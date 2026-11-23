@@ -4,6 +4,7 @@
 # Run as root on the VM, with the panel installed as a service (rc.d daemoxcp_mail) from the jar to test,
 # and the compiled tests copied to a folder the user daemoxcp_mail can read:
 #   sh tests/separation-service-test.sh /home/panel /var/tmp/sep-tests
+# With the panel's own name set (option 2 of the menu): HOST=panel.example.com sh tests/separation-service-test.sh ...
 #
 # It restarts the panel several times. With the separation on it checks who runs what (ps), who listens
 # (sockstat), the permissions of every file the two parts share, what daemoxcp_mail can and cannot read or
@@ -24,7 +25,11 @@ JAVA=/usr/local/openjdk25/bin/java
 LOG=/var/db/daemoxcp-mail/panel.log
 RUN=/var/run/daemoxcp-mail
 PORT=2096
-BASE=https://127.0.0.1:$PORT
+# A panel with its own name answers only to that name (HostCheck: 421 to any other Host): give it as HOST, for example
+# HOST=panel.example.com, and every request still goes to 127.0.0.1, with that name.
+HOST=${HOST:-127.0.0.1}
+BASE=https://$HOST:$PORT
+curl() { command curl --resolve "$HOST:$PORT:127.0.0.1" "$@"; }
 UA="separation-service-test"
 fail=0
 

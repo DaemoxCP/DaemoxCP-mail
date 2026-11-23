@@ -59,7 +59,7 @@ const NEWER = { version: '1.1.0', tag: 'v1.1.0', url: 'https://github.com/Daemox
         check('it says the running version (' + running + ')', /^This panel runs version \d+\.\d+\.\d+\.$/.test(running));
         check('the daily check is on by default', await page.locator('#relAuto').isChecked());
         const hint = (await page.locator('#relAutoHint').innerText()).trim();
-        check('the switch says what leaves the server (' + hint.slice(0, 70) + '...)', /api\.github\.com/.test(hint) && /DaemoxCP\/mail/.test(hint));
+        check('the switch says what leaves the server (' + hint.slice(0, 70) + '...)', /api\.github\.com/.test(hint) && /DaemoxCP\/DaemoxCP-mail/.test(hint));
         check('the switch has its label', await page.locator('label[for="relAuto"]').count() === 1);
 
         console.log('\n== 2. Check now, for real ==');
@@ -74,7 +74,7 @@ const NEWER = { version: '1.1.0', tag: 'v1.1.0', url: 'https://github.com/Daemox
         console.log('  (the panel got: ' + JSON.stringify({ ok: answer.ok, error: answer.error, newest: answer.newest }) + ')');
         check('GitHub was asked and the answer saved (' + answer.checkedAt + ')', !!answer.checkedAt);
         if (answer.error === 'not_found')
-            check('404: the card says the repository is not public yet (' + outcome + ')', /not public yet/.test(outcome) && /DaemoxCP\/mail/.test(outcome));
+            check('404: the card says the repository is not public yet (' + outcome + ')', /not public yet/.test(outcome) && /DaemoxCP\/DaemoxCP-mail/.test(outcome));
         else
             check('the card says the outcome in words (' + outcome + ')', outcome.length > 20 && !/undefined|\{|null/.test(outcome));
         check('no release told, there is none', await page.locator('#relOutcome .alert').count() === 0 || !!answer.newest);
