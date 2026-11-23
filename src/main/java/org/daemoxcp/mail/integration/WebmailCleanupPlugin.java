@@ -1,5 +1,7 @@
 package org.daemoxcp.mail.integration;
 
+import org.daemoxcp.mail.i18n.I18n;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -8,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -19,7 +22,8 @@ import java.util.Map;
  *
  * <p>The user is the one of the Roundcube session. With the login from the panel (SSO) Roundcube logs in as
  * Dovecot's "mailbox*master-user": only the part before the asterisk is sent, the session's mailbox. The texts
- * are in the plugin's language files (localization/en_US.inc, it_IT.inc). The panel writes the files at boot,
+ * are the panel's (lang/xx.json, keys webmailCleanup.*), written as the plugin's language files, one per language of
+ * the panel (localization/en_US.inc, it_IT.inc, ...). The panel writes the files at boot,
  * owned by root and readable by everyone (code, no secret: the address and the key are in the panel's block in
  * config.inc.php, WebmailPasswordConfig), and only if they are different.
  */
@@ -134,34 +138,57 @@ public final class WebmailCleanupPlugin {
                 """;
     }
 
-    /** The plugin's texts, per Roundcube language. Pure. */
+    /** The plugin's labels, in the order of its language files; their texts are the panel's keys webmailCleanup.*. */
+    static final List<String> LABELS = List.of("section", "title", "junk", "trash", "never", "afterdays", "help",
+            "unavailable", "savefailed");
+
+    /**
+     * The plugin's texts, one Roundcube language file per language of the panel (I18n.LANGUAGES), from the panel's
+     * language files: a language added to the panel (a lang/xx.json) reaches the webmail too. Until 2026-11-23 the
+     * texts were written here, in English and Italian only. "$n" in afterDays is Roundcube's placeholder for the
+     * number of days and stays as it is in every language. Pure.
+     */
     public static Map<String, String> localization() {
         Map<String, String> m = new LinkedHashMap<>();
-        m.put("en_US", labels("Automatic emptying", "Empty Junk and Trash by themselves", "Empty Junk", "Empty Trash", "Never",
-                "After $n days",
-                "Off until you choose it. The server deletes the messages that have been in the folder longer than this.",
-                "The automatic emptying cannot be read right now. Try again later.",
-                "The automatic emptying could not be saved. Try again later."));
-        m.put("it_IT", labels("Svuotamento automatico", "Svuota da sole la Junk e il Cestino", "Svuota la Junk", "Svuota il Cestino",
-                "Mai", "Dopo $n giorni",
-                "Spento finché non lo scegli. Il server cancella i messaggi che stanno nella cartella da più tempo di così.",
-                "Lo svuotamento automatico adesso non si riesce a leggere. Riprova più tardi.",
-                "Lo svuotamento automatico non si è potuto salvare. Riprova più tardi."));
+        for (String lang : I18n.LANGUAGES) {
+            StringBuilder file = new StringBuilder("<?php\n// Written by DaemoxCP Mail, which rewrites it: do not edit (WebmailCleanupPlugin).\n$labels = [];\n");
+            for (String label : LABELS) file.append(label(label, I18n.t(lang, key(label))));
+            m.put(roundcubeLocale(lang), file.toString());
+        }
         return m;
     }
 
-    private static String labels(String section, String title, String junk, String trash, String never, String afterdays,
-                                 String help, String unavailable, String savefailed) {
-        return "<?php\n// Written by DaemoxCP Mail, which rewrites it: do not edit (WebmailCleanupPlugin).\n$labels = [];\n"
-             + label("section", section) + label("title", title) + label("junk", junk) + label("trash", trash)
-             + label("never", never) + label("afterdays", afterdays) + label("help", help) + label("unavailable", unavailable)
-             + label("savefailed", savefailed);
+    /** The panel's key of a label: webmailCleanup.afterDays for afterdays, webmailCleanup.saveFailed for savefailed. */
+    static String key(String label) {
+        return "webmailCleanup." + switch (label) {
+            case "afterdays" -> "afterDays";
+            case "savefailed" -> "saveFailed";
+            default -> label;
+        };
     }
 
-    /** A line of PHP between single quotes: no quotes or backslashes in the texts, checked here. */
-    private static String label(String key, String text) {
-        if (text.contains("'") || text.contains("\\")) throw new IllegalArgumentException("quote in " + key);
-        return "$labels['" + key + "'] = '" + text + "';\n";
+    /**
+     * Roundcube's name of a language: language and country (it_IT, en_US), the name of its localization file. The
+     * panel's codes are ISO 639-1 (lang/xx.json): the country is the language's own, except where Roundcube uses
+     * another one or the code alone.
+     */
+    public static String roundcubeLocale(String lang) {
+        String exception = Map.ofEntries(Map.entry("en", "en_US"), Map.entry("pt", "pt_PT"), Map.entry("sv", "sv_SE"),
+                Map.entry("da", "da_DK"), Map.entry("el", "el_GR"), Map.entry("ja", "ja_JP"), Map.entry("zh", "zh_CN"),
+                Map.entry("cs", "cs_CZ"), Map.entry("uk", "uk_UA"), Map.entry("ko", "ko_KR"), Map.entry("ca", "ca_ES"),
+                Map.entry("et", "et_EE"), Map.entry("sl", "sl_SI"), Map.entry("nb", "nb_NO"), Map.entry("he", "he_IL"),
+                Map.entry("ar", "ar_SA"), Map.entry("fa", "fa_IR"), Map.entry("vi", "vi_VN"), Map.entry("hi", "hi_IN"),
+                Map.entry("eu", "eu_ES"), Map.entry("gl", "gl_ES"), Map.entry("ga", "ga_IE"), Map.entry("sr", "sr_CS"))
+                .get(lang);
+        return exception != null ? exception : lang + "_" + lang.toUpperCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * A line of PHP between single quotes. A quote or a backslash in a text is escaped (\' and \\): a language
+     * with apostrophes (French, Italian elisions) must not break the file.
+     */
+    public static String label(String key, String text) {
+        return "$labels['" + key + "'] = '" + text.replace("\\", "\\\\").replace("'", "\\'") + "';\n";
     }
 
     /**

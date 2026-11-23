@@ -7580,5 +7580,14 @@
   "server.appleprof.sign.notTrusted": "the mail server's certificate does not lead to an authority that phones and computers trust.",
   "server.appleprof.sign.otherName": "the mail server's certificate does not cover {h}.",
   "server.appleprof.sign.selfSigned": "the mail server's certificate is still the one the installation made itself. Once the Let's Encrypt one is in place (SSL certificates page), the profile is signed.",
-  "server.appleprof.sign.unreadable": "the mail server's certificate cannot be read."
+  "server.appleprof.sign.unreadable": "the mail server's certificate cannot be read.",
+  "webmailCleanup.section": "Automatic emptying",
+  "webmailCleanup.title": "Empty Junk and Trash by themselves",
+  "webmailCleanup.junk": "Empty Junk",
+  "webmailCleanup.trash": "Empty Trash",
+  "webmailCleanup.never": "Never",
+  "webmailCleanup.afterDays": "After $n days",
+  "webmailCleanup.help": "Off until you choose it. The server deletes the messages that have been in the folder longer than this.",
+  "webmailCleanup.unavailable": "The automatic emptying cannot be read right now. Try again later.",
+  "webmailCleanup.saveFailed": "The automatic emptying could not be saved. Try again later."
 }

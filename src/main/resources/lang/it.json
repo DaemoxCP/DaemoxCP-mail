@@ -7580,5 +7580,14 @@
   "server.appleprof.sign.notTrusted": "il certificato del server di posta non porta a un'autorità di cui telefoni e computer si fidano.",
   "server.appleprof.sign.otherName": "il certificato del server di posta non copre {h}.",
   "server.appleprof.sign.selfSigned": "il certificato del server di posta è ancora quello che si è fatta l'installazione. Quando c'è quello di Let's Encrypt (pagina Certificati SSL), il profilo si firma.",
-  "server.appleprof.sign.unreadable": "il certificato del server di posta non si legge."
+  "server.appleprof.sign.unreadable": "il certificato del server di posta non si legge.",
+  "webmailCleanup.section": "Svuotamento automatico",
+  "webmailCleanup.title": "Svuota da sole la Junk e il Cestino",
+  "webmailCleanup.junk": "Svuota la Junk",
+  "webmailCleanup.trash": "Svuota il Cestino",
+  "webmailCleanup.never": "Mai",
+  "webmailCleanup.afterDays": "Dopo $n giorni",
+  "webmailCleanup.help": "Spento finché non lo scegli. Il server cancella i messaggi che stanno nella cartella da più tempo di così.",
+  "webmailCleanup.unavailable": "Lo svuotamento automatico adesso non si riesce a leggere. Riprova più tardi.",
+  "webmailCleanup.saveFailed": "Lo svuotamento automatico non si è potuto salvare. Riprova più tardi."
 }
