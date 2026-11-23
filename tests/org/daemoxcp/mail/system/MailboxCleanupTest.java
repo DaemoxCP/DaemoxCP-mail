@@ -114,6 +114,15 @@ public class MailboxCleanupTest {
         Map<String, String> loc = WebmailCleanupPlugin.localization();
         check("its texts in English and Italian, the same labels", loc.keySet().equals(java.util.Set.of("en_US", "it_IT"))
                 && labels(loc.get("en_US")).equals(labels(loc.get("it_IT"))) && labels(loc.get("en_US")).size() == 9);
+        check("  the texts are the panel's language files (webmailCleanup.*): a new language of the panel reaches the webmail",
+                loc.get("en_US").contains("$labels['title'] = '" + org.daemoxcp.mail.i18n.I18n.t("en", "webmailCleanup.title") + "';")
+                && loc.get("it_IT").contains("$labels['afterdays'] = '" + org.daemoxcp.mail.i18n.I18n.t("it", "webmailCleanup.afterDays") + "';")
+                && loc.size() == org.daemoxcp.mail.i18n.I18n.LANGUAGES.size());
+        check("  Roundcube's names of the languages", WebmailCleanupPlugin.roundcubeLocale("en").equals("en_US")
+                && WebmailCleanupPlugin.roundcubeLocale("it").equals("it_IT") && WebmailCleanupPlugin.roundcubeLocale("es").equals("es_ES")
+                && WebmailCleanupPlugin.roundcubeLocale("pt").equals("pt_PT") && WebmailCleanupPlugin.roundcubeLocale("sv").equals("sv_SE"));
+        check("  an apostrophe or a backslash in a text does not break the PHP file",
+                WebmailCleanupPlugin.label("help", "Vider l'onglet \\ ici").equals("$labels['help'] = 'Vider l\\'onglet \\\\ ici';\n"));
         String channel = Files.readString(Path.of("src/main/java/org/daemoxcp/mail/webserver/RootChannel.java"));
         String gate = Files.readString(Path.of("src/main/java/org/daemoxcp/mail/webserver/RootGate.java"));
         check("the route: CSRF and Host exempt, served by the root, before sign-in, in the root's gate",
