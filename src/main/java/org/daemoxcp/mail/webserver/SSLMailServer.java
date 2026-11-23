@@ -58,7 +58,8 @@ public class SSLMailServer {
     public enum Mode { LEGACY, ROOT_PART, WEB_PART }
 
     /**
-     * The APIs that the web part serves by itself, with the daemoxcp_mail user: they do not need root (MySQL, SQLite read-only, the vault key read-only, the network). Domains
+     * The APIs that the web part serves by itself, with the daemoxcp_mail user: they do not need root
+     * (MySQL, SQLite read-only, the vault key read-only, the network). Domains
      * and mailboxes ask the root part for one thing only, the closed operation "mail-folders" (rootOperations),
      * without parameters. All the other APIs go to the root part, /api/account included: administrators,
      * passkeys, codes and sessions are written only by the root part (0.8.2, A).
@@ -11925,7 +11926,8 @@ public class SSLMailServer {
     /**
      * "Show password" (POST {id}): the copy of the password from the vault, only if it is still the
      * mailbox's password (compared with the current hash), because an old copy is not shown. The root
-     * serves it: the web part does not have the private key of the vault. Every reveal goes into the audit log.
+     * serves it: the web part does not have the private key of the vault.
+     * Every reveal goes into the audit log.
      */
     private void handleApiMailboxPassword(HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {

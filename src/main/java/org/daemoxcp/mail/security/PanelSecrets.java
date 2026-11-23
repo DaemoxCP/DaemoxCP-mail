@@ -62,8 +62,8 @@ public final class PanelSecrets {
     /** The panel's TLS private key (PEM) (it used to be in the SQLite configuration database). */
     public static final String PANEL_TLS_KEY = "panel_tls_key";
     /**
-     * The password of the web part's MySQL user (daemoxcp_mail_web), which can only call the web's procedures.
-     * The root part writes it when the user is ready and tested.
+     * The password of the web part's MySQL user (daemoxcp_mail_web), which can only call the web's procedures
+     * (WebDbAccess). The root part writes it when the user is ready and tested.
      */
     public static final String MYSQL_WEB_PASSWORD = "mysql_web_password";
     /**

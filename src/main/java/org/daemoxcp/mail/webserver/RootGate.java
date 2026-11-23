@@ -12,7 +12,8 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 /**
- * The closed list of what the root part accepts from the web part, before any handler:
+ * The closed list of what the root part accepts from the web part, before any
+ * handler:
  * <ul>
  *   <li>for every route that stays with the root part, the methods its handler uses ({@link #METHODS}); a route
  *       that is not here is rejected by the root part;</li>
