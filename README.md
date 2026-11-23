@@ -258,7 +258,7 @@ Measured on a running server (`ps -ax -o user,command`):
 
 | Service | Process | User | Why |
 |---|---|---|---|
-| **DaemoxCP Mail** | root part (`--web`) | `root` | It manages the machine: packages, services, firewall, configurations, boot environments. **It opens no port**: it only answers the web part on a local socket. |
+| **DaemoxCP Mail** | root part (`--web`) and the rc script's `daemon(8)`, which runs it and writes its log | `root` | It manages the machine: packages, services, firewall, configurations, boot environments. **It opens no port**: it only answers the web part on a local socket. |
 | | web part (`--web-part`) and its `daemon(8)` supervisor | `daemoxcp_mail` | Everything that answers on the network (port 2096). It forwards what needs root to the root part on `/var/run/daemoxcp-mail/root.sock`. |
 | **Postfix** | `master` | `root` | Opens the mail ports and delivers system mail. |
 | | `smtpd`, `qmgr`, `pickup`, … | `postfix` | Everything that talks to the Internet. |

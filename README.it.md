@@ -258,7 +258,7 @@ Misurati su un server in uso (`ps -ax -o user,command`):
 
 | Servizio | Processo | Utente | Perché |
 |---|---|---|---|
-| **DaemoxCP Mail** | parte root (`--web`) | `root` | Gestisce la macchina: pacchetti, servizi, firewall, configurazioni, boot environment. **Non apre nessuna porta**: risponde solo alla parte web, su un socket locale. |
+| **DaemoxCP Mail** | parte root (`--web`) e il `daemon(8)` dello script rc, che la avvia e ne scrive il registro | `root` | Gestisce la macchina: pacchetti, servizi, firewall, configurazioni, boot environment. **Non apre nessuna porta**: risponde solo alla parte web, su un socket locale. |
 | | parte web (`--web-part`) e il suo supervisore `daemon(8)` | `daemoxcp_mail` | Tutto ciò che risponde in rete (porta 2096). Quello che chiede root lo passa alla parte root su `/var/run/daemoxcp-mail/root.sock`. |
 | **Postfix** | `master` | `root` | Apre le porte della posta e consegna la posta di sistema. |
 | | `smtpd`, `qmgr`, `pickup`, … | `postfix` | Tutto ciò che parla con Internet. |
