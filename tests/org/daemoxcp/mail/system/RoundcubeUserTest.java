@@ -311,9 +311,11 @@ public class RoundcubeUserTest {
                 .contains("fastcgi_pass unix:" + RoundcubeUser.SOCKET + ";"));
         String pool = RoundcubeUser.poolConf("pm = static\npm.max_children = 4\n");
         List<RoundcubeUser.Pool> pp = RoundcubeUser.pools(pool);
-        check("the new pool: roundcube, its own socket, nginx in the group, pm carried over",
+        // Since 23/11/2026 the socket's group is roundcube_fpm (roundcube and nginx's www, nobody else): a php-fpm master
+        // that is not root may give the socket only one of roundcube's own groups (PhpFpmMaster).
+        check("the new pool: roundcube, its own socket, the socket's group shared with nginx only, pm carried over",
                 pp.size() == 1 && "roundcube".equals(pp.get(0).get("user")) && RoundcubeUser.SOCKET.equals(pp.get(0).get("listen"))
-                && "www".equals(pp.get(0).get("listen.group")) && "static".equals(pp.get(0).get("pm")));
+                && RoundcubeUser.SOCKET_GROUP.equals(pp.get(0).get("listen.group")) && "static".equals(pp.get(0).get("pm")));
         check("the www.conf placeholder has no pool, and no '#'", RoundcubeUser.pools(RoundcubeUser.wwwPlaceholder()).isEmpty()
                 && RoundcubeUser.wwwPlaceholder().lines().allMatch(l -> l.startsWith(";")));
 

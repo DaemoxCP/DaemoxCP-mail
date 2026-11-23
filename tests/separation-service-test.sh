@@ -125,7 +125,7 @@ check "$PANEL/database: $(mode $PANEL/database)" "$(is "$(mode $PANEL/database)"
 check "daemoxcp-mail.db: $(mode $PANEL/database/daemoxcp-mail.db)" "$(is "$(mode $PANEL/database/daemoxcp-mail.db)" "-rw-r----- root:daemoxcp_mail")"
 check "the audit log: $(mode /var/log/daemoxcp-mail-auth.log)" "$(is "$(mode /var/log/daemoxcp-mail-auth.log)" "-rw-r----- daemoxcp_mail:wheel")"
 check "newsyslog recreates it as daemoxcp_mail" "$(has "$(cat /usr/local/etc/newsyslog.conf.d/daemoxcp-mail-auth.conf)" "daemoxcp_mail:wheel")"
-check "the web part's log: $(mode /var/db/daemoxcp-mail/panel-web.log)" "$(has "$(mode /var/db/daemoxcp-mail/panel-web.log)" "-rw------- root:")"
+check "the web part's log, its supervisor's: $(mode /var/db/daemoxcp-mail/panel-web.log)" "$(is "$(mode /var/db/daemoxcp-mail/panel-web.log)" "-rw------- daemoxcp_mail:wheel")"
 A=$PANEL/admin
 check "the pages: $(mode $A)" "$(is "$(mode $A)" "drwxr-x--- root:daemoxcp_mail")"
 check "their scripts: $(mode $A/assets/open)" "$(is "$(mode $A/assets/open)" "drwxr-x--- root:daemoxcp_mail")"
@@ -140,10 +140,12 @@ for f in $E/root-secrets.properties $E/master.key $E/firewall.json /var/db/daemo
     as_web /bin/test -r "$f"; r=$?
     check "daemoxcp_mail cannot read $f" "$(is $r 1)"
 done
-for f in $E/panel-secrets.properties $E/master.key $E $PANEL/database/daemoxcp-mail.db $PANEL/database $RUN $RUN/root.sock $JAR; do
+for f in $E/panel-secrets.properties $E/master.key $E $PANEL/database/daemoxcp-mail.db $PANEL/database $RUN $JAR; do
     as_web /bin/test -w "$f"; r=$?
     check "daemoxcp_mail cannot write $f" "$(is $r 1)"
 done
+# unix(4): connecting to a socket needs write permission on it; the folder, root's, keeps it from being replaced.
+as_web /bin/test -w $RUN/root.sock; check "daemoxcp_mail can write the root socket, to connect to it (unix(4))" $?
 
 echo
 echo "== 3. Sign-in and the API through the web part =="
@@ -163,9 +165,10 @@ PASSET=$(curl -sk -A "$UA" -b "$JAR_COOKIES" "$BASE/home" | grep -o '/assets/[0-
 c=$(get "$PASSET"); check "a script of a signed-in page ($PASSET): $c" "$(is "$c" 200)"
 c=$(post "/api/updates" '{"action":"service_users"}' "$CSRF"); B=$(cat /var/tmp/sep-body)
 check "POST service_users with the CSRF token: $c" "$(is "$c" 200)"
-PANEL_ROW=$(printf '%s' "$B" | tr '{' '\n' | grep '"daemoxcp-mail"' | head -1)
-check "  the panel runs as daemoxcp_mail and root ($PANEL_ROW)" "$(has "$PANEL_ROW" '"daemoxcp_mail"')"
-check "  root for the part that manages the machine" "$(has "$PANEL_ROW" '"root"')"
+# Each user of a service is an object of its "roles", with the processes ps shows: the panel's are --web and --web-part,
+# and only the panel runs as daemoxcp_mail.
+check "  the panel runs as daemoxcp_mail ($(printf '%s' "$B" | grep -o '"user":"daemoxcp_mail"' | head -1))" "$(has "$B" '"user":"daemoxcp_mail"')"
+check "  root for the part that manages the machine (--web)" "$(has "$B" '"--web"')"
 check "  and the page does not say it runs entirely as root" "$(is "$(has "$B" panelLegacy)" 1)"
 c=$(post "/api/updates" '{"action":"service_users"}' ""); check "the same without the CSRF token: 403 ($c)" "$(is "$c" 403)"
 
@@ -177,9 +180,10 @@ c=$(post "/api/domains" "{\"domain\":\"$D\",\"description\":\"separation test\"}
 check "add a test domain: $c (id $DID)" "$(is "$c" 200)"
 c=$(post "/api/mailboxes" "{\"email\":\"probe@$D\",\"password\":\"Sep-Test-Password-2026x\",\"name\":\"Probe\",\"quota_mb\":10}" "$CSRF"); MID=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' /var/tmp/sep-body)
 check "add a test mailbox: $c (id $MID, $(cut -c1-120 /var/tmp/sep-body))" "$(is "$c" 200)"
-[ -d "/var/vmail/$D/probe/Maildir/cur" ] && [ -d "/var/vmail/$D/probe/Maildir/new" ] && [ -d "/var/vmail/$D/probe/Maildir/tmp" ]; r=$?
+# The Maildir is the mailbox's folder itself (mail_path = /var/vmail/<domain>/<user>, since 20/11/2026).
+[ -d "/var/vmail/$D/probe/cur" ] && [ -d "/var/vmail/$D/probe/new" ] && [ -d "/var/vmail/$D/probe/tmp" ]; r=$?
 check "the root part made its mail folders (the mail-folders operation)" $r
-check "  owned by vmail ($(stat -f %Su /var/vmail/$D/probe/Maildir 2>/dev/null))" "$(is "$(stat -f %Su /var/vmail/$D/probe/Maildir 2>/dev/null)" vmail)"
+check "  owned by vmail ($(stat -f %Su /var/vmail/$D/probe 2>/dev/null))" "$(is "$(stat -f %Su /var/vmail/$D/probe 2>/dev/null)" vmail)"
 c=$(post "/api/mailbox-password" "{\"id\":$MID}" "$CSRF"); B=$(cat /var/tmp/sep-body)
 check "Show password asks a recent confirmation first: $c, needs_reauth" "$(is "$c$(has "$B" '"needs_reauth":true')" 4030)"
 confirm_session
@@ -239,7 +243,10 @@ rm -f "$MYOPT"
 echo
 echo "== 3d. Postfix's and Dovecot's own MySQL users (MailDbUsers) =="
 PF=/usr/local/etc/postfix
-DSQL=/usr/local/etc/dovecot/dovecot-sql.conf
+# Dovecot 2.4 keeps its MySQL settings in auth-sql.conf.ext ("user = ..."); 2.3 in dovecot-sql.conf ("user=..." in connect).
+DSQL=/usr/local/etc/dovecot/conf.d/auth-sql.conf.ext
+[ -f $DSQL ] || DSQL=/usr/local/etc/dovecot/dovecot-sql.conf
+dsql_user() { grep -oE 'user ?= ?[A-Za-z0-9_]+' $DSQL | head -1 | tr -d ' '; }
 unescape() { sed 's/\\\(.\)/\1/g'; }
 PANELPW=$(sed -n 's/^mysql_password=//p' $E/root-secrets.properties | unescape)
 check "the panel's MySQL password is known to the test" "$(is "$([ -n "$PANELPW" ] && echo y)" y)"
@@ -250,7 +257,7 @@ for m in mysql-virtual-domains.cf mysql-virtual-mailboxes.cf mysql-virtual-alias
     R=$(/usr/local/sbin/postmap -q daemoxcp-mail-probe@invalid mysql:$PF/$m 2>&1; echo "exit $?")
     check "  postmap -q asks MySQL without an error ($R)" "$(is "$R" "exit 1")"
 done
-check "dovecot-sql.conf enters as daemoxcp_mail_dovecot ($(grep -o 'user=[^ ]*' $DSQL))" "$(is "$(grep -o 'user=[^ ]*' $DSQL)" "user=daemoxcp_mail_dovecot")"
+check "$(basename $DSQL) enters as daemoxcp_mail_dovecot ($(dsql_user))" "$(is "$(dsql_user)" "user=daemoxcp_mail_dovecot")"
 check "  the panel's password is not in it" "$(is "$(grep -cF -- "$PANELPW" $DSQL)" 0)"
 check "  still root:dovecot 0600 ($(mode $DSQL))" "$(is "$(mode $DSQL)" "-rw------- root:dovecot")"
 R=$(/usr/local/bin/doveadm auth lookup daemoxcp-mail-auth-probe@invalid >/dev/null 2>&1; echo $?)
@@ -260,7 +267,7 @@ printf '[client]\nuser=root\npassword="%s"\n' "$(sed -n 's/^mysql_root_password=
 asroot() { /usr/local/bin/mysql --defaults-extra-file="$ROOTOPT" -N -e "$1" 2>&1; }
 R=$(asroot "SELECT COUNT(*) FROM information_schema.processlist WHERE user = 'daemoxcp_mail_dovecot'")
 check "MySQL sees Dovecot's connection as daemoxcp_mail_dovecot ($R)" "$(is "$([ "$R" -ge 1 ] 2>/dev/null && echo y)" y)"
-MDB=$(sed -n 's/.*dbname=\([A-Za-z0-9_]*\).*/\1/p' $DSQL)
+MDB=$(sed -n 's/.*dbname *= *\([A-Za-z0-9_]*\).*/\1/p' $DSQL | head -1)
 BOX=$(asroot "SELECT email FROM $MDB.mailboxes WHERE active = 1 AND receive_enabled = 1 LIMIT 1")
 if [ -n "$BOX" ]; then
     R=$(/usr/local/sbin/postmap -q "$BOX" mysql:$PF/mysql-virtual-mailboxes.cf 2>&1)
@@ -308,6 +315,7 @@ check "no DONE, no WARNING ($DONE)" "$(is "$DONE" "")"
 echo
 echo "== 6. Planted: the user daemoxcp_mail is someone else's =="
 service daemoxcp_mail stop >/dev/null 2>&1
+GECOS_BEFORE=$(pw usershow daemoxcp_mail | cut -d: -f8)
 pw usermod daemoxcp_mail -c "Someone else"
 m=$(mark); service daemoxcp_mail start >/dev/null 2>&1; STATE=$(wait_start "$m"); SEGMENT=$(since "$m")
 check "the panel serves everything as root ($STATE)" "$(is "$STATE" legacy)"
@@ -315,14 +323,14 @@ check "  and says why" "$(has "$SEGMENT" "is not the panel's: comment")"
 check "  root listens on $PORT" "$(is "$(sockstat -46l -p $PORT | awk 'NR > 1 { print $1 }' | sort -u)" root)"
 c=$(curl -sk -o /dev/null -w '%{http_code}' "$BASE/index"); check "  the panel answers ($c)" "$(is "$c" 200)"
 service daemoxcp_mail stop >/dev/null 2>&1
-pw usermod daemoxcp_mail -c "Mail panel web part"
+pw usermod daemoxcp_mail -c "$GECOS_BEFORE"
 
 echo
 echo "== 7. Planted: the jar unreadable by daemoxcp_mail =="
 chmod 600 "$JAR"
 m=$(mark); service daemoxcp_mail start >/dev/null 2>&1; STATE=$(wait_start "$m"); SEGMENT=$(since "$m")
 check "the panel serves everything as root ($STATE)" "$(is "$STATE" legacy)"
-check "  and says why" "$(has "$SEGMENT" "cannot read $JAR")"
+check "  and says why" "$(has "$SEGMENT" "cannot read $PANEL/")"
 service daemoxcp_mail stop >/dev/null 2>&1
 chmod 644 "$JAR"
 

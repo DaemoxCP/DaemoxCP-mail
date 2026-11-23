@@ -372,11 +372,12 @@ public final class PanelSeparation {
         } catch (IOException e) {
             LOGGER.warning("[PanelSeparation] the web part's log could not be rotated: " + e.getMessage());
         }
-        // daemon(8) opens the log as daemoxcp_mail, and cannot create it in root's folder: it is prepared here.
+        // daemon(8) opens the log as daemoxcp_mail, and cannot create it in root's folder: it is prepared here,
+        // readable by its writer only, as daemon(8) creates it (0600).
         try {
             if (Files.isSymbolicLink(webLog)) return webLog + " is a symbolic link";
             if (!Files.exists(webLog)) Files.createFile(webLog);
-            set(webLog, USER, "wheel", "rw-r-----");
+            set(webLog, USER, "wheel", "rw-------");
         } catch (IOException e) {
             return "the web part's log " + webLog + " could not be prepared: " + e.getMessage();
         }
