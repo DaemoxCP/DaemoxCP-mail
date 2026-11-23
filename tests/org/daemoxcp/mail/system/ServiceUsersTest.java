@@ -183,6 +183,20 @@ public class ServiceUsersTest {
         check("  the jar with the name it had before the rename (until the restart) is still the panel",
                 java.util.regex.Pattern.compile(ServiceUsers.JAR).matcher("java -jar /home/panel/freebsd-mail-panel-1.0.jar --web").find()
                 && !java.util.regex.Pattern.compile(ServiceUsers.JAR).matcher("java -jar /home/panel/other-1.0.jar --web").find());
+        // The panel's two daemon(8) supervisors (23/11/2026): the rc script's, root like the root part it runs; the web
+        // part's, as daemoxcp_mail. The page shows them, so a supervisor left as root no longer goes unseen.
+        String supervised = full + "root    69990     1 daemon: daemoxcp_mail[70001] (daemon)\n"
+                + "daemoxcp_mail 70003     1 daemon: daemoxcp-mail-web[70002] (daemon)\n";
+        ServiceUsers.Findings sup = ex(supervised, POOL_AFTER, "", false);
+        Map<String, java.util.Set<String>> supRoles = sup.services().get("daemoxcp-mail").roles;
+        check("the supervisors are the panel's, with no warning (" + codes(sup) + "): " + supRoles, sup.problems().isEmpty()
+                && supRoles.get("root").equals(java.util.Set.of("--web", "daemon"))
+                && supRoles.get("daemoxcp_mail").equals(java.util.Set.of("--web-part", "daemon")));
+        sup = ex(full + "root    70003     1 daemon: daemoxcp-mail-web[70002] (daemon)\n", POOL_AFTER, "", false);
+        check("  the web part's supervisor as root: warning (" + codes(sup) + ")", codes(sup).equals("root:daemoxcp-mail"));
+        sup = ex(full + "root    70004     1 daemon: other-service[70005] (daemon)\n", POOL_AFTER, "", false);
+        check("  a daemon(8) of something else is not the panel's (" + sup.services().get("daemoxcp-mail").roles + ")",
+                !sup.services().get("daemoxcp-mail").roles.get("root").contains("daemon"));
         check("mysql: mysqld and mysqld_safe, not sh (" + f.services().get("mysql").roles + ")",
                 f.services().get("mysql").roles.get("mysql").equals(java.util.Set.of("mysqld", "mysqld_safe")));
         check("fail2ban: fail2ban-server, not python3.12; redis: redis-server; unbound: local-unbound",

@@ -72,6 +72,11 @@ public final class ServiceUsers {
 
     /** In order: the first one that recognises the process wins. */
     static final List<Rule> RULES = List.of(
+            // The panel's two daemon(8) supervisors, by their titles: the rc script's runs the root part and writes its
+            // log, root like it; the web part's runs as daemoxcp_mail since 23/11/2026 (PanelSeparation): as root it
+            // is a warning.
+            new Rule(Product.SLUG, "^daemon: " + Pattern.quote(PanelSeparation.TITLE) + "\\[", false),
+            new Rule(Product.SLUG, "^daemon: " + Pattern.quote(Product.ID) + "\\[", true),
             // The web part of the separated panel (PanelSeparation) runs as its own user: as root it is a warning.
             // The jar is also recognised by its earlier name (section "jarNames"): until the restart the process
             // still shows it.
@@ -121,6 +126,7 @@ public final class ServiceUsers {
      */
     static String processName(String service, String command) {
         String c = command == null ? "" : command.trim();
+        if (Product.SLUG.equals(service) && c.startsWith("daemon: ")) return "daemon";
         if (Product.SLUG.equals(service))
             return c.matches(".*--web-part( .*|$)") ? "--web-part" : c.matches(".*--web( .*|$)") ? "--web" : "java";
         if (c.startsWith("nginx: ")) return c.replaceFirst("^nginx: (\\S+).*$", "$1");
