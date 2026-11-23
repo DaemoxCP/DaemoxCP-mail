@@ -196,6 +196,7 @@
     ["# e lockedPackages con regola: block in quick from <permaban>", "# e bloccati con regola: block in quick from <permaban>"]
   ],
   "italianComments": [
+    ["# Firewall panel-fw DISABILITATO — nessuna regola attiva.", "# Firewall panel-fw DISABLED: no rule is active."],
     ["# (smtpd_sender_login_maps), il From questa regola di Rspamd, che dal milter sa chi si e' autenticato (HeaderFromCheck).", "# (smtpd_sender_login_maps), this Rspamd rule the From, knowing from the milter who authenticated (HeaderFromCheck)."],
     ["# Il file e' quello che scrive anche il pannello (NginxMain, una fonte sola): il blocco default_server che risponde 444", "# The file is the one the panel writes too (NginxMain, a single source): the default_server block that answers 444"],
     ["# lasciato al predefinito, che dal livello 3.11 passa da vuoto a may: cosi' il livello non cambia niente (reperto 251).", "# left to the default, which from level 3.11 goes from empty to may: so the level changes nothing (finding 251)."],

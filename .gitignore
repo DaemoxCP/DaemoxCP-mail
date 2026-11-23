@@ -1,11 +1,11 @@
-# Prodotti della compilazione: li rigenera "mvn package", non vanno in git.
-# Prima di questo file il repository ne seguiva 289, fra cui 32 MB di jar: ogni
-# diff se li portava dietro e tre volte in una sessione hanno impedito un
-# "git checkout" e un "git rebase" perche' risultavano modificati.
+# Build output: "mvn package" makes it again, it does not belong in git.
+# Before this file the repository tracked 289 of these files, 32 MB of jars among them: every
+# diff carried them along, and three times in one session they blocked a
+# "git checkout" and a "git rebase" because they showed as modified.
 target/
 
-# Rumore di macOS, uno per cartella visitata dal Finder.
+# macOS noise, one per folder the Finder opened.
 .DS_Store
 
-# Le prove compilate sul posto (javac -d tests): si rifanno, e una e' finita in un commit per sbaglio.
+# Tests compiled in place (javac -d tests): they are made again, and one ended up in a commit by mistake.
 tests/**/*.class

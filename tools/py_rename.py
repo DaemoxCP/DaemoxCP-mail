@@ -48,15 +48,15 @@ for f in args[1:]:
           | {(a.asname or a.name).split(".")[0] for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
     caught = sorted(v for k, v in mp.items() if k in names and v in names and v not in mp)
     for v in caught:
-        print(f"NON TORNA {f}: il nome nuovo {v} c'e' gia'"); problems += 1
+        print(f"DOES NOT MATCH {f}: the new name {v} already exists"); problems += 1
     new, n = rename(src)
     before = ast.dump(Mapped().visit(ast.parse(src)), include_attributes=False)
     after = ast.dump(ast.parse(new), include_attributes=False)
     if before != after:
         i = next(i for i in range(min(len(before), len(after))) if before[i] != after[i])
-        print(f"NON TORNA {f}: albero diverso: ...{before[i-80:i+60]}... / ...{after[i-80:i+60]}..."); problems += 1
+        print(f"DOES NOT MATCH {f}: different tree: ...{before[i-80:i+60]}... / ...{after[i-80:i+60]}..."); problems += 1
     left = sorted({t.string for t in tokenize.generate_tokens(io.StringIO(new).readline) if t.type == tokenize.NAME} & set(mp))
-    print(f"{f}: {n} nomi cambiati" + (f"; restano (dopo un punto?): {left}" if left else ""))
+    print(f"{f}: {n} names changed" + (f"; left (after a dot?): {left}" if left else ""))
     if not dry and not problems: open(f, "w", encoding="utf-8").write(new)
-print("VERIFICA FALLITA" if problems else "VERIFICA: stesso albero a meno della mappa, nessuna cattura")
+print("CHECK FAILED" if problems else "CHECK: same tree except for the map, no capture")
 sys.exit(1 if problems else 0)

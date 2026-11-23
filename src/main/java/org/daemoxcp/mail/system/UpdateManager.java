@@ -9712,7 +9712,7 @@ public final class UpdateManager {
         r.put("before", before).put("after", after).put("removed", via);
 
         if (!via) {
-            if (isProtected) log.append("--- riprotezione ---\n").append(sh("pkg lock -y " + name + " 2>&1", 60));
+            if (isProtected) log.append("--- ").append(I18n.tr("server.um.x.relockSection")).append(" ---\n").append(sh("pkg lock -y " + name + " 2>&1", 60));
             // pkg states the reason in its output: report it instead of leaving
             // the user to read the log to understand why.
             String why = deleteOutput.contains("locked")

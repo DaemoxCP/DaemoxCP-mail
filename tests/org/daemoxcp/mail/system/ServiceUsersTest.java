@@ -202,7 +202,7 @@ public class ServiceUsersTest {
         f = ex(AFTER, POOL_AFTER, "# 25 0 * * * acme.sh --cron\n", false);
         check("a comment in the cron is not a warning", f.problems().isEmpty());
 
-        OUT.println("\n== What every user of a service does (reperto 228)");
+        OUT.println("\n== What every user of a service does (finding 228)");
         // A separated panel, Dovecot with its four users, Postfix's daemons: as on the VM after the upgrades.
         String full = AFTER.replace("root    70001     1 /usr/local/openjdk25/bin/java -jar /home/panel/daemoxcp-mail-1.0.jar --web",
                         "root    70001     1 /usr/local/openjdk25/bin/java -jar /home/panel/daemoxcp-mail-1.0.jar --web\n"

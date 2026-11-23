@@ -16,6 +16,6 @@ for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.html'))) {
 for (const f of extra) scan(fs.readFileSync(f, 'utf8'));
 const targets = new Map(); for (const [a, b] of map) targets.set(b, (targets.get(b) || []).concat(a));
 for (const [a, b] of map) {
-  if (ids.has(b) && !map.has(b)) console.log('ESISTE GIA ' + a + ' -> ' + b);
-  if (targets.get(b).length > 1) console.log('CONDIVISO ' + targets.get(b).join(',') + ' -> ' + b);
+  if (ids.has(b) && !map.has(b)) console.log('ALREADY EXISTS ' + a + ' -> ' + b);
+  if (targets.get(b).length > 1) console.log('SHARED ' + targets.get(b).join(',') + ' -> ' + b);
 }

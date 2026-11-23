@@ -408,7 +408,7 @@ public class InstallScriptDriftTest {
                 + "echo \"You may need to manually remove $C if it is no longer needed.\"; fi\nexit 0\n";
         Path manifest = work.resolve("manifest-" + version);
         Files.writeString(manifest, "name: " + PKG + "\nversion: \"" + version + "\"\norigin: misc/" + PKG
-                + "\ncomment: \"test for reperto 42\"\ndesc: \"test for reperto 42\"\nmaintainer: root@localhost\n"
+                + "\ncomment: \"test for finding 42\"\ndesc: \"test for finding 42\"\nmaintainer: root@localhost\n"
                 + "www: https://localhost/\nprefix: /usr/local\nscripts: {\n"
                 + "  pre-install: <<EOD\n" + preInstall + "EOD\n"
                 + "  post-install: <<EOD\n" + postInstall + "EOD\n"

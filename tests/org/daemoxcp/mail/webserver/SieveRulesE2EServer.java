@@ -77,7 +77,7 @@ public class SieveRulesE2EServer {
         Main.setupRequired = false;
 
         MailDatabase.Domain dom = db.getDomainByName(DOMAIN);
-        int domainId = dom != null ? dom.id : db.addDomain(DOMAIN, "reperto 223");
+        int domainId = dom != null ? dom.id : db.addDomain(DOMAIN, "finding 223");
         if (db.getMailboxByEmail("alice@" + DOMAIN) == null)
             db.addMailbox(domainId, "alice@" + DOMAIN, "A-long-test-password-42", "Alice", 100);
         if (db.getMailboxByEmail("bob@" + DOMAIN) == null

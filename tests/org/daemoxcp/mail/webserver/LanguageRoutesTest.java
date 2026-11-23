@@ -176,7 +176,7 @@ public class LanguageRoutesTest {
                     && "it".equals(db.getAdminLanguage(admin)) && setCookie(save).contains("__Host-lang=it"));
             HttpResponse<String> home = ask("GET", "/home", null, "Cookie", sessionCookie, "Accept-Language", "en");
             check("the saved choice wins over the browser", "it".equals(langOf(home)) && home.body().contains("<title>Dashboard - DaemoxCP Mail</title>")
-                    && home.body().contains("<span class=\"topbar-page\">Dashboard</span>") && home.body().contains("Vai al contenuto"));
+                    && home.body().contains("<span class=\"topbar-page\">Dashboard</span>") && home.body().contains(org.daemoxcp.mail.i18n.I18n.t("it", "layout.skipToContent")));
             check("and a browser without the cookie gets it aligned", setCookie(home).contains("__Host-lang=it"));
             HttpResponse<String> aligned = ask("GET", "/home", null, "Cookie", sessionCookie + "; __Host-lang=it", "Accept-Language", "en");
             check("a cookie already aligned is not sent again", !setCookie(aligned).contains("__Host-lang"));

@@ -1,9 +1,9 @@
-# Rinomina r26 di tutto il progetto, 24/10/2026 (ramo mac/codice-in-inglese), su main a a4c9f16.
-# Tre giri, in quest'ordine, ognuno controllato da tools/JavaRename.java: i tipi, poi membri e
-# variabili, poi i nomi rimasti. Le righe member: e type: valgono su qualunque ramo; le righe local:
-# portano il numero di riga dell'albero di quel giro.
+# The r26 rename of the whole project, 24/10/2026, on main at a4c9f16.
+# Three passes, in this order, each checked by tools/JavaRename.java: the types, then members and
+# variables, then the names left. The member: and type: lines hold on any branch; the local: lines
+# carry the line number of that pass's tree.
 
-# --- giro 1: tipi
+# --- pass 1: types
 type:org.mail_panel.security.BanActionRepair$Esito Outcome
 type:org.mail_panel.security.BanActionRepair$Esito$Tipo Kind
 type:org.mail_panel.security.DnsRules$EsitoDmarc DmarcOutcome
@@ -46,7 +46,7 @@ type:org.mail_panel.system.SubmissionPort$Ris RunResult
 type:org.mail_panel.system.WebDiagnostics$Blocco Block
 type:org.mail_panel.system.WebDiagnostics$Ris RunResult
 type:org.mail_panel.system.WebProtection$Ris RunResult
-# --- giro 2: membri e variabili
+# --- pass 2: members and variables
 local:src/main/java/org/mail_panel/Main.java:366:ripristino restore
 local:src/main/java/org/mail_panel/Main.java:435:creato created
 local:src/main/java/org/mail_panel/Main.java:906:politica policy
@@ -2986,7 +2986,7 @@ local:tests/org/mail_panel/webserver/VersionsApiTest.java:175:ignoto unknown
 local:tests/org/mail_panel/webserver/VersionsApiTest.java:184:azione action
 local:tests/org/mail_panel/webserver/VersionsApiTest.java:194:riuscita succeeded
 local:tests/org/mail_panel/webserver/VersionsApiTest.java:201:dopo after
-# --- giro 3: nomi rimasti
+# --- pass 3: names left
 local:src/main/java/org/mail_panel/security/BanActionRepair.java:260:inizio start
 local:src/main/java/org/mail_panel/security/BanActionRepair.java:440:inizio start
 local:src/main/java/org/mail_panel/security/BanActionRepair.java:531:coda queue

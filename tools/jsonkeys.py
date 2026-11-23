@@ -80,7 +80,7 @@ def _js_rename(text, where):
     protected = i18n_object_ranges(text)
     def r_obj(m):
         if any(a <= m.start(2) < b for a, b in protected):
-            counts["js {k:} lasciata, segnaposto di t()"] += 1
+            counts["js {k:} left, a placeholder of t()"] += 1
             return m.group(0)
         counts["js {k:} " + where] += 1
         return m.group(1) + mp[m.group(2)] + m.group(3)
@@ -108,7 +108,7 @@ def i18n_object_ranges(text):
 
 def note_review(text, path, offset_line=0):
     for m in JS_LOOSE.finditer(text):
-        review.append((path, text.count("\n", 0, m.start()) + 1 + offset_line, "stringa sciolta", m.group(0)))
+        review.append((path, text.count("\n", 0, m.start()) + 1 + offset_line, "loose string", m.group(0)))
     for m in JS_SHORT.finditer(text):
         review.append((path, text.count("\n", 0, m.start()) + 1 + offset_line, "abbreviata", m.group(0).strip()))
 
@@ -178,10 +178,10 @@ for path in sorted(glob.glob(f"{root}/src/main/resources/pages/*.js") + glob.glo
         if not dry:
             open(path, "w", encoding="utf-8").write(t2)
 
-print(f"file cambiati: {changed}{' (prova a secco)' if dry else ''}")
+print(f"files changed: {changed}{' (dry run)' if dry else ''}")
 for k, v in sorted(counts.items()):
     print(f"  {k}: {v}")
-print(f"da guardare a mano: {len(review)}")
+print(f"to look at by hand: {len(review)}")
 with open(f"{root}/../jsonkeys-review.txt", "w", encoding="utf-8") as f:
     for r in review:
         f.write(f"{r[0]}:{r[1]}\t{r[2]}\t{r[3]}\n")

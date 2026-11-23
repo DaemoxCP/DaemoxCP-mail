@@ -551,7 +551,7 @@ public class PfFirewallManager {
     static String anchorBody(FirewallState state, List<String> geoFiles, String refusal) {
         StringBuilder sb = new StringBuilder();
         if (state.mode == Mode.DISABLED) {
-            sb.append("# Firewall panel-fw DISABILITATO — nessuna regola attiva.\n");
+            sb.append("# Firewall panel-fw DISABLED: no rule is active.\n");
             return sb.toString();
         }
 

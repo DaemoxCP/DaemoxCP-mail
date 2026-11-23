@@ -266,7 +266,7 @@ public class MailboxPasswordTest {
             check("nothing changed so far", db.mailboxPasswordMatches(id, second));
             HttpResponse<String> wrong = send("POST", path, form("user", email, "curpass", "Not-This-One-2026", "newpass", "From-Webmail-2026"), type, "X-DaemoxCP-Key", key);
             check("wrong current password: 403, unchanged", wrong.statusCode() == 403 && db.mailboxPasswordMatches(id, second));
-            HttpResponse<String> weak = send("POST", path, form("user", email, "curpass", second, "newpass", "corta"), type, "X-DaemoxCP-Key", key);
+            HttpResponse<String> weak = send("POST", path, form("user", email, "curpass", second, "newpass", "short"), type, "X-DaemoxCP-Key", key);
             check("new password outside the rule: 400, unchanged", weak.statusCode() == 400 && db.mailboxPasswordMatches(id, second));
             check("accented letters: 400", send("POST", path, form("user", email, "curpass", second, "newpass", "Password-café-2026"), type,
                     "X-DaemoxCP-Key", key).statusCode() == 400);
@@ -340,13 +340,13 @@ public class MailboxPasswordTest {
                 + "$config['plugins'] = ['archive', 'password'];\n"
                 + "// Password plugin (change password from webmail)\n"
                 + "$config['password_driver'] = 'sql';\n"
-                + "$config['password_db_dsn'] = 'mysql://mailpanel:Segreta123@127.0.0.1/mailpanel';\n"
+                + "$config['password_db_dsn'] = 'mysql://mailpanel:Secret123@127.0.0.1/mailpanel';\n"
                 + "$config['password_query'] = 'UPDATE mailboxes SET password=%P WHERE email=%u';\n"
                 + "$config['password_crypt_hash'] = 'blowfish';\n"
                 + "$config['password_minimum_length'] = 12;\n"
                 + "$config['managesieve_port'] = 4190;\n";
         String fixed = WebmailPasswordConfig.apply(old, 2096, key);
-        check("the sql driver and the panel's MySQL password are gone", !fixed.contains("Segreta123") && !fixed.contains("'sql'")
+        check("the sql driver and the panel's MySQL password are gone", !fixed.contains("Secret123") && !fixed.contains("'sql'")
                 && !fixed.contains("password_query") && !fixed.contains("password_crypt_hash"));
         check("the rest stays", fixed.contains("db_dsnw") && fixed.contains("'archive', 'password'") && fixed.contains("managesieve_port"));
         check("the httpapi block points to the panel on loopback with the key", fixed.contains("'httpapi'")

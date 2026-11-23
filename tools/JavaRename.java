@@ -98,7 +98,7 @@ public class JavaRename {
     public static void main(String[] args) throws Exception {
         boolean pkg = args.length == 4 && args[0].equals("package");
         if (args.length != 3 && !pkg) {
-            System.err.println("uso: declarations|rename <classpath> <file>  oppure  package <classpath> <vecchio> <nuovo>");
+            System.err.println("usage: declarations|rename <classpath> <file>  or  package <classpath> <old> <new>");
             System.exit(2);
         }
         Path root = Path.of("").toAbsolutePath();
@@ -106,7 +106,7 @@ public class JavaRename {
             case "declarations" -> listDeclarations(root, args[1], Path.of(args[2]));
             case "rename" -> System.exit(rename(root, args[1], Path.of(args[2])));
             case "package" -> System.exit(renamePackage(root, args[1], args[2], args[3]));
-            default -> { System.err.println("modo sconosciuto: " + args[0]); System.exit(2); }
+            default -> { System.err.println("unknown mode: " + args[0]); System.exit(2); }
         }
     }
 
@@ -144,7 +144,7 @@ public class JavaRename {
         }
         if (!errors.isEmpty()) {
             errors.stream().limit(20).forEach(System.err::println);
-            throw new IllegalStateException(errors.size() + " errori di compilazione: niente da fare finche' non compila");
+            throw new IllegalStateException(errors.size() + " compilation errors: nothing to do until it compiles");
         }
         Trees t = Trees.instance(task);
         Elements elements = task.getElements();
@@ -227,7 +227,7 @@ public class JavaRename {
             if (e == null || pos < 0) return;
             kind = refine(e, kind);
             if (!text.startsWith(name, pos)) throw new IllegalStateException(
-                    "posizione sbagliata per " + name + " in " + file + ":" + lines.getLineNumber(Math.max(pos, 0)));
+                    "wrong position for " + name + " in " + file + ":" + lines.getLineNumber(Math.max(pos, 0)));
             String key = "src:" + file + "@" + pos;
             keys.put(e, key);
             // For a type the "owner" is the type itself: it is chosen by binary name.
@@ -374,11 +374,11 @@ public class JavaRename {
      */
     static int renamePackage(Path root, String classpath, String oldPkg, String newPkg) throws IOException {
         String pkgName = "[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)+";
-        if (!oldPkg.matches(pkgName) || !newPkg.matches(pkgName)) throw new IllegalArgumentException("nomi di pacchetto non validi");
+        if (!oldPkg.matches(pkgName) || !newPkg.matches(pkgName)) throw new IllegalArgumentException("invalid package names");
         watchQualified = oldPkg;
         Analysis before = analyze(root, classpath);
-        System.out.println("prima: " + before.occurrences.size() + " occorrenze, " + before.declarations.size()
-                + " dichiarazioni, " + before.qualifiedSpans.values().stream().mapToInt(Set::size).sum() + " volte " + oldPkg);
+        System.out.println("before: " + before.occurrences.size() + " occurrences, " + before.declarations.size()
+                + " declarations, " + before.qualifiedSpans.values().stream().mapToInt(Set::size).sum() + " times " + oldPkg);
 
         String oldDir = oldPkg.replace('.', '/') + "/", newDir = newPkg.replace('.', '/') + "/";
         Map<String, String> moves = new HashMap<>();
@@ -390,14 +390,14 @@ public class JavaRename {
         Map<String, TreeMap<Integer, Edit>> byFile = new HashMap<>();
         for (Map.Entry<String, TreeSet<Integer>> q : before.qualifiedSpans.entrySet())
             for (int s : q.getValue()) byFile.computeIfAbsent(q.getKey(), k -> new TreeMap<>()).put(s, new Edit(q.getKey(), s, oldPkg, newPkg));
-        System.out.println("nomi qualificati da cambiare in " + byFile.size() + " file, file da spostare: " + moves.size());
+        System.out.println("qualified names to change in " + byFile.size() + " files, files to move: " + moves.size());
 
         for (String f : before.sources.keySet()) {
             StringBuilder sb = new StringBuilder(before.sources.get(f));
             TreeMap<Integer, Edit> ed = byFile.get(f);
             if (ed != null) for (Edit e : ed.descendingMap().values()) {
                 if (!sb.substring(e.pos(), e.pos() + oldPkg.length()).equals(oldPkg))
-                    throw new IllegalStateException("testo inatteso in " + f + " a " + e.pos());
+                    throw new IllegalStateException("unexpected text in " + f + " at " + e.pos());
                 sb.replace(e.pos(), e.pos() + oldPkg.length(), newPkg);
             }
             String to = moves.getOrDefault(f, f);
@@ -423,8 +423,8 @@ public class JavaRename {
             Occurrence n = afterAt.get(nf + "@" + np);
             String expectedTarget = moveKey(o.target(), moves, byFile, oldPkg, newPkg);
             if (n == null || !n.name().equals(o.name()) || !n.target().equals(expectedTarget)) {
-                if (bad++ < 30) System.out.println("NON TORNA: " + o.file() + "@" + o.pos() + " " + o.name() + " -> "
-                        + (n == null ? "sparita" : n.name() + " punta a " + n.target()) + ", attesa " + expectedTarget);
+                if (bad++ < 30) System.out.println("DOES NOT MATCH: " + o.file() + "@" + o.pos() + " " + o.name() + " -> "
+                        + (n == null ? "gone" : n.name() + " points to " + n.target()) + ", expected " + expectedTarget);
             }
         }
         // The pieces of the new name, where the old name used to be: all of them, in order, in their place. ALL
@@ -448,29 +448,29 @@ public class JavaRename {
             String want = parts.get(o.pos());
             if (want == null) continue;
             if (o.name().equals(want)) insideAfter++;
-            else if (bad++ < 30) System.out.println("NON TORNA: " + o.file() + "@" + o.pos() + " atteso " + want + ", c'e' " + o.name());
+            else if (bad++ < 30) System.out.println("DOES NOT MATCH: " + o.file() + "@" + o.pos() + " expected " + want + ", found " + o.name());
         }
         for (Map.Entry<String, Set<String>> ov : before.overrides.entrySet()) {
             String nk = moveKey(ov.getKey(), moves, byFile, oldPkg, newPkg);
             Set<String> expected = new TreeSet<>();
             for (String k : ov.getValue()) expected.add(moveKey(k, moves, byFile, oldPkg, newPkg));
             if (!after.overrides.getOrDefault(nk, Set.of()).equals(expected) && bad++ < 30)
-                System.out.println("OVERRIDE CAMBIATO: " + nk);
+                System.out.println("OVERRIDE CHANGED: " + nk);
         }
         int expectedCount = before.occurrences.size() - insideBefore + insideAfter;
         if (after.occurrences.size() != expectedCount) {
-            System.out.println("NON TORNA: occorrenze " + after.occurrences.size() + " dopo, attese " + expectedCount
-                    + " (" + insideBefore + " pezzi del nome vecchio, " + insideAfter + " del nome nuovo)");
+            System.out.println("DOES NOT MATCH: occurrences " + after.occurrences.size() + " after, expected " + expectedCount
+                    + " (" + insideBefore + " pieces of the old name, " + insideAfter + " of the new name)");
             bad++;
         }
         if (after.declarations.size() != before.declarations.size()) {
-            System.out.println("NON TORNA: dichiarazioni " + before.declarations.size() + " prima, " + after.declarations.size() + " dopo");
+            System.out.println("DOES NOT MATCH: declarations " + before.declarations.size() + " before, " + after.declarations.size() + " after");
             bad++;
         }
         System.out.println(bad == 0
-                ? "CONTROLLO: tutte le " + after.occurrences.size() + " occorrenze puntano alla stessa dichiarazione di prima ("
-                  + insideBefore + " pezzi di " + oldPkg + " diventati " + insideAfter + " di " + newPkg + ")"
-                : "CONTROLLO FALLITO: " + bad + " occorrenze non tornano");
+                ? "CHECK: all " + after.occurrences.size() + " occurrences point to the same declaration as before ("
+                  + insideBefore + " pieces of " + oldPkg + " became " + insideAfter + " of " + newPkg + ")"
+                : "CHECK FAILED: " + bad + " occurrences do not match");
         return bad == 0 ? 0 : 1;
     }
 
@@ -523,11 +523,11 @@ public class JavaRename {
             String s = l.strip();
             if (s.isEmpty() || s.startsWith("#")) continue;
             String[] p = s.split("\\s+");
-            if (p.length != 2 || !p[1].matches("[A-Za-z_][A-Za-z0-9_]*")) throw new IllegalArgumentException("riga non valida: " + l);
-            if (map.put(p[0], p[1]) != null) throw new IllegalArgumentException("selettore doppio: " + p[0]);
+            if (p.length != 2 || !p[1].matches("[A-Za-z_][A-Za-z0-9_]*")) throw new IllegalArgumentException("invalid line: " + l);
+            if (map.put(p[0], p[1]) != null) throw new IllegalArgumentException("duplicate selector: " + p[0]);
         }
         Analysis before = analyze(root, classpath);
-        System.out.println("prima: " + before.occurrences.size() + " occorrenze, " + before.declarations.size() + " dichiarazioni");
+        System.out.println("before: " + before.occurrences.size() + " occurrences, " + before.declarations.size() + " declarations");
 
         // Selector -> keys of the declarations it chooses. Every selector must choose
         // at least one: a selector that finds nothing is a typo, not a no-op.
@@ -583,13 +583,13 @@ public class JavaRename {
                             && d.name().equals(rest.substring(c2 + 1)) && d.kind().equals("variable")) chosen.add(d);
                 }
             }
-            if (chosen.isEmpty()) { System.out.println("NESSUNA DICHIARAZIONE per " + sel); problems++; }
+            if (chosen.isEmpty()) { System.out.println("NO DECLARATION for " + sel); problems++; }
             for (Declaration d : chosen) targetToNew.put("src:" + d.file() + "@" + d.pos(), m.getValue());
         }
         for (Map.Entry<String, String> x : externalRenames.entrySet())
             targetToNew.put(x.getKey(), x.getValue().substring(x.getValue().lastIndexOf('.') + 1, x.getValue().length() - 2));
         if (!typeRenames.isEmpty() && (!externalRenames.isEmpty() || map.keySet().stream().anyMatch(k -> !k.startsWith("type:")))) {
-            System.out.println("i tipi si rinominano in un giro a parte, prima dei membri");
+            System.out.println("types are renamed in a pass of their own, before the members");
             return 1;
         }
         if (problems > 0) return 1;
@@ -601,18 +601,18 @@ public class JavaRename {
         }
         Map<String, TreeMap<Integer, Edit>> byFile = new HashMap<>();
         for (Edit e : edits) byFile.computeIfAbsent(e.file(), k -> new TreeMap<>()).put(e.pos(), e);
-        System.out.println("occorrenze da cambiare: " + edits.size() + " in " + byFile.size() + " file");
+        System.out.println("occurrences to change: " + edits.size() + " in " + byFile.size() + " files");
 
         for (Map.Entry<String, TreeMap<Integer, Edit>> f : byFile.entrySet()) {
             StringBuilder sb = new StringBuilder(before.sources.get(f.getKey()));
             for (Edit e : f.getValue().descendingMap().values()) {
                 if (!sb.substring(e.pos(), e.pos() + e.oldName().length()).equals(e.oldName()))
-                    throw new IllegalStateException("testo inatteso in " + e.file() + " a " + e.pos());
+                    throw new IllegalStateException("unexpected text in " + e.file() + " at " + e.pos());
                 sb.replace(e.pos(), e.pos() + e.oldName().length(), e.newName());
             }
             String to = moves.getOrDefault(f.getKey(), f.getKey());
             if (!to.equals(f.getKey()) && Files.exists(root.resolve(to)))
-                throw new IllegalStateException("c'e' gia' " + to + ": il tipo rinominato non ha dove andare");
+                throw new IllegalStateException("already there: " + to + ": the renamed type has nowhere to go");
             Files.writeString(root.resolve(to), sb.toString(), StandardCharsets.UTF_8);
             if (!to.equals(f.getKey())) Files.delete(root.resolve(f.getKey()));
         }
@@ -629,8 +629,8 @@ public class JavaRename {
             String expectedTarget = externalRenames.containsKey(o.target())
                     ? externalRenames.get(o.target()) : renameTypesIn(moveFile(shiftKey(byFile, o.target()), moves), typeRenames);
             if (n == null || !n.name().equals(expectedName) || !n.target().equals(expectedTarget)) {
-                if (bad++ < 30) System.out.println("NON TORNA: " + o.file() + "@" + o.pos() + " " + o.name()
-                        + " -> " + (n == null ? "sparita" : n.name() + " punta a " + n.target()) + ", attesa " + expectedTarget);
+                if (bad++ < 30) System.out.println("DOES NOT MATCH: " + o.file() + "@" + o.pos() + " " + o.name()
+                        + " -> " + (n == null ? "gone" : n.name() + " points to " + n.target()) + ", expected " + expectedTarget);
             }
         }
         // The overrides must be the same: none lost and none gained.
@@ -640,20 +640,20 @@ public class JavaRename {
             for (String k : ov.getValue()) expected.add(renameTypesIn(moveFile(shiftKey(byFile, k), moves), typeRenames));
             Set<String> got = after.overrides.getOrDefault(nk, Set.of());
             if (!got.equals(expected)) {
-                if (bad++ < 30) System.out.println("OVERRIDE CAMBIATO: " + nk + " prima " + expected + ", dopo " + got);
+                if (bad++ < 30) System.out.println("OVERRIDE CHANGED: " + nk + " before " + expected + ", after " + got);
             }
         }
         if (after.overrides.size() != before.overrides.size()) {
-            System.out.println("NON TORNA: metodi " + before.overrides.size() + " prima, " + after.overrides.size() + " dopo");
+            System.out.println("DOES NOT MATCH: methods " + before.overrides.size() + " before, " + after.overrides.size() + " after");
             bad++;
         }
         if (after.occurrences.size() != before.occurrences.size()) {
-            System.out.println("NON TORNA: occorrenze " + before.occurrences.size() + " prima, " + after.occurrences.size() + " dopo");
+            System.out.println("DOES NOT MATCH: occurrences " + before.occurrences.size() + " before, " + after.occurrences.size() + " after");
             bad++;
         }
         System.out.println(bad == 0
-                ? "CONTROLLO: tutte le " + after.occurrences.size() + " occorrenze puntano alla stessa dichiarazione di prima"
-                : "CONTROLLO FALLITO: " + bad + " occorrenze non tornano");
+                ? "CHECK: all " + after.occurrences.size() + " occurrences point to the same declaration as before"
+                : "CHECK FAILED: " + bad + " occurrences do not match");
         return bad == 0 ? 0 : 1;
     }
 

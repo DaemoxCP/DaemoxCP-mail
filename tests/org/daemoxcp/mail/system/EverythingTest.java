@@ -108,7 +108,7 @@ public class EverythingTest {
         check("a step checked at its turn (no signature) runs inside the chain only within what was shown",
                 !UpdateManager.planAccepted("", "ffffffffffffffff", postfix));
 
-        System.out.println("\n== What was not shown, said by name (reperto 208) ==");
+        System.out.println("\n== What was not shown, said by name (finding 208) ==");
         // The real server: postfix-mysql waited for mysql84-client; at its turn its plan also installed lmdb0.
         JSONObject withLmdb0 = plan("install lmdb0 0.9.36_1", "upgrade postfix-mysql 3.11.7_5,1 3.11.7_1,1");
         java.util.List<String> outside = UpdateManager.outsideApproved(withLmdb0, shown);

@@ -68,7 +68,7 @@ public class PlaceholderRename {
             }.scan(cu, null);
             calls += seen[0];
         }
-        System.out.println("Map.of dentro I18n.tr: " + calls + "; chiavi da rinominare: " + edits.size() + "; collisioni: " + clashes.size());
+        System.out.println("Map.of inside I18n.tr: " + calls + "; keys to rename: " + edits.size() + "; collisioni: " + clashes.size());
         clashes.forEach(x -> System.out.println("  COLLISIONE " + x));
         if (!clashes.isEmpty()) System.exit(1);
         if (dry) return;
@@ -78,11 +78,11 @@ public class PlaceholderRename {
             StringBuilder sb = new StringBuilder(Files.readString(e.getKey()));
             e.getValue().sort(Comparator.comparingInt(Edit::pos).reversed());
             for (Edit x : e.getValue()) {
-                if (!sb.substring(x.pos(), x.end()).equals("\"" + x.value() + "\"")) throw new IllegalStateException("testo inatteso " + e.getKey() + "@" + x.pos());
+                if (!sb.substring(x.pos(), x.end()).equals("\"" + x.value() + "\"")) throw new IllegalStateException("unexpected text " + e.getKey() + "@" + x.pos());
                 sb.replace(x.pos(), x.end(), "\"" + map.get(x.value()) + "\"");
             }
             Files.writeString(e.getKey(), sb.toString());
         }
-        System.out.println("scritti " + per.size() + " file");
+        System.out.println("written " + per.size() + " file");
     }
 }

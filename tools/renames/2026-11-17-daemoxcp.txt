@@ -1,13 +1,13 @@
-# Il nome DaemoxCP Mail ovunque, 17/11/2026 (ramo mac/daemoxcp-mail-everywhere), su main a 0c54a1ab.
-# Ogni giro controllato da tools/JavaRename.java.
+# The name DaemoxCP Mail everywhere, 17/11/2026, on main at 0c54a1ab.
+# Each pass checked by tools/JavaRename.java.
 
-# --- giro 1: il pacchetto (modo package)
+# --- pass 1: the package (package mode)
 package org.mail_panel org.daemoxcp.mail
 
-# --- giro 2: i tipi
+# --- pass 2: the types
 type:org.daemoxcp.mail.content.MailPanelContent PanelContent
 
-# --- giro 3: i campi del menu di configurazione (le colonne di SQLite cambiano nome a parte)
+# --- pass 3: the fields of the configuration menu (SQLite's columns are renamed separately)
 member:org.daemoxcp.mail.gui.ModifyData#mail_panel_port panelPort
 member:org.daemoxcp.mail.gui.ModifyData#mail_panel_host panelHost
 member:org.daemoxcp.mail.gui.ModifyData#mail_panel_ssl_cert panelSslCert

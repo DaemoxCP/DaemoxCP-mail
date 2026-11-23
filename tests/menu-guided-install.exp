@@ -1,7 +1,7 @@
 #!/usr/bin/expect -f
 # The terminal menu on the VM, driven by keys from the Mac through ssh -tt, on a copy of the panel folder
 # (/var/tmp/menu-test: the jar, a copy of database/ made with sqlite3 .backup, and certs/ with other.crt/.key for
-# other.example.net and panel.crt/.key for panel.rehearsal.test, self-signed) so the service keeps its SQLite (reperti 242, 243):
+# other.example.net and panel.crt/.key for panel.rehearsal.test, self-signed) so the service keeps its SQLite (findings 242, 243):
 #  A. option 1: a made-up time zone is refused in a dialog, the script never runs;
 #  B. option 2: a certificate given as a file path that does not cover the panel name is refused (validation
 #     error); the right one is shown in the confirmation (what it covers, self-signed warning); then Cancel and Exit,

@@ -43,7 +43,7 @@ public class PlanDivergenceTest {
                 change("reinstall", "cyrus-sasl", "2.1.28_5", "2.1.28_5"));
 
         JSONArray d = PackagePlan.divergences(before, after, plan);
-        check("reperto 14: the removal outside the plan is seen", d.length() == 1);
+        check("finding 14: the removal outside the plan is seen", d.length() == 1);
         if (d.length() == 1) {
             JSONObject x = d.getJSONObject(0);
             check("  it is lmdb", "lmdb".equals(x.optString("name")));

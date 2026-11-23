@@ -77,7 +77,7 @@ public class SieveGeneratorTest {
         String move = generator.generateSieveScript(1, new Rules().filter("spam", "move", "Junk"));
         generated.add(new String[]{"move", move});
         print(move);
-        check("move: fileinto :create without :copy (a missing folder is created, reperto 229)", move.contains("  fileinto :create \"Junk\";\n"));
+        check("move: fileinto :create without :copy (a missing folder is created, finding 229)", move.contains("  fileinto :create \"Junk\";\n"));
         check("the require line asks for mailbox (fileinto :create), the one of before did not",
                 SieveGenerator.REQUIRE.contains("\"mailbox\"") && !SieveGenerator.REQUIRE_BEFORE_MAILBOX.contains("\"mailbox\"")
                         && SieveGenerator.REQUIRE.replace(", \"mailbox\"", "").equals(SieveGenerator.REQUIRE_BEFORE_MAILBOX));

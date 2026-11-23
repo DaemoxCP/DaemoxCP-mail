@@ -1,5 +1,5 @@
-# Valori che viaggiano fra server e pagina (codici, verdetti, azioni, gettoni, rotte), 25/10/2026
-# Separati da TAB: alcuni hanno spazi e apostrofi.
+# Values that travel between server and page (codes, verdicts, actions, tokens, routes), 25/10/2026
+# Separated by TAB: some have spaces and apostrophes.
 ALLINEATO	ALIGNED
 C'E' MA IL PATH NON LO RAGGIUNGE	NOT_IN_PATH
 C'E' UN COSTRUTTO NON PIU' VALIDO	INVALID_CONSTRUCT

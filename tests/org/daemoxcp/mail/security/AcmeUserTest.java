@@ -271,7 +271,7 @@ public class AcmeUserTest {
             int port = 18000 + (int) (ProcessHandle.current().pid() % 1000);
             try (AcmeUser.Challenge ch = AcmeUser.Challenge.open(port, dir)) {
                 check("the token can be read", get(port, "/.well-known/acme-challenge/tok3n_-A", "GET").equals("200 tok3n_-A.thumbprint"));
-                check("HEAD risponde 200", get(port, "/.well-known/acme-challenge/tok3n_-A", "HEAD").startsWith("200"));
+                check("HEAD answers 200", get(port, "/.well-known/acme-challenge/tok3n_-A", "HEAD").startsWith("200"));
                 check("a token that is not there: 404", get(port, "/.well-known/acme-challenge/nope", "GET").startsWith("404"));
                 check("leaving the folder: 404", get(port, "/.well-known/acme-challenge/..%2F" + secret.getFileName(), "GET").startsWith("404")
                         && get(port, "/.well-known/acme-challenge/../" + secret.getFileName(), "GET").startsWith("404"));

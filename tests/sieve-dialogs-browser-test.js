@@ -261,13 +261,13 @@ function unlisted(page, selector, text) {
         const before = E.RULES ? rules() : '';
         await menuOf(page, alice, T['mbx.filters']);
         await shown(page, 'sieveModal');
-        await newFilter(page, 'Rifiutato', 'rifiutato-224', 'INBOX.Rifiutato');
+        await newFilter(page, 'Rejected', 'rejected-224', 'INBOX.Rejected');
         await soon(page.waitForSelector('#panelNotices .alert-danger', { timeout: 5000 }));
         let n = await notices(page);
         check('the notice says it, in Italian: ' + JSON.stringify(n.map(x => x.text)),
             n.length === 1 && n[0].text === T['server.sieve.notWritten'] && n[0].kind.includes('alert-danger') && n[0].role === 'alert');
         check('it is on top of the dialog, not behind it', n.length === 1 && n[0].onTop);
-        check('the filter is in the list: it is saved in the panel', await soon(listed(page, 'Rifiutato')));
+        check('the filter is in the list: it is saved in the panel', await soon(listed(page, 'Rejected')));
         if (E.RULES) check('the rules file did not change', rules() === before);
         await photo(page, 'created');
         await closeNotices(page);
@@ -280,7 +280,7 @@ function unlisted(page, selector, text) {
         await soon(page.waitForSelector('#panelNotices .alert-danger', { timeout: 5000 }));
         n = await notices(page);
         check('the same notice: ' + JSON.stringify(n.map(x => x.text)), n.length === 1 && n[0].text === T['server.sieve.notWritten']);
-        check('gone from the list: deleted in the panel', await soon(unlisted(page, '#sieveFiltersList', 'Rifiutato')));
+        check('gone from the list: deleted in the panel', await soon(unlisted(page, '#sieveFiltersList', 'Rejected')));
         await closeNotices(page);
         await page.click('#sieveModal .btn-close');
         await page.waitForSelector('#sieveModal', { state: 'hidden' });

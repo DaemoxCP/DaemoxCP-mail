@@ -1,4 +1,4 @@
-# Nomi Python di tests/check_lang.py: come 2026-10-25-python.txt, ma li' keys, name, text ed end ci sono gia'
+# Python names of tests/check_lang.py: like 2026-10-25-python.txt, but there keys, name, text and end already exist
 BUSTA ENVELOPE
 CAMEL_AMMESSI ALLOWED_CAMEL
 CASO CASE

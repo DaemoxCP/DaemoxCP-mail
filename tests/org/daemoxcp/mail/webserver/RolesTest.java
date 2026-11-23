@@ -193,10 +193,10 @@ public class RolesTest {
         check("/api/updates: reading the status is system.view, rebooting is system.manage",
                 "system.view".equals(routes.get("/api/updates").permissionFor("POST", "updates_status"))
                 && "system.manage".equals(routes.get("/api/updates").permissionFor("POST", "reboot_now")));
-        check("/api/updates: going back to the server before a reinstallation is system.manage (reperto 172)",
+        check("/api/updates: going back to the server before a reinstallation is system.manage (finding 172)",
                 "system.manage".equals(routes.get("/api/updates").permissionFor("POST", "reinstall_way_back")));
         check("/api/admins: the vault key asks vault.manage", "vault.manage".equals(routes.get("/api/admins").permissionFor("POST", "vault_backup_key")));
-        check("/api/panel_info: how long the panel runs is home.view, its details system.view (reperto 183)",
+        check("/api/panel_info: how long the panel runs is home.view, its details system.view (finding 183)",
                 "home.view".equals(routes.get("/api/panel_info").permissionFor("GET", "uptime"))
                 && "system.view".equals(routes.get("/api/panel_info").permissionFor("GET", "details")));
         check("Account for every role, Settings for the superadmin", "account.self".equals(routes.get("/account").readPermission())

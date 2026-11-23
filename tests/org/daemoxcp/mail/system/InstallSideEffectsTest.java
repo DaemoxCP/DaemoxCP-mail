@@ -148,7 +148,7 @@ public class InstallSideEffectsTest {
                     newDefault != null && "newDefault".equals(newDefault.getString("kind")) && !newDefault.getBoolean("alarm"));
 
             JSONObject cert = find(c, ssl.resolve("cert.pem"));
-            check("the untouched copy of a sample that is a link, now the new default: no alarm (reperto 201)",
+            check("the untouched copy of a sample that is a link, now the new default: no alarm (finding 201)",
                     cert != null && "newDefault".equals(cert.getString("kind")) && !cert.getBoolean("alarm"));
             JSONObject foreignLink = find(c, ssl.resolve("foreign.pem"));
             check("  a sample link that leads to a file of another package: alarm", foreignLink != null

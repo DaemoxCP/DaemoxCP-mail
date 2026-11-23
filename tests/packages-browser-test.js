@@ -148,7 +148,7 @@ async function served(route) {
     csp.watch(page, errorList);
     page.on('console', m => { if (m.type() === 'error') errorList.push(m.text()); });
 
-    console.log('\n== The Packages row says the state; Update everything, at the top, has the one button (reperto 207) ==');
+    console.log('\n== The Packages row says the state; Update everything, at the top, has the one button (finding 207) ==');
     await page.goto(BASE + '/updates');
     await page.waitForSelector('#uc-all .uc-head button');
     real('one read when the page opens', readings === 1);
@@ -270,7 +270,7 @@ async function served(route) {
         row.includes('3 mail server packages of one family have an update, in one step') && !row.includes('in 1 steps')
         && !row.includes('Their updates are steps'));
 
-    console.log('\n== A step held only by a package an earlier step updates: checked when its turn comes (reperto 207) ==');
+    console.log('\n== A step held only by a package an earlier step updates: checked when its turn comes (finding 207) ==');
     nginxDone = false; phpDone = false; allJob = false; phpBlockedBy = 'nginx';
     await page.goto(BASE + '/updates');
     await page.waitForSelector('#uc-all .uc-head button[data-on-click="ucEverything()"]', { timeout: 10000 });

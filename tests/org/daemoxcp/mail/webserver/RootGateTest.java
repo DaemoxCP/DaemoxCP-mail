@@ -55,7 +55,7 @@ public class RootGateTest {
 
         System.out.println("\n== 2. The shape of every value ==");
         check("text, numbers, booleans and nulls pass", passes("/api/report", "POST", null,
-                "{\"action\":\"save\",\"recipient\":\"admin@example.com\",\"hours\":24,\"enabled\":true,\"note\":null,\"text\":\"Riga uno\\nRiga due, è così\"}"));
+                "{\"action\":\"save\",\"recipient\":\"admin@example.com\",\"hours\":24,\"enabled\":true,\"note\":null,\"text\":\"Line one\\nLine two, a café\"}"));
         check("a control character is refused", !passes("/api/report", "POST", null, "{\"action\":\"save\",\"x\":\"a\\u0000b\"}")
                 && !passes("/api/logs", "GET", "filter=a%00b", null));
         check("a field name that is not a name is refused", !passes("/api/report", "POST", null, "{\"a b\":\"x\"}")
@@ -79,7 +79,7 @@ public class RootGateTest {
         check("a jail with a space is refused", !passes("/api/fail2ban", "POST", null, "{\"jail\":\"a b\"}"));
         check("a port out of range is refused", !passes("/api/roundcube-domain", "POST", null, "{\"port\":\"99999\"}")
                 && passes("/api/roundcube-domain", "POST", null, "{\"port\":\"8443\"}"));
-        check("a package that starts with a dash is refused: it would be an option of pkg (reperto 205)",
+        check("a package that starts with a dash is refused: it would be an option of pkg (finding 205)",
                 !passes("/api/updates", "POST", null, "{\"action\":\"package_preflight\",\"package\":\"-r\"}"));
         check("a package with a slash or a space is refused", !passes("/api/updates", "POST", null, "{\"action\":\"x\",\"package\":\"../x\"}")
                 && !passes("/api/updates", "POST", null, "{\"package\":\"a b\"}") && passes("/api/updates", "POST", null, "{\"package\":\"postfix-mysql\"}"));

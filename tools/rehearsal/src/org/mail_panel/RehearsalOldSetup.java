@@ -14,10 +14,10 @@ public class RehearsalOldSetup {
         Main.dbManager = new org.mail_panel.sqli.dataBaseManager();
         String cert = Files.readString(Path.of("/usr/local/etc/ssl/mail/fullchain.pem"));
         String key = Files.readString(Path.of("/usr/local/etc/ssl/mail/privkey.pem"));
-        System.out.println("pannello: " + Main.dbManager.update_panel_config("127.0.0.1", "2096", cert, key, "", "mailpanel-"));
+        System.out.println("panel: " + Main.dbManager.update_panel_config("127.0.0.1", "2096", cert, key, "", "mailpanel-"));
         String err = Main.connectFromConfig();
         System.out.println("MySQL: " + (err == null ? "connesso" : err));
-        System.out.println("amministratore: " + Main.createFirstAdmin("rehearsal-admin", "admin@" + domain, System.out, System.err));
+        System.out.println("administrator: " + Main.createFirstAdmin("rehearsal-admin", "admin@" + domain, System.out, System.err));
         org.mail_panel.database.MailDatabase db = Main.mailDatabase != null ? Main.mailDatabase : new org.mail_panel.database.MailDatabase();
         if (!db.isConnected()) db.connect();
         // The columns that the server's version adds at the start of the web panel (SSLMailServer,
@@ -41,7 +41,7 @@ public class RehearsalOldSetup {
             try (java.sql.PreparedStatement q = db.getConnection().prepareStatement("SELECT id FROM mailboxes WHERE email = ?")) {
                 q.setString(1, b[0]);
                 try (java.sql.ResultSet rs = q.executeQuery()) {
-                    System.out.println("casella " + b[0] + ": " + (rs.next() ? "c'era gia'" : db.addMailbox(id, b[0], b[1], b[2], 1024)));
+                    System.out.println("mailbox " + b[0] + ": " + (rs.next() ? "already there" : db.addMailbox(id, b[0], b[1], b[2], 1024)));
                 }
             }
             list.append(b[0]).append(' ').append(b[1]).append('\n');
@@ -52,10 +52,10 @@ public class RehearsalOldSetup {
         Files.setPosixFilePermissions(f, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
         System.out.println("include: " + org.mail_panel.system.ProtezioneWeb.aggiungiInclude());
         System.out.println("443: " + org.mail_panel.system.ProtezioneWeb.installa("/usr/local/etc/ssl/mail/fullchain.pem", "/usr/local/etc/ssl/mail/privkey.pem"));
-        System.out.println("modo MTA-STS: " + org.mail_panel.system.MtaSts.impostaModo("enforce"));
-        System.out.println("politica: " + org.mail_panel.system.ProtezioneWeb.scriviPolitica());
+        System.out.println("MTA-STS mode: " + org.mail_panel.system.MtaSts.impostaModo("enforce"));
+        System.out.println("policy: " + org.mail_panel.system.ProtezioneWeb.scriviPolitica());
         System.out.println("jail: " + org.mail_panel.system.ProtezioneWeb.installaJail());
-        System.out.println("script di avvio: " + org.mail_panel.system.UpdateManager.scriptRcPannello(true));
+        System.out.println("start script: " + org.mail_panel.system.UpdateManager.scriptRcPannello(true));
         System.exit(0);
     }
 }

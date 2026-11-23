@@ -286,7 +286,7 @@ public class SieveDialogFieldsTest {
             check("a mailbox number that is not a number: no exception text " + t8,
                     !t8.toString().contains("For input string") && !t8.toString().contains("Exception"));
 
-            System.out.println("\n== Filters, rules not written (reperto 223 still holds) ==");
+            System.out.println("\n== Filters, rules not written (finding 223 still holds) ==");
             gen.accept = false;
             n = gen.calls.size();
             JSONObject r1 = post("/api/sieve", new JSONObject().put("action", "update").put("filter_id", filterId)

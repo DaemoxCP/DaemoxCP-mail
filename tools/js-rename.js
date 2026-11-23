@@ -24,13 +24,13 @@ function jsEdits(code, where) {
       const isPropName = (ts.isPropertyAccessExpression(p) && p.name === node)
         || (ts.isPropertyAssignment(p) && p.name === node)
         || (ts.isMethodDeclaration(p) && p.name === node);
-      if (!isPropName) { out.push([node.getStart(sf), node.text.length, map.get(node.text)]); inc('identificatori ' + where); }
+      if (!isPropName) { out.push([node.getStart(sf), node.text.length, map.get(node.text)]); inc('identifiers ' + where); }
       else if (ts.isShorthandPropertyAssignment(p)) { /* handled below */ }
     }
     if (ts.isShorthandPropertyAssignment(node) && map.has(node.name.text)) {
       // { nome } = { nome: nome }: the key stays, the value changes
       out.push([node.name.getStart(sf), node.name.text.length, node.name.text + ': ' + map.get(node.name.text)]);
-      inc('abbreviate ' + where);
+      inc('abbreviated ' + where);
       return;
     }
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
@@ -136,11 +136,11 @@ for (const f of walk(path.join(root, 'src/main/java'))) {
   const src = fs.readFileSync(f, 'utf8'); const e = [];
   for (const s of javaStrings(src)) {
     if (!looksJs(s.text)) continue;
-    for (const [p, l, n] of mixedEdits(s.text, 'nel java')) {
+    for (const [p, l, n] of mixedEdits(s.text, 'in the java')) {
       const a = s.pos[p], b = s.pos[p + l - 1] + 1;
       if (src.slice(a, b) === s.text.slice(p, p + l)) e.push([a, b - a, n]);
     }
   }
   if (e.length) { files++; if (!dry) fs.writeFileSync(f, apply(src, e)); }
 }
-console.log('file cambiati: ' + files + (dry ? ' (a secco)' : ''), JSON.stringify(counts));
+console.log('files changed: ' + files + (dry ? ' (a secco)' : ''), JSON.stringify(counts));

@@ -76,19 +76,19 @@ public class JsonKeyCheck {
             }.scan(cu, null);
         }
         int n = 0;
-        for (Map.Entry<String, Map<Object, Map<String, List<String>>>> kind : Map.of("SCRITTE", puts, "LETTE", reads).entrySet()) {
+        for (Map.Entry<String, Map<Object, Map<String, List<String>>>> kind : Map.of("WRITTEN", puts, "READ", reads).entrySet()) {
             for (Map.Entry<Object, Map<String, List<String>>> o : kind.getValue().entrySet()) {
                 Map<String, List<String>> after = new TreeMap<>();
                 for (String k : o.getValue().keySet()) after.computeIfAbsent(map.getOrDefault(k, k), x -> new ArrayList<>()).add(k);
                 for (Map.Entry<String, List<String>> x : after.entrySet()) {
                     if (x.getValue().size() > 1) {
                         n++;
-                        System.out.println(kind.getKey() + " sullo stesso oggetto (" + label.get(o.getKey()) + "): " + x.getValue() + " -> " + x.getKey());
+                        System.out.println(kind.getKey() + " on the same object (" + label.get(o.getKey()) + "): " + x.getValue() + " -> " + x.getKey());
                     }
                 }
             }
         }
-        System.out.println(n == 0 ? "NESSUNA COLLISIONE" : n + " COLLISIONI");
+        System.out.println(n == 0 ? "NO COLLISION" : n + " COLLISIONS");
         System.exit(n == 0 ? 0 : 1);
     }
 }

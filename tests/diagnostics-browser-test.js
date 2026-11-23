@@ -47,7 +47,7 @@ const check = (what, ok) => { console.log((ok ? '  OK     ' : '  FAILED ') + wha
     const fine = await page.$$eval('#diagAllOk > li', lis => lis.map(li => ({ key: li.dataset.diag, text: li.textContent.replace(/\s+/g, ' ').trim() })));
     fine.forEach(x => console.log('    ok ' + x.key + ': ' + x.text.slice(0, 120)));
     check('what is fine says so in words too', fine.every(x => /\(fine\)/.test(x.text) && x.text.length > 20));
-    // Twelve since 16/11/2026: outgoing port 25 and the provider's firewall (repertos 245, 246) joined the ten.
+    // Twelve since 16/11/2026: outgoing port 25 and the provider's firewall (findings 245, 246) joined the ten.
     check('twelve checks, every one with a verdict', items.length + fine.length === 12);
     const order = { problem: 0, warn: 1, todo: 2, info: 3 };
     check('the most important first', items.every((x, i) => i === 0 || order[items[i - 1].level] <= order[x.level]));

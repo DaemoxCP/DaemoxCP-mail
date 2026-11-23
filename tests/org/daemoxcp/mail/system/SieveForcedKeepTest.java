@@ -40,7 +40,7 @@ public class SieveForcedKeepTest {
         String forwardNow = before229(generator.generateSieveScript(1, new SieveGeneratorTest.Rules().forward("bob@example.test", false)
                 .away("Away", "Back on Monday")));
         String noneNow = before229(generator.generateSieveScript(1, new SieveGeneratorTest.Rules()));
-        check("the generator's text before reperto 229 starts with the require line of then",
+        check("the generator's text before finding 229 starts with the require line of then",
                 moveNow.startsWith(SieveGenerator.REQUIRE_BEFORE_MAILBOX) && !moveNow.contains(":create"));
         String moveBefore = moveNow + SieveGenerator.OLD_FORCED_KEEP;
 

@@ -256,7 +256,7 @@ public class LoginRoutesTest {
             check("the same code a second time: refused", ask("POST", "/api/login", "{\"action\":\"code_verify\",\"email\":\"" + bossEmail
                     + "\",\"code\":\"" + code + "\",\"csrf_token\":\"" + token + "\"}", "Cookie", preCookie).statusCode() == 401);
 
-            System.out.println("\n== The Content-Security-Policy, and scripts and styles as files (reperto 178) ==");
+            System.out.println("\n== The Content-Security-Policy, and scripts and styles as files (finding 178) ==");
             String policy = SecurityHeaders.CONTENT_SECURITY_POLICY;
             check("the login page and the home send the policy, without unsafe-inline", policy.equals(page.headers().firstValue("Content-Security-Policy").orElse(""))
                     && policy.equals(home.headers().firstValue("Content-Security-Policy").orElse("")) && !policy.contains("unsafe-"));

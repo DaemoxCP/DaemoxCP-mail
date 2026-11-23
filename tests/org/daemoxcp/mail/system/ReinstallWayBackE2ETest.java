@@ -140,7 +140,7 @@ public class ReinstallWayBackE2ETest {
             for (String n : List.of(three.get(1), three.get(2))) PackageWayBack.destroy(n);
             check("removed by hand: everything as before", bootEnvironments().equals(beBefore) && snapshots().equals(snapBefore));
 
-            System.out.println("\n== The space (reperto 170) ==");
+            System.out.println("\n== The space (finding 170) ==");
             long saved = PackageWayBack.reinstallMinFree;
             try {
                 PackageWayBack.reinstallMinFree = Long.MAX_VALUE;

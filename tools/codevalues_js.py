@@ -50,7 +50,7 @@ changed = 0
 for f in sorted(glob.glob(f"{root}/src/main/resources/pages/*") + glob.glob(f"{root}/tests/*.js")):
     t = open(f, encoding="utf-8").read()
     page = "/pages/" in f
-    t2 = apply(t, PATS_ALL + (PATS_PAGE if page else []), "pagine" if page else "prove")
+    t2 = apply(t, PATS_ALL + (PATS_PAGE if page else []), "pages" if page else "prove")
     if t2 != t:
         changed += 1
         if not dry: open(f, "w", encoding="utf-8").write(t2)
@@ -63,10 +63,10 @@ for f in sorted(glob.glob(f"{root}/src/main/java/**/*.java", recursive=True)):
         # only the Java strings that contain JavaScript (a string that is only a code has
         # already gone through ValueRename)
         if len(seg) > 12 and re.search(r"===|!==|\breturn\b|=>|function|\bcase\b|value=", seg):
-            seg = apply(seg, PATS_ALL + PATS_PAGE, "javascript nel java")
+            seg = apply(seg, PATS_ALL + PATS_PAGE, "javascript in the java")
         parts.append(t[last:a]); parts.append(seg); last = b
     parts.append(t[last:]); t2 = "".join(parts)
     if t2 != t:
         changed += 1
         if not dry: open(f, "w", encoding="utf-8").write(t2)
-print(f"file cambiati: {changed}{' (a secco)' if dry else ''}", dict(counts))
+print(f"files changed: {changed}{' (dry run)' if dry else ''}", dict(counts))

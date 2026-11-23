@@ -57,7 +57,7 @@ public class VacationTrackingTest {
         Path alice = Files.createDirectories(homes.resolve("example.test/alice"));
         Path aliceHome = Files.createDirectories(alice.resolve("home"));
         Path dupes = write(aliceHome.resolve(".dovecot.lda-dupes"), "tracking");
-        Path oldDupes = write(alice.resolve(".dovecot.lda-dupes"), "tracking of before reperto 217");
+        Path oldDupes = write(alice.resolve(".dovecot.lda-dupes"), "tracking of before finding 217");
         Path locks = Files.createDirectories(aliceHome.resolve(".dovecot.lda-dupes.locks"));
         Path mail = write(Files.createDirectories(alice.resolve("cur")).resolve("1.mail:2,S"), "a message");
         Path bobDupes = write(Files.createDirectories(homes.resolve("example.test/bob/home")).resolve(".dovecot.lda-dupes"), "bob's");

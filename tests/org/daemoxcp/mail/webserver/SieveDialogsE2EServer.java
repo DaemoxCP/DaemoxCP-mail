@@ -68,7 +68,7 @@ public class SieveDialogsE2EServer {
         Main.setupRequired = false;
 
         MailDatabase.Domain dom = db.getDomainByName(DOMAIN);
-        int domainId = dom != null ? dom.id : db.addDomain(DOMAIN, "reperto 224");
+        int domainId = dom != null ? dom.id : db.addDomain(DOMAIN, "finding 224");
         MailDatabase.Mailbox alice = db.getMailboxByEmail("alice@" + DOMAIN);
         int aliceId = alice != null ? alice.id : db.addMailbox(domainId, "alice@" + DOMAIN, "A-long-test-password-42", "Alice", 100);
         for (MailDatabase.SieveFilter f : db.getSieveFilters(aliceId)) db.deleteSieveFilter(f.id);

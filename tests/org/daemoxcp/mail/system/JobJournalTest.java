@@ -76,7 +76,7 @@ public class JobJournalTest {
             }
             check("a well formed name that does not exist: refused", !JobJournal.read("20000101-000000-x__y.log").optBoolean("success"));
 
-            System.out.println("\n== what is done before the end (reperto 207) ==");
+            System.out.println("\n== what is done before the end (finding 207) ==");
             // On the VM "Update everything" wrote the way back's cleanup AFTER "=== end", and the list, which reads the
             // last line, called it unfinished. The cleanup now runs before the end, outside the job's lock.
             UpdateManager.Job e = new UpdateManager.Job("all-5", "update_everything");
@@ -118,7 +118,7 @@ public class JobJournalTest {
                 if (after.getJSONObject(i).getString("type").equals("update_everything")) listed = after.getJSONObject(i).getString("status").equals("completed");
             check("listed as completed, not as unfinished", listed);
 
-            System.out.println("\n== logs of before, and errors redone well (reperto 212) ==");
+            System.out.println("\n== logs of before, and errors redone well (finding 212) ==");
             // Before build 554 the way back's cleanup wrote a line AFTER the end: that log ended, and must read so.
             Path old = dir.resolve("20261109-070942-pkg_branch__branch-1.log");
             Files.writeString(old, "=== job branch-1 (pkg_branch) started 2026-11-09T07:09:42Z ===\n2026-11-09T07:09:56Z === end: completed after 14 s ===\n"

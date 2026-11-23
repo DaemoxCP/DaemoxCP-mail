@@ -107,7 +107,7 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     console.log('\n== Skip to content ==');
     await page.goto(BASE + '/dns');
     await page.keyboard.press('Tab');
-    check('the first Tab reaches "Vai al contenuto"', await page.evaluate(() => document.activeElement.textContent.trim()) === 'Vai al contenuto'
+    check('the first Tab reaches the skip link (' + IT['layout.skipToContent'] + ')', await page.evaluate(() => document.activeElement.textContent.trim()) === IT['layout.skipToContent']
         && await page.evaluate(() => document.activeElement.classList.contains('skip-link')));
     await page.keyboard.press('Enter');
     check('and Enter moves to the page content', await page.evaluate(() => document.activeElement.id) === 'main');
@@ -129,7 +129,7 @@ async function text(page, sel) { return (await page.textContent(sel)).replace(/\
     await page.waitForTimeout(300);
     check('pressing the current language again sends nothing', changes.length === 1);
     await Promise.all([page.waitForNavigation(), page.click('[data-set-lang="it"]')]);
-    check('and back to Italian', await page.getAttribute('html', 'lang') === 'it' && await text(page, '.topbar-title') === 'DNS e certificati › DNS');
+    check('and back to Italian', await page.getAttribute('html', 'lang') === 'it' && await text(page, '.topbar-title') === IT['nav.section.dns'] + ' › ' + IT['nav.dns']);
 
     check('each button says its language in that language (title and lang)', await page.getAttribute('[data-set-lang="it"]', 'title') === 'Italiano'
         && await page.getAttribute('[data-set-lang="en"]', 'title') === 'English' && await page.getAttribute('[data-set-lang="en"]', 'lang') === 'en');

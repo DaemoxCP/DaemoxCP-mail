@@ -115,7 +115,7 @@ async function menuOf(page, address, item) {
         await menuOf(page, alice, 'Auto-Responder');
         await shown(page, 'autoResponderModal');
         await page.check('#arEnabled');
-        await page.fill('#arSubject', 'Fuori ufficio');
+        await page.fill('#arSubject', 'Out of office');
         await page.fill('#arBody', 'Torno lunedi.');
         await page.click('#autoResponderModal .modal-footer button.btn-primary');
         await soon(page.waitForSelector('#panelNotices .alert-danger', { timeout: 5000 }));
