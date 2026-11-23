@@ -128,6 +128,56 @@ public class ServiceUsersTest {
         check("  on 2.4 too, auth-worker as root is still a warning (" + codes(f) + ")", codes(f).equals("root:dovecot"));
         f = ex(AFTER.replace("rspamd  56502     1 rspamd: main process", "root    56502     1 rspamd: main process"), POOL_AFTER, "", false);
         check("rspamd's main process as root: warning (" + codes(f) + ")", codes(f).equals("root:rspamd"));
+        OUT.println("\n== Root at a glance (23/11/2026)");
+        ServiceUsers.Findings g = ex(AFTER, POOL_AFTER, "", false);
+        check("Postfix: root only for the master, by design (" + ServiceUsers.rootProcesses(g.services().get("postfix")) + ")",
+                "needed".equals(ServiceUsers.rootStatus(g.services().get("postfix")))
+                && ServiceUsers.rootProcesses(g.services().get("postfix")).equals(List.of("master")));
+        check("Dovecot: root only for master, log, config (" + ServiceUsers.rootProcesses(g.services().get("dovecot")) + ")",
+                "needed".equals(ServiceUsers.rootStatus(g.services().get("dovecot")))
+                && ServiceUsers.rootProcesses(g.services().get("dovecot")).equals(List.of("master", "log", "config")));
+        check("redis and php-fpm (as roundcube): no process as root",
+                "none".equals(ServiceUsers.rootStatus(g.services().get("redis"))) && ServiceUsers.rootProcesses(g.services().get("redis")).isEmpty()
+                && "none".equals(ServiceUsers.rootStatus(g.services().get("php-fpm"))));
+        g = ex(AFTER.replace("mysql   26927", "root    26927"), POOL_AFTER, "", false);
+        check("mysqld as root: without needing it, and which (" + ServiceUsers.rootProcesses(g.services().get("mysql")) + ")",
+                "needless".equals(ServiceUsers.rootStatus(g.services().get("mysql")))
+                && ServiceUsers.rootProcesses(g.services().get("mysql")).equals(List.of("mysqld")));
+        g = ex(AFTER + "root    65002 59971 dovecot/auth -w\n", POOL_AFTER, "", false);
+        check("Dovecot's auth-worker as root: only it is named as needless (" + ServiceUsers.rootProcesses(g.services().get("dovecot")) + ")",
+                "needless".equals(ServiceUsers.rootStatus(g.services().get("dovecot")))
+                && ServiceUsers.rootProcesses(g.services().get("dovecot")).equals(List.of("auth-worker")));
+        g = ex(AFTER, POOL_AFTER, "", true);
+        check("acme.sh still as root: without needing it (" + ServiceUsers.rootProcesses(g.services().get("acme.sh")) + ")",
+                "needless".equals(ServiceUsers.rootStatus(g.services().get("acme.sh")))
+                && ServiceUsers.rootProcesses(g.services().get("acme.sh")).equals(List.of("acme.sh")));
+
+        OUT.println("\n== The official documentation of each service (23/11/2026)");
+        // Every service the card can show has at least one page, and every link is https on a host of the closed list,
+        // with its title in both languages: the panel never draws an address it did not write itself.
+        java.util.Set<String> shown = new java.util.TreeSet<>();
+        for (ServiceUsers.Rule r : ServiceUsers.RULES) shown.add(r.service().replace("$1", "x"));
+        shown.addAll(List.of("acme.sh", "sievec"));
+        for (String sv : shown)
+            check("  " + sv + ": " + ServiceUsers.docsOf(sv).size() + " official page(s)", !ServiceUsers.docsOf(sv).isEmpty());
+        java.util.Set<String> urls = new java.util.HashSet<>();
+        for (java.util.Map.Entry<String, List<ServiceUsers.Doc>> e : ServiceUsers.DOCS.entrySet())
+            for (ServiceUsers.Doc d : e.getValue()) {
+                java.net.URI u = java.net.URI.create(d.url());
+                String key = "server.su.doc." + d.id();
+                String it = org.daemoxcp.mail.i18n.I18n.t("it", key), en = org.daemoxcp.mail.i18n.I18n.t("en", key);
+                check("  " + e.getKey() + " / " + d.id() + ": https on " + u.getHost() + ", title in both languages",
+                        "https".equals(u.getScheme()) && ServiceUsers.DOC_HOSTS.contains(u.getHost()) && u.getUserInfo() == null
+                        && u.getPort() == -1 && !it.equals(key) && !en.equals(key) && !it.equals(en)
+                        && d.url().matches("https://[A-Za-z0-9.-]+/[^\\s\"'<>]*"));
+                urls.add(d.url());
+            }
+        check("a pool of php-fpm shows php-fpm's pool pages", ServiceUsers.docsOf("php-fpm pool roundcube").equals(ServiceUsers.docsOf("php-fpm pool x"))
+                && !ServiceUsers.docsOf("php-fpm pool roundcube").isEmpty());
+        org.json.JSONArray dj = ServiceUsers.docs("postfix");
+        check("the page gets title and address (" + dj.length() + ")", dj.length() == ServiceUsers.docsOf("postfix").size()
+                && dj.getJSONObject(0).getString("url").startsWith("https://") && !dj.getJSONObject(0).getString("title").startsWith("server."));
+
         OUT.println("\n== Why root, said on the page");
         for (ServiceUsers.Rule r : ServiceUsers.RULES)
             if (r.rootNeeded() && !r.service().contains("$1"))

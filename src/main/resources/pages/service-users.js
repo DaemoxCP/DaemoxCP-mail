@@ -13,6 +13,33 @@
             return h + '</ul>';
         }
 
+        // Whether the service runs something as root: only what must (and which processes), nothing, or something
+        // that does not need it. Said in words, the icon only next to them.
+        function svcUsersRoot(s) {
+            const list = (s.rootProcesses || []).join(', ');
+            if (s.root === 'needed')
+                return '<i class="fas fa-shield-halved text-body-secondary me-1" aria-hidden="true"></i>' + escHtml(t('su.rootOnly', { processes: list }));
+            if (s.root === 'needless')
+                return '<i class="fas fa-triangle-exclamation text-warning me-1" aria-hidden="true"></i>' + escHtml(t('su.rootNeedless', { processes: list }));
+            return '<i class="fas fa-user-check text-success me-1" aria-hidden="true"></i>' + escHtml(t('su.rootNone'));
+        }
+
+        // The official pages behind what the row says, in a new tab and without telling them where the click came
+        // from (noreferrer: the panel's address stays private). The addresses come from the panel's code, and only
+        // https ones are drawn.
+        function svcUsersDocs(s) {
+            const docs = (s.docs || []).filter(d => /^https:\/\/[A-Za-z0-9.-]+\/[^\s"'<>]*$/.test(d.url || ''));
+            if (!docs.length) return '';
+            let h = '<div class="mt-1"><span class="text-body-secondary">' + escHtml(t('su.docs')) + '</span>'
+                  + '<ul class="list-unstyled mb-0 ms-3">';
+            docs.forEach(d => {
+                h += '<li><a href="' + escHtml(d.url) + '" target="_blank" rel="noopener noreferrer">' + escHtml(d.title)
+                   + '<span class="visually-hidden"> ' + escHtml(t('su.newTab')) + '</span>'
+                   + ' <i class="fas fa-arrow-up-right-from-square small" aria-hidden="true"></i></a></li>';
+            });
+            return h + '</ul></div>';
+        }
+
         async function svcUsersLoad() {
             const el = document.getElementById('upd-svc-users');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('su.reading'));
@@ -34,14 +61,16 @@
 
             h += '<div class="table-responsive"><table class="table table-sm align-middle mb-3">'
                + '<caption class="small">' + escHtml(t('su.caption')) + '</caption><thead><tr>'
-               + '<th scope="col">' + escHtml(t('su.colService')) + '</th><th scope="col">' + escHtml(t('su.colUsers'))
+               + '<th scope="col">' + escHtml(t('su.colService')) + '</th><th scope="col">' + escHtml(t('su.colRoot'))
+               + '</th><th scope="col">' + escHtml(t('su.colUsers'))
                + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
             (r.services || []).forEach(s => {
                 h += '<tr class="upd-cell"><td class="small"><code>' + updEsc(s.service) + '</code></td>'
+                   + '<td class="small">' + svcUsersRoot(s) + '</td>'
                    + '<td class="small">' + svcUsersRoles(s)
                    + (s.rootWhy ? '<div class="text-body-secondary mt-1"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>'
                        + '<span class="visually-hidden">' + escHtml(t('su.rootWhyLabel')) + ' </span>' + updEsc(s.rootWhy) + '</div>' : '')
-                   + '</td>'
+                   + svcUsersDocs(s) + '</td>'
                    + '<td class="small">' + (s.ok
                        ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i> ' + escHtml(t('su.ok'))
                        : '<i class="fas fa-triangle-exclamation text-warning" aria-hidden="true"></i> ' + escHtml(t('su.warn'))) + '</td></tr>';

@@ -105,6 +105,73 @@ public final class ServiceUsers {
             new Rule("unbound", "local-unbound( |$)|/sbin/unbound( |$)", false));
 
     /**
+     * An official page behind what the card says about a service: its title is server.su.doc.ID in the language files.
+     * Every address was opened and read before it was written here (23/11/2026), and says what the card says.
+     */
+    record Doc(String id, String url) {}
+
+    /** The only hosts a documentation link may point to: the projects' own sites, FreeBSD's manual, NVD. */
+    static final Set<String> DOC_HOSTS = Set.of("bugs.php.net", "dev.mysql.com", "doc.dovecot.org", "docs.rspamd.com", "github.com", "man.freebsd.org", "nginx.org", "redis.io", "www.php.net", "www.postfix.org");
+
+    /** Service -> its official pages. "php-fpm pool" stands for every pool. */
+    static final Map<String, List<Doc>> DOCS = Map.ofEntries(
+            Map.entry(Product.SLUG, List.of(
+                    new Doc("daemon8", "https://man.freebsd.org/cgi/man.cgi?query=daemon&sektion=8&manpath=FreeBSD+15.0-RELEASE#DESCRIPTION"),
+                    new Doc("chroot8", "https://man.freebsd.org/cgi/man.cgi?query=chroot&sektion=8&manpath=FreeBSD+15.0-RELEASE#DESCRIPTION"),
+                    new Doc("unixSocket", "https://man.freebsd.org/cgi/man.cgi?query=unix&sektion=4&manpath=FreeBSD+15.0-RELEASE#ADDRESSING"))),
+            Map.entry("postfix", List.of(
+                    new Doc("postfixPrivileged", "https://www.postfix.org/UNPRIVILEGED_README.html#security-model"),
+                    new Doc("postfixMasterCf", "https://www.postfix.org/master.5.html#syntax"),
+                    new Doc("postfixLocal", "https://www.postfix.org/local.8.html#security"),
+                    new Doc("postfixMailOwner", "https://www.postfix.org/postconf.5.html#mail_owner"),
+                    new Doc("freebsdIp", "https://man.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+15.0-RELEASE#DESCRIPTION"))),
+            Map.entry("dovecot", List.of(
+                    new Doc("dovecotMaster", "https://doc.dovecot.org/2.4.5/developers/design/processes.html#master-process"),
+                    new Doc("dovecotConfigLog", "https://doc.dovecot.org/2.4.5/core/config/service.html#config"),
+                    new Doc("dovecotAnvil", "https://doc.dovecot.org/2.4.5/core/config/service.html#anvil"),
+                    new Doc("dovecotLogin", "https://doc.dovecot.org/2.4.5/core/config/login_processes.html#login-processes"),
+                    new Doc("freebsdIp", "https://man.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+15.0-RELEASE#DESCRIPTION"))),
+            Map.entry("nginx", List.of(
+                    new Doc("nginxMaster", "https://nginx.org/en/docs/beginners_guide.html"),
+                    new Doc("nginxSockets", "https://nginx.org/en/docs/control.html#reconfiguration"),
+                    new Doc("nginxUser", "https://nginx.org/en/docs/ngx_core_module.html#user"),
+                    new Doc("freebsdIp", "https://man.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+15.0-RELEASE#DESCRIPTION"))),
+            Map.entry("php-fpm", List.of(
+                    new Doc("phpFpmUser", "https://github.com/php/php-src/blob/c93b3d151f50a30dceb41744a42d42a76ef002c8/sapi/fpm/www.conf.in#L20-L26"),
+                    new Doc("phpFpmCve", "https://bugs.php.net/bug.php?id=81026"),
+                    new Doc("phpFpmListen", "https://www.php.net/manual/en/install.fpm.configuration.php#listen-owner"),
+                    new Doc("rcSubrUser", "https://man.freebsd.org/cgi/man.cgi?query=rc.subr&sektion=8&manpath=FreeBSD+15.0-RELEASE#DESCRIPTION"),
+                    new Doc("unixSocket", "https://man.freebsd.org/cgi/man.cgi?query=unix&sektion=4&manpath=FreeBSD+15.0-RELEASE#ADDRESSING"))),
+            Map.entry("php-fpm pool", List.of(
+                    new Doc("phpFpmUser", "https://github.com/php/php-src/blob/c93b3d151f50a30dceb41744a42d42a76ef002c8/sapi/fpm/www.conf.in#L20-L26"),
+                    new Doc("phpFpmListen", "https://www.php.net/manual/en/install.fpm.configuration.php#listen-owner"))),
+            Map.entry("fail2ban", List.of(
+                    new Doc("fail2banRoot", "https://github.com/fail2ban/fail2ban/blob/cae17d2f99d53d613c4e5ed9d1b2328f201a3612/doc/run-rootless.txt#L1-L5"),
+                    new Doc("pfDevice", "https://man.freebsd.org/cgi/man.cgi?query=pf&sektion=4&manpath=FreeBSD+15.0-RELEASE#DESCRIPTION"),
+                    new Doc("pfDeviceMode", "https://github.com/freebsd/freebsd-src/blob/2b7df8c16dc77a6774a4d309477b1238fe725d93/sys/netpfil/pf/pf_ioctl.c#L7075"))),
+            Map.entry("rspamd", List.of(
+                    new Doc("rspamdIsolation", "https://docs.rspamd.com/developers/architecture/#process-isolation"))),
+            Map.entry("redis", List.of(
+                    new Doc("redisSecurity", "https://redis.io/docs/latest/operate/oss_and_stack/management/security/#code-security"))),
+            Map.entry("clamav", List.of(
+                    new Doc("clamdConf", "https://man.freebsd.org/cgi/man.cgi?query=clamd.conf&sektion=5&manpath=FreeBSD+15.0-RELEASE+and+Ports"),
+                    new Doc("freshclamConf", "https://man.freebsd.org/cgi/man.cgi?query=freshclam.conf&sektion=5&manpath=FreeBSD+15.0-RELEASE+and+Ports"))),
+            Map.entry("mysql", List.of(
+                    new Doc("mysqlNoRoot", "https://dev.mysql.com/doc/refman/8.4/en/security-against-attack.html"),
+                    new Doc("mysqlUser", "https://dev.mysql.com/doc/refman/8.4/en/changing-mysql-user.html"))),
+            Map.entry("unbound", List.of(
+                    new Doc("localUnbound", "https://man.freebsd.org/cgi/man.cgi?query=local-unbound.conf&sektion=5&manpath=FreeBSD+15.0-RELEASE"))),
+            Map.entry("acme.sh", List.of(
+                    new Doc("acmeNoRoot", "https://github.com/acmesh-official/acme.sh/blob/5567d7fe7298fd37aca53194885ba444c6678669/README.md?plain=1#L71"))),
+            Map.entry("sievec", List.of(
+                    new Doc("sievec", "https://doc.dovecot.org/2.4.5/core/man/sievec.1.html#description"))));
+
+    /** The official pages of a service; every php-fpm pool has the pool's ones. */
+    static List<Doc> docsOf(String service) {
+        return DOCS.getOrDefault(service.startsWith("php-fpm pool ") ? "php-fpm pool" : service, List.of());
+    }
+
+    /**
      * Where root stays, the reason put into words on the page (server.su.rootWhy.*): only the services
      * that really need root by the way they are made. Whoever looks at it must be able to understand that it
      * is not an oversight.
@@ -206,6 +273,9 @@ public final class ServiceUsers {
         /** User -> the short names of its processes: what each user of the service does. */
         final Map<String, Set<String>> roles = new LinkedHashMap<>();
         final Set<String> needlessRoot = new LinkedHashSet<>();
+        /** The short names of the processes that run as root: those that need it, and those that do not. */
+        final Set<String> neededRootNames = new LinkedHashSet<>();
+        final Set<String> needlessRootNames = new LinkedHashSet<>();
         /** One of its processes runs as root and needs it: the page says why. */
         boolean neededRoot;
         int processes;
@@ -286,8 +356,14 @@ public final class ServiceUsers {
             s.users.add(p.user());
             s.roles.computeIfAbsent(p.user(), k -> new LinkedHashSet<>()).add(processName(name, p.command()));
             s.processes++;
-            if ("root".equals(p.user()) && !rootNeeded) s.needlessRoot.add(p.command().split("\\s+")[0]);
-            if ("root".equals(p.user()) && rootNeeded) s.neededRoot = true;
+            if ("root".equals(p.user()) && !rootNeeded) {
+                s.needlessRoot.add(p.command().split("\\s+")[0]);
+                s.needlessRootNames.add(processName(name, p.command()));
+            }
+            if ("root".equals(p.user()) && rootNeeded) {
+                s.neededRoot = true;
+                s.neededRootNames.add(processName(name, p.command()));
+            }
         }
         for (Service s : services.values())
             if (!s.needlessRoot.isEmpty())
@@ -328,6 +404,7 @@ public final class ServiceUsers {
         if (acmeAsRoot) {
             acme.users.add("root");
             acme.roles.computeIfAbsent("root", k -> new LinkedHashSet<>()).add("acme.sh");
+            acme.needlessRootNames.add("acme.sh");
             problems.add(new Problem("acmeRoot", "acme.sh", "root", AcmeUser.OLD_HOME));
         } else if (Files.isRegularFile(Path.of(AcmeUser.SCRIPT))) {
             acme.users.add(AcmeUser.USER);
@@ -338,6 +415,7 @@ public final class ServiceUsers {
                 if (!l.trim().startsWith("#") && l.contains("acme.sh")) {
                     acme.users.add("root");
                     acme.roles.computeIfAbsent("root", k -> new LinkedHashSet<>()).add("acme.sh");
+                    acme.needlessRootNames.add("acme.sh");
                     problems.add(new Problem("acmeRoot", "acme.sh", "root", "root's crontab: " + l.trim()));
                 }
         if (!acme.users.isEmpty()) services.put(acme.name, acme);
@@ -407,6 +485,32 @@ public final class ServiceUsers {
         return out;
     }
 
+    /**
+     * Whether a service runs something as root: "needed" (only processes that must, by the way the program is made),
+     * "none", or "needless" (at least one process that does not need it: the page warns). Pure.
+     */
+    static String rootStatus(Service s) {
+        if (!s.needlessRootNames.isEmpty() || (s.users.contains("root") && !s.neededRoot)) return "needless";
+        return s.neededRoot ? "needed" : "none";
+    }
+
+    /** The short names of the processes the root status is about: those that need root, or those that should not have it. */
+    static List<String> rootProcesses(Service s) {
+        return switch (rootStatus(s)) {
+            case "needed" -> new ArrayList<>(s.neededRootNames);
+            case "needless" -> new ArrayList<>(s.needlessRootNames.isEmpty() ? s.roles.getOrDefault("root", Set.of()) : s.needlessRootNames);
+            default -> List.of();
+        };
+    }
+
+    /** The documentation of a service for the page: title in the reader's language and address. */
+    static JSONArray docs(String service) {
+        JSONArray out = new JSONArray();
+        for (Doc d : docsOf(service))
+            out.put(new JSONObject().put("title", I18n.tr("server.su.doc." + d.id())).put("url", d.url()));
+        return out;
+    }
+
     /** For the page: the services, their users, the warnings. */
     public static JSONObject state() {
         Findings f = now();
@@ -421,7 +525,8 @@ public final class ServiceUsers {
             for (Problem p : f.problems())
                 if (java.util.Arrays.asList(p.service().split(", ")).contains(s.name)) warned = true;
             JSONObject o = new JSONObject().put("service", s.name).put("users", new JSONArray(s.users))
-                    .put("processes", s.processes).put("ok", !warned).put("roles", roles(s));
+                    .put("processes", s.processes).put("ok", !warned).put("roles", roles(s))
+                    .put("root", rootStatus(s)).put("rootProcesses", new JSONArray(rootProcesses(s))).put("docs", docs(s.name));
             String why = ROOT_WHY.get(s.name);
             if (s.neededRoot && !warned && why != null) o.put("rootWhy", I18n.tr("server.su.rootWhy." + why));
             services.put(o);
