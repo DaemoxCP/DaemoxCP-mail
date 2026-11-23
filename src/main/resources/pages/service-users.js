@@ -59,33 +59,35 @@
                 h += '</ul>';
             }
 
-            h += '<div class="table-responsive"><table class="table table-sm align-middle mb-3">'
+            // On phone and tablet the rows become cards (table-cards, the layout's): every cell says its column.
+            const lab = k => ' data-label="' + escHtml(t(k)) + '"';
+            h += '<div class="table-responsive"><table class="table table-sm align-middle mb-3 table-cards">'
                + '<caption class="small">' + escHtml(t('su.caption')) + '</caption><thead><tr>'
                + '<th scope="col">' + escHtml(t('su.colService')) + '</th><th scope="col">' + escHtml(t('su.colRoot'))
                + '</th><th scope="col">' + escHtml(t('su.colUsers'))
                + '</th><th scope="col">' + escHtml(t('up.colResult')) + '</th></tr></thead><tbody>';
             (r.services || []).forEach(s => {
-                h += '<tr class="upd-cell"><td class="small"><code>' + updEsc(s.service) + '</code></td>'
-                   + '<td class="small">' + svcUsersRoot(s) + '</td>'
-                   + '<td class="small">' + svcUsersRoles(s)
+                h += '<tr class="upd-cell"><td class="small"' + lab('su.colService') + '><code>' + updEsc(s.service) + '</code></td>'
+                   + '<td class="small"' + lab('su.colRoot') + '>' + svcUsersRoot(s) + '</td>'
+                   + '<td class="small"' + lab('su.colUsers') + '>' + svcUsersRoles(s)
                    + (s.rootWhy ? '<div class="text-body-secondary mt-1"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>'
                        + '<span class="visually-hidden">' + escHtml(t('su.rootWhyLabel')) + ' </span>' + updEsc(s.rootWhy) + '</div>' : '')
                    + svcUsersDocs(s) + '</td>'
-                   + '<td class="small">' + (s.ok
+                   + '<td class="small"' + lab('up.colResult') + '>' + (s.ok
                        ? '<i class="fas fa-check-circle text-success" aria-hidden="true"></i> ' + escHtml(t('su.ok'))
                        : '<i class="fas fa-triangle-exclamation text-warning" aria-hidden="true"></i> ' + escHtml(t('su.warn'))) + '</td></tr>';
             });
             h += '</tbody></table></div>';
 
             if ((r.pools || []).length) {
-                h += '<div class="table-responsive"><table class="table table-sm align-middle mb-0">'
+                h += '<div class="table-responsive"><table class="table table-sm align-middle mb-0 table-cards">'
                    + '<caption class="small">' + escHtml(t('su.poolsCaption')) + '</caption><thead><tr>'
                    + '<th scope="col">' + escHtml(t('su.colPool')) + '</th><th scope="col">' + escHtml(t('su.colUser'))
                    + '</th><th scope="col">' + escHtml(t('su.colFile')) + '</th></tr></thead><tbody>';
                 r.pools.forEach(p => {
-                    h += '<tr class="upd-cell"><td class="small"><code>' + updEsc(p.pool) + '</code></td>'
-                       + '<td class="small"><code>' + updEsc(p.user) + '</code></td>'
-                       + '<td class="small"><code>' + updEsc(p.file) + '</code></td></tr>';
+                    h += '<tr class="upd-cell"><td class="small"' + lab('su.colPool') + '><code>' + updEsc(p.pool) + '</code></td>'
+                       + '<td class="small"' + lab('su.colUser') + '><code>' + updEsc(p.user) + '</code></td>'
+                       + '<td class="small"' + lab('su.colFile') + '><code>' + updEsc(p.file) + '</code></td></tr>';
                 });
                 h += '</tbody></table></div>';
             }
