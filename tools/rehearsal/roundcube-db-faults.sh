@@ -80,5 +80,5 @@ EOP
     grep -c db_dsnr "$C" ;;
   clear:dsnr)
     cp -p /root/rcdb/config-before-dsnr.php "$C"; grep -c db_dsnr "$C" ;;
-  *) echo "uso: roundcube-db-faults.sh plant|clear webmail-down|password-policy|init-connect|fpm-reload|session-trigger|logged-in-session|panel-plugin|existing-account|dsnr"; exit 2 ;;
+  *) echo "usage: roundcube-db-faults.sh plant|clear webmail-down|password-policy|init-connect|fpm-reload|session-trigger|logged-in-session|panel-plugin|existing-account|dsnr"; exit 2 ;;
 esac

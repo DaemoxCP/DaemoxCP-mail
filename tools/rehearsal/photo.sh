@@ -19,7 +19,7 @@ take)
     tar -cpf "$COPIES/home-panel.tar" -C /home panel
     tar -cpf "$COPIES/var-log.tar" -C /var log
     bectl create "$NAME"
-    echo "fotografia $NAME: boot environment piu' $COPIES (home-panel.tar, var-log.tar)"
+    echo "snapshot $NAME: boot environment plus $COPIES (home-panel.tar, var-log.tar)"
     ;;
 restore)
     NAME=$2; CLONE=$3
@@ -37,8 +37,8 @@ restore)
     tar -xpf /var/tmp/var-log.tar -C /var
     rm -f /var/tmp/home-panel.tar /var/tmp/var-log.tar
     bectl activate "$CLONE"
-    echo "pronto: $CLONE al prossimo avvio. Adesso: shutdown -r now"
+    echo "ready: $CLONE at the next boot. Now: shutdown -r now"
     ;;
 *)
-    echo "uso: $0 take NOME | restore NOME CLONE" >&2; exit 64 ;;
+    echo "usage: $0 take NAME | restore NAME CLONE" >&2; exit 64 ;;
 esac
