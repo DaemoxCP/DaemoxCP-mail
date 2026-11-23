@@ -8,52 +8,52 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * La superficie pubblica sulla porta 443, ridotta al minimo e con dei freni.
+ * The public surface on port 443, reduced to the minimum and with some brakes.
  *
- * Il contesto: questo server tiene la webmail sulla 8443, chiusa agli indirizzi esterni. Due
- * funzioni pero' hanno bisogno della 443 perche' i protocolli non ammettono altra porta: la
- * politica MTA-STS, che leggono i server mittenti di tutto il mondo, e il file di
- * configurazione che cerca Thunderbird. Aprire la 443 significa esporre qualcosa, quindi
- * quel qualcosa dev'essere il meno possibile.
+ * The context: this server keeps the webmail on 8443, closed to external addresses. Two
+ * functions, however, need 443 because the protocols allow no other port: the
+ * MTA-STS policy, which sending servers all over the world read, and the
+ * configuration file that Thunderbird looks for. Opening 443 means exposing something, so
+ * that something must be as little as possible.
  *
- * Le scelte, una per una, e il motivo di ciascuna:
+ * The choices, one by one, and the reason for each:
  *
- *  - **Un blocco server separato**, non un'aggiunta a quello della webmail. Se si aggiungesse
- *    li', il nuovo sito erediterebbe la radice di Roundcube e il gestore del PHP: si
- *    aprirebbe la 443 su un'applicazione intera per servire due file di testo.
+ *  - **A separate server block**, not an addition to the webmail one. If it were added
+ *    there, the new site would inherit Roundcube's root and the PHP handler: 443 would
+ *    be opened onto an entire application to serve two text files.
  *
- *  - **default_server sulla 443.** Cosi' qualunque nome arrivi su quella porta finisce qui, e
- *    non c'e' modo che una richiesta raggiunga per sbaglio un altro blocco.
+ *  - **default_server on 443.** That way whatever name arrives on that port ends up here,
+ *    and there is no way for a request to reach another block by mistake.
  *
- *  - **Due sole location, entrambe esatte** (`location =`), e tutto il resto 404. Non c'e'
- *    radice, non c'e' indice, non c'e' try_files: non esiste un percorso che consegni un file
- *    che non sia uno dei due.
+ *  - **Only two locations, both exact** (`location =`), and everything else 404. There is no
+ *    root, no index, no try_files: there is no path that serves a file
+ *    other than one of the two.
  *
- *  - **La politica MTA-STS e' un file STATICO su disco**, non una richiesta girata al
- *    pannello. E' identica per tutti i domini — dichiara lo stesso MX — quindi non c'e'
- *    ragione di generarla ogni volta. Cosi' un'inondazione su quel percorso la assorbe nginx
- *    servendo duecento byte, e non arriva mai al processo Java ne' al database.
+ *  - **The MTA-STS policy is a STATIC file on disk**, not a request passed on to the
+ *    panel. It is identical for all domains -- it declares the same MX -- so there is no
+ *    reason to generate it every time. That way a flood on that path is absorbed by nginx
+ *    serving two hundred bytes, and never reaches the Java process or the database.
  *
- *  - **Solo GET e HEAD.** Sono due file da leggere: qualunque altro metodo e' o un errore o
- *    un tentativo.
+ *  - **Only GET and HEAD.** They are two files to read: any other method is either an error
+ *    or an attempt.
  *
- *  - **Limiti di frequenza e di connessioni per indirizzo**, larghi abbastanza da non
- *    disturbare nessuno: cinque richieste al secondo e otto connessioni sono ordini di
- *    grandezza sopra l'uso reale, che e' una richiesta ogni tanto.
+ *  - **Rate and connection limits per address**, wide enough not to
+ *    bother anyone: five requests per second and eight connections are orders of
+ *    magnitude above real usage, which is one request now and then.
  *
- *  - **Corpo massimo minuscolo e attese brevi.** Una richiesta lenta che tiene occupata una
- *    connessione e' il modo piu' economico di fare danno: qui muore in cinque secondi.
+ *  - **Tiny maximum body and short timeouts.** A slow request that keeps a
+ *    connection busy is the cheapest way to do damage: here it dies in five seconds.
  *
- *  - **Log dedicato**, cosi' fail2ban puo' guardare solo questo e non confondersi con la
+ *  - **Dedicated log**, so fail2ban can watch only this and not mix it up with the
  *    webmail.
  */
 public class WebProtection {
 
     /**
-     * Il nome della superficie pubblica sul sistema: il file di nginx, il suo log, il filtro e
-     * la jail di fail2ban, e quindi l'ancora e la tabella di pf (f2b/NAME, f2b-NAME). Viaggia
-     * fra tre servizi: nginx scrive il log che fail2ban legge. Fino al 30/10/2026 era
-     * "mailpanel-pubblico": i server installati prima li sposta PublicSurfaceRename all'avvio.
+     * The name of the public surface on the system: the nginx file, its log, the fail2ban filter and
+     * jail, and therefore the pf anchor and table (f2b/NAME, f2b-NAME). It travels
+     * between three services: nginx writes the log that fail2ban reads. Until 2026-10-30 it was
+     * `mailpanel-pubblico` ("mailpanel-public"): servers installed before are moved by PublicSurfaceRename at boot.
      */
     public static final String NAME = Product.SLUG + "-public";
 
@@ -67,19 +67,21 @@ public class WebProtection {
 
     private WebProtection() {}
 
-    /* ===================================================================
-     * La configurazione, come funzione pura
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The configuration, as a pure function
+     * ===================================================================
+     */
 
     /**
-     * Le cartelle che nginx include davvero, ricavate dalla configurazione completa.
+     * The folders that nginx really includes, derived from the complete configuration.
      *
-     * Non si scrive piu' in "sites-enabled" perche' lo scrive uno degli script di
-     * installazione: su questo server quella cartella NON e' inclusa, e un file messo li'
-     * sarebbe stato ignorato mentre il pannello dichiarava "installato". Si guarda dove
-     * nginx dice di guardare, e si scrive li'.
+     * We no longer write into "sites-enabled" because one of the installation scripts
+     * writes there: on this server that folder is NOT included, and a file put there
+     * would have been ignored while the panel declared "installed". We look where
+     * nginx says to look, and write there.
      *
-     * I percorsi relativi si risolvono rispetto al prefisso di nginx, come fa nginx stesso.
+     * Relative paths are resolved against the nginx prefix, as nginx itself does.
      */
     public static java.util.List<String> includedFolders(String dump) {
         java.util.LinkedHashSet<String> outside = new java.util.LinkedHashSet<>();
@@ -88,7 +90,7 @@ public class WebProtection {
             String t = r.trim();
             if (t.startsWith("#") || !t.startsWith("include ")) continue;
             String v = t.substring(8).replace(";", "").trim();
-            // Interessano solo gli include a modello: "include qualcosa/*.conf".
+            // Only pattern includes matter: "include something/*.conf".
             int star = v.indexOf('*');
             if (star < 0) continue;
             int slash = v.lastIndexOf('/', star);
@@ -100,7 +102,7 @@ public class WebProtection {
         return new java.util.ArrayList<>(outside);
     }
 
-    /** La cartella in cui scrivere: la prima inclusa che esiste ed e' scrivibile. */
+    /** The folder to write into: the first included one that exists and is writable. */
     public static String chosenFolder(java.util.List<String> included) {
         for (String c : included) {
             try {
@@ -108,7 +110,7 @@ public class WebProtection {
                 if (Files.isDirectory(p) && Files.isWritable(p)) return c;
             } catch (Exception ignore) {}
         }
-        // Nessuna esiste: si prende la prima dichiarata, che si puo' creare.
+        // None exists: take the first declared one, which can be created.
         return included.isEmpty() ? null : included.get(0);
     }
 
@@ -172,13 +174,15 @@ public class WebProtection {
                 location / { return 404; }
             }
             """.formatted(cert, key, ACCESS_LOG, POLICY_FILE);
-        // Le righe listen della famiglia scelta nelle Impostazioni (IpFamily); senza scelta, IPv4 e IPv6 come sempre.
+        // The listen lines of the family chosen in Settings (IpFamily); with no choice, IPv4 and IPv6 as always.
         return IpFamily.withNginxListen(text, 443, IpFamily.chosen());
     }
 
-    /* ===================================================================
-     * Lo stato reale
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The real state
+     * ===================================================================
+     */
 
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
@@ -200,11 +204,11 @@ public class WebProtection {
     }
 
     /**
-     * nginx include davvero la cartella in cui stiamo per scrivere?
+     * Does nginx really include the folder we are about to write into?
      *
-     * Senza questo controllo si scriverebbe un file perfetto che nginx non legge mai, e il
-     * pannello direbbe "installato" mentre la 443 resta chiusa. Si guarda la configurazione
-     * completa, non il file principale: l'include potrebbe stare in un file incluso a sua volta.
+     * Without this check we would write a perfect file that nginx never reads, and the
+     * panel would say "installed" while 443 stays closed. We look at the complete
+     * configuration, not the main file: the include could be in a file that is itself included.
      */
     public static JSONObject activeInclude() {
         JSONObject r = new JSONObject();
@@ -224,9 +228,11 @@ public class WebProtection {
                 .put("reason", I18n.tr("server.pubweb.includes", java.util.Map.of("dir", String.valueOf(choice))));
     }
 
-    /* ===================================================================
-     * L'installazione
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The installation
+     * ===================================================================
+     */
 
     public static JSONObject install(String cert, String key) {
         JSONObject r = new JSONObject();
@@ -245,14 +251,14 @@ public class WebProtection {
                         .put("error", I18n.tr("server.pubweb.noCert", java.util.Map.of("cert", String.valueOf(cert), "key", String.valueOf(key))));
             r.put("certificate", cert);
 
-            // 1. La politica, prima della configurazione: se nginx partisse puntando a un file
-            //    che non c'e', servirebbe un 404 sul percorso che deve funzionare.
+            // 1. The policy, before the configuration: if nginx started pointing to a file
+            //    that is not there, it would serve a 404 on the path that has to work.
             JSONObject pol = writePolicy();
             r.put("policy", pol);
             if (!pol.optBoolean("success", false))
                 return r.put("success", false).put("error", pol.optString("error"));
 
-            // 2. Copia di sicurezza di un'eventuale versione precedente.
+            // 2. Backup copy of any previous version.
             Path f = Path.of(FILE);
             String before = Files.exists(f) ? Files.readString(f) : null;
             if (before != null) {
@@ -264,7 +270,7 @@ public class WebProtection {
             Files.createDirectories(Path.of(folder));
             Files.writeString(f, configuration(cert, key));
 
-            // 3. La validazione decide.
+            // 3. The validation decides.
             RunResult test = run("nginx", "-t");
             if (test.code != 0) {
                 if (before != null) Files.writeString(f, before); else Files.deleteIfExists(f);
@@ -280,7 +286,7 @@ public class WebProtection {
                         .put("error", I18n.tr("server.pubweb.reloadFailedRemoved", java.util.Map.of("out", String.valueOf(reloadOutcome.output.trim()))));
             }
 
-            // 4. Non basta che i comandi non abbiano protestato: si prova la porta.
+            // 4. It is not enough that the commands did not complain: we test the port.
             JSONObject test443 = localTest();
             r.put("test", test443);
             if (!test443.optBoolean("ok", false))
@@ -295,7 +301,7 @@ public class WebProtection {
         }
     }
 
-    /** Scrive la politica MTA-STS su disco. E' uguale per tutti i domini: dichiara lo stesso MX. */
+    /** Writes the MTA-STS policy to disk. It is the same for all domains: it declares the same MX. */
     public static JSONObject writePolicy() {
         JSONObject r = new JSONObject();
         String host = MtaSts.mailHost();
@@ -305,7 +311,7 @@ public class WebProtection {
         String mode = MtaSts.currentMode();
         String text = MtaSts.policy(host, mode, MtaSts.recommendedMaxAge(mode));
         try {
-            // Coi permessi scritti, non con l'umask del servizio: nginx (www) deve poterla leggere (reperto 250)
+            // With explicit permissions, not the service's umask: nginx (www) must be able to read it (finding 250)
             PublicPolicyAccess.write(Path.of(PUBLIC_DIR), Path.of(POLICY_FILE), text);
             return r.put("success", true).put("mode", mode).put("text", text)
                     .put("id", MtaSts.id(text));
@@ -314,16 +320,18 @@ public class WebProtection {
         }
     }
 
-    /* ===================================================================
-     * Aggiungere la riga di include
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Adding the include line
+     * ===================================================================
+     */
 
     public static final String PROPOSED_FOLDER = NGINX_PREFIX + "/conf.d";
     private static final String MAIN_COPY = "/var/db/daemoxcp-mail/nginx.conf-before-include";
 
     /**
-     * Il file principale, ricavato da "nginx -T": la prima riga "# configuration file X:"
-     * indica il file da cui nginx e' partito. Non si tira a indovinare il percorso.
+     * The main file, derived from "nginx -T": the first line "# configuration file X:"
+     * names the file nginx started from. We do not guess the path.
      */
     public static String mainFile(String dump) {
         if (dump == null) return null;
@@ -338,14 +346,14 @@ public class WebProtection {
     }
 
     /**
-     * Inserisce la riga di include subito dopo l'apertura del blocco http.
+     * Inserts the include line right after the opening of the http block.
      *
-     * Deve stare DENTRO http: fuori, nginx rifiuta le direttive di un blocco server, e la
-     * configurazione non parte. Si inserisce in cima al blocco cosi' le direttive del file
-     * incluso non si trovano dopo qualcosa che le renda inefficaci.
+     * It must be INSIDE http: outside, nginx rejects the directives of a server block, and the
+     * configuration does not start. It is inserted at the top of the block so that the directives of the
+     * included file do not come after something that would make them ineffective.
      *
-     * Restituisce null se il blocco http non si trova o se l'include c'e' gia': meglio non
-     * fare niente che scrivere una riga in un punto a caso di una configurazione che funziona.
+     * Returns null if the http block is not found or if the include is already there: better to
+     * do nothing than to write a line at a random point of a configuration that works.
      */
     public static String withInclude(String main, String folder) {
         if (main == null || folder == null) return null;
@@ -372,7 +380,7 @@ public class WebProtection {
         return null;
     }
 
-    /** Aggiunge la riga di include al file principale, con tutte le reti di sicurezza. */
+    /** Adds the include line to the main file, with all the safety nets. */
     public static JSONObject addInclude() {
         JSONObject r = new JSONObject();
         try {
@@ -415,7 +423,7 @@ public class WebProtection {
                         .put("error", I18n.tr("server.pubweb.reloadFailedRestored", java.util.Map.of("out", String.valueOf(reloadOutcome.output.trim()))));
             }
 
-            // Si rilegge da nginx, non dal file: conta cosa nginx include davvero.
+            // Reread from nginx, not from the file: what counts is what nginx really includes.
             RunResult afterDump = run("nginx", "-T");
             boolean seen = afterDump.code == 0
                     && includedFolders(afterDump.output).contains(PROPOSED_FOLDER);
@@ -430,24 +438,26 @@ public class WebProtection {
         }
     }
 
-    /* ===================================================================
-     * La jail fail2ban
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The fail2ban jail
+     * ===================================================================
+     */
 
     static final String F2B_DIR = "/usr/local/etc/fail2ban";
     static final String FILTER = F2B_DIR + "/filter.d/" + NAME + ".conf";
     public static final String JAIL = F2B_DIR + "/jail.d/" + NAME + ".conf";
 
     /**
-     * Il filtro guarda SOLO il log di questo sito, e solo le risposte 404, 405 e 429.
+     * The filter watches ONLY this site's log, and only the 404, 405 and 429 responses.
      *
-     * Il ragionamento: su questa porta esistono due percorsi leciti. Chi ne chiede altri sta
-     * cercando qualcosa — una pagina di amministrazione, un file di configurazione, un
-     * exploit — e chi prende 429 sta gia' andando oltre il limite di frequenza. Un errore
-     * capita a chiunque, quindi si banna dopo dieci in dieci minuti, non al primo.
+     * The reasoning: on this port there are two legitimate paths. Whoever asks for others is
+     * looking for something -- an admin page, a configuration file, an
+     * exploit -- and whoever gets 429 is already going past the rate limit. An error
+     * can happen to anyone, so the ban comes after ten in ten minutes, not at the first.
      *
-     * Guardare un log dedicato invece di quello generale evita di bannare per errore chi usa
-     * la webmail: sono due file diversi, e le due cose non si confondono.
+     * Watching a dedicated log instead of the general one avoids banning by mistake those who use
+     * the webmail: they are two different files, and the two things do not get mixed up.
      */
     public static String filter() {
         return """
@@ -497,7 +507,7 @@ public class WebProtection {
             """.formatted(NAME, ACCESS_LOG);
     }
 
-    /** Installa filtro e jail, e verifica che fail2ban la veda davvero attiva. */
+    /** Installs filter and jail, and checks that fail2ban really sees it active. */
     public static JSONObject installJail() {
         JSONObject r = new JSONObject();
         try {
@@ -519,7 +529,7 @@ public class WebProtection {
                         .put("error", I18n.tr("server.pubweb.f2bRejected", java.util.Map.of("out", String.valueOf(rel.output.trim()))));
             }
 
-            // Non basta che il reload sia andato: si chiede a fail2ban se la vede.
+            // It is not enough that the reload went through: we ask fail2ban whether it sees it.
             RunResult st = run("fail2ban-client", "status", NAME);
             if (st.code != 0)
                 return r.put("success", false)
@@ -532,7 +542,7 @@ public class WebProtection {
         }
     }
 
-    /** Chiede i due percorsi a 127.0.0.1 sulla 443, per vedere se nginx risponde davvero. */
+    /** Requests the two paths from 127.0.0.1 on 443, to see whether nginx really answers. */
     private static JSONObject localTest() {
         JSONObject r = new JSONObject();
         RunResult a = run("sh", "-c",

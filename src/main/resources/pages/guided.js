@@ -1,11 +1,12 @@
 
-        // ---------- le procedure dedicate, guidate (reperto 197) ----------
-        // Java, Roundcube, MySQL e Python dicono le stesse cose nello stesso modo: dopo «Prepara» una riga sui controlli,
-        // quello che va saputo prima, il piano esatto e UN pulsante; se qualcosa ferma, solo le righe che fermano e cosa
-        // fare; tutti i controlli chiusi sotto. La conferma e' la finestra del pannello, non quella del browser. Il
-        // registro del lavoro sta chiuso sotto (e su disco, Diagnostica); alla fine la riga resta, con l'esito.
+        // ---------- the dedicated procedures, guided (finding 197) ----------
+        // Java, Roundcube, MySQL and Python say the same things in the same way: after "Prepare" one line about
+        // the checks, what must be known beforehand, the exact plan and ONE button; if something blocks, only the
+        // blocking lines and what to do; all the checks collapsed below. The confirmation is the panel's window,
+        // not the browser's. The job's log stays collapsed below (and on disk, Diagnostics); at the end the line
+        // stays, with the outcome.
 
-        // L'esito dei lavori finiti in questa pagina, per riga: la riga non sparisce col suo esito.
+        // The outcome of the jobs finished on this page, per line: a line does not lose its outcome.
         const gdDone = {};
 
         function gdChecksTable(checks) {
@@ -26,7 +27,8 @@
                 : '';
         }
 
-        // Il risultato dei controlli, guidato. o: { already, alreadyText, unknownText, extra (html), note (testo), go: { label, action } }
+        // The result of the checks, guided.
+        // o: { already, alreadyText, unknownText, extra (html), note (text), go: { label, action } }
         function gdReady(r, o) {
             const checks = r.checks || [];
             const stops = checks.filter(c => c.level === 'block');
@@ -52,14 +54,14 @@
             return h + gdAllChecks(checks);
         }
 
-        // Il piano in righe, per la conferma: cosa cambia, pacchetto per pacchetto.
+        // The plan in lines, for the confirmation: what changes, package by package.
         function gdPlanLines(r) {
             const c = (r && r.plan && r.plan.changes) || [];
             return c.map(x => x.name + ': ' + (x.from || '-') + ' → ' + (x.to || '-')).join('\n');
         }
 
-        // Fa partire il lavoro: l'avanzamento in una riga nel riquadro, il registro chiuso sotto; alla fine l'esito resta
-        // nella riga (gdDone) e la scheda si rilegge.
+        // Starts the job: the progress in one line in the box, the log collapsed below; at the end the outcome
+        // stays in the line (gdDone) and the card reads itself again.
         function gdFollow(key, boxId, logBoxId, preId, jobId, runningText) {
             const el = document.getElementById(boxId), pre = document.getElementById(preId);
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(runningText);

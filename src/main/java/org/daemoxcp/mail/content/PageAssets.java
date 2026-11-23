@@ -18,50 +18,50 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Gli script e i fogli di stile delle pagine come file serviti dal pannello, non in linea: la
- * Content-Security-Policy non ha piu' 'unsafe-inline' (reperto 178).
+ * The pages' scripts and style sheets as files served by the panel, not inline: the
+ * Content-Security-Policy no longer has 'unsafe-inline' (finding 178).
  *
- * <p>Le pagine restano scritte come prima, con i loro blocchi &lt;script&gt; e &lt;style&gt; nei text
- * block: e' {@link #externalize} che, quando le pagine si generano, mette al posto di ogni blocco un
- * &lt;script src&gt; o un &lt;link&gt; verso un file col nome preso dal contenuto (sha-256). Cosi':
+ * <p>The pages stay written as before, with their &lt;script&gt; and &lt;style&gt; blocks in the text
+ * blocks: it is {@link #externalize} that, when the pages are generated, puts in place of each block a
+ * &lt;script src&gt; or a &lt;link&gt; to a file named after the content (sha-256). This way:
  * <ul>
- *   <li>il nome cambia solo quando cambia il contenuto, e il file si tiene in cache per sempre;</li>
- *   <li>un blocco uguale in tutte le pagine (la testa, il piede, il tema) e' un file solo;</li>
- *   <li>l'ordine di esecuzione e' quello di prima: un &lt;script src&gt; senza async ne' defer
- *   blocca il parser nello stesso punto in cui lo bloccava il blocco in linea.</li>
+ *   <li>the name changes only when the content changes, and the file is cached forever;</li>
+ *   <li>a block that is the same in all pages (the head, the footer, the theme) is a single file;</li>
+ *   <li>the execution order is the same as before: a &lt;script src&gt; without async or defer
+ *   blocks the parser at the same point where the inline block blocked it.</li>
  * </ul>
  *
- * <p>I file stanno accanto alle pagine generate, in assets/ (quelli delle pagine protette, dati solo
- * a chi e' entrato) e assets/open/ (quelli delle pagine d'accesso e d'installazione e quelli comuni,
- * dati a tutti): il server li legge dal disco come legge le pagine, e i file rimasti da una versione
- * di prima si tolgono a ogni generazione.
+ * <p>The files sit next to the generated pages, in assets/ (those of the protected pages, given only
+ * to whoever has logged in) and assets/open/ (those of the login and installation pages and the common ones,
+ * given to everyone): the server reads them from disk as it reads the pages, and the files left over from an
+ * earlier version are removed at every generation.
  */
 public final class PageAssets {
 
-    /** La cartella dei file, dentro quella delle pagine, e il prefisso dei loro indirizzi. */
+    /** The folder of the files, inside the pages' one, and the prefix of their addresses. */
     public static final String DIR = "assets";
-    /** La sottocartella dei file che si danno anche prima di entrare. */
+    /** The subfolder of the files that are given out even before logging in. */
     public static final String OPEN = "open";
-    /** Il nome di un file: l'impronta del contenuto e l'estensione. */
+    /** The name of a file: the fingerprint of the content and the extension. */
     public static final Pattern FILE = Pattern.compile("[0-9a-f]{20}\\.(js|css)");
 
     private static final Pattern INLINE_SCRIPT = Pattern.compile("<script>(.*?)</script>", Pattern.DOTALL);
     private static final Pattern INLINE_STYLE = Pattern.compile("<style>(.*?)</style>", Pattern.DOTALL);
 
-    /** I file registrati, per percorso relativo ad assets/ (open/xxx.js o xxx.js). */
+    /** The registered files, by path relative to assets/ (open/xxx.js or xxx.js). */
     private static final Map<String, byte[]> REGISTERED = new ConcurrentHashMap<>();
 
     /**
-     * Le azioni e gli stili senza codice in linea (data-on-*, data-style): va nella &lt;head&gt; di
-     * ogni pagina, prima del corpo.
+     * The actions and styles without inline code (data-on-*, data-style): it goes in the &lt;head&gt; of
+     * every page, before the body.
      */
     public static final String ACTIONS = script(resource("pages/panel-actions.js"), true);
 
     private PageAssets() {}
 
     /**
-     * La pagina con ogni blocco &lt;script&gt; (senza src) e &lt;style&gt; al posto suo: un file.
-     * @param open true per le pagine che si vedono prima di entrare (accesso, installazione)
+     * The page with every &lt;script&gt; (without src) and &lt;style&gt; block replaced by a file.
+     * @param open true for the pages seen before logging in (login, installation)
      */
     public static String externalize(String html, boolean open) {
         html = replace(INLINE_SCRIPT, html, js -> script(js, open));
@@ -76,12 +76,12 @@ public final class PageAssets {
         return out.toString();
     }
 
-    /** Il tag che carica questo script, registrato come file. */
+    /** The tag that loads this script, registered as a file. */
     public static String script(String js, boolean open) {
         return "<script src=\"" + register(js, "js", open) + "\"></script>";
     }
 
-    /** Il tag che carica questo foglio di stile, registrato come file. */
+    /** The tag that loads this style sheet, registered as a file. */
     public static String stylesheet(String css, boolean open) {
         return "<link rel=\"stylesheet\" href=\"" + register(css, "css", open) + "\">";
     }
@@ -95,13 +95,13 @@ public final class PageAssets {
     }
 
     /**
-     * Scrive in pagesDir/assets i file registrati e toglie quelli che non lo sono piu' (di una
-     * versione di prima). Ogni file si scrive tutto o niente.
+     * Writes the registered files into pagesDir/assets and removes those that no longer are (from an
+     * earlier version). Every file is written all or nothing.
      */
     public static void writeAll(Path pagesDir) throws IOException {
         Path base = pagesDir.resolve(DIR);
         Files.createDirectories(base.resolve(OPEN));
-        // Come le pagine (PanelContent.readableByPanel): le legge la parte web, mai l'umask a deciderlo.
+        // Like the pages (PanelContent.readableByPanel): the web part reads them, never the umask to decide it.
         PanelContent.readableByPanel(base, true);
         PanelContent.readableByPanel(base.resolve(OPEN), true);
         Set<Path> wanted = new HashSet<>();
@@ -127,8 +127,8 @@ public final class PageAssets {
     }
 
     /**
-     * Il file da dare per un indirizzo /assets/..., o null. Quelli delle pagine protette solo a chi
-     * e' entrato; il nome deve essere esattamente un'impronta con la sua estensione.
+     * The file to give for an /assets/... address, or null. Those of the protected pages only to whoever
+     * has logged in; the name must be exactly a fingerprint with its extension.
      */
     public static Path resolve(Path pagesDir, String urlPath, boolean authenticated) {
         String prefix = "/" + DIR + "/";
@@ -142,7 +142,7 @@ public final class PageAssets {
         return Files.isRegularFile(f) ? f : null;
     }
 
-    /** Il Content-Type di un file servito. */
+    /** The Content-Type of a served file. */
     public static String contentType(Path f) {
         return f.getFileName().toString().endsWith(".css") ? "text/css; charset=UTF-8" : "text/javascript; charset=UTF-8";
     }

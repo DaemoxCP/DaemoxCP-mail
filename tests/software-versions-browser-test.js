@@ -136,7 +136,7 @@ async function served(route) {
     real('the buttons have a name: Start/Restart/Stop Postfix, Stop the webmail',
         await page.locator('button[aria-label="' + IT['home.start'] + ' Postfix"]').count() === 1 && await page.locator('button[aria-label="' + IT['home.restart'] + ' Postfix"]').count() === 1
         && await page.locator('button[aria-label="' + IT['home.stop'] + ' Postfix"]').count() === 1 && await page.locator('button[aria-label="' + IT['home.stop'] + ' ' + IT['home.theWebmail'] + '"]').count() === 1);
-    // The panel's window and its notices (reperto 198), not the browser's dialogs.
+    // The panel's window and its notices (finding 198), not the browser's dialogs.
     const ask = async accept => {
         await page.waitForSelector('#panelAskModal.show', { timeout: 5000 });
         const q = await page.innerText('#panelAskModal .modal-body');

@@ -31,7 +31,7 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 
 /**
- * Panel sessions last for one start of the jar only, with Strict cookies (reperto 184).
+ * Panel sessions last for one start of the jar only, with Strict cookies (finding 184).
  *
  *  1. The cookies: session, pre-login and language are SameSite=Strict, __Host-, HttpOnly, Secure;
  *     the session one has no Max-Age nor Expires: a browser-session cookie.
@@ -44,9 +44,9 @@ import java.util.concurrent.Executors;
  *     /index?session=ended and the cookie removed (Strict); on an API, 401 with X-Panel-Session:
  *     ended; without a cookie, /index and nothing else; a wrong confirmation code (also a 401)
  *     without X-Panel-Session; logout removes the cookie and sends Clear-Site-Data; with the
- *     database not answering the cookie stays and there is no X-Panel-Session (reperto 185), and the
+ *     database not answering the cookie stays and there is no X-Panel-Session (finding 185), and the
  *     answer is 503 with X-Panel-Database: a page that says it and reloads by itself, an API the
- *     pages ask again, never the sign-in page nor a 401 (reperto 209).
+ *     pages ask again, never the sign-in page nor a 401 (finding 209).
  *
  * Usage (with the test MySQL of README.md, on the test VM):
  *   java -Dmysql.port=33062 -Dmysql.user=daemoxcp_mail -Dmysql.password=... -Dmysql.database=daemoxcp_mail_test \
@@ -165,14 +165,14 @@ public class SessionRunTest {
             check("without a cookie: /index and nothing else, no cookie to remove", none.statusCode() == 302
                     && "/index".equals(none.headers().firstValue("Location").orElse("")) && none.headers().allValues("Set-Cookie").isEmpty());
             // The database not answering (MySQL restarting, or stopping before the panel while the
-            // server reboots) does not mean the session has ended (reperto 185).
+            // server reboots) does not mean the session has ended (finding 185).
             java.util.function.Supplier<java.sql.Connection> real = org.daemoxcp.mail.security.AuthStore.connection;
             org.daemoxcp.mail.security.AuthStore.connection = () -> (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
                     SessionRunTest.class.getClassLoader(), new Class<?>[]{java.sql.Connection.class}, (proxy, method, a) -> {
                         throw new java.sql.SQLException("MySQL is not reachable (test)");
                     });
             try {
-                // Until reperto 209 a page went to /index and an API had 401: on the real server, MySQL restarting inside
+                // Until finding 209 a page went to /index and an API had 401: on the real server, MySQL restarting inside
                 // "Update everything" sent an open page to the sign-in page and filled the Updates card with errors.
                 HttpResponse<String> downPage = send(http, base, "GET", "/home", null, dead, null);
                 check("the database does not answer: a page says so (503, X-Panel-Database) and reloads by itself, not the sign-in; the cookie stays",

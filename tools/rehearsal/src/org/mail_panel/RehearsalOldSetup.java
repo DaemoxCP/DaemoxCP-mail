@@ -4,9 +4,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Dopo l'installazione: quello che il server vero ha in piu', fatto con le funzioni della versione
- * del server. Certificato del pannello, primo amministratore, un dominio con due caselle, la
- * superficie sulla 443 con MTA-STS in enforce, la sua jail, lo script di avvio.
+ * After the installation: what the production server has in addition, made with the functions of the
+ * server's version. Certificate of the panel, first administrator, a domain with two mailboxes, the
+ * surface on 443 with MTA-STS in enforce, its jail, the start script.
  */
 public class RehearsalOldSetup {
     public static void main(String[] a) throws Exception {
@@ -20,8 +20,8 @@ public class RehearsalOldSetup {
         System.out.println("amministratore: " + Main.createFirstAdmin("rehearsal-admin", "admin@" + domain, System.out, System.err));
         org.mail_panel.database.MailDatabase db = Main.mailDatabase != null ? Main.mailDatabase : new org.mail_panel.database.MailDatabase();
         if (!db.isConnected()) db.connect();
-        // Le colonne che la versione del server aggiunge all'avvio del pannello web (SSLMailServer,
-        // righe 481-490 di 419b0a2), nello stesso ordine: senza, una casella non si crea.
+        // The columns that the server's version adds at the start of the web panel (SSLMailServer,
+        // lines 481-490 of 419b0a2), in the same order: without them, a mailbox cannot be created.
         db.ensureMailboxReceiveEnabledColumn();
         db.ensureMailboxPasswordVaultColumns();
         db.ensureThemeColumn();
@@ -34,7 +34,7 @@ public class RehearsalOldSetup {
             q.setString(1, domain);
             try (java.sql.ResultSet rs = q.executeQuery()) { id = rs.next() ? rs.getInt(1) : db.addDomain(domain, "rehearsal"); }
         }
-        // Le credenziali di prova stanno solo qui e in /root/rehearsal/mailboxes, leggibile da root.
+        // The test credentials are only here and in /root/rehearsal/mailboxes, readable by root.
         String[][] boxes = {{"alice@" + domain, "Rehearsal-Alice-2026x", "Alice"}, {"bob@" + domain, "Rehearsal-Bob-2026x", "Bob"}};
         StringBuilder list = new StringBuilder();
         for (String[] b : boxes) {

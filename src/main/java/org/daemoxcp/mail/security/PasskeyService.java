@@ -30,26 +30,26 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Le passkey del pannello (WebAuthn), verificate dalla libreria Yubico webauthn-server-core.
+ * The panel's passkeys (WebAuthn), verified by the Yubico webauthn-server-core library.
  *
- *  - la registrazione salva la chiave pubblica COSE, controllando sfida, origine e rpId, e chiede
- *    una passkey "discoverable" con verifica dell'utente (impronta, volto o PIN);
- *  - il login verifica la firma, la sfida (usabile una volta, scade in tre minuti), l'origine,
- *    l'rpId, la verifica dell'utente e il contatore;
- *  - il login non chiede il nome utente: niente da indovinare, niente che dica se un account
- *    esiste. Prima la pagina chiedeva il nome e /api/auth/check rispondeva se esisteva e se
- *    aveva una passkey;
- *  - la conferma di un'operazione delicata (STEP_UP) vale solo per la sessione e l'amministratore
- *    che l'hanno chiesta.
+ *  - registration saves the COSE public key, checking challenge, origin and rpId, and asks for
+ *    a "discoverable" passkey with user verification (fingerprint, face or PIN);
+ *  - login verifies the signature, the challenge (usable once, expires in three minutes), the origin,
+ *    the rpId, the user verification and the counter;
+ *  - login does not ask for the user name: nothing to guess, nothing that tells whether an account
+ *    exists. The page used to ask for the name and /api/auth/check answered whether it existed and whether
+ *    it had a passkey;
+ *  - the confirmation of a sensitive operation (STEP_UP) is valid only for the session and the administrator
+ *    that asked for it.
  *
- * rpId e origine vengono dalla richiesta (Host e schema), che
- * {@link org.daemoxcp.mail.webserver.HostCheck} ha gia' controllato: una passkey registrata per un
- * nome vale solo per quel nome, perche' l'autenticatore firma l'hash dell'rpId e il browser
- * scrive l'origine vera della pagina.
+ * rpId and origin come from the request (Host and scheme), which
+ * {@link org.daemoxcp.mail.webserver.HostCheck} has already checked: a passkey registered for a
+ * name is valid only for that name, because the authenticator signs the hash of the rpId and the browser
+ * writes the real origin of the page.
  *
- * Il controllo qui sotto guarda che l'Host SOMIGLI a un nome DNS, non che sia il nome di questo
- * pannello: {@code evil.example} lo passa senza difficolta'. Finche' nessuno controllava l'Host,
- * bastava quello per far cominciare una cerimonia con un rpId scelto da chi chiedeva.
+ * The check below looks at whether the Host RESEMBLES a DNS name, not whether it is the name of this
+ * panel: {@code evil.example} passes it without difficulty. As long as nobody checked the Host,
+ * that was enough to start a ceremony with an rpId chosen by whoever asked.
  */
 public final class PasskeyService {
 
@@ -58,7 +58,7 @@ public final class PasskeyService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final long CEREMONY_MS = 180_000;
     private static final int MAX_PENDING = 500;
-    /** Un nome DNS: le passkey non funzionano con un indirizzo IP come rpId. */
+    /** A DNS name: passkeys do not work with an IP address as rpId. */
     private static final Pattern DNS_NAME = Pattern.compile("(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*");
     private static final Pattern HOST_HEADER = Pattern.compile("[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?");
 
@@ -66,22 +66,22 @@ public final class PasskeyService {
 
     public enum Kind { LOGIN, REGISTER, STEP_UP }
 
-    /** Una cerimonia avviata e non ancora conclusa. */
+    /** A ceremony started and not yet completed. */
     record Pending(Kind kind, String rpId, String origin, long adminId, long sessionId,
                    AssertionRequest assertion, PublicKeyCredentialCreationOptions creation, long started) {}
 
     private static final Map<String, Pending> PENDING = new ConcurrentHashMap<>();
 
-    /** Il messaggio e' una chiave dei testi (server.passkey.*), tradotta da chi risponde. */
+    /** The message is a text key (server.passkey.*), translated by whoever replies. */
     public static class PasskeyException extends Exception {
         public PasskeyException(String messageKey) { super(messageKey); }
     }
 
     public record Started(String requestId, String optionsJson) {}
 
-    // ===================== rpId e origine =====================
+    // ===================== rpId and origin =====================
 
-    /** L'rpId dalla richiesta: il nome dell'Host senza porta, o null se non e' un nome DNS. */
+    /** The rpId from the request: the Host name without the port, or null if it is not a DNS name. */
     public static String rpId(String hostHeader) {
         if (hostHeader == null || !HOST_HEADER.matcher(hostHeader.trim()).matches()) return null;
         String h = hostHeader.trim().toLowerCase(java.util.Locale.ROOT);
@@ -91,7 +91,7 @@ public final class PasskeyService {
         return h;
     }
 
-    /** L'origine che il browser scrive in clientDataJSON: https + Host, porta compresa. */
+    /** The origin the browser writes in clientDataJSON: https + Host, port included. */
     public static String origin(String hostHeader) {
         return "https://" + hostHeader.trim().toLowerCase(java.util.Locale.ROOT);
     }
@@ -122,7 +122,7 @@ public final class PasskeyService {
         PENDING.put(id, p);
     }
 
-    /** La cerimonia, tolta dall'elenco (vale una volta sola), se c'era e non e' scaduta. */
+    /** The ceremony, removed from the list (it is valid once only), if it was there and has not expired. */
     private static Pending take(String id, Kind kind) throws PasskeyException {
         Pending p = id == null || id.length() > 64 ? null : PENDING.remove(id);
         if (p == null || p.kind() != kind || clock.getAsLong() - p.started() > CEREMONY_MS)
@@ -151,7 +151,7 @@ public final class PasskeyService {
         }
     }
 
-    /** L'amministratore che la passkey dimostra, dopo aver verificato tutta l'asserzione. */
+    /** The administrator the passkey proves, after verifying the whole assertion. */
     public static AuthStore.Admin finishLogin(String requestId, String credentialJson) throws PasskeyException {
         Pending p = take(requestId, Kind.LOGIN);
         AssertionResult r = verifyAssertion(p, credentialJson);
@@ -174,7 +174,7 @@ public final class PasskeyService {
         return r;
     }
 
-    // ===================== Registrazione =====================
+    // ===================== Registration =====================
 
     public static Started startRegistration(AuthStore.Admin admin, long sessionId, String hostHeader) throws PasskeyException {
         String rpId = rpId(hostHeader);
@@ -217,9 +217,9 @@ public final class PasskeyService {
             throw new PasskeyException("server.passkey.saveFailed");
     }
 
-    // ===================== Conferma di un'operazione con la passkey =====================
+    // ===================== Confirming an operation with the passkey =====================
 
-    /** Chiede all'amministratore di confermare con una delle sue passkey. */
+    /** Asks the administrator to confirm with one of their passkeys. */
     public static Started startStepUp(AuthStore.Admin admin, long sessionId, String hostHeader) throws PasskeyException {
         String rpId = rpId(hostHeader);
         if (rpId == null) throw new PasskeyException("server.passkey.needsDomain");
@@ -240,7 +240,7 @@ public final class PasskeyService {
         }
     }
 
-    /** Riesce solo se la passkey e' di quell'amministratore e la cerimonia e' di quella sessione. */
+    /** Succeeds only if the passkey belongs to that administrator and the ceremony belongs to that session. */
     public static void finishStepUp(String requestId, long sessionId, long adminId, String credentialJson) throws PasskeyException {
         Pending p = take(requestId, Kind.STEP_UP);
         if (p.sessionId() != sessionId || p.adminId() != adminId) throw new PasskeyException("server.passkey.expired");
@@ -249,7 +249,7 @@ public final class PasskeyService {
         if (who.isEmpty() || who.get().id() != adminId) throw new PasskeyException("server.passkey.failed");
     }
 
-    // ===================== Le credenziali, dal database =====================
+    // ===================== The credentials, from the database =====================
 
     static final CredentialRepository REPOSITORY = new CredentialRepository() {
         @Override

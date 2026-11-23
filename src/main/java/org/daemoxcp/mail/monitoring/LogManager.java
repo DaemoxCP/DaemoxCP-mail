@@ -56,7 +56,7 @@ public class LogManager {
         registerLogFile("clamav", CLAMAV_LOG, "server.log.clamav", LogType.ANTIVIRUS);
     }
 
-    /** description e' una chiave di lingua (server.log.<id>): si traduce quando esce verso la pagina. */
+    /** description is a language key (server.log.<id>): it is translated when it goes out to the page. */
     private void registerLogFile(String id, String path, String description, LogType type) {
         LogFile logFile = new LogFile();
         logFile.id = id;

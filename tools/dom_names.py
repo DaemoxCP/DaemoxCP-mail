@@ -1,14 +1,13 @@
-"""Id del DOM, classi CSS e altri nomi col trattino: a parola intera, mai dentro un nome piu' lungo.
+"""DOM ids, CSS classes and other hyphenated names: as a whole word, never inside a longer name.
 
-Un id attraversa quattro parti (markup, JavaScript, CSS, prove da browser) e nessun compilatore lo
-segue. I nomi della mappa sono distintivi (camelCase o col trattino), quindi si cambiano ovunque
-compaiano come parola intera: il confine e' tutto cio' che non e' lettera, cifra, _ o -. Un nome che
-finisce col trattino ('filtro-') e' un prefisso: vale anche seguito da ' o ` o $ (id costruiti).
-Mai i file di lingua. Le parole comuni (pacchetti, aggiornamenti) non vanno in mappa: compaiono
-anche nei testi e nei nomi di file, e si cambiano a mano solo dove sono id.
+An id crosses four parts (markup, JavaScript, CSS, browser tests) and no compiler follows
+it. The names in the map are distinctive (camelCase or hyphenated), so they are changed wherever
+they appear as a whole word: the boundary is anything that is not a letter, a digit, _ or -. A name
+that ends with a hyphen ('filtro-') is a prefix: it also holds when followed by ' or ` or $ (built ids).
+Never the language files. The common words (pacchetti, aggiornamenti) do not go in the map: they
+also appear in the texts and in file names, and are changed by hand only where they are ids.
 
-Uso: python3 tools/dom_names.py <radice> <mappa.txt> [--dry]
-"""
+Usage: python3 tools/dom_names.py <root> <map.txt> [--dry]"""
 import re, sys, glob, collections
 root, mapfile = sys.argv[1], sys.argv[2]
 dry = "--dry" in sys.argv
@@ -24,7 +23,7 @@ for f in sorted(files):
         counts[m.group(1)] += 1
         return mp[m.group(1)]
     t2 = rx.sub(r, t)
-    # un prefisso col trattino davanti a ' " ` $ : la lookahead sopra lo esclude se segue una lettera
+    # a hyphenated prefix before ' " ` $ : the lookahead above excludes it if a letter follows
     if t2 != t and not dry: open(f, "w", encoding="utf-8").write(t2)
 for k in mp: print(f"  {counts[k]:3} {k} -> {mp[k]}")
 print("mai trovati:", [k for k in mp if not counts[k]])

@@ -18,27 +18,28 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * All'avvio del servizio: la jail di fail2ban degli accessi al pannello prende il nome nuovo (DaemoxCP Mail,
- * 17/11/2026): mail-panel-auth diventa daemoxcp-mail-auth.
+ * At service startup: the fail2ban jail for panel logins takes the new name (DaemoxCP Mail,
+ * 2026-11-17): mail-panel-auth becomes daemoxcp-mail-auth.
  *
- * <p>Il nome viaggia fra quattro posti, come quello della superficie pubblica (PublicSurfaceRename): il registro
- * degli accessi che scrive il pannello (/var/log/NOME.log), il filtro (filter.d/NOME.conf), la sezione [NOME] di
- * jail.local che lo legge e banna in pf (ancora f2b/NOME), e la rotazione di newsyslog. Se se ne sposta uno solo, la
- * jail guarda un registro che nessuno scrive piu' e non banna niente, senza dare errori. Quindi tutto o niente:
+ * <p>The name travels between four places, like that of the public surface (PublicSurfaceRename): the login
+ * log the panel writes (/var/log/NAME.log), the filter (filter.d/NAME.conf), the [NAME] section of
+ * jail.local that reads it and bans in pf (still f2b/NAME), and the newsyslog rotation. If only one of them moves, the
+ * jail watches a log nobody writes any more and bans nothing, without giving errors. So all or nothing:
  * <ol>
- *   <li>il registro con le sue copie ruotate prende il nome nuovo (il pannello, appena partito, non l'ha ancora
- *       aperto: scrivera' gia' sul nome nuovo);</li>
- *   <li>il filtro prende il nome nuovo, con la firma di adesso;</li>
- *   <li>in jail.local la sezione cambia nome, filtro, registro e nome dell'azione; il resto resta com'era, anche
- *       quello che l'amministratore ha cambiato a mano;</li>
- *   <li>la rotazione di newsyslog prende nome e registro nuovi;</li>
- *   <li>nel database di fail2ban i ban e la posizione nel registro passano alla jail nuova (senza ribannare: la
- *       jail recidive li conterebbe, vedi PublicSurfaceRename);</li>
- *   <li>fail2ban-client -t, reload, e la jail nuova deve esserci.</li>
+ *   <li>the log with its rotated copies takes the new name (the panel, just started, has not opened it
+ *       yet: it will already write to the new name);</li>
+ *   <li>the filter takes the new name, with the current signature;</li>
+ *   <li>in jail.local the section changes name, filter, log and action name; the rest stays as it was, even
+ *       what the administrator changed by hand;</li>
+ *   <li>the newsyslog rotation takes the new name and log;</li>
+ *   <li>in the fail2ban database the bans and the position in the log move to the new jail (without banning again: the
+ *       recidive jail would count them, see PublicSurfaceRename);</li>
+ *   <li>fail2ban-client -t, reload, and the new jail must be there.</li>
  * </ol>
- * Al primo passo che non torna si rimette tutto com'era e si ricarica fail2ban: al prossimo avvio si riprova.
+ * At the first step that does not work out everything is put back as it was and fail2ban is reloaded: at the next
+ * startup it tries again.
  *
- * <p>Il nome di prima sta in legacy-names.json (sezione "authJail").
+ * <p>The previous name is in legacy-names.json (section "authJail").
  */
 public final class AuthJailRename {
 
@@ -48,20 +49,20 @@ public final class AuthJailRename {
 
     record Report(Outcome outcome, String detail) {}
 
-    /** Dove stanno i file: fissi sul server, cartelle temporanee nella prova. */
+    /** Where the files are: fixed on the server, temporary folders in the test. */
     record Places(Path f2bDir, Path logDir, Path newsyslogDir) {}
 
-    /** fail2ban, separato per provarlo senza il servizio vero. */
+    /** fail2ban, kept separate to test it without the real service. */
     interface Services {
-        /** fail2ban gira e risponde. */
+        /** fail2ban is running and answers. */
         boolean running();
-        /** fail2ban-client -t: null se la configurazione va, altrimenti cosa dice. */
+        /** fail2ban-client -t: null if the configuration works, otherwise what it says. */
         String test();
-        /** fail2ban-client reload: null se e' andato. */
+        /** fail2ban-client reload: null if it worked. */
         String reload();
-        /** La jail c'e' in fail2ban. */
+        /** The jail exists in fail2ban. */
         boolean jailExists(String jail);
-        /** Ban e posizione nel registro della jail {@code from} passano a {@code to}. */
+        /** Bans and log position of the jail {@code from} move to {@code to}. */
         boolean moveState(String from, String to, String fromLog, String toLog);
     }
 
@@ -81,11 +82,11 @@ public final class AuthJailRename {
         }
     }
 
-    // ===================== funzioni pure =====================
+    // ===================== pure functions =====================
 
     /**
-     * jail.local con la sezione [oldName] chiamata [newName]: dentro la sezione cambiano il nome del filtro, il
-     * registro e il nome dell'azione; il resto del file e della sezione resta com'era. Null se la sezione non c'e'.
+     * jail.local with the [oldName] section called [newName]: inside the section the filter name, the log and the
+     * action name change; the rest of the file and of the section stays as it was. Null if the section is not there.
      */
     static String renamedSection(String jailLocal, String oldName, String newName, String oldLog, String newLog) {
         Matcher h = Pattern.compile("(?m)^\\[" + Pattern.quote(oldName) + "\\]\\s*$").matcher(jailLocal);
@@ -99,12 +100,12 @@ public final class AuthJailRename {
         section = Pattern.compile("(?m)^(filter\\s*=\\s*)" + Pattern.quote(oldName) + "\\s*$").matcher(section)
                 .replaceAll("$1" + Matcher.quoteReplacement(newName));
         section = section.replace("name=" + oldName + ",", "name=" + newName + ",").replace("name=" + oldName + "]", "name=" + newName + "]");
-        // La riga di testa che il pannello scrive sopra la sezione, se c'e', prende la firma di adesso.
+        // The header line the panel writes above the section, if present, takes the current signature.
         String before = PanelMarker.current(jailLocal.substring(0, start), "productComments");
         return before + section + jailLocal.substring(end);
     }
 
-    // ===================== il passaggio =====================
+    // ===================== the switchover =====================
 
     private record Step(Path from, Path to, String before) {}
 
@@ -132,7 +133,7 @@ public final class AuthJailRename {
         boolean filterMoved = false, newsyslogMoved = false;
         String newJail = section ? renamedSection(jail, oldName, newName, oldLog, newLog) : null;
         try {
-            // 1. il registro e le sue copie ruotate (NOME.log.0.bz2 ...)
+            // 1. the log and its rotated copies (NAME.log.0.bz2 ...)
             try (DirectoryStream<Path> ds = Files.newDirectoryStream(at.logDir(), oldName + ".log*")) {
                 for (Path f : ds) {
                     Path to = at.logDir().resolve(newName + f.getFileName().toString().substring(oldName.length()));
@@ -141,7 +142,7 @@ public final class AuthJailRename {
                     movedLogs.add(new Path[] {f, to});
                 }
             }
-            // 2. il filtro, con la firma di adesso
+            // 2. the filter, with the current signature
             if (Files.exists(oldFilter, LinkOption.NOFOLLOW_LINKS)) {
                 String f = Files.readString(oldFilter, StandardCharsets.UTF_8);
                 Files.move(oldFilter, newFilter, StandardCopyOption.ATOMIC_MOVE);
@@ -153,7 +154,7 @@ public final class AuthJailRename {
                     written.add(new Step(newFilter, newFilter, f));
                 }
             }
-            // 3. la sezione di jail.local
+            // 3. the jail.local section
             if (newJail != null) {
                 PanelMarker.replaceKeeping(jailLocal, newJail);
                 written.add(new Step(jailLocal, jailLocal, jail));

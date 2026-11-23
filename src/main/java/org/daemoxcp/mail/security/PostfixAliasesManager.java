@@ -17,26 +17,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Gestione e auto-fix dell'alias map di sistema di Postfix.
+ * Management and auto-fix of Postfix's system alias map.
  *
- * Postfix mantiene una "alias map" usata per inoltrare mail dirette ad account locali
- * di sistema (root, postmaster, mailer-daemon, ecc.). Il path è configurato in
- * {@code main.cf} via {@code alias_database} (di solito {@code /etc/aliases} su Linux
- * o {@code /etc/mail/aliases} su FreeBSD). Postfix legge un file binario {@code <path>.db}
- * compilato con {@code postalias <path>}.
+ * Postfix keeps an "alias map" used to forward mail addressed to local system
+ * accounts (root, postmaster, mailer-daemon, etc.). The path is configured in
+ * {@code main.cf} via {@code alias_database} (usually {@code /etc/aliases} on Linux
+ * or {@code /etc/mail/aliases} on FreeBSD). Postfix reads a binary file {@code <path>.db}
+ * compiled with {@code postalias <path>}.
  *
- * Errore tipico nei log se manca il .db:
+ * Typical error in the logs if the .db is missing:
  * {@code postfix/smtpd: error: open database /etc/aliases.db: No such file or directory}
  *
- * Questo manager:
- *  - Diagnostica: legge {@code alias_database} via {@code postconf -h}, verifica esistenza
- *    di sorgenti e .db.
- *  - Risolve: crea il sorgente se manca con default safe + compila il .db con postalias.
- *  - Set forward di root: aggiorna/aggiunge la riga {@code root: <email>} senza distruggere il file.
- *  - Reload Postfix con {@code service postfix reload}.
+ * This manager:
+ *  - Diagnoses: reads {@code alias_database} via {@code postconf -h}, checks that the
+ *    sources and the .db exist.
+ *  - Fixes: creates the source if missing with safe defaults + compiles the .db with postalias.
+ *  - Sets root's forward: updates/adds the {@code root: <email>} line without destroying the file.
+ *  - Reloads Postfix with {@code service postfix reload}.
  *
- * Tutti i metodi sono best-effort e sicuri: in caso di errore loggano e ritornano un
- * risultato strutturato senza propagare eccezioni al webserver.
+ * All methods are best-effort and safe: on error they log and return a
+ * structured result without propagating exceptions to the web server.
  */
 public class PostfixAliasesManager {
     private static final Logger LOGGER = Logger.getLogger(PostfixAliasesManager.class.getName());
@@ -46,9 +46,9 @@ public class PostfixAliasesManager {
     private static final String SERVICE = "/usr/sbin/service";
 
     /**
-     * Default seguri per il file aliases. Vengono usati solo se il file sorgente
-     * non esiste: scriviamo un contenuto minimo standard. Il root inoltra a se stesso
-     * (l'utente può modificarlo dalla UI con {@link #setRootForward(String)}).
+     * Safe defaults for the aliases file. They are used only if the source file
+     * does not exist: we write a minimal standard content. Root forwards to itself
+     * (the user can change it from the UI with {@link #setRootForward(String)}).
      */
     private static final String DEFAULT_ALIASES =
         "# /etc/aliases — system mail aliases for Postfix\n" +
@@ -76,7 +76,7 @@ public class PostfixAliasesManager {
             s.aliasDatabaseRaw = aliasDatabase;
             s.aliasMapsRaw     = aliasMaps;
 
-            // Estrai il primo file path da `alias_database` (formato: hash:/path[,hash:/path2,...])
+            // Extract the first file path from `alias_database` (format: hash:/path[,hash:/path2,...])
             String primary = parseFirstHashPath(aliasDatabase);
             if (primary == null) {
                 // Fallback: prova /etc/aliases (Linux default) o /etc/mail/aliases (FreeBSD)
@@ -90,7 +90,7 @@ public class PostfixAliasesManager {
             s.sourceExists = Files.exists(src);
             s.dbExists     = Files.exists(db);
 
-            // Calcola "stale": .db più vecchio del sorgente
+            // Compute "stale": .db older than the source
             if (s.sourceExists && s.dbExists) {
                 try {
                     long srcM = Files.getLastModifiedTime(src).toMillis();
@@ -99,14 +99,14 @@ public class PostfixAliasesManager {
                 } catch (Exception ignore) {}
             }
 
-            // Estrai root forward attuale (se sorgente esiste)
+            // Extract the current root forward (if the source exists)
             if (s.sourceExists) {
                 s.rootForward = extractRootForward(src);
                 try { s.sourceContent = Files.readString(src, StandardCharsets.UTF_8); }
                 catch (Exception ignore) {}
             }
 
-            // Verdetto
+            // Verdict
             if (!s.sourceExists) {
                 s.overall = "MISSING_SOURCE";
                 s.summary = I18n.tr("server.aliases.missingSource", java.util.Map.of("file", String.valueOf(s.aliasFile)));
@@ -134,11 +134,11 @@ public class PostfixAliasesManager {
     // ========== FIX ==========
 
     /**
-     * Esegue l'auto-fix:
-     *  1. Se il sorgente manca → lo crea con default safe.
-     *  2. Esegue postalias per (ri)compilare il .db.
-     *  3. Reload Postfix.
-     * Tutti i passi sono accumulati nel log.
+     * Runs the auto-fix:
+     *  1. If the source is missing -> creates it with safe defaults.
+     *  2. Runs postalias to (re)compile the .db.
+     *  3. Reloads Postfix.
+     * All the steps are accumulated in the log.
      */
     public FixResult fix() {
         FixResult r = new FixResult();
@@ -152,7 +152,7 @@ public class PostfixAliasesManager {
             r.aliasFile = s.aliasFile;
             r.aliasDbFile = s.aliasDbFile;
 
-            // 1) Crea sorgente se manca
+            // 1) Create the source if missing
             if (!s.sourceExists) {
                 Path src = Paths.get(s.aliasFile);
                 try {
@@ -190,8 +190,8 @@ public class PostfixAliasesManager {
             if (sr.exitCode == 0) {
                 r.log.append("✓ ").append(I18n.tr("server.aliases.reloaded")).append("\n");
             } else {
-                // Non blocchiamo: il file .db è già aggiornato anche senza reload
-                // perché Postfix lo rilegge automaticamente al lookup successivo.
+                // We do not block: the .db file is already updated even without a reload
+                // because Postfix rereads it automatically at the next lookup.
                 r.log.append("⚠ ").append(I18n.tr("server.aliases.reloadNonBlocking", java.util.Map.of("c", String.valueOf(sr.exitCode), "out", String.valueOf(sr.output)))).append("\n");
             }
 
@@ -206,12 +206,12 @@ public class PostfixAliasesManager {
     }
 
     /**
-     * Aggiorna l'inoltro di root a una mail specifica (o lo riporta a self).
-     * Modifica/aggiunge la riga {@code root: <forwardTo>} nel file sorgente
-     * mantenendo tutto il resto.
-     * Dopo l'update esegue postalias + reload.
+     * Updates root's forwarding to a specific address (or sets it back to self).
+     * Changes/adds the {@code root: <forwardTo>} line in the source file
+     * keeping everything else.
+     * After the update it runs postalias + reload.
      *
-     * @param forwardTo email (es. "owner@domain-a.test") o null per riportare a "root"
+     * @param forwardTo email (e.g. "owner@domain-a.test") or null to set it back to "root"
      */
     public FixResult setRootForward(String forwardTo) {
         FixResult r = new FixResult();
@@ -220,7 +220,7 @@ public class PostfixAliasesManager {
             forwardTo = forwardTo.trim();
             if (forwardTo.isEmpty()) forwardTo = "root";
 
-            // Validazione molto basilare (email o username locale)
+            // Very basic validation (email or local username)
             if (!forwardTo.matches("^[a-zA-Z0-9._+\\-@]+$")) {
                 r.success = false;
                 r.message = I18n.tr("server.aliases.badForward");
@@ -229,7 +229,7 @@ public class PostfixAliasesManager {
 
             AliasesStatus s = diagnose();
             if (!s.sourceExists) {
-                // Se non esiste, creiamolo prima con i default, poi appliciamo il forward
+                // If it does not exist, create it first with the defaults, then apply the forward
                 FixResult init = fix();
                 if (!init.success) return init;
                 s = diagnose();
@@ -240,8 +240,8 @@ public class PostfixAliasesManager {
             Path src = Paths.get(s.aliasFile);
             String content = Files.readString(src, StandardCharsets.UTF_8);
 
-            // Pattern: trova la riga "root:" (eventualmente con whitespace) e sostituisci.
-            // Se non c'è, appendi.
+            // Pattern: find the "root:" line (possibly with whitespace) and replace it.
+            // If it is not there, append it.
             Pattern p = Pattern.compile("(?m)^[ \\t]*root[ \\t]*:.*$");
             Matcher m = p.matcher(content);
             String newLine = "root:          " + forwardTo;
@@ -258,7 +258,7 @@ public class PostfixAliasesManager {
             Files.writeString(src, newContent, StandardCharsets.UTF_8,
                 StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
 
-            // Ricompila + reload
+            // Recompile + reload
             CommandResult pc = runCommand(POSTALIAS, s.aliasFile);
             if (pc.exitCode == 0) {
                 r.log.append("✓ postalias ").append(s.aliasFile).append(" — OK\n");
@@ -283,12 +283,12 @@ public class PostfixAliasesManager {
     }
 
     /**
-     * Auto-setup non distruttivo da chiamare al boot del pannello.
-     * Se la diagnosi rileva problemi, applica il fix automaticamente.
-     * Se è tutto OK, non fa nulla. Idempotente.
+     * Non-destructive auto-setup to call at panel boot.
+     * If the diagnosis finds problems, it applies the fix automatically.
+     * If everything is OK, it does nothing. Idempotent.
      */
     public void ensureAtBoot() {
-        // All'avvio non c'e' una richiesta: riepiloghi e messaggi finiscono solo nel log, in inglese.
+        // At startup there is no request: summaries and messages end up only in the log, in English.
         I18n.setCurrent("en");
         try {
             AliasesStatus s = diagnose();
@@ -395,13 +395,13 @@ public class PostfixAliasesManager {
         public String summary;
         public String aliasFile;        // es. /etc/aliases
         public String aliasDbFile;      // es. /etc/aliases.db
-        public String aliasMapsRaw;     // valore raw da postconf -h alias_maps
-        public String aliasDatabaseRaw; // valore raw da postconf -h alias_database
+        public String aliasMapsRaw;     // raw value from postconf -h alias_maps
+        public String aliasDatabaseRaw; // raw value from postconf -h alias_database
         public boolean sourceExists;
         public boolean dbExists;
         public boolean dbStaleVsSource;
-        public String rootForward;      // dove va inoltrato root (può essere null)
-        public String sourceContent;    // contenuto completo del file (per UI / audit)
+        public String rootForward;      // where root is forwarded to (may be null)
+        public String sourceContent;    // full content of the file (for UI / audit)
     }
 
     public static class FixResult {

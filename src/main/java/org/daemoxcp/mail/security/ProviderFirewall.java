@@ -23,19 +23,19 @@ import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 /**
- * Il firewall del provider davanti al server, e gli indirizzi di Cloudflare da metterci (reperto 245).
+ * The provider's firewall in front of the server, and the Cloudflare addresses to put in it (finding 245).
  *
- * <p>Il pannello (2096) e la webmail (8443) passano dal proxy di Cloudflare: nel firewall del provider (Hetzner Cloud
- * o un altro) quelle due porte vanno aperte solo agli intervalli di Cloudflare, e quella lista cambia ogni tanto. Il
- * firewall di Hetzner Cloud un'API ce l'ha, ma il suo token vale «Read» o «Read &amp; Write» su tutto il progetto: un
- * token che puo' cambiare il firewall puo' anche cancellare il server, e non deve stare sul server di posta. Quindi la
- * lista si aggiorna a mano, e il pannello aiuta: la scarica da cloudflare.com, la mostra pronta da incollare, con le
- * regole da creare (ricavate dalle porte vere: sshd, la posta, POP3 se e' acceso, il pannello e la webmail), e ricorda
- * l'impronta della lista che l'amministratore ha detto di aver messo. Quando Cloudflare la cambia, Diagnostica lo dice
- * finche' l'amministratore non conferma di nuovo.
+ * <p>The panel (2096) and the webmail (8443) go through the Cloudflare proxy: in the provider's firewall (Hetzner Cloud
+ * or another) those two ports must be open only to the Cloudflare ranges, and that list changes now and then. The
+ * Hetzner Cloud firewall does have an API, but its token is "Read" or "Read &amp; Write" on the whole project: a
+ * token that can change the firewall can also delete the server, and must not be on the mail server. So the
+ * list is updated by hand, and the panel helps: it downloads it from cloudflare.com, shows it ready to paste, with the
+ * rules to create (derived from the real ports: sshd, mail, POP3 if it is on, the panel and the webmail), and remembers
+ * the fingerprint of the list the administrator said they put in. When Cloudflare changes it, Diagnostics says so
+ * until the administrator confirms again.
  *
- * <p>Il pannello non vede il firewall del provider: «confermato» vuol dire solo che qualcuno ha detto di averlo fatto.
- * L'impronta e' lo SHA-256 della lista ordinata; lo stato sta in un file di root, 0600.
+ * <p>The panel does not see the provider's firewall: "confirmed" only means that someone said they did it.
+ * The fingerprint is the SHA-256 of the sorted list; the state is in a root file, 0600.
  */
 public final class ProviderFirewall {
 
@@ -44,15 +44,15 @@ public final class ProviderFirewall {
     static final Path STATE = Path.of("/var/db/daemoxcp-mail/provider-firewall.json");
     static final String URL_V4 = "https://www.cloudflare.com/ips-v4";
     static final String URL_V6 = "https://www.cloudflare.com/ips-v6";
-    /** Come UpdateManager.cloudflareRanges: sotto queste soglie la risposta e' rotta, non una lista nuova. */
+    /** Like UpdateManager.cloudflareRanges: below these thresholds the response is broken, not a new list. */
     static final int MIN_V4 = 10, MIN_V6 = 5;
     static final Duration CACHE = Duration.ofHours(1);
     static final Pattern FINGERPRINT = Pattern.compile("[0-9a-f]{64}");
 
-    /** La lista ufficiale. */
+    /** The official list. */
     public record Official(List<String> v4, List<String> v6) {}
 
-    /** Da dove viene la lista: cloudflare.com, o una lista finta nelle prove. */
+    /** Where the list comes from: cloudflare.com, or a fake list in tests. */
     interface Source {
         Official download() throws Exception;
     }
@@ -65,7 +65,7 @@ public final class ProviderFirewall {
     private static Official cached;
     private static Instant cachedAt = Instant.EPOCH;
 
-    /** Lo SHA-256 della lista ordinata, IPv4 poi IPv6. */
+    /** The SHA-256 of the sorted list, IPv4 then IPv6. */
     static String fingerprint(Official o) {
         List<String> all = new ArrayList<>(new TreeSet<>(o.v4()));
         all.add("--");
@@ -78,7 +78,7 @@ public final class ProviderFirewall {
         }
     }
 
-    /** La lista scaricata adesso, o quella dell'ultima ora; null se cloudflare.com non da' una lista credibile. */
+    /** The list downloaded now, or the one from the last hour; null if cloudflare.com does not give a credible list. */
     static synchronized Official official(boolean fresh) {
         if (!fresh && cached != null && Instant.now().isBefore(cachedAt.plus(CACHE))) return cached;
         try {
@@ -92,7 +92,7 @@ public final class ProviderFirewall {
         }
     }
 
-    /** L'impronta confermata e quando, o null. */
+    /** The confirmed fingerprint and when, or null. */
     static JSONObject acknowledged() {
         try {
             if (!Files.isRegularFile(statePath, LinkOption.NOFOLLOW_LINKS) || Files.size(statePath) > 4096) return null;
@@ -104,7 +104,7 @@ public final class ProviderFirewall {
         }
     }
 
-    /** Le regole da creare nel firewall del provider, dalle porte vere di questo server. */
+    /** The rules to create in the provider's firewall, from this server's real ports. */
     static JSONObject rules(SortedSet<Integer> ssh, int panelPort, int webmailPort, boolean pop3) {
         SortedSet<Integer> mail = new TreeSet<>(PfPolicy.FIXED);
         if (pop3) mail.addAll(List.of(110, 995));
@@ -116,7 +116,7 @@ public final class ProviderFirewall {
                 .put("cloudflare", new JSONArray(cf)).put("pop3", pop3);
     }
 
-    /** Lo stato per la pagina e per Diagnostica. */
+    /** The state for the page and for Diagnostics. */
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
         SortedSet<Integer> ssh = PfPolicy.sshPorts(Shell.run(Duration.ofSeconds(15), "sockstat", "-46l", "-P", "tcp").output());
@@ -126,7 +126,7 @@ public final class ProviderFirewall {
         return withList(r, official(false), acknowledged());
     }
 
-    /** La parte della lista e del confronto con quella confermata: pura rispetto ai suoi argomenti. */
+    /** The part about the list and the comparison with the confirmed one: pure with respect to its arguments. */
     static JSONObject withList(JSONObject r, Official o, JSONObject ack) {
         if (ack != null) r.put("acknowledged", new JSONObject().put("fingerprint", ack.optString("fingerprint"))
                 .put("at", ack.optString("at", "")));
@@ -141,8 +141,8 @@ public final class ProviderFirewall {
     }
 
     /**
-     * L'amministratore dice di aver messo nel firewall del provider la lista che ha visto (la sua impronta). Si
-     * riscarica: se nel frattempo la lista e' cambiata, non si conferma una lista che non e' quella di adesso.
+     * The administrator says they put into the provider's firewall the list they saw (its fingerprint). It is
+     * downloaded again: if the list has changed in the meantime, a list that is not the current one is not confirmed.
      */
     public static JSONObject acknowledge(String fp) {
         if (fp == null || !FINGERPRINT.matcher(fp).matches())
@@ -161,7 +161,7 @@ public final class ProviderFirewall {
         return r.put("success", true);
     }
 
-    /** Scrittura atomica, 0600 di root: un file temporaneo nella stessa cartella, poi rename. */
+    /** Atomic write, 0600 owned by root: a temporary file in the same folder, then rename. */
     static void write(Path file, String text) throws IOException {
         Path dir = file.getParent();
         Files.createDirectories(dir);

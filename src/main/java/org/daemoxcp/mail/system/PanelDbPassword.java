@@ -24,40 +24,40 @@ import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 /**
- * La password dell'utente MySQL del pannello cambiata una volta (reperto 232).
+ * The password of the panel's MySQL user, changed once (finding 232).
  *
- * <p>Sui server installati prima della PR #91 quella password e' stata per tutta la loro vita in config.inc.php di
- * Roundcube, leggibile dalla webmail. Adesso la webmail entra con un utente suo (RoundcubeDbUser), Postfix e Dovecot
- * coi loro (MailDbUsers), la parte web con daemoxcp_mail_web: la password del pannello la usa solo il pannello. Ma chi
- * l'avesse presa la ha ancora, e con lei legge e scrive tutto il database della posta. Toglierla dalla webmail non
- * bastava: va cambiata.
+ * <p>On the servers installed before PR #91 that password was, for their whole life, in Roundcube's
+ * config.inc.php, readable by the webmail. Now the webmail logs in with its own user (RoundcubeDbUser), Postfix and
+ * Dovecot with theirs (MailDbUsers), the web part with daemoxcp_mail_web: the panel's password is used only by the
+ * panel. But whoever had taken it still has it, and with it reads and writes the whole mail database. Removing it
+ * from the webmail was not enough: it must be changed.
  *
- * <p>Senza fermare niente, con la doppia password di MySQL (8.0.14 e successivi):
+ * <p>Without stopping anything, with MySQL's dual password (8.0.14 and later):
  * <ol>
- *   <li>si scrive lo stato («a meta'», con l'impronta SHA-256 della vecchia: la vecchia stessa no) e la password
- *       nuova in attesa (PendingDbPassword): un arresto da qui in poi lo decide l'avvio dopo;</li>
- *   <li>{@code ALTER USER ... IDENTIFIED BY nuova RETAIN CURRENT PASSWORD} su ogni account locale dell'utente
- *       (localhost e 127.0.0.1: MySQL porta 127.0.0.1 sull'account localhost): da qui valgono tutte e due;</li>
- *   <li>MySQL deve accettarle tutte e due davanti a noi; poi il pannello adotta la nuova (le connessioni nuove la
- *       rileggono dal file dei segreti, quelle aperte restano buone) e le copie lasciate dagli script vecchi che
- *       contengono la vecchia la ricevono;</li>
- *   <li>{@code DISCARD OLD PASSWORD} su ogni account; MySQL deve rifiutare la vecchia, accettare la nuova, e nessun
- *       account deve avere ancora una seconda password. Lo stato diventa «fatto», con la data UTC.</li>
+ *   <li>the state is written ("halfway", with the SHA-256 fingerprint of the old one: not the old one itself) and
+ *       the new password pending (PendingDbPassword): a stop from here on is decided by the next startup;</li>
+ *   <li>{@code ALTER USER ... IDENTIFIED BY new RETAIN CURRENT PASSWORD} on every local account of the user
+ *       (localhost and 127.0.0.1: MySQL maps 127.0.0.1 to the localhost account): from here on both are valid;</li>
+ *   <li>MySQL must accept both in front of us; then the panel adopts the new one (new connections re-read it
+ *       from the secrets file, the open ones stay good) and the copies left by old scripts that contain the old
+ *       one receive it;</li>
+ *   <li>{@code DISCARD OLD PASSWORD} on every account; MySQL must refuse the old one, accept the new one, and no
+ *       account must still have a second password. The state becomes "done", with the UTC date.</li>
  * </ol>
- * Fino al passo 3 un errore rimette MySQL com'era (la vecchia di nuovo principale, la seconda scartata) e toglie la
- * nuova; al prossimo avvio si riprova. Dopo il passo 3 il pannello e' gia' sulla nuova e non si torna indietro: se il
- * DISCARD non riesce lo si rifa' all'avvio dopo (lo stato resta «a meta'», e l'impronta dice che il pannello non e'
- * piu' sulla vecchia).
+ * Until step 3 an error puts MySQL back as it was (the old one primary again, the second one discarded) and
+ * removes the new one; at the next startup it is retried. After step 3 the panel is already on the new one and
+ * there is no going back: if the DISCARD fails it is redone at the next startup (the state stays "halfway", and
+ * the fingerprint says that the panel is no longer on the old one).
  *
- * <p>Non parte, e lo scrive nel log, se: lo stato dice gia' «fatto» (anche l'installazione lo scrive, perche' genera
- * una password che la webmail non ha mai avuto); il pannello non ha ancora una password, o ne ha una in attesa
- * (un'installazione che decide); MySQL come root non risponde, o non accetta adesso la password del pannello; un
- * account ha gia' una seconda password che non e' nostra; la password compare ancora in un file di Postfix, di
- * Dovecot o della webmail (qualcuno entra ancora con lei: cambiarla lo romperebbe). Gli account dello stesso utente
- * per altri host non si toccano, e il log li nomina.
+ * <p>It does not start, and writes it in the log, if: the state already says "done" (the installation writes it
+ * too, because it generates a password the webmail never had); the panel does not have a password yet, or has a
+ * pending one (an installation that is deciding); MySQL as root does not answer, or does not accept the panel's
+ * password right now; an account already has a second password that is not ours; the password still appears in a
+ * Postfix, Dovecot or webmail file (someone still logs in with it: changing it would break that). The accounts
+ * of the same user for other hosts are not touched, and the log names them.
  *
- * <p>Restano con la vecchia, che dopo non apre piu' niente: le copie di sicurezza (/var/db/daemoxcp-mail, gli ambienti di
- * avvio), e un MySQL ripristinato da prima, che riporterebbe anche la vecchia password.
+ * <p>What keeps the old one, which afterwards opens nothing any more: the backup copies (/var/db/daemoxcp-mail,
+ * the boot environments), and a MySQL restored from before, which would also bring back the old password.
  */
 public final class PanelDbPassword {
 
@@ -65,57 +65,57 @@ public final class PanelDbPassword {
 
     private PanelDbPassword() {}
 
-    /** Lo stato a meta': segue l'impronta SHA-256 (esadecimale) della password vecchia. */
+    /** The halfway state: it is followed by the SHA-256 fingerprint (hexadecimal) of the old password. */
     static final String RETAINED = "retained:";
-    /** Lo stato a cose fatte: segue la data UTC. */
+    /** The state once done: it is followed by the UTC date. */
     static final String DONE = "done ";
 
-    /** Gli host di un account locale: 127.0.0.1 MySQL lo porta su localhost, e IPv6. */
+    /** The hosts of a local account: MySQL maps 127.0.0.1 to localhost, and IPv6. */
     static final Set<String> LOCAL_HOSTS = Set.of("localhost", "127.0.0.1", "::1");
 
-    /** Un account dell'utente del pannello: l'host, e se ha gia' una seconda password. */
+    /** An account of the panel's user: the host, and whether it already has a second password. */
     record Account(String host, boolean secondary) {}
 
     /** MySQL come root. */
     interface Accounts {
-        /** Gli account dell'utente; null se MySQL non risponde (o non conosce le password doppie). */
+        /** The user's accounts; null if MySQL does not answer (or does not know dual passwords). */
         List<Account> list(String user);
-        /** La password nuova, e quella di adesso che resta valida accanto. */
+        /** The new password, with the current one staying valid alongside it. */
         boolean retain(String host, String user, String password);
-        /** Questa password come principale; la seconda, se c'e', resta. */
+        /** This password as the primary one; the second one, if there is one, stays. */
         boolean setPrimary(String host, String user, String password);
-        /** La seconda password tolta. */
+        /** The second password removed. */
         boolean discard(String host, String user);
     }
 
-    /** I file fuori dal pannello. */
+    /** The files outside the panel. */
     interface Places {
-        /** I file dei servizi in cui la password compare (un file che non si legge conta). */
+        /** The services' files in which the password appears (a file that cannot be read counts). */
         List<String> usersOf(String password);
-        /** Le copie lasciate dagli script vecchi: dove c'e' la vecchia, la nuova. Quelle non riscritte, col motivo. */
+        /** The copies left by old scripts: where the old one is, the new one. Those not rewritten, with the reason. */
         List<String> rewriteCopies(String old, String fresh);
     }
 
-    /** Lo stato, nel file dei segreti di root. */
+    /** The state, in root's secrets file. */
     interface State {
         String get();
         void set(String value);
     }
 
     public enum Outcome {
-        /** Gia' fatto, o niente da cambiare (pannello non installato). */
+        /** Already done, or nothing to change (panel not installed). */
         NOTHING,
-        /** Cambiata adesso. */
+        /** Changed now. */
         DONE,
-        /** Finita adesso una rotazione rimasta a meta'. */
+        /** A rotation left halfway, finished now. */
         RESUMED,
-        /** Non si cambia, per una ragione che non passa da sola: il dettaglio la dice. */
+        /** Not changed, for a reason that does not go away by itself: the detail states it. */
         LEFT,
-        /** Non adesso (MySQL non risponde, il turno e' di un altro): al prossimo avvio. */
+        /** Not now (MySQL does not answer, the turn belongs to someone else): at the next startup. */
         NOT_NOW,
-        /** Qualcosa e' andato storto prima che il pannello adottasse la nuova: tutto com'era. */
+        /** Something went wrong before the panel adopted the new one: everything as it was. */
         ROLLED_BACK,
-        /** A meta': il pannello funziona, il resto lo finisce il prossimo avvio. */
+        /** Halfway: the panel works, the next startup finishes the rest. */
         INCOMPLETE
     }
 
@@ -133,7 +133,7 @@ public final class PanelDbPassword {
         }
     }
 
-    /** La decisione e il cambio, puri rispetto alle interfacce. */
+    /** The decision and the change, pure with respect to the interfaces. */
     static Result run(PendingDbPassword.Store store, PendingDbPassword.Probe probe, Accounts db, Places places, State state,
                       String user, Supplier<String> generator) {
         String mark = nz(state.get());
@@ -151,10 +151,12 @@ public final class PanelDbPassword {
 
         if (mark.startsWith(RETAINED)) {
             if (!fingerprint(current).equals(mark.substring(RETAINED.length()))) {
-                // Il pannello e' gia' sulla nuova (adottata qui, o dall'avvio con PendingDbPassword): resta il DISCARD.
+                // The panel is already on the new one (adopted here, or at startup with PendingDbPassword):
+                // only the DISCARD is left.
                 return finish(probe, db, state, user, local, others, null, current, Outcome.RESUMED);
             }
-            // Ancora sulla vecchia: la nuova non e' mai stata adottata. MySQL torna alla sola vecchia, e si ricomincia.
+            // Still on the old one: the new one was never adopted. MySQL goes back to the old one alone,
+            // and we start over.
             if (local.stream().anyMatch(Account::secondary) && !backToOld(db, local, user, current))
                 return new Result(Outcome.INCOMPLETE, "an earlier change stopped half way, and MySQL could not be put back"
                         + " to the panel's password alone: the panel keeps working (MySQL accepts it), retried at the next start");
@@ -191,7 +193,7 @@ public final class PanelDbPassword {
 
         List<Account> changed = new ArrayList<>();
         for (Account a : local) {
-            changed.add(a);   // anche se fallisce: un ALTER a meta' si rimette come gli altri
+            changed.add(a);   // even if it fails: a halfway ALTER is put back like the others
             if (!db.retain(a.host(), user, fresh))
                 return rollBack(store, db, state, user, changed, current, "MySQL refused the new password for " + user + "@" + a.host());
         }
@@ -213,7 +215,7 @@ public final class PanelDbPassword {
         return r;
     }
 
-    /** Il DISCARD e le verifiche. old e' null quando non la si conosce piu' (si riprende dopo un arresto). */
+    /** The DISCARD and the checks. old is null when it is no longer known (resuming after a stop). */
     private static Result finish(PendingDbPassword.Probe probe, Accounts db, State state, String user, List<Account> local,
                                  List<String> others, String old, String fresh, Outcome ok) {
         List<String> notDiscarded = new ArrayList<>();
@@ -238,7 +240,7 @@ public final class PanelDbPassword {
                 + (others.isEmpty() ? "" : "; accounts of the same user for other hosts not touched: " + others));
     }
 
-    /** Ogni account cambiato di nuovo con la sola vecchia; poi via la nuova e lo stato. */
+    /** Every account changed again to the old one alone; then the new one and the state are removed. */
     private static Result rollBack(PendingDbPassword.Store store, Accounts db, State state, String user, List<Account> changed,
                                    String old, String why) {
         if (!backToOld(db, changed, user, old))
@@ -255,16 +257,16 @@ public final class PanelDbPassword {
         return ok;
     }
 
-    // ===================== Il server vero =====================
+    // ===================== The production server =====================
 
-    /** Dove la webmail, Postfix e Dovecot scrivono come entrano in MySQL. */
+    /** Where the webmail, Postfix and Dovecot write how they log in to MySQL. */
     static final List<Path> SERVICE_DIRS = List.of(Path.of("/usr/local/etc/postfix"), Path.of("/usr/local/etc/dovecot"),
             Path.of(RoundcubeDbUser.ROUNDCUBE_DIR, "config"), Path.of("/usr/local/etc/mail"));
     /**
-     * Le copie lasciate dagli script per componente: /usr/local/etc/mail/mysql_password (FullMailStackScript, da cui
-     * DovecotConfig la rilegge se non la riceve) e /usr/local/etc/daemoxcp-mail/mysql.json (MySQLMailScript; prima /usr/local/etc/mailpanel, spostato da
-     * ProductRename). Se hanno la
-     * vecchia ricevono la nuova; se hanno altro restano come sono.
+     * The copies left by the per-component scripts: /usr/local/etc/mail/mysql_password (FullMailStackScript, from
+     * which DovecotConfig re-reads it if it does not receive it) and /usr/local/etc/daemoxcp-mail/mysql.json
+     * (MySQLMailScript; formerly /usr/local/etc/mailpanel, moved by ProductRename). If they have the old one they
+     * receive the new one; if they have something else they stay as they are.
      */
     static final List<Path> COPIES = List.of(Path.of("/usr/local/etc/mail/mysql_password"),
             Path.of("/usr/local/etc/daemoxcp-mail/mysql.json"));
@@ -272,8 +274,9 @@ public final class PanelDbPassword {
     static final long MAX_FILE = 2L * 1024 * 1024;
 
     /**
-     * Un nome da copia di sicurezza, che nessun servizio legge (.bak, .orig, .old, ~, .sample, .save, una data in coda,
-     * il file temporaneo del pannello): con la vecchia dentro non blocca, perche' dopo il cambio non apre piu' niente.
+     * A backup-copy name, which no service reads (.bak, .orig, .old, ~, .sample, .save, a date at the end, the
+     * panel's temporary file): with the old one inside it does not block, because after the change it opens
+     * nothing any more.
      */
     static boolean backupName(String name) {
         return name.endsWith(".bak") || name.endsWith(".orig") || name.endsWith(".old") || name.endsWith("~")
@@ -282,12 +285,12 @@ public final class PanelDbPassword {
                 || name.matches(".*[.-][0-9]{8,}$");
     }
 
-    /** Il file temporaneo che il pannello scrive accanto a quello vero prima di rinominarlo al suo posto. */
+    /** The temporary file the panel writes next to the real one before renaming it into its place. */
     static final String TEMP_SUFFIX = ".daemoxcp-mail.tmp";
 
     /**
-     * I file sotto dirs (fino a tre livelli, senza seguire collegamenti) che contengono la password, tranne le copie e i
-     * nomi da copia di sicurezza.
+     * The files under dirs (up to three levels, without following links) that contain the password, except the
+     * copies and the backup-copy names.
      */
     static List<String> usersOf(List<Path> dirs, List<Path> copies, String password) {
         List<String> out = new ArrayList<>();
@@ -321,7 +324,7 @@ public final class PanelDbPassword {
         return false;
     }
 
-    /** Le copie con la vecchia riscritte con la nuova, stesso proprietario e permessi; quelle non riscritte. */
+    /** The copies with the old one rewritten with the new one, same owner and permissions; those not rewritten. */
     static List<String> rewriteCopies(List<Path> copies, String old, String fresh) {
         List<String> left = new ArrayList<>();
         for (Path f : copies) {
@@ -337,7 +340,7 @@ public final class PanelDbPassword {
         return left;
     }
 
-    /** Il codice dell'errore di MySQL, mai il messaggio: in un ALTER USER potrebbe ripetere la password. */
+    /** MySQL's error code, never the message: in an ALTER USER it might repeat the password. */
     static String errorCode(Shell.Result r) {
         String o = r == null ? "" : r.outputTrim();
         if (o.startsWith("ERROR ")) {
@@ -389,8 +392,8 @@ public final class PanelDbPassword {
     }
 
     /**
-     * L'installazione ha appena dato al pannello una password nuova, che la webmail non ha mai avuto: non c'e' niente
-     * da cambiare.
+     * The installation has just given the panel a new password, which the webmail never had: there is nothing
+     * to change.
      */
     public static void markFreshFromInstallation() {
         try {
@@ -400,7 +403,7 @@ public final class PanelDbPassword {
         }
     }
 
-    /** All'avvio della parte root, dopo RoundcubeDbUser e MailDbUsers. */
+    /** At the start of the root part, after RoundcubeDbUser and MailDbUsers. */
     public static Result ensureAtBoot() {
         try {
             if (Main.dbManager == null || !Main.mysqlAvailable) return new Result(Outcome.NOT_NOW, "MySQL not available");

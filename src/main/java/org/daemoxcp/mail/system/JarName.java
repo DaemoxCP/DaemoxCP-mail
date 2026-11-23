@@ -5,13 +5,13 @@ import java.nio.file.Path;
 import java.util.logging.Logger;
 
 /**
- * Dalla 0.9.0 il jar si chiama daemoxcp-mail.jar, senza la versione, e cosi' lo chiamano il README e i comandi da
- * console. Sui server installati prima il file si chiama ancora daemoxcp-mail-1.0.jar, e il servizio (rc.conf, lo
- * script di avvio) e upgrade-panel.sh usano quel percorso: il file vero resta dov'e', e accanto nasce il collegamento
- * daemoxcp-mail.jar che punta a lui. Cosi' "java -jar daemoxcp-mail.jar --access-code" vale su ogni server, e
- * upgrade-panel.sh, che sostituisce il file vero, non lascia mai il collegamento indietro.
+ * Since 0.9.0 the jar is called daemoxcp-mail.jar, without the version, and that is what the README and the
+ * console commands call it. On servers installed before, the file is still called daemoxcp-mail-1.0.jar, and the
+ * service (rc.conf, the start script) and upgrade-panel.sh use that path: the real file stays where it is, and next
+ * to it the link daemoxcp-mail.jar pointing to it is created. That way "java -jar daemoxcp-mail.jar --access-code"
+ * works on every server, and upgrade-panel.sh, which replaces the real file, never leaves the link behind.
  *
- * All'avvio della parte root, idempotente: al secondo avvio non scrive niente.
+ * At the start of the root part, idempotent: at the second start it writes nothing.
  */
 public final class JarName {
 
@@ -36,7 +36,7 @@ public final class JarName {
         }
     }
 
-    /** Il collegamento accanto al jar che gira, se serve. Pura sul filesystem: le prove la chiamano su una cartella loro. */
+    /** The link next to the running jar, if needed. Pure on the filesystem: the tests call it on a folder of their own. */
     static Outcome ensure(Path jar) throws java.io.IOException {
         if (jar == null || !Files.isRegularFile(jar) || jar.getFileName().toString().equals(Product.JAR_FILE)) return Outcome.NOTHING;
         Path link = jar.resolveSibling(Product.JAR_FILE);

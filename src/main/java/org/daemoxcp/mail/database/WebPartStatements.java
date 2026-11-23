@@ -6,33 +6,34 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Le istruzioni del catalogo che la parte web del pannello separato puo' fare:
- * nella web CatalogGuard accetta solo queste. Sono quelle delle rotte che la web serve da se' e dei suoi
- * filtri, misurate sul bytecode (il grafo delle chiamate) e provate sulla VM. Non ci sono le scritture
- * dell'accesso: amministratori, passkey, codici e sessioni li scrive solo la root (A), e le migrazioni le fa
- * lei. Nemmeno le rotte della webmail (cambio password, copia nel vault): le serve la root.
+ * The catalog statements that the web part of the separated panel may run:
+ * in the web part CatalogGuard accepts only these. They are those of the routes the web part serves by itself and
+ * of its filters, measured on the bytecode (the call graph) and tested on the VM. The login writes are not here:
+ * administrators, passkeys, codes and sessions are written only by the root part (A), and it runs the migrations.
+ * Nor the webmail routes (password change, copy in the vault): the root part serves them.
  *
- * <p>Le istruzioni MySQL hanno ciascuna la sua procedura ({@link #ROUTINES}): quando la web entra in MySQL col
- * suo utente, che puo' solo chiamarle, la connessione manda la procedura al posto dell'istruzione. Quelle di
- * SQLite (CONFIG_) restano istruzioni.
+ * <p>The MySQL statements each have their own procedure ({@link #ROUTINES}): when the web part logs into MySQL
+ * with its own user, which can only call them, the connection sends the procedure instead of the statement. The
+ * SQLite ones (CONFIG_) stay statements.
  */
 public final class WebPartStatements {
 
     private WebPartStatements() {}
 
-    /** I nomi delle costanti di SqlCatalog: SqlCatalogTest controlla che ci siano tutte. */
+    /** The names of the SqlCatalog constants: SqlCatalogTest checks that they are all there. */
     public static final Set<String> NAMES = Set.of(
-            // La sessione della richiesta: chi e', quando ha fatto l'ultima cosa.
+            // The request's session: who it is, when it last did something.
             "SESSION_CHECK", "SESSION_TOUCH", "AUTH_ADMIN_BY_ID",
-            // Le preferenze dell'amministratore collegato, e se c'e' gia' un amministratore.
+            // The preferences of the logged-in administrator, and whether there is already an administrator.
             "MAIL_GET_ADMIN_LANGUAGE", "MAIL_SET_ADMIN_LANGUAGE", "MAIL_GET_ADMIN_THEME", "MAIL_SET_ADMIN_THEME",
             "MAIL_HAS_ADMIN_USER",
-            // Impostazioni e registro di controllo.
+            // Settings and audit log.
             "MAIL_GET_SETTING", "MAIL_LOG_AUDIT_EVENT",
-            // Domini: i nomi per autoconfig e MTA-STS, l'elenco, uno, aggiungere, descrivere, togliere.
+            // Domains: the names for autoconfig and MTA-STS, the list, one, add, describe, remove.
             "MAIL_GET_DOMAIN_NAMES", "MAIL_GET_DOMAINS", "MAIL_GET_DOMAIN_BY_NAME", "MAIL_ADD_DOMAIN",
             "MAIL_UPDATE_DOMAIN_DESCRIPTION", "MAIL_DELETE_DOMAIN",
-            // Caselle e i loro dati collegati. Le copie delle password (Mostra password) le legge solo la root.
+            // Mailboxes and their linked data. The copies of the passwords ("Show password") are read only by the root
+            // part.
             "MAIL_GET_MAILBOXES", "MAIL_GET_ALL_MAILBOXES", "MAIL_GET_MAILBOX", "MAIL_GET_MAILBOX_BY_EMAIL",
             "MAIL_INSERT_MAILBOX", "MAIL_UPDATE_MAILBOX", "MAIL_UPDATE_MAILBOX_PASSWORD", "MAIL_DELETE_MAILBOX",
             "MAIL_MAILBOX_HAS_ENCRYPTED_PASSWORD",
@@ -40,25 +41,26 @@ public final class WebPartStatements {
             "MAIL_GET_FORWARDING_RULES", "MAIL_GET_SIEVE_FILTERS",
             "MAIL_TRANSFORM_MAILBOX_TO_ALIAS", "MAIL_TRANSFORM_MAILBOX_TO_ALIAS_2", "MAIL_TRANSFORM_MAILBOX_TO_ALIAS_3",
             "MAIL_TRANSFORM_ALIAS_TO_MAILBOX",
-            // Webmail e statistiche.
+            // Webmail and statistics.
             "MAIL_CREATE_AUTO_LOGIN_TOKEN", "MAIL_GET_EMAIL_STATISTICS", "MAIL_GET_TRAINING_COUNT",
-            // SQLite in sola lettura: la configurazione e i segreti di prima rimasti nelle colonne.
+            // Read-only SQLite: the configuration and the previous secrets left in the columns.
             "CONFIG_DB_BUSY_TIMEOUT", "CONFIG_GET_DATA_CONFIG", "CONFIG_GET_PANEL_TLS_KEY", "CONFIG_GET_MYSQL_PASSWORD",
             "CONFIG_GET_MAIL_HOSTNAME", "CONFIG_GET_ROUNDCUBE_DOMAIN");
 
     /**
-     * La procedura di un'istruzione MySQL della web: l'istruzione, la sua chiamata (l'impronta della sessione e poi
-     * gli stessi parametri, nello stesso ordine), e i testi con cui la root la crea, la toglie e la da' alla web.
+     * The procedure of a MySQL statement of the web part: the statement, its call (the session's fingerprint and then
+     * the same parameters, in the same order), and the texts with which the root part creates it, drops it and
+     * grants it to the web part.
      */
     public record Routine(String statement, String call, String create, String drop, String grant) {
 
-        /** Una lettura (SELECT) restituisce le righe; una scrittura una riga con affected, e id se e' un inserimento. */
+        /** A read (SELECT) returns the rows; a write returns one row with affected, and id if it is an insert. */
         public boolean read() {
             return statement.stripLeading().startsWith("SELECT");
         }
     }
 
-    /** Le procedure, una per ogni istruzione MySQL dell'elenco: SqlCatalogTest controlla che ci siano tutte. */
+    /** The procedures, one for each MySQL statement in the list: SqlCatalogTest checks that they are all there. */
     public static final List<Routine> ROUTINES = List.of(
             new Routine(SqlCatalog.SESSION_CHECK, SqlCatalog.WEB_CALL_CHECK_SESSION, SqlCatalog.WEB_CREATE_CHECK_SESSION,
                     SqlCatalog.WEB_DROP_CHECK_SESSION, SqlCatalog.WEB_GRANT_CHECK_SESSION),
@@ -145,7 +147,7 @@ public final class WebPartStatements {
         return Map.copyOf(m);
     }
 
-    /** La procedura di un'istruzione, o null se non ne ha (SQLite, o un'istruzione che la web non fa). */
+    /** The procedure of a statement, or null if it has none (SQLite, or a statement the web part does not run). */
     public static Routine routineOf(String statement) {
         return statement == null ? null : BY_STATEMENT.get(statement);
     }

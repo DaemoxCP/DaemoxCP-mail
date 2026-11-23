@@ -120,13 +120,13 @@ import java.sql.ResultSet;
  */
 public class Main {
 
-    // I comandi esterni partono con fork(), non con jspawnhelper. Con il meccanismo predefinito
-    // ogni comando passa da jspawnhelper, che controlla di essere della stessa versione della
-    // JVM in memoria: appena pkg aggiorna il JDK sotto il pannello acceso, ogni avvio fallisce
-    // ("Failed to exec spawn helper") e il pannello non legge piu' niente finche' non lo si
-    // riavvia. Provato su FreeBSD 15.1 con openjdk25 25.0.2 -> 25.0.4: con FORK i comandi
-    // continuano a partire. La proprieta' si legge una volta sola, al primo processo lanciato:
-    // per questo sta qui, prima di qualunque altra cosa.
+    // External commands start with fork(), not with jspawnhelper. With the default mechanism
+    // every command goes through jspawnhelper, which checks that it is the same version as the
+    // JVM in memory: as soon as pkg updates the JDK under the running panel, every launch fails
+    // ("Failed to exec spawn helper") and the panel can no longer read anything until it is
+    // restarted. Tested on FreeBSD 15.1 with openjdk25 25.0.2 -> 25.0.4: with FORK the commands
+    // keep starting. The property is read only once, at the first process launched:
+    // that is why it is here, before anything else.
     static {
         if (System.getProperty("jdk.lang.Process.launchMechanism") == null)
             System.setProperty("jdk.lang.Process.launchMechanism", "FORK");
@@ -138,7 +138,7 @@ public class Main {
 
     // Status flags for SSLMailServer compatibility
     public static boolean mysqlAvailable = false;
-    /** Nessun amministratore attivo: il pannello aspetta che lo si crei dalla console (--create-admin). */
+    /** No active administrator: the panel waits for one to be created from the console (--create-admin). */
     public static volatile boolean setupRequired = true;
 
     // ANSI color codes
@@ -176,9 +176,9 @@ public class Main {
             panel.addComponent(new EmptySpace());
         }
 
-        // Invio nel campo vale come OK. In Lanterna Invio in un campo di una riga sposta il fuoco al componente dopo,
-        // che qui e' Annulla: chi scriveva il valore e premeva Invio due volte, come si fa in ogni modulo, annullava
-        // quello che aveva scritto (installazione dal README, 20/11/2026). Annulla resta il primo pulsante.
+        // Enter in the field counts as OK. In Lanterna, Enter in a one-line field moves the focus to the next
+        // component, which here is Cancel: whoever typed the value and pressed Enter twice, as in any form, cancelled
+        // what they had typed (install from the README, 2026-11-20). Cancel stays the first button.
         TextBox textBox = new TextBox(new TerminalSize(40, 1)) {
             @Override
             public Result handleKeyStroke(com.googlecode.lanterna.input.KeyStroke key) {
@@ -220,21 +220,21 @@ public class Main {
     }
 
     /**
-     * Come {@link #executeScript}, ma i segreti arrivano allo script dall'<em>ambiente</em>, e
-     * gli argomenti non si stampano.
+     * Like {@link #executeScript}, but the secrets reach the script through the <em>environment</em>,
+     * and the arguments are not printed.
      *
-     * <p>Due strade portavano fuori la password del database, e sono tutte e due chiuse qui.
+     * <p>Two roads led the database password out, and both are closed here.
      *
-     * <p>La prima: {@code "Arguments: " + String.join(" ", args)} le scriveva sullo standard
-     * output. Avviato dal servizio, quello standard output e' un <em>file</em>: la password
-     * finiva su disco in chiaro, e ci restava. Adesso si dice quanti argomenti ci sono, non
-     * quali.
+     * <p>The first: {@code "Arguments: " + String.join(" ", args)} wrote them to standard
+     * output. Started by the service, that standard output is a <em>file</em>: the password
+     * ended up on disk in clear text, and stayed there. Now it says how many arguments there
+     * are, not which.
      *
-     * <p>La seconda, peggiore: un argomento della riga di comando lo legge <em>chiunque</em>
-     * con {@code ps}, per tutta la durata dell'installazione, che sono minuti. L'ambiente di
-     * un processo invece su FreeBSD lo vede solo chi ne e' proprietario o root
-     * ({@code procstat -e}). Non e' una cassaforte, ma e' la differenza fra "ogni utente
-     * della macchina" e "root".
+     * <p>The second, worse: a command-line argument can be read by <em>anyone</em>
+     * with {@code ps}, for the whole duration of the installation, which is minutes. The
+     * environment of a process, instead, on FreeBSD is visible only to its owner or root
+     * ({@code procstat -e}). It is not a safe, but it is the difference between "every user
+     * of the machine" and "root".
      */
     public static boolean executeScriptWithSecrets(String scriptPath, String scriptName,
                                                    java.util.Map<String, String> secrets, String... args) {
@@ -242,16 +242,16 @@ public class Main {
     }
 
     /**
-     * @param pause se aspettare ENTER alla fine (solo con un terminale, vedi waitForEnter). Falso
-     *              quando dopo lo script c'e' ancora qualcosa da fare che non deve dipendere da un
-     *              tasto: l'installazione completa riprotegge i pacchetti, e aspetta dopo.
+     * @param pause whether to wait for ENTER at the end (only with a terminal, see waitForEnter). False
+     *              when after the script there is still something to do that must not depend on a
+     *              key: the full installation re-locks the packages, and waits afterwards.
      */
     private static boolean executeScript(String scriptPath, String scriptName,
                                          java.util.Map<String, String> secrets, boolean pause, String... args) {
         return executeScript(scriptPath, scriptName, secrets, pause, (java.util.function.Consumer<String>) null, args);
     }
 
-    /** Come sopra, e ogni riga dello script passa anche da {@code onLine} (se non e' null). */
+    /** Like above, and every line of the script also goes through {@code onLine} (if it is not null). */
     private static boolean executeScript(String scriptPath, String scriptName,
                                          java.util.Map<String, String> secrets, boolean pause,
                                          java.util.function.Consumer<String> onLine, String... args) {
@@ -289,24 +289,23 @@ public class Main {
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             org.daemoxcp.mail.util.Shell.applyPath(processBuilder);
             processBuilder.environment().putAll(secrets);
-            // Lo lancia il pannello, che l'ha appena scritto dal suo jar: il controllo della versione
-            // che lo script fa quando lo si lancia a mano qui non serve (InstallScripts).
+            // The panel launches it, having just written it from its jar: the version check
+            // the script does when launched by hand is not needed here (InstallScripts).
             processBuilder.environment().put(org.daemoxcp.mail.scripts.InstallScripts.FROM_PANEL, "1");
             processBuilder.redirectErrorStream(true);
-            // Lo stdin del figlio e' /dev/null, sempre. L'impostazione predefinita di
-            // ProcessBuilder e' una pipe di cui la JVM tiene aperto il capo in scrittura e
-            // su cui non scrive mai: uno script che legge non riceve ne' dati ne' EOF, e
-            // resta fermo per sempre. Misurato sulla VM: uno script con "read x" appende
-            // executeScript in tutte e tre le condizioni -- stdin del pannello su pipe
-            // aperta, su /dev/null, e su una pty vera con l'ENTER pronto. Non e' quindi un
-            // guasto della sola non interattivita': quella pipe non serve a nessuno, perche'
-            // nemmeno un operatore al terminale puo' rispondere (quello che digita va allo
-            // stdin del pannello, che lo legge waitForEnter(), non allo script). Per questo
-            // non e' condizionato a nonInteractive.
-            // Con /dev/null la lettura torna EOF: lo script non si ferma piu' e il suo codice
-            // d'uscita arriva al chiamante. Attenzione a chi aggiunge uno script che legge:
-            // EOF non e' un errore, quindi "read x" prosegue con un valore VUOTO. Chi legge
-            // deve controllare l'esito della lettura, altrimenti va avanti su niente.
+            // The child's stdin is /dev/null, always. ProcessBuilder's default is a pipe
+            // whose write end the JVM keeps open and never writes to: a script that reads
+            // receives neither data nor EOF, and stays stuck forever. Measured on the VM:
+            // a script with "read x" hangs executeScript in all three conditions -- the
+            // panel's stdin on an open pipe, on /dev/null, and on a real pty with ENTER
+            // ready. So it is not a fault of non-interactivity alone: that pipe is of no
+            // use to anyone, because not even an operator at the terminal can answer (what
+            // they type goes to the panel's stdin, read by waitForEnter(), not to the
+            // script). That is why it is not conditional on nonInteractive.
+            // With /dev/null the read returns EOF: the script no longer stops and its exit
+            // code reaches the caller. Beware, whoever adds a script that reads: EOF is
+            // not an error, so "read x" goes on with an EMPTY value. Whoever reads must
+            // check the result of the read, otherwise it goes on with nothing.
             processBuilder.redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));
             processBuilder.directory(new File(System.getProperty("user.dir")));
 
@@ -347,12 +346,12 @@ public class Main {
     }
 
     /**
-     * Si ferma finche' qualcuno non preme ENTER. Senza terminale non si ferma e non stampa
-     * niente: il messaggio da' per inteso un lettore che non c'e', e l'attesa non finisce.
-     * Con stdin chiuso System.in.read() legge EOF e il processo prosegue di corsa; con stdin
-     * su una pipe aperta -- ssh senza -t, cron, un runner -- non legge niente e resta fermo
-     * per sempre. E' la seconda forma che ha tenuto un'installazione riuscita ferma per sette
-     * ore e cinquanta: processo vivo, exit code 0, nessun errore da nessuna parte.
+     * Stops until someone presses ENTER. Without a terminal it does not stop and prints
+     * nothing: the message assumes a reader who is not there, and the wait never ends.
+     * With stdin closed System.in.read() reads EOF and the process rushes on; with stdin
+     * on an open pipe -- ssh without -t, cron, a runner -- it reads nothing and stays stuck
+     * forever. It was the second form that kept a successful installation stuck for seven
+     * hours and fifty minutes: process alive, exit code 0, no error anywhere.
      */
     private static void waitForEnter() {
         if (nonInteractive) return;
@@ -369,9 +368,9 @@ public class Main {
     }
 
     public static void main(String[] args) throws InterruptedException, IOException {
-        // La parte web del pannello separato: la avvia la parte root con
-        // daemon(8) e l'utente daemoxcp_mail (PanelSeparation). Niente di quello che segue: migrazioni, script,
-        // contenuti e SQLite in scrittura sono lavoro della root, che li ha gia' fatti.
+        // The web part of the separated panel: the root part starts it with
+        // daemon(8) and the daemoxcp_mail user (PanelSeparation). None of what follows: migrations, scripts,
+        // content and SQLite writes are the root's job, and it has already done them.
         for (String a : args) {
             if ("--web-part".equals(a)) {
                 System.exit(startWebPart() ? 0 : 1);
@@ -393,19 +392,19 @@ public class Main {
 
         // Generate all panel HTML content
         org.daemoxcp.mail.system.PathMigration.run();
-        // Il nome del prodotto (DaemoxCP Mail, 17/11/2026) su un server installato prima: cartelle, utente di sistema,
-        // servizio, jar, jail. Solo il servizio o il menu, da root, e prima che qualcuno legga quei nomi.
+        // The product name (DaemoxCP Mail, 2026-11-17) on a server installed before: folders, system user,
+        // service, jar, jail. Only the service or the menu, as root, and before anyone reads those names.
         boolean renameApplies = org.daemoxcp.mail.system.ProductRename.applies(args);
         if (renameApplies) org.daemoxcp.mail.system.ProductRename.atServiceStart();
-        // I commenti che le versioni di prima scrivevano in italiano nei file del server, in inglese (22/11/2026): dopo
-        // il nome del prodotto, e prima delle riparazioni che riconoscono i loro blocchi dal commento.
+        // The comments that earlier versions wrote in Italian in the server's files, into English (2026-11-22):
+        // after the product name, and before the repairs that recognise their blocks by the comment.
         if (renameApplies) org.daemoxcp.mail.system.EnglishComments.atBoot();
-        // Lo script di avvio scritto dal pannello cita i file che PathMigration ha appena rinominato.
+        // The start script written by the panel refers to the files that PathMigration has just renamed.
         org.daemoxcp.mail.system.RcScriptRepair.ensureAtBoot();
-        // I segreti solo di root (le password di root di MySQL e dell'utente MySQL di Roundcube) escono dal
-        // file del pannello e vanno in quello di root: la parte web, che gira con l'utente daemoxcp_mail, non li
-        // deve poter leggere. Solo da root; al secondo avvio non c'e'
-        // niente da spostare.
+        // The root-only secrets (the MySQL root password and that of Roundcube's MySQL user) leave the
+        // panel's file and go into root's: the web part, which runs as the daemoxcp_mail user, must not be
+        // able to read them. Only as root; at the second start there is
+        // nothing to move.
         if ("root".equals(System.getProperty("user.name"))) {
             java.util.logging.Logger log = java.util.logging.Logger.getLogger(Main.class.getName());
             try {
@@ -420,10 +419,10 @@ public class Main {
         }
         PanelContent.generateAllContent();
 
-        // Se una manutenzione dei pacchetti non e' arrivata in fondo (pannello ucciso, crash,
-        // riavvio a meta'), i pacchetti sono rimasti SBLOCCATI e nessuno se ne accorgerebbe
-        // finche' un aggiornamento successivo non porta via un pezzo dello stack di posta.
-        // Il ripristino va fatto qui, all'avvio, prima che il pannello torni utilizzabile.
+        // If a package maintenance did not get to the end (panel killed, crash,
+        // restart halfway), the packages were left UNLOCKED and nobody would notice
+        // until a later update takes away a piece of the mail stack.
+        // The recovery must happen here, at startup, before the panel is usable again.
         try {
             String restore = org.daemoxcp.mail.system.UpdateManager.restoreLocksAfterCrash();
             if (!restore.isEmpty()) System.out.println(restore);
@@ -433,20 +432,20 @@ public class Main {
 
         // Initialize database BEFORE screen to avoid warnings during GUI
         dbManager = new dataBaseManager();
-        // Prima la tabella, poi le colonne: su un server nuovo l'ordine inverso lasciava la configurazione senza
-        // roundcube_ssl_chain fino al secondo avvio (dataBaseManager.prepareAtStartup).
+        // First the table, then the columns: on a new server the reverse order left the configuration without
+        // roundcube_ssl_chain until the second start (dataBaseManager.prepareAtStartup).
         boolean needsTableCreation = dbManager.prepareAtStartup();
-        // Il database e gli utenti MySQL col nome del prodotto, prima che qualcuno entri in MySQL. Dopo la tabella:
-        // su un server nuovo legge la riga dei valori predefiniti e non ha niente da fare.
+        // The database and the MySQL users with the product name, before anyone goes into MySQL. After the table:
+        // on a new server it reads the row of default values and has nothing to do.
         if (renameApplies) org.daemoxcp.mail.system.MysqlRename.ensureAtBoot(dbManager);
 
-        // Prima che qualunque cosa entri in MySQL: se un'installazione e' stata interrotta con la
-        // password nuova ancora in attesa, o se MySQL rifiuta quella del pannello (i server rotti
-        // dalla versione di prima, reperto 156), si chiede a MySQL quale conosce. Vale per ogni
-        // processo: il servizio --web, il menu, i comandi da console. Di solito costa una
-        // connessione e non cambia niente (PendingDbPassword.settleAtStartup).
+        // Before anything goes into MySQL: if an installation was interrupted with the
+        // new password still pending, or if MySQL refuses the panel's (the servers broken
+        // by the previous version, finding 156), MySQL is asked which one it knows. It holds for every
+        // process: the --web service, the menu, the console commands. Usually it costs one
+        // connection and changes nothing (PendingDbPassword.settleAtStartup).
         try {
-            org.daemoxcp.mail.i18n.I18n.setCurrent("en");   // una riga d'avvio di ogni modo, servizio compreso: un registro
+            org.daemoxcp.mail.i18n.I18n.setCurrent("en");   // one startup line for every mode, service included: a log
             String decided;
             try { decided = org.daemoxcp.mail.system.PendingDbPassword.settleAtStartup(dbManager).message(); }
             finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
@@ -455,9 +454,9 @@ public class Main {
             System.out.println("Checking the panel's MySQL password failed: " + e.getMessage());
         }
 
-        // Gli script d'installazione riscritti da questo jar a ogni avvio (servizio, menu, comandi da
-        // console), e quelli che nessuno scrive piu' messi da parte: mai uno script di una versione di
-        // prima su disco (InstallScripts, reperto 169).
+        // The installation scripts rewritten by this jar at every start (service, menu, console
+        // commands), and those that nobody writes any more set aside: never a script from an earlier
+        // version on disk (InstallScripts, finding 169).
         try {
             createDirectoryIfNotExists("./install_scripts/");
             org.daemoxcp.mail.scripts.InstallScripts.refreshAtStartup();
@@ -465,20 +464,20 @@ public class Main {
             System.out.println("Writing the install scripts failed: " + e.getMessage());
         }
 
-        // La lingua della console (il menu a schermo e i comandi qui sotto): --lang, poi quella del pannello, poi
-        // l'inglese. Non per il servizio (--web): le sue righe sono registri e restano in inglese.
+        // The console language (the on-screen menu and the commands below): --lang, then the panel's, then
+        // English. Not for the service (--web): its lines are logs and stay in English.
         if (!java.util.Arrays.asList(args).contains("--web")) chooseConsoleLanguage(args);
-        // Poi --lang e il suo valore non ci sono piu': i comandi leggono i loro argomenti per posizione
-        // (--access-code --lang en prendeva «--lang» per il nome dell'amministratore).
+        // Then --lang and its value are gone: the commands read their arguments by position
+        // (--access-code --lang en took "--lang" as the administrator's name).
         args = org.daemoxcp.mail.i18n.ConsoleLanguage.withoutFlag(args);
 
-        // I comandi da console, per chi ha una shell sul server (dalla cartella del pannello):
-        //   java -jar daemoxcp-mail.jar --create-admin <nome> <email>   il primo amministratore
-        //   java -jar daemoxcp-mail.jar --access-code [nome]            un codice di accesso monouso
-        //   java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6|ipv6out   IPv4, IPv6, tutte e due, o IPv6 solo in uscita (da root)
-        //   java -jar daemoxcp-mail.jar --empty-folders junk|trash|both all|<casella>...   svuotamento d'emergenza (da root)
-        // Il primo amministratore non si crea dal pannello web: chi raggiungesse per primo la
-        // pagina diventerebbe amministratore.
+        // The console commands, for whoever has a shell on the server (from the panel's folder):
+        //   java -jar daemoxcp-mail.jar --create-admin <name> <email>   the first administrator
+        //   java -jar daemoxcp-mail.jar --access-code [name]            a one-time access code
+        //   java -jar daemoxcp-mail.jar --ip-family both|ipv4|ipv6|ipv6out   IPv4, IPv6, both, or IPv6 outbound (root)
+        //   java -jar daemoxcp-mail.jar --empty-folders junk|trash|both all|<mailbox>...   emergency emptying (root)
+        // The first administrator is not created from the web panel: whoever reached the page
+        // first would become administrator.
         for (int i = 0; i < args.length; i++) {
             if ("--create-admin".equals(args[i])) {
                 if (i + 2 >= args.length) {
@@ -504,9 +503,9 @@ public class Main {
             if ("--empty-folders".equals(args[i])) {
                 System.exit(emptyFolders(java.util.Arrays.copyOfRange(args, i + 1, args.length)));
             }
-            // La reinstallazione completa staccata dal menu (ReinstallJob): la lancia la voce del
-            // menu con daemon(8), in una sessione sua, e la segue. Chi chiude il terminale o uccide
-            // il menu non la ferma piu' a meta' (reperto 163). L'esito va nel file indicato.
+            // The full reinstallation detached from the menu (ReinstallJob): the menu option launches
+            // it with daemon(8), in a session of its own, and follows it. Whoever closes the terminal
+            // or kills the menu no longer stops it halfway (finding 163). The outcome goes to the given file.
             if ("--reinstall".equals(args[i])) {
                 nonInteractive = true;
                 String host = i + 1 < args.length ? args[i + 1].trim() : "";
@@ -516,8 +515,8 @@ public class Main {
                     if (exitFile != null) org.daemoxcp.mail.system.ReinstallJob.writeExit(exitFile, false);
                     System.exit(2);
                 }
-                // Lo script si riscrive SEMPRE da questo jar, appena prima di eseguirlo: lanciato a mano
-                // dopo un aggiornamento del jar, un «solo se manca» userebbe quello di prima (reperto 169).
+                // The script is ALWAYS rewritten from this jar, right before running it: launched by hand
+                // after a jar update, a "only if missing" would use the old one (finding 169).
                 createDirectoryIfNotExists("./install_scripts/");
                 new FullMailServerScript().write_file();
                 boolean ok = false;
@@ -531,38 +530,38 @@ public class Main {
             }
         }
 
-        // Modalita' solo-web: nessun menu a schermo.
+        // Web-only mode: no on-screen menu.
         //
-        // Serve perche' il pannello deve poter tornare su DA SOLO dopo che si e' spento per
-        // aggiornare la propria JVM. L'interfaccia a schermo (Lanterna) pretende un terminale,
-        // e uno script staccato non ne ha uno: senza questa modalita' il processo ripartirebbe
-        // e morirebbe subito, lasciando il pannello web irraggiungibile.
-        // Il server web di suo non ha mai avuto bisogno del terminale: usa solo System.out.
+        // It is needed because the panel must be able to come back up ON ITS OWN after it shut down to
+        // update its own JVM. The on-screen interface (Lanterna) demands a terminal,
+        // and a detached script does not have one: without this mode the process would restart
+        // and die at once, leaving the web panel unreachable.
+        // The web server on its own has never needed the terminal: it only uses System.out.
         boolean webOnly = false;
         for (String a1 : args) if ("--web".equals(a1)) webOnly = true;
         if (webOnly) {
-            // --web e' il servizio: nessun tasto da premere, qualunque cosa dica il terminale.
+            // --web is the service: no key to press, whatever the terminal says.
             nonInteractive = true;
             System.out.println("Starting in web-only mode: no on-screen menu.");
             System.out.println("To see the menu again: stop this process and start it again without --web.");
-            // Se il server non parte il processo deve uscire diverso da zero: con exit 0 chi
-            // ha riavviato il pannello crede che sia tornato su, e invece e' spento.
+            // If the server does not start the process must exit non-zero: with exit 0 whoever
+            // restarted the panel believes it is back up, while it is actually down.
             System.exit(startWebServer() ? 0 : 1);
             return;
         }
 
-        // Comodita', non dipendenza: il pannello non ha bisogno di run.sh per funzionare ne'
-        // per riaccendersi da solo (la riga di riavvio la ricostruisce dal processo vivo).
-        // Se pero' non c'e', se lo scrive, cosi' esiste un modo breve per avviare --web a mano.
+        // Convenience, not dependency: the panel needs run.sh neither to work nor
+        // to restart on its own (it rebuilds the restart line from the live process).
+        // If it is missing, though, it writes it, so there is a short way to start --web by hand.
         try {
-            // Il messaggio condiviso con il pannello, nella lingua della console.
+            // The message shared with the panel, in the console language.
             org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
             String created;
             try { created = org.daemoxcp.mail.system.UpdateManager.createRunSh(); }
             finally { org.daemoxcp.mail.i18n.I18n.clearCurrent(); }
             if (!created.isEmpty()) System.out.println(created);
         } catch (Exception e) {
-            // Se non si puo' scrivere accanto al jar non e' un problema: serviva solo a comodita'.
+            // If it cannot write next to the jar it is not a problem: it was only for convenience.
         }
 
         // NOW start screen (after SQLite native libs are loaded)
@@ -586,8 +585,8 @@ public class Main {
         // Generate install scripts
         generateInstallScripts(gui);
 
-        // Se l'ultima reinstallazione completa non e' finita, lo si dice appena il menu si apre, con le
-        // due strade: la voce 6 (il server di prima) o la 4 (rifarla).
+        // If the last full reinstallation did not finish, it is said as soon as the menu opens, with the
+        // two roads: option 6 (the previous server) or option 4 (redo it).
         String unfinished = reinstallAttention();
         if (!unfinished.isEmpty()) new Welcome(org.daemoxcp.mail.i18n.I18n.tr("console.attention"), unfinished).show(gui);
 
@@ -609,8 +608,9 @@ public class Main {
                         break;
 
                     case 1: {
-                        // Fuso orario, NTP e DNS. Il fuso lo sceglie chi installa (reperto 242): prima era sempre
-                        // Europe/Rome. Si propone quello che il sistema ha gia', e un nome sbagliato non parte.
+                        // Time zone, NTP and DNS. The time zone is chosen by whoever installs (finding 242):
+                        // before it was always Europe/Rome. The one the system already has is proposed, and a
+                        // wrong name does not go.
                         String zone = showTextInputDialogWithDefault(gui, org.daemoxcp.mail.i18n.I18n.tr("console.tz.title"),
                                 org.daemoxcp.mail.i18n.I18n.tr("console.tz.ask"),
                                 org.daemoxcp.mail.system.SystemTimeZone.current());
@@ -654,12 +654,12 @@ public class Main {
                         break;
 
                     case 5:
-                        // Il codice di accesso di emergenza (o il primo amministratore)
+                        // The emergency access code (or the first administrator)
                         emergencyAccess(gui);
                         break;
 
                     case 6:
-                        // Tornare al server di prima dell'ultima reinstallazione (ReinstallReturn)
+                        // Go back to the server as it was before the last reinstallation (ReinstallReturn)
                         goBackFromMenu(screen, gui);
                         break;
 
@@ -687,10 +687,10 @@ public class Main {
     }
 
     private static void generateInstallScripts(MultiWindowTextGUI gui) {
-        // Gli script si riscrivono a ogni avvio (InstallScripts.refreshAtStartup, prima del menu): qui
-        // si riscrivono ancora e si dice qualcosa solo se NON si scrivono. Prima, scritti solo «se
-        // mancano», la finestra compariva la prima volta; scritti sempre, comparirebbero due finestre
-        // da chiudere a ogni apertura del menu (reperto 172).
+        // The scripts are rewritten at every start (InstallScripts.refreshAtStartup, before the menu): here
+        // they are rewritten again and something is said only if they are NOT written. Before, written only "if
+        // missing", the window appeared the first time; written always, two windows would appear
+        // to close at every opening of the menu (finding 172).
         SetTimeOnSystemScript timezoneScript = new SetTimeOnSystemScript();
         timezoneScript.write_file();
         if (!timezoneScript.writed)
@@ -703,9 +703,9 @@ public class Main {
     }
 
     /**
-     * Il testo per il menu se l'ultima reinstallazione completa non e' finita: interrotta (l'avviso di
-     * PackageRecovery lo sa) o fallita dopo aver cominciato a cambiare il sistema (ReinstallJob). ""
-     * se non c'e' niente da dire.
+     * The text for the menu if the last full reinstallation did not finish: interrupted (the notice from
+     * PackageRecovery knows it) or failed after it began changing the system (ReinstallJob). ""
+     * if there is nothing to say.
      */
     static String reinstallAttention() {
         boolean interrupted = org.daemoxcp.mail.system.PackageRecovery.notice().optBoolean("reinstall");
@@ -723,9 +723,9 @@ public class Main {
     }
 
     /**
-     * Voce 6 del menu: torna al server com'era prima dell'ultima reinstallazione, con la posta arrivata
-     * dopo fusa dentro (ReinstallReturn). Poi chiede se riavviare adesso: il momento lo sceglie chi e'
-     * al terminale.
+     * Menu option 6: goes back to the server as it was before the last reinstallation, with the mail that
+     * arrived afterwards merged in (ReinstallReturn). Then asks whether to restart now: the moment is chosen by
+     * whoever is at the terminal.
      */
     private static void goBackFromMenu(Screen screen, MultiWindowTextGUI gui) {
         String name = org.daemoxcp.mail.system.ReinstallReturn.latest();
@@ -769,10 +769,10 @@ public class Main {
         try { screen.startScreen(); } catch (IOException e) { throw new RuntimeException(e); }
     }
 
-    /** L'esito dell'ultimo ritorno chiesto dal menu (le prove lo leggono). */
+    /** The outcome of the last return requested from the menu (the tests read it). */
     static final class JSONObjectHolder { static volatile org.json.JSONObject last; }
 
-    /** Il nome del pannello salvato con la voce 2, "" se non c'e'. */
+    /** The panel name saved with option 2, "" if there is none. */
     private static String savedPanelHost() {
         try (ResultSet r = dbManager.get_data_config()) {
             if (r.next()) {
@@ -780,7 +780,7 @@ public class Main {
                 return h == null ? "" : h.trim();
             }
         } catch (Exception ignored) {
-            // nessuna configurazione: nessun nome
+            // no configuration: no name
         }
         return "";
     }
@@ -803,8 +803,8 @@ public class Main {
             return;
         }
 
-        // I tre nomi prima di partire (reperto 244): la webmail non piu' quella di esempio, posta e web su nomi
-        // diversi (la posta resta fuori dal proxy di Cloudflare). Gli avvisi lasciano scegliere.
+        // The three names before starting (finding 244): the webmail no longer the example one, mail and web on
+        // different names (mail stays outside Cloudflare's proxy). The warnings let you choose.
         org.daemoxcp.mail.system.InstallNames.Result names = org.daemoxcp.mail.system.InstallNames.check(
                 mailHostname.trim(), dbManager.getRoundcubeDomain(), savedPanelHost());
         if (!names.problems().isEmpty()) {
@@ -826,13 +826,13 @@ public class Main {
             throw new RuntimeException(e);
         }
 
-        // Staccata dal menu (ReinstallJob): il menu la lancia e la segue. Se questo terminale si
-        // chiude, la reinstallazione va avanti da sola fino in fondo.
+        // Detached from the menu (ReinstallJob): the menu launches it and follows it. If this terminal
+        // closes, the reinstallation goes on by itself to the end.
         org.daemoxcp.mail.system.ReinstallJob.runFromMenu(mailHostname.trim(), System.out);
 
-        // Un'attesa sola, alla fine: dopo la riprotezione dei pacchetti, non prima. Con l'attesa
-        // dentro executeScript, chi chiudeva il terminale davanti a "Press ENTER" uccideva il
-        // processo con i pacchetti ancora sbloccati (li riproteggeva solo il prossimo avvio).
+        // A single wait, at the end: after re-locking the packages, not before. With the wait
+        // inside executeScript, whoever closed the terminal in front of "Press ENTER" killed the
+        // process with the packages still unlocked (only the next start re-locked them).
         waitForEnter();
 
         try {
@@ -843,24 +843,24 @@ public class Main {
     }
 
     /**
-     * L'installazione completa, senza la finestra del nome: e' quello che fa la voce del menu
-     * dopo che il nome e' stato scritto. Pubblica per il conduttore delle prove
-     * (tests/org/daemoxcp/mail/system/MenuReinstall.java), che cosi' prova proprio questo codice.
+     * The full installation, without the name window: it is what the menu option does
+     * after the name has been written. Public for the test driver
+     * (tests/org/daemoxcp/mail/system/MenuReinstall.java), which in this way tests exactly this code.
      *
-     * Sul turno dei lavori sui pacchetti, con i pacchetti protetti sbloccati prima e riprotetti
-     * alla fine (InstallLocks). Il turno e lo sblocco vengono PRIMA di qualunque cambiamento:
-     * prima del nome, dei flag dei servizi e soprattutto della nuova password di MySQL, che
-     * salvata senza installazione lascerebbe il pannello con una password che MySQL non conosce.
+     * On the package turn, with the locked packages unlocked first and re-locked
+     * at the end (InstallLocks). The turn and the unlock come BEFORE any change:
+     * before the name, the service flags and above all the new MySQL password, which,
+     * saved without an installation, would leave the panel with a password MySQL does not know.
      *
-     * @return vero se lo script e' uscito con 0
+     * @return true if the script exited with 0
      */
     public static boolean runInstallation(String mailHostname) {
         InstallLocks.Start start;
-        // La via di ritorno (reperto 156): un boot environment fatto col turno preso e PRIMA dello
-        // sblocco, cioe' col server com'e' adesso, pacchetti protetti compresi. Lo script cancella
-        // le configurazioni, svuota /var/vmail e ricrea le tabelle di MySQL: senza, tornare indietro
-        // da una reinstallazione andata male non si poteva. Se il sistema ha i boot environment e
-        // questo non si crea, l'installazione non parte (la regola dei lavori sui pacchetti).
+        // The way back (finding 156): a boot environment made with the turn taken and BEFORE the
+        // unlock, that is, with the server as it is now, locked packages included. The script deletes
+        // the configurations, empties /var/vmail and recreates the MySQL tables: without it, going back
+        // from a reinstallation gone wrong was not possible. If the system has boot environments and
+        // this one cannot be created, the installation does not start (the rule of package jobs).
         org.daemoxcp.mail.system.PackageWayBack.Prepared[] wayBack = {null};
         java.util.function.Consumer<String> wayBackLog =
                 line -> { if (!line.isEmpty()) System.out.println(ANSI_CYAN + "[WAY BACK] " + line + ANSI_RESET); };
@@ -868,8 +868,8 @@ public class Main {
         try {
             start = InstallLocks.prepare(org.daemoxcp.mail.i18n.I18n.tr("server.reinstall.turn"), () -> {
                 try {
-                    // Lo spazio prima della via di ritorno: con meno di 1 GB libero si ferma qui, e
-                    // altrimenti dice quanto la via di ritorno terra' occupato (reperto 170).
+                    // The space before the way back: with less than 1 GB free it stops here, and
+                    // otherwise it says how much the way back will keep occupied (finding 170).
                     String noSpace = org.daemoxcp.mail.system.PackageWayBack.reinstallSpace(wayBackLog);
                     if (noSpace != null) return noSpace;
                     wayBack[0] = org.daemoxcp.mail.system.PackageWayBack.beforeInstallation(wayBackLog);
@@ -902,8 +902,8 @@ public class Main {
                 boolean allBack = !org.daemoxcp.mail.system.PackageQueue.statePresent();
                 System.out.println((allBack ? ANSI_GREEN : ANSI_RED) + "[LOCKS] " + back + ANSI_RESET);
             }
-            // Dopo la riprotezione: il boot environment resta se lo script ha cominciato a cambiare
-            // il sistema, si toglie se si e' fermato prima.
+            // After re-locking: the boot environment stays if the script began changing
+            // the system, and is removed if it stopped before.
             org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
             try { org.daemoxcp.mail.system.PackageWayBack.afterInstallation(wayBackLog, wayBack[0], systemTouched.get()); }
             catch (RuntimeException e) { System.out.println(ANSI_YELLOW + "[WAY BACK] " + e.getMessage() + ANSI_RESET); }
@@ -913,15 +913,15 @@ public class Main {
         return success;
     }
 
-    /** Il corpo dell'installazione, con il turno gia' preso e i pacchetti gia' sbloccati. */
+    /** The body of the installation, with the turn already taken and the packages already unlocked. */
     private static boolean installOnTurn(String mailHostname) {
         return installOnTurn(mailHostname, new java.util.concurrent.atomic.AtomicBoolean(false));
     }
 
     /**
-     * @param systemTouched diventa vero quando lo script arriva alla fase 1, cioe' comincia a
-     *        fermare servizi e cancellare configurazioni. Prima di li' lo script controlla soltanto
-     *        (turno, parametri, Roundcube, pacchetti protetti) e non cambia niente.
+     * @param systemTouched becomes true when the script reaches phase 1, that is, starts
+     *        stopping services and deleting configurations. Before that point the script only checks
+     *        (turn, parameters, Roundcube, locked packages) and changes nothing.
      */
     private static boolean installOnTurn(String mailHostname, java.util.concurrent.atomic.AtomicBoolean systemTouched) {
         // Save hostname
@@ -950,11 +950,11 @@ public class Main {
             System.out.println(ANSI_YELLOW + "[WARNING] Could not read MySQL config: " + e.getMessage() + ANSI_RESET);
         }
 
-        // Una password nuova a ogni installazione, ma IN ATTESA: quella del pannello resta la
-        // vecchia finche' MySQL non conosce la nuova. Prima la si scriveva subito come password del
-        // pannello, e ogni uscita dello script prima della fase 3 (Roundcube non configurato, un
-        // parametro mancante, il turno, un pacchetto protetto, pkg) lasciava il pannello con una
-        // password che MySQL rifiutava (reperto 156). La decisione e' dopo lo script, qui sotto.
+        // A new password at every installation, but PENDING: the panel's stays the
+        // old one until MySQL knows the new one. Before, it was written at once as the panel's
+        // password, and every exit of the script before phase 3 (Roundcube not configured, a
+        // missing parameter, the turn, a locked package, pkg) left the panel with a
+        // password MySQL refused (finding 156). The decision is after the script, below.
         org.daemoxcp.mail.system.PendingDbPassword.Store passwordStore =
                 org.daemoxcp.mail.system.PendingDbPassword.panelStore(dbManager);
         org.daemoxcp.mail.system.PendingDbPassword.Probe mysqlProbe =
@@ -975,16 +975,16 @@ public class Main {
             org.daemoxcp.mail.i18n.I18n.clearCurrent();
         }
 
-        // La password di root di MySQL. Quella NON si rigenera a ogni installazione: la si
-        // genera la prima volta e poi e' quella, perche' se MySQL c'e' gia' root la usa gia'
-        // (una reinstallazione del pannello non e' una reinstallazione del database). Prima
-        // non esisteva affatto e root entrava senza niente: lo script faceva "mysql -u root"
-        // e, se falliva, "mysql -u root --password=".
+        // The MySQL root password. That one is NOT regenerated at every installation: it is
+        // generated the first time and then it stays, because if MySQL is already there root already uses it
+        // (a reinstallation of the panel is not a reinstallation of the database). Before, it
+        // did not exist at all and root got in with nothing: the script ran "mysql -u root"
+        // and, if that failed, "mysql -u root --password=".
         String mysqlRootPassword = org.daemoxcp.mail.security.PanelSecrets.ensureMysqlRootPassword();
         System.out.println(ANSI_GREEN + "[AUTO] MySQL root password ready in the panel secrets file" + ANSI_RESET);
 
-        // La password dell'utente MySQL della webmail (roundcube): come quella di root si genera
-        // una volta sola, perche' la migrazione all'avvio la rilegge da li' (RoundcubeDbUser).
+        // The password of the webmail's MySQL user (roundcube): like root's, it is generated
+        // only once, because the boot migration reads it back from there (RoundcubeDbUser).
         String roundcubeDbPassword = org.daemoxcp.mail.security.PanelSecrets.ensureRoundcubeDbPassword();
 
         // Read Roundcube configuration
@@ -1044,13 +1044,13 @@ public class Main {
             }
         }
 
-        // Execute the unified mail server installation script. Le password viaggiano
-        // nell'ambiente e non fra gli argomenti: un argomento lo legge chiunque con "ps".
-        // Senza l'attesa di un tasto alla fine: la fa installMailServer, dopo la riprotezione.
-        // DAEMOXCP_MAIL_PACKAGE_TURN dice allo script che il turno dei pacchetti lo tiene questo
-        // processo, suo padre: senza, lo script prenderebbe il turno da se' con lockf, lo
-        // troverebbe preso da noi e si fermerebbe. Lo script non ci crede sulla parola: controlla
-        // che il lock sia preso e che dentro ci sia questo pid (FullMailServerScript).
+        // Execute the unified mail server installation script. The passwords travel
+        // in the environment and not among the arguments: anyone can read an argument with "ps".
+        // Without waiting for a key at the end: installMailServer does it, after re-locking.
+        // DAEMOXCP_MAIL_PACKAGE_TURN tells the script that the package turn is held by this
+        // process, its parent: without it, the script would take the turn itself with lockf, would
+        // find it taken by us and would stop. The script does not take our word for it: it checks
+        // that the lock is taken and that this pid is inside (FullMailServerScript).
         boolean success = executeScript("./install_scripts/install_mail_server.sh",
                 "Complete Mail Server Installation",
                 java.util.Map.of("MYSQL_PASSWORD", mysqlPassword,
@@ -1062,17 +1062,17 @@ public class Main {
                 mysqlHost, mysqlPort, mysqlUser, mysqlDatabase, mailHostname.trim(),
                 roundcubeDomain, roundcubePort, roundcubeSslCert, roundcubeSslKey, roundcubeSslChain);
 
-        // Quale password conosce MySQL adesso: lo dice MySQL, non il codice d'uscita. Uno script
-        // fallito dopo la fase 3 ha gia' dato a MySQL (e a Postfix e Dovecot) la password nuova;
-        // uno fermato prima no. Il turno dei pacchetti e' ancora nostro (runInstallation).
+        // Which password MySQL knows now: MySQL says it, not the exit code. A script
+        // that failed after phase 3 has already given MySQL (and Postfix and Dovecot) the new password;
+        // one stopped before has not. The package turn is still ours (runInstallation).
         org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
         try {
             org.daemoxcp.mail.system.PendingDbPassword.Result decided =
                     org.daemoxcp.mail.system.PendingDbPassword.settle(passwordStore, mysqlProbe, mysqlUser);
             if (decided.outcome() == org.daemoxcp.mail.system.PendingDbPassword.Outcome.NEW_ADOPTED) {
-                // Il resto della configurazione MySQL (host, porta, utente, database) in SQLite.
+                // The rest of the MySQL configuration (host, port, user, database) in SQLite.
                 dbManager.update_mysql_config(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
-                // Una password nuova che la webmail non ha mai avuto: niente da cambiare all'avvio (reperto 232).
+                // A new password the webmail has never had: nothing to change at startup (finding 232).
                 org.daemoxcp.mail.system.PanelDbPassword.markFreshFromInstallation();
             }
             boolean good = decided.outcome() == org.daemoxcp.mail.system.PendingDbPassword.Outcome.NEW_ADOPTED
@@ -1088,13 +1088,14 @@ public class Main {
         }
         System.out.flush();
 
-        // Gli script scrivono nelle mappe di Postfix e nella connessione di Dovecot l'utente del pannello: si passa
-        // subito ai loro utenti (MailDbUsers), che leggono solo le colonne che usano. Se qualcosa non torna i file
-        // restano come li ha scritti lo script, e ci riprova il prossimo avvio del pannello.
-        // Prima le tabelle del pannello complete (reperto 248): l'installazione crea solo quelle della posta, e le
-        // altre (accesso, passkey, colonne aggiunte dopo come mailboxes.receive_enabled) arrivavano solo al primo
-        // avvio del server web o con --create-admin. Senza, MailDbUsers qui sotto non trovava receive_enabled e
-        // lasciava Postfix e Dovecot sull'utente del pannello fino all'avvio, e la voce 5 del menu si fermava.
+        // The scripts write the panel's user into Postfix's maps and Dovecot's connection: we switch
+        // at once to their own users (MailDbUsers), which read only the columns they use. If something does not
+        // add up the files stay as the script wrote them, and the next panel start tries again.
+        // First the panel's tables, complete (finding 248): the installation creates only the mail ones, and the
+        // others (access, passkeys, columns added later like mailboxes.receive_enabled) arrived only at the first
+        // start of the web server or with --create-admin. Without them, MailDbUsers below did not find
+        // receive_enabled and left Postfix and Dovecot on the panel's user until startup, and menu option 5
+        // stopped.
         if (success) {
             String notConnected = connectFromConfig();
             if (notConnected != null) {
@@ -1117,9 +1118,9 @@ public class Main {
             dbManager.setServiceInstalled("rspamd", true);
             dbManager.setServiceInstalled("clamav", true);
 
-            // Le utenze del pannello se ne vanno con le tabelle (lo script le ricrea vuote): chi ha
-            // reinstallato deve sapere che il pannello web non fa entrare nessuno finche' non crea il
-            // primo amministratore dalla console.
+            // The panel's accounts go away with the tables (the script recreates them empty): whoever
+            // reinstalled must know that the web panel lets nobody in until they create the
+            // first administrator from the console.
             org.daemoxcp.mail.i18n.I18n.setCurrent(consoleLanguage);
             try {
                 System.out.println(ANSI_YELLOW + "[PANEL] " + org.daemoxcp.mail.i18n.I18n.tr("server.reinstall.accountsDeleted") + ANSI_RESET);
@@ -1143,8 +1144,8 @@ public class Main {
                     }
                 }
 
-                // Only load self-signed if no certificate is configured. Il nome, la porta e il prefisso scritti con la
-                // voce 2 restano (reperto 244): prima diventavano sempre 0.0.0.0, 2096 e daemoxcp-mail-.
+                // Only load self-signed if no certificate is configured. The name, port and prefix written with
+                // option 2 stay (finding 244): before, they always became 0.0.0.0, 2096 and daemoxcp-mail-.
                 String keptHost = "", keptPort = "", keptPrefix = "";
                 try (ResultSet configResult = dbManager.get_data_config()) {
                     if (configResult.next()) {
@@ -1183,12 +1184,12 @@ public class Main {
                 System.out.println(ANSI_YELLOW + "[WARNING] Could not auto-load certificate: " + e.getMessage() + ANSI_RESET);
             }
 
-            // L'installazione finisce col server gia' chiuso (installazione dal README, 20/11/2026). Lo script lascia un
-            // pf.conf minimo che fa passare tutto, e MySQL in ascolto su ogni interfaccia anche col protocollo X (33060):
-            // fino a oggi li chiudeva solo il primo avvio del pannello, e chi installava senza avviarlo, o lo avviava
-            // ore dopo, restava aperto. Le stesse due chiusure del primo avvio, con lo stesso codice: dopo, l'avvio non
-            // trova niente da fare. Le porte del pannello e della webmail le leggono dalla configurazione appena scritta
-            // qui sopra. MySQL prima, perche' lo riavvia; poi pf.
+            // The installation ends with the server already closed (install from the README, 2026-11-20). The script
+            // leaves a minimal pf.conf that lets everything through, and MySQL listening on every interface, X protocol
+            // too (33060): until today only the panel's first start closed them, and whoever installed without starting
+            // it, or started it hours later, stayed open. The same two closures as the first start, with the same code:
+            // afterwards, the start finds nothing to do. They read the panel and webmail ports from the configuration
+            // just written above. MySQL first, because it restarts it; then pf.
             org.daemoxcp.mail.system.MysqlListen.ensureAtBoot();
             org.daemoxcp.mail.security.PfPolicy.ensureAtBoot();
 
@@ -1199,18 +1200,18 @@ public class Main {
     }
 
     /**
-     * Vero quando non c'e' nessuno che possa premere un tasto: avvio da rc.d, da cron, da un
-     * runner, o un `ssh host 'java ...'` senza -t.
+     * True when there is nobody who can press a key: start from rc.d, from cron, from a
+     * runner, or an `ssh host 'java ...'` without -t.
      *
-     * E' stato di classe e non un parametro perche' parametro era: arrivava a questa funzione
-     * sola e le altre sei attese restavano scoperte, executeScript() compresa, che e' quella
-     * che ha tenuto fermo un processo per sette ore e cinquanta a installazione finita bene.
-     * Qui lo leggono waitForEnter() e startWebServer(), che sono tutti i punti in cui il
-     * processo si ferma ad aspettare una persona.
+     * It is class state and not a parameter because it used to be a parameter: it reached this
+     * function only and the other six waits stayed uncovered, executeScript() included, which is the one
+     * that kept a process stuck for seven hours and fifty minutes after an installation that ended well.
+     * Here it is read by waitForEnter() and startWebServer(), which are all the points where the
+     * process stops to wait for a person.
      *
-     * Lo decide il terminale, non la riga di comando: Console.isTerminal() e' vero solo se
-     * stdin E stdout sono un tty, quindi anche un `| tail` lo spegne. --web lo forza comunque,
-     * perche' significa "fai il servizio" anche se chi lo lancia ha un terminale davanti.
+     * The terminal decides it, not the command line: Console.isTerminal() is true only if
+     * stdin AND stdout are a tty, so even a `| tail` turns it off. --web forces it anyway,
+     * because it means "be the service" even if whoever launches it has a terminal in front of them.
      */
     private static boolean nonInteractive = !hasTerminal();
 
@@ -1220,16 +1221,16 @@ public class Main {
     }
 
     /**
-     * Accende il server del pannello e resta in ascolto.
+     * Starts the panel's server and keeps listening.
      *
-     * @return vero se il server e' partito, falso su ogni errore di configurazione e se la
-     *         porta era occupata. Il chiamante non interattivo ne fa il proprio codice
-     *         d'uscita: senza terminale il messaggio rosso a schermo non lo legge nessuno.
-     *         Sul percorso di successo non torna: o resta in ascolto, o aspetta ENTER.
+     * @return true if the server started, false on every configuration error and if the
+     *         port was taken. The non-interactive caller makes it its own exit
+     *         code: without a terminal nobody reads the red message on screen.
+     *         On the success path it does not return: either it keeps listening, or it waits for ENTER.
      */
     private static boolean startWebServer() {
-        // Un pannello alla volta (PanelInstanceLock): prima di qualunque riparazione all'avvio e prima di prendere il
-        // posto della parte web, che se c'e' gia' un pannello acceso e' la sua.
+        // One panel at a time (PanelInstanceLock): before any repair at startup and before taking the
+        // place of the web part, which, if a panel is already running, belongs to it.
         String running = org.daemoxcp.mail.system.PanelInstanceLock.acquire(java.time.Duration.ofSeconds(30));
         if (running != null) {
             System.out.println();
@@ -1276,11 +1277,11 @@ public class Main {
                     return false;
                 }
 
-                // Da adesso il pannello guarda l'Host della richiesta, e con un indirizzo
-                // wildcard quel nome non c'e': si accettano localhost e gli indirizzi di
-                // questa macchina. E' lo stato normale dopo l'installazione, che scrive
-                // 0.0.0.0, quindi lo si dice all'avvio invece di lasciarlo scoprire a chi
-                // apre il pannello con un nome e si vede rifiutare.
+                // From now on the panel looks at the request's Host, and with a wildcard
+                // address that name does not exist: localhost and the addresses of
+                // this machine are accepted. It is the normal state after installation, which writes
+                // 0.0.0.0, so it is said at startup instead of leaving it to be discovered by whoever
+                // opens the panel with a name and gets refused.
                 if (org.daemoxcp.mail.webserver.HostCheck.isWildcardHost(host)) {
                     System.out.println(ANSI_YELLOW + "The panel address is " + host
                             + " (listen everywhere), so it answers to localhost and to this"
@@ -1296,16 +1297,16 @@ public class Main {
                 String mysqlUser = result.getString("mysql_user");
                 String mysqlPassword = dbManager.mysqlPassword();
                 String mysqlDatabase = result.getString("mysql_database");
-                // Letti i valori, la lettura di SQLite si chiude QUI e non alla fine del try: sul
-                // percorso buono questo metodo non torna (resta in ascolto), e il ResultSet aperto
-                // teneva la lettura, cioe' il lock SHARED sul file, per tutta la vita del servizio.
-                // Ogni scrittura di un altro processo dalla stessa cartella (il menu, la console)
-                // finiva in SQLITE_BUSY: misurato sul clone il 06/11/2026 (reperti 156 e 160).
+                // Once the values are read, the SQLite read is closed HERE and not at the end of the try: on
+                // the good path this method does not return (it keeps listening), and the open ResultSet
+                // kept the read, that is, the SHARED lock on the file, for the whole life of the service.
+                // Every write by another process from the same folder (the menu, the console)
+                // ended in SQLITE_BUSY: measured on the clone on 2026-11-06 (findings 156 and 160).
                 result.close();
 
                 mailDatabase = new MailDatabase();
 
-                mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // rilegge la password a ogni ricollegamento
+                mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // reads the password again at every reconnection
                 mailDatabase.setCredentials(mysqlUser, mysqlPassword);
                 mailDatabase.setHost(mysqlHost);
                 mailDatabase.setPort(Integer.parseInt(mysqlPort));
@@ -1313,7 +1314,7 @@ public class Main {
 
                 if (mailDatabase.connect()) {
                     mysqlAvailable = true;
-                    // Le tabelle dell'accesso senza password, prima che il server risponda.
+                    // The tables of passwordless access, before the server answers.
                     try {
                         if (mailDatabase.hasAdminUser()) {
                             org.daemoxcp.mail.security.AuthStore.migrate();
@@ -1332,12 +1333,12 @@ public class Main {
                     System.out.println(ANSI_YELLOW + "Some features will be unavailable" + ANSI_RESET);
                 }
 
-                // La porta gia' occupata quasi sempre vuol dire una cosa sola: il pannello e'
-                // gia' acceso. Da quando puo' riaccendersi da solo dopo l'aggiornamento della
-                // JVM, capita di lanciarlo credendolo spento — e una traccia di stack Java non
-                // e' una risposta a "che e' successo?". Qui si dice chi occupa la porta.
-                // Il pannello separato: la parte web con l'utente daemoxcp_mail sulla porta, questa parte root
-                // senza porte. Se una condizione manca si resta come oggi, e lo si dice (PanelSeparation).
+                // A port already taken almost always means one thing only: the panel is
+                // already running. Since it can restart on its own after the JVM update,
+                // it happens that someone launches it believing it is down -- and a Java stack
+                // trace is not an answer to "what happened?". Here it says who holds the port.
+                // The separated panel: the web part with the daemoxcp_mail user on the port, this root part
+                // with no ports. If a condition is missing it stays as today, and says so (PanelSeparation).
                 SSLMailServer.Mode mode = SSLMailServer.Mode.LEGACY;
                 String notSeparated = org.daemoxcp.mail.system.PanelSeparation.prepare(port, setupRequired, mysqlAvailable);
                 if (notSeparated == null) mode = SSLMailServer.Mode.ROOT_PART;
@@ -1346,8 +1347,8 @@ public class Main {
                 try {
                     server = new SSLMailServer(port, certContent, keyContent, mode);
                     if (mode == SSLMailServer.Mode.ROOT_PART) {
-                        // Prima di accendere la web: il suo utente MySQL, che puo' solo chiamare le sue procedure
-                        // (0.8.2). Se non e' pronto la web entra come prima, e lo si dice.
+                        // Before starting the web part: its MySQL user, which can only call its procedures
+                        // (0.8.2). If it is not ready the web part logs in as before, and says so.
                         String webDb = org.daemoxcp.mail.database.WebDbAccess.ensure(mailDatabase);
                         if (webDb != null)
                             System.out.println(ANSI_YELLOW + "[WebDbAccess] the web part keeps the panel's MySQL user: " + webDb + ANSI_RESET);
@@ -1381,12 +1382,12 @@ public class Main {
                     return false;
                 }
                 server.start();
-                // Il guardiano dei lavori sui pacchetti morti a meta' mentre il servizio e' acceso
-                // (UpdateManager.startInterruptionWatch): prima ci pensava solo l'avvio.
+                // The watchdog of package jobs that died halfway while the service is running
+                // (UpdateManager.startInterruptionWatch): before, only the startup took care of it.
                 org.daemoxcp.mail.system.UpdateManager.startInterruptionWatch();
 
-                // La regola dei blocchi: i pacchetti dello stack di posta restano bloccati,
-                // tranne quelli sbloccati apposta da un amministratore.
+                // The lock rule: the mail stack packages stay locked,
+                // except those unlocked on purpose by an administrator.
                 try {
                     String policy = org.daemoxcp.mail.system.UpdateManager.applyLockPolicy();
                     if (!policy.isEmpty()) System.out.println(policy);
@@ -1409,16 +1410,16 @@ public class Main {
                 Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                     System.out.println();
                     System.out.println(ANSI_YELLOW + "Shutting down server..." + ANSI_RESET);
-                    // Prima la parte web, che senza la root non servirebbe piu' le API.
+                    // First the web part, which without the root would no longer serve the APIs.
                     org.daemoxcp.mail.system.PanelSeparation.stop();
                     finalServer.stop();
                 }));
 
                 if (nonInteractive) {
-                    // Senza terminale non si legge da stdin, in nessuna delle due forme che
-                    // prende: chiuso, readLine() torna subito null e il server si spegnerebbe
-                    // un istante dopo essersi acceso; pipe aperta, non torna affatto. Qui si
-                    // resta fermi finche' non arriva un segnale, e a quello pensa lo shutdown hook.
+                    // Without a terminal stdin is not read, in either of the two forms it
+                    // takes: closed, readLine() returns null at once and the server would shut down
+                    // an instant after starting; an open pipe, it never returns. Here we
+                    // stay still until a signal arrives, and the shutdown hook takes care of that.
                     System.out.println("Listening. To stop it: kill " + ProcessHandle.current().pid());
                     System.out.flush();
                     try { new java.util.concurrent.CountDownLatch(1).await(); }
@@ -1441,18 +1442,18 @@ public class Main {
             e.printStackTrace();
             waitForEnter();
         }
-        // Nessuna riga di configurazione in tabella, o un'eccezione: il server non e' partito.
+        // No configuration row in the table, or an exception: the server did not start.
         return false;
     }
 
     /**
-     * La separazione non si fa: un avviso nel registro, tranne quando e' una scelta (spenta a mano) o non
-     * e' il servizio (il menu, che gira da root con un terminale davanti).
+     * The separation does not happen: a warning in the log, except when it is a choice (turned off by hand) or it is
+     * not the service (the menu, which runs as root with a terminal in front).
      */
     private static void separationNotApplied(String why) {
         java.util.logging.Logger log = java.util.logging.Logger.getLogger(Main.class.getName());
         String text = "[PanelSeparation] NOT_APPLIED: " + why + "; the panel serves everything as root, as before";
-        // Stati attesi, non guasti: spenta a mano, installazione non finita, il menu senza root.
+        // Expected states, not faults: turned off by hand, installation not finished, the menu without root.
         boolean expected = why.startsWith("switched off") || why.startsWith("the first installation")
                 || why.startsWith("the panel is not running as root");
         if (expected || !nonInteractive) log.info(text);
@@ -1460,20 +1461,21 @@ public class Main {
     }
 
     /**
-     * La parte web del pannello separato, con l'utente daemoxcp_mail: la porta del pannello, i filtri, l'accesso,
-     * le pagine e le rotte pubbliche; le API di chi ha fatto l'accesso le passa alla parte root
-     * (SSLMailServer in modo WEB_PART). SQLite in sola lettura: la configurazione la scrive solo root.
+     * The web part of the separated panel, with the daemoxcp_mail user: the panel's port, the filters, the access,
+     * the pages and the public routes; the APIs of whoever has logged in are passed to the root part
+     * (SSLMailServer in WEB_PART mode). SQLite read-only: only root writes the configuration.
      *
-     * @return falso se non e' partita: daemon(8) la riavvia, e la root dopo ANSWER_SECONDS torna al modo di oggi
+     * @return false if it did not start: daemon(8) restarts it, and the root after ANSWER_SECONDS goes back to
+     *         today's mode
      */
-    /** Vero nella parte web del pannello separato (--web-part). */
+    /** True in the web part of the separated panel (--web-part). */
     static volatile boolean webPart = false;
 
     private static boolean startWebPart() {
         nonInteractive = true;
         webPart = true;
-        // Da qui la parte web non lancia comandi di sistema, salvo i pochi suoi (Shell.webPartOnly), e nel
-        // database fa solo le istruzioni del suo elenco (CatalogGuard).
+        // From here the web part runs no system commands, except its own few (Shell.webPartOnly), and in the
+        // database it runs only the statements on its list (CatalogGuard).
         org.daemoxcp.mail.util.Shell.webPartOnly();
         org.daemoxcp.mail.database.CatalogGuard.webPartOnly();
         if ("root".equals(System.getProperty("user.name"))) {
@@ -1507,8 +1509,8 @@ public class Main {
             mailDatabase.setHost(mysqlHost);
             mailDatabase.setPort(Integer.parseInt(mysqlPort));
             mailDatabase.setDatabase(mysqlDatabase);
-            // Il suo utente MySQL, che puo' solo chiamare le procedure della web (0.8.2, WebDbAccess), se la root
-            // lo ha preparato e provato; altrimenti, come prima, l'utente del pannello.
+            // Its MySQL user, which can only call the web part's procedures (0.8.2, WebDbAccess), if the root
+            // has prepared and tested it; otherwise, as before, the panel's user.
             String webPassword = org.daemoxcp.mail.security.PanelSecrets.text(org.daemoxcp.mail.security.PanelSecrets.MYSQL_WEB_PASSWORD);
             if (!webPassword.isEmpty()) {
                 mailDatabase.useRoutines(org.daemoxcp.mail.database.WebDbAccess.WEB_USER, () ->
@@ -1526,8 +1528,8 @@ public class Main {
             } else {
                 System.out.println("[WARNING] Web part: could not connect to MySQL");
             }
-            // La chiave delle sessioni e' della root, che le crea (A): senza, la web non riconoscerebbe nessuna
-            // sessione, e non parte (daemon la riavvia).
+            // The session key belongs to the root, which creates the sessions (A): without it, the web part would
+            // recognise no session, and it does not start (daemon restarts it).
             byte[] sessionKey = SSLMailServer.sessionKeyFromRoot(30_000);
             if (sessionKey == null) {
                 System.err.println("Web part: the root part did not give the session key");
@@ -1560,11 +1562,11 @@ public class Main {
                 String mysqlUser = result.getString("mysql_user");
                 String mysqlPassword = dbManager.mysqlPassword();
                 String mysqlDatabase = result.getString("mysql_database");
-                result.close();     // letti i valori: la lettura di SQLite non resta aperta mentre si lavora su MySQL
+                result.close();     // values read: the SQLite read does not stay open while working on MySQL
 
                 mailDatabase = new MailDatabase();
 
-                mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // rilegge la password a ogni ricollegamento
+                mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // reads the password again at every reconnection
                 mailDatabase.setCredentials(mysqlUser, mysqlPassword);
                 mailDatabase.setHost(mysqlHost);
                 mailDatabase.setPort(Integer.parseInt(mysqlPort));
@@ -1590,8 +1592,8 @@ public class Main {
     }
 
     /**
-     * Svuota il database del pannello e ricrea le tabelle vuote. Vero solo se non e' rimasta
-     * nessuna tabella di prima: "completato" si scrive solo allora, altrimenti si dice cosa resta.
+     * Empties the panel's database and recreates the empty tables. True only if no table from
+     * before is left: "completed" is written only then, otherwise it says what is left.
      */
     private static boolean resetDatabase() {
         System.out.println(ANSI_RED + "RESETTING MySQL database..." + ANSI_RESET);
@@ -1606,11 +1608,11 @@ public class Main {
             String mysqlUser = result.getString("mysql_user");
             String mysqlPassword = dbManager.mysqlPassword();
             String mysqlDatabase = result.getString("mysql_database");
-            result.close();     // letti i valori: la lettura di SQLite non resta aperta mentre si azzera MySQL
+            result.close();     // values read: the SQLite read does not stay open while MySQL is reset
 
             mailDatabase = new MailDatabase();
 
-            mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // rilegge la password a ogni ricollegamento
+            mailDatabase.setPasswordSource(dbManager::mysqlPassword);   // reads the password again at every reconnection
             mailDatabase.setCredentials(mysqlUser, mysqlPassword);
             mailDatabase.setHost(mysqlHost);
             mailDatabase.setPort(Integer.parseInt(mysqlPort));
@@ -1628,7 +1630,7 @@ public class Main {
                 error = e.getMessage();
             }
             try {
-                // Anche dopo un reset non riuscito: il pannello ritrova le tabelle che mancano.
+                // Even after a failed reset: the panel gets back the tables that are missing.
                 mailDatabase.createSchema();
             } catch (java.sql.SQLException e) {
                 error = (error == null ? "" : error + " ") + "Tables not recreated: " + e.getMessage();
@@ -1698,11 +1700,11 @@ public class Main {
     }
 
     /**
-     * java -jar daemoxcp-mail.jar --create-admin <nome> <email>: il primo amministratore,
-     * superadmin, senza password. Solo se non ce n'e' nessuno attivo: gli altri si aggiungono
-     * dalla pagina Amministratori, e chi ha perso l'accesso usa --access-code. Stampa un codice
-     * di accesso monouso, perche' l'email del server potrebbe non partire ancora (DNS da fare).
-     * Si aspetta mailDatabase gia' collegato; restituisce il codice di uscita del processo.
+     * java -jar daemoxcp-mail.jar --create-admin <name> <email>: the first administrator,
+     * superadmin, without a password. Only if there is no active one: the others are added
+     * from the Administrators page, and whoever lost access uses --access-code. Prints a one-time
+     * access code, because the server's email might not go out yet (DNS still to do).
+     * Expects mailDatabase already connected; returns the process exit code.
      */
     public static int createFirstAdmin(String username, String email, java.io.PrintStream out, java.io.PrintStream err) {
         if (!org.daemoxcp.mail.webserver.SecurityUtils.isValidUsername(username)) {
@@ -1734,7 +1736,7 @@ public class Main {
             });
             return 2;
         }
-        // Il nome del server di posta, scritto dall'installazione dal menu, anche nelle impostazioni.
+        // The mail server name, written by the installation from the menu, in the settings too.
         String hostname = dbManager != null ? dbManager.getMailHostname() : null;
         if (hostname != null && hostname.trim().contains(".") && mailDatabase.getSetting("mail_hostname", "").isEmpty())
             mailDatabase.setSetting("mail_hostname", hostname.trim().toLowerCase(java.util.Locale.ROOT));
@@ -1748,12 +1750,12 @@ public class Main {
     }
 
     /**
-     * Il pannello senza amministratore se ne accorge appena lo si crea dalla console: alla prima
-     * richiesta dopo, prepara le tabelle dell'accesso e mostra la pagina di accesso.
+     * The panel without an administrator notices as soon as one is created from the console: at the first
+     * request afterwards, it prepares the access tables and shows the login page.
      */
     public static synchronized void refreshSetupState() {
         if (!setupRequired || !mysqlAvailable || mailDatabase == null || !mailDatabase.hasAdminUser()) return;
-        // La parte web non migra niente: le tabelle dell'accesso le sistema la root, che sola le scrive (A).
+        // The web part migrates nothing: the access tables are set up by the root, the only one that writes them (A).
         if (webPart) {
             setupRequired = false;
             return;
@@ -1767,8 +1769,8 @@ public class Main {
     }
 
     /**
-     * Il collegamento a MySQL con i dati della configurazione, per i comandi da console e dal menu.
-     * Null se riesce, altrimenti il perche' (da mostrare a chi l'ha chiesto).
+     * The connection to MySQL with the configuration data, for the console and menu commands.
+     * Null if it succeeds, otherwise the reason (to show to whoever asked for it).
      */
     static String connectFromConfig() {
         try (ResultSet result = dbManager.get_data_config()) {
@@ -1783,18 +1785,21 @@ public class Main {
         return null;
     }
 
-    /** La lingua della console: la sceglie chooseConsoleLanguage, una volta, all'avvio. */
+    /** The console language: chooseConsoleLanguage picks it, once, at startup. */
     static String consoleLanguage = "en";
 
-    /** Vero se la lingua viene da --lang o dal terminale: allora un comando per un amministratore non la cambia. */
+    /**
+     * True if the language comes from --lang or from the terminal: then a command for an administrator does not
+     * change it.
+     */
     static boolean consoleLanguageAsked = false;
 
     /**
-     * La lingua della console (menu a schermo e comandi da riga di comando), nell'ordine di ConsoleLanguage: --lang xx,
-     * la lingua del terminale (LC_ALL, LC_MESSAGES, LANG), la lingua del pannello (del primo amministratore attivo che
-     * ne ha scelta una), l'inglese (anche su un server non ancora installato, o con MySQL fermo). La lingua di un
-     * amministratore per i suoi comandi la mette useAdminLanguage. Diventa la lingua del processo (I18n), cosi' ogni
-     * testo della console la segue senza passarsela.
+     * The console language (on-screen menu and command-line commands), in ConsoleLanguage's order: --lang xx,
+     * the terminal's language (LC_ALL, LC_MESSAGES, LANG), the panel's language (of the first active administrator who
+     * has chosen one), English (also on a server not yet installed, or with MySQL stopped). The language of an
+     * administrator for their own commands is set by useAdminLanguage. It becomes the process language (I18n), so every
+     * console text follows it without passing it around.
      */
     static void chooseConsoleLanguage(String[] args) {
         java.util.List<String> languages = org.daemoxcp.mail.i18n.I18n.LANGUAGES;
@@ -1807,8 +1812,8 @@ public class Main {
     }
 
     /**
-     * Un comando per un amministratore (--access-code nome) parla la lingua che lui ha scelto nel pannello, se c'e' e
-     * se --lang o il terminale non ne hanno gia' detta una: il codice e' per lui.
+     * A command for an administrator (--access-code name) speaks the language they chose in the panel, if there is one
+     * and if --lang or the terminal have not already given one: the code is for them.
      */
     static void useAdminLanguage(String username) {
         if (consoleLanguageAsked || username == null || mailDatabase == null) return;
@@ -1819,11 +1824,11 @@ public class Main {
     private static void useConsoleLanguage(String lang) {
         consoleLanguage = lang;
         org.daemoxcp.mail.i18n.I18n.setProcessLanguage(consoleLanguage);
-        // Anche i pulsanti delle finestre di Lanterna (OK, Annulla, Si', No): li sceglie dalla lingua predefinita.
+        // The buttons of Lanterna's windows too (OK, Cancel, Yes, No): it picks them from the default language.
         java.util.Locale.setDefault(java.util.Locale.forLanguageTag(consoleLanguage));
     }
 
-    /** La lingua del pannello letta da MySQL con una connessione sola, chiusa subito; null se non si legge. */
+    /** The panel language read from MySQL with a single connection, closed at once; null if it cannot be read. */
     static String savedPanelLanguage() {
         try (ResultSet result = dbManager.get_data_config()) {
             if (!result.next()) return null;
@@ -1835,10 +1840,10 @@ public class Main {
         }
     }
 
-    /** Un MailDatabase con la configurazione del pannello (la riga di SQLite), non ancora collegato. */
+    /** A MailDatabase with the panel's configuration (the SQLite row), not yet connected. */
     static MailDatabase configuredMailDatabase(ResultSet result) throws java.sql.SQLException {
         MailDatabase db = new MailDatabase();
-        db.setPasswordSource(dbManager::mysqlPassword);   // rilegge la password a ogni ricollegamento
+        db.setPasswordSource(dbManager::mysqlPassword);   // reads the password again at every reconnection
         db.setCredentials(result.getString("mysql_user"), dbManager.mysqlPassword());
         db.setHost(result.getString("mysql_host"));
         db.setPort(Integer.parseInt(result.getString("mysql_port")));
@@ -1846,17 +1851,17 @@ public class Main {
         return db;
     }
 
-    /** L'esito di un comando da console: il testo da mostrare e se e' riuscito. */
+    /** The outcome of a console command: the text to show and whether it succeeded. */
     record ConsoleResult(boolean ok, String text) {}
 
     /**
-     * Un codice di accesso monouso per un amministratore attivo (quello col nome dato, o l'unico).
-     * Si aspetta mailDatabase gia' collegato.
+     * A one-time access code for an active administrator (the one with the given name, or the only one).
+     * Expects mailDatabase already connected.
      */
     static ConsoleResult accessCode(String username) {
         try {
-            // Lo schema prima, come --create-admin (reperto 248): su un server appena installato le tabelle
-            // dell'accesso non ci sono ancora.
+            // The schema first, like --create-admin (finding 248): on a freshly installed server the access
+            // tables are not there yet.
             mailDatabase.createSchema();
             org.daemoxcp.mail.security.AuthStore.migrate();
         } catch (Exception e) {
@@ -1878,8 +1883,8 @@ public class Main {
     }
 
     /**
-     * Dal menu del terminale: il codice di accesso di emergenza, per quando passkey ed email non
-     * bastano. Se non c'e' ancora nessun amministratore, si crea qui il primo.
+     * From the terminal menu: the emergency access code, for when passkeys and email are not
+     * enough. If there is no administrator yet, the first one is created here.
      */
     private static void emergencyAccess(MultiWindowTextGUI gui) {
         String title = org.daemoxcp.mail.i18n.I18n.tr("console.menu.code");
@@ -1889,7 +1894,7 @@ public class Main {
             return;
         }
         try {
-            mailDatabase.createSchema();   // reperto 248, come --create-admin
+            mailDatabase.createSchema();   // finding 248, like --create-admin
             org.daemoxcp.mail.security.AuthStore.migrate();
         } catch (Exception e) {
             message(gui, title, org.daemoxcp.mail.i18n.I18n.tr("console.code.tablesFailed", java.util.Map.of("e", String.valueOf(e.getMessage()))));
@@ -1925,9 +1930,9 @@ public class Main {
     }
 
     /**
-     * java -jar daemoxcp-mail.jar --access-code [nome]: un codice monouso di otto cifre
-     * per entrare senza email ne' passkey (primo accesso, email persa). Lo genera solo chi ha una
-     * shell sul server; vale 15 minuti, una volta. Restituisce il codice di uscita del processo.
+     * java -jar daemoxcp-mail.jar --access-code [name]: a one-time eight-digit code
+     * to get in without email or passkey (first access, lost email). Only whoever has a
+     * shell on the server can generate it; it is valid for 15 minutes, once. Returns the process exit code.
      */
     static int printAccessCode(String username) {
         String notConnected = connectFromConfig();
@@ -1942,15 +1947,17 @@ public class Main {
     }
 
     /**
-     * --ip-family: IPv4, IPv6, tutte e due, o la posta in IPv6 solo in uscita (ipv6out), dalla console, come la scheda delle Impostazioni ma senza avvisi da
-     * confermare: e' la strada di chi ha scelto una famiglia sola e da li' non raggiunge piu' il pannello. Gli stessi
-     * controlli (indirizzo e rotta nella famiglia che resta) e lo stesso ritorno a com'era se un servizio non regge.
-     * Da root: riscrive le configurazioni di Postfix, Dovecot e nginx e ricarica pf.
+     * --ip-family: IPv4, IPv6, both, or mail over IPv6 outbound only (ipv6out), from the console, like the Settings
+     * tab but without warnings to confirm: it is the road for whoever chose a single family and from there can no
+     * longer reach the panel. The same checks (address and route in the family that remains) and the same return
+     * to how it was if a service does not hold.
+     * As root: rewrites the Postfix, Dovecot and nginx configurations and reloads pf.
      */
     /**
-     * --empty-folders: lo svuotamento d'emergenza della Junk e/o del Cestino, di tutte le caselle (all) o di quelle
-     * date, subito (EmergencyEmpty). Solo da root e da un terminale: mostra quanti messaggi toglie e chiede di scrivere
-     * quel numero. Lo svuotamento di tutti i giorni e' automatico, casella per casella, dal pannello o dalla webmail.
+     * --empty-folders: the emergency emptying of Junk and/or Trash, of all mailboxes (all) or of the given
+     * ones, right now (EmergencyEmpty). Only as root and from a terminal: shows how many messages it removes and
+     * asks to type that number. The everyday emptying is automatic, mailbox by mailbox, from the panel or from
+     * the webmail.
      */
     static int emptyFolders(String[] rest) {
         String usage = org.daemoxcp.mail.i18n.I18n.tr("console.usage", java.util.Map.of("cmd",
@@ -1964,7 +1971,8 @@ public class Main {
             System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.asRoot"));
             return 2;
         }
-        // Da Java 22 System.console() c'e' anche senza un terminale: isTerminal() dice se dall'altra parte c'e' qualcuno.
+        // Since Java 22 System.console() exists even without a terminal: isTerminal() says whether someone is on
+        // the other side.
         java.io.Console terminal = System.console();
         if (terminal == null || !terminal.isTerminal()) {
             System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.empty.terminal"));
@@ -2038,7 +2046,8 @@ public class Main {
             System.err.println(org.daemoxcp.mail.i18n.I18n.tr("console.ipf.asRoot"));
             return 2;
         }
-        // In console le righe INFO dei servizi toccati sono rumore: restano avvisi ed errori, e l'esito qui sotto.
+        // In the console the INFO lines of the services touched are noise: warnings and errors remain, and the
+        // outcome below.
         java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");
         rootLogger.setLevel(java.util.logging.Level.WARNING);
         for (java.util.logging.Handler h : rootLogger.getHandlers()) h.setLevel(java.util.logging.Level.WARNING);
@@ -2055,7 +2064,7 @@ public class Main {
                 return 1;
             }
             mailDatabase.logAuditEvent("IP_FAMILY_CHANGED", "127.0.0.1", f.key + " (console)", "console");
-            // Il firewall del pannello (liste, paesi) segue la scelta: la sua prima regola rifiuta la famiglia chiusa.
+            // The panel's firewall (lists, countries) follows the choice: its first rule refuses the closed family.
             org.daemoxcp.mail.security.PfFirewallManager.ApplyResult fw = org.daemoxcp.mail.security.PfFirewallManager.reapplySaved();
             if (fw != null && !fw.success) System.out.println("  " + org.daemoxcp.mail.i18n.I18n.tr("console.ipf.fwNotReloaded", java.util.Map.of("e", String.valueOf(fw.message))));
             System.out.println(switch (f) {
@@ -2072,10 +2081,10 @@ public class Main {
     }
 
     /**
-     * --addresses: gli indirizzi del server dalla console, la via d'uscita di chi non raggiunge piu' il pannello dopo un
-     * passo della guida (ServerAddresses). show li mostra; ipv6-off toglie l'IPv6 aggiunto dal pannello e rimette le
-     * righe di rc.conf di prima; ipv4-dhcp riprende l'IPv4 col DHCP. Gli stessi controlli e lo stesso ritorno a com'era
-     * della pagina. Da root: ifconfig, route e rc.conf. SSH non si tocca.
+     * --addresses: the server's addresses from the console, the way out for whoever can no longer reach the
+     * panel after a step of the guide (ServerAddresses). show displays them; ipv6-off removes the IPv6 added by
+     * the panel and puts back the previous rc.conf lines; ipv4-dhcp takes IPv4 back with DHCP. The same checks
+     * and the same return to how it was as the page. As root: ifconfig, route and rc.conf. SSH is not touched.
      */
     static int addresses(String value) {
         if (value == null || !java.util.List.of("show", "ipv6-off", "ipv4-dhcp").contains(value)) {
@@ -2121,7 +2130,7 @@ public class Main {
         }
     }
 
-    /** All'avvio: se nessun amministratore puo' entrare, come si fa. */
+    /** At startup: if no administrator can get in, how to do it. */
     static void warnIfNoLogin() {
         boolean someoneCanLogIn = org.daemoxcp.mail.security.AuthStore.admins().stream().anyMatch(a -> a.active()
                 && (a.hasEmail() || !org.daemoxcp.mail.security.AuthStore.passkeysOf(a.id()).isEmpty()));

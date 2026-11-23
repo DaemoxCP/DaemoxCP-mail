@@ -1,8 +1,8 @@
-// The page tells when the mail server did not get the rules (reperto 223), in Chromium against the REAL server
+// The page tells when the mail server did not get the rules (finding 223), in Chromium against the REAL server
 // (SieveRulesE2EServer on the test VM: the Java handlers, the generated pages, the test MySQL and the real
 // SieveGenerator, which writes as root under /var/mail/sieve).
 //
-// PHASE=refused (the default), with /var/mail at FreeBSD's 0775, so root refuses to write any rule (reperto 221):
+// PHASE=refused (the default), with /var/mail at FreeBSD's 0775, so root refuses to write any rule (finding 221):
 //  1. Mailboxes, "Forwarding" of alice: a forward added. The notice says the change is saved in the panel but the
 //     mail server did not get it (server.sieve.notWritten), it stays until closed, it is on top of the dialog; the
 //     forward is in the list (saved in the panel) and the field is empty, so nobody adds it twice.

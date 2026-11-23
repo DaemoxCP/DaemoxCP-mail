@@ -1,12 +1,13 @@
-        // ========== Indirizzi del server: IPv4 e IPv6 (ServerAddresses, AddressGuide) ==========
-        // Lo stato del server, l'obiettivo, e i passi numerati (fatto / adesso / dopo / bloccato) con UN pulsante per il
-        // passo di adesso. Tutto costruito con il DOM: niente testo del server dentro innerHTML.
+        // ========== Server addresses: IPv4 and IPv6 (ServerAddresses, AddressGuide) ==========
+        // The server's state, the goal, and the numbered steps (done / now / later / blocked) with ONE button for
+        // the current step. All built with the DOM: no server text inside innerHTML.
 
         let addrData = null;
 
-        // Lo stato si chiede piu' volte (dopo un passo, cambiando obiettivo, il ricontrollo da solo) e ogni risposta ci mette
-        // qualche secondo (le prove d'uscita vere): si disegna solo la risposta dell'ultima domanda. Prima una risposta lenta
-        // per l'obiettivo di prima poteva arrivare dopo e coprire quello scelto dopo (visto nella prova nel browser).
+        // The state is requested several times (after a step, when changing goal, the automatic recheck) and
+        // every answer takes a few seconds (the real outbound tests): only the answer to the last request is
+        // drawn. Before, a slow answer for the previous goal could arrive later and cover the one chosen
+        // afterwards (seen in the browser test).
         let addrSeq = 0;
 
         function addrFetchState() {
@@ -15,7 +16,7 @@
                 .then(d => (id === addrSeq ? d : null));
         }
 
-        // Ogni testo con la sua chiave scritta per intero: I18nTest le cerca cosi' in entrambe le lingue.
+        // Every text with its key written in full: that is how I18nTest finds them in both languages.
         function addrStatusText(s) {
             switch (s) {
                 case 'done': return t('addr.status.done');
@@ -88,7 +89,7 @@
         }
 
 
-        // I passi dal provider, quando il provider e' riconosciuto (oggi Hetzner Cloud).
+        // The steps at the provider, when the provider is recognized (today Hetzner Cloud).
         function addrHowHetzner(id, p) {
             switch (id) {
                 case 'v4Ptr': return t('guide.howHetzner.v4Ptr', p);
@@ -97,8 +98,8 @@
             }
         }
 
-        // L'obiettivo: IPv4 e IPv6 con la casella «La posta entra anche in IPv6» spenta e' «send6», la posta in IPv6
-        // solo in uscita; la casella vale solo per IPv4 e IPv6.
+        // The goal: IPv4 and IPv6 with the "Mail also comes in over IPv6" box off is "send6", mail over IPv6
+        // only outbound; the box applies only to IPv4 and IPv6.
         function addrGoal() {
             const r = document.querySelector('input[name="addrGoal"]:checked');
             const g = r ? r.value : 'both';
@@ -114,16 +115,16 @@
             return e;
         }
 
-        // hidden: solo per gli screen reader (la riga e' un role=status sempre nella pagina), quando lo stesso esito si
-        // vede gia' accanto al pulsante che l'ha chiesto, in fondo alla scheda e lontano da qui.
+        // hidden: only for screen readers (the line is a role=status always in the page), when the same outcome
+        // is already visible next to the button that asked for it, at the bottom of the card and far from here.
         function addrSay(text, kind, hidden) {
             const el = document.getElementById('addrStatus');
             el.className = hidden ? 'visually-hidden' : 'small mb-2 text-' + (kind || 'muted');
             el.textContent = text || '';
         }
 
-        // L'ora di un controllo, nella lingua del pannello, coi secondi: due controlli nello stesso minuto si
-        // distinguono, e lo screen reader legge di nuovo una frase che e' cambiata.
+        // The time of a check, in the panel's language, with seconds: two checks in the same minute can be
+        // told apart, and the screen reader reads again a sentence that has changed.
         function addrTime() {
             return new Date().toLocaleTimeString(window.I18N_LANG, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         }
@@ -136,7 +137,7 @@
             return true;
         }
 
-        // Si o no o «non controllato»: la parola e un'icona che non e' l'unico segnale (r9: il colore non basta).
+        // Yes or no or "not checked": the word and an icon that is not the only signal (r9: color is not enough).
         function addrYesNo(v) {
             const span = addrEl('span', v === true ? 'text-success' : v === false ? 'text-danger' : 'text-muted');
             const icon = addrEl('i', 'fas me-1 ' + (v === true ? 'fa-check' : v === false ? 'fa-times' : 'fa-question'));
@@ -156,7 +157,8 @@
             return tr;
         }
 
-        // Il valore {ip} dei testi: l'IPv6 del server (o quello suggerito) per i passi IPv6, l'IPv4 pubblico per gli altri.
+        // The {ip} value of the texts: the server's IPv6 (or the suggested one) for the IPv6 steps, the public
+        // IPv4 for the others.
         function addrParams(id) {
             const d = addrData;
             const v6 = (d.state.v6.addresses && d.state.v6.addresses[0]) || (d.suggestion && d.suggestion.address) || '';
@@ -188,8 +190,8 @@
             return wrap;
         }
 
-        // Il pannello del passo di adesso: la spiegazione e UN pulsante.
-        // Un valore da scrivere altrove (la console del provider): l'etichetta, il valore, e «Copia».
+        // The panel of the current step: the explanation and ONE button.
+        // A value to write elsewhere (the provider's console): the label, the value, and "Copy".
         function addrCopyRow(label, value) {
             const row = addrEl('div', 'd-flex flex-wrap align-items-center gap-2 mb-2');
             const code = addrEl('code', 'text-break', value);
@@ -208,7 +210,7 @@
             if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(value).then(done).catch(() => {});
         }
 
-        // Il pannello del passo di adesso: la spiegazione e UN pulsante.
+        // The panel of the current step: the explanation and ONE button.
         function addrNowPanel(step) {
             const d = addrData;
             const box = addrEl('div', 'border rounded p-2 mt-2');
@@ -223,7 +225,7 @@
             const hetzner = d.provider === 'hetzner' && ['v4Ptr', 'v6Ptr'].includes(step.id);
             box.append(addrEl('p', 'small mb-2', manual ? addrHowManual(step.id, params) : hetzner ? addrHowHetzner(step.id, params) : addrHow(step.id, params)));
 
-            // Il DNS inverso: i valori da scrivere nella console del provider, con «Copia», e cosa da' adesso.
+            // The reverse DNS: the values to write in the provider's console, with "Copy", and what it gives now.
             if (['v4Ptr', 'v6Ptr'].includes(step.id)) {
                 const v6 = step.id === 'v6Ptr';
                 if (v6 && hetzner && d.state.v6.hostPart) box.append(addrCopyRow(t('addr.copyAddressField'), d.state.v6.hostPart));
@@ -246,7 +248,7 @@
                 const again = addrButton(t('addr.checkAgain'), 'addrRecheck()', false);
                 again.dataset.recheck = '1';
                 box.append(again);
-                // Quando e' stato l'ultimo controllo, da solo o col pulsante: si vede che il pannello sta guardando.
+                // When the last check was, automatic or by button: it shows that the panel is watching.
                 const last = addrEl('p', 'small text-muted mt-2 mb-0', t('addr.lastCheck', { time: addrTime() }));
                 last.id = 'addrLastCheck';
                 box.append(last);
@@ -263,7 +265,7 @@
                         addrField('addrV6Gateway', t('addr.fieldGateway'), sg ? sg.gateway.replace(/%.*$/, '') : 'fe80::1', 'addrFieldHint'),
                         hint];
                     if (sg) {
-                        // Il provider l'ha gia' detto: una frase e il pulsante; i campi solo dietro «Cambia».
+                        // The provider has already said so: a sentence and the button; the fields only behind "Change".
                         box.append(addrEl('p', 'small mb-2', t('addr.suggested', { ip: sg.address, p: sg.prefix, gw: sg.gateway.replace(/%.*$/, '') })));
                         const det = addrEl('details', 'mb-2');
                         det.append(addrEl('summary', 'small', t('addr.change')));
@@ -292,8 +294,9 @@
             return box;
         }
 
-        // Quando il passo di adesso e' dell'amministratore (fuori dal pannello), il pannello ricontrolla da solo ogni 30
-        // secondi, per 10 minuti; ridisegna solo se qualcosa e' cambiato, cosi' non toglie il fuoco a chi sta leggendo.
+        // When the current step is the administrator's (outside the panel), the panel rechecks by itself every
+        // 30 seconds, for 10 minutes; it redraws only if something has changed, so it does not take focus away
+        // from whoever is reading.
         let addrTimer = null, addrRechecks = 0, addrShown = '';
 
         function addrSchedule(d) {
@@ -344,10 +347,11 @@
             });
         }
 
-        // I passi che, senza un account Cloudflare che veda la zona, l'amministratore fa a mano nel suo DNS.
+        // The steps that, without a Cloudflare account that sees the zone, the administrator does by hand in
+        // their DNS.
         const addrManualIds = ['v4Dns', 'v6Dns', 'webAaaa', 'webA', 'v6DnsRemove', 'v4DnsRemove'];
-        // Alla prima risposta la casella «La posta entra anche in IPv6» prende com'e' il server: accesa se la posta
-        // riceve gia' in IPv6. Senza, spenta: la scelta consigliata.
+        // At the first answer the "Mail also comes in over IPv6" box takes the server's state: on if mail
+        // already receives over IPv6. Otherwise, off: the recommended choice.
         let addrSynced = false;
 
         function addrLoad() {
@@ -366,12 +370,14 @@
             }).catch(() => addrSay(t('addr.failedGeneric'), 'danger'));
         }
 
-        // La casella «La posta entra anche in IPv6» e' un acceso/spento vero. Se gli altri passi sono gia' fatti e manca
-        // solo quello della posta, toccarla applica subito la scelta, dopo UNA conferma: cosa succede e gli avvisi che
-        // IpFamily darebbe (chi la tocca da quale famiglia arriva), chiesti prima senza cambiare niente. Se si annulla o
-        // non riesce, la casella torna com'era: cosi' dice sempre com'e' il server. Se mancano altri passi la casella
-        // sceglie soltanto, e la guida mostra i passi che mancano. Prima sceglieva e basta, e serviva anche il pulsante
-        // dell'ultimo passo: due gesti per un acceso/spento (chiesto dall'amministratore il 19/11).
+        // The "Mail also comes in over IPv6" box is a real on/off switch. If the other steps are already done
+        // and only the mail one is missing, touching it applies the choice at once, after ONE confirmation:
+        // what happens and the warnings IpFamily would give (whoever touches it, which family they arrive
+        // from), asked for first without changing anything. If it is cancelled or does not succeed, the box
+        // goes back to how it was: so it always says how the server is. If other steps are missing the box
+        // only chooses, and the guide shows the missing steps. Before, it only chose, and the button of the
+        // last step was also needed: two gestures for an on/off switch (asked by the administrator on
+        // 19 November).
         async function addrSwitch() {
             const sw = document.getElementById('addrInbound6');
             const was = !sw.checked;
@@ -387,8 +393,9 @@
             const last = open.length === 1 && open[0].status === 'now' && ['mailBoth', 'mailSend6'].includes(open[0].id) ? open[0].id : '';
             if (!last) return;
             const family = last === 'mailBoth' ? 'both' : 'ipv6out';
-            // Gli avvisi della scelta, senza farla. Se non arrivano si chiede la scelta senza «confermata»: se ce ne sono,
-            // IpFamily li manda indietro e addrMail li mostra in una seconda conferma, prima di cambiare.
+            // The warnings of the choice, without making it. If they do not arrive the choice is requested
+            // without `confirmed`: if there are any, IpFamily sends them back and addrMail shows them in a
+            // second confirmation, before changing.
             let warnings = null;
             try {
                 const w = await fetch('/api/ip-family?family=' + encodeURIComponent(family)).then(r => r.json());
@@ -404,10 +411,11 @@
             sw.focus();
         }
 
-        // «Controlla di nuovo»: dice sempre com'e' andata, accanto al pulsante. Prima, se non era cambiato niente, la
-        // pagina si ridisegnava uguale e non diceva nulla: sembrava che il pulsante non facesse niente (visto sul server
-        // vero, aspettando il DNS inverso). Se non e' cambiato niente la pagina non si ridisegna e il fuoco resta sul
-        // pulsante; se e' cambiato, il fuoco torna sul pulsante del passo nuovo, se ce l'ha.
+        // "Check again": it always says how it went, next to the button. Before, if nothing had changed, the
+        // page was redrawn identical and said nothing: it looked as if the button did nothing (seen on the
+        // production server, waiting for the reverse DNS). If nothing has changed the page is not redrawn and
+        // focus stays on the button; if it has changed, focus goes back to the button of the new step, if it
+        // has one.
         function addrRecheck() {
             addrRechecks = 0;
             const btn = document.querySelector('#addrSteps button[data-recheck]');
@@ -441,7 +449,7 @@
             document.querySelectorAll('#addrCard button, #addrCard input').forEach(e => { e.disabled = locked; });
         }
 
-        // Un passo del pannello: POST, l'esito con il nome del registro, poi lo stato di nuovo (il passo dopo).
+        // A panel step: POST, the outcome with the log's name, then the state again (the next step).
         function addrPost(body) {
             addrLock(true);
             addrSay(t('addr.working'), 'muted');
@@ -458,7 +466,7 @@
             }).catch(() => { addrLock(false); addrSay(t('addr.failedGeneric'), 'danger'); });
         }
 
-        // Ricarica lo stato senza cancellare l'esito appena scritto.
+        // Reloads the state without erasing the outcome just written.
         function addrLoadKeepingStatus() {
             return addrFetchState().then(d => {
                 if (d && d.success) addrRender(d);
@@ -491,9 +499,10 @@
             return addrPost({ action: 'dns', type: type, op: op });
         }
 
-        // La posta: la stessa scelta della scheda «IPv4 e IPv6» (IpFamily). Prima senza conferma: se IpFamily ha degli
-        // avvisi (chi la sceglie da quale famiglia arriva, i record che restano) si mostrano, e solo dopo un «si'» si va.
-        // Restituisce vero solo se la scelta e' stata applicata (la casella di sopra torna com'era se no).
+        // Mail: the same choice as the "IPv4 and IPv6" card (IpFamily). Before, without confirmation: if
+        // IpFamily has warnings (whoever chooses it, which family they arrive from, the records that
+        // remain) they are shown, and only after a "yes" does it go ahead. Returns true only if the choice
+        // has been applied (otherwise the box above goes back to how it was).
         async function addrMail(family, confirmed) {
             addrLock(true);
             addrSay(t('set.ipfApplying'), 'muted');

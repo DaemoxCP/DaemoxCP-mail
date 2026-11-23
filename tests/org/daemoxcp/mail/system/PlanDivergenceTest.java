@@ -15,7 +15,7 @@ import org.json.JSONObject;
  * checked its ten, found them all "ok" and concluded "verification passed".
  *
  * Here the comparison with the inventory is tested, which looks from the other direction. The
- * first case is that reperto, with its data.
+ * first case is that finding, with its data.
  *
  * The inventory lines are the real ones of {@code pkg query '%n\t%v\t%k'}, read by the real parser:
  * a test on maps built by hand would skip exactly the place where a key or format defect hides.
@@ -26,7 +26,7 @@ public class PlanDivergenceTest {
 
     public static void main(String[] args) {
 
-        // ===== 1. Reperto 14, with its data =====
+        // ===== 1. Finding 14, with its data =====
         // Before: lmdb installed. The plan: install lmdb0, upgrade nginx, reinstall cyrus-sasl. No
         // removal. After: lmdb is no longer there.
         Map<String, String> before = PackagePlan.versionsOnly(PackagePlan.installed(

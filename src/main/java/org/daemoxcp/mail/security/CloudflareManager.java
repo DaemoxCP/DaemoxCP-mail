@@ -15,14 +15,14 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * Integrazione Cloudflare DNS API per la rotazione DKIM automatica.
+ * Cloudflare DNS API integration for automatic DKIM rotation.
  *
- * MULTI-ACCOUNT: ogni account = una riga in {@code cloudflare_accounts}
- * con label, email (informativa) e api_token. Ogni dominio si lega a un
- * account specifico (column domains.cloudflare_account_id). Questo
- * permette di gestire domini su account Cloudflare differenti.
+ * MULTI-ACCOUNT: each account = one row in {@code cloudflare_accounts}
+ * with label, email (informational) and api_token. Each domain is tied to a
+ * specific account (column domains.cloudflare_account_id). This
+ * allows managing domains on different Cloudflare accounts.
  *
- * Token con permessi minimi: Zone:Read + DNS:Edit, scope "Include - Specific zone".
+ * Token with minimal permissions: Zone:Read + DNS:Edit, scope "Include - Specific zone".
  */
 public class CloudflareManager {
 
@@ -30,14 +30,14 @@ public class CloudflareManager {
 
     private final MailDatabase database;
     private final HttpClient http;
-    /** L'indirizzo dell'API: quello di Cloudflare, o nelle prove un server finto sulla macchina. */
+    /** The API address: Cloudflare's, or in the tests a fake server on the machine. */
     private final String apiBase;
 
     public CloudflareManager(MailDatabase database) {
         this(database, API_BASE);
     }
 
-    /** Per le prove: lo stesso gestore, verso un'API finta. */
+    /** For the tests: the same manager, pointed at a fake API. */
     CloudflareManager(MailDatabase database, String apiBase) {
         this.database = database;
         this.apiBase = apiBase;
@@ -61,7 +61,7 @@ public class CloudflareManager {
         return database.getCloudflareAccountForDomain(domainId);
     }
 
-    /** Verifica il token; se valido, lo salva come nuovo account. */
+    /** Verifies the token; if valid, saves it as a new account. */
     public AddAccountResult addAccount(String label, String email, String apiToken) {
         try {
             if (label == null || label.isBlank()) {
@@ -83,11 +83,11 @@ public class CloudflareManager {
     }
 
     /**
-     * Aggiorna label/email di un account esistente; opzionalmente
-     * aggiorna anche il token (se non-null/non-vuoto, viene verificato).
+     * Updates label/email of an existing account; optionally
+     * also updates the token (if non-null/non-empty, it is verified).
      *
-     * Se il nuovo token combacia esattamente con quello già salvato,
-     * lo salta e restituisce un messaggio specifico ("Il token è invariato").
+     * If the new token matches exactly the one already saved,
+     * it skips it and returns a specific message ("The token is unchanged").
      */
     public AddAccountResult updateAccount(int id, String label, String email, String newToken) {
         try {
@@ -100,7 +100,7 @@ public class CloudflareManager {
                 labelOrEmailUpdated = true;
             }
 
-            // Token: caso null/vuoto → nessun cambio token, ok
+            // Token: null/empty case -> no token change, ok
             if (newToken == null || newToken.isBlank()) {
                 return new AddAccountResult(true, id,
                     labelOrEmailUpdated ? I18n.tr("server.cfm.labelUpdated") : I18n.tr("server.cfm.noChange"));
@@ -108,7 +108,7 @@ public class CloudflareManager {
 
             String trimmed = newToken.trim();
 
-            // Caso: stesso identico token di prima → segnala e non rilanciare la verifica Cloudflare
+            // Case: the very same token as before -> report it and do not run the Cloudflare verification again
             if (a.apiToken != null && trimmed.equals(a.apiToken)) {
                 return new AddAccountResult(true, id,
                     labelOrEmailUpdated
@@ -116,7 +116,7 @@ public class CloudflareManager {
                         : I18n.tr("server.cfm.sameToken"));
             }
 
-            // Token davvero nuovo → verifica e salva
+            // Truly new token -> verify and save
             TokenCheck tc = verifyToken(trimmed);
             if (!tc.valid) return new AddAccountResult(false, id, I18n.tr("server.cfm.tokenInvalid", java.util.Map.of("m", String.valueOf(tc.message))));
             database.updateCloudflareAccountToken(id, trimmed);
@@ -137,7 +137,7 @@ public class CloudflareManager {
         return database.assignCloudflareAccountToDomain(domainId, accountId);
     }
 
-    /** Vero se il dominio ha un account CF assegnato. */
+    /** True if the domain has a CF account assigned. */
     public boolean hasAccountForDomain(int domainId) {
         try {
             return database.getCloudflareAccountForDomain(domainId) != null;
@@ -149,7 +149,7 @@ public class CloudflareManager {
     // ========= Cloudflare API calls =========
 
     /**
-     * Verifica un token (GET /user/tokens/verify).
+     * Verifies a token (GET /user/tokens/verify).
      */
     public TokenCheck verifyToken(String token) {
         try {
@@ -171,8 +171,8 @@ public class CloudflareManager {
     }
 
     /**
-     * Trova la zona Cloudflare per un dominio. Risale a livelli superiori se
-     * il dominio è un sotto-dominio gestito da una zona apex.
+     * Finds the Cloudflare zone for a domain. Goes up to higher levels if
+     * the domain is a subdomain managed by an apex zone.
      */
     public ZoneLookup findZone(String token, String domain) {
         try {
@@ -207,9 +207,9 @@ public class CloudflareManager {
             JSONObject payload = new JSONObject();
             payload.put("type", "TXT");
             payload.put("name", name);
-            // Pre-formatta il content secondo RFC 1035: stringhe TXT max 255 char ciascuna,
-            // ognuna racchiusa tra virgolette, separate da spazio. Così Cloudflare non
-            // mostra avvisi di quoting e il record è esplicitamente conforme.
+            // Pre-formats the content according to RFC 1035: TXT strings of max 255 chars each,
+            // each one enclosed in quotes, separated by a space. This way Cloudflare does not
+            // show quoting warnings and the record is explicitly compliant.
             payload.put("content", formatTxtRecordContent(value));
             payload.put("ttl", ttl <= 0 ? 1 : ttl);
             payload.put("comment", txtComment(name));
@@ -226,8 +226,10 @@ public class CloudflareManager {
         }
     }
 
-    /** Il commento di un TXT del pannello: quello della rotazione sui record DKIM (DkimManager lo rilegge), altrimenti
-     * quello di tutti gli altri record. Prima ogni TXT, anche SPF, DMARC e _mta-sts, diceva "DKIM rotation". */
+    /**
+     * The comment of a panel TXT: the rotation one on DKIM records (DkimManager reads it back), otherwise
+     * the one of all the other records. Before, every TXT, even SPF, DMARC and _mta-sts, said "DKIM rotation".
+     */
     static final String DKIM_COMMENT = "DKIM rotation - auto-managed by " + org.daemoxcp.mail.system.Product.NAME;
 
     static String txtComment(String name) {
@@ -235,28 +237,28 @@ public class CloudflareManager {
     }
 
     /**
-     * Una lettura dei record della zona che non e' riuscita: Cloudflare ha risposto con un errore, non ha risposto, o la
-     * zona ha piu' record di quanti se ne leggono. Non e' una zona vuota. Prima le due letture restituivano una lista
-     * vuota anche in questi casi, e chi le usa per sapere "c'e' gia'?" avrebbe creato un secondo SPF, DMARC o DKIM
-     * accanto al primo, rompendo il dominio. Il messaggio e' gia' nella lingua di chi guarda.
+     * A read of the records of the zone that did not succeed: Cloudflare answered with an error, did not answer, or the
+     * zone has more records than are read. It is not an empty zone. Before, the two reads returned an empty list in
+     * these cases too, and whoever uses them to know "is it already there?" would have created a second SPF, DMARC or
+     * DKIM next to the first, breaking the domain. The message is already in the language of whoever is looking.
      */
     public static final class ZoneReadException extends RuntimeException {
         public ZoneReadException(String message) { super(message); }
     }
 
-    /** Le pagine da 100 record che si leggono al massimo: oltre, la zona non si puo' dire letta tutta. */
+    /** The maximum number of 100-record pages that are read: beyond that, the zone cannot be said to be read in full. */
     static final int MAX_PAGES = 10;
 
     /**
-     * Formatta il contenuto di un record TXT secondo lo standard DNS:
-     *  - Stringhe DNS character-string sono limitate a 255 ottetti (RFC 1035 §3.3.14).
-     *  - Per valori più lunghi, vanno spezzati in più stringhe consecutive, ognuna
-     *    racchiusa tra virgolette doppie e separate da uno spazio.
-     *  - Il resolver concatena automaticamente le stringhe alla ricezione.
+     * Formats the content of a TXT record according to the DNS standard:
+     *  - DNS character-string strings are limited to 255 octets (RFC 1035 section 3.3.14).
+     *  - Longer values must be split into several consecutive strings, each
+     *    enclosed in double quotes and separated by a space.
+     *  - The resolver automatically concatenates the strings on receipt.
      *
-     * Esempi:
-     *   "v=spf1 ip4:1.2.3.4 ~all"                                 (corto: una sola stringa)
-     *   "v=DKIM1; k=rsa; p=MIIBIj...EwppK2GMQ" "iVl0JWQ...wIDAQAB" (DKIM 2048 = 2 stringhe)
+     * Examples:
+     *   "v=spf1 ip4:1.2.3.4 ~all"                                 (short: a single string)
+     *   "v=DKIM1; k=rsa; p=MIIBIj...EwppK2GMQ" "iVl0JWQ...wIDAQAB" (DKIM 2048 = 2 strings)
      */
     static String formatTxtRecordContent(String value) {
         if (value == null || value.isEmpty()) return "\"\"";
@@ -276,13 +278,13 @@ public class CloudflareManager {
     }
 
     /**
-     * Cerca un record TXT per nome esatto. Utile per ritrovare un record DNS
-     * di cui non abbiamo memorizzato l'ID (es. record DKIM originale creato
-     * manualmente prima dell'integrazione Cloudflare).
+     * Looks up a TXT record by exact name. Useful to find again a DNS record
+     * whose ID we have not stored (e.g. an original DKIM record created
+     * manually before the Cloudflare integration).
      *
-     * @return RecordOp con success=true e recordId valorizzato se trovato,
-     *         success=false con error="not found" se non esistente, oppure
-     *         success=false con error=... in caso di errore API.
+     * @return RecordOp with success=true and recordId set if found,
+     *         success=false with error="not found" if it does not exist, or
+     *         success=false with error=... in case of an API error.
      */
     public RecordOp findTxtRecord(String token, String zoneId, String name) {
         try {
@@ -305,14 +307,14 @@ public class CloudflareManager {
     }
 
     /**
-     * Lista tutti i record TXT della zona il cui nome contiene una sottostringa specifica.
-     * Il confronto è case-insensitive (Cloudflare normalizza i nomi DNS in minuscolo).
-     * Esempio uso: {@code listTxtRecordsContaining(token, zoneId, "_domainkey.")} per trovare
-     * tutti i record DKIM (sia attivi che orfani) di un dominio.
-     * Itera con paginazione fino a 1000 record.
-     * Se {@code nameSubstring} è null o vuoto, ritorna TUTTI i record TXT della zona.
+     * Lists all the TXT records of the zone whose name contains a specific substring.
+     * The comparison is case-insensitive (Cloudflare normalizes DNS names to lowercase).
+     * Usage example: {@code listTxtRecordsContaining(token, zoneId, "_domainkey.")} to find
+     * all the DKIM records (both active and orphaned) of a domain.
+     * Iterates with pagination up to 1000 records.
+     * If {@code nameSubstring} is null or empty, returns ALL the TXT records of the zone.
      *
-     * @throws ZoneReadException se la zona non si e' potuta leggere tutta: mai una lista vuota al posto di un errore
+     * @throws ZoneReadException if the zone could not be read in full: never an empty list in place of an error
      */
     public java.util.List<TxtRecordInfo> listTxtRecordsContaining(String token, String zoneId, String nameSubstring) {
         java.util.List<TxtRecordInfo> result = new java.util.ArrayList<>();
@@ -368,28 +370,28 @@ public class CloudflareManager {
     }
 
     /**
-     * Il commento dei record che il pannello crea, per chi li guarda nella dashboard di
-     * Cloudflare. Il pannello non lo rilegge (legge solo i commenti dei record DKIM, vedi
-     * DkimManager). I record creati prima della fine di ottobre 2026 hanno ancora il testo
-     * italiano, e lo tengono: cambiarlo vorrebbe dire scrivere su Cloudflare all'avvio per un
-     * commento.
+     * The comment of the records that the panel creates, for whoever looks at them in the Cloudflare
+     * dashboard. The panel does not read it back (it reads only the comments of DKIM records, see
+     * DkimManager). Records created before the end of October 2026 still have the Italian
+     * text, and keep it: changing it would mean writing to Cloudflare at startup for a
+     * comment.
      */
     static final String RECORD_COMMENT = "Created by " + org.daemoxcp.mail.system.Product.NAME;
 
     /**
-     * I record di questa zona che hanno il commento di prima (in italiano fino al 30/10/2026, legacy-names.json,
-     * cloudflareRecordComments) prendono quello di adesso. Il committente, il 09/11/2026: «quando aggiunge un record,
-     * non usi l'italiano nei commenti tipo "Creato dal pannello di posta" ma sempre e comunque l'inglese» (reperto 211).
-     * Cambia SOLO il commento, con PATCH: nome, contenuto, TTL e proxy restano come sono, quindi il DNS non cambia.
-     * Restituisce quanti ne ha cambiati, o -1 se Cloudflare non ha risposto come doveva (si riprova al prossimo avvio).
+     * The records of this zone that have the old comment (in Italian until 2026-10-30, legacy-names.json,
+     * cloudflareRecordComments) get the current one. The owner, on 2026-11-09: "when you add a record, do not use
+     * Italian in comments like `Creato dal pannello di posta` but always and in any case English" (finding 211).
+     * Only the comment changes, with PATCH: name, content, TTL and proxy stay as they are, so DNS does not change.
+     * Returns how many it changed, or -1 if Cloudflare did not answer as it should (it retries at the next startup).
      */
     public int renameLegacyComments(String token, String zoneId) {
         int renamed = 0;
         try {
             for (String[] pair : org.daemoxcp.mail.system.LegacyNames.pairs("cloudflareRecordComments")) {
-                // Si cerca col filtro esatto di Cloudflare, e si ricontrolla qui: si tocca solo cio' che ha quel testo. Un
-                // record cambiato esce dal filtro, quindi si rilegge sempre la prima pagina finche' ne resta qualcuno; un
-                // giro che non cambia niente chiude (niente giri a vuoto).
+                // The search uses Cloudflare's exact filter, and it is checked again here: only what has that text is
+                // touched. A changed record drops out of the filter, so the first page is always reread while some
+                // remain; a round that changes nothing ends it (no empty rounds).
                 for (int round = 0; round < 50; round++) {
                     HttpResponse<String> resp = call("GET", "/zones/" + zoneId + "/dns_records?per_page=100&comment.exact="
                             + URLEncoder.encode(pair[0], StandardCharsets.UTF_8), token, null);
@@ -418,10 +420,10 @@ public class CloudflareManager {
     }
 
     /**
-     * Crea un CNAME. Sempre con proxied=false, e non e' una preferenza: un CNAME
-     * proxato non risponde piu' con il CNAME ma con gli indirizzi di Cloudflare, quindi
-     * il client di posta non troverebbe piu' l'host che cerca e la verifica del pannello
-     * direbbe "punta altrove". La nuvola grigia qui non e' un consiglio, e' un requisito.
+     * Creates a CNAME. Always with proxied=false, and it is not a preference: a proxied
+     * CNAME no longer answers with the CNAME but with Cloudflare's addresses, so
+     * the mail client would no longer find the host it is looking for and the panel's check
+     * would say "points elsewhere". The gray cloud here is not advice, it is a requirement.
      */
     public RecordOp createCnameRecord(String token, String zoneId, String name, String target, int ttl) {
         try {
@@ -439,9 +441,9 @@ public class CloudflareManager {
     }
 
     /**
-     * Un record A o AAAA (ServerAddresses e HostRecords). Il nome della posta va sempre senza proxy: Cloudflare non fa
-     * passare la porta 25 (developers.cloudflare.com/dns/troubleshooting/email-issues/), e il nome a cui punta un MX deve
-     * essere «DNS only». Il pannello e la webmail invece si' (2096 e 8443 sono porte che Cloudflare inoltra).
+     * An A or AAAA record (ServerAddresses and HostRecords). The mail name always goes without proxy: Cloudflare does
+     * not let port 25 through (developers.cloudflare.com/dns/troubleshooting/email-issues/), and the name an MX points
+     * to must be "DNS only". The panel and the webmail, instead, do (2096 and 8443 are ports that Cloudflare forwards).
      */
     public RecordOp createAddressRecord(String token, String zoneId, String name, String type, String ip, boolean proxied) {
         if (!"A".equals(type) && !"AAAA".equals(type))
@@ -461,10 +463,10 @@ public class CloudflareManager {
     }
 
     /**
-     * Crea un SRV nella forma documentata da Cloudflare: nome completo in "name" e i soli
-     * campi priority/weight/port/target dentro "data".
+     * Creates an SRV in the form documented by Cloudflare: full name in "name" and only the
+     * priority/weight/port/target fields inside "data".
      *
-     * Esempio della documentazione ufficiale:
+     * Example from the official documentation:
      *   {"type":"SRV","name":"_xmpp._tcp.example.com",
      *    "data":{"priority":10,"weight":5,"port":5223,"target":"server.example.com"}}
      */
@@ -487,13 +489,13 @@ public class CloudflareManager {
     }
 
     /**
-     * Cambia il contenuto di un record TXT esistente.
+     * Changes the content of an existing TXT record.
      *
-     * Metodo e percorso presi dalla documentazione ufficiale, letta a pagina renderizzata:
+     * Method and path taken from the official documentation, read on the rendered page:
      *   PATCH /zones/{zone_id}/dns_records/{dns_record_id}  -  "Update an existing DNS record"
-     * Il corpo segue la forma dell'esempio della stessa pagina, che indica tipo, nome e
-     * contenuto. PATCH lascia stare cio' che non si nomina, quindi commento e altri campi
-     * del record restano dove sono.
+     * The body follows the form of the example on the same page, which gives type, name and
+     * content. PATCH leaves alone what is not named, so the comment and the other fields
+     * of the record stay where they are.
      */
     public RecordOp updateTxtRecord(String token, String zoneId, String recordId,
                                     String name, String value, int ttl) {
@@ -511,15 +513,15 @@ public class CloudflareManager {
     }
 
     /**
-     * Accende o spegne il proxy di Cloudflare su un record.
+     * Turns the Cloudflare proxy on or off on a record.
      *
-     * Serve per i nomi che devono puntare DRITTI al server: mta-sts e autoconfig. Con il
-     * proxy acceso, chi li interroga parla con Cloudflare, che a sua volta deve poter
-     * validare il certificato dell'origine — un secondo pezzo che deve funzionare, e che
-     * quando non funziona risponde 526 senza spiegare cosa manchi. Diretto sono meno cose
-     * che possono rompersi.
+     * It is needed for the names that must point STRAIGHT to the server: mta-sts and autoconfig. With the
+     * proxy on, whoever queries them talks to Cloudflare, which in turn must be able to
+     * validate the certificate of the origin: a second piece that has to work, and that
+     * when it does not work answers 526 without explaining what is missing. Direct means fewer things
+     * that can break.
      *
-     * Si usa PATCH, che tocca il solo campo indicato e lascia stare nome, contenuto e TTL.
+     * PATCH is used, which touches only the given field and leaves name, content and TTL alone.
      */
     public RecordOp setProxy(String token, String zoneId, String recordId, boolean proxied) {
         try {
@@ -531,7 +533,7 @@ public class CloudflareManager {
         }
     }
 
-    /** Corregge un CNAME esistente: destinazione giusta e proxy spento. */
+    /** Fixes an existing CNAME: right target and proxy off. */
     public RecordOp updateCname(String token, String zoneId, String recordId,
                                   String name, String target) {
         try {
@@ -545,7 +547,7 @@ public class CloudflareManager {
         }
     }
 
-    /** Corregge un SRV esistente: destinazione e porta giuste. */
+    /** Fixes an existing SRV: right target and port. */
     public RecordOp updateSrv(String token, String zoneId, String recordId, String name,
                                 String target, int priority, int weight, int port) {
         try {
@@ -568,14 +570,14 @@ public class CloudflareManager {
     }
 
     /**
-     * Tutti i record della zona, di qualunque tipo, con il tipo riportato.
+     * All the records of the zone, of any type, with the type reported.
      *
-     * Serve guardare ANCHE i tipi diversi da quello che si vuole creare: il DNS non
-     * ammette un CNAME accanto ad altri dati sullo stesso nome, quindi un record A su
-     * "autoconfig" fa rifiutare il CNAME da Cloudflare. Meglio dirlo prima, spiegando
-     * perche', che mostrare l'errore grezzo dell'API.
+     * It is necessary to look ALSO at types other than the one to be created: DNS does not
+     * allow a CNAME next to other data on the same name, so an A record on
+     * "autoconfig" makes Cloudflare reject the CNAME. Better to say so beforehand, explaining
+     * why, than to show the raw error of the API.
      *
-     * @throws ZoneReadException se la zona non si e' potuta leggere tutta: mai una lista vuota al posto di un errore
+     * @throws ZoneReadException if the zone could not be read in full: never an empty list in place of an error
      */
     public java.util.List<DnsRecordInfo> listRecords(String token, String zoneId) {
         java.util.List<DnsRecordInfo> result = new java.util.ArrayList<>();
@@ -596,7 +598,7 @@ public class CloudflareManager {
                     info.name = r.optString("name", "");
                     info.content = r.optString("content", "");
                     info.proxied = r.optBoolean("proxied", false);
-                    // I campi strutturati, quando ci sono, valgono piu' della stringa.
+                    // The structured fields, when present, are worth more than the string.
                     JSONObject data = r.optJSONObject("data");
                     if (data != null) {
                         if (data.has("priority")) info.srvPriority = data.optInt("priority");
@@ -605,7 +607,7 @@ public class CloudflareManager {
                         String targetValue = data.optString("target", "");
                         if (!targetValue.isEmpty()) info.srvDestination = targetValue;
                     }
-                    // La priorita' Cloudflare la espone anche fuori da "data".
+                    // Cloudflare also exposes the priority outside "data".
                     if (info.srvPriority == null && r.has("priority"))
                         info.srvPriority = r.optInt("priority");
                     result.add(info);
@@ -631,14 +633,14 @@ public class CloudflareManager {
         public String content;
         public boolean proxied;
         /**
-         * SRV: i campi che Cloudflare restituisce in "data", piu' la priorita'.
+         * SRV: the fields that Cloudflare returns in "data", plus the priority.
          *
-         * Per un SRV il campo "content" e' una stringa di comodo, e Cloudflare ci mette solo
-         * PESO, PORTA e DESTINAZIONE: la priorita' vive in un campo suo. Chi legge la
-         * priorita' da "content" la legge dal posto sbagliato — e chi pretende quattro campi
-         * da una stringa che ne ha tre non ottiene un valore sbagliato, ottiene NULL, cioe'
-         * "record non riconosciuto". E' cosi' che il pannello ha riscritto a ogni esecuzione
-         * due SRV che erano gia' giusti, annunciando ogni volta una differenza inesistente.
+         * For an SRV the "content" field is a convenience string, and Cloudflare puts in it only
+         * WEIGHT, PORT and TARGET: the priority lives in a field of its own. Whoever reads the
+         * priority from "content" reads it from the wrong place, and whoever demands four fields
+         * from a string that has three does not get a wrong value, they get NULL, that is,
+         * "record not recognized". That is how the panel rewrote, on every run, two SRV records
+         * that were already right, announcing each time a difference that did not exist.
          */
         public Integer srvPriority;
         public Integer srvWeight;
@@ -684,21 +686,21 @@ public class CloudflareManager {
         if (errors != null && errors.length() > 0) {
             JSONObject e = errors.getJSONObject(0);
             String raw = e.optString("message", I18n.tr("server.cfm.unknown")) + " (code " + e.optInt("code", 0) + ")";
-            // Il token che Cloudflare non riconosce: la sua frase da sola («Invalid request headers (code 6003)») non dice
-            // a chi installa cosa fare (reperto 250, provato sulla VM con un token finto)
+            // The token that Cloudflare does not recognize: its sentence alone ("Invalid request headers (code 6003)")
+            // does not tell whoever installs what to do (finding 250, tested on the VM with a fake token)
             return TOKEN_REFUSED.contains(e.optInt("code", 0)) ? I18n.tr("server.cfm.tokenRefused", java.util.Map.of("m", raw)) : raw;
         }
         return I18n.tr("server.cfm.unknown");
     }
 
     /**
-     * I codici con cui Cloudflare rifiuta il token stesso, non l'operazione: 6003 e 6111 (intestazione non valida: token
-     * incompleto, con spazi o caratteri in piu'), 1000 (token non valido), 9109 (token non valido o senza accesso),
-     * 10000 (autenticazione).
+     * The codes with which Cloudflare rejects the token itself, not the operation: 6003 and 6111 (invalid header: token
+     * incomplete, with spaces or extra characters), 1000 (invalid token), 9109 (token invalid or without access),
+     * 10000 (authentication).
      */
     private static final java.util.Set<Integer> TOKEN_REFUSED = java.util.Set.of(6003, 6111, 1000, 9109, 10000);
 
-    /** Maschera un token mostrando solo gli ultimi 4 caratteri. */
+    /** Masks a token, showing only the last 4 characters. */
     public static String maskToken(String token) {
         if (token == null || token.isEmpty()) return "";
         if (token.length() <= 8) return "•••";

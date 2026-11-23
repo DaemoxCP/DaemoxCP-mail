@@ -14,29 +14,29 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Fa bannare con pf le jail che bannavano con iptables.
+ * Makes the jails that banned with iptables ban with pf.
  *
- * Cosa era successo. Delle sette jail attive, cinque dichiaravano la propria azione
- * ("action = pf[name=...]") e due no: la superficie pubblica (oggi daemoxcp-mail-public, allora
- * mailpanel-pubblico) e daemoxcp-mail-auth, cioe' proprio le
- * due che proteggono il pannello. Non dichiarandola ereditavano il valore predefinito di
- * jail.conf, che e' costruito su iptables — un comando che su FreeBSD non esiste. Il risultato
- * non era un errore visibile: le jail rilevavano, contavano i tentativi e incrementavano i ban
- * regolarmente. Sulla superficie pubblica erano 14.370 tentativi e 46 ban, nessuno dei quali ha mai
- * bloccato niente. Una jail che sbaglia comando di ban e' indistinguibile da una che funziona,
- * finche' non si guarda il firewall.
+ * What had happened. Of the seven active jails, five declared their own action
+ * ("action = pf[name=...]") and two did not: the public surface (today daemoxcp-mail-public, back then
+ * `mailpanel-pubblico`) and daemoxcp-mail-auth, that is, precisely the
+ * two that protect the panel. By not declaring it they inherited the default value of
+ * jail.conf, which is built on iptables, a command that does not exist on FreeBSD. The result
+ * was not a visible error: the jails detected, counted the attempts and increased the bans
+ * regularly. On the public surface there were 14,370 attempts and 46 bans, none of which ever
+ * blocked anything. A jail with the wrong ban command is indistinguishable from one that works,
+ * until you look at the firewall.
  *
- * Perche' non basta correggere il codice. Il file della superficie pubblica lo riscrive il pannello
- * a ogni installazione, quindi li' la correzione arriva da sola. La sezione [daemoxcp-mail-auth] no:
- * viene aggiunta a jail.local una volta sola e poi mai piu' toccata, per non calpestare le
- * modifiche di chi la personalizza. Ottima regola, che pero' significa che su un'installazione
- * gia' fatta quella sezione resterebbe con iptables per sempre. Serve un intervento che la
- * aggiorni, e che lo faccia con la stessa cautela: cambia la riga dell'azione e nient'altro.
+ * Why fixing the code is not enough. The file of the public surface is rewritten by the panel
+ * at every installation, so there the fix arrives by itself. The [daemoxcp-mail-auth] section does not:
+ * it is added to jail.local only once and then never touched again, so as not to trample the
+ * changes of whoever customizes it. An excellent rule, which however means that on an existing
+ * installation that section would stay on iptables forever. An intervention is needed that
+ * updates it, and does so with the same caution: it changes the action line and nothing else.
  *
- * Come si comporta. Prima copia, poi scrive, poi ricarica, poi RICHIEDE a fail2ban quale comando
- * esegue adesso: senza quest'ultimo passo si direbbe "riparato" avendo solo scritto un file, ed
- * e' esattamente il genere di conferma che ha lasciato passare il guasto per tutto questo tempo.
- * Se qualcosa va storto ripristina la copia e ricarica.
+ * How it behaves. First it copies, then writes, then reloads, then ASKS fail2ban again which command
+ * it runs now: without this last step it would say "repaired" having only written a file, and
+ * that is exactly the kind of confirmation that let the fault slip by all this time.
+ * If something goes wrong it restores the copy and reloads.
  */
 public final class BanActionRepair {
 
@@ -47,7 +47,7 @@ public final class BanActionRepair {
 
     private BanActionRepair() { }
 
-    /** Le jail il cui comando di ban non e' eseguibile su questo sistema. Legge e basta. */
+    /** The jails whose ban command cannot be executed on this system. It only reads. */
     public static JSONObject diagnosis() {
         JSONObject r = new JSONObject();
         JSONArray broken = new JSONArray();
@@ -56,9 +56,9 @@ public final class BanActionRepair {
         for (String jail : activeJails()) {
             String cmd = banCommand(jail);
             if (cmd == null || cmd.isEmpty()) {
-                // Senza l'uscita cruda questa riga e' un vicolo cieco: dice che non si sa, e non
-                // lascia a chi legge nessun modo di sapere. Con l'uscita, il passo successivo lo
-                // puo' fare chiunque guardi la pagina.
+                // Without the raw output this line is a dead end: it says that it is not known, and
+                // leaves the reader no way of knowing. With the output, the next step can be
+                // taken by anyone looking at the page.
                 notJudged.put(new JSONObject().put("jail", jail)
                     .put("why", I18n.tr("server.banfix.noCommand"))
                     .put("output", actionsOutput(jail))
@@ -69,9 +69,9 @@ public final class BanActionRepair {
             }
             String runnable = firstRunnable(cmd);
             if (runnable == null) {
-                // Salto deliberato: la riga non nomina chiaramente un programma. Va DETTO, non
-                // taciuto — una jail saltata in silenzio fa diventare verde un controllo che
-                // semplicemente non l'ha guardata, che e' il difetto che qui si sta cercando.
+                // Deliberate skip: the line does not clearly name a program. It must be SAID, not
+                // kept quiet: a jail skipped silently turns green a check that
+                // simply did not look at it, which is the defect being hunted here.
                 notJudged.put(new JSONObject().put("jail", jail)
                     .put("why", I18n.tr("server.banfix.noProgram"))
                     .put("command", cmd));
@@ -88,7 +88,7 @@ public final class BanActionRepair {
                 .put("repairable", broken.length() > 0);
     }
 
-    /** Scrive l'azione pf dove manca, ricarica, e verifica chiedendo di nuovo a fail2ban. */
+    /** Writes the pf action where it is missing, reloads, and verifies by asking fail2ban again. */
     public static JSONObject repair() {
         JSONObject r = new JSONObject();
         JSONArray steps = new JSONArray();
@@ -97,14 +97,14 @@ public final class BanActionRepair {
             boolean touched = false;
             boolean toReviewByHand = false;
 
-            // 1. La superficie pubblica: il file e' del pannello, si riscrive intero.
+            // 1. The public surface: the file belongs to the panel, it is rewritten whole.
             Path pub = Paths.get(PUBLIC_JAIL);
             if (Files.exists(pub)) {
                 String before = Files.readString(pub, StandardCharsets.UTF_8);
                 String after = org.daemoxcp.mail.system.WebProtection.jail();
-                // Riscrivere il file intero e' lecito solo se e' il file che scrive il pannello.
-                // Se qualcuno lo ha sostituito con il proprio, sovrascriverlo cancellerebbe il
-                // suo lavoro senza avvisare — e questo e' un rimedio, non un ripristino.
+                // Rewriting the whole file is legitimate only if it is the file the panel writes.
+                // If someone replaced it with their own, overwriting it would delete their
+                // work without warning, and this is a fix, not a restore.
                 if (!org.daemoxcp.mail.system.PanelMarker.writtenByPanel(before)) {
                     steps.put(step(PUBLIC_NAME, false,
                         I18n.tr("server.banfix.notOurFile", java.util.Map.of("file", String.valueOf(PUBLIC_JAIL), "jail", PUBLIC_NAME))));
@@ -123,7 +123,7 @@ public final class BanActionRepair {
                     I18n.tr("server.banfix.notInstalled")));
             }
 
-            // 2. daemoxcp-mail-auth: sezione dentro jail.local, si cambia solo la riga dell'azione.
+            // 2. daemoxcp-mail-auth: a section inside jail.local, only the action line is changed.
             Path loc = Paths.get(JAIL_LOCAL);
             if (Files.exists(loc)) {
                 String before = Files.readString(loc, StandardCharsets.UTF_8);
@@ -150,10 +150,10 @@ public final class BanActionRepair {
             }
 
             if (!touched && !toReviewByHand) {
-                // I file possono essere gia' corretti mentre il processo in esecuzione ha ancora
-                // in memoria la configurazione di prima: sono due cose diverse, e fermarsi qui
-                // direbbe "non serviva" guardando solo il disco. Se il runtime non riporta
-                // l'azione di qualche jail, il lavoro non e' finito — si ricarica e si riguarda.
+                // The files may already be correct while the running process still has the
+                // previous configuration in memory: they are two different things, and stopping here
+                // would say "it was not needed" looking only at the disk. If the runtime does not report
+                // the action of some jail, the job is not finished: reload and look again.
                 java.util.List<String> mute = new ArrayList<>();
                 for (String jail : new String[] { PUBLIC_NAME, "daemoxcp-mail-auth" }) {
                     String c = banCommand(jail);
@@ -171,7 +171,7 @@ public final class BanActionRepair {
                 return r.put("success", false).put("steps", steps)
                         .put("message", I18n.tr("server.banfix.untouched"));
 
-            // 3. Ricarica.
+            // 3. Reload.
             Shell.Result rel = Shell.run(Duration.ofSeconds(30), CLIENT, "reload");
             if (!rel.success()) {
                 restore(copies);
@@ -184,11 +184,11 @@ public final class BanActionRepair {
             steps.put(step("reload", true,
                 I18n.tr("server.banfix.accepted")));
 
-            // Il reload semplice puo' non bastare. fail2ban-client(1): "reload ... reloads the
+            // A plain reload may not be enough. fail2ban-client(1): "reload ... reloads the
             // configuration without restarting of the server, the option '--restart' activates
-            // completely restarting of affected jails". Se dopo il reload l'azione non risulta,
-            // la configurazione e' giusta ma non e' stata applicata: si ricrea la jail. Senza
-            // "--unban", che il manuale indica come l'opzione che invece toglierebbe i ban.
+            // completely restarting of affected jails". If after the reload the action does not show,
+            // the configuration is right but has not been applied: the jail is recreated. Without
+            // "--unban", which the manual indicates as the option that would instead remove the bans.
             java.util.List<String> stillMute = new ArrayList<>();
             for (String jail : new String[] { PUBLIC_NAME, "daemoxcp-mail-auth" }) {
                 String c = banCommand(jail);
@@ -200,16 +200,16 @@ public final class BanActionRepair {
                     I18n.tr("server.banfix.restarted", java.util.Map.of("list", String.valueOf(String.join(", ", stillMute)), "out", String.valueOf(rs.output() == null || rs.output().isBlank() ? I18n.tr("server.banfix.none") : rs.output().trim())))));
             }
 
-            // 4. La verifica che conta: cosa esegue ADESSO, chiesto a fail2ban.
+            // 4. The check that counts: what it runs NOW, asked of fail2ban.
             JSONArray verification = new JSONArray();
             boolean allOk = true;
             for (String jail : new String[] { PUBLIC_NAME, "daemoxcp-mail-auth" }) {
                 String cmd = banCommand(jail);
                 boolean ok = cmd != null && cmd.contains("pfctl");
                 if (cmd == null || cmd.isEmpty()) {
-                    // Distinguere "non c'e'" da "c'e' e non parla": la prima non e' un guasto,
-                    // la seconda si', e confonderle assolverebbe proprio il caso che stiamo
-                    // inseguendo. Lo si decide chiedendo se la jail esiste, non presumendolo.
+                    // Telling "it is not there" from "it is there and does not talk": the first is not
+                    // a fault, the second is, and confusing them would acquit exactly the case we are
+                    // chasing. It is decided by asking whether the jail exists, not by assuming it.
                     Shell.Result st = Shell.run(Duration.ofSeconds(10), CLIENT, "status", jail);
                     boolean jailExists = st.success() && !st.output().contains("does not exist");
                     if (!jailExists) {
@@ -245,17 +245,17 @@ public final class BanActionRepair {
     }
 
     /**
-     * Il contenuto di jail.local con l'azione pf al posto di quella che c'era.
+     * The content of jail.local with the pf action in place of the one that was there.
      *
-     * Si tocca UNA riga, dentro UNA sezione: il resto del file, gli spazi, i commenti e le
-     * sezioni altrui restano identici byte per byte. E' un file di configurazione vivo, scritto
-     * anche a mano, e un rimedio che ne riordina pezzi non richiesti fa piu' danni del guasto.
+     * ONE line is touched, inside ONE section: the rest of the file, the spaces, the comments and the
+     * sections of others stay identical byte for byte. It is a live configuration file, also written
+     * by hand, and a fix that rearranges pieces of it nobody asked for does more damage than the fault.
      *
-     * Il caso che imporrebbe cautela e' l'azione scritta su piu' righe: in un file .conf una
-     * riga indentata prosegue quella sopra, quindi sostituire solo la prima lascerebbe attaccata
-     * al comando nuovo una coda che appartiene a quello vecchio. Non si prova a indovinare come
-     * ricomporla: si dichiara che va guardata a mano, e non si tocca niente. Meglio non riparare
-     * che riparare a meta' un file che decide chi entra.
+     * The case that would call for caution is the action written over several lines: in a .conf file
+     * an indented line continues the one above, so replacing only the first would leave attached
+     * to the new command a tail that belongs to the old one. No attempt is made to guess how to put
+     * it back together: it is declared that it must be looked at by hand, and nothing is touched.
+     * Better not to repair than to half-repair a file that decides who gets in.
      */
     static Outcome withPfAction(String content, String jail) {
         String[] lines = content.split("\n", -1);
@@ -270,8 +270,8 @@ public final class BanActionRepair {
             if (t.startsWith("[") && t.endsWith("]")) { end = i; break; }
         }
 
-        // Prima si guarda, poi si scrive: si cerca la riga dell'azione e si giudica se sia
-        // toccabile, senza aver ancora modificato niente.
+        // First look, then write: the action line is searched for and judged on whether it can
+        // be touched, without having modified anything yet.
         int actionLine = -1;
         for (int i = start + 1; i < end; i++) {
             String t = lines[i].trim();
@@ -283,14 +283,14 @@ public final class BanActionRepair {
         if (actionLine >= 0) {
             String t = lines[actionLine].trim();
             String value = t.substring(t.indexOf('=') + 1).trim();
-            // "Comincia con pf" non basta per dire che va bene, e nemmeno "non contiene
-            // segnaposto". Va riconosciuta la forma INTERA che si sa funzionare qui:
-            // pf[name=..., port="..."]. Lo dico dopo averlo sbagliato due volte con lo stesso
-            // meccanismo — prima "actiontype=<allports>", poi "actiontype=any" — ed entrambe
-            // sarebbero state promosse da un controllo piu' permissivo e lasciate li' per
-            // sempre, mentre fail2ban rispondeva "No actions for jail ...", cioe' quella jail
-            // non bannava niente. Una porta dichiarata e' la condizione che distingue le
-            // quattro jail con tabella E regola da quelle senza.
+            // "Starts with pf" is not enough to say it is fine, and neither is "contains no
+            // placeholders". The WHOLE form known to work here must be recognized:
+            // pf[name=..., port="..."]. I say this after getting it wrong twice with the same
+            // mechanism (first "actiontype=<allports>", then "actiontype=any"), and both
+            // would have been promoted by a more permissive check and left there
+            // forever, while fail2ban answered "No actions for jail ...", that is, that jail
+            // banned nothing. A declared port is the condition that distinguishes the
+            // four jails with a table AND a rule from those without.
             boolean pf = value.equals("pf") || value.startsWith("pf[") || value.startsWith("pf ");
             boolean goodForm = pf && !value.contains("<")
                               && value.contains("port=") && value.contains("name=");
@@ -301,15 +301,15 @@ public final class BanActionRepair {
                 return Outcome.toReview(I18n.tr("server.banfix.multiline", java.util.Map.of("jail", String.valueOf(jail), "file", String.valueOf(JAIL_LOCAL), "line", String.valueOf(actionLine + 1))));
         }
 
-        // allports, non la porta: l'azione pf costruisce "... to any port $port" e senza porta
-        // pf rifiuta la regola, lasciando la tabella senza nessuno che la legga.
+        // allports, not the port: the pf action builds "... to any port $port" and without a port
+        // pf rejects the rule, leaving the table with nobody reading it.
         String action = "action   = pf[name=" + jail + ", port=\"0:65535\"]";
         java.util.List<String> out = new ArrayList<>(java.util.Arrays.asList(lines));
         if (actionLine >= 0) {
             out.set(actionLine, action);
         } else {
-            // Dopo l'ultima riga di configurazione della sezione, cosi' la si legge dove
-            // ci si aspetta di trovarla e non in fondo a righe vuote.
+            // After the last configuration line of the section, so that it is read where
+            // one expects to find it and not at the bottom of empty lines.
             int after = start;
             for (int i = start + 1; i < end; i++) {
                 String t = lines[i].trim();
@@ -320,7 +320,7 @@ public final class BanActionRepair {
         return Outcome.modified(String.join("\n", out));
     }
 
-    /** Cosa e' successo alla sezione, senza doverne rileggere il testo per capirlo. */
+    /** What happened to the section, without having to reread its text to understand it. */
     static final class Outcome {
         enum Kind { ABSENT, ALREADY_IN_PLACE, MODIFIED, TO_REVIEW }
         final Kind type;
@@ -334,13 +334,13 @@ public final class BanActionRepair {
     }
 
     /**
-     * Il primo comando eseguibile nominato da un comando di ban, o null se non si puo' dire.
+     * The first executable command named by a ban command, or null if it cannot be told.
      *
-     * Null non e' un fallimento ma una risposta: su questo si costruisce l'accusa "questa jail
-     * banna con un comando che non esiste", e un'accusa sbagliata farebbe premere un pulsante
-     * di riparazione a chi non ne ha bisogno. Quindi si giudica solo cio' che e' chiaramente il
-     * nome di un programma: se la riga comincia con un costrutto di shell, una variabile o una
-     * parola con metacaratteri, non si conclude niente.
+     * Null is not a failure but an answer: on it is built the accusation "this jail
+     * bans with a command that does not exist", and a wrong accusation would make someone who
+     * does not need it press a repair button. So only what is clearly the
+     * name of a program is judged: if the line starts with a shell construct, a variable or a
+     * word with metacharacters, nothing is concluded.
      */
     static String firstRunnable(String command) {
         if (command == null) return null;
@@ -348,8 +348,8 @@ public final class BanActionRepair {
             String t = line.trim();
             if (t.isEmpty() || t.startsWith("#")) continue;
             String first = t.split("\\s+")[0];
-            // fail2ban lascia i segnaposto fra parentesi angolari: <iptables> nomina comunque
-            // il comando, e va giudicato per quello che nomina.
+            // fail2ban leaves placeholders in angle brackets: <iptables> still names
+            // the command, and must be judged for what it names.
             first = first.replace("<", "").replace(">", "");
             if (first.isEmpty()) continue;
             if (SHELL_CONSTRUCTS.contains(first)) return null;
@@ -359,7 +359,7 @@ public final class BanActionRepair {
         return null;
     }
 
-    /** Parole che aprono un costrutto di shell: non sono programmi da cercare su disco. */
+    /** Words that open a shell construct: they are not programs to look for on disk. */
     private static final java.util.Set<String> SHELL_CONSTRUCTS = java.util.Set.of(
         "if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done",
         "case", "esac", "test", "[", "[[", "echo", "true", "false", ":", "exec",
@@ -385,7 +385,7 @@ public final class BanActionRepair {
         return out;
     }
 
-    /** La riga dell'azione dentro un testo di configurazione: si mostra cio' che si e' scritto. */
+    /** The action line inside a configuration text: what was written is shown. */
     private static String actionLineOf(String content) {
         for (String r : content.split("\n")) {
             String t = r.trim();
@@ -395,11 +395,11 @@ public final class BanActionRepair {
     }
 
     /**
-     * Le righe di /var/log/fail2ban.log che parlano di questa jail e di errori.
+     * The lines of /var/log/fail2ban.log that talk about this jail and about errors.
      *
-     * Quando fail2ban dice "No actions for jail X" non spiega perche' li', ma lo ha gia' scritto
-     * nel proprio log al momento del caricamento. Mostrarlo e' l'unico modo perche' chi guarda
-     * la pagina — e chi legge il suo racconto — possa sapere la causa invece di ipotizzarla.
+     * When fail2ban says "No actions for jail X" it does not explain why there, but it has already
+     * written it in its own log at load time. Showing it is the only way for whoever looks at
+     * the page (and whoever reads their account of it) to know the cause instead of guessing it.
      */
     static String logErrorsFor(String jail) {
         try {
@@ -408,26 +408,26 @@ public final class BanActionRepair {
             java.util.List<String> all = Files.readAllLines(log, StandardCharsets.UTF_8);
             StringBuilder out = new StringBuilder();
 
-            // 1. Le ultime righe che nominano questa jail, di qualunque livello. Il livello non
-            //    si filtra: la riga piu' informativa finora e' stata una WARNING di routine
-            //    ("already banned") che, venendo dal modulo delle azioni, ha dimostrato che la
-            //    jail le azioni ce le ha — l'opposto di quello che sospettavo.
+            // 1. The last lines that name this jail, of any level. The level is not
+            //    filtered: the most informative line so far was a routine WARNING
+            //    ("already banned") which, coming from the actions module, proved that the
+            //    jail does have the actions, the opposite of what I suspected.
             java.util.List<String> theirs = new ArrayList<>();
             for (int i = all.size() - 1; i >= 0 && theirs.size() < 8; i--)
                 if (all.get(i).contains(jail)) theirs.add(0, all.get(i));
             out.append("— ").append(I18n.tr("server.banfix.lastLines", java.util.Map.of("jail", String.valueOf(jail)))).append(":\n")
                .append(theirs.isEmpty() ? I18n.tr("server.banfix.none") : String.join("\n", theirs));
 
-            // 2. TUTTA la finestra dell'ultimo reload, senza filtri di nessun tipo.
+            // 2. The WHOLE window of the last reload, without filters of any kind.
             //
-            // Le due versioni precedenti di questo riquadro hanno nascosto la risposta, ognuna a
-            // modo suo: la prima filtrava per nome della jail, e un errore di caricamento il nome
-            // spesso non ce l'ha; la seconda partiva dall'ultima riga contenente "reload", che e'
-            // "Reload finished", mostrando solo cio' che viene DOPO — mentre la spiegazione sta
-            // dentro il reload. Due filtri, due volte la stessa risposta buttata via.
+            // The two previous versions of this box hid the answer, each in
+            // its own way: the first filtered by jail name, and a loading error often
+            // does not have the name; the second started from the last line containing "reload",
+            // which is "Reload finished", showing only what comes AFTER, while the explanation lies
+            // inside the reload. Two filters, twice the same answer thrown away.
             //
-            // Quindi qui non si filtra: si prende la finestra e la si mostra intera. Un riquadro
-            // che mostra troppo si legge; uno che mostra la cosa sbagliata fa perdere giornate.
+            // So here nothing is filtered: the window is taken and shown whole. A box
+            // that shows too much can be read; one that shows the wrong thing wastes days.
             int end = -1;
             for (int i = all.size() - 1; i >= 0; i--)
                 if (all.get(i).contains("Reload finished")) { end = i; break; }
@@ -440,7 +440,7 @@ public final class BanActionRepair {
                 out.append(": ").append(I18n.tr("server.banfix.noReload"));
             } else {
                 int start = Math.max(0, end - 80);
-                // Si risale fino all'inizio vero del reload, se lo si trova nella finestra.
+                // We go back up to the real start of the reload, if it is found in the window.
                 for (int i = end; i >= start; i--)
                     if (all.get(i).contains("Reload jail") || all.get(i).contains("Stopping all jails")
                         || all.get(i).contains("Reloading")) { start = i; break; }
@@ -455,13 +455,13 @@ public final class BanActionRepair {
     }
 
     /**
-     * Ogni file di configurazione che definisce questa jail, con la sezione per intero.
+     * Every configuration file that defines this jail, with the whole section.
      *
-     * Serve a rispondere a "cosa vede fail2ban", che non e' la stessa domanda di "cosa ho
-     * scritto". Fail2ban legge jail.conf, poi jail.local, poi tutto jail.d in ordine, e l'ultima
-     * definizione vince: una seconda sezione con lo stesso nome, in un file che nessuno guarda,
-     * spiegherebbe da sola perche' l'azione appena scritta non ha nessun effetto. Finche' non si
-     * guarda, resta un'ipotesi fra le tante.
+     * It serves to answer "what does fail2ban see", which is not the same question as "what did I
+     * write". Fail2ban reads jail.conf, then jail.local, then all of jail.d in order, and the last
+     * definition wins: a second section with the same name, in a file that nobody looks at,
+     * would by itself explain why the action just written has no effect. Until one looks,
+     * it remains one hypothesis among many.
      */
     static String sectionsDefining(String jail) {
         StringBuilder out = new StringBuilder();
@@ -496,15 +496,15 @@ public final class BanActionRepair {
     }
 
     /**
-     * Cosa fail2ban ha INTERPRETATO dai file per questa jail.
+     * What fail2ban has INTERPRETED from the files for this jail.
      *
-     * fail2ban-client(1): "-d  dump configuration. For debugging". E' l'unica fonte che risponde
-     * a "cosa legge fail2ban", che non e' ne' "cosa ho scritto io" ne' "cosa e' caricato adesso":
-     * sono tre cose diverse, e per mezza giornata ho confuso la prima con la terza. Se qui
-     * compare "addaction" la configurazione e' letta bene e il problema e' nell'applicarla; se
-     * non compare, il problema e' nel file.
+     * fail2ban-client(1): "-d  dump configuration. For debugging". It is the only source that answers
+     * "what does fail2ban read", which is neither "what I wrote" nor "what is loaded now":
+     * they are three different things, and for half a day I confused the first with the third. If
+     * "addaction" appears here the configuration is read correctly and the problem is in applying it;
+     * if it does not appear, the problem is in the file.
      *
-     * Legge e basta.
+     * It only reads.
      */
     static String readConfiguration(String jail) {
         Shell.Result r = Shell.run(Duration.ofSeconds(20), CLIENT, "--dp");
@@ -520,7 +520,7 @@ public final class BanActionRepair {
             : String.join("\n", theirs);
     }
 
-    /** Cosa risponde fail2ban quando gli si chiedono le azioni di una jail, testuale. */
+    /** What fail2ban answers when asked for the actions of a jail, verbatim. */
     private static String actionsOutput(String jail) {
         Shell.Result a = Shell.run(Duration.ofSeconds(10), CLIENT, "get", jail, "actions");
         String u = a.output() == null ? "" : a.output().trim();
@@ -544,13 +544,13 @@ public final class BanActionRepair {
     private static final String BACKUP_FOLDER = "/var/db/daemoxcp-mail/fail2ban-backups";
 
     /**
-     * La copia di sicurezza va FUORI da jail.d.
+     * The backup copy goes OUTSIDE jail.d.
      *
-     * Fail2ban carica i file di quella cartella, e una copia lasciata li' dentro e' un secondo
-     * file che definisce la stessa jail a un passo dall'essere letto: basta un nome che finisca
-     * per .conf. Le prime copie di oggi sono finite proprio li', e nella diagnosi comparivano
-     * accanto al file vero come se fossero configurazioni attive — ambiguita' che in un file che
-     * decide chi entra non ci deve essere.
+     * Fail2ban loads the files of that folder, and a copy left in there is a second
+     * file that defines the same jail one step away from being read: a name ending in
+     * .conf is enough. The first copies today ended up right there, and in the diagnosis they
+     * appeared next to the real file as if they were active configurations: an ambiguity that
+     * must not exist in a file that decides who gets in.
      */
     private static Path copy(Path f) throws Exception {
         Path dir = Paths.get(BACKUP_FOLDER);
@@ -562,7 +562,7 @@ public final class BanActionRepair {
         return c;
     }
 
-    /** Dove ripristinare ciascuna copia: il nome del file non basta piu' a dirlo. */
+    /** Where to restore each copy: the file name is no longer enough to tell. */
     private static final java.util.Map<Path, Path> copies = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static void restore(List<Path> done) {

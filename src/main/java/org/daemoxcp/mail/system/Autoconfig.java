@@ -13,41 +13,43 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Il file di configurazione che Thunderbird cerca da solo quando aggiungi una casella.
+ * The configuration file that Thunderbird looks for by itself when you add a mailbox.
  *
- * Perche' esiste questa classe, dato che abbiamo gia' i record SRV: **Thunderbird non li
- * usa.** Le richieste 342242 e 675476 su Bugzilla chiedono RFC 6186 da anni e non sono state
- * implementate; la documentazione Mozilla elenca come unici meccanismi il file XML, il
- * database centrale di Mozilla e infine il tentativo a indovinare. Quindi senza questo file
- * chi aggiunge una casella su Thunderbird continua a doversi ricordare server, porte e
- * cifratura, esattamente come prima.
+ * Why this class exists, given that we already have the SRV records: **Thunderbird does not
+ * use them.** Bugzilla requests 342242 and 675476 have been asking for RFC 6186 for years and have
+ * not been implemented; the Mozilla documentation lists as the only mechanisms the XML file,
+ * Mozilla's central database and finally guessing. So without this file, whoever adds a
+ * mailbox in Thunderbird still has to remember server, ports and encryption, exactly as
+ * before.
  *
- * Il file viene generato per OGNI dominio, non uno solo per tutti. La documentazione
- * ufficiale non dice se Thunderbird pretenda che l'elemento &lt;domain&gt; corrisponda al
- * dominio dell'indirizzo: quando la fonte non copre il caso si sceglie l'alternativa che e'
- * giusta comunque, e un file per dominio lo e' in entrambi gli scenari.
+ * The file is generated for EACH domain, not a single one for all of them. The official
+ * documentation does not say whether Thunderbird requires the &lt;domain&gt; element to match the
+ * domain of the address: when the source does not cover the case, we choose the alternative that
+ * is right either way, and one file per domain is right in both scenarios.
  *
- * I valori NON sono scritti a mano qui: porte e cifratura sono quelle che il pannello
- * configura davvero (Dovecot in ascolto su 993 in TLS diretto, Postfix submission su 587 con
- * smtpd_tls_security_level=encrypt), e lo username e' l'indirizzo completo perche' e' cosi'
- * che Dovecot interroga il database (WHERE email='%s').
+ * The values are NOT hand-written here: ports and encryption are the ones the panel really
+ * configures (Dovecot listening on 993 with direct TLS, Postfix submission on 587 with
+ * smtpd_tls_security_level=encrypt), and the username is the full address because that is how
+ * Dovecot queries the database (WHERE email='%s').
  */
 public class Autoconfig {
 
-    /** Porta IMAP su TLS diretto: inet_listener imaps in DovecotConfig. */
+    /** IMAP port over direct TLS: imaps inet_listener in DovecotConfig. */
     public static final int IMAP_PORT = 993;
-    /** Submission: "submission inet" in master.cf, con TLS obbligatorio. */
+    /** Submission: "submission inet" in master.cf, with mandatory TLS. */
     public static final int SMTP_PORT = 587;
 
     private Autoconfig() {}
 
-    /* ===================================================================
-     * Il file
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The file
+     * ===================================================================
+     */
 
     /**
-     * L'XML per un dominio. Funzione pura: stessi ingressi, stesso file, e si puo' provare
-     * senza server.
+     * The XML for one domain. A pure function: same inputs, same file, and it can be tested
+     * without a server.
      */
     public static String xml(String domain, String mailHost) {
         String d = escape(domain);
@@ -81,9 +83,9 @@ public class Autoconfig {
     }
 
     /**
-     * Escape XML. Con una whitelist a monte i nomi di dominio non conterrebbero mai questi
-     * caratteri, ma il file si costruisce concatenando: se un giorno qualcuno ci mette
-     * dentro un valore che arriva da fuori, questo lo regge lo stesso.
+     * XML escaping. With a whitelist upstream, domain names would never contain these
+     * characters, but the file is built by concatenation: if one day someone puts into it
+     * a value that comes from outside, this still holds up.
      */
     private static String escape(String s) {
         if (s == null) return "";
@@ -91,7 +93,7 @@ public class Autoconfig {
                 .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
-    /** Un dominio e' servito solo se il pannello lo gestisce davvero. Whitelist, non filtro. */
+    /** A domain is served only if the panel really manages it. A whitelist, not a filter. */
     public static String managedDomain(String required) {
         if (required == null) return null;
         String r = required.trim().toLowerCase(Locale.ROOT);
@@ -99,12 +101,12 @@ public class Autoconfig {
         int p = r.indexOf(':');
         if (p > 0) r = r.substring(0, p);
         if (r.isEmpty()) return null;
-        // Non si interroga il database a ogni richiesta: questa rotta e' pubblica e chiunque
-        // puo' chiamarla in continuazione. Vedi DomainCache.
+        // The database is not queried on every request: this route is public and anyone
+        // can call it over and over. See DomainCache.
         return DomainCache.managed(r);
     }
 
-    /** Il dominio della casella indicata nel parametro emailaddress, se c'e'. */
+    /** The domain of the mailbox given in the emailaddress parameter, if there is one. */
     public static String domainFromAddress(String address) {
         if (address == null) return null;
         int a = address.lastIndexOf('@');
@@ -119,25 +121,27 @@ public class Autoconfig {
         }
     }
 
-    /* ===================================================================
-     * Lo stato reale del server
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The real state of the server
+     * ===================================================================
+     */
 
     private static final String[] CONF_CANDIDATES = {
         "/usr/local/etc/nginx/sites-enabled/roundcube.conf",
         "/usr/local/etc/nginx/nginx.conf",
     };
 
-    /** Il file di configurazione nginx che contiene il sito in ascolto su 443. */
+    /** The nginx configuration file that contains the site listening on 443. */
     public static String confNginx() {
         for (String c : CONF_CANDIDATES) {
             try {
                 Path p = Path.of(c);
                 if (!Files.isReadable(p)) continue;
                 String t = Files.readString(p);
-                // NON si cerca "listen 443": questo server ascolta su 8443, e "listen 8443"
-                // non contiene "listen 443". Il controllo scritto cosi' dichiarava introvabile
-                // una configurazione che c'era, su una porta scelta apposta.
+                // We do NOT look for "listen 443": this server listens on 8443, and "listen 8443"
+                // does not contain "listen 443". The check written that way declared as not found
+                // a configuration that was there, on a port chosen on purpose.
                 if (t.contains("listen ") && t.contains("ssl") && t.contains("server_name")) return c;
             } catch (Exception ignore) {}
         }
@@ -147,9 +151,9 @@ public class Autoconfig {
     static final String MARKER = "# --- autoconfig Thunderbird (" + Product.NAME + ") ---";
 
     /**
-     * Il blocco del pannello c'e' gia', col marcatore di adesso o con quello di prima
-     * (legacy-names.json). Il file e' di nginx, non del pannello: il marcatore di prima resta dov'e',
-     * e senza riconoscerlo si aggiungerebbe un secondo blocco, che nginx -t rifiuta.
+     * The panel's block is already there, with the current marker or with the previous one
+     * (legacy-names.json). The file belongs to nginx, not to the panel: the previous marker stays
+     * where it is, and without recognising it a second block would be added, which nginx -t rejects.
      */
     static boolean hasBlock(String text) {
         for (String m : PanelMarker.forms("autoconfigMarker", MARKER)) if (text.contains(m)) return true;
@@ -157,7 +161,7 @@ public class Autoconfig {
     }
 
     /**
-     * Cosa manca perche' Thunderbird trovi il file. Si LEGGE, non si tocca niente.
+     * What is missing for Thunderbird to find the file. It READS, it touches nothing.
      */
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
@@ -179,13 +183,13 @@ public class Autoconfig {
         boolean brokenPresent = hasBlock(text);
         r.put("coveredName", coveredName).put("brokenPresent", brokenPresent);
         r.put("serverName", firstLineWith(text, "server_name"));
-        // Se la superficie pubblica sulla 443 e' installata, quei nomi sono suoi e questa
-        // scheda non deve nemmeno offrire di toccare nginx: un pulsante che, premuto, si
-        // rifiuta, e' un pulsante che non andava mostrato.
+        // If the public surface on 443 is installed, those names are its own and this
+        // tab must not even offer to touch nginx: a button that, when pressed,
+        // refuses, is a button that should not have been shown.
         r.put("surface443", WebProtection.state().optBoolean("installed", false));
 
-        // Il certificato: se non copre autoconfig.<dominio>, Thunderbird sbatte su un errore
-        // TLS prima ancora di leggere il file.
+        // The certificate: if it does not cover autoconfig.<domain>, Thunderbird runs into a TLS
+        // error before it even reads the file.
         JSONArray domains = new JSONArray();
         List<String> troubles = new ArrayList<>();
         int reviewed = 0, working = 0;
@@ -198,10 +202,10 @@ public class Autoconfig {
                 JSONObject j = new JSONObject().put("domain", d.domain).put("name", name);
                 j.put("dns", resolves(name));
                 j.put("certificate", certificateCovers(name));
-                // La prova che conta: si CHIEDE il file come lo chiederebbe Thunderbird.
-                // Leggere la configurazione di nginx dice cosa dovrebbe succedere; questa
-                // dice cosa succede. Non sono la stessa cosa, e quando divergono e' sempre
-                // la seconda ad avere ragione.
+                // The test that counts: we ASK for the file the way Thunderbird would ask for it.
+                // Reading the nginx configuration says what should happen; this test
+                // says what does happen. They are not the same thing, and when they diverge it is
+                // always the second one that is right.
                 JSONObject test = testDownload(name, d.domain);
                 j.put("test", test);
                 reviewed++;
@@ -214,16 +218,16 @@ public class Autoconfig {
         }
         r.put("domains", domains).put("reviewed", reviewed).put("working", working);
 
-        // Il verdetto viene dalla PROVA, non dal testo della configurazione.
+        // The verdict comes from the TEST, not from the text of the configuration.
         //
-        // Prima era "nomeCoperto && rottaPresente", cioe' il risultato di una ricerca dentro
-        // nginx.conf del marcatore che questa classe stessa scrive. Ma la rotta puo' stare
-        // altrove — e sta altrove: la scheda della 443 la installa in
-        // conf.d/daemoxcp-mail-public.conf, che serve esattamente questi due file, la politica
-        // MTA-STS e questo XML. Risultato: il pannello scaricava il file davvero, lo otteneva,
-        // e un attimo dopo dichiarava che nginx non lo serve e che i client devono
-        // configurarsi a mano. Il commento qui sopra diceva gia' quale delle due misure ha
-        // ragione; il verdetto usava l'altra.
+        // It used to be "nomeCoperto && rottaPresente", that is the result of a search inside
+        // nginx.conf for the marker that this very class writes. But the route can live
+        // elsewhere -- and it does live elsewhere: the 443 tab installs it in
+        // conf.d/daemoxcp-mail-public.conf, which serves exactly these two files, the MTA-STS
+        // policy and this XML. Result: the panel really downloaded the file, got it,
+        // and a moment later declared that nginx does not serve it and that clients have to
+        // be configured by hand. The comment above already said which of the two measurements is
+        // right; the verdict used the other one.
         boolean ready = ready(readList, reviewed, working);
         r.put("ready", ready);
         r.put("why", ready
@@ -237,25 +241,25 @@ public class Autoconfig {
     }
 
     /**
-     * Chiede il file esattamente come farebbe Thunderbird e guarda cosa torna.
+     * Asks for the file exactly as Thunderbird would and looks at what comes back.
      *
-     * Gli esiti vengono tenuti distinti apposta: "il certificato non e' valido per quel nome"
-     * e "il file non c'e'" sono due guasti diversi con due rimedi opposti, e confonderli
-     * manderebbe a rifare la cosa sbagliata.
+     * The outcomes are kept separate on purpose: "the certificate is not valid for that name"
+     * and "the file is not there" are two different faults with two opposite remedies, and
+     * confusing them would send someone off to redo the wrong thing.
      */
     /**
-     * Il verdict, staccato da state() perche' un test possa arrivarci.
+     * The verdict, split out of state() so that a test can reach it.
      *
-     * E' la riga che sbagliava: prima diceva "pronto" in base a una ricerca di testo dentro
-     * nginx.conf, e cosi' dichiarava che nginx non serviva un file che stava servendo. Ora
-     * dipende solo dalle prove, e ha tre condizioni, tutte necessarie:
+     * This is the line that was wrong: it used to say "ready" based on a text search inside
+     * nginx.conf, and so it declared that nginx was not serving a file it was serving. Now
+     * it depends only on the tests, and it has three conditions, all of them necessary:
      *
-     *  - l'elenco dei domini si e' potuto leggere: se non si e' letto, non si e' provato nulla;
-     *  - almeno un dominio e' stato provato: zero prove tutte riuscite fanno "0 == 0", cioe'
-     *    verde. Su zero domini un conteggio dice sempre di si', ed e' il modo piu' silenzioso
-     *    di dichiarare funzionante una cosa che non e' stata guardata;
-     *  - tutte le prove sono riuscite: una sola che fallisce basta, perche' e' un dominio i
-     *    cui client continuano a doversi configurare a mano.
+     *  - the list of domains could be read: if it was not read, nothing was tested;
+     *  - at least one domain was tested: zero tests, all successful, make "0 == 0", that is
+     *    green. On zero domains a count always says yes, and it is the quietest way to
+     *    declare working something that nobody has looked at;
+     *  - all the tests succeeded: a single failing one is enough, because it is a domain whose
+     *    clients still have to be configured by hand.
      */
     static boolean ready(boolean readList, int reviewed, int working) {
         return readList && reviewed > 0 && working == reviewed;
@@ -307,7 +311,7 @@ public class Autoconfig {
         return "";
     }
 
-    /** Il nome risolve in DNS (il CNAME autoconfig.* creato dalla pagina DNS). */
+    /** The name resolves in DNS (the autoconfig.* CNAME created by the DNS page). */
     private static boolean resolves(String name) {
         try {
             ProcessBuilder pb = new ProcessBuilder("dig", "+short", name);
@@ -322,7 +326,7 @@ public class Autoconfig {
         }
     }
 
-    /** Il certificato in uso contiene quel nome fra i suoi SAN. */
+    /** The certificate in use contains that name among its SANs. */
     private static boolean certificateCovers(String name) {
         try {
             Path cert = Path.of("/usr/local/etc/ssl/mail/fullchain.pem");
@@ -347,18 +351,20 @@ public class Autoconfig {
         }
     }
 
-    /* ===================================================================
-     * L'installazione
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The installation
+     * ===================================================================
+     */
 
     /**
-     * Aggiunge a nginx il nome autoconfig e la rotta che gira la richiesta al
-     * pannello, che genera l'XML giusto per il dominio chiesto.
+     * Adds to nginx the autoconfig name and the route that forwards the request to the
+     * panel, which generates the right XML for the requested domain.
      *
-     * Si segue la stessa disciplina usata per alzare il livello di Postfix: copia di
-     * sicurezza, modifica, VALIDAZIONE con nginx -t, e se la validazione fallisce si
-     * ripristina la copia e non si ricarica niente. Una webmail spenta per aggiungere un
-     * file di configurazione sarebbe un pessimo scambio.
+     * It follows the same discipline used to raise Postfix's level: a backup
+     * copy, the change, VALIDATION with nginx -t, and if the validation fails the copy
+     * is restored and nothing is reloaded. A webmail taken down to add a
+     * configuration file would be a terrible trade.
      */
     public static JSONObject install() {
         JSONObject r = new JSONObject();
@@ -370,27 +376,27 @@ public class Autoconfig {
                 return r.put("success", true).put("alreadyDone", true)
                         .put("note", I18n.tr("server.autoconf.alreadyAll") + " " + st.optString("why", ""));
 
-            // La guardia che conta, e vale anche quando il file NON arriva.
+            // The guard that counts, and it applies even when the file does NOT arrive.
             //
-            // Se la superficie pubblica sulla 443 e' installata, autoconfig.<dominio> e
-            // mta-sts.<dominio> li serve gia' lei, ed e' un blocco scritto apposta per questo:
-            // due sole location esatte, 404 su tutto il resto, limiti di frequenza, solo GET e
-            // HEAD, e un log suo che la jail fail2ban sorveglia.
+            // If the public surface on 443 is installed, autoconfig.<domain> and
+            // mta-sts.<domain> are already served by it, and it is a block written precisely for this:
+            // only two exact locations, 404 on everything else, rate limits, only GET and
+            // HEAD, and a log of its own that the fail2ban jail watches.
             //
-            // Quel blocco e' dichiarato "server_name _", cioe' vince come default_server solo
-            // finche' nessun altro rivendica quei nomi. Aggiungere "autoconfig.* mta-sts.*" al
-            // server_name della webmail glieli porterebbe via — in nginx un nome con jolly
-            // batte il default_server — e con essi la protezione e il log della jail, che
-            // resterebbe "attiva" su un file che nessuno scrive piu'.
+            // That block is declared "server_name _", that is, it wins as default_server only
+            // as long as nobody else claims those names. Adding "autoconfig.* mta-sts.*" to the
+            // webmail's server_name would take them away from it -- in nginx a wildcard name
+            // beats the default_server -- and with them the protection and the jail's log, which
+            // would stay "active" on a file that nobody writes any more.
             //
-            // "nginx -t" non se ne accorgerebbe: e' una rottura di significato, non di
-            // sintassi. Quindi la decisione va presa qui, prima di scrivere.
+            // "nginx -t" would not notice: it is a break in meaning, not in
+            // syntax. So the decision has to be made here, before writing.
             if (WebProtection.state().optBoolean("installed", false))
                 return r.put("success", false).put("alreadyElsewhere", true)
                         .put("error", I18n.tr("server.autoconf.publicSurface", java.util.Map.of("file", WebProtection.FILE_NAME)) + " " + st.optString("why", ""));
 
-            // Quali politiche MTA-STS rispondono PRIMA di toccare qualcosa. Senza questa
-            // fotografia, dopo non c'e' modo di sapere se una l'ho rotta io.
+            // Which MTA-STS policies answer BEFORE anything is touched. Without this
+            // snapshot, afterwards there is no way to know whether I broke one.
             List<String> policiesBefore = answeringPolicies();
             r.put("policiesBefore", new JSONArray(policiesBefore));
 
@@ -406,7 +412,7 @@ public class Autoconfig {
 
             String fresh = text;
 
-            // 1. i nomi: senza, nginx non risponde per autoconfig.<dominio>
+            // 1. the names: without them, nginx does not answer for autoconfig.<domain>
             if (!fresh.contains("autoconfig.") || !fresh.contains("mta-sts.")) {
                 int i = fresh.indexOf("server_name");
                 if (i < 0) return r.put("success", false)
@@ -417,15 +423,15 @@ public class Autoconfig {
                 fresh = fresh.substring(0, end) + " autoconfig.* mta-sts.*" + fresh.substring(end);
             }
 
-            // 2. la rotta: la richiesta va al pannello, che sa quali domini esistono e
-            //    costruisce l'XML per quello giusto. Un file statico non potrebbe.
+            // 2. the route: the request goes to the panel, which knows which domains exist and
+            //    builds the XML for the right one. A static file could not.
             if (!hasBlock(fresh)) {
                 int i = fresh.indexOf("location /");
                 if (i < 0) return r.put("success", false)
                         .put("error", I18n.tr("server.autoconf.noLocation"));
-                // Due rotte, un marcatore solo: entrambe girano la richiesta al pannello, che
-                // sa quali domini esistono e genera il contenuto per quello chiesto. Un file
-                // statico non potrebbe, perche' il contenuto dipende dal dominio.
+                // Two routes, a single marker: both forward the request to the panel, which
+                // knows which domains exist and generates the content for the requested one. A
+                // static file could not, because the content depends on the domain.
                 String broken = MARKER + "\n"
                         + "    location = /mail/config-v1.1.xml {\n"
                         + "        proxy_pass https://127.0.0.1:2096/autoconfig/mail/config-v1.1.xml;\n"
@@ -440,7 +446,7 @@ public class Autoconfig {
 
             Files.writeString(p, fresh);
 
-            // 3. la validazione. Qui si decide se andare avanti o tornare indietro.
+            // 3. the validation. This is where we decide whether to go ahead or go back.
             Outcome test = run("nginx", "-t");
             if (test.code != 0) {
                 Files.writeString(p, text);
@@ -456,11 +462,11 @@ public class Autoconfig {
                         .put("error", I18n.tr("server.autoconf.reloadFailed", java.util.Map.of("out", String.valueOf(reloadOutcome.output.trim()))));
             }
 
-            // Una verifica non puo' guardare solo cio' che volevo ottenere: va guardato anche
-            // cio' che potevo aver rotto. Spostare dei nomi fra due server_name sposta le
-            // richieste da un blocco all'altro, e il blocco che li perde e' quello che serve la
-            // politica MTA-STS. Con i record TXT gia' pubblicati, farla sparire vuol dire
-            // lasciare al mondo la dichiarazione di una protezione che non risponde piu'.
+            // A check cannot look only at what I wanted to achieve: it must also look at
+            // what I might have broken. Moving names between two server_name directives moves the
+            // requests from one block to the other, and the block that loses them is the one that
+            // serves the MTA-STS policy. With the TXT records already published, making it disappear
+            // means leaving the world the declaration of a protection that no longer answers.
             List<String> policiesAfter = answeringPolicies();
             List<String> lost = new ArrayList<>(policiesBefore);
             lost.removeAll(policiesAfter);
@@ -489,12 +495,12 @@ public class Autoconfig {
     }
 
     /**
-     * I domini la cui politica MTA-STS risponde adesso.
+     * The domains whose MTA-STS policy answers right now.
      *
-     * Serve a fare un prima/dopo attorno a una modifica di nginx: e' l'unico modo per
-     * accorgersi di aver rotto una cosa che non si stava cercando di toccare. Un dominio che
-     * gia' non rispondeva prima non conta come danno — non lo si e' rotto qui — e includerlo
-     * farebbe fallire un'installazione riuscita.
+     * It is used to take a before/after around an nginx change: it is the only way to
+     * notice having broken something one was not trying to touch. A domain that already
+     * was not answering before does not count as damage -- it was not broken here -- and
+     * including it would make a successful installation fail.
      */
     private static List<String> answeringPolicies() {
         List<String> liveOnes = new ArrayList<>();
@@ -520,7 +526,7 @@ public class Autoconfig {
         }
     }
 
-    /** L'anteprima del file, per guardarlo prima di installare qualsiasi cosa. */
+    /** The preview of the file, to look at it before installing anything. */
     public static JSONObject preview() {
         JSONObject r = new JSONObject().put("success", true);
         String host = mailHost();

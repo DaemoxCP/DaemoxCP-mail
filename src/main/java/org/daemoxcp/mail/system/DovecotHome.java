@@ -20,29 +20,29 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * La home di Dovecot di ogni casella in /var/vmail/dominio/nome/home, non piu' la radice della posta (reperto 217).
+ * Dovecot's home of each mailbox in /var/vmail/domain/name/home, no longer the mail root (finding 217).
  *
- * La posta sta nella radice della casella (mail_location = maildir:/var/vmail/%d/%n) e la home era la stessa cartella.
- * Dovecot nella home scrive i suoi file: la memoria delle risposte automatiche e degli inoltri (.dovecot.lda-dupes, con
- * la cartella dei lucchetti .dovecot.lda-dupes.locks), e con il reperto 214 gli script Sieve dell'utente (sieve/,
- * dovecot.sieve). Maildir++ prende per una cartella di posta tutto cio' che comincia col punto: misurato sulla VM il
- * 10/11/2026, dopo una sola risposta automatica IMAP LIST dava «dovecot», «dovecot.lda-dupes» e
- * «dovecot.lda-dupes.locks», selezionabile, e la webmail li mostrava; aprirla la trasformava in una Maildir vera (cur,
- * new, tmp). La documentazione di Dovecot (2.3 e 2.4, «Home directories for virtual users»): la home non deve essere la
- * cartella della posta con Maildir, «Non-mailbox files may show up as mailboxes»; fra le disposizioni ammesse c'e' la
- * home sotto la posta, «home=/var/vmail/domain/user/home/, mail=/var/vmail/domain/user/». E' questa: la posta non si
- * sposta, si spostano solo i file di Dovecot. maildir_stat_dirs = yes non basta: .dovecot.lda-dupes.locks e' una
- * cartella.
+ * The mail is in the root of the mailbox (mail_location = maildir:/var/vmail/%d/%n) and the home was the same
+ * folder. Dovecot writes its own files in the home: the memory of automatic replies and forwards
+ * (.dovecot.lda-dupes, with the lock folder .dovecot.lda-dupes.locks), and since finding 214 the user's Sieve
+ * scripts (sieve/, dovecot.sieve). Maildir++ takes as a mail folder everything that starts with a dot: measured on
+ * the VM on 2026-11-10, after a single automatic reply IMAP LIST gave "dovecot", "dovecot.lda-dupes" and
+ * "dovecot.lda-dupes.locks", selectable, and the webmail showed them; opening it turned it into a real Maildir
+ * (cur, new, tmp). The Dovecot documentation (2.3 and 2.4, "Home directories for virtual users"): the home must not
+ * be the mail folder with Maildir, "Non-mailbox files may show up as mailboxes"; among the allowed layouts there is
+ * the home under the mail, "home=/var/vmail/domain/user/home/, mail=/var/vmail/domain/user/". This is the one: the
+ * mail does not move, only Dovecot's files move. maildir_stat_dirs = yes is not enough: .dovecot.lda-dupes.locks
+ * is a folder.
  *
- * Qui, sui server installati prima: si cambia solo il percorso della home in conf.d/auth-sql.conf.ext, se e' quello che
- * il pannello scriveva (2.3 o 2.4), e si portano nella home i file che Dovecot aveva messo nella radice. I file li
- * sposta vmail, non root: e' la sua cartella, e root dentro una cartella di un altro utente seguirebbe i suoi
- * collegamenti. Ordine: prima si copiano nella home (con la configurazione di prima Dovecot usa ancora gli originali),
- * poi la configurazione nuova, doveconf, il ricaricamento e la verifica con doveadm user; se una cosa sola non torna la
- * configurazione torna com'era e le copie si tolgono. Dopo, gli originali si tolgono dalla radice, e la cartella
- * fantasma .dovecot.lda-dupes.locks se non contiene posta; se ne contiene (qualcuno ci ha spostato dei messaggi) resta, e
- * il registro lo dice. Se in radice e in home ci sono due script dell'utente diversi, non si sceglie: restano tutti e due.
- * Al secondo avvio non trova niente da fare.
+ * Here, on servers installed earlier: only the home path in conf.d/auth-sql.conf.ext is changed, if it is the one
+ * the panel used to write (2.3 or 2.4), and the files Dovecot had put in the root are brought into the home. The
+ * files are moved by vmail, not by root: it is its folder, and root inside another user's folder would follow that
+ * user's links. Order: first they are copied into the home (with the previous configuration Dovecot still uses the
+ * originals), then the new configuration, doveconf, the reload and the check with doveadm user; if a single thing
+ * does not add up, the configuration goes back to how it was and the copies are removed. Afterwards the originals
+ * are removed from the root, and so is the ghost folder .dovecot.lda-dupes.locks if it contains no mail; if it does
+ * (someone moved messages into it) it stays, and the log says so. If the root and the home hold two different user
+ * scripts, no choice is made: both stay. At the second startup it finds nothing to do.
  */
 public final class DovecotHome {
 
@@ -53,28 +53,32 @@ public final class DovecotHome {
     static final String DOVECONF = "/usr/local/bin/doveconf";
     static final String DOVEADM = "/usr/local/bin/doveadm";
 
-    /** La cartella della home dentro quella della casella. */
+    /** The home folder inside the mailbox folder. */
     public static final String DIR = "home";
 
-    /** La home della 2.3 come la scriveva il pannello (args dello userdb static), seguita da uno spazio o dalla fine riga. */
+    /**
+     * The 2.3 home as the panel used to write it (args of the static userdb), followed by a space or the end
+     * of the line.
+     */
     static final Pattern OLD23 = Pattern.compile("(?m)(\\bhome=/var/vmail/%d/%n)(?=[ \\t]|$)");
     static final String NEW23 = "home=/var/vmail/%d/%n/" + DIR;
 
-    /** La home della 2.4 come la scriveva il pannello (fields dello userdb static), da sola sulla riga. */
+    /** The 2.4 home as the panel used to write it (fields of the static userdb), alone on its line. */
     static final Pattern OLD24 = Pattern.compile("(?m)^([ \\t]*home = /var/vmail/%\\{user \\| domain\\}/%\\{user \\| username\\})[ \\t]*$");
     static final String NEW24 = "home = /var/vmail/%{user | domain}/%{user | username}/" + DIR;
 
-    /** Le cartelle fantasma che Maildir++ ricavava dai file di Dovecot nella radice: la piu' profonda e i suoi genitori. */
+    /** The ghost folders that Maildir++ derived from Dovecot's files in the root: the deepest one and its parents. */
     static final List<String> PHANTOMS = List.of("dovecot.lda-dupes.locks", "dovecot.lda-dupes", "dovecot");
 
     /**
-     * Il lavoro sui file, eseguito come vmail: $1 la fase, $2 la radice (/var/vmail). Ogni riga che scrive e' una parola
-     * in maiuscolo e un percorso. Le cose di Dovecot (la memoria dei duplicati, lo script compilato, il registro degli
-     * script) se sono diverse tengono la piu' recente; quelle dell'utente (gli script) se sono diverse restano tutte e due.
-     *  prepare: crea la home e ci copia quello che c'e' in radice (gli originali restano, per la configurazione di prima);
-     *  undo:    toglie dalla home le copie uguali agli originali, e la home se resta vuota;
-     *  finish:  crea la home nelle caselle che hanno gia' la posta, ci sposta quello che e' rimasto in radice, e toglie
-     *           la cartella fantasma dei lucchetti se non contiene posta.
+     * The job on the files, run as vmail: $1 the phase, $2 the root (/var/vmail). Every line it writes is a word
+     * in upper case and a path. Dovecot's things (the duplicates memory, the compiled script, the scripts' log)
+     * keep the most recent one if they differ; the user's things (the scripts) both stay if they differ.
+     *  prepare: creates the home and copies into it what is in the root (the originals stay, for the previous
+     *           configuration);
+     *  undo:    removes from the home the copies identical to the originals, and the home if it is left empty;
+     *  finish:  creates the home in the mailboxes that already have mail, moves into it what is left in the root,
+     *           and removes the ghost lock folder if it contains no mail.
      */
     static final String SCRIPT = """
             PATH=/bin:/usr/bin; export PATH
@@ -138,14 +142,15 @@ public final class DovecotHome {
 
     private DovecotHome() {}
 
-    /** La home di Dovecot di una casella: /var/vmail/dominio/nome/home. */
+    /** Dovecot's home of a mailbox: /var/vmail/domain/name/home. */
     public static Path of(String domain, String user) {
         return SafeNames.under(vmail, domain, user, DIR);
     }
 
     /**
-     * conf.d/auth-sql.conf.ext con la home nuova, o null se non c'e' niente da cambiare: gia' fatto, o la home non e'
-     * quella che scriveva il pannello, una volta sola (allora non e' sua, e resta com'e'). Funzione pura.
+     * conf.d/auth-sql.conf.ext with the new home, or null if there is nothing to change: already done, or the
+     * home is not, exactly once, the one the panel used to write (then it is not the panel's, and it stays as it
+     * is). A pure function.
      */
     static String migrated(String conf) {
         if (conf == null) return null;
@@ -163,8 +168,9 @@ public final class DovecotHome {
     }
 
     /**
-     * Il server usa gia' la home nella sua cartella: per chi crea una casella nuova (ConfigRegeneratorScript), che
-     * cosi' la crea subito invece di aspettare il prossimo avvio del pannello.
+     * The server already uses the home in its own folder: for whoever creates a new mailbox
+     * (ConfigRegeneratorScript), which in this way creates it right away instead of waiting for the panel's
+     * next startup.
      */
     public static boolean configured() {
         try {
@@ -174,12 +180,12 @@ public final class DovecotHome {
         }
     }
 
-    /** La configurazione mette gia' la home nella sua cartella (2.3 o 2.4). */
+    /** The configuration already puts the home in its own folder (2.3 or 2.4). */
     static boolean usesHome(String conf) {
         return conf != null && (conf.contains(NEW23) || conf.contains(NEW24));
     }
 
-    /** Le righe del lavoro sui file, e se e' andato tutto bene. */
+    /** The lines of the job on the files, and whether everything went well. */
     record Outcome(boolean ok, List<String> lines) {
         List<String> with(String word) {
             List<String> out = new ArrayList<>();
@@ -188,17 +194,17 @@ public final class DovecotHome {
         }
     }
 
-    /** Il lavoro sui file come vmail. */
+    /** The job on the files, as vmail. */
     static Outcome asVmail(String phase) {
         Shell.Result r = Shell.run(Duration.ofSeconds(600), "su", "-m", "vmail", "-c", SCRIPT, "sh", phase, vmail.toString());
         return new Outcome(r.success(), r.outputTrim().isEmpty() ? List.of() : List.of(r.outputTrim().split("\n")));
     }
 
     /**
-     * Quando il pannello scrive le regole di una casella (risposta automatica, inoltro): la sua home, come vmail, se la
-     * configurazione la vuole nella sua cartella. Senza, Dovecot la crea da solo alla prima risposta automatica, ma prima
-     * scrive nel registro della posta «Error: duplicate db: ... file_dotlock_open(.../home/.dovecot.lda-dupes) failed:
-     * No such file or directory» (misurato sulla VM).
+     * When the panel writes a mailbox's rules (automatic reply, forwarding): its home, as vmail, if the
+     * configuration wants it in its own folder. Without it, Dovecot creates it by itself at the first automatic
+     * reply, but first it writes in the mail log "Error: duplicate db: ...
+     * file_dotlock_open(.../home/.dovecot.lda-dupes) failed: No such file or directory" (measured on the VM).
      */
     public static void ensureHome(String domain, String user) {
         try {
@@ -214,7 +220,7 @@ public final class DovecotHome {
         }
     }
 
-    /** All'avvio della parte root. */
+    /** At the start of the root part. */
     public static void ensureAtBoot() {
         try {
             String problem = ensure();
@@ -224,15 +230,15 @@ public final class DovecotHome {
         }
     }
 
-    /** Null se non c'era niente da fare o se e' fatto; altrimenti cosa e' rimasto com'era, e perche'. */
+    /** Null if there was nothing to do or if it is done; otherwise what was left as it was, and why. */
     static synchronized String ensure() throws Exception {
         if (!Files.isRegularFile(authSql, LinkOption.NOFOLLOW_LINKS) || !Files.isExecutable(Path.of(DOVECONF))
                 || !Files.isDirectory(vmail, LinkOption.NOFOLLOW_LINKS)) return null;
         String current = Files.readString(authSql, StandardCharsets.UTF_8);
         String next = migrated(current);
         if (next == null) {
-            // Gia' fatto (o la configurazione l'ha riscritta il pannello col modello nuovo): restano da portare nella
-            // home i file rimasti in radice, se ce ne sono.
+            // Already done (or the panel rewrote the configuration with the new template): what remains is to bring
+            // into the home the files left in the root, if there are any.
             if (!usesHome(current)) return null;
             Outcome f = asVmail("finish");
             String told = report(f, false);
@@ -257,7 +263,7 @@ public final class DovecotHome {
                 return putBack(current, "Dovecot did not reload");
             verified = verify();
             if (verified != null && !verified.startsWith("UNVERIFIED")) return putBack(current, verified);
-            // I processi di prima finiscono la consegna che hanno in mano con la configurazione di prima.
+            // The earlier processes finish the delivery they have in hand with the previous configuration.
             Thread.sleep(3000);
         }
         Outcome f = asVmail("finish");
@@ -269,7 +275,7 @@ public final class DovecotHome {
         return f.ok() ? null : "NOT_COMPLETE: " + told;
     }
 
-    /** Le prime caselle sotto /var/vmail (dominio/nome), come indirizzi. */
+    /** The first mailboxes under /var/vmail (domain/name), as addresses. */
     static List<String> candidates(Path root, int max) {
         List<String> out = new ArrayList<>();
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) return out;
@@ -291,10 +297,10 @@ public final class DovecotHome {
     }
 
     /**
-     * Dovecot da' la home nuova per una casella vera? Null se si'; «UNVERIFIED ...» se nessuna casella risponde (una
-     * cartella rimasta di una casella tolta non e' un utente di Dovecot); altrimenti la home che da'. Riprova per una
-     * decina di secondi: subito dopo il ricaricamento il processo di autenticazione puo' non rispondere ancora
-     * («auth-master: userdb lookup: Disconnected unexpectedly», visto sulla VM).
+     * Does Dovecot give the new home for a real mailbox? Null if yes; "UNVERIFIED ..." if no mailbox answers (a
+     * leftover folder of a removed mailbox is not a Dovecot user); otherwise the home it gives. Retries for about
+     * ten seconds: right after the reload the authentication process may not answer yet
+     * ("auth-master: userdb lookup: Disconnected unexpectedly", seen on the VM).
      */
     static String verify() throws InterruptedException {
         List<String> mailboxes = candidates(vmail, 5);
@@ -315,7 +321,7 @@ public final class DovecotHome {
         return "UNVERIFIED " + said;
     }
 
-    /** Cosa ha fatto il lavoro sui file, in una riga per il registro; e le iscrizioni alle cartelle fantasma tolte. */
+    /** What the job on the files did, in one line for the log; and the removed subscriptions to ghost folders. */
     private static String report(Outcome f, boolean always) {
         List<String> moved = f.with("MOVED"), removed = f.with("PHANTOM_REMOVED"), kept = f.with("PHANTOM_KEPT"),
                 both = f.with("BOTH_DIFFER"), failed = new ArrayList<>(f.with("FAILED"));
@@ -332,7 +338,7 @@ public final class DovecotHome {
         if (!failed.isEmpty()) parts.add("FAILED: " + String.join(", ", head(failed)));
         String told = String.join("; ", parts);
         if (!always && f.ok() && !told.isEmpty()) {
-            // Ai riavvii dopo, una cartella con della posta o due script diversi restano: si ricordano, non si rifanno.
+            // At later restarts, a folder with mail or two different scripts stay: they are remembered, not redone.
             boolean did = !moved.isEmpty() || !removed.isEmpty() || !f.with("CREATED").isEmpty();
             LOGGER.info("[DovecotHome] " + (did ? "DONE: " : "still as they were: ") + told);
         }
@@ -340,8 +346,9 @@ public final class DovecotHome {
     }
 
     /**
-     * Le iscrizioni alle cartelle fantasma di una casella, che non esistono piu': si tolgono, perche' la webmail non le
-     * mostri vuote. Una cartella vera con lo stesso nome (qualcuno l'ha creata) resta iscritta. Quante ne ha tolte.
+     * A mailbox's subscriptions to the ghost folders, which no longer exist: they are removed, so that the
+     * webmail does not show them empty. A real folder with the same name (someone created it) stays subscribed.
+     * How many it removed.
      */
     static int unsubscribe(Path mailboxDir) {
         if (mailboxDir == null || mailboxDir.getParent() == null) return 0;

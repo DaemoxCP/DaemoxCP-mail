@@ -21,27 +21,26 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * La reinstallazione completa dal menu gira staccata dal menu: un processo suo, in una sessione sua
- * (daemon(8)), che scrive in un registro; il menu lo segue e basta.
+ * The full reinstallation from the menu runs detached from the menu: a process of its own, in a session of
+ * its own (daemon(8)), that writes to a log; the menu just follows it.
  *
- * <p>Perche' esiste: misurato sulla VM FreeBSD 15.1 il 06/11/2026 (reperto 163). Lo script girava
- * come figlio della JVM del menu, nel suo stesso gruppo di processi.
+ * <p>Why it exists: measured on the FreeBSD 15.1 VM on 2026-11-06 (finding 163). The script ran as a child
+ * of the menu's JVM, in the same process group.
  * <ul>
- *   <li>Chiuso l'ssh durante la fase 2 (il terminale riceve SIGHUP): morti insieme menu, script e
- *       pkg. Posta spenta, configurazioni di Postfix gia' cancellate, i 39 pacchetti sbloccati con
- *       l'elenco su disco, e il servizio acceso non se ne accorgeva fino al suo prossimo avvio.</li>
- *   <li>La JVM del menu uccisa con kill -9: lo script orfano andava avanti ~16 secondi (installava
- *       Roundcube e PHP) e moriva alla prima riga scritta sul tubo che nessuno leggeva piu', in un
- *       punto a caso.</li>
+ *   <li>ssh closed during phase 2 (the terminal receives SIGHUP): menu, script and pkg died together.
+ *       Mail off, Postfix configurations already deleted, the 39 packages unlocked with the list on
+ *       disk, and the running service did not notice until its next startup.</li>
+ *   <li>The menu's JVM killed with kill -9: the orphaned script went on for ~16 seconds (installing
+ *       Roundcube and PHP) and died at the first line written to the pipe that nobody read any more, at
+ *       a random point.</li>
  * </ul>
- * Adesso il menu lancia {@code Main --reinstall <nome> <file d'esito>} con daemon(8): sessione
- * nuova, nessun terminale, l'uscita in un file. Se il menu muore (ssh caduto, Ctrl-C, kill) il
- * lavoro va avanti, riprotegge i pacchetti, decide la password e la via di ritorno, e scrive
- * l'esito. Riaprendo il menu durante una reinstallazione, il menu segue quella in corso invece di
- * partirne un'altra.
+ * Now the menu launches {@code Main --reinstall <name> <outcome file>} with daemon(8): new session, no
+ * terminal, the output in a file. If the menu dies (ssh dropped, Ctrl-C, kill) the job goes on, locks
+ * the packages again, decides the password and the way back, and writes the outcome. When the menu is
+ * reopened during a reinstallation, it follows the one in progress instead of starting another.
  *
- * <p>Il registro sta in /var/log/daemoxcp-mail, fuori dal boot environment: resta anche dopo essere
- * tornati indietro con la via di ritorno, che e' proprio quando serve leggerlo.
+ * <p>The log lives in /var/log/daemoxcp-mail, outside the boot environment: it stays even after going
+ * back with the way back, which is exactly when it needs to be read.
  */
 public final class ReinstallJob {
 
@@ -49,38 +48,38 @@ public final class ReinstallJob {
 
     private ReinstallJob() {}
 
-    /** La cartella dei registri. Le prove la spostano con -Ddaemoxcp.mail.reinstall.dir. */
+    /** The log folder. The tests move it with -Ddaemoxcp.mail.reinstall.dir. */
     static Path dir = Path.of(System.getProperty("daemoxcp.mail.reinstall.dir", "/var/log/daemoxcp-mail"));
 
-    /** daemon(8) della base di FreeBSD. */
+    /** daemon(8) from the FreeBSD base system. */
     static String daemon = "/usr/sbin/daemon";
 
-    /** Quante reinstallazioni passate si tengono (registro ed esito). */
+    /** How many past reinstallations are kept (log and outcome). */
     static final int KEEP = 10;
 
     private static final DateTimeFormatter STAMP =
             DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss").withZone(ZoneOffset.UTC);
 
-    /** Una reinstallazione: il registro, il file col pid (di daemon -p) e quello dell'esito. */
+    /** A reinstallation: the log, the pid file (from daemon -p) and the outcome file. */
     public record Run(Path log, Path pid, Path exit) {
         static Run named(String base) {
             return new Run(dir.resolve(base + ".log"), dir.resolve(base + ".pid"), dir.resolve(base + ".exit"));
         }
     }
 
-    /** Un nome di server di posta accettabile: lettere, cifre, trattini e punti, come un nome DNS. */
+    /** An acceptable mail server name: letters, digits, hyphens and dots, like a DNS name. */
     public static boolean validHostname(String h) {
         return h != null && h.length() <= 253
                 && h.matches("[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*");
     }
 
     /**
-     * Dalla voce del menu: lancia la reinstallazione staccata (o ritrova quella in corso) e ne segue
-     * il registro fino alla fine. Vero se e' riuscita. Senza daemon(8) (non FreeBSD) la fa qui, come
-     * prima, e lo dice.
+     * From the menu option: launches the detached reinstallation (or finds the one in progress) and follows
+     * its log until the end. True if it succeeded. Without daemon(8) (not FreeBSD) it does it here, as
+     * before, and says so.
      */
     public static boolean runFromMenu(String host, PrintStream out) {
-        I18n.setCurrent("en");     // la console e' in inglese
+        I18n.setCurrent("en");     // the console is in English
         try {
             Run running = running();
             if (running != null) {
@@ -97,7 +96,7 @@ public final class ReinstallJob {
                 out.println(I18n.tr("server.reinstall.job.inProcess", Map.of("daemon", daemon)));
                 out.flush();
                 I18n.clearCurrent();
-                // Lo script del jar che gira, come fa Main --reinstall (InstallScripts, reperto 169).
+                // The script of the running jar, as Main --reinstall does (InstallScripts, finding 169).
                 new org.daemoxcp.mail.scripts.FullMailServerScript().write_file();
                 return org.daemoxcp.mail.Main.runInstallation(host);
             }
@@ -120,7 +119,7 @@ public final class ReinstallJob {
         }
     }
 
-    /** Lancia il lavoro con daemon(8) e aspetta che abbia scritto il suo pid. */
+    /** Launches the job with daemon(8) and waits until it has written its pid. */
     static Run launch(String host) throws IOException, InterruptedException {
         Files.createDirectories(dir);
         setPermissions(dir, "rwx------");
@@ -130,12 +129,12 @@ public final class ReinstallJob {
         Files.createFile(r.log());
         setPermissions(r.log(), "rw-------");
 
-        // --enable-native-access: col -cp la voce Enable-Native-Access del manifest del jar non vale (solo -jar la
-        // legge), e Java 25 scriveva quattro WARNING sul System.load del driver SQLite in testa al registro della
-        // reinstallazione, quindi anche sullo schermo del menu (prova da server pulito del 18/11/2026).
+        // --enable-native-access: with -cp the Enable-Native-Access entry of the jar manifest does not apply
+        // (only -jar reads it), and Java 25 wrote four WARNINGs about the System.load of the SQLite driver at
+        // the top of the reinstallation log, so also on the menu screen (test from a clean server on 2026-11-18).
         List<String> cmd = new ArrayList<>(List.of(daemon, "-f", "-o", r.log().toString(),
                 "-p", r.pid().toString(), "-t", "daemoxcp-mail-reinstall", java(), "--enable-native-access=ALL-UNNAMED"));
-        // Le impostazioni del pannello (cartella dei segreti, dei registri) valgono anche per lui.
+        // The panel's settings (secrets folder, log folder) apply to it too.
         for (String k : System.getProperties().stringPropertyNames())
             if (k.startsWith("daemoxcp.mail.")) cmd.add("-D" + k + "=" + System.getProperty(k));
         cmd.addAll(List.of("-cp", System.getProperty("java.class.path"), "org.daemoxcp.mail.Main",
@@ -154,8 +153,8 @@ public final class ReinstallJob {
     }
 
     /**
-     * Segue il registro dall'inizio fino all'esito. Vero se l'esito e' 0. Se il lavoro sparisce
-     * senza esito (ucciso), lo dice e torna falso.
+     * Follows the log from the start until the outcome. True if the outcome is 0. If the job disappears
+     * without an outcome (killed), it says so and returns false.
      */
     static boolean follow(Run r, PrintStream out) {
         long offset = 0;
@@ -200,7 +199,7 @@ public final class ReinstallJob {
         }
     }
 
-    /** Il pid scritto da daemon -p (che lo toglie quando il lavoro finisce); 0 se non c'e'. */
+    /** The pid written by daemon -p (which removes it when the job ends); 0 if there is none. */
     static long pidOf(Run r) {
         try {
             String s = Files.readString(r.pid(), StandardCharsets.UTF_8).trim();
@@ -210,7 +209,7 @@ public final class ReinstallJob {
         }
     }
 
-    /** Vivo: il pid c'e', il processo c'e', ed e' una reinstallazione del pannello. */
+    /** Alive: the pid is there, the process is there, and it is a reinstallation of the panel. */
     static boolean alive(Run r) {
         long pid = pidOf(r);
         if (pid <= 0) return false;
@@ -219,7 +218,7 @@ public final class ReinstallJob {
                 .orElse(false);
     }
 
-    /** La reinstallazione in corso adesso, se ce n'e' una (la piu' recente). */
+    /** The reinstallation in progress now, if there is one (the most recent). */
     static Run running() {
         try (var files = Files.list(dir)) {
             List<String> bases = files.map(p -> p.getFileName().toString())
@@ -231,15 +230,15 @@ public final class ReinstallJob {
                 if (!Files.exists(r.exit()) && alive(r)) return r;
             }
         } catch (IOException e) {
-            // nessuna cartella: nessuna reinstallazione in corso
+            // no folder: no reinstallation in progress
         }
         return null;
     }
 
     /**
-     * Il registro dell'ultima reinstallazione finita male DOPO aver cominciato a cambiare il sistema
-     * (arrivata alla fase 1): uccisa senza esito, o esito 1. "" se l'ultima e' andata bene, si e'
-     * fermata prima di cambiare qualcosa, e' ancora in corso, o non ce n'e'.
+     * The log of the last reinstallation that failed AFTER starting to change the system (that reached
+     * phase 1): killed without an outcome, or outcome 1. "" if the last one went well, stopped before
+     * changing anything, is still in progress, or there is none.
      */
     public static String lastFailedAfterChanges() {
         try (var files = Files.list(dir)) {
@@ -259,7 +258,7 @@ public final class ReinstallJob {
         }
     }
 
-    /** Alla fine del lavoro staccato (Main --reinstall): l'esito, scritto tutto o niente. */
+    /** At the end of the detached job (Main --reinstall): the outcome, written all or nothing. */
     public static void writeExit(Path exit, boolean ok) {
         try {
             Path tmp = exit.resolveSibling(exit.getFileName() + ".tmp");
@@ -275,7 +274,7 @@ public final class ReinstallJob {
         }
     }
 
-    /** Si tengono le ultime KEEP reinstallazioni finite; mai i file di una in corso. */
+    /** The last KEEP finished reinstallations are kept; never the files of one in progress. */
     static void prune() {
         try (var files = Files.list(dir)) {
             List<String> bases = files.map(p -> p.getFileName().toString())
@@ -303,7 +302,7 @@ public final class ReinstallJob {
         try {
             Files.setPosixFilePermissions(p, PosixFilePermissions.fromString(perms));
         } catch (IOException | UnsupportedOperationException ignored) {
-            // file system senza permessi POSIX
+            // file system without POSIX permissions
         }
     }
 }

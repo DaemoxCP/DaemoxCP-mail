@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * clamd's socket only for the group clamav, 0660, with rspamd in that group (reperto 237). Against a fake clamd whose
+ * clamd's socket only for the group clamav, 0660, with rspamd in that group (finding 237). Against a fake clamd whose
  * socket gets the mode its clamd.conf says when it starts, and a fake rspamd that reaches it only if the socket is open
  * to everyone or rspamd was started in the group clamav:
  *  1. the installer appends exactly ClamdSocket.BLOCK and puts rspamd in the group before clamd and rspamd start;

@@ -6,7 +6,7 @@ import java.io.PrintStream;
  * What the panel does, at start, on a server installed before the installer made Postfix the
  * local MTA (LocalMtaRepair.decide). The decision is kept apart from the system on purpose: here
  * the configurations that the three scripts of `main` really left are checked, plus the edge
- * cases. The real effect on a machine is measured by the run on the VM (reperti).
+ * cases. The real effect on a machine is measured by the run on the VM (findings).
  *
  * The case that matters is the first: the full installation of main left myorigin = $mydomain
  * (the server's name) and mydestination = localhost. Enabling mailer.conf as it is bounces the

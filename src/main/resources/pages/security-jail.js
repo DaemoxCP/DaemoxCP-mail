@@ -3,8 +3,8 @@
         let fhcCsrfToken = null;
 
         function ensureFhcCsrfToken() {
-            // riusa csrf token globale se esiste, altrimenti chiama un endpoint dedicato
-            // (qui assumiamo esista document.getElementById('csrf_token'))
+            // reuse the global csrf token if it exists, otherwise call a dedicated endpoint
+            // (here we assume document.getElementById('csrf_token') exists)
             try {
                 const el = document.getElementById('csrf_token');
                 if (el && el.value) return el.value;
@@ -13,8 +13,8 @@
         }
 
         // ===== Postfix Aliases =====
-        // Il testo grezzo della jail, sotto la sua scheda. Era una catena di parentElement nel gestore
-        // in linea; i gestori adesso chiamano solo funzioni (panel-actions.js, reperto 178).
+        // The jail's raw text, under its card. It was a chain of parentElement in the inline
+        // handler; the handlers now only call functions (panel-actions.js, finding 178).
         function toggleJailRaw(button, name) {
             const box = button.parentElement && button.parentElement.parentElement && button.parentElement.parentElement.parentElement;
             const raw = box && box.querySelector('.jail-raw-' + CSS.escape(name));
@@ -27,11 +27,11 @@
             return d.innerHTML;
         }
 
-        // ===== Stato live jail Fail2ban =====
-        // Stampa per ogni jail attiva l'output di:
+        // ===== Live state of the Fail2ban jails =====
+        // For each active jail, prints the output of:
         //   fail2ban-client get <jail> maxretry/findtime/bantime/logpath/filter/ignoreip
         //   fail2ban-client status <jail>
-        // così l'utente vede SUBITO se la config è quella che ha impostato.
+        // so the user sees AT ONCE whether the config is the one they set.
         function loadJailLiveState() {
             const body = document.getElementById('jailLiveBody');
             body.innerHTML = '<p class="text-muted small mb-0 p-2"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('sj.running')) + '</p>';
@@ -45,9 +45,9 @@
                     return;
                 }
                 if (!data.running) {
-                    // Il pannello sa avviarlo da solo (start_service): dettare un comando da
-                    // terminale per una cosa che il pannello fa gia' e' mandare fuori da qui
-                    // un lavoro che sta qui dentro.
+                    // The panel can start it by itself (start_service): dictating a terminal
+                    // command for something the panel already does is sending outside a
+                    // job that belongs in here.
                     body.innerHTML = '<div class="alert alert-warning m-2 mb-0">'
                         + '<strong>' + escHtml(t('sj.notRunning')) + '</strong> ' + escHtml(t('sj.notRunningHint')) + ''
                         + '<button class="btn btn-sm btn-warning ms-2" data-on-click="startFail2banFromPanel()">'
@@ -72,7 +72,7 @@
 
         function renderJailLiveCard(j) {
             const name = j.name || '?';
-            // Tag colorato per "currently banned": 0 = grigio, >0 = giallo
+            // Colored tag for "currently banned": 0 = grey, >0 = yellow
             const cbBadge = j.currently_banned > 0
                 ? '<span class="badge bg-warning text-dark ms-1">' + escHtml(tn('sj.bannedNow', j.currently_banned)) + '</span>'
                 : '<span class="badge bg-light text-dark ms-1">' + escHtml(tn('sj.bannedNow', 0)) + '</span>';
@@ -94,7 +94,7 @@
             html += renderJailGetRow('ignoreip',  j.ignoreip,  t('sj.ignoreip'));
             html += '</tbody></table>';
 
-            // Status counters parsati
+            // Parsed status counters
             html += '<div class="row g-2 mb-2">';
             html += '<div class="col-6 col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">' + escHtml(t('sj.curFailed')) + '</div><strong class="fs-5">' + escHtml(j.currently_failed) + '</strong></div></div>';
             html += '<div class="col-6 col-md-3"><div class="border rounded p-1 text-center"><div class="text-muted small">' + escHtml(t('sj.totFailed')) + '</div><strong class="fs-5">' + escHtml(j.total_failed) + '</strong></div></div>';
@@ -106,7 +106,7 @@
                 html += '<div class="mb-2"><strong class="small">' + escHtml(t('sj.bannedList')) + '</strong> <code class="small" data-style="word-break:break-all">' + paliasEscape(j.banned_ips_raw) + '</code></div>';
             }
 
-            // Output RAW del comando "fail2ban-client status <jail>" — chiuso di default
+            // RAW output of the "fail2ban-client status <jail>" command -- collapsed by default
             html += '<div class="jail-raw-' + paliasEscape(name) + ' d-none">';
             html += '<div class="small text-muted mb-1"><i class="fas fa-terminal me-1" aria-hidden="true"></i>' + escHtml(t('sj.outputOf')) + ' <code>fail2ban-client status ' + paliasEscape(name) + '</code></div>';
             html += '<pre class="bg-dark text-light p-2 small rounded mb-0" data-style="font-size:0.75rem;white-space:pre-wrap">' + paliasEscape(j.status_raw || '') + '</pre>';
@@ -118,7 +118,7 @@
 
         function renderJailGetRow(key, value, descr, isSeconds) {
             let display = paliasEscape(value || '');
-            // Se è in secondi, mostra anche la conversione umana
+            // If it is in seconds, also show the human-readable conversion
             if (isSeconds && /^-?\d+$/.test((value || '').trim())) {
                 const n = parseInt(value, 10);
                 if (n === -1) {
@@ -205,7 +205,7 @@
             html += '</table>';
             body.innerHTML = html;
 
-            // Pre-compila il campo "root forward" se disponibile
+            // Pre-fill the "root forward" field if available
             const fwInput = document.getElementById('paliasRootForward');
             if (fwInput && data.root_forward) fwInput.value = data.root_forward;
         }
@@ -279,7 +279,8 @@
                         return;
                     }
                     if (data.all_ok && data.unchecked) {
-                        // Niente di rotto, ma non tutto si e' potuto guardare: non "tutto a posto", e niente "Ripara tutto".
+                        // Nothing broken, but not everything could be checked: not "all fine", and no
+                        // "Fix everything".
                         overall.innerHTML = '<span class="badge bg-warning text-dark">' + escHtml(t('sj.unchecked')) + '</span>';
                         if (btnFixAll) btnFixAll.classList.add('d-none');
                     } else if (data.all_ok) {
@@ -302,7 +303,7 @@
                         html += '<div><strong>' + icon + ' ' + escapeHtml(chk.label) + '</strong></div>';
                         html += '<div class="small text-muted">' + escapeHtml(chk.status || '') + '</div>';
                         if (!chk.ok && chk.unknown && chk.impact) {
-                            // Non ha potuto guardare: cosa vuol dire e cosa fare, non «se non lo sistemi».
+                            // It could not look: what it means and what to do, not "if you don't fix it".
                             html += '<div class="small mt-1"><i class="fas fa-circle-info text-warning me-1" aria-hidden="true"></i>' + escHtml(chk.impact) + '</div>';
                         } else if (!chk.ok && chk.impact) {
                             html += '<div class="small text-danger mt-1"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' + escHtml(t('sj.ifNotFixed', { impact: chk.impact })) + '</div>';
@@ -347,7 +348,7 @@
                 btn.disabled = false;
                 btn.innerHTML = original;
 
-                // Render report passo-passo
+                // Render the step-by-step report
                 const report = document.getElementById('fhcFixAllReport');
                 const stepsEl = document.getElementById('fhcFixAllSteps');
                 let html = '';
@@ -372,7 +373,7 @@
                 stepsEl.innerHTML = html;
                 report.classList.remove('d-none');
 
-                // Riricarica lo stato
+                // Reload the state
                 loadFail2banHealth();
                 loadStatus();
             }).catch(e => {
@@ -383,7 +384,7 @@
         }
 
         async function runFhcFix(action, btn) {
-            // Warning rafforzato per le azioni pf (rischio lockout SSH)
+            // Stronger warning for the pf actions (risk of SSH lockout)
             const pfActions = { 'start_pf': true, 'enable_pf_at_boot': true, 'add_pf_anchor': true };
             let confirmMsg = t('sj.confirmOne');
             if (pfActions[action]) confirmMsg = t('sj.confirmPf');
@@ -402,9 +403,9 @@
             }).then(r => r.json()).then(data => {
                 btn.disabled = false;
                 btn.innerHTML = original;
-                // Una riparazione che scrive file e poi si verifica ha un racconto da fare:
-                // ricaricare la diagnosi e basta butterebbe via il passo che conta, cioe' cosa
-                // ha risposto fail2ban DOPO il reload.
+                // A repair that writes files and then verifies itself has a story to tell:
+                // just reloading the diagnosis would throw away the step that matters, that is
+                // what fail2ban answered AFTER the reload.
                 if (data.steps) {
                     const rep = document.getElementById('fhcFixAllReport');
                     const el = document.getElementById('fhcFixAllSteps');
@@ -428,7 +429,7 @@
                     if (rep) rep.classList.remove('d-none');
                 }
                 if (data.success) {
-                    // ricarica la diagnosi
+                    // reload the diagnosis
                     loadFail2banHealth();
                     loadStatus();
                 } else if (data.steps) {
@@ -445,7 +446,7 @@
             });
         }
 
-        // Helper escapeHtml (se non già definita altrove nella pagina)
+        // Helper escapeHtml (if not already defined elsewhere in the page)
         if (typeof escapeHtml !== 'function') {
             window.escapeHtml = function(text) {
                 const div = document.createElement('div');
@@ -454,7 +455,7 @@
             };
         }
 
-        // Reload morbido (fail2ban-client reload): rilegge i file senza killare il daemon
+        // Soft reload (fail2ban-client reload): rereads the files without killing the daemon
         async function reloadFail2banFromPanel() {
             if (!await panelConfirm(t('sj.confirmReload'))) return;
             fetch('/api/fail2ban_health', {
@@ -469,7 +470,7 @@
             }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        // Restart pulito (service fail2ban restart): killa il daemon e lo riavvia
+        // Clean restart (service fail2ban restart): kills the daemon and starts it again
         async function restartFail2banFromPanel() {
             if (!await panelConfirm(t('sj.confirmRestart'))) return;
             fetch('/api/fail2ban_health', {
@@ -484,17 +485,17 @@
             }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        // Avvio di fail2ban dal pannello. Esiste gia' l'azione start_service: quello che
-        // mancava era il modo di premerla dalla pagina dove il problema si vede.
+        // Starting fail2ban from the panel. The start_service action already exists: what
+        // was missing was a way to press it from the page where the problem shows.
         async function startFail2banFromPanel() {
-            // La barra rovesciata va DOPPIA qui dentro. Dentro un text block Java la sequenza
-            // barra-n e' un a capo VERO: arriva al browser come un ritorno a capo dentro una
-            // stringa JavaScript, la stringa non si chiude, il parser si ferma e l'INTERO blocco
-            // di script non viene eseguito. La pagina resta con tutti gli indicatori che girano,
-            // e sembra che le chiamate non finiscano mentre non sono nemmeno partite.
+            // The backslash must be DOUBLED in here. Inside a Java text block the
+            // backslash-n sequence is a REAL newline: it reaches the browser as a line break inside
+            // a JavaScript string, the string does not close, the parser stops and the WHOLE
+            // script block is not run. The page stays with all the indicators spinning,
+            // and it looks as if the calls never finish while they have not even started.
             //
-            // Questo commento stesso, scritto la prima volta con la sequenza singola per
-            // spiegarla, ha rotto la pagina allo stesso modo: qui non si nomina, si descrive.
+            // This very comment, written the first time with the single sequence to
+            // explain it, broke the page in the same way: here it is not named, it is described.
             if (!await panelConfirm(t('sj.confirmStart'))) return;
             fetch('/api/fail2ban_health', {
                 method: 'POST',
@@ -510,8 +511,8 @@
 
         // ===== End Health Check =====
 
-        // Distingue "nessuno ha attaccato" da "la jail non vede niente": a schermo sono lo
-        // stesso zero, ma vogliono dire il contrario. Legge e basta.
+        // Distinguishes "nobody attacked" from "the jail sees nothing": on screen they are the
+        // same zero, but they mean the opposite. It only reads.
         async function checkJailFilter(entryName) {
             const box = document.getElementById('filter-' + entryName);
             if (!box) return;
@@ -524,7 +525,7 @@
                         csrf_token: document.getElementById('csrf_token').value })
                 });
                 const r = await res.json();
-                // Non verificato NON e' verde e non e' rosso: e' "non lo so".
+                // Unverified is NOT green and is not red: it is "I don't know".
                 const cls = !r.verified ? 'secondary' : (r.hooks > 0 ? 'success' : 'danger');
                 box.innerHTML = '<div class="alert alert-' + cls + ' py-1 px-2 mb-0 small">'
                     + escapeHtml(r.messageText || '')

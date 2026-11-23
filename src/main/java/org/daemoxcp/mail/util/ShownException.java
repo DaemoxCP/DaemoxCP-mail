@@ -5,18 +5,19 @@ import org.daemoxcp.mail.i18n.I18n;
 import java.util.Map;
 
 /**
- * Un errore scritto per chi usa la pagina, gia' nella sua lingua: l'unico, con PasskeyException, il cui testo
- * ErrorText lascia arrivare a una pagina. Un'altra eccezione, anche IllegalArgumentException o IllegalStateException
- * con un testo scritto a mano, finisce nel log del pannello, e alla pagina va il testo generico tradotto: cosi' nessun
- * testo inglese scritto nel codice, ne' il toString() di un'eccezione avvolta (percorsi, classi), arriva a chi usa il
- * pannello (i18n completo, 19/11/2026).
+ * An error written for whoever uses the page, already in their language: the only one, with PasskeyException,
+ * whose text ErrorText lets through to a page. Any other exception, even an IllegalArgumentException or
+ * IllegalStateException with a hand-written text, ends up in the panel log, and the page gets the translated
+ * generic text: that way no English text written in the code, nor the toString() of a wrapped exception (paths,
+ * classes), reaches whoever uses the panel (complete i18n, 2026-11-19).
  *
- * <p>Si costruisce con la chiave del testo: of("server.x.y") o of("server.x.y", Map.of("name", ...)). Il testo si
- * traduce subito, nella lingua della richiesta in corso (I18n.current), come faceva chi lo lanciava con I18n.tr.
+ * <p>It is built with the key of the text: of("server.x.y") or of("server.x.y", Map.of("name", ...)). The text is
+ * translated right away, in the language of the current request (I18n.current), as whoever threw it with
+ * I18n.tr used to do.
  */
 public class ShownException extends IllegalStateException implements TranslatedError {
 
-    /** Un argomento sbagliato, detto alla pagina gia' tradotto: come ShownException, ma IllegalArgumentException. */
+    /** A wrong argument, told to the page already translated: like ShownException, but an IllegalArgumentException. */
     public static final class Argument extends IllegalArgumentException implements TranslatedError {
         private Argument(String text) {
             super(text);
@@ -38,25 +39,25 @@ public class ShownException extends IllegalStateException implements TranslatedE
         this.key = key;
     }
 
-    /** Il testo della chiave, nella lingua della richiesta in corso. */
+    /** The text of the key, in the language of the current request. */
     public static ShownException of(String key) {
         return new ShownException(key, I18n.tr(key));
     }
 
-    /** Il testo della chiave coi suoi {valori}, nella lingua della richiesta in corso. */
+    /** The text of the key with its {values}, in the language of the current request. */
     public static ShownException of(String key, Map<String, ?> params) {
         return new ShownException(key, I18n.tr(key, params));
     }
 
     /**
-     * Un testo gia' tradotto altrove con I18n.tr (un campo di uno stato costruito prima, nella stessa lingua). Solo per
-     * quello: un testo scritto nel codice si lancia con of(chiave).
+     * A text already translated elsewhere with I18n.tr (a field of a state built earlier, in the same language). Only
+     * for that: a text written in the code is thrown with of(key).
      */
     public static ShownException translated(String text) {
         return new ShownException(null, text);
     }
 
-    /** La chiave del testo, per le prove e per chi deve riconoscere l'errore; null per translated(). */
+    /** The key of the text, for the tests and for whoever must recognise the error; null for translated(). */
     public String key() {
         return key;
     }

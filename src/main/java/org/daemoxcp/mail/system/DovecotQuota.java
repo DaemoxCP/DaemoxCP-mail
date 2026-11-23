@@ -24,25 +24,28 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Le quote delle caselle, applicate davvero: prima si salvavano con ogni casella (quota_mb) e Dovecot non le leggeva.
+ * The mailbox quotas, really enforced: before, they were saved with each mailbox (quota_mb) and Dovecot did not
+ * read them.
  *
- * <p>Nella 2.4 (DovecotConfig):
+ * <p>In 2.4 (DovecotConfig):
  * <ul>
- *   <li>conf.d/{@value DovecotConfig#QUOTA_FILE_NAME}: il plugin quota, imap_quota, una radice col driver count, e il
- *       servizio quota-status che Postfix interroga;</li>
- *   <li>un userdb sql prima di userdb static, in auth-sql.conf.ext, che da' il limite di ogni casella
- *       (quota_storage_size = quota_mb in MB; 0 = nessun limite). L'utente MySQL di Dovecot legge quota_mb (MailDbUsers,
- *       che gira prima);</li>
- *   <li>in Postfix, dopo reject_unauth_destination, {@value #POLICY}: una casella piena risponde 452 al destinatario,
- *       e con Dovecot che non risponde la posta passa come prima (default_action=DUNNO) e la quota la controlla LMTP.</li>
+ *   <li>conf.d/{@value DovecotConfig#QUOTA_FILE_NAME}: the quota plugin, imap_quota, a root with the count driver,
+ *       and the quota-status service that Postfix queries;</li>
+ *   <li>a userdb sql before userdb static, in auth-sql.conf.ext, that gives the limit of each mailbox
+ *       (quota_storage_size = quota_mb in MB; 0 = no limit). Dovecot's MySQL user reads quota_mb (MailDbUsers,
+ *       which runs before);</li>
+ *   <li>in Postfix, after reject_unauth_destination, {@value #POLICY}: a full mailbox answers 452 to the
+ *       recipient, and with Dovecot not answering, mail goes through as before (default_action=DUNNO) and LMTP
+ *       checks the quota.</li>
  * </ul>
  *
- * <p>Sui server installati prima, all'avvio e dopo MailDbUsers: si scrivono i due file di Dovecot, doveconf -n, riavvio
- * (un reload non crea il socket nuovo), e le prove: Dovecot gira, l'autenticazione passa, LMTP e IMAP ci sono,
- * quota-status risponde DUNNO a un destinatario che non c'e', e doveadm user da' a una casella il suo limite. Se una non
- * torna, i file tornano com'erano e Dovecot riparte. Poi Postfix, con postfix check e reload, e main.cf rimesso com'era se
- * non vanno. Una configurazione che il pannello non riconosce resta com'e', e lo dice il registro. Nella 2.3 niente: le
- * quote vogliono la 2.4, che la pagina Aggiornamenti installa. Al secondo avvio non fa niente.
+ * <p>On servers installed earlier, at startup and after MailDbUsers: the two Dovecot files are written, doveconf
+ * -n, restart (a reload does not create the new socket), and the tests: Dovecot runs, authentication goes through,
+ * LMTP and IMAP are there, quota-status answers DUNNO to a recipient that does not exist, and doveadm user gives a
+ * mailbox its limit. If one does not add up, the files go back to how they were and Dovecot restarts. Then Postfix,
+ * with postfix check and reload, and main.cf put back as it was if they fail. A configuration that the panel does
+ * not recognise stays as it is, and the log says so. In 2.3 nothing: the quotas need 2.4, which the Updates page
+ * installs. At the second startup it does nothing.
  */
 public final class DovecotQuota {
 
@@ -53,7 +56,7 @@ public final class DovecotQuota {
     static final Path SOCKET = Path.of("/var/spool/postfix/private/quota-status");
     static final String POSTCONF = "/usr/local/sbin/postconf";
     static final String POSTFIX = "/usr/local/sbin/postfix";
-    /** Nelle regole di Postfix, dopo reject_unauth_destination. */
+    /** In Postfix's rules, after reject_unauth_destination. */
     public static final String POLICY = "check_policy_service { unix:private/quota-status, default_action=DUNNO }";
 
     private static final Pattern UNAUTH = Pattern.compile("\\breject_unauth_destination\\b");
@@ -65,14 +68,15 @@ public final class DovecotQuota {
     record Decision(Action action, String authSql, String reason) {}
 
     /**
-     * auth-sql.conf.ext col userdb delle quote prima di userdb static; lo stesso testo se c'e' gia'; null se il file non e'
-     * quello che scrive il pannello (un altro userdb sql, nessun userdb static o piu' d'uno, static non a inizio riga).
+     * auth-sql.conf.ext with the quota userdb before userdb static; the same text if it is already there; null if
+     * the file is not the one the panel writes (another userdb sql, no userdb static or more than one, static not at
+     * the start of a line).
      */
     static String withQuotaUserdb(String authSql) {
         if (authSql == null || !authSql.contains("passdb sql {")) return null;
         if (authSql.contains(DovecotConfig.QUOTA_USERDB)) return authSql;
-        // Il blocco scritto da una versione di prima del pannello (la sua prima riga, poi un solo userdb sql fino a
-        // userdb static): si sostituisce con quello di adesso.
+        // The block written by an earlier version of the panel (its first line, then a single userdb sql up to
+        // userdb static): it is replaced with the current one.
         int mark = authSql.indexOf(DovecotConfig.QUOTA_USERDB_MARK);
         if (mark >= 0) {
             int stat = authSql.indexOf("userdb static {", mark);
@@ -90,10 +94,10 @@ public final class DovecotQuota {
         return authSql.substring(0, line) + DovecotConfig.QUOTA_USERDB + authSql.substring(line);
     }
 
-    /** Funzione pura: la versione di Dovecot, auth-sql.conf.ext e il file delle quote come sono adesso (null se mancano). */
+    /** A pure function: the Dovecot version, auth-sql.conf.ext and the quota file as they are now (null if missing). */
     static Decision decide(String version, String authSql, String quotaFile) {
         if (version == null || !version.trim().startsWith("2.4")) return new Decision(Action.NOT_24, null, "Dovecot is not 2.4");
-        // I blocchi scritti in italiano dalle versioni di prima valgono come quelli di adesso (EnglishComments).
+        // The blocks written in Italian by earlier versions count as the current ones (EnglishComments).
         authSql = org.daemoxcp.mail.system.EnglishComments.english(authSql);
         quotaFile = org.daemoxcp.mail.system.EnglishComments.english(quotaFile);
         String wanted = withQuotaUserdb(authSql);
@@ -103,7 +107,10 @@ public final class DovecotQuota {
         return new Decision(Action.APPLY, wanted, "quotas not applied yet");
     }
 
-    /** Le regole di Postfix con la domanda a quota-status dopo reject_unauth_destination; le stesse se c'e'; null se non si sa dove. */
+    /**
+     * Postfix's rules with the query to quota-status after reject_unauth_destination; the same if it is already
+     * there; null if it is not known where.
+     */
     static String withPolicy(String restrictions) {
         if (restrictions == null) return null;
         if (restrictions.contains("private/quota-status")) return restrictions;
@@ -136,7 +143,7 @@ public final class DovecotQuota {
         return Files.isRegularFile(f, LinkOption.NOFOLLOW_LINKS) ? Files.readString(f, StandardCharsets.UTF_8) : null;
     }
 
-    /** I due file di Dovecot, la prova di doveconf, il riavvio e le verifiche; se non tornano, tutto com'era. */
+    /** The two Dovecot files, the doveconf test, the restart and the checks; if they fail, everything as it was. */
     static boolean applyDovecot(String authSql) throws Exception {
         if (!DovecotAuthWorker.running()) {
             LOGGER.info("[DovecotQuota] Dovecot is not running: quotas left as they are, retrying at the next start");
@@ -177,7 +184,7 @@ public final class DovecotQuota {
         return true;
     }
 
-    /** Dopo il riavvio, fino a 20 s. null se va. */
+    /** After the restart, up to 20 s. null if it works. */
     static String verifyDovecot() throws InterruptedException {
         String last = "unreachable";
         for (int i = 0; i < 40; i++) {
@@ -193,7 +200,10 @@ public final class DovecotQuota {
         return last;
     }
 
-    /** Una casella col suo limite: doveadm user deve dare quota_storage_size = quota_mb M. null se va o non c'e' una casella. */
+    /**
+     * A mailbox with its limit: doveadm user must give quota_storage_size = quota_mb M. null if it works or
+     * there is no mailbox.
+     */
     static String checkLimit() {
         try {
             if (org.daemoxcp.mail.Main.mailDatabase == null) return null;
@@ -211,8 +221,8 @@ public final class DovecotQuota {
     }
 
     /**
-     * Una domanda a quota-status come la fa Postfix (protocollo delle policy: righe nome=valore, poi una vuota). La
-     * risposta e' la riga action=..., o un testo che dice perche' non c'e'.
+     * A query to quota-status as Postfix makes it (policy protocol: name=value lines, then an empty one). The
+     * answer is the action=... line, or a text that says why there is none.
      */
     static String askQuotaStatus(String recipient) {
         try (SocketChannel ch = SocketChannel.open(StandardProtocolFamily.UNIX)) {
@@ -238,7 +248,7 @@ public final class DovecotQuota {
         }
     }
 
-    /** La domanda a quota-status in smtpd_recipient_restrictions, se quota-status risponde e le regole sono quelle del pannello. */
+    /** The quota-status query in smtpd_recipient_restrictions, if quota-status answers and the rules are the panel's. */
     static void ensurePostfix() throws Exception {
         if (!Files.isExecutable(Path.of(POSTCONF))) return;
         String now = postconf("-h", "smtpd_recipient_restrictions");
@@ -280,9 +290,12 @@ public final class DovecotQuota {
         LOGGER.info("[DovecotQuota] DONE: Postfix asks quota-status before accepting a recipient (" + POLICY + ")");
     }
 
-    // ===================== quanto usa ogni casella, per la pagina Caselle =====================
+    // ===================== how much each mailbox uses, for the "Mailboxes" page =====================
 
-    /** Se le quote si applicano su questo server, o perche' no (in inglese: la pagina lo mette dentro un suo testo). */
+    /**
+     * Whether the quotas are enforced on this server, or why not (in English: the page puts it inside a text of
+     * its own).
+     */
     public static String notApplied() {
         try {
             Shell.Result v = Shell.run(Duration.ofSeconds(15), "dovecot", "--version");
@@ -297,8 +310,8 @@ public final class DovecotQuota {
     }
 
     /**
-     * Quanto usa ogni casella e il suo limite, da {@code doveadm -f tab quota get -A}: email, usato e limite in KB (0 =
-     * nessun limite), percentuale. Con applied false e il perche', se le quote non si applicano.
+     * How much each mailbox uses and its limit, from {@code doveadm -f tab quota get -A}: email, used and limit in
+     * KB (0 = no limit), percentage. With applied false and the reason, if the quotas are not enforced.
      */
     public static JSONObject usage() {
         JSONObject r = new JSONObject().put("success", true);
@@ -310,7 +323,7 @@ public final class DovecotQuota {
         return r.put("mailboxes", parseUsage(q.outputTrim()));
     }
 
-    /** Il testo di doveadm -f tab quota get -A: solo le righe STORAGE, con l'intestazione per trovare le colonne. */
+    /** The text of doveadm -f tab quota get -A: only the STORAGE lines, with the header to find the columns. */
     static JSONArray parseUsage(String tab) {
         JSONArray out = new JSONArray();
         if (tab == null || tab.isBlank()) return out;
@@ -360,7 +373,7 @@ public final class DovecotQuota {
         Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 
-    /** Scrittura atomica con proprietario, gruppo e permessi di prima (auth-sql.conf.ext ha la password del database). */
+    /** Atomic write with the previous owner, group and permissions (auth-sql.conf.ext has the database password). */
     private static void writeLike(Path file, String content, PosixFileAttributes attrs) throws Exception {
         Path tmp = file.resolveSibling("." + file.getFileName() + ".tmp");
         Files.deleteIfExists(tmp);

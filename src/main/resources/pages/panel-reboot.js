@@ -1,10 +1,10 @@
-// La striscia "il server va riavviato" in cima a ogni pagina, la finestra del riavvio e una finestra di
-// conferma per tutto il pannello (reperto 185). Le mette la cornice (Layout.rebootFrame) a chi vede il
-// sistema; il pulsante e le finestre solo a chi puo' cambiarlo.
+// The "the server needs a restart" strip at the top of every page, the restart window and a confirmation
+// window for the whole panel (finding 185). The frame (Layout.rebootFrame) adds them for those who see the
+// system; the button and the windows only for those who can change it.
 //
-// Prima il riavvio stava in fondo alla scheda del sistema, nella pagina Aggiornamenti, e chiedeva di
-// scrivere una frase in una finestra del browser; che servisse lo diceva solo un cartellino nella stessa
-// scheda. Le patch del kernel installate restavano senza effetto finche' qualcuno non ci passava.
+// Before, the restart was at the bottom of the system card, on the Updates page, and asked to
+// type a phrase in a browser window; that it was needed was said only by a tag in the same
+// card. Installed kernel patches stayed without effect until someone happened to come by.
 var panelReboot = { state: null, poll: null, at: 0, sawDown: false };
 
 function panelRebootApi(action, extra) {
@@ -14,8 +14,8 @@ function panelRebootApi(action, extra) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(Object.assign({ action: action, csrf_token: token ? token.value : '' }, extra || {}))
     }).then(function (r) {
-        // Una risposta che non e' JSON (Cloudflare quando l'origine e' giu': 52x in HTML) vale come
-        // il server che non risponde.
+        // A response that is not JSON (Cloudflare when the origin is down: 52x in HTML) counts as
+        // the server not answering.
         return r.json().then(function (j) { j.status = r.status; return j; },
                              function () { return { success: false, network: true, status: r.status }; });
     }).catch(function (e) { return { success: false, network: true, error: t('common.networkError', { message: e.message }) }; });
@@ -38,9 +38,9 @@ function panelRebootButton(className, icon, label, action) {
     return b;
 }
 
-// Quando il contenuto della finestra cambia, il pulsante premuto puo' sparire: il fuoco andrebbe fuori
-// dalla finestra, ed Esc non la chiuderebbe piu' (Bootstrap ascolta i tasti sulla finestra). Si rimette
-// sul pulsante di chiusura (r9: il fuoco non si perde mai).
+// When the window's content changes, the pressed button may disappear: focus would go outside
+// the window, and Esc would no longer close it (Bootstrap listens for keys on the window). It is put
+// back on the close button (r9: focus is never lost).
 function panelRebootKeepFocus() {
     var modal = document.getElementById('panelRebootModal');
     if (modal && modal.classList.contains('show') && !modal.contains(document.activeElement)) {
@@ -55,7 +55,7 @@ function panelRebootWhy(r) {
     return '';
 }
 
-// La striscia: compare solo se serve (o se un riavvio e' gia' programmato), e si rilegge dopo ogni azione.
+// The strip: it appears only if needed (or if a restart is already scheduled), and it is reread after every action.
 function panelRebootRefresh() {
     var box = document.getElementById('panelRebootBanner');
     if (!box) return Promise.resolve(null);
@@ -89,16 +89,16 @@ function panelRebootRefresh() {
     });
 }
 
-// L'ora del riavvio nel fuso di chi guarda (r13: si converte solo per mostrarla).
+// The restart time in the viewer's time zone (r13: it is converted only to show it).
 function panelRebootTime(ms) {
     return new Intl.DateTimeFormat(window.I18N_LANG || undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
         .format(new Date(ms));
 }
 
-// Col riavvio programmato il pannello e' in sola lettura (RestartLock sul server, che rifiuta comunque): i
-// pulsanti della pagina si vedono spenti e non fanno niente, e chi ne preme uno legge perche' e cosa puo' fare.
-// Restano la striscia del riavvio, le sue finestre, il menu, le schede e le parti da aprire e chiudere: si blocca
-// solo il contenuto della pagina (#main).
+// With the scheduled restart the panel is read-only (RestartLock on the server, which refuses anyway): the
+// page's buttons look switched off and do nothing, and whoever presses one reads why and what they can do.
+// The restart strip, its windows, the menu, the tabs and the parts to open and close remain: only the
+// page's content (#main) is locked.
 function panelRestartLock(on) {
     document.body.classList.toggle('panel-restart-locked', on);
 }
@@ -120,7 +120,7 @@ function panelRestartBlocked(e) {
 document.addEventListener('click', panelRestartBlocked, true);
 document.addEventListener('submit', panelRestartBlocked, true);
 
-// La finestra: perche', cosa si ferma, quando; poi il conto alla rovescia e il ritorno del server.
+// The window: why, what stops, when; then the countdown and the server's return.
 function panelRebootOpen() {
     var body = document.getElementById('panelRebootBody');
     var go = document.getElementById('panelRebootGo');
@@ -187,10 +187,11 @@ function panelRebootCancel() {
     });
 }
 
-// Dopo l'ora del riavvio: finche' il server si spegne (risponde ancora, ma senza sessione: MySQL si e'
-// gia' fermato) o e' giu' (non risponde), si dice che si sta riavviando. Quando torna, dopo essere
-// stato giu', la sessione non c'e' piu' (vale un avvio solo): si va all'accesso, che dice che il
-// server e' stato riavviato. Se dopo dieci minuti non e' mai stato giu', il riavvio non c'e' stato.
+// After the restart time: while the server is shutting down (it still answers, but without a session: MySQL
+// has already stopped) or is down (it does not answer), it says that it is restarting. When it comes back,
+// after having been down, the session is gone (it is valid for one run only): it goes to the login, which
+// says that the server has been restarted. If after ten minutes it has never been down, the restart did
+// not happen.
 function panelRebootWaiting() {
     var box = document.getElementById('panelRebootBanner');
     var line = panelRebootEl('div', 'alert alert-warning mb-0', t('rb.waiting'));
@@ -224,8 +225,8 @@ function panelRebootWatch() {
     }, 5000);
 }
 
-// Una conferma del pannello, al posto di prompt(): titolo, testo e il pulsante che fa la cosa.
-// Restituisce una promessa: true se si e' premuto il pulsante, false altrimenti.
+// A panel confirmation, instead of prompt(): title, text and the button that does the thing.
+// Returns a promise: true if the button was pressed, false otherwise.
 function panelAsk(options) {
     var modal = document.getElementById('panelAskModal');
     if (!modal) return Promise.resolve(window.confirm(options.text || ''));
@@ -244,15 +245,15 @@ function panelAsk(options) {
     });
 }
 
-// Una conferma di una frase, al posto di confirm() (reperto 198): «Procedere?», la frase, e il pulsante; rosso quando
-// si toglie qualcosa. Restituisce una promessa, come panelAsk.
+// A one-sentence confirmation, instead of confirm() (finding 198): "Go ahead?", the sentence, and the button;
+// red when something is removed. Returns a promise, like panelAsk.
 function panelConfirm(text, danger) {
     return panelAsk({ title: t('gd.confirmTitle'), text: text, confirm: t(danger ? 'gd.confirmDanger' : 'gd.confirmGo'), danger: !!danger });
 }
 
-// Un avviso del pannello, al posto di alert() (reperto 198): non ferma la pagina, lo leggono gli screen reader (role
-// alert per errori e richieste, status per gli esiti), il colore dice cos'e' e lo dice anche la parola nascosta. Gli
-// esiti riusciti spariscono da soli dopo 10 s; errori e richieste restano finche' non li si chiude.
+// A panel notice, instead of alert() (finding 198): it does not stop the page, screen readers read it (role
+// alert for errors and requests, status for outcomes), the color says what it is and so does the hidden word.
+// Successful outcomes disappear by themselves after 10 s; errors and requests stay until they are closed.
 function panelSay(kind, text) {
     var s = String(text === undefined || text === null ? '' : text);
     var k = { success: 1, danger: 1, warning: 1, info: 1 }[kind] ? kind : 'info';
@@ -278,7 +279,7 @@ function panelSay(kind, text) {
     if (k === 'success' || k === 'info') setTimeout(function () { n.remove(); }, 10000);
 }
 
-// La stessa, col pulsante rosso: per quello che toglie, revoca o azzera.
+// The same, with the red button: for what removes, revokes or resets.
 function panelConfirmDanger(text) {
     return panelConfirm(text, true);
 }
@@ -288,21 +289,21 @@ function panelAskYes() {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('panelAskModal')).hide();
 }
 
-// Il fuoco torna dov'era quando una finestra si chiude (r9). Bootstrap lo rende da se' solo alle finestre aperte con
-// data-bs-toggle, e quando una finestra si apre sopra un'altra le toglie la trappola del Tab senza piu' ridargliela.
-// Le finestre del pannello aperte dal codice sopra un'altra («Procedere?», la conferma recente: scoprire una password,
-// le chiavi) lasciavano cosi' il fuoco sul body: la finestra sotto non sentiva piu' Esc e chi usa la tastiera o uno
-// screen reader restava fuori, dietro (prova da server pulito del 18/11/2026). All'apertura si ricorda chi aveva il
-// fuoco; alla chiusura la finestra ancora aperta sotto riprende la trappola, e il fuoco torna a chi lo aveva, o se non
-// c'e' piu' alla finestra stessa.
+// Focus goes back to where it was when a window closes (r9). Bootstrap gives it back by itself only to windows
+// opened with data-bs-toggle, and when a window opens on top of another it removes the latter's Tab trap without
+// ever giving it back. The panel's windows opened by code on top of another ("Go ahead?", the recent
+// confirmation: revealing a password, the keys) thus left focus on the body: the window below no longer heard
+// Esc, and whoever uses the keyboard or a screen reader was left outside, behind (test from a clean server,
+// 2026-11-18). On opening, it remembers who had focus; on closing, the window still open below takes back the
+// trap, and focus returns to whoever had it or, if that is gone, to the window itself.
 document.addEventListener('show.bs.modal', function (e) {
     var a = document.activeElement;
     e.target.panelFocusBefore = a && a !== document.body ? a : null;
 });
-// Aperta sopra un'altra, la finestra nuova il fuoco non lo prendeva nemmeno: la trappola di Bootstrap 5.3.0 lo sposta
-// sulla finestra nuova PRIMA di spegnere quella della finestra sotto, che se lo riprende subito. La domanda non veniva
-// letta e Invio ed Esc andavano alla finestra dietro. Aperta del tutto, se il fuoco non e' suo, la sua trappola riparte
-// (adesso e' l'unica) e lo prende.
+// Opened on top of another, the new window did not even take focus: Bootstrap 5.3.0's trap moves it onto
+// the new window BEFORE switching off the trap of the window below, which takes it back immediately. The
+// question was not read, and Enter and Esc went to the window behind. Once fully open, if focus is not its
+// own, its trap restarts (now it is the only one) and takes it.
 document.addEventListener('shown.bs.modal', function (e) {
     if (e.target.contains(document.activeElement)) return;
     var inst = window.bootstrap && bootstrap.Modal.getInstance(e.target);
@@ -320,14 +321,14 @@ document.addEventListener('hidden.bs.modal', function (e) {
     }
     var back = e.target.panelFocusBefore;
     e.target.panelFocusBefore = null;
-    // Disabilitato (il pulsante che ha chiesto la conferma e ora lavora) non prende il fuoco: allora la finestra.
+    // Disabled (the button that asked for the confirmation and is now working) does not take focus: then the window.
     var usable = back && document.contains(back) && back.offsetParent !== null && !back.disabled && (!top || top.contains(back));
     if (usable) back.focus();
     if (top && !top.contains(document.activeElement)) top.focus();
 });
 
-// Le finestre stanno in un <template> (Layout.rebootFrame) e si mettono in fondo alla pagina: dentro la
-// pagina, prima del suo titolo, i loro <h2> venivano prima di quello della pagina.
+// The windows are in a <template> (Layout.rebootFrame) and are put at the end of the page: inside the
+// page, before its title, their <h2> came before the page's own.
 document.addEventListener('DOMContentLoaded', function () {
     var tpl = document.getElementById('panelRebootTemplates');
     if (tpl) document.body.appendChild(tpl.content.cloneNode(true));

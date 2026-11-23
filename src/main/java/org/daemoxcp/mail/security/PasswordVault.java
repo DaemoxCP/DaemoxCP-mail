@@ -24,29 +24,29 @@ import java.util.Base64;
 import java.util.logging.Logger;
 
 /**
- * La copia cifrata delle password delle caselle, per «Mostra password».
+ * The encrypted copy of the mailbox passwords, for "Show password".
  *
- * <p>A chiave asimmetrica: la parte web cifra le copie delle password nuove con la chiave pubblica, che sta nel
- * suo file dei segreti, e non ne legge nessuna; le legge solo la parte root, che sola ha la chiave privata (nel
- * file dei segreti di root). Chi prendesse la web non porta via le password delle caselle, nemmeno quelle che
- * passano di li' dopo.
+ * <p>With an asymmetric key: the web part encrypts the copies of new passwords with the public key, which is in
+ * its secrets file, and reads none of them; only the root part reads them, being the only one with the private key (in
+ * the root secrets file). Whoever took over the web part would not carry away the mailbox passwords, not even those that
+ * pass through there afterwards.
  *
- * <p>Il formato (v2): {@code "v2:" + base64(versione 0x02 || chiave AES avvolta || nonce || testo cifrato e tag)}.
- * Per ogni copia una chiave AES-256 nuova, presa dal generatore crittografico, avvolta con RSA-OAEP (SHA-256 e
- * MGF1 con SHA-256) nella chiave pubblica RSA da 3072 bit; la password cifrata con AES-256-GCM, nonce di 12 byte a
- * caso, e la versione e la chiave avvolta legate al tag (dati aggiuntivi): nessuno puo' scambiarle.
+ * <p>The format (v2): {@code "v2:" + base64(version 0x02 || wrapped AES key || nonce || ciphertext and tag)}.
+ * For each copy a new AES-256 key, taken from the cryptographic generator, wrapped with RSA-OAEP (SHA-256 and
+ * MGF1 with SHA-256) in the 3072-bit RSA public key; the password encrypted with AES-256-GCM, a random 12-byte
+ * nonce, and the version and the wrapped key bound to the tag (additional data): nobody can swap them.
  *
- * <p>Le copie di prima (v1) sono AES-256-GCM con la chiave simmetrica di {@code master.key}: la root le ricifra in
- * v2 all'avvio ({@link #reencryptOldCopies}); il file resta, solo di root, per una copia che non si fosse potuta
- * ricifrare.
+ * <p>The old copies (v1) are AES-256-GCM with the symmetric key of {@code master.key}: the root part re-encrypts them to
+ * v2 at startup ({@link #reencryptOldCopies}); the file stays, root only, for a copy that could not be
+ * re-encrypted.
  */
 public class PasswordVault {
     private static final Logger LOGGER = Logger.getLogger(PasswordVault.class.getName());
 
-    /** La chiave simmetrica delle copie di prima (i test la spostano con -Ddaemoxcp.mail.vault.key=...). */
+    /** The symmetric key of the old copies (tests move it with -Ddaemoxcp.mail.vault.key=...). */
     private static final String KEY_FILE = System.getProperty("daemoxcp.mail.vault.key", "/usr/local/etc/daemoxcp-mail/master.key");
 
-    /** Il segno delle copie a chiave asimmetrica. Il base64 non contiene ':', quindi nessuna copia v1 comincia cosi'. */
+    /** The marker of the asymmetric-key copies. Base64 does not contain ':', so no v1 copy starts like this. */
     static final String V2_PREFIX = "v2:";
     private static final byte V2 = 2;
     private static final int RSA_BITS = 3072;
@@ -76,12 +76,13 @@ public class PasswordVault {
         return "root".equals(System.getProperty("user.name"));
     }
 
-    // ===================== Le chiavi =====================
+    // ===================== The keys =====================
 
     /**
-     * La parte root, all'avvio e prima di accendere la web: la coppia di chiavi c'e', e la chiave pubblica nel file
-     * della web e' quella della privata. Se manca la privata la genera; se la pubblica manca o non corrisponde, la
-     * riscrive da quella privata (una copia ripristinata a mano, per esempio). Vero se ha cambiato qualcosa.
+     * The root part, at startup and before switching on the web part: the key pair exists, and the public key in the
+     * web file matches the private one. If the private key is missing it generates it; if the public one is missing or
+     * does not match, it rewrites it from the private one (a copy restored by hand, for example). True if it changed
+     * something.
      */
     public static synchronized boolean ensureKeyPair() {
         if (!runningAsRoot()) return false;
@@ -128,7 +129,7 @@ public class PasswordVault {
         }
     }
 
-    /** La chiave pubblica di una privata RSA (modulo ed esponente stanno anche nella privata). */
+    /** The public key of an RSA private key (modulus and exponent are also in the private key). */
     static PublicKey publicOf(PrivateKey key) {
         try {
             RSAPrivateCrtKey k = (RSAPrivateCrtKey) key;
@@ -138,11 +139,11 @@ public class PasswordVault {
         }
     }
 
-    /** La chiave pubblica con cui cifrare: dal file della web (la root la mette li' all'avvio). */
+    /** The public key to encrypt with: from the web file (the root part puts it there at startup). */
     private static PublicKey currentPublicKey() {
         String pub = PanelSecrets.text(PanelSecrets.VAULT_PUBLIC_KEY);
         if (pub.isEmpty() && runningAsRoot()) {
-            // La root senza ancora una coppia (un'installazione nuova, una prova): la crea qui.
+            // The root part without a key pair yet (a new installation, a test): it creates it here.
             ensureKeyPair();
             pub = PanelSecrets.text(PanelSecrets.VAULT_PUBLIC_KEY);
         }
@@ -150,15 +151,15 @@ public class PasswordVault {
         return publicKey(pub);
     }
 
-    /** Dove sta la chiave privata, da dire a chi ne fa la copia. */
+    /** Where the private key is, to tell whoever makes a copy of it. */
     public static String privateKeyLocation() {
         return PanelSecrets.location(PanelSecrets.VAULT_PRIVATE_KEY);
     }
 
     /**
-     * La chiave privata in base64 (PKCS#8), per la copia di sicurezza: con questa si leggono tutte le copie delle
-     * password. Solo la root. Per rimetterla: nel file dei segreti di root, alla voce vault_private_key; la root
-     * riscrive la pubblica al prossimo avvio.
+     * The private key in base64 (PKCS#8), for the backup copy: with it all the password copies can be
+     * read. Root part only. To put it back: in the root secrets file, under the vault_private_key entry; the root part
+     * rewrites the public key at the next startup.
      */
     public String exportPrivateKeyBase64() {
         if (!runningAsRoot()) throw new IllegalStateException("Only the root part has the vault's private key");
@@ -169,7 +170,7 @@ public class PasswordVault {
 
     // ===================== Cifrare e decifrare =====================
 
-    /** Cifra una password con la chiave pubblica (formato v2): la web e la root. */
+    /** Encrypts a password with the public key (v2 format): the web part and the root part. */
     public String encrypt(String plaintext) {
         return encryptWith(plaintext, currentPublicKey());
     }
@@ -202,14 +203,14 @@ public class PasswordVault {
         }
     }
 
-    /** Vero se la copia e' gia' nel formato a chiave asimmetrica. */
+    /** True if the copy is already in the asymmetric-key format. */
     public static boolean isCurrentFormat(String encoded) {
         return encoded != null && encoded.startsWith(V2_PREFIX);
     }
 
     /**
-     * Decifra una copia: v2 con la chiave privata (e, se non torna, con quella di prima della rotazione), v1 con
-     * master.key. Solo la parte root: nella web non c'e' niente con cui decifrare.
+     * Decrypts a copy: v2 with the private key (and, if that does not work, with the one from before the rotation), v1 with
+     * master.key. Root part only: in the web part there is nothing to decrypt with.
      */
     public String decrypt(String encoded) {
         if (encoded == null || encoded.isEmpty()) return null;
@@ -248,7 +249,7 @@ public class PasswordVault {
         }
     }
 
-    /** Una copia di prima (v1: base64 di nonce || testo cifrato e tag), con la chiave di master.key. */
+    /** An old copy (v1: base64 of nonce || ciphertext and tag), with the master.key key. */
     private static String decryptOld(String encoded) {
         try {
             byte[] key = oldKey();
@@ -263,7 +264,7 @@ public class PasswordVault {
         }
     }
 
-    /** I 32 byte della chiave di prima: base64 (la forma scritta dal pannello) o byte grezzi. */
+    /** The 32 bytes of the old key: base64 (the form written by the panel) or raw bytes. */
     private static byte[] oldKey() throws java.io.IOException {
         Path keyPath = Paths.get(KEY_FILE);
         if (!Files.exists(keyPath)) throw new java.io.IOException("no " + KEY_FILE + " for the copies of before");
@@ -278,15 +279,15 @@ public class PasswordVault {
         return keyBytes;
     }
 
-    // ===================== Ricifrare =====================
+    // ===================== Re-encrypting =====================
 
-    /** Com'e' andata una ricifratura: quante copie, quante ricifrate, quante no. */
+    /** How a re-encryption went: how many copies, how many re-encrypted, how many not. */
     public record Reencrypted(int total, int reencrypted, int failed) {}
 
     /**
-     * All'avvio della root: le copie di prima (v1, master.key) ricifrate con la chiave pubblica. Solo quelle: le altre
-     * restano come sono, e al secondo avvio non c'e' niente da fare. Una copia che non si decifra resta com'e', e il
-     * registro lo dice.
+     * At root part startup: the old copies (v1, master.key) re-encrypted with the public key. Only those: the others
+     * stay as they are, and on the second startup there is nothing to do. A copy that cannot be decrypted stays as it
+     * is, and the log says so.
      */
     public static Reencrypted reencryptOldCopies(org.daemoxcp.mail.database.MailDatabase db) throws java.sql.SQLException {
         PasswordVault vault = getInstance();
@@ -309,9 +310,9 @@ public class PasswordVault {
     }
 
     /**
-     * La rotazione (Amministratori → cassaforte): una coppia nuova, tutte le copie ricifrate con la sua pubblica, poi
-     * la coppia salvata. La privata di prima resta nel file di root (vault_previous_private_key) per le copie che non si
-     * fossero potute ricifrare. Se non se ne ricifra nessuna ma ce n'erano, la coppia nuova non si salva.
+     * The rotation ("Administrators" -> "vault"): a new pair, all the copies re-encrypted with its public key, then the
+     * pair saved. The previous private key stays in the root file (vault_previous_private_key) for the copies that
+     * could not be re-encrypted. If none is re-encrypted but there were some, the new pair is not saved.
      */
     public synchronized Reencrypted rotate(org.daemoxcp.mail.database.MailDatabase db) throws java.sql.SQLException {
         if (!runningAsRoot()) throw new IllegalStateException("Only the root part rotates the vault's keys");
@@ -335,8 +336,8 @@ public class PasswordVault {
             }
         }
         if (fresh.isEmpty() && !rows.isEmpty()) return new Reencrypted(rows.size(), 0, failed);
-        // Prima le chiavi (la privata nuova nel file di root, la vecchia accanto), poi le copie: a meta' strada ogni
-        // copia si legge con l'una o con l'altra.
+        // Keys first (the new private key in the root file, the old one next to it), then the copies: halfway through every
+        // copy can be read with one or the other.
         String before = PanelSecrets.text(PanelSecrets.VAULT_PRIVATE_KEY);
         if (!before.isEmpty()) PanelSecrets.setText(PanelSecrets.VAULT_PREVIOUS_PRIVATE_KEY, before);
         String priv = Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded());
@@ -348,11 +349,11 @@ public class PasswordVault {
         return new Reencrypted(rows.size(), fresh.size(), failed);
     }
 
-    // ===================== Il generatore di password =====================
+    // ===================== The password generator =====================
 
     /**
-     * Genera una password sicura: 20 caratteri da tutti gli insiemi ("all_chars"), cioe' lettere,
-     * cifre e i simboli che SecurityUtils.isValidMailboxPassword accetta.
+     * Generates a secure password: 20 characters from all the sets ("all_chars"), that is letters,
+     * digits and the symbols that SecurityUtils.isValidMailboxPassword accepts.
      */
     public String generatePassword() {
         return generatePassword(20);
@@ -362,28 +363,28 @@ public class PasswordVault {
         return generatePassword(length, "all_chars", true, true, true, true);
     }
 
-    // Gli insiemi di caratteri del generatore. I simboli di "all_chars" sono quelli che
-    // SecurityUtils.isValidPassword accetta, presi da li'. Prima erano scritti qui, con in piu'
-    // < > / ~ e l'apice inverso: una password generata con "Tutti i caratteri" il pannello stesso
-    // la rifiutava in creazione ("Password non valida") o la scartava in modifica, in media sette
-    // volte su dieci. tests/.../PasswordGeneratorTest lo verifica per ogni tipo e combinazione.
+    // The generator's character sets. The symbols of "all_chars" are the ones that
+    // SecurityUtils.isValidPassword accepts, taken from there. They used to be written here, with in addition
+    // < > / ~ and the backtick: a password generated with "All characters" was rejected by the panel itself
+    // on creation ("Invalid password") or discarded on edit, on average seven
+    // times out of ten. tests/.../PasswordGeneratorTest checks it for every type and combination.
     private static final String LOWERCASE = "abcdefghijklmnopqrstuvwxyz";
     private static final String UPPERCASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final String DIGITS = "0123456789";
     private static final String SYMBOLS = org.daemoxcp.mail.webserver.SecurityUtils.PASSWORD_SYMBOLS;
-    // "easy_to_read": niente caratteri che si confondono (0/O, 1/l/I), simboli comodi per shell/JSON/CSV.
+    // "easy_to_read": no characters that get confused (0/O, 1/l/I), symbols convenient for shell/JSON/CSV.
     private static final String CLEAR_LOWERCASE = "abcdefghijkmnpqrstuvwxyz";    // no l, o
     private static final String CLEAR_UPPERCASE = "ABCDEFGHJKLMNPQRSTUVWXYZ";    // no I, O
     private static final String CLEAR_DIGITS = "23456789";                        // no 0, 1
     private static final String CLEAR_SYMBOLS = "!@#%^*()_-+=[]{}:;,.?";
 
     /**
-     * Gli insiemi di caratteri attivi per un tipo e delle scelte, nell'ordine in cui il generatore
-     * ne garantisce almeno uno ciascuno. Lo usano sia il generatore sia la stima dell'entropia,
-     * cosi' i due non possono piu' raccontare insiemi diversi.
+     * The active character sets for a type and a set of choices, in the order in which the generator
+     * guarantees at least one of each. Both the generator and the entropy estimate use it,
+     * so the two can no longer tell different sets.
      *
-     * @param type "easy_to_say" (solo lettere: cifre e simboli ignorati), "easy_to_read"
-     *             (niente caratteri ambigui) o "all_chars"; qualsiasi altro valore vale "easy_to_read"
+     * @param type "easy_to_say" (letters only: digits and symbols ignored), "easy_to_read"
+     *             (no ambiguous characters) or "all_chars"; any other value counts as "easy_to_read"
      */
     static java.util.List<String> sets(String type, boolean includeLower, boolean includeUpper,
                                           boolean includeDigits, boolean includeSymbols) {
@@ -398,7 +399,7 @@ public class PasswordVault {
             case "all_chars" -> { lower = LOWERCASE; upper = UPPERCASE; digits = DIGITS; symbols = SYMBOLS; }
             default -> { lower = CLEAR_LOWERCASE; upper = CLEAR_UPPERCASE; digits = CLEAR_DIGITS; symbols = CLEAR_SYMBOLS; }
         }
-        // Nessuna categoria scelta: ripiego ragionevole, tutte quelle che il tipo ammette.
+        // No category chosen: a reasonable fallback, all those the type allows.
         if (!includeLower && !includeUpper && !includeDigits && !includeSymbols) {
             includeLower = includeUpper = true;
             if (!"easy_to_say".equals(type)) { includeDigits = includeSymbols = true; }
@@ -411,7 +412,7 @@ public class PasswordVault {
         return active;
     }
 
-    /** Quanti caratteri diversi puo' contenere una password con queste scelte (per la stima dell'entropia). */
+    /** How many different characters a password with these choices can contain (for the entropy estimate). */
     public static int poolSize(String type, boolean includeLower, boolean includeUpper,
                                      boolean includeDigits, boolean includeSymbols) {
         int n = 0;
@@ -420,18 +421,18 @@ public class PasswordVault {
     }
 
     /**
-     * Generatore password configurabile.
+     * Configurable password generator.
      *
-     * @param length      lunghezza desiderata, riportata dentro SecurityUtils.MAILBOX_PASSWORD_MIN..128: il
-     *                    generatore serve alle caselle, e una password piu' corta il pannello non la accetterebbe
-     * @param type        "easy_to_say"  → solo lettere (lowercase+uppercase), no numeri/simboli — facile da dettare a voce
-     *                    "easy_to_read" → caratteri "safe" (no ambigui 0/O/1/l/I, no simboli problematici)
-     *                    "all_chars"    → tutte le lettere e cifre e tutti i simboli che il pannello accetta
-     *                    (qualsiasi altro valore viene trattato come "easy_to_read")
-     * @param includeLower include caratteri minuscoli
-     * @param includeUpper include caratteri maiuscoli
-     * @param includeDigits include cifre (ignorato se type=easy_to_say)
-     * @param includeSymbols include simboli (ignorato se type=easy_to_say)
+     * @param length      desired length, brought within SecurityUtils.MAILBOX_PASSWORD_MIN..128: the
+     *                    generator is for mailboxes, and the panel would not accept a shorter password
+     * @param type        "easy_to_say"  -> letters only (lowercase+uppercase), no digits/symbols - easy to dictate aloud
+     *                    "easy_to_read" -> "safe" characters (no ambiguous 0/O/1/l/I, no troublesome symbols)
+     *                    "all_chars"    -> all the letters and digits and all the symbols the panel accepts
+     *                    (any other value is treated as "easy_to_read")
+     * @param includeLower include lowercase characters
+     * @param includeUpper include uppercase characters
+     * @param includeDigits include digits (ignored if type=easy_to_say)
+     * @param includeSymbols include symbols (ignored if type=easy_to_say)
      */
     public String generatePassword(int length, String type, boolean includeLower, boolean includeUpper,
                                     boolean includeDigits, boolean includeSymbols) {
@@ -439,22 +440,22 @@ public class PasswordVault {
             length = org.daemoxcp.mail.webserver.SecurityUtils.MAILBOX_PASSWORD_MIN;
         if (length > org.daemoxcp.mail.webserver.SecurityUtils.PASSWORD_MAX) length = org.daemoxcp.mail.webserver.SecurityUtils.PASSWORD_MAX;
 
-        // Insiemi attivi (almeno uno, garantito da sets()) e pool completo
+        // Active sets (at least one, guaranteed by sets()) and full pool
         java.util.List<String> activeSets = sets(type, includeLower, includeUpper, includeDigits, includeSymbols);
         String allPool = String.join("", activeSets);
 
         char[] chars = new char[length];
-        // Garantisci almeno 1 di ogni categoria attiva
+        // Guarantee at least 1 of each active category
         int filled = 0;
         for (String set : activeSets) {
             if (filled >= length) break;
             chars[filled++] = set.charAt(rng.nextInt(set.length()));
         }
-        // Riempi il resto pescando dal pool completo
+        // Fill the rest drawing from the full pool
         for (int i = filled; i < length; i++) {
             chars[i] = allPool.charAt(rng.nextInt(allPool.length()));
         }
-        // Fisher-Yates shuffle per non avere le prime N posizioni categoria-fissate
+        // Fisher-Yates shuffle so that the first N positions are not fixed by category
         for (int i = chars.length - 1; i > 0; i--) {
             int j = rng.nextInt(i + 1);
             char tmp = chars[i]; chars[i] = chars[j]; chars[j] = tmp;
@@ -463,8 +464,8 @@ public class PasswordVault {
     }
 
     /**
-     * Stima l'entropia della password (bit) in funzione di lunghezza e dimensione del pool.
-     * Approssimazione: log2(poolSize) * length.
+     * Estimates the password entropy (bits) from the length and the pool size.
+     * Approximation: log2(poolSize) * length.
      */
     public static double estimateEntropy(int length, int poolSize) {
         if (length <= 0 || poolSize <= 1) return 0.0;

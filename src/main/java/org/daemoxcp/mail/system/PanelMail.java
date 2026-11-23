@@ -13,43 +13,43 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * La busta e l'aspetto comuni a tutte le email del pannello: il rapporto periodico e i codici
- * (accesso, conferma di un'operazione, cambio dell'email di accesso).
+ * The envelope and the look shared by all the panel's emails: the periodic report and the codes
+ * (access, confirmation of an operation, change of the login email).
  *
- * Perche' un posto solo. Fino al 05/11/2026 ogni email era un testo nudo con il mittente
- * "Control panel" e, nell'oggetto del rapporto, il risultato di hostname(1): sul server vero
- * "freebsd". Chi riceveva "[freebsd] 1 thing to do" da "Control panel" non sapeva ne' quale
- * pannello, ne' quale server, ne' che cosa ci fosse da fare. Qui stanno le tre cose che ogni
- * email deve avere uguali:
+ * Why a single place. Until 2026-11-05 every email was a bare text with the sender
+ * "Control panel" and, in the report's subject, the result of hostname(1): on the production
+ * server "freebsd". Whoever received "[freebsd] 1 thing to do" from "Control panel" knew
+ * neither which panel, nor which server, nor what there was to do. Here are the three things
+ * every email must have the same:
  *
- *  1. CHI SCRIVE: "Mail control panel (mail.example.org)". Il nome del server e' quello con
- *     cui il server di posta si presenta (mail_hostname, poi myhostname di Postfix), non
- *     hostname(1), che su un server installato da un'immagine e' spesso un nome generico.
- *  2. LA BUSTA MIME: multipart/alternative con una parte di testo e una HTML, tutte e due in
- *     UTF-8 e quoted-printable (nessuna riga oltre i 76 caratteri, qualunque cosa ci sia nel
- *     testo), Date, Message-ID, Content-Language, e le intestazioni che dicono che il
- *     messaggio e' automatico (Auto-Submitted, X-Auto-Response-Suppress): un risponditore
- *     automatico non deve rispondere a un pannello.
- *  3. L'ASPETTO: un solo modello HTML, con gli stili scritti dentro gli elementi perche' Gmail
- *     e diversi altri programmi di posta tolgono i fogli di stile. Nessuna immagine, nessun
- *     carattere esterno, nessun collegamento: il messaggio si legge uguale ovunque e non
- *     somiglia a un messaggio che chiede di cliccare.
+ *  1. WHO WRITES: "Mail control panel (mail.example.org)". The server name is the one the
+ *     mail server introduces itself with (mail_hostname, then Postfix's myhostname), not
+ *     hostname(1), which on a server installed from an image is often a generic name.
+ *  2. THE MIME ENVELOPE: multipart/alternative with a text part and an HTML part, both in
+ *     UTF-8 and quoted-printable (no line over 76 characters, whatever is in the text),
+ *     Date, Message-ID, Content-Language, and the headers saying that the message is
+ *     automatic (Auto-Submitted, X-Auto-Response-Suppress): an automatic responder must
+ *     not reply to a panel.
+ *  3. THE LOOK: a single HTML template, with the styles written inside the elements because
+ *     Gmail and several other mail programs strip style sheets. No image, no external
+ *     font, no link: the message reads the same everywhere and does not look like a
+ *     message asking you to click.
  *
- * I testi stanno nei file di lingua (mail.*); qui ci sono solo la forma e la codifica.
+ * The texts are in the language files (mail.*); here there are only the form and the encoding.
  */
 public final class PanelMail {
 
     private PanelMail() {}
 
-    /** Un'email pronta: oggetto, testo semplice e HTML, nella lingua in cui e' scritta. */
+    /** A ready email: subject, plain text and HTML, in the language it is written in. */
     public record Message(String subject, String text, String html, String lang) {}
 
-    // ===================== chi scrive =====================
+    // ===================== who writes =====================
 
     /**
-     * Il nome del server di posta: il valore salvato dall'installazione (mail_hostname), poi
-     * myhostname di Postfix, e solo alla fine hostname(1). Sul server vero hostname(1) da'
-     * "freebsd", myhostname "mail.domain-b.test": e' il secondo che dice quale server e'.
+     * The mail server's name: the value saved by the installation (mail_hostname), then Postfix's
+     * myhostname, and only at the end hostname(1). On the production server hostname(1) gives
+     * "freebsd", myhostname "mail.domain-b.test": it is the second one that says which server it is.
      */
     public static String serverName() {
         String name = "";
@@ -62,24 +62,24 @@ public final class PanelMail {
         return validHost(name) ? name.toLowerCase(Locale.ROOT) : "";
     }
 
-    /** Un nome di host che puo' finire in un'intestazione: solo lettere, cifre, punti e trattini. */
+    /** A host name that may end up in a header: only letters, digits, dots and hyphens. */
     static boolean validHost(String h) {
         return h != null && h.length() <= 253 && h.matches("[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?");
     }
 
-    /** Il nome visualizzato del mittente, con il server se lo si conosce. */
+    /** The sender's display name, with the server if it is known. */
     static String senderName(String lang, String server) {
         return server == null || server.isEmpty()
                 ? I18n.t(lang, "mail.common.senderNameBare")
                 : I18n.t(lang, "mail.common.senderName", Map.of("server", server));
     }
 
-    /** La data lunga nella lingua dell'email: "5 November 2026", "5 novembre 2026". */
+    /** The long date in the email's language: "5 November 2026", `5 novembre 2026`. */
     static String longDate(String lang, ZonedDateTime when) {
         return when.format(DateTimeFormatter.ofPattern(I18n.t(lang, "mail.common.datePattern"), localeOf(lang)));
     }
 
-    /** Data e ora con il fuso, nella lingua dell'email: "5 November 2026 at 20:15 UTC". */
+    /** Date and time with the time zone, in the email's language: "5 November 2026 at 20:15 UTC". */
     static String longDateTime(String lang, ZonedDateTime when) {
         return when.format(DateTimeFormatter.ofPattern(I18n.t(lang, "mail.common.dateTimePattern"), localeOf(lang)));
     }
@@ -88,17 +88,17 @@ public final class PanelMail {
         return Locale.forLanguageTag(I18n.normalize(lang));
     }
 
-    // ===================== la busta =====================
+    // ===================== the envelope =====================
 
     /**
-     * Il messaggio completo, come lo vuole sendmail -t: intestazioni, riga vuota, corpo.
-     * Le righe finiscono con CRLF; sendmail le accetta e Postfix le riscrive come preferisce.
+     * The complete message, as sendmail -t wants it: headers, empty line, body.
+     * Lines end with CRLF; sendmail accepts them and Postfix rewrites them as it prefers.
      */
     static String compose(String fromName, String from, String to, Message m, String messageId, ZonedDateTime date) {
         String boundary = "=_mcp_" + randomHex(12);
         StringBuilder b = new StringBuilder(m.text().length() * 2 + m.html().length() * 2 + 1024);
-        // Il nome del mittente con il server puo' superare i 78 caratteri: si va a capo prima
-        // dell'indirizzo, che e' il punto in cui ogni programma di posta se lo aspetta.
+        // The sender's name with the server can exceed 78 characters: the line is broken before the
+        // address, which is the point where every mail program expects it.
         String fromLine = "From: " + address(fromName, from);
         if (fromLine.length() > 78 && fromLine.endsWith(" <" + from + ">"))
             fromLine = fromLine.substring(0, fromLine.length() - from.length() - 3) + "\r\n <" + from + ">";
@@ -109,8 +109,8 @@ public final class PanelMail {
          .append("Message-ID: <").append(messageId).append(">\r\n")
          .append("MIME-Version: 1.0\r\n")
          .append("Content-Language: ").append(I18n.normalize(m.lang())).append("\r\n")
-         // Non e' posta scritta da una persona: i risponditori automatici (RFC 3834) e Outlook
-         // (X-Auto-Response-Suppress) non devono rispondere.
+         // It is not mail written by a person: automatic responders (RFC 3834) and Outlook
+         // (X-Auto-Response-Suppress) must not reply.
          .append("Auto-Submitted: auto-generated\r\n")
          .append("X-Auto-Response-Suppress: All\r\n")
          .append("X-Mailer: ").append(I18n.tr("brand.name")).append("\r\n")
@@ -131,10 +131,10 @@ public final class PanelMail {
     }
 
     /**
-     * "Nome" <indirizzo>: tra virgolette se e' ASCII e la riga del mittente ci sta; altrimenti
-     * in parole codificate RFC 2047, che si possono mandare a capo fra l'una e l'altra (chi
-     * legge le riunisce senza spazi). Un nome lungo fra virgolette non si puo' spezzare senza
-     * affidarsi a programmi che riuniscano bene le virgolette piegate.
+     * "Name" <address>: in quotes if it is ASCII and the sender line fits; otherwise in RFC 2047
+     * encoded words, which can be broken onto new lines between one and the next (the reader
+     * joins them without spaces). A long quoted name cannot be split without relying on
+     * programs that join folded quotes correctly.
      */
     static String address(String name, String address) {
         if (name == null || name.isBlank()) return address;
@@ -145,12 +145,12 @@ public final class PanelMail {
     }
 
     /**
-     * Un'intestazione secondo RFC 2047 se contiene caratteri non ASCII.
+     * A header according to RFC 2047 if it contains non-ASCII characters.
      *
-     * Ogni parola codificata sta entro i 75 caratteri che la norma impone, e non spezza mai un
-     * carattere UTF-8 a meta': la versione di prima metteva tutto l'oggetto in una sola parola,
-     * che con un oggetto lungo superava il limite. Le parole successive vanno a capo con uno
-     * spazio davanti (folding), che chi legge non vede.
+     * Every encoded word stays within the 75 characters the standard imposes, and never splits a
+     * UTF-8 character in half: the previous version put the whole subject in a single word,
+     * which with a long subject exceeded the limit. The following words go on a new line with a
+     * space in front (folding), which the reader does not see.
      */
     static String encodeHeader(String s, int alreadyUsed) {
         if (s == null) return "";
@@ -159,13 +159,13 @@ public final class PanelMail {
         return encodeWords(clean);
     }
 
-    /** Il testo in parole codificate "=?UTF-8?B?...?=", una per riga, ognuna entro i 77 caratteri con il nome dell'intestazione. */
+    /** The text in encoded words "=?UTF-8?B?...?=", one per line, each within 77 characters with the header name. */
     static String encodeWords(String s) {
         String clean = s.replace("\r", " ").replace("\n", " ");
         StringBuilder out = new StringBuilder();
         StringBuilder chunk = new StringBuilder();
         int chunkBytes = 0;
-        final int maxBytes = 42;       // 42 byte = 56 caratteri base64: con =?UTF-8?B?, ?= e "Subject: " fanno 77
+        final int maxBytes = 42;       // 42 bytes = 56 base64 characters: with =?UTF-8?B?, ?= and "Subject: " they make 77
         for (int i = 0; i < clean.length(); ) {
             int cp = clean.codePointAt(i);
             String c = new String(Character.toChars(cp));
@@ -189,9 +189,9 @@ public final class PanelMail {
     }
 
     /**
-     * Un'intestazione ASCII lunga va a capo prima di uno spazio, entro i 78 caratteri che la
-     * norma raccomanda (RFC 5322, 2.1.1): chi la legge toglie l'a capo e ritrova la riga intera.
-     * Le parti gia' piegate (le parole codificate) si lasciano come sono.
+     * A long ASCII header is broken before a space, within the 78 characters the standard
+     * recommends (RFC 5322, 2.1.1): the reader removes the line break and finds the whole line again.
+     * The parts already folded (the encoded words) are left as they are.
      */
     static String fold(String header) {
         StringBuilder out = new StringBuilder();
@@ -214,9 +214,9 @@ public final class PanelMail {
     }
 
     /**
-     * Quoted-printable (RFC 2045, 6.7): l'ASCII stampabile resta com'e', il resto diventa =XX,
-     * e nessuna riga supera i 76 caratteri. Le righe lunghe dell'HTML e le lettere accentate
-     * arrivano cosi' intatte attraverso qualunque server, anche uno che non accetta 8 bit.
+     * Quoted-printable (RFC 2045, 6.7): printable ASCII stays as it is, the rest becomes =XX,
+     * and no line exceeds 76 characters. The long HTML lines and the accented letters thus
+     * arrive intact through any server, even one that does not accept 8 bit.
      */
     static String quotedPrintable(String text) {
         StringBuilder out = new StringBuilder(text.length() + text.length() / 3);
@@ -232,7 +232,7 @@ public final class PanelMail {
                     piece = String.valueOf((char) b);
                 else
                     piece = String.format("=%02X", b);
-                // Spazio per il pezzo e, se la riga continua, per il "=" della riga spezzata.
+                // Room for the piece and, if the line continues, for the "=" of the split line.
                 int room = last ? 76 : 75;
                 if (col + piece.length() > room) {
                     out.append("=\r\n");
@@ -252,9 +252,9 @@ public final class PanelMail {
         return java.util.HexFormat.of().formatHex(r);
     }
 
-    // ===================== l'aspetto =====================
+    // ===================== the look =====================
 
-    /** Le tonalita' delle cose da fare: sfondo, bordo e testo. Contrasto del testo >= 4.5:1 sullo sfondo. */
+    /** The shades of the things to do: background, border and text. Text contrast >= 4.5:1 on the background. */
     public enum Tone {
         NOW("#fef2f2", "#b91c1c", "#991b1b"),
         URGENT("#fff7ed", "#c2410c", "#9a3412"),
@@ -267,7 +267,7 @@ public final class PanelMail {
             this.background = background; this.border = border; this.text = text;
         }
 
-        /** La tonalita' di una cosa da fare, dalla sua urgenza (0 subito ... 3 quando si puo'). */
+        /** The shade of a thing to do, from its urgency (0 right away ... 3 when possible). */
         public static Tone of(int urgency) {
             return switch (urgency) { case 0 -> NOW; case 1 -> URGENT; case 2 -> TODO; default -> LATER; };
         }
@@ -280,9 +280,9 @@ public final class PanelMail {
     public static String esc(String s) { return I18n.escapeHtml(s == null ? "" : s); }
 
     /**
-     * La pagina intera: intestazione con il nome del pannello e del server, il contenuto, il
-     * piede. "preheader" e' la riga che Gmail e Apple Mail mostrano nell'elenco accanto
-     * all'oggetto: se manca, mostrano l'inizio del corpo, che qui sarebbe il nome del pannello.
+     * The whole page: header with the panel's and the server's name, the content, the footer.
+     * "preheader" is the line that Gmail and Apple Mail show in the list next to the subject:
+     * if it is missing, they show the start of the body, which here would be the panel's name.
      */
     static String page(String lang, String title, String preheader, String server, String content, String footer) {
         String l = I18n.normalize(lang);
@@ -290,8 +290,8 @@ public final class PanelMail {
              + "<html lang=\"" + l + "\">\n<head>\n"
              + "<meta charset=\"UTF-8\">\n"
              + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-             // Solo chiaro: senza questa dichiarazione alcuni programmi in modalita' scura
-             // invertono i colori a modo loro, e i colori delle urgenze diventano illeggibili.
+             // Light only: without this declaration some programs in dark mode invert the
+             // colours their own way, and the urgency colours become unreadable.
              + "<meta name=\"color-scheme\" content=\"light\">\n"
              + "<meta name=\"supported-color-schemes\" content=\"light\">\n"
              + "<title>" + esc(title) + "</title>\n"
@@ -339,7 +339,7 @@ public final class PanelMail {
         return "<p style=\"margin:0 0 12px;font-size:13px;line-height:20px;color:" + MUTED + ";\">" + esc(text) + "</p>\n";
     }
 
-    /** Una riga di stato in evidenza: titolo in grassetto e una frase sotto. Il colore non e' mai l'unico segnale. */
+    /** A highlighted status line: bold title and a sentence below. Colour is never the only signal. */
     static String banner(Tone tone, String title, String detail) {
         return "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:16px 0 4px;\">"
              + "<tr><td style=\"padding:14px 16px;background-color:" + tone.background + ";border-left:4px solid " + tone.border + ";border-radius:4px;\">"
@@ -349,7 +349,7 @@ public final class PanelMail {
              + "</td></tr></table>\n";
     }
 
-    /** Una cosa da fare: l'etichetta d'urgenza scritta, il titolo, la spiegazione e dove farla nel pannello. */
+    /** A thing to do: the urgency label in words, the title, the explanation and where to do it in the panel. */
     static String item(Tone tone, String label, String title, String detail, String whereLabel, String where) {
         StringBuilder b = new StringBuilder();
         b.append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 12px;border:1px solid ").append(LINE)
@@ -368,7 +368,7 @@ public final class PanelMail {
         return b.toString();
     }
 
-    /** Una tabella di dati a due colonne: nome e valore. La prima colonna e' l'intestazione della riga. */
+    /** A two-column data table: name and value. The first column is the row header. */
     static String facts(String caption, List<String[]> rows) {
         StringBuilder b = new StringBuilder();
         b.append("<table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" width=\"100%\" style=\"border-collapse:collapse;margin:0 0 4px;font-size:14px;line-height:20px;\">");
@@ -385,7 +385,7 @@ public final class PanelMail {
         return b.toString();
     }
 
-    /** Un elenco puntato di righe gia' fatte (pacchetti, vulnerabilita'). */
+    /** A bulleted list of ready-made lines (packages, vulnerabilities). */
     static String list(List<String> lines) {
         if (lines.isEmpty()) return "";
         StringBuilder b = new StringBuilder("<ul style=\"margin:4px 0 12px;padding:0 0 0 20px;font-size:13px;line-height:20px;color:#374151;\">");
@@ -394,7 +394,7 @@ public final class PanelMail {
         return b.append("</ul>\n").toString();
     }
 
-    /** Il codice monouso, grande e in caratteri a larghezza fissa, facile da leggere e da copiare. */
+    /** The one-time code, large and in fixed-width characters, easy to read and to copy. */
     static String code(String code) {
         return "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:16px 0;\">"
              + "<tr><td style=\"padding:14px 22px;background-color:#f3f4f6;border:1px solid " + LINE + ";border-radius:6px;"
@@ -406,23 +406,23 @@ public final class PanelMail {
         return "<p style=\"margin:0 0 6px;\">" + esc(text) + "</p>\n";
     }
 
-    // ===================== il testo semplice =====================
+    // ===================== the plain text =====================
 
-    /** Il titolo di una sezione del testo semplice, sottolineato. */
+    /** The title of a plain-text section, underlined. */
     static String textHeading(String title) {
         return title + "\n" + "-".repeat(Math.min(60, Math.max(3, title.length()))) + "\n";
     }
 
     /**
-     * Va a capo a 72 colonne, mantenendo il rientro: il testo semplice si legge in un
-     * terminale o in un programma che non mostra l'HTML, e una riga di 300 caratteri li'
-     * diventa una striscia da scorrere.
+     * Wraps at 72 columns, keeping the indentation: the plain text is read in a terminal
+     * or in a program that does not show HTML, and a 300-character line there becomes a
+     * strip to scroll.
      */
     static String wrap(String text, int width, String indent) {
         return wrap(text, width, indent, indent);
     }
 
-    /** Come wrap, con un rientro per la prima riga e un altro per le seguenti (gli elenchi: "- " poi allineato). */
+    /** Like wrap, with one indentation for the first line and another for the following ones (lists: "- " then aligned). */
     static String wrap(String text, int width, String first, String rest) {
         StringBuilder out = new StringBuilder();
         boolean firstLine = true;

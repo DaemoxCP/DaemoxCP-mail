@@ -16,19 +16,20 @@ import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 /**
- * Gli script Sieve dell'utente nella sua cartella di posta, e le regole del pannello prima di loro, sui server
- * installati prima (reperto 214). La configurazione nuova la scrive DovecotConfig (SIEVE23, SIEVE24): qui si cambia,
- * in conf.d/10-master.conf, solo il blocco Sieve che il pannello stesso aveva scritto, uguale riga per riga.
+ * The user's Sieve scripts in their mail folder, and the panel's rules before them, on servers installed
+ * earlier (finding 214). The new configuration is written by DovecotConfig (SIEVE23, SIEVE24): here only the
+ * Sieve block that the panel itself had written, identical line by line, is changed in conf.d/10-master.conf.
  *
- * Prima: le regole del pannello e gli script dell'utente erano lo stesso file, /var/mail/sieve/dominio/nome, di root.
- * ManageSieve, i Filtri della webmail e doveadm sieve non potevano salvare niente («mkdir_parents_chgrp(...) failed:
- * Permission denied»). Dopo: le regole del pannello restano li', di root, e girano prima; gli script dell'utente
- * stanno in ~/sieve, gia' di vmail. Nessun permesso si allarga.
+ * Before: the panel's rules and the user's scripts were the same file, /var/mail/sieve/domain/name, owned by
+ * root. ManageSieve, the webmail "Filters" and doveadm sieve could not save anything ("mkdir_parents_chgrp(...)
+ * failed: Permission denied"). After: the panel's rules stay there, owned by root, and run first; the user's
+ * scripts are in ~/sieve, already owned by vmail. No permission is widened.
  *
- * Prima di toccare: se in /var/mail/sieve c'e' gia' uno script attivo fatto da ManageSieve (un collegamento, che il
- * pannello non scrive mai), qualcuno ce l'ha fatto funzionare a mano, e si lascia com'e'. Dopo: doveconf deve
- * accettare il file, Dovecot ricaricarsi, e doveadm sieve list aprire davvero gli script di una casella; se una
- * cosa sola non torna, il file torna com'era e Dovecot si ricarica. Al secondo avvio non trova niente da fare.
+ * Before touching anything: if in /var/mail/sieve there is already an active script made by ManageSieve (a
+ * link, which the panel never writes), someone made it work by hand, and it is left as it is. After: doveconf
+ * must accept the file, Dovecot must reload, and doveadm sieve list must really open the scripts of a mailbox;
+ * if a single thing does not add up, the file goes back to how it was and Dovecot reloads. At the second
+ * startup it finds nothing to do.
  */
 public final class SieveStorage {
 
@@ -40,11 +41,11 @@ public final class SieveStorage {
     static final String DOVECONF = "/usr/local/bin/doveconf";
     static final String DOVEADM = "/usr/local/bin/doveadm";
 
-    /** Il blocco della 2.3, dentro plugin {}, come lo scriveva il pannello. */
+    /** The 2.3 block, inside plugin {}, as the panel wrote it. */
     static final String OLD23 = "  sieve = /var/mail/sieve/%d/%n/.dovecot.sieve\n"
                               + "  sieve_dir = /var/mail/sieve/%d/%n/\n";
 
-    /** Il blocco della 2.4 come lo scriveva il pannello. */
+    /** The 2.4 block as the panel wrote it. */
     static final String OLD24 = "sieve_script personal {\n"
                               + "  type = personal\n"
                               + "  driver = file\n"
@@ -55,8 +56,8 @@ public final class SieveStorage {
     private SieveStorage() {}
 
     /**
-     * conf.d/10-master.conf con il blocco Sieve nuovo, o null se non c'e' niente da cambiare: gia' fatto, o il blocco
-     * non e' quello che scriveva il pannello (allora non e' suo, e resta com'e'). Funzione pura.
+     * conf.d/10-master.conf with the new Sieve block, or null if there is nothing to change: already done, or
+     * the block is not the one the panel wrote (then it is not the panel's, and it stays as it is). Pure function.
      */
     static String migrated(String conf) {
         if (conf == null) return null;
@@ -71,7 +72,7 @@ public final class SieveStorage {
         return n;
     }
 
-    /** I collegamenti .dovecot.sieve sotto /var/mail/sieve: li fa ManageSieve, il pannello scrive solo file. */
+    /** The .dovecot.sieve links under /var/mail/sieve: ManageSieve makes them, the panel writes only files. */
     static List<Path> manageSieveLinks(Path root) {
         List<Path> out = new ArrayList<>();
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) return out;
@@ -83,7 +84,7 @@ public final class SieveStorage {
         return out;
     }
 
-    /** Una casella su cui provare: la prima cartella /var/vmail/dominio/nome, come indirizzo; null se non ce n'e'. */
+    /** A mailbox to test on: the first /var/vmail/domain/name folder, as an address; null if there is none. */
     static String someMailbox(Path vmail) {
         if (!Files.isDirectory(vmail)) return null;
         try (Stream<Path> domains = Files.list(vmail)) {
@@ -102,7 +103,7 @@ public final class SieveStorage {
         return null;
     }
 
-    /** All'avvio della parte root. */
+    /** At the start of the root part. */
     public static void ensureAtBoot() {
         try {
             String problem = ensure();
@@ -112,7 +113,7 @@ public final class SieveStorage {
         }
     }
 
-    /** Null se non c'era niente da fare o se e' fatto; altrimenti perche' e' rimasto com'era. */
+    /** Null if there was nothing to do or if it is done; otherwise why it stayed as it was. */
     static synchronized String ensure() throws Exception {
         if (!Files.isRegularFile(MASTER_CONF, LinkOption.NOFOLLOW_LINKS) || !Files.isExecutable(Path.of(DOVECONF))) return null;
         String current = Files.readString(MASTER_CONF, StandardCharsets.UTF_8);

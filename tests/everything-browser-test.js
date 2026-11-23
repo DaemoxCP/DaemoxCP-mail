@@ -1,14 +1,14 @@
-// "Update everything" on the TEST VM panel, as a person would do it (reperto 207): sign in, Updates, the one row at the
+// "Update everything" on the TEST VM panel, as a person would do it (finding 207): sign in, Updates, the one row at the
 // top with the steps in order and one button; "Cancel" leaves the button where it is; then the confirmation with every
 // step numbered, the one job to its end, and, with the panel's Java last, the page that reloads by itself on the sign-in
-// page when the panel comes back (a restart ends every session, reperto 184). Then, signed in again: nothing left to
+// page when the panel comes back (a restart ends every session, finding 184). Then, signed in again: nothing left to
 // update, the job's log on disk ends with its end (Diagnostics lists it as completed), and on the VM:
 //  - every service up, nothing left to update, the protected packages protected again;
 //  - postfix's inet_protocols written in main.cf, and postfix listening on the same addresses as before;
 //  - with the Java: the Java report says it succeeded, the service sees the panel again (its pidfile is the root
 //    part), the web part runs as daemoxcp_mail and holds the port, Java is the new one and protected again.
 // It takes the place of java-update-browser-test.js: the Java row and its "Prepare" are gone, the Java is the last step.
-// With the Java, the page is reloaded while its script works (reperto 210): it must say the Java is being updated, with
+// With the Java, the page is reloaded while its script works (finding 210): it must say the Java is being updated, with
 // the script's log, offer nothing, and still reload by itself when the panel comes back.
 //
 // It needs updates waiting on the VM, and it changes it (packages, a boot environment, the panel's restart). The way
@@ -123,7 +123,7 @@ async function topRow(page) {
         if (java) {
             // The Java script copies the JDK, stops the panel, updates it and starts it again (two or three minutes on the
             // VM, four on the real server). The owner reloaded the page meanwhile and saw "1 step to do: the Java" and a
-            // warning about a job "that did not finish" (reperto 210): reloaded, the page must say what is happening.
+            // warning about a job "that did not finish" (finding 210): reloaded, the page must say what is happening.
             await page.reload();
             await page.waitForSelector('#ucRunning:not([hidden])', { timeout: 60000 }).catch(() => {});
             const during = await page.innerText('#ucRunning').catch(() => '');

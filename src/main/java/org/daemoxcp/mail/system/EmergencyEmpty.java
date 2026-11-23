@@ -11,14 +11,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Lo svuotamento d'emergenza della Junk e/o del Cestino, dalla console del server (--empty-folders): per tutte le
- * caselle o per alcune, subito. Lo svuotamento di tutti i giorni e' un'altra cosa: automatico, casella per casella,
- * spento finche' non lo si chiede, dal pannello o dalla webmail (junk_expunge_days, trash_expunge_days).
+ * The emergency emptying of Junk and/or Trash, from the server console (--empty-folders): for all mailboxes or
+ * for some, right away. The everyday emptying is something else: automatic, mailbox by mailbox, off until
+ * requested, from the panel or from the webmail (junk_expunge_days, trash_expunge_days).
  *
- * <p>Prima si contano i messaggi di ogni cartella (doveadm mailbox status), si mostrano, e si chiede di scrivere quel
- * numero: solo da un terminale, mai a occhi chiusi. Poi doveadm expunge ... all, cartella per cartella; quello che e'
- * stato tolto va nel registro di controllo del pannello (quante caselle, quante cartelle, quanti messaggi: niente
- * contenuto). Una cartella che non c'e' conta zero e si salta.
+ * <p>First the messages of each folder are counted (doveadm mailbox status), shown, and you are asked to type
+ * that number: only from a terminal, never blindly. Then doveadm expunge ... all, folder by folder; what was
+ * removed goes into the panel's audit log (how many mailboxes, how many folders, how many messages: no
+ * content). A folder that does not exist counts as zero and is skipped.
  */
 public final class EmergencyEmpty {
 
@@ -26,7 +26,7 @@ public final class EmergencyEmpty {
 
     static final String DOVEADM = "/usr/local/bin/doveadm";
 
-    /** Le cartelle per la parola della riga di comando; null se la parola non va. Pura. */
+    /** The folders for the command-line word; null if the word is not valid. Pure. */
     public static List<String> folders(String which) {
         if (which == null) return null;
         return switch (which) {
@@ -37,21 +37,27 @@ public final class EmergencyEmpty {
         };
     }
 
-    /** Il numero di messaggi dall'uscita di «doveadm -f flow mailbox status messages»: «messages=12». -1 se non c'e'. Pura. */
+    /**
+     * The number of messages from the output of "doveadm -f flow mailbox status messages": "messages=12". -1 if
+     * missing. Pure.
+     */
     static int messages(String flow) {
         Matcher m = Pattern.compile("(?:^|\\s)messages=(\\d+)").matcher(flow == null ? "" : flow);
         return m.find() ? Integer.parseInt(m.group(1)) : -1;
     }
 
-    /** Quanti messaggi ha la cartella della casella: 0 se non c'e'. */
+    /** How many messages the mailbox's folder has: 0 if it does not exist. */
     @FunctionalInterface
     public interface Counter { int count(String mailbox, String folder); }
 
-    /** Svuota la cartella della casella: vero se doveadm ha risposto bene. */
+    /** Empties the mailbox's folder: true if doveadm answered successfully. */
     @FunctionalInterface
     public interface Expunger { boolean expunge(String mailbox, String folder); }
 
-    /** Il conto: per casella, per cartella, i messaggi; solo le cartelle che ne hanno. Puro rispetto a Counter. */
+    /**
+     * The count: per mailbox, per folder, the messages; only the folders that have some. Pure with respect to
+     * Counter.
+     */
     public static Map<String, Map<String, Integer>> plan(List<String> mailboxes, List<String> folders, Counter counter) {
         Map<String, Map<String, Integer>> plan = new LinkedHashMap<>();
         for (String mb : mailboxes) {
@@ -69,10 +75,10 @@ public final class EmergencyEmpty {
         return t;
     }
 
-    /** Il risultato: quante cartelle svuotate, quali no. */
+    /** The result: how many folders emptied, which ones not. */
     public record Result(int emptied, List<String> failed) {}
 
-    /** Svuota quello che il conto dice. Puro rispetto a Expunger. */
+    /** Empties what the count says. Pure with respect to Expunger. */
     public static Result run(Map<String, Map<String, Integer>> plan, Expunger expunger) {
         int emptied = 0;
         List<String> failed = new ArrayList<>();
@@ -84,13 +90,13 @@ public final class EmergencyEmpty {
         return new Result(emptied, failed);
     }
 
-    /** I messaggi di una cartella, da Dovecot. */
+    /** The messages of a folder, from Dovecot. */
     public static int countWithDovecot(String mailbox, String folder) {
         Shell.Result r = Shell.run(Duration.ofSeconds(60), DOVEADM, "-f", "flow", "mailbox", "status", "-u", mailbox, "messages", folder);
         return r.success() ? Math.max(0, messages(r.output())) : 0;
     }
 
-    /** doveadm expunge -u casella mailbox cartella all. */
+    /** doveadm expunge -u user mailbox folder all. */
     public static boolean expungeWithDovecot(String mailbox, String folder) {
         return Shell.run(Duration.ofSeconds(600), DOVEADM, "expunge", "-u", mailbox, "mailbox", folder, "all").success();
     }

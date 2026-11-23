@@ -23,7 +23,7 @@ import java.util.stream.Stream;
  * ARRIVED, after Postfix, the milter and Dovecot:
  *  - the displayed sender, the decoded subject, the envelope headers;
  *  - the DKIM signature, if the sender's domain has one;
- *  - le due parti, testo e HTML, decodificate.
+ *  - the two parts, text and HTML, decoded.
  * It leaves a copy of every message in -Dpanelmail.copies=<folder>, to open it in a mail
  * program.
  *

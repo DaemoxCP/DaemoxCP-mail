@@ -21,34 +21,34 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Il catalogo dei pacchetti gia' scaricato: per ogni repository acceso, dov'e' e di quando e'.
+ * The package catalog already downloaded: for every enabled repository, where it is and how old it is.
  *
- * Dove sta lo dice il sorgente di pkg (libpkg/repo/binary/common.c): ogni repository ha il
- * suo catalogo in $PKG_DBDIR/repos/<nome>/db, senza estensione. Prima il pannello guardava
- * /var/db/pkg/repo-FreeBSD.sqlite, cioe' il nome delle versioni vecchie di pkg e del
- * repository "FreeBSD" di prima di FreeBSD 15 (che lo ha diviso in FreeBSD-ports e
- * FreeBSD-ports-kmods): su un sistema di oggi quel file non c'e', e la Home e il rapporto
- * dicevano "eta' sconosciuta".
+ * Where it lives is stated by pkg's source (libpkg/repo/binary/common.c): every repository has its
+ * own catalog in $PKG_DBDIR/repos/<name>/db, without an extension. Before, the panel looked at
+ * /var/db/pkg/repo-FreeBSD.sqlite, that is the name used by old versions of pkg and by the
+ * "FreeBSD" repository from before FreeBSD 15 (which split it into FreeBSD-ports and
+ * FreeBSD-ports-kmods): on a current system that file does not exist, and the Home page and the
+ * report said "age unknown".
  *
- * La data di quel file NON e' quella dell'ultimo "pkg update". Alla fine di un aggiornamento
- * pkg gli mette la data del catalogo sul server, presa dalla risposta ("Set mtime from http
- * request if possible", libpkg/repo/binary/update.c), e se il server risponde che non e'
- * cambiato non lo tocca. Quindi e' la data di PUBBLICAZIONE dell'elenco con cui pkg confronta:
- * esattamente il termine di paragone dei conteggi, e si legge senza andare in rete.
+ * The date of that file is NOT the date of the last "pkg update". At the end of an update pkg
+ * sets it to the date of the catalog on the server, taken from the response ("Set mtime from http
+ * request if possible", libpkg/repo/binary/update.c), and if the server answers that it has not
+ * changed it does not touch it. So it is the PUBLICATION date of the list pkg compares against:
+ * exactly the reference point of the counts, and it is read without going to the network.
  *
- * Contano solo i repository accesi: uno spento puo' aver lasciato un catalogo vecchio, ma non
- * entra nel confronto. Se sono piu' d'uno vale il piu' vecchio, perche' un conteggio e' fresco
- * quanto il suo elenco meno fresco.
+ * Only the enabled repositories count: a disabled one may have left an old catalog, but it does
+ * not take part in the comparison. If there is more than one, the oldest counts, because a count
+ * is only as fresh as its least fresh list.
  */
 public final class PkgCatalog {
 
     private PkgCatalog() {}
 
 
-    /** Un nome di repository finisce in un percorso: solo questi caratteri, e non troppi. */
+    /** A repository name ends up in a path: only these characters, and not too many. */
     private static final Pattern REPO_NAME = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
 
-    /** Legge davvero: cartella di pkg, repository accesi, date dei cataloghi. Nessuna rete. */
+    /** Really reads: pkg's folder, enabled repositories, catalog dates. No network. */
     public static JSONObject read() {
         String dir = "/var/db/pkg";
         for (String line : Shell.run(Duration.ofSeconds(15), "pkg", "config", "PKG_DBDIR").outputTrim().split("\n"))
@@ -60,9 +60,9 @@ public final class PkgCatalog {
     }
 
     /**
-     * I repository accesi, dall'uscita di "pkg -vv". La forma e' quella di print_repository()
-     * nel sorgente di pkg (src/utils.c): "  <nome>: { ", poi "enabled : yes," o "no,", e "}".
-     * Restituisce null se non riconosce nessun repository: "non so" non e' "nessuno".
+     * The enabled repositories, from the output of "pkg -vv". The shape is the one of
+     * print_repository() in pkg's source (src/utils.c): "  <name>: { ", then "enabled : yes," or
+     * "no,", and "}". Returns null if it recognizes no repository: "I don't know" is not "none".
      */
     static List<String> enabledOnes(String output) {
         List<String> allItems = new ArrayList<>(), enabledOnes = new ArrayList<>();
@@ -84,13 +84,13 @@ public final class PkgCatalog {
     }
 
     /**
-     * Di quando e' il catalogo di ogni repository acceso, dalle date dei file nella cartella di
-     * pkg. Non lancia comandi: legge date di file. Sta da sola perche' le prove la verifichino
-     * su una cartella costruita da loro, con le date che decidono loro.
+     * How old the catalog of every enabled repository is, from the dates of the files in pkg's
+     * folder. It runs no commands: it reads file dates. It stands on its own so that the tests can
+     * verify it on a folder they build themselves, with the dates they choose.
      *
-     * @param accesi i repository accesi; null se pkg -vv non ha risposto, e allora si prendono
-     *               i cataloghi che ci sono
-     * @param adesso l'ora attuale in secondi dal 1970, UTC
+     * @param enabledOnes the enabled repositories; null if pkg -vv did not answer, and then the
+     *               catalogs that exist are taken
+     * @param now the current time in seconds since 1970, UTC
      */
     static JSONObject data(String dir, List<String> enabledOnes, long now) {
         List<String> names = new ArrayList<>();
@@ -101,14 +101,14 @@ public final class PkgCatalog {
             try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(dir, "repos"))) {
                 for (Path p : ds)
                     if (Files.isRegularFile(p.resolve("db"))) names.add(p.getFileName().toString());
-            } catch (Exception e) { /* nessuna cartella repos: si prova il nome vecchio */ }
+            } catch (Exception e) { /* no repos folder: the old name is tried */ }
             try (DirectoryStream<Path> ds = Files.newDirectoryStream(Paths.get(dir), "repo-*.sqlite")) {
                 for (Path p : ds) {
                     String f = p.getFileName().toString();
                     String n = f.substring("repo-".length(), f.length() - ".sqlite".length());
                     if (!names.contains(n)) names.add(n);
                 }
-            } catch (Exception e) { /* nemmeno quello */ }
+            } catch (Exception e) { /* not even that */ }
             Collections.sort(names);
         }
 
@@ -123,20 +123,20 @@ public final class PkgCatalog {
                 missing.put(name);
                 continue;
             }
-            // Prima il posto di adesso, poi quello delle versioni vecchie di pkg.
+            // First the current location, then the one of old pkg versions.
             Path file = null;
             for (Path p : List.of(Paths.get(dir, "repos", name, "db"), Paths.get(dir, "repo-" + name + ".sqlite")))
                 if (Files.isRegularFile(p)) { file = p; break; }
             long published = -1;
             try {
                 if (file != null) published = Files.getLastModifiedTime(file).to(TimeUnit.SECONDS);
-            } catch (Exception e) { /* resta -1 */ }
+            } catch (Exception e) { /* stays -1 */ }
             if (published < 0) {
                 o.put("found", false).put("searched", Paths.get(dir, "repos", name, "db").toString());
                 missing.put(name);
                 continue;
             }
-            // Un orologio un po' indietro rispetto al server darebbe un'eta' negativa: e' "oggi".
+            // A clock slightly behind the server's would give a negative age: it is "today".
             long seconds = Math.max(0, now - published);
             o.put("found", true).put("file", file.toString()).put("published", published)
              .put("data", DateTimeFormatter.ofPattern(I18n.tr("server.catalog.dateTime")).format(Instant.ofEpochSecond(published).atZone(ZoneId.systemDefault())))
@@ -153,13 +153,13 @@ public final class PkgCatalog {
                 .put("oldest", oldest == null ? "" : oldest.getString("name"));
     }
 
-    /** "oggi", "ieri", "N giorni fa". */
+    /** "today", "yesterday", "N days ago". */
     static String howMuch(long days) {
         return days < 0 ? I18n.tr("server.catalog.unknownDate") : days == 0 ? I18n.tr("server.catalog.today")
                 : days == 1 ? I18n.tr("server.catalog.yesterday") : I18n.tr("server.catalog.daysAgo", java.util.Map.of("n", String.valueOf(days)));
     }
 
-    /** La frase sul catalogo, per la Home e per il rapporto: una sola, scritta qui. */
+    /** The sentence about the catalog, for the Home page and for the report: only one, written here. */
     static String note(JSONObject c) {
         JSONArray el = c.optJSONArray("repository");
         JSONArray missing = c.optJSONArray("missing");

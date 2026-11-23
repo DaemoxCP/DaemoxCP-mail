@@ -1,46 +1,46 @@
 #!/bin/sh
-# Il passaggio del pannello di posta a un jar nuovo, su un server gia' avviato: lo stesso giro che e'
-# stato provato sulla VM dal pannello dell'11/10 (reperti, punto 135). Si ferma al primo segnale
-# storto, e da quel momento non tocca piu' niente: dice cosa ha visto e come tornare indietro.
+# The upgrade of the mail panel to a new jar, on a server already running: the same round that was
+# tested on the VM from the panel of 11 October (findings, point 135). It stops at the first wrong
+# sign, and from that moment on it no longer touches anything: it says what it saw and how to go back.
 #
-# Uso, da root:
+# Usage, as root:
 #   upgrade-panel.sh [-m MAILBOX -p PASSWORD_FILE] NEW_JAR JAR_SHA256
 #
-#   NEW_JAR         il jar da mettere al posto di quello che gira; non si tocca niente finche' la
-#                   sua impronta non e' quella attesa
-#   JAR_SHA256      l'impronta attesa, presa da dove il jar e' stato costruito, non dal jar stesso
-#   -m MAILBOX      una casella su cui provare, prima e dopo, accesso IMAP, consegna e webmail
-#   -p PASSWORD_FILE il file con la sua password, una riga, solo per root (0600 o 0400)
+#   NEW_JAR         the jar to put in place of the one that is running; nothing is touched until its
+#                   fingerprint is the expected one
+#   JAR_SHA256      the expected fingerprint, taken from where the jar was built, not from the jar itself
+#   -m MAILBOX      a mailbox on which to test, before and after, IMAP login, delivery and webmail
+#   -p PASSWORD_FILE the file with its password, one line, for root only (0600 or 0400)
 #
-# Cosa fa, in ordine:
-#   1. i controlli: root, impronta, pannello acceso come servizio, boot environment, spazio, nessun
-#      pkg in corso;
-#   2. la fotografia dello stato (servizi, porte, configurazioni, MTA-STS, webmail, pacchetti
-#      protetti, e la casella se c'e');
-#   3. ferma il pannello (la posta resta accesa), crea il boot environment, copia la cartella del
-#      pannello, che sta fuori dai boot environment, col jar di prima;
-#   4. mette il jar nuovo e lo avvia; aspetta che le migrazioni finiscano e le legge nel log: devono
-#      dire DONE, o niente;
-#   5. lo stato, che deve essere uguale alla fotografia;
-#   6. un secondo avvio, che non deve trovare piu' niente da fare;
-#   7. di nuovo lo stato.
-# Quello che vede lo scrive in una cartella accanto a quella del pannello (il nome lo stampa
-# all'inizio), quindi fuori dal boot environment: resta anche tornando indietro.
+# What it does, in order:
+#   1. the checks: root, fingerprint, panel running as a service, boot environment, space, no
+#      pkg in progress;
+#   2. the snapshot of the state (services, ports, configurations, MTA-STS, webmail, locked
+#      packages, and the mailbox if there is one);
+#   3. stops the panel (the mail stays up), creates the boot environment, copies the folder of the
+#      panel, which is outside the boot environments, with the jar from before;
+#   4. puts the new jar in place and starts it; waits for the migrations to finish and reads them in
+#      the log: they must say DONE, or nothing;
+#   5. the state, which must be equal to the snapshot;
+#   6. a second start, which must not find anything more to do;
+#   7. the state again.
+# What it sees it writes into a folder next to the one of the panel (it prints the name at the
+# start), so outside the boot environment: it stays there even when going back.
 
 set -u
 PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 export PATH
 umask 077
 
-# Il servizio del pannello: daemoxcp_mail da DaemoxCP Mail (17/11/2026), mailpanel prima. Il primo avvio del jar
-# nuovo lo rinomina da se' (PanelServiceRename) mentre questo script aspetta, quindi il nome si rilegge ogni volta.
+# The service of the panel: daemoxcp_mail since DaemoxCP Mail (2026-11-17), mailpanel before. The first start of
+# the new jar renames it by itself (PanelServiceRename) while this script waits, so the name is read again every time.
 service_name() {
     if [ -f /usr/local/etc/rc.d/daemoxcp_mail ]; then echo daemoxcp_mail; else echo mailpanel; fi
 }
 RC=/usr/local/etc/rc.d/$(service_name)
-BOOT_TIMEOUT=900      # secondi: AcmeUser puo' installare acme.sh dalla rete
+BOOT_TIMEOUT=900      # seconds: AcmeUser can install acme.sh from the network
 STOP_TIMEOUT=60
-MIN_FREE_KB=1048576   # 1 GiB liberi nel pool del boot environment
+MIN_FREE_KB=1048576   # 1 GiB free in the boot environment's pool
 
 usage() {
     echo "usage: $0 [-m MAILBOX -p PASSWORD_FILE] NEW_JAR JAR_SHA256" >&2
@@ -48,27 +48,27 @@ usage() {
     exit 64
 }
 
-# L'annuncio di LocalMtaRepair, scritto come avviso ma previsto sui server installati prima che
-# Postfix fosse l'MTA locale (il server vero ha myorigin = il nome dell'host): dice cosa sta per
-# cambiare, e subito dopo "Postfix is now the local MTA" dice che e' fatto. E' una migrazione, non
-# un segnale storto; se non riesce, le righe dopo sono avvisi veri e fermano.
+# The announcement of LocalMtaRepair, written as a warning but expected on the servers installed before
+# Postfix was the local MTA (the production server has myorigin = the host name): it says what is about to
+# change, and right after it "Postfix is now the local MTA" says that it is done. It is a migration, not
+# a wrong sign; if it does not succeed, the lines after it are real warnings and they stop.
 LOCAL_MTA_NOTICE='^WARNING: \[LocalMta\] (myorigin .* is not in mydestination: it becomes localhost first|sendmail\(8\) hands over to dma: )'
 
-# Le righe che fermano: ogni avviso o errore, le eccezioni, e i nomi trovati due volte.
+# The lines that stop: every warning or error, the exceptions, and the names found twice.
 bad_lines() {
     grep -nE '^(WARNING|SEVERE):|Exception|Both .* exist|Could not rename|FAILED|failed:' "$1" \
         | grep -vE "^[0-9]+:${LOCAL_MTA_NOTICE#^}"
 }
 
-# Quello che le migrazioni hanno fatto: al primo avvio si leggono, al secondo non ce ne devono essere.
-# Le righe dei controlli che passano ("Alias map OK", "already hands over") non contano.
+# What the migrations did: at the first start they are read, at the second there must be none.
+# The lines of the checks that pass ("Alias map OK", "already hands over") do not count.
 migration_lines() {
     grep -nE "^(INFO|WARNING|SEVERE): (\[[A-Za-z0-9]+\] [A-Z_]+: |Renamed |\[CommentRepair\] comments repaired|\[LocalMta\] Postfix is now|\[PostfixAliases\] Auto-fix|Mail stack packages locked at startup)|${LOCAL_MTA_NOTICE}" "$1"
 }
 
-# Solo la lettura di un pezzo di log, con le regole del passaggio: per rileggere un avvio a mano, e
-# per provare le regole su log costruiti apposta. "first": le migrazioni si elencano, gli avvisi
-# fermano; "second": ferma anche una sola migrazione. Esce 1 se il log fermerebbe il passaggio.
+# Only the reading of a piece of log, with the rules of the upgrade: to read a start again by hand, and
+# to test the rules on logs built on purpose. "first": the migrations are listed, the warnings
+# stop; "second": even a single migration stops. Exits 1 if the log would stop the upgrade.
 if [ "${1:-}" = "--check-log" ]; then
     [ $# -eq 3 ] && [ -f "$2" ] || usage
     case $3 in first|second) ;; *) usage ;; esac
@@ -100,8 +100,8 @@ SWAPPED=no
 
 say() { printf '%s\n' "$*"; }
 
-# Il valore che lo script di avvio usera' (jar, dir, log...): rc.conf se c'e', altrimenti il suo valore di default.
-# Col servizio di adesso, che durante il primo avvio cambia nome.
+# The value that the start script will use (jar, dir, log...): rc.conf if it is there, otherwise its default value.
+# With the current service, which changes name during the first start.
 rc_setting() {
     s=$(service_name)
     v=$(sysrc -n "${s}_$1" 2>/dev/null)
@@ -109,7 +109,7 @@ rc_setting() {
     printf '%s\n' "$v"
 }
 
-# Come tornare indietro, detto con i nomi veri di questo passaggio.
+# How to go back, said with the real names of this upgrade.
 rollback_help() {
     say ""
     say "To go back:"
@@ -134,7 +134,7 @@ fail() {
     exit 1
 }
 
-# --- 1. i controlli -----------------------------------------------------------------------------
+# --- 1. the checks ------------------------------------------------------------------------------
 
 [ "$(id -u)" = 0 ] || fail "it must be run as root"
 [ "$(uname -s)" = FreeBSD ] || fail "this is not FreeBSD"
@@ -174,8 +174,8 @@ FREE_KB=$(( $(zfs get -Hp -o value available "$POOL") / 1024 ))
 pgrep -x pkg >/dev/null 2>&1 && fail "a pkg is running: wait for it to finish"
 pgrep -x pkg-static >/dev/null 2>&1 && fail "a pkg-static is running: wait for it to finish"
 
-# La cartella del lavoro accanto a quella del pannello: sullo stesso dataset, fuori dal boot
-# environment se il pannello sta in /home come sul server.
+# The folder of the job next to the one of the panel: on the same dataset, outside the boot
+# environment if the panel is in /home as on the server.
 WORK=${PANEL_DIR%/*}/panel-upgrade-$STAMP
 mkdir -m 700 "$WORK" || fail "cannot create $WORK"
 {
@@ -189,15 +189,15 @@ mkdir -m 700 "$WORK" || fail "cannot create $WORK"
 } > "$WORK/summary.txt"
 say "Panel upgrade: everything I see goes into $WORK"
 
-# --- 2. la fotografia ---------------------------------------------------------------------------
+# --- 2. the snapshot ----------------------------------------------------------------------------
 
-# Lo stato che deve restare uguale dopo il passaggio, una riga per cosa. Niente password ne'
-# contenuti: solo esiti.
-# I servizi dei pacchetti accesi in rc.conf: quelli di «service -e», con lo stesso calcolo (name, rcvar,
-# load_rc_config_var di rc.subr), ma senza checkyesno. Per gli script che danno il valore predefinito solo dentro di
-# se' (sentinel di redis, pkg_triggers, mysqlrouter, clamav_milter) checkyesno scrive «WARNING: $..._enable is not set
-# properly» nel registro di sistema a ogni chiamata, anche con 2>/dev/null: 4 righe per fotografia, 12 per
-# aggiornamento (misurato il 20/11/2026; stesso elenco di service -e, provato sulla VM).
+# The state that must stay the same after the upgrade, one line per thing. No passwords and no
+# contents: only outcomes.
+# The services of the packages enabled in rc.conf: those of "service -e", with the same computation (name,
+# rcvar, load_rc_config_var of rc.subr), but without checkyesno. For the scripts that give the default value
+# only inside themselves (sentinel of redis, pkg_triggers, mysqlrouter, clamav_milter) checkyesno writes
+# "WARNING: $..._enable is not set properly" in the system log at every call, even with 2>/dev/null: 4 lines
+# per snapshot, 12 per update (measured on 2026-11-20; same list as service -e, tested on the VM).
 enabled_local() (
     . /etc/rc.subr
     for file in /usr/local/etc/rc.d/*; do
@@ -213,34 +213,37 @@ enabled_local() (
 )
 
 state() {
-    # In ordine di nome: service -e segue rcorder, che cambia quando un pacchetto si aggiunge.
-    # Il pannello no, con tutti e due i nomi: il primo avvio lo rinomina.
+    # In order of name: service -e follows rcorder, which changes when a package is added.
+    # Not the panel, with both names: the first start renames it.
     for s in $(enabled_local | grep -vxE 'mailpanel|daemoxcp_mail' | sort); do
         printf 'service %s: %s\n' "$s" "$(service "$s" status >/dev/null 2>&1 && echo up || echo DOWN)"
     done
     printf 'mysqld: %s\n' "$(pgrep -q mysqld && echo up || echo DOWN)"
-    # Le porte di MySQL: la 33060 (protocollo X) e l'indirizzo della 3306 li chiude il pannello stesso
-    # al primo avvio (MysqlListen, che lo verifica e se non va rimette com'era). Qui contano come una
-    # riga sola, cosi' chiuderle non sembra un guasto; che MySQL sia acceso lo dice la riga mysqld.
-    # Lo stesso per POP3 (110, 995): il pannello lo accende o lo spegne come ha scelto l'amministratore,
-    # spento finche' non sceglie (Pop3, che verifica che IMAP risponda ancora e se no rimette com'era);
-    # IMAP resta nella fotografia.
-    # E la 24 e la 6379, su 127.0.0.1 e ::1: le chiude il pannello al primo avvio, quando Postfix consegna a Dovecot dal
-    # socket nella sua coda (LmtpSocket, reperto 234) e rspamd parla con redis dal socket (RedisSocket, 235). Tutti e due
-    # provano una consegna e una scansione prima e dopo, e se non va rimettono la porta.
-    # La 4190 (ManageSieve) conta per il suo nome e non per l'indirizzo: il primo avvio la porta da tutte le interfacce
-    # a 127.0.0.1, dove la usa la webmail (ManageSieveLocal, che dopo il riavvio di Dovecot verifica autenticazione,
-    # IMAP e il saluto di ManageSieve, e se no rimette com'era). Se Dovecot smettesse di ascoltarla, la riga sparisce.
+    # The MySQL ports: 33060 (X protocol) and the address of 3306 are closed by the panel itself
+    # at the first start (MysqlListen, which verifies it and if it does not work puts it back as it was).
+    # Here they count as a single line, so that closing them does not look like a fault; that MySQL is
+    # running is said by the mysqld line.
+    # The same for POP3 (110, 995): the panel turns it on or off as the administrator chose, off
+    # until they choose (Pop3, which verifies that IMAP still answers and if not puts it back as it
+    # was); IMAP stays in the snapshot.
+    # And 24 and 6379, on 127.0.0.1 and ::1: the panel closes them at the first start, when Postfix
+    # delivers to Dovecot from the socket in its queue (LmtpSocket, finding 234) and rspamd talks to
+    # redis over the socket (RedisSocket, 235). Both test a delivery and a scan before and after, and
+    # if it does not work they put the port back.
+    # 4190 (ManageSieve) counts for its name and not for the address: the first start moves it from all
+    # the interfaces to 127.0.0.1, where the webmail uses it (ManageSieveLocal, which after the restart
+    # of Dovecot verifies authentication, IMAP and the ManageSieve greeting, and if not puts it back as
+    # it was). If Dovecot stopped listening on it, the line would disappear.
     sockstat -46l -P tcp 2>/dev/null | awk 'NR > 1 {a = $6; if (a ~ /:(33060|110|995)$/) next; if (a ~ /^(127\.0\.0\.1|\[::1\]):(24|6379)$/) next; if (a ~ /:3306$/) a = "MySQL 3306"; if (a ~ /:4190$/) a = "ManageSieve 4190"; print "listening port: " a}' | sort -u
     printf 'nginx -t: %s\n' "$(nginx -t >/dev/null 2>&1 && echo ok || echo ERROR)"
     printf 'postfix check: %s\n' "$(postfix check >/dev/null 2>&1 && echo ok || echo ERROR)"
     printf 'doveconf: %s\n' "$(doveconf -n >/dev/null 2>&1 && echo ok || echo ERROR)"
     printf 'fail2ban: %s\n' "$(timeout -f 20 fail2ban-client ping >/dev/null 2>&1 && echo answers || echo NOT ANSWERING)"
     printf 'panel on 2096: %s\n' "$(curl -sk -m 15 -o /dev/null -w '%{http_code}' https://127.0.0.1:2096/)"
-    # MTA-STS: dai file di nginx che servono la politica, chiesta a ogni loro nome. Sul server (e sul
-    # banco) la 443 e' il sito predefinito, "server_name _": risponde a qualunque nome, quindi si
-    # chiede all'indirizzo locale. Senza nessun file lo si dice, cosi' anche una sparizione cambia
-    # lo stato (la prima versione cercava "mta-sts." fra i nomi e non controllava niente).
+    # MTA-STS: from the nginx files that serve the policy, requested at each of their names. On the
+    # server (and on the test bench) 443 is the default site, "server_name _": it answers to any name,
+    # so it is requested at the local address. Without any file it says so, so that a disappearance too
+    # changes the state (the first version looked for "mta-sts." among the names and checked nothing).
     confs=$(grep -l 'mta-sts\.txt' /usr/local/etc/nginx/conf.d/*.conf 2>/dev/null)
     [ -n "$confs" ] || say "MTA-STS on 443: no nginx file serves it"
     for c in $confs; do
@@ -262,14 +265,14 @@ state() {
     return 0
 }
 
-# I pacchetti protetti, uno per riga. Si confrontano a parte: all'avvio il pannello nuovo protegge
-# anche i pacchetti dello stack che non lo erano (UpdateManager.applyLockPolicy) e non ne sblocca
-# nessuno, quindi l'elenco puo' crescere; quelli di prima devono restarci tutti.
+# The locked packages, one per line. They are compared separately: at startup the new panel also locks
+# the packages of the stack that were not locked (UpdateManager.applyLockPolicy) and unlocks none of
+# them, so the list can grow; the ones from before must all stay in it.
 locked() {
     pkg query -e '%k = 1' '%n' 2>/dev/null | sort
 }
 
-# Il confronto con la fotografia: lo stato uguale, e nessun pacchetto protetto perso.
+# The comparison with the snapshot: the state the same, and no locked package lost.
 compare() {
     state > "$WORK/state-after-$1.txt" 2>&1
     locked > "$WORK/locked-after-$1.txt"
@@ -287,12 +290,12 @@ compare() {
     return 0
 }
 
-# Accesso IMAP, consegna e webmail con la casella data: la password non esce mai dal suo file.
+# IMAP login, delivery and webmail with the given mailbox: the password never leaves its file.
 mailbox_state() {
     printf 'mailbox login: %s\n' "$(timeout -f 20 doveadm auth test "$MAILBOX" < "$PASSFILE" >/dev/null 2>&1 && echo ok || echo REFUSED)"
     token="panel-upgrade-$STAMP-$(date +%s)"
-    # Il sendmail di Postfix, non /usr/sbin/sendmail: prima del passaggio quello puo' ancora andare a
-    # dma (mailer.conf), che consegna fuori invece che in casella.
+    # The sendmail of Postfix, not /usr/sbin/sendmail: before the upgrade that one can still go to
+    # dma (mailer.conf), which delivers outside instead of into the mailbox.
     printf 'Subject: %s\n\npanel upgrade test\n' "$token" | timeout -f 20 "$(postconf -h sendmail_path)" "$MAILBOX"
     i=0
     while [ $i -lt 60 ] && ! timeout -f 5 doveadm search -u "$MAILBOX" mailbox INBOX subject "$token" 2>/dev/null | grep -q .; do
@@ -320,7 +323,7 @@ mailbox_state() {
 STEP="snapshot"
 state > "$WORK/state-before.txt" 2>&1
 locked > "$WORK/locked-before.txt"
-# Solo in fondo alla riga: la prima riga di una pagina (MTA-STS) puo' contenere qualunque parola.
+# Only at the end of the line: the first line of a page (MTA-STS) can contain any word.
 grep -E ': (DOWN|ERROR|NOT ANSWERING|REFUSED)$|: NOT ARRIVED within' "$WORK/state-before.txt" > "$WORK/already-wrong.txt"
 if [ -s "$WORK/already-wrong.txt" ]; then
     cat "$WORK/already-wrong.txt"
@@ -328,7 +331,7 @@ if [ -s "$WORK/already-wrong.txt" ]; then
 fi
 say "Snapshot: $(wc -l < "$WORK/state-before.txt" | tr -d ' ') lines, all fine; $(wc -l < "$WORK/locked-before.txt" | tr -d ' ') locked packages"
 
-# --- 3. pannello fermo, boot environment, copie -------------------------------------------------
+# --- 3. panel stopped, boot environment, copies -------------------------------------------------
 
 STEP="stopping the panel"
 service "$SVC" stop >> "$WORK/service.txt" 2>&1
@@ -346,17 +349,18 @@ tar -cpf "$WORK/panel-dir.tar" -C "${PANEL_DIR%/*}" "${PANEL_DIR##*/}" 2>> "$WOR
 cp -p "$JAR" "$WORK/previous.jar"
 ls -1 /var/log/nginx > "$WORK/nginx-logs-before.txt" 2>/dev/null
 stat -f '%Su:%Sg %N' /var/log/php_errors.log > "$WORK/php-errors-owner-before.txt" 2>/dev/null
-# Il registro degli accessi al pannello col suo nome di adesso o di prima (AuthJailRename lo rinomina), e cosa c'e'
-# in /var/log: sta fuori dai boot environment, e rollback-panel.sh rimette i nomi di prima.
+# The access log of the panel with its current name or the one from before (AuthJailRename renames it), and
+# what is in /var/log: it is outside the boot environments, and rollback-panel.sh puts back the old names.
 for f in /var/log/daemoxcp-mail-auth.log /var/log/mail-panel-auth.log; do
-    # Coi numeri, non coi nomi: il primo avvio rinomina l'utente della parte web, e prima del riavvio nel boot
-    # environment di prima chown non conoscerebbe piu' il nome di prima (visto sulla VM il 17/11/2026).
+    # With the numbers, not with the names: the first start renames the user of the web part, and before the
+    # reboot into the boot environment from before chown would no longer know the old name (seen on the VM on
+    # 2026-11-17).
     [ -f "$f" ] && stat -f '%u:%g %N' "$f" > "$WORK/auth-log-owner-before.txt" && break
 done
 ls -1 /var/log > "$WORK/var-log-before.txt" 2>/dev/null
 say "Copy of the panel folder: $WORK/panel-dir.tar"
 
-# --- 4. il jar nuovo e il primo avvio -----------------------------------------------------------
+# --- 4. the new jar and the first start ---------------------------------------------------------
 
 STEP="new jar"
 cp "$NEW_JAR" "$JAR.new" && [ "$(sha256 -q "$JAR.new")" = "$NEW_SHA" ] \
@@ -367,12 +371,12 @@ mv -f "$JAR.new" "$JAR"
 SWAPPED=yes
 say "New jar in place: $NEW_SHA"
 
-# Il log dal segno in poi. Il file si cerca prima per inode, perche' daemon(8) scrive sempre lo
-# stesso file anche se cambia nome: il pannello nuovo puo' rinominarlo (PathMigration) senza che lo
-# script di avvio lo sappia, ed e' proprio il difetto che la #89 ha corretto. Se lo script di avvio
-# l'ha messo da parte (.1, oltre 10 MB), il resto sta nel file nuovo.
+# The log from the mark onwards. The file is looked up by inode first, because daemon(8) always writes
+# the same file even if it changes name: the new panel can rename it (PathMigration) without the start
+# script knowing, and that is exactly the defect that #89 fixed. If the start script set it aside
+# (.1, over 10 MB), the rest is in the new file.
 segment() {
-    # La cartella del registro di prima, e quella dove la sposta il primo avvio (DataFolderRename): stesso inode.
+    # The folder of the log from before, and the one where the first start moves it (DataFolderRename): same inode.
     for f in $(find "$LOG_DIR" /var/db/daemoxcp-mail /var/db/mailpanel -maxdepth 1 -type f -inum "$LOG_INODE" 2>/dev/null) \
              "$(rc_setting log)" "$LOG_BEFORE"; do
         [ -f "$f" ] && grep -qF "$1" "$f" || continue
@@ -382,9 +386,9 @@ segment() {
     done
 }
 
-# Avvia (o riavvia) e aspetta la fine dell'avvio: la riga del server partito arriva dopo le
-# migrazioni del thread principale, quella dell'ACME dopo AcmeUser e ServiceUsers. Col pannello
-# separato (PanelSeparation) la riga e' quella della parte root pronta: la porta la tiene la web.
+# Starts (or restarts) and waits for the end of the startup: the line of the started server arrives after
+# the migrations of the main thread, the ACME one after AcmeUser and ServiceUsers. With the separated panel
+# (PanelSeparation) the line is the one of the root part being ready: the port is held by the web part.
 boot() {
     mark="=== upgrade-panel.sh $STAMP: $1 ==="
     f=$(rc_setting log)
@@ -416,13 +420,13 @@ if [ -s "$WORK/first-start-bad.txt" ]; then
     fail "the first start wrote the lines above"
 fi
 
-# --- 5. lo stato dopo il primo avvio ------------------------------------------------------------
+# --- 5. the state after the first start ---------------------------------------------------------
 
 STEP="state after the first start"
 compare first-start
 say "State after the first start: same as the snapshot"
 
-# --- 6. il secondo avvio ------------------------------------------------------------------------
+# --- 6. the second start ------------------------------------------------------------------------
 
 STEP="second start"
 boot second-start restart
@@ -433,7 +437,7 @@ if [ -s "$WORK/second-start-migrations.txt" ] || [ -s "$WORK/second-start-bad.tx
     fail "the second start had to be silent, and wrote the lines above"
 fi
 
-# --- 7. di nuovo lo stato -----------------------------------------------------------------------
+# --- 7. the state again -------------------------------------------------------------------------
 
 STEP="state after the second start"
 compare second-start

@@ -10,54 +10,54 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Il profilo di configurazione che imposta una casella su Apple Mail, su Mac e su iPhone.
+ * The configuration profile that sets up a mailbox in Apple Mail, on Mac and on iPhone.
  *
- * Perche' questa strada e non le altre: **Apple Mail non usa i record SRV** (RFC 6186) **ne'
- * il file XML di Thunderbird**. Si appoggia a un elenco interno di provider noti, e per un
- * server proprio non esiste alcun documento Apple che descriva un meccanismo di scoperta
- * automatica. Cercare di indovinarne uno significherebbe costruire qualcosa che non si puo'
- * verificare su nessuna fonte.
+ * Why this route and not the others: **Apple Mail does not use SRV records** (RFC 6186) **nor
+ * Thunderbird's XML file**. It relies on an internal list of known providers, and for a
+ * server of one's own there is no Apple document describing an automatic discovery
+ * mechanism. Trying to guess one would mean building something that cannot be
+ * verified against any source.
  *
- * Il profilo di configurazione invece e' documentato da Apple, chiave per chiave, ed e' il
- * modo previsto per configurare Mail senza che l'utente tocchi un'impostazione. I nomi delle
- * chiavi qui sotto sono presi dallo schema ufficiale (repository apple/device-management,
- * com.apple.mail.managed.yaml e TopLevel.yaml), non dalla memoria.
+ * The configuration profile, instead, is documented by Apple, key by key, and it is the
+ * intended way to configure Mail without the user touching a setting. The names of the
+ * keys below are taken from the official schema (repository apple/device-management,
+ * com.apple.mail.managed.yaml and TopLevel.yaml), not from memory.
  *
- * Sulla porta in uscita: si usa la 465, non la 587. Lo schema Apple ha un solo booleano,
- * OutgoingMailServerUseSSL, e non un campo che distingua TLS diretto da STARTTLS. Sulla 465
- * Postfix ha smtpd_tls_wrappermode=yes, cioe' TLS dal primo byte: il booleano descrive quel
- * caso senza ambiguita'. Con la 587 si dovrebbe sperare che Apple interpreti "SSL" come
- * "STARTTLS", che e' cio' che accade in pratica ma non e' scritto da nessuna parte.
+ * On the outgoing port: 465 is used, not 587. Apple's schema has a single boolean,
+ * OutgoingMailServerUseSSL, and no field that distinguishes direct TLS from STARTTLS. On 465
+ * Postfix has smtpd_tls_wrappermode=yes, that is TLS from the first byte: the boolean describes that
+ * case without ambiguity. With 587 one would have to hope that Apple interprets "SSL" as
+ * "STARTTLS", which is what happens in practice but is not written anywhere.
  *
- * La password NON viene inclusa. Il profilo e' un file che finisce nella cartella Download e
- * puo' essere inoltrato per sbaglio: metterci dentro la password in chiaro trasformerebbe una
- * comodita' in una fuga di credenziali. Mail la chiede una volta sola, perche'
- * OutgoingPasswordSameAsIncomingPassword dice che quella in uscita e' la stessa.
+ * The password is NOT included. The profile is a file that ends up in the Downloads folder and
+ * can be forwarded by mistake: putting the password in clear text inside it would turn a
+ * convenience into a credential leak. Mail asks for it only once, because
+ * OutgoingPasswordSameAsIncomingPassword says the outgoing one is the same.
  *
- * ATTENZIONE su quest'ultimo punto, verificato sulla pagina Apple: quel campo vale SOLO per
- * le installazioni interattive, cioe' quando l'utente apre il file di persona — che e'
- * esattamente il nostro caso. Se un giorno questi profili venissero distribuiti da un MDM,
- * l'impostazione verrebbe ignorata e la password sarebbe chiesta due volte.
+ * WARNING on this last point, verified on the Apple page: that field applies ONLY to
+ * interactive installations, that is when the user opens the file in person, which is
+ * exactly our case. If one day these profiles were distributed by an MDM,
+ * the setting would be ignored and the password would be asked for twice.
  *
- * Un'altra riga della stessa pagina va letta e NON seguita: su IncomingMailServerUsername
- * Apple scrive "usually the same as the email address up to the '@' character". Qui si mette
- * l'indirizzo COMPLETO, perche' Dovecot interroga il database con WHERE email='%s'. La
- * documentazione descrive cosa fa il client; cosa serve al server lo dice il server.
+ * Another line of the same page must be read and NOT followed: on IncomingMailServerUsername
+ * Apple writes "usually the same as the email address up to the '@' character". Here we put
+ * the FULL address, because Dovecot queries the database with WHERE email='%s'. The
+ * documentation describes what the client does; what the server needs is said by the server.
  */
 public class AppleProfile {
 
-    /** IMAP su TLS diretto: inet_listener imaps di Dovecot. */
+    /** IMAP over direct TLS: Dovecot's imaps inet_listener. */
     public static final int IMAP_PORT = 993;
-    /** smtps in master.cf, con smtpd_tls_wrappermode=yes. */
+    /** smtps in master.cf, with smtpd_tls_wrappermode=yes. */
     public static final int SMTP_PORT = 465;
 
     private AppleProfile() {}
 
     /**
-     * Il file .mobileconfig per una casella.
+     * The .mobileconfig file for a mailbox.
      *
-     * Gli identificativi sono DERIVATI dall'indirizzo, non casuali: reinstallando il profilo
-     * Apple aggiorna quello esistente invece di aggiungere un secondo account identico.
+     * The identifiers are DERIVED from the address, not random: when the profile is reinstalled
+     * Apple updates the existing one instead of adding a second identical account.
      */
     public static String mobileconfig(String email, String displayName, String mailHost,
                                       String organization) {
@@ -68,11 +68,11 @@ public class AppleProfile {
         String profileId = "org.mail-panel." + email.toLowerCase(Locale.ROOT);
         String profileUuid = deterministic("profile:" + email.toLowerCase(Locale.ROOT));
         String mailUuid = deterministic("mail:" + email.toLowerCase(Locale.ROOT));
-        // iOS e macOS riconoscono un profilo dal suo PayloadIdentifier e dal suo UUID: questi due
-        // semi e il ".mail" dell'identificatore non vanno piu' cambiati. Fino al 30/10/2026 erano
-        // in italiano; il committente ha scelto di passarli all'inglese sapendo che un profilo
-        // scaricato prima si installa ACCANTO a quello nuovo invece di essere sostituito: la
-        // pagina dice di togliere quello vecchio (pa.after.html).
+        // iOS and macOS recognise a profile by its PayloadIdentifier and its UUID: these two
+        // seeds and the ".mail" of the identifier must not be changed any more. Until 2026-10-30 they were
+        // in Italian; the owner chose to switch them to English knowing that a profile
+        // downloaded earlier gets installed NEXT TO the new one instead of being replaced: the
+        // page says to remove the old one (pa.after.html).
 
         return """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -126,8 +126,8 @@ public class AppleProfile {
     }
 
     /**
-     * Un UUID sempre uguale per lo stesso indirizzo. Se fosse casuale, ogni download
-     * genererebbe un profilo "nuovo" e Mail accumulerebbe account doppioni.
+     * A UUID that is always the same for the same address. If it were random, every download
+     * would generate a "new" profile and Mail would pile up duplicate accounts.
      */
     private static String deterministic(String seed) {
         return UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8))
@@ -140,7 +140,7 @@ public class AppleProfile {
                 .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
-    /** La casella esiste davvero? Whitelist: si serve solo cio' che il pannello ospita. */
+    /** Does the mailbox really exist? Whitelist: only what the panel hosts is served. */
     public static ProfileMailbox mailbox(String email) {
         if (email == null || email.isBlank()) return null;
         String searched = email.trim().toLowerCase(Locale.ROOT);
@@ -163,7 +163,7 @@ public class AppleProfile {
         }
     }
 
-    /** L'elenco delle caselle e lo stato generale, per la scheda del pannello. */
+    /** The list of mailboxes and the general state, for the panel tab. */
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
         String host = mailHost();
@@ -181,11 +181,12 @@ public class AppleProfile {
             return new JSONObject().put("success", false)
                     .put("error", I18n.tr("server.appleprof.mailboxesUnreadable", java.util.Map.of("err", org.daemoxcp.mail.util.ErrorText.detail("AppleProfile", e))));
         }
-        // Se il profilo scaricato sara' firmato: lo dice il certificato, che la parte web puo' leggere (la chiave no).
+        // Whether the downloaded profile will be signed: the certificate says so, which the web part can read (the key
+        // it cannot).
         return r.put("mailboxes", mailboxes).put("signing", signer(host).json());
     }
 
-    /** L'anteprima del profilo, per guardarlo prima di scaricarlo. */
+    /** The profile preview, to look at it before downloading it. */
     public static JSONObject preview(String email) {
         ProfileMailbox c = mailbox(email);
         if (c == null)
@@ -200,12 +201,12 @@ public class AppleProfile {
     }
 
     /**
-     * Il profilo si analizza prima di consegnarlo. Se una sostituzione andasse storta si
-     * servirebbe un file che Mail rifiuta con un messaggio incomprensibile: meglio un errore
-     * chiaro dal pannello che un fallimento muto sul telefono.
+     * The profile is parsed before handing it over. If a substitution went wrong, a file
+     * would be served that Mail rejects with an incomprehensible message: better a clear
+     * error from the panel than a silent failure on the phone.
      *
-     * Il DOCTYPE rimanda al DTD di Apple: il caricamento di entita' esterne va spento, sia
-     * per non dipendere dalla rete sia per non aprire la porta alle entita' esterne.
+     * The DOCTYPE refers to Apple's DTD: loading external entities must be switched off, both
+     * so as not to depend on the network and so as not to open the door to external entities.
      */
     public static boolean wellFormed(String profile) {
         try {
@@ -222,43 +223,46 @@ public class AppleProfile {
         }
     }
 
-    /** Il nome del file proposto al browser. Solo caratteri innocui. */
+    /** The file name proposed to the browser. Harmless characters only. */
     public static String fileName(String email) {
         String base = email == null ? "mail" : email.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._-]", "-");
         return base + ".mobileconfig";
     }
 
-    /* ===================================================================
-     * La firma (23/11/2026)
-     * =================================================================== */
-
     /*
-     * Un profilo non firmato l'iPhone lo mostra «Non verificato», in rosso: si installa lo stesso, ma chi lo apre
-     * pensa a un errore (visto dal committente sul suo iPhone, 23/11/2026). Firmato con un certificato di cui il
-     * telefono si fida, lo mostra «Verificato», col nome del firmatario. Il certificato giusto c'e' gia': quello del
-     * nome della posta, lo stesso che Postfix e Dovecot presentano (Let's Encrypt, da acme.sh).
-     *
-     * Si firma solo con un certificato di cui un telefono si fida davvero: valido adesso, non autofirmato (quello
-     * dell'installazione lo e', finche' non arriva Let's Encrypt), che copre il nome della posta e che porta a
-     * un'autorita' dell'elenco della Java. Con uno autofirmato il telefono direbbe «Non verificato» lo stesso, e una
-     * firma che non serve a niente e' solo una cosa in piu' che puo' rompersi: il profilo esce non firmato, e la
-     * finestra dice perche'.
-     *
-     * La chiave la legge solo root: il profilo da scaricare lo costruisce e lo firma la parte root (la rotta
-     * /apple-profile non e' piu' fra quelle che la parte web serve da se'), e firma solo il profilo che costruisce
-     * lei, dalla casella del database. Mai un contenuto arrivato da fuori: la chiave del server non firma altro.
-     * La firma la fa openssl della base di FreeBSD (CMS, come chiede Apple); la Java non ha un'interfaccia pubblica
-     * per CMS. Dopo la firma il file si rilegge con openssl: se il contenuto non torna identico, esce non firmato.
+     * ===================================================================
+     * The signature (2026-11-23)
+     * ===================================================================
      */
 
-    /** Il certificato e la chiave del nome della posta: gli stessi di Postfix (smtpd_tls_cert_file) e Dovecot. */
+    /*
+     * An unsigned profile is shown by the iPhone as "Not Verified", in red: it installs anyway, but whoever opens it
+     * thinks of an error (seen by the owner on his iPhone, 2026-11-23). Signed with a certificate the phone trusts, it
+     * is shown as "Verified", with the signer's name. The right certificate is already there: the one of the mail name,
+     * the same one Postfix and Dovecot present (Let's Encrypt, from acme.sh).
+     *
+     * It is signed only with a certificate a phone really trusts: valid now, not self-signed (the one
+     * from the installation is, until Let's Encrypt arrives), covering the mail name and leading to
+     * an authority in Java's list. With a self-signed one the phone would say "Not Verified" anyway, and a
+     * signature that serves no purpose is just one more thing that can break: the profile goes out unsigned, and the
+     * window says why.
+     *
+     * Only root reads the key: the profile to download is built and signed by the root part (the /apple-profile route
+     * is no longer among those the web part serves by itself), and it signs only the profile it builds itself, from the
+     * mailbox in the database. Never content that came from outside: the server key signs nothing else. The signature
+     * is made by the openssl of the FreeBSD base system (CMS, as Apple requires); Java has no public interface for CMS.
+     * After signing, the file is read back with openssl: if the content does not come back identical, it goes out
+     * unsigned.
+     */
+
+    /** The certificate and key of the mail name: the same as Postfix's (smtpd_tls_cert_file) and Dovecot's. */
     static java.nio.file.Path certificate = java.nio.file.Path.of("/usr/local/etc/ssl/mail/fullchain.pem");
     static java.nio.file.Path key = java.nio.file.Path.of("/usr/local/etc/ssl/mail/privkey.pem");
     static String openssl = "/usr/bin/openssl";
-    /** Le autorita' di cui ci si fida: l'elenco della Java (null). Le prove ne mettono una loro. */
+    /** The trusted authorities: Java's list (null). Tests put in one of their own. */
     static java.security.KeyStore trusted = null;
 
-    /** Se il profilo si firma, e con cosa; se no, il perche' gia' tradotto. */
+    /** Whether the profile gets signed, and with what; if not, the reason, already translated. */
     public record Signer(boolean ok, String name, String notAfter, String why) {
         JSONObject json() {
             JSONObject r = new JSONObject().put("signed", ok);
@@ -271,7 +275,7 @@ public class AppleProfile {
         return new Signer(false, null, null, I18n.tr("server.appleprof.sign." + key, params));
     }
 
-    /** Il certificato della posta puo' firmare il profilo di 'host'? Legge solo il certificato, non la chiave. */
+    /** Can the mail certificate sign the profile of 'host'? It reads only the certificate, not the key. */
     public static Signer signer(String host) {
         java.util.List<java.security.cert.X509Certificate> chain = new java.util.ArrayList<>();
         try (java.io.InputStream in = java.nio.file.Files.newInputStream(certificate)) {
@@ -294,7 +298,7 @@ public class AppleProfile {
         return new Signer(true, host.toLowerCase(Locale.ROOT), until, null);
     }
 
-    /** Il nome e' fra quelli del certificato (subjectAltName), anche con un * al posto della prima etichetta. */
+    /** The name is among the certificate's names (subjectAltName), even with a * in place of the first label. */
     static boolean covers(java.security.cert.X509Certificate leaf, String host) {
         String h = host.trim().toLowerCase(Locale.ROOT);
         try {
@@ -314,14 +318,14 @@ public class AppleProfile {
     }
 
     /**
-     * Dal certificato a un'autorita' dell'elenco, con gli intermedi del file (Let's Encrypt ne mette piu' d'uno, e
-     * con le firme incrociate l'ordine non e' detto): li mette in fila CertPathBuilder. Senza revoca: per decidere se
-     * firmare basta sapere che la catena porta a un'autorita' nota.
+     * From the certificate to an authority in the list, with the intermediates from the file (Let's Encrypt puts more
+     * than one, and with cross-signatures the order is not guaranteed): CertPathBuilder lines them up. Without
+     * revocation: to decide whether to sign it is enough to know that the chain leads to a known authority.
      */
     static boolean trustedPath(java.security.cert.X509Certificate leaf, java.util.List<java.security.cert.X509Certificate> chain) {
         try {
             java.security.KeyStore ks = trusted;
-            // L'elenco della Java, col tipo riconosciuto dal file (PKCS12 o JKS, a seconda di come e' costruita).
+            // Java's list, with the type recognised from the file (PKCS12 or JKS, depending on how it is built).
             if (ks == null) ks = java.security.KeyStore.getInstance(
                     java.nio.file.Path.of(System.getProperty("java.home"), "lib", "security", "cacerts").toFile(), (char[]) null);
             java.security.cert.X509CertSelector target = new java.security.cert.X509CertSelector();
@@ -338,9 +342,9 @@ public class AppleProfile {
     }
 
     /**
-     * Il profilo firmato (CMS in DER, col contenuto dentro e la catena del certificato), o null se non si e' potuto:
-     * allora si consegna quello non firmato. Il risultato si rilegge prima di darlo: deve contenere esattamente il
-     * profilo.
+     * The signed profile (CMS in DER, with the content inside and the certificate chain), or null if it was not possible:
+     * then the unsigned one is handed over. The result is read back before handing it over: it must contain exactly the
+     * profile.
      */
     public static byte[] sign(byte[] profile) {
         byte[] der = run(profile, openssl, "cms", "-sign", "-binary", "-nodetach", "-outform", "DER", "-md", "sha256",
@@ -350,7 +354,7 @@ public class AppleProfile {
         return back != null && java.util.Arrays.equals(back, profile) ? der : null;
     }
 
-    /** Un programma con 'in' sullo standard input: lo standard output, o null se non finisce bene entro 30 secondi. */
+    /** A program with 'in' on standard input: the standard output, or null if it does not finish cleanly within 30 seconds. */
     private static byte[] run(byte[] in, String... cmd) {
         Process p = null;
         try {

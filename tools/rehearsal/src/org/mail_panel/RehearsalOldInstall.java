@@ -1,9 +1,9 @@
 package org.mail_panel;
 
 /**
- * La prova del passaggio dalla versione del server (419b0a2, 11/10/2026): l'installazione come la
- * faceva il suo menu (Main, righe 470-680 di quella versione), senza il menu. Si compila contro il
- * jar del server e si lancia da /home/panel, da root.
+ * The test of the upgrade from the server's version (419b0a2, 2026-10-11): the installation as its
+ * menu did it (Main, lines 470-680 of that version), without the menu. It is compiled against the
+ * server's jar and launched from /home/panel, as root.
  */
 public class RehearsalOldInstall {
     public static void main(String[] a) throws Exception {
@@ -23,15 +23,16 @@ public class RehearsalOldInstall {
         StringBuilder pwd = new StringBuilder();
         for (int i = 0; i < 24; i++) pwd.append(chars.charAt(rnd.nextInt(chars.length())));
         Main.dbManager.update_mysql_config("127.0.0.1", "3306", "mailpanel", pwd.toString(), "mailserver");
-        // Il dominio di Roundcube: il menu lo chiedeva prima, e senza lo script si ferma.
+        // The Roundcube domain: the menu asked for it beforehand, and without it the script stops.
         String webmail = a[1], cert = "/usr/local/etc/ssl/mail/fullchain.pem", key = "/usr/local/etc/ssl/mail/privkey.pem";
         Main.dbManager.updateRoundcubeConfig(webmail, "8443", cert, key, "");
         new org.mail_panel.scripts.FullMailServerScript().write_file();
-        // Sul catalogo di oggi lo script di allora ha due nomi di pacchetto che non vanno piu'
-        // (reperti, punto 135). postfix-mysql porta mysql84-client, che toglie mysql80-server gia'
-        // nella fase dei pacchetti, prima che MySQL sia mai partito: niente database, e lo script
-        // dice lo stesso «riuscita». E dovecot-pigeonhole lascia lmtp senza sieve. Il server vero ha
-        // mysql84-server e dovecot-pigeonhole-mysql: si cambiano quelle due righe e nient'altro.
+        // On today's catalogue the script of that time has two package names that no longer work
+        // (findings, point 135). postfix-mysql brings mysql84-client, which removes mysql80-server already
+        // in the packages phase, before MySQL has ever started: no database, and the script
+        // says `riuscita` ("succeeded") all the same. And dovecot-pigeonhole leaves lmtp without sieve. The
+        // production server has mysql84-server and dovecot-pigeonhole-mysql: those two lines are changed
+        // and nothing else.
         java.nio.file.Path script = java.nio.file.Path.of("./install_scripts/install_mail_server.sh");
         String before = java.nio.file.Files.readString(script);
         String[][] fixes = {

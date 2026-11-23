@@ -17,19 +17,19 @@ import java.util.function.LongSupplier;
 import java.util.logging.Logger;
 
 /**
- * I codici monouso: accesso via email, accesso dalla console del server, conferma di
- * un'operazione delicata, cambio dell'email di accesso.
+ * The one-time codes: login via email, login from the server console, confirmation of
+ * a sensitive operation, change of the login email.
  *
- *  - il codice esiste solo nel messaggio (o sulla console): nel database c'e' l'impronta HMAC;
- *  - vale 10 minuti (15 dalla console e per il cambio dell'email), cinque tentativi, una volta;
- *  - chiedere un codice per un indirizzo che non e' di nessuno da' la stessa risposta, nello
- *    stesso tempo: l'invio parte da una coda a parte e chi risponde non aspetta sendmail;
- *  - limiti contro lo spam: per indirizzo IP, per sottorete e per destinatario. Oltre il limite
- *    la risposta resta la stessa, semplicemente il messaggio non parte;
- *  - nei log mai il codice ne' l'indirizzo email.
+ *  - the code exists only in the message (or on the console): the database holds the HMAC fingerprint;
+ *  - it is valid for 10 minutes (15 from the console and for the email change), five attempts, once;
+ *  - asking for a code for an address that belongs to nobody gives the same answer, in the
+ *    same time: sending starts from a separate queue and whoever answers does not wait for sendmail;
+ *  - limits against spam: per IP address, per subnet and per recipient. Over the limit
+ *    the answer stays the same, the message simply does not go out;
+ *  - never the code nor the email address in the logs.
  *
- * Il messaggio parte dal Postfix di questo server (lo stesso sendmail del rapporto periodico):
- * il pannello sta sul server di posta e non ha bisogno di credenziali SMTP.
+ * The message goes out from this server's Postfix (the same sendmail as the periodic report):
+ * the panel sits on the mail server and does not need SMTP credentials.
  */
 public final class LoginCodes {
 
@@ -47,9 +47,9 @@ public final class LoginCodes {
     static LongSupplier clock = System::currentTimeMillis;
 
     /**
-     * Chi spedisce le email; i test lo sostituiscono con una lambda che riceve destinatario,
-     * oggetto e testo. Il pannello vero riceve il messaggio intero (testo e HTML) dal secondo
-     * metodo, che per una lambda ripiega sul primo.
+     * Who sends the emails; the tests replace it with a lambda that receives recipient,
+     * subject and text. The real panel receives the whole message (text and HTML) from the second
+     * method, which for a lambda falls back on the first.
      */
     public interface Mailer {
         void send(String to, String subject, String body) throws Exception;
@@ -79,13 +79,13 @@ public final class LoginCodes {
         return t;
     });
 
-    /** Nei test l'invio avviene subito, per poterlo controllare. */
+    /** In tests the sending happens immediately, so that it can be checked. */
     public static boolean synchronousMail = false;
 
     /**
-     * In coda, nella lingua di chi ha chiesto, con l'ora e l'indirizzo della richiesta: il
-     * messaggio si compone nel thread della coda, perche' leggere il nome del server puo' voler
-     * dire chiedere a Postfix, e chi risponde alla richiesta non deve aspettarlo.
+     * Queued, in the language of whoever asked, with the time and the address of the request: the
+     * message is composed in the queue's thread, because reading the server name may mean
+     * asking Postfix, and whoever answers the request must not wait for it.
      */
     static void queue(String to, org.daemoxcp.mail.system.CodeMail.Kind kind, String code, long minutes, String ip) {
         String lang = I18n.current();
@@ -95,18 +95,18 @@ public final class LoginCodes {
                 mailer.send(to, org.daemoxcp.mail.system.CodeMail.message(kind, lang,
                         org.daemoxcp.mail.system.PanelMail.serverName(), code, minutes, ip, when));
             } catch (Exception e) {
-                // Ne' l'indirizzo ne' il messaggio: dentro c'e' il codice. I dettagli sono nel log della posta.
+                // Neither the address nor the message: the code is inside. The details are in the mail log.
                 LOGGER.warning("Login code email not delivered");
             }
         };
         if (synchronousMail) job.run(); else QUEUE.submit(job);
     }
 
-    // ===================== Limiti =====================
+    // ===================== Limits =====================
 
     private static final Map<String, Deque<Long>> HITS = new HashMap<>();
 
-    /** Vero (e conta la richiesta) se nella finestra ce ne sono state meno di max. */
+    /** True (and counts the request) if in the window there have been fewer than max. */
     static synchronized boolean allow(String key, int max, long windowMs) {
         long now = clock.getAsLong();
         Deque<Long> d = HITS.computeIfAbsent(key, k -> new ArrayDeque<>());
@@ -119,7 +119,7 @@ public final class LoginCodes {
 
     public static synchronized void resetLimits() { HITS.clear(); }
 
-    /** La sottorete di un indirizzo: /24 per IPv4, /64 per IPv6. */
+    /** The subnet of an address: /24 for IPv4, /64 for IPv6. */
     static String subnet(String ip) {
         try {
             if (!InputValidator.isValidIp(ip)) return "?:" + ip;
@@ -135,7 +135,7 @@ public final class LoginCodes {
 
     private static final long MIN = 60_000L, HOUR = 3_600_000L, DAY = 86_400_000L;
 
-    // ===================== Codici =====================
+    // ===================== Codes =====================
 
     static String digits(int n) {
         StringBuilder b = new StringBuilder(n);
@@ -145,19 +145,19 @@ public final class LoginCodes {
 
     private static Instant in(long seconds) { return AuthStore.now().plusSeconds(seconds); }
 
-    /** Solo cifre e lunghezza giusta (spazi e trattini tolti): tutto il resto non arriva al confronto. */
+    /** Only digits and the right length (spaces and dashes removed): everything else does not reach the comparison. */
     static String clean(String code, int length) {
         if (code == null || code.length() > 20) return null;
         String c = code.replace(" ", "").replace("-", "");
         return c.matches("[0-9]{" + length + "}") ? c : null;
     }
 
-    /** Un indirizzo email accettabile: solo ASCII stampabile, al massimo 254 caratteri. */
+    /** An acceptable email address: printable ASCII only, at most 254 characters. */
     public static boolean validEmail(String email) {
         return email != null && email.length() <= 254 && org.daemoxcp.mail.webserver.SecurityUtils.isValidEmail(email);
     }
 
-    /** Controlla l'ultimo codice valido dell'amministratore: conta il tentativo, e se e' giusto lo consuma. */
+    /** Checks the administrator's latest valid code: counts the attempt, and if it is correct consumes it. */
     private static boolean check(AuthStore.CodeFlow flow, String purpose, long adminId, String code) {
         List<AuthStore.CodeRow> rows = AuthStore.activeCodes(flow, adminId);
         if (rows.isEmpty()) return false;
@@ -168,9 +168,9 @@ public final class LoginCodes {
                 && AuthStore.consumeCode(flow, row.id(), MAX_ATTEMPTS);
     }
 
-    // ----- accesso via email -----
+    // ----- login via email -----
 
-    /** Manda un codice se l'indirizzo e' di un amministratore e i limiti lo permettono. Non dice mai quale dei due. */
+    /** Sends a code if the address belongs to an administrator and the limits allow it. Never says which of the two. */
     public static void requestEmailLogin(String email, String ip) {
         if (!validEmail(email)) return;
         String index = DataCrypto.emailIndex(email);
@@ -190,22 +190,22 @@ public final class LoginCodes {
         queue(admin.get().email(), org.daemoxcp.mail.system.CodeMail.Kind.LOGIN, code, EMAIL_TTL_S / 60, ip);
     }
 
-    /** L'amministratore, se il codice e' giusto, valido e non ancora usato. */
+    /** The administrator, if the code is correct, valid and not used yet. */
     public static Optional<AuthStore.Admin> verifyEmailLogin(String email, String code, String ip) {
         String c = clean(code, 6);
         if (!allow("email-verify-ip:" + ip, 10, 15 * MIN) || c == null || !validEmail(email)) return Optional.empty();
         Optional<AuthStore.Admin> admin = AuthStore.adminByEmail(email);
         if (admin.isEmpty()) {
-            // Lo stesso lavoro di un confronto vero, per non rispondere prima.
+            // The same work as a real comparison, so as not to answer sooner.
             DataCrypto.sameHash(DataCrypto.codeHash("email_login", 0, c), DataCrypto.codeHash("email_login", 0, "000000"));
             return Optional.empty();
         }
         return check(AuthStore.CodeFlow.EMAIL_LOGIN, "email_login", admin.get().id(), c) ? admin : Optional.empty();
     }
 
-    // ----- accesso dalla console del server -----
+    // ----- login from the server console -----
 
-    /** Un codice da otto cifre per entrare senza email ne' passkey: lo genera chi ha accesso al server. */
+    /** An eight-digit code to log in without email or passkey: whoever has access to the server generates it. */
     public static String issueConsoleCode(AuthStore.Admin admin) {
         String code = digits(8);
         if (!AuthStore.saveCode(AuthStore.CodeFlow.CONSOLE_LOGIN, admin.id(),
@@ -226,15 +226,15 @@ public final class LoginCodes {
                         ? AuthStore.adminById(row.adminId()) : Optional.empty();
             }
         }
-        // Un codice sbagliato consuma un tentativo di ogni codice valido: non si provano tutti i numeri.
+        // A wrong code consumes an attempt of every valid code: you cannot try all the numbers.
         for (AuthStore.CodeRow row : rows) AuthStore.codeAttempt(AuthStore.CodeFlow.CONSOLE_LOGIN, row.id());
         return Optional.empty();
     }
 
     /**
-     * La conferma di un'operazione delicata con un codice della console (--access-code): chi lo legge ha la shell di
-     * root, che vale piu' di qualunque conferma. Solo i codici dell'amministratore collegato: quello di un altro non
-     * passa e non si consuma. Stesso limite per indirizzo e stessi tentativi dell'accesso con quel codice.
+     * The confirmation of a sensitive operation with a console code (--access-code): whoever reads it has the root
+     * shell, which is worth more than any confirmation. Only the codes of the logged-in administrator: another's does
+     * not pass and is not consumed. Same per-address limit and same attempts as logging in with that code.
      */
     public static boolean verifyConsoleStepUp(AuthStore.Admin admin, String code, String ip) {
         String c = clean(code, 8);
@@ -251,9 +251,9 @@ public final class LoginCodes {
         return false;
     }
 
-    // ----- conferma di un'operazione delicata (chi non ha una passkey) -----
+    // ----- confirmation of a sensitive operation (for those without a passkey) -----
 
-    /** Manda un codice all'email dell'amministratore collegato. Falso se non ha un'email o e' oltre il limite. */
+    /** Sends a code to the email of the logged-in administrator. False if they have no email or are over the limit. */
     public static boolean requestStepUp(AuthStore.Admin admin, String ip) {
         if (!admin.hasEmail()) return false;
         if (!(allow("stepup:" + admin.id(), 3, 15 * MIN) & allow("stepup-ip:" + ip, 5, 15 * MIN))) return false;
@@ -269,11 +269,11 @@ public final class LoginCodes {
         return c != null && check(AuthStore.CodeFlow.STEP_UP, "step_up", admin.id(), c);
     }
 
-    // ----- cambio dell'email -----
+    // ----- email change -----
 
     public enum ChangeResult { SENT, INVALID, TAKEN, LIMIT }
 
-    /** Manda un codice al nuovo indirizzo: l'email cambia solo quando quel codice torna indietro. */
+    /** Sends a code to the new address: the email changes only when that code comes back. */
     public static ChangeResult requestEmailChange(AuthStore.Admin admin, String newEmail, String ip) {
         if (!validEmail(newEmail)) return ChangeResult.INVALID;
         Optional<AuthStore.Admin> owner = AuthStore.adminByEmail(newEmail);
@@ -289,7 +289,7 @@ public final class LoginCodes {
         return ChangeResult.SENT;
     }
 
-    /** Vero se il codice e' giusto e l'indirizzo e' ancora libero: da quel momento l'email di accesso e' la nuova. */
+    /** True if the code is correct and the address is still free: from that moment the login email is the new one. */
     public static boolean confirmEmailChange(AuthStore.Admin admin, String code) {
         String c = clean(code, 6);
         if (c == null) return false;

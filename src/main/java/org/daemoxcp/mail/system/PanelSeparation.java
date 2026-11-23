@@ -24,31 +24,31 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * Il pannello in due processi: la parte root, il processo che rc.d
- * avvia con --web, non apre porte; la parte web (--web-part) gira con l'utente daemoxcp_mail, risponde sulla
- * porta del pannello e passa alla root, su un socket unix, le API di chi ha fatto l'accesso.
+ * The panel in two processes: the root part, the process that rc.d starts
+ * with --web, opens no ports; the web part (--web-part) runs as the user daemoxcp_mail, answers on the panel's
+ * port and passes to the root part, over a unix socket, the API calls of whoever has logged in.
  *
- * <p>Qui c'e' quello che fa la parte root:
+ * <p>Here is what the root part does:
  * <ul>
- *   <li>l'utente e il gruppo daemoxcp_mail: si creano se mancano, e se ci sono devono essere quelli che crea il
- *       pannello (commento, cartella, shell, nessun altro membro nel gruppo): altrimenti l'utente e' di
- *       qualcun altro e non lo si usa;</li>
- *   <li>i file che la web deve leggere: la cartella dei segreti e quella di SQLite diventano 0750
- *       root:daemoxcp_mail, il file dei segreti della web, master.key e il database SQLite 0640 root:daemoxcp_mail.
- *       La web li legge e non li cambia: SQLite lo apre in sola lettura (dataBaseManager.readOnly), e
- *       quello che vi scrive root (nomi, porte, percorsi) la web non lo puo' toccare. Tutto il resto in
- *       quelle cartelle resta solo di root. Il registro di autenticazione, che la web scrive per fail2ban,
- *       diventa di daemoxcp_mail;</li>
- *   <li>il socket e l'avvio della web con daemon(8): {@code -u daemoxcp_mail} fa girare la web con quell'utente,
- *       mentre il supervisore resta root e scrive lui i file pid e il registro (misurato sulla VM il
- *       07/11/2026: pid 0600 root, registro 0600 root:wheel), quindi la web non li puo' cambiare;
- *       {@code -r} la riavvia se muore;</li>
- *   <li>se una condizione manca, o la web non risponde entro {@link #ANSWER_SECONDS}, si ferma quello che
- *       si e' avviato e il pannello serve tutto da root come prima, con un avviso. Non si disfa niente:
- *       root legge comunque i file di daemoxcp_mail.</li>
+ *   <li>the user and the group daemoxcp_mail: they are created if missing, and if present they must be the
+ *       ones the panel creates (comment, folder, shell, no other member in the group): otherwise the user
+ *       belongs to someone else and is not used;</li>
+ *   <li>the files the web part must read: the secrets folder and the SQLite folder become 0750
+ *       root:daemoxcp_mail, the web part's secrets file, master.key and the SQLite database 0640
+ *       root:daemoxcp_mail. The web part reads them and does not change them: it opens SQLite read-only
+ *       (dataBaseManager.readOnly), and what root writes there (names, ports, paths) the web part cannot
+ *       touch. Everything else in those folders stays root-only. The authentication log, which the web
+ *       part writes for fail2ban, becomes daemoxcp_mail's;</li>
+ *   <li>the socket and the start of the web part with daemon(8): {@code -u daemoxcp_mail} makes the web
+ *       part run as that user, while the supervisor stays root and writes the pid files and the log itself
+ *       (measured on the VM on 2026-11-07: pid 0600 root, log 0600 root:wheel), so the web part cannot
+ *       change them; {@code -r} restarts it if it dies;</li>
+ *   <li>if a condition is missing, or the web part does not answer within {@link #ANSWER_SECONDS}, what
+ *       was started is stopped and the panel serves everything as root as before, with a warning. Nothing
+ *       is undone: root reads the files of daemoxcp_mail anyway.</li>
  * </ul>
  *
- * <p>Per spegnere la separazione a mano: {@code sysrc daemoxcp_mail_opts="-Ddaemoxcp.mail.separation=off"} e
+ * <p>To turn the separation off by hand: {@code sysrc daemoxcp_mail_opts="-Ddaemoxcp.mail.separation=off"} and
  * {@code service daemoxcp_mail restart}.
  */
 public final class PanelSeparation {
@@ -57,15 +57,18 @@ public final class PanelSeparation {
 
     public static final String USER = Product.ID;
     public static final String GROUP = Product.ID;
-    /** Il commento con cui il pannello crea l'utente: un utente daemoxcp_mail con un altro non e' suo. */
+    /** The comment with which the panel creates the user: a daemoxcp_mail user with a different one is not its own. */
     static final String GECOS = Product.NAME + " web part";
     static final String HOME = PanelUser.HOME;
     static final String SHELL = PanelUser.SHELL;
 
-    /** La cartella del socket e dei pid; le prove la spostano con -Ddaemoxcp.mail.run.dir. */
+    /** The folder of the socket and of the pids; the tests move it with -Ddaemoxcp.mail.run.dir. */
     static Path runDir = Path.of(System.getProperty("daemoxcp.mail.run.dir", "/var/run/daemoxcp-mail"));
     static final String TITLE = "daemoxcp-mail-web";
-    /** Il titolo e quelli di prima (sezione "webPartTitles"): una web accesa da una versione vecchia si riconosce lo stesso. */
+    /**
+     * The title and the earlier ones (section "webPartTitles"): a web part started by an old version is still
+     * recognised.
+     */
     static java.util.List<String> titles() {
         java.util.List<String> t = new java.util.ArrayList<>(java.util.List.of(TITLE));
         t.addAll(LegacyNames.oldNamesOf("webPartTitles", TITLE));
@@ -74,19 +77,19 @@ public final class PanelSeparation {
     static Path webLog = Path.of("/var/db/daemoxcp-mail/panel-web.log");
     static Path auditLog = Path.of("/var/log/daemoxcp-mail-auth.log");
     static final long LOG_LIMIT = 10L * 1024 * 1024;
-    /** Quanto si aspetta che la web risponda: avvio della JVM, MySQL, le rotte. Sulla VM ci mette pochi secondi. */
+    /** How long to wait for the web part to answer: JVM startup, MySQL, the routes. On the VM it takes a few seconds. */
     static final long ANSWER_SECONDS = 90;
 
     /**
-     * I file che la web legge nella cartella dei segreti; il resto della cartella resta solo di root. Non piu'
-     * master.key: col vault asimmetrico la web cifra con la chiave pubblica, che sta nel suo file, e non legge
-     * nessuna copia. La chiave simmetrica di prima resta solo di root.
+     * The files the web part reads in the secrets folder; the rest of the folder stays root-only. No longer
+     * master.key: with the asymmetric vault the web part encrypts with the public key, which is in its own file,
+     * and reads no copy. The earlier symmetric key stays root-only.
      */
     static final Set<String> SECRETS_FOR_WEB = Set.of("panel-secrets.properties");
     static final Set<String> SQLITE_FOR_WEB = Set.of("daemoxcp-mail.db");
 
     private static volatile boolean active;
-    /** Questo processo e' (o e' stato, prima di un ritorno al modo di oggi) la parte root: prepare() e' riuscito. */
+    /** This process is (or was, before going back to the single-process mode) the root part: prepare() succeeded. */
     private static volatile boolean rootPart;
     private static volatile String notSeparated = "not started yet";
     private static volatile RootChannel channel;
@@ -100,29 +103,29 @@ public final class PanelSeparation {
 
     static Path webPid() { return runDir.resolve("web.pid"); }
 
-    /** Vero se la web gira con il suo utente e la root non ha porte. */
+    /** True if the web part runs as its own user and the root part has no ports. */
     public static boolean active() { return active; }
 
     /**
-     * Vero da quando questo processo si e' preparato a fare la parte root, anche se poi e' tornato al modo
-     * di oggi: da quel momento c'e' (o c'e' stato) un processo daemoxcp_mail che scrive nel database, e la root
-     * non prende piu' dal database quello che decide dove scrive (SSLMailServer.getAuditLogPath).
+     * True from when this process got ready to be the root part, even if it then went back to the single-process
+     * mode: from that moment there is (or was) a daemoxcp_mail process writing to the database, and the root part
+     * no longer takes from the database what decides where it writes (SSLMailServer.getAuditLogPath).
      */
     public static boolean rootPart() { return rootPart; }
 
-    /** Perche' il pannello gira tutto da root, per la pagina degli utenti dei servizi; null se e' separato. */
+    /** Why the panel runs entirely as root, for the service users page; null if it is separated. */
     public static String notSeparatedReason() { return active ? null : notSeparated; }
 
-    /** Spenta a mano (daemoxcp_mail_opts) o per le prove. */
+    /** Turned off by hand (daemoxcp_mail_opts) or for tests. */
     static boolean switchedOff() {
         return "off".equalsIgnoreCase(System.getProperty("daemoxcp.mail.separation", ""));
     }
 
-    // ===================== Le condizioni =====================
+    // ===================== The conditions =====================
 
     /**
-     * Prepara la separazione: utente, file, porta libera, nessuna web di un avvio di prima. Null se si
-     * puo' avviare la web; altrimenti il motivo, e il pannello resta com'e' oggi.
+     * Prepares the separation: user, files, free port, no web part left from an earlier start. Null if the
+     * web part can be started; otherwise the reason, and the panel stays in the single-process mode.
      */
     public static String prepare(int port, boolean setupRequired, boolean mysqlAvailable) {
         String why = prepareOrReason(port, setupRequired, mysqlAvailable);
@@ -155,9 +158,9 @@ public final class PanelSeparation {
     }
 
     /**
-     * Un comando con l'utente della web e solo il suo gruppo, senza shell ne' PAM: chroot(8) con radice /.
-     * -G serve: senza, il comando teneva i gruppi aggiuntivi di root, wheel e operator (misurato sulla VM
-     * il 07/11/2026).
+     * A command with the web part's user and only its group, without a shell or PAM: chroot(8) with root /.
+     * -G is needed: without it, the command kept root's supplementary groups, wheel and operator (measured on
+     * the VM on 2026-11-07).
      */
     static boolean asUser(String... cmd) {
         List<String> c = new ArrayList<>(List.of("/usr/sbin/chroot", "-u", USER, "-g", GROUP, "-G", GROUP, "/"));
@@ -175,10 +178,10 @@ public final class PanelSeparation {
         }
     }
 
-    /** L'utente della web come lo crea il pannello: i controlli stanno in PanelUser, uguali per ogni utente suo. */
+    /** The web part's user as the panel creates it: the checks are in PanelUser, the same for every user of its own. */
     static final PanelUser WEB_USER = new PanelUser(USER, GECOS);
 
-    /** L'utente daemoxcp_mail, creato se manca. Null se c'e' ed e' quello del pannello; altrimenti il motivo. */
+    /** The user daemoxcp_mail, created if missing. Null if it exists and is the panel's; otherwise the reason. */
     static String ensureUser() {
         PanelUser.Ensured e = WEB_USER.ensure();
         if (e.problem() != null) return e.problem();
@@ -187,7 +190,7 @@ public final class PanelSeparation {
         return null;
     }
 
-    /** Null se le righe di pw sono quelle dell'utente creato dal pannello; altrimenti cosa non torna. Pura. */
+    /** Null if the lines from pw are those of the user created by the panel; otherwise what does not add up. Pure. */
     static String userProblem(String userLine, String groupLine) {
         return WEB_USER.problem(userLine, groupLine);
     }
@@ -195,7 +198,7 @@ public final class PanelSeparation {
     static String jarPath() {
         try {
             Path p = Path.of(org.daemoxcp.mail.Main.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            // Col nome di adesso se questo processo ha appena spostato il jar (PanelServiceRename).
+            // With the current name if this process has just moved the jar (PanelServiceRename).
             p = Path.of(PanelServiceRename.current(p.toAbsolutePath().toString()));
             return Files.isRegularFile(p) ? p.toAbsolutePath().toString() : null;
         } catch (Exception e) {
@@ -209,14 +212,14 @@ public final class PanelSeparation {
 
     // ===================== I file =====================
 
-    /** Cosa e' cambiato in questo avvio, per la riga DONE (e per le prove). */
+    /** What changed in this start, for the DONE line (and for the tests). */
     static final List<String> changed = new ArrayList<>();
 
-    /** Porta i file a come li vuole la separazione; null se e' andato tutto, altrimenti il motivo. */
+    /** Brings the files to how the separation wants them; null if everything worked, otherwise the reason. */
     static String prepareFiles() throws IOException {
         changed.clear();
-        // Le chiavi del vault prima di accendere la web: la privata nel file di root, la pubblica in quello della
-        // web, con cui la web cifra le copie delle password nuove.
+        // The vault keys before starting the web part: the private one in root's file, the public one in the web
+        // part's, with which the web part encrypts the copies of the new passwords.
         org.daemoxcp.mail.security.PasswordVault.ensureKeyPair();
 
         Path run = runDir;
@@ -246,8 +249,8 @@ public final class PanelSeparation {
     }
 
     /**
-     * Una cartella 0750 root:daemoxcp_mail con i file dati 0640 root:daemoxcp_mail; gli altri file della cartella
-     * perdono ogni permesso di gruppo e degli altri, cosi' aprire la cartella al gruppo non apre loro.
+     * A 0750 root:daemoxcp_mail folder with the data files 0640 root:daemoxcp_mail; the folder's other files lose
+     * every group and other permission, so opening the folder to the group does not open them.
      */
     static String openToWeb(Path dir, Set<String> forWeb) throws IOException {
         if (!Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) return dir + " is missing";
@@ -264,8 +267,8 @@ public final class PanelSeparation {
                 PosixFileAttributes a = Files.readAttributes(f, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
                 Set<PosixFilePermission> own = EnumSet.noneOf(PosixFilePermission.class);
                 for (PosixFilePermission x : a.permissions()) if (x.name().startsWith("OWNER")) own.add(x);
-                // Su FreeBSD un file nuovo prende il gruppo della cartella (open(2)): quelli che non sono per
-                // la web tornano al gruppo di root, oltre a perdere i permessi di gruppo e degli altri.
+                // On FreeBSD a new file takes the folder's group (open(2)): those that are not for the
+                // web part go back to root's group, besides losing the group and other permissions.
                 boolean group = a.group().getName().equals(GROUP);
                 if (!own.equals(a.permissions()) || group) {
                     Files.setPosixFilePermissions(f, own);
@@ -279,8 +282,8 @@ public final class PanelSeparation {
     }
 
     /**
-     * Le pagine del pannello e i loro script e stili (PanelContent, PageAssets): la web li serve, quindi
-     * cartelle 0750 e file 0640 root:daemoxcp_mail, in sola lettura. Solo cartelle e file veri, mai collegamenti.
+     * The panel's pages and their scripts and styles (PanelContent, PageAssets): the web part serves them, so
+     * folders 0750 and files 0640 root:daemoxcp_mail, read-only. Only real folders and files, never links.
      */
     static String openPagesToWeb(Path admin) throws IOException {
         if (!Files.isDirectory(admin, LinkOption.NOFOLLOW_LINKS)) return admin + " is missing";
@@ -295,7 +298,7 @@ public final class PanelSeparation {
         return null;
     }
 
-    /** Proprietario, gruppo e permessi, solo se diversi; annota cosa e' cambiato. */
+    /** Owner, group and permissions, only if different; records what changed. */
     static void set(Path p, String owner, String group, String perms) throws IOException {
         PosixFileAttributes a = Files.readAttributes(p, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         UserPrincipalLookupService lookup = p.getFileSystem().getUserPrincipalLookupService();
@@ -312,11 +315,11 @@ public final class PanelSeparation {
         if (c) changed.add(p + " " + owner + ":" + group + " " + perms);
     }
 
-    // ===================== La parte web =====================
+    // ===================== The web part =====================
 
     /**
-     * Apre il socket, avvia la web e aspetta che risponda. Null se risponde; altrimenti ferma quello che ha
-     * avviato e dice perche'. Il dispatcher e' SSLMailServer in modo ROOT_PART.
+     * Opens the socket, starts the web part and waits for it to answer. Null if it answers; otherwise it stops
+     * what it started and says why. The dispatcher is SSLMailServer in ROOT_PART mode.
      */
     public static String startWebPart(int port, RootChannel.Dispatcher dispatcher) {
         String why = startOrReason(port, dispatcher);
@@ -326,9 +329,10 @@ public final class PanelSeparation {
         } else {
             active = true;
             notSeparated = null;
-            // Se la root si spegne per qualunque motivo (anche un errore subito dopo, prima che Main registri
-            // il suo arresto), la web si ferma con lei: da sola risponderebbe 503 a ogni API. Misurato sulla
-            // VM il 07/11/2026: un errore nella root dopo questo punto lasciava la web orfana.
+            // If the root part shuts down for any reason (even an error right after, before Main registers
+            // its shutdown), the web part stops with it: on its own it would answer 503 to every API call.
+            // Measured on the VM on 2026-11-07: an error in the root part after this point left the web
+            // part orphaned.
             if (!hookAdded) {
                 hookAdded = true;
                 Runtime.getRuntime().addShutdownHook(new Thread(PanelSeparation::stop, "web-part-stop"));
@@ -366,28 +370,29 @@ public final class PanelSeparation {
                 : why;
     }
 
-    /** Quello che serve per aspettare la web: il pid del supervisore (o -1) e se la web risponde sulla porta. */
+    /** What waiting for the web part needs: the supervisor's pid (or -1) and whether the web part answers on the port. */
     interface Probe {
         int supervisor();
         boolean answering();
     }
 
-    /** Una pausa fra un controllo e l'altro (un secondo; nelle prove niente). */
+    /** A pause between one check and the next (one second; none in the tests). */
     @FunctionalInterface
     interface Pause {
         void pause() throws InterruptedException;
     }
 
     static final String GONE = "gone", SILENT = "silent";
-    /** Quanti controlli di fila senza supervisore prima di dire che la web si e' fermata. */
+    /** How many consecutive checks without a supervisor before saying that the web part has stopped. */
     static final int GONE_CHECKS = 3;
 
     /**
-     * Aspetta che la web risponda: null se risponde, GONE se il supervisore manca per GONE_CHECKS controlli di fila,
-     * SILENT se non risponde entro seconds. Prima di ogni controllo una pausa: daemon(8) torna quando il padre esce, e
-     * il supervisore scrive il suo pidfile un attimo dopo; controllare subito leggeva un pidfile vuoto, o quello del
-     * supervisore di prima, gia' morto, e dava la web per fermata mentre partiva (misurato sulla VM il 20/11/2026: una
-     * volta su molti avvii, e il pannello restava tutto da root). Pura rispetto a Probe e Pause.
+     * Waits for the web part to answer: null if it answers, GONE if the supervisor is missing for GONE_CHECKS
+     * consecutive checks, SILENT if it does not answer within seconds. Before each check a pause: daemon(8) returns
+     * when the parent exits, and the supervisor writes its pidfile a moment later; checking immediately read an
+     * empty pidfile, or the one of the previous supervisor, already dead, and took the web part for stopped while it
+     * was starting (measured on the VM on 2026-11-20: once in many starts, and the panel stayed entirely as root).
+     * Pure with respect to Probe and Pause.
      */
     static String waitForWeb(Probe probe, long seconds, Pause pause) {
         int gone = 0;
@@ -409,8 +414,8 @@ public final class PanelSeparation {
     }
 
     /**
-     * La riga di daemon(8). Della JVM della root passano solo la memoria e le proprieta' del pannello
-     * (-Xm*, -Ddaemoxcp_mail.*), non daemoxcp.mail.separation: la web non ne fa niente.
+     * The daemon(8) line. From the root part's JVM only the memory and the panel's properties are passed on
+     * (-Xm*, -Ddaemoxcp_mail.*), not daemoxcp.mail.separation: the web part does nothing with it.
      */
     static List<String> command(String javaBin, String jar) {
         List<String> cmd = new ArrayList<>(List.of("/usr/sbin/daemon", "-r", "-R", "5", "-u", USER,
@@ -422,7 +427,7 @@ public final class PanelSeparation {
         return cmd;
     }
 
-    /** L'utente del processo che ascolta sulla porta, da sockstat. */
+    /** The user of the process listening on the port, from sockstat. */
     static String listener(int port) {
         for (String l : Shell.run(Duration.ofSeconds(15), "sockstat", "-46l", "-p", String.valueOf(port)).outputTrim().split("\n")) {
             String[] f = l.trim().split("\\s+");
@@ -431,7 +436,7 @@ public final class PanelSeparation {
         return null;
     }
 
-    /** Vero se sulla porta risponde un server HTTPS, qualunque stato dia (anche 421 per l'Host). */
+    /** True if an HTTPS server answers on the port, whatever status it gives (even 421 for the Host). */
     static boolean answers(int port) {
         Shell.Result r = Shell.run(Duration.ofSeconds(15), "curl", "-sk", "-m", "5", "-o", "/dev/null", "-w", "%{http_code}",
                 "https://127.0.0.1:" + port + "/index");
@@ -446,7 +451,7 @@ public final class PanelSeparation {
         }
     }
 
-    /** Il pid del supervisore della web se e' vivo ed e' proprio lui (titolo di daemon), altrimenti -1. */
+    /** The pid of the web part's supervisor if it is alive and really is that one (daemon's title), otherwise -1. */
     static int supervisor() {
         int pid = readPid(supervisorPid());
         if (pid <= 1) return -1;
@@ -455,7 +460,7 @@ public final class PanelSeparation {
         return -1;
     }
 
-    /** Una web rimasta da un avvio di prima (la root uccisa senza potersi fermare): si ferma. */
+    /** A web part left over from an earlier start (the root part killed without being able to stop it): it is stopped. */
     static void stopLeftover() {
         if (supervisor() > 0) {
             LOGGER.info("[PanelSeparation] a web part of a previous start was still running: stopped");
@@ -463,7 +468,7 @@ public final class PanelSeparation {
         }
     }
 
-    /** Ferma la web: SIGTERM al supervisore, che lo passa alla web e non la riavvia (daemon(8)). */
+    /** Stops the web part: SIGTERM to the supervisor, which forwards it and does not restart the web part (daemon(8)). */
     public static synchronized void stop() {
         active = false;
         stopSupervisor();
@@ -486,7 +491,7 @@ public final class PanelSeparation {
         LOGGER.warning("[PanelSeparation] the web part did not stop within 15 seconds: killed");
     }
 
-    /** Vero se il pid e' vivo ed e' la web (java ... --web-part di daemoxcp_mail). */
+    /** True if the pid is alive and is the web part (java ... --web-part of daemoxcp_mail). */
     static boolean alive(int pid) {
         if (pid <= 1) return false;
         String l = Shell.run(Duration.ofSeconds(10), "ps", "-o", "user=", "-o", "command=", "-p", String.valueOf(pid)).outputTrim();

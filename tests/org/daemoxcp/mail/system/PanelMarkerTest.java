@@ -15,7 +15,7 @@ import java.util.stream.Stream;
  * The "old" files are built from today's by putting back the old signature taken from the data
  * file: the test writes no old name. After the migration every file must be identical byte for
  * byte to the one today's code writes from scratch, with the same permissions; a second pass must
- * find nothing. The effect on the real services is measured by the test on the VM (reperti).
+ * find nothing. The effect on the real services is measured by the test on the VM (findings).
  *
  *   java -cp "tests:&lt;dir&gt;/daemoxcp-mail.jar" org.daemoxcp.mail.system.PanelMarkerTest
  */

@@ -14,7 +14,7 @@ import java.nio.file.Path;
 import java.util.concurrent.Executors;
 
 /**
- * The real panel server for sieve-rules-browser-test.js (reperto 223): the Java handlers, the generated pages, the test
+ * The real panel server for sieve-rules-browser-test.js (finding 223): the Java handlers, the generated pages, the test
  * MySQL and the REAL SieveGenerator, which writes as root under /var/mail/sieve. Over HTTPS with the name
  * panel.localhost; a superadmin's session goes to stdout ("SESSION ..."), valid only with the User-Agent
  * "SieveRulesE2EServer" (WebSessions ties it to the browser).

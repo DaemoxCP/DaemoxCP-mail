@@ -1,31 +1,31 @@
 package org.daemoxcp.mail.scripts;
 
 /**
- * Postfix come MTA LOCALE: il pezzo di script che fa passare da Postfix la posta che nasce su
- * questa macchina — cron, periodic, mail(1), il mail() di PHP, chiunque chiami sendmail(8).
- * Lo usano tutti e tre gli script che installano Postfix (FullMailServerScript, PostfixScript,
- * FullMailStackScript), e sta qui per non scriverlo tre volte.
+ * Postfix as LOCAL MTA: the piece of script that makes the mail born on this machine go
+ * through Postfix -- cron, periodic, mail(1), PHP's mail(), anyone who calls sendmail(8).
+ * All three scripts that install Postfix use it (FullMailServerScript, PostfixScript,
+ * FullMailStackScript), and it is here so as not to write it three times.
  *
- * Su FreeBSD /usr/sbin/sendmail e' mailwrapper(8): legge /usr/local/etc/mail/mailer.conf e, se
- * manca, /etc/mail/mailer.conf del sistema base, che da FreeBSD 14 passa tutto a dma(8). Il
- * pacchetto di Postfix quel file NON lo scrive: lo dice nel suo messaggio di installazione e
- * si ferma li'. Misurato sulla VM FreeBSD 15.1 il 23/10/2026, con l'installazione di main: un
- * `sendmail -t` locale e il mail() di PHP finivano entrambi in dma ("dma[...]: delivery
- * successful" nel maillog), e Postfix non ne vedeva nessuno. Per la posta verso fuori vuol dire
- * niente milter, quindi niente firma DKIM, e nessuna politica TLS: e' il difetto che il rapporto
- * periodico aveva gia' incontrato e aggirato da solo (PeriodicReport.postfixSendmail).
+ * On FreeBSD /usr/sbin/sendmail is mailwrapper(8): it reads /usr/local/etc/mail/mailer.conf and, if
+ * it is missing, the base system's /etc/mail/mailer.conf, which since FreeBSD 14 passes everything to
+ * dma(8). The Postfix package does NOT write that file: it says so in its installation message and
+ * stops there. Measured on the FreeBSD 15.1 VM on 2026-10-23, with the installation from main: a
+ * local `sendmail -t` and PHP's mail() both ended up in dma ("dma[...]: delivery
+ * successful" in the maillog), and Postfix saw none of them. For outgoing mail this means
+ * no milter, so no DKIM signature, and no TLS policy: it is the defect that the periodic
+ * report had already met and worked around on its own (PeriodicReport.postfixSendmail).
  *
- * Questo pezzo da solo NON basta, e anche questo e' misurato: va insieme a "myorigin = localhost"
- * in main.cf, che ciascuno script scrive. Senza, "root" diventava root@<nome del server>, che non
- * e' in mydestination, e Postfix lo spediva via SMTP. Sulla VM, senza DNS, restava in coda; con
- * il nome del server che risolve sul server stesso, come in produzione, rimbalzava ("mail for
- * ... loops back to myself"), e il rimbalzo, indirizzato allo stesso root, rimbalzava a sua
- * volta e veniva scartato. Cioe' la posta di sistema che dma consegnava in /var/mail/root
- * sarebbe andata persa. Il perche' di localhost e non di $myhostname in mydestination e' scritto
- * accanto a myorigin, in FullMailServerScript.
+ * This piece alone is NOT enough, and this too is measured: it goes together with "myorigin = localhost"
+ * in main.cf, which each script writes. Without it, "root" became root@<server name>, which is not
+ * in mydestination, and Postfix sent it via SMTP. On the VM, without DNS, it stayed in the queue; with
+ * the server name resolving to the server itself, as in production, it bounced ("mail for
+ * ... loops back to myself"), and the bounce, addressed to the same root, bounced in its
+ * turn and was discarded. That is, the system mail that dma delivered to /var/mail/root
+ * would have been lost. The reason for localhost and not $myhostname in mydestination is written
+ * next to myorigin, in FullMailServerScript.
  *
- * Si puo' ripetere: il secondo giro trova mailer.conf gia' giusto e non lo tocca, e sysrc
- * scrive ogni voce una volta sola.
+ * It can be repeated: the second run finds mailer.conf already right and does not touch it, and sysrc
+ * writes each entry only once.
  */
 public final class LocalMtaScript {
 

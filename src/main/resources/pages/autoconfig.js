@@ -1,4 +1,4 @@
-        // ---------- Configurazione automatica dei client (file XML di Thunderbird) ----------
+        // ---------- Automatic client configuration (Thunderbird's XML file) ----------
         async function acApi(actionItem, extra) {
             const r = await fetch('/api/autoconfig', {
                 method: 'POST',
@@ -28,20 +28,20 @@
             h += '<div class="alert alert-' + (r.ready ? 'success' : 'warning') + ' py-2 small mb-2">'
                + '<i class="fas fa-' + (r.ready ? 'check-circle' : 'triangle-exclamation') + ' me-1" aria-hidden="true"></i>'
                + escHtml(r.ready ? t('acf.arrives') : t('acf.doesNotArrive'))
-               // Il verdetto viene dallo scarico vero, e qui si dice perche'. Prima veniva da
-               // una ricerca dentro nginx.conf del marcatore di questa scheda, e siccome la
-               // rotta la installa la scheda della 443 in un altro file, la riga diceva "non
-               // serve il file" mentre il file arrivava.
+               // The verdict comes from the real download, and the reason is given here. Before, it came
+               // from a search inside nginx.conf for this card's marker, and since the
+               // route is installed by the 443 card in another file, the line said "the file
+               // is not served" while the file was arriving.
                + (r.why ? '<div class="mt-1">' + acEsc(r.why) + '</div>' : '')
                + '</div>';
 
             h += '<div class="small text-muted mb-2">' + escHtml(t('acf.readFrom', { conf: r.conf, host: r.mailHost })) + '</div>';
 
-            // Queste due righe NON sono il verdetto e non sono requisiti: dicono solo se la
-            // rotta sta in QUESTO file. Puo' benissimo stare in un altro — e sta in un altro,
-            // quando la scheda della 443 ha installato la sua superficie pubblica. Mostrarle
-            // con spunta e croce le faceva sembrare condizioni da soddisfare, e invitava a
-            // premere un pulsante per aggiungere una rotta che c'era gia' altrove.
+            // These two lines are NOT the verdict and are not requirements: they only say whether the
+            // route is in THIS file. It may well be in another one, and it is in another one
+            // when the 443 card has installed its public surface. Showing them
+            // with a tick and a cross made them look like conditions to meet, and invited
+            // pressing a button to add a route that already existed elsewhere.
             h += '<div class="small text-muted mb-2">'
                + escHtml((r.coveredName ? t('acf.nameDeclared') : t('acf.nameNotDeclared')) + ' ' + (r.brokenPresent ? t('acf.routePresent') : t('acf.routeMissing')))
                + ' ' + escHtml(t('acf.infoOnly')) + '</div>';
@@ -71,9 +71,10 @@
                   : '<button class="btn btn-sm btn-outline-success" data-on-click="acInstall()">'
                     + '<i class="fas fa-screwdriver-wrench me-1" aria-hidden="true"></i>' + escHtml(t('acf.setUpNginx')) + '</button>')
                + '</div>'
-               // Il pulsante sparisce anche quando il file NON arriva, se la superficie sulla
-               // 443 e' installata: in quel caso la causa non e' nginx, e modificare nginx.conf
-               // toglierebbe autoconfig.* e mta-sts.* al blocco protetto per darli alla webmail.
+               // The button disappears also when the file does NOT arrive, if the surface on
+               // 443 is installed: in that case the cause is not nginx, and editing nginx.conf
+               // would take autoconfig.* and mta-sts.* away from the protected block to give
+               // them to the webmail.
                + ((!r.ready && r.surface443)
                   ? '<div class="alert alert-warning py-2 small mt-2 mb-0">'
                     + '<i class="fas fa-circle-info me-1" aria-hidden="true"></i>' + escHtml(t('acf.handledBy443')) + '</div>'

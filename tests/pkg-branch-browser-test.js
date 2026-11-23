@@ -100,7 +100,7 @@ async function served(route) {
 
     console.log('\n== The card reads itself ==');
     await page.goto(BASE + '/updates');
-    // The branch has a card of its own under "Update the server" (reperto 205): it reads itself, nothing to open.
+    // The branch has a card of its own under "Update the server" (finding 205): it reads itself, nothing to open.
     await page.waitForSelector('#branch-body table');
     real('the branch is a card of its own, not a row of "Update the server"', await page.$('section#branch.card') !== null
         && await page.$('#uc-branch') === null && await page.$('#update-center #branch-body') === null);

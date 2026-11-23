@@ -1,12 +1,12 @@
 #!/bin/sh
-# Un passaggio di versione come lo farebbe il committente: fermo il pannello, cambio il jar,
-# lo riavvio con lo script di avvio che c'e'. Poi un secondo riavvio, per vedere cosa resta.
-# Uso: upgrade-phase.sh JAR ETICHETTA DOMINIO
+# A version upgrade as the owner would do it: I stop the panel, change the jar,
+# restart it with the start script that is there. Then a second restart, to see what is left.
+# Usage: upgrade-phase.sh JAR LABEL DOMAIN
 JAR="$1"; LABEL="$2"; DOMAIN="$3"; OUT=/root/rehearsal/$LABEL
 mkdir -p "$OUT"
 wait_panel() {
     i=0; while [ $i -lt 180 ] && [ "$(curl -sk -o /dev/null -w "%{http_code}" https://127.0.0.1:2096/)" = "000" ]; do sleep 2; i=$((i+2)); done
-    sleep 30   # le migrazioni all'avvio, nginx e fail2ban ricaricati
+    sleep 30   # the boot migrations, nginx and fail2ban reloaded
 }
 service mailpanel stop
 cp -p "$JAR" /home/panel/freebsd-mail-panel-1.0.jar

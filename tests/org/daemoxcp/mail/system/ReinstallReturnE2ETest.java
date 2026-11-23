@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * Going back to the server before a reinstallation without losing the mail that arrived after it
- * (ReinstallReturn, reperto 169), with real bectl, without restarting.
+ * (ReinstallReturn, finding 169), with real bectl, without restarting.
  *
  * A test mailbox in /var/vmail with five "old" messages and a Dovecot file; the reinstallation's
  * way back; then what a reinstallation does: the five deleted, three new messages arrived later,

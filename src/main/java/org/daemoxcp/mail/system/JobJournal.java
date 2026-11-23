@@ -22,31 +22,31 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Il registro su disco dei lavori del pannello (reperto 196): uno per lavoro, in /var/db/daemoxcp-mail/jobs.
+ * The on-disk log of the panel's jobs (finding 196): one per job, in /var/db/daemoxcp-mail/jobs.
  *
- * Il registro che la pagina mostra sta in memoria: un riavvio del pannello o del server lo cancella, proprio quando
- * servirebbe capire cosa e' successo (un passaggio di release attraversa dei riavvii). Qui ogni riga si scrive anche su
- * disco, con l'ora in UTC, fra una riga d'inizio (che lavoro, quando) e una di fine (stato, errore, durata). La cartella
- * e' della sola root (0700), i file 0600: dentro ci sono percorsi e nomi di pacchetti, niente segreti, ma restano
- * comunque del sistema. Se ne tengono gli ultimi KEEP. Un registro che non si scrive non ferma il lavoro: lo si dice
- * nel registro del pannello, una volta.
+ * The log the page shows lives in memory: a restart of the panel or of the server wipes it, exactly when it would be
+ * needed to understand what happened (a release upgrade goes through restarts). Here every line is also written to
+ * disk, with the time in UTC, between a start line (which job, when) and an end line (status, error, duration). The
+ * folder belongs to root only (0700), the files are 0600: they contain paths and package names, no secrets, but they
+ * still belong to the system. The last KEEP are kept. A log that cannot be written does not stop the job: this is
+ * said in the panel's log, once.
  */
 public final class JobJournal {
 
     private static final Logger LOGGER = Logger.getLogger(JobJournal.class.getName());
 
-    /** La cartella; un'altra solo nelle prove (-Ddaemoxcp.mail.jobs.dir). */
+    /** The folder; a different one only in tests (-Ddaemoxcp.mail.jobs.dir). */
     static Path dir = Paths.get(System.getProperty("daemoxcp.mail.jobs.dir", "/var/db/daemoxcp-mail/jobs"));
-    /** Quanti registri restano: i piu' vecchi oltre questo numero si tolgono quando ne nasce uno nuovo. */
+    /** How many logs are kept: the oldest ones beyond this number are removed when a new one is created. */
     static int keep = 200;
-    /** Il nome di un registro: data e ora UTC, tipo, "__", id del lavoro. Nient'altro e' leggibile da fuori. */
+    /** The name of a log: UTC date and time, type, "__", job id. Nothing else is readable from outside. */
     static final Pattern NAME = Pattern.compile("[0-9]{8}-[0-9]{6}-[A-Za-z0-9._-]{1,120}\\.log");
     private static final DateTimeFormatter FILE_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC);
     private static volatile boolean warned;
 
     private JobJournal() { }
 
-    /** Apre il registro di un lavoro che comincia adesso; null se non si puo' (e lo si dice una volta). */
+    /** Opens the log of a job that starts now; null if it cannot (and says so once). */
     static Path open(String id, String type, long startedAt) {
         try {
             if (!Files.isDirectory(dir)) {
@@ -69,7 +69,7 @@ public final class JobJournal {
         }
     }
 
-    /** Una riga, con l'ora UTC davanti. */
+    /** A line, with the UTC time in front. */
     static void append(Path f, String line) {
         if (f == null) return;
         try {
@@ -82,21 +82,22 @@ public final class JobJournal {
         }
     }
 
-    /** La fine: stato, errore se c'e', esito se c'e', durata. */
+    /** The end: status, error if any, outcome if any, duration. */
     static void end(Path f, String status, String error, String outcome, long seconds) {
         append(f, "=== end: " + status + " after " + seconds + " s"
                 + (error == null || error.isEmpty() ? "" : "; error: " + error.replace('\n', ' '))
                 + (outcome == null || outcome.isEmpty() ? "" : "; outcome: " + outcome.replace('\n', ' ')) + " ===");
     }
 
-    /** I registri, dal piu' recente: nome, tipo, inizio (UTC), dimensione, e lo stato scritto alla fine (o "running"). */
+    /** The logs, most recent first: name, type, start (UTC), size, and the status written at the end (or "running"). */
     public static JSONObject list(int max) {
         JSONArray out = new JSONArray();
         for (Path f : files()) {
             if (out.length() >= max) break;
             String name = f.getFileName().toString();
             String rest = name.substring(16, name.length() - 4);
-            // Fra tipo e id due trattini bassi: gli id hanno trattini loro (jump-1731...), i tipi anche (os-patch).
+            // Two underscores between type and id: ids have hyphens of their own (jump-1731...), and so do types
+            // (os-patch).
             String type = rest.contains("__") ? rest.substring(0, rest.indexOf("__")) : rest;
             String start = name.substring(0, 4) + "-" + name.substring(4, 6) + "-" + name.substring(6, 8) + "T"
                     + name.substring(9, 11) + ":" + name.substring(11, 13) + ":" + name.substring(13, 15) + "Z";
@@ -111,7 +112,7 @@ public final class JobJournal {
         return new JSONObject().put("success", true).put("dir", dir.toString()).put("journals", out);
     }
 
-    /** Un registro per nome: solo un nome della forma giusta, solo dentro la cartella; gli ultimi 400 KB al massimo. */
+    /** A log by name: only a name of the right form, only inside the folder; at most the last 400 KB. */
     public static JSONObject read(String name) {
         if (name == null || !NAME.matcher(name).matches())
             return new JSONObject().put("success", false).put("error", org.daemoxcp.mail.i18n.I18n.tr("server.journal.badName"));
@@ -128,7 +129,10 @@ public final class JobJournal {
         }
     }
 
-    /** I registri, dal piu' recente (il nome comincia con data e ora UTC: l'ordine dei nomi e' l'ordine nel tempo). */
+    /**
+     * The logs, most recent first (the name starts with the UTC date and time: the order of the names is the order
+     * in time).
+     */
     static List<Path> files() {
         List<Path> out = new ArrayList<>();
         if (!Files.isDirectory(dir)) return out;
@@ -149,9 +153,9 @@ public final class JobJournal {
     }
 
     /**
-     * Un lavoro finito male a cui ne e' seguito uno della stessa famiglia finito bene: «settled». La Diagnostica li
-     * contava per sempre fra quelli da guardare: sul server vero, il 09/11/2026, tre errori gia' rifatti con successo
-     * (reperto 212). L'elenco, dal piu' recente: chi incontra un lavoro riuscito ricorda la sua famiglia.
+     * A job that ended badly and was followed by one of the same family that ended well: "settled". Diagnostics
+     * counted them forever among those to look at: on the production server, on 2026-11-09, three errors already redone
+     * successfully (finding 212). The list, most recent first: each successful job met remembers its family.
      */
     static void settle(JSONArray journals) {
         java.util.Set<String> doneLater = new java.util.HashSet<>();
@@ -164,7 +168,7 @@ public final class JobJournal {
         }
     }
 
-    /** La famiglia di un lavoro: i pacchetti (quelli che li cambiano), il sistema di base, o il tipo stesso. */
+    /** The family of a job: the packages (the jobs that change them), the base system, or the type itself. */
     static String family(String type) {
         return switch (type) {
             case "update", "guided_update", "guided_update_all", "update_everything", "roundcube", "maintenance",
@@ -175,9 +179,9 @@ public final class JobJournal {
     }
 
     /**
-     * La riga della fine: l'ultima «=== end:» fra le ultime righe, se c'e', altrimenti l'ultima riga. Prima della
-     * build 554 la pulizia della via di ritorno scriveva una riga DOPO la fine, e quei registri risultavano «senza una
-     * fine» pur essendo finiti (reperto 207): restano su disco, e si leggono giusti.
+     * The end line: the last "=== end:" among the last lines, if there is one, otherwise the last line. Before build
+     * 554 the cleanup of the way back wrote a line AFTER the end, and those logs showed up as "without an end" although
+     * they had finished (finding 207): they stay on disk, and are read correctly.
      */
     static String endLine(Path f) {
         String tail = lastLines(f);

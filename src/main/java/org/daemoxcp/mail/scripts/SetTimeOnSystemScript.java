@@ -11,7 +11,7 @@ public class SetTimeOnSystemScript {
     public boolean writed = false;
     private static final String SCRIPT_PATH = "./install_scripts/setup_timezone_and_dns.sh";
 
-    /** Sempre, tutto o niente, con l'impronta del jar (InstallScripts): mai uno script di una versione di prima. */
+    /** Always, all or nothing, with the jar's fingerprint (InstallScripts): never a script from an earlier version. */
     public void write_file() {
         this.writed = InstallScripts.write(SCRIPT_PATH, new SetTimeOnSystem().getScriptContent());
     }

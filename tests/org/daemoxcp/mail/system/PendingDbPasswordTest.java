@@ -15,7 +15,7 @@ import java.util.Set;
  * The rule under test: the panel's password changes ONLY into one MySQL accepted in front of us,
  * and a pending password is thrown away only when MySQL said no.
  *
- * Uso: java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PendingDbPasswordTest
+ * Usage: java -cp "tests:target/daemoxcp-mail.jar" org.daemoxcp.mail.system.PendingDbPasswordTest
  */
 public class PendingDbPasswordTest {
 

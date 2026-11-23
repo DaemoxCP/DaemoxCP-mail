@@ -21,43 +21,43 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * MTA-STS acceso con un pulsante solo.
+ * MTA-STS turned on with a single button.
  *
- * Perche' esiste. Attivare MTA-STS richiede otto cose fatte NELL'ORDINE GIUSTO: la riga di
- * include in nginx, la configurazione della 443, la jail, un CNAME per dominio, che quel
- * CNAME punti DRITTO al server e non passi da un proxy, un certificato che copra quei nomi,
- * la verifica che la politica risponda, e solo alla fine il record TXT. Farle fare a mano
- * una per una significa sbagliare l'ordine — come e' successo
- * a me, che ho chiesto di provare con curl un nome che il passo dopo doveva ancora creare.
+ * Why it exists. Activating MTA-STS requires eight things done IN THE RIGHT ORDER: the
+ * include line in nginx, the configuration of 443, the jail, a CNAME per domain, that CNAME
+ * pointing STRAIGHT to the server and not going through a proxy, a certificate that covers
+ * those names, the check that the policy answers, and only at the end the TXT record. Having
+ * them done by hand one by one means getting the order wrong, as happened
+ * to me, when I asked to test with curl a name that the next step had yet to create.
  *
- * L'ordine non e' un dettaglio di comodita': ogni passo e' il presupposto del successivo. Il
- * TXT pubblicato prima che la politica risponda e' una dichiarazione pubblica non mantenuta;
- * il certificato emesso prima del CNAME non puo' validare il nome; la configurazione scritta
- * prima dell'include finisce in un file che nginx non legge.
+ * The order is not a matter of convenience: each step is the precondition of the next. The
+ * TXT published before the policy answers is a public declaration that is not kept; the
+ * certificate issued before the CNAME cannot validate the name; the configuration written
+ * before the include ends up in a file nginx does not read.
  *
- * Quindi la sequenza la conosce il pannello, che sa anche a che punto e' e riparte da li'.
- * Ogni passo verifica il proprio esito prima che cominci il successivo, e al primo che
- * fallisce ci si ferma spiegando cosa manca: proseguire dopo un fallimento vorrebbe dire
- * costruire sul vuoto.
+ * So the sequence is known by the panel, which also knows where it stands and resumes from
+ * there. Each step verifies its own outcome before the next one begins, and at the first
+ * one that fails it stops, explaining what is missing: going on after a failure would mean
+ * building on nothing.
  */
 public class MtaStsSetup {
 
     private MtaStsSetup() {}
 
     /**
-     * Quanto la sequenza aspetta, al massimo, che un record DNS appena creato diventi visibile.
+     * How long, at most, the sequence waits for a newly created DNS record to become visible.
      *
-     * Non e' un numero scelto a sentimento: un resolver che ha gia' in cache la risposta
-     * precedente la tiene per il TTL di quella risposta, e su un jolly Cloudflare quel TTL
-     * misurato vale 300 secondi. Sotto i cinque minuti l'attesa non servirebbe a niente; sei
-     * lasciano il margine perche' la cache scada davvero.
+     * It is not a number chosen by feel: a resolver that already has the previous answer in its
+     * cache keeps it for the TTL of that answer, and on a Cloudflare wildcard that TTL measured
+     * 300 seconds. Under five minutes the wait would be useless; six leave the margin for the
+     * cache to really expire.
      */
     private static final long MAX_WAIT_MS = 6 * 60 * 1000L;
 
     /**
-     * Ogni quanto si riprova. Trenta secondi perche' la JVM tiene in cache le risoluzioni
-     * riuscite per trenta secondi: riprovare piu' spesso vorrebbe dire rileggere la propria
-     * cache e credere di aver interrogato il DNS.
+     * How often it retries. Thirty seconds, because the JVM caches successful resolutions for
+     * thirty seconds: retrying more often would mean rereading its own cache and believing it
+     * had queried DNS.
      */
     private static final long WAIT_INTERVAL_MS = 30 * 1000L;
 
@@ -76,15 +76,17 @@ public class MtaStsSetup {
         return p;
     }
 
-    /* ===================================================================
-     * A che punto siamo
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Where we stand
+     * ===================================================================
+     */
 
     public static JSONObject plan() {
         JSONObject r = new JSONObject().put("success", true);
         List<Step> steps = new ArrayList<>();
 
-        // 1-2-3: la superficie sulla 443
+        // 1-2-3: the surface on 443
         JSONObject web = WebProtection.state();
         JSONObject inclusion = web.optJSONObject("include");
         boolean includeOk = inclusion != null && inclusion.optBoolean("ok", false);
@@ -97,13 +99,13 @@ public class MtaStsSetup {
         steps.add(step("jail", I18n.tr("server.sts.stepJail"), "",
                 jailActive() ? "done" : "todo", null));
 
-        // 4 e 4-bis: i CNAME. Una sola lettura della zona per entrambi i passi, cosi' non
-        // possono contraddirsi come e' successo con domain-d.test.
+        // 4 and 4-bis: the CNAMEs. A single read of the zone for both steps, so they
+        // cannot contradict each other as happened with domain-d.test.
         List<NameReview> reviews = reviewCname();
-        // Se l'esame non copre tutti i domini vuol dire che si e' fermato per un guasto:
-        // senza questa riga le liste resterebbero vuote e il piano direbbe "tutti a posto"
-        // proprio perche' non ha guardato niente. E' l'errore che sto togliendo dal pannello:
-        // non deve tornare dalla porta di servizio.
+        // If the examination does not cover all the domains, it means it stopped because of a fault:
+        // without this line the lists would stay empty and the plan would say "all in place"
+        // precisely because it looked at nothing. It is the error I am removing from the panel:
+        // it must not come back through the back door.
         int domainCount = domains().size();
         Breakdown breakdown = split(reviews);
         List<String> absent = breakdown.absent, crooked = breakdown.crooked, proxied = breakdown.proxied,
@@ -125,7 +127,7 @@ public class MtaStsSetup {
                 blindOnes.isEmpty() ? null
                     : I18n.tr("server.sts.blindDns")));
 
-        // 4-bis: i record che devono puntare DRITTI al server
+        // 4-bis: the records that must point STRAIGHT to the server
         boolean blind = !blindOnes.isEmpty();
         steps.add(step("proxy", I18n.tr("server.sts.stepProxy"),
                 !proxied.isEmpty() ? I18n.tr("server.sts.viaCf", java.util.Map.of("list", String.valueOf(String.join(", ", proxied))))
@@ -138,7 +140,7 @@ public class MtaStsSetup {
                         ? " " + I18n.tr("server.sts.wildcardWhy")
                         : "")));
 
-        // 5: il certificato
+        // 5: the certificate
         List<String> servedNames = namesToCover();
         List<String> uncovered = new ArrayList<>();
         for (String n : servedNames) if (!certificateCovers(n)) uncovered.add(n);
@@ -149,16 +151,16 @@ public class MtaStsSetup {
                 excluded.isEmpty() ? null
                     : I18n.tr("server.sts.otherAccount", java.util.Map.of("list", String.valueOf(String.join(", ", excluded))))));
 
-        // 6-7: la prova e il record
+        // 6-7: the test and the record
         List<TxtReview> txtReviews = new ArrayList<>();
         for (String d : domains()) {
             boolean answers = MtaSts.publicTest(d).optBoolean("ok", false);
-            // Il TXT si legge SEMPRE, e soprattutto quando la politica NON risponde: e' proprio
-            // quella la combinazione da scoprire, un record gia' pubblicato che manda i mittenti
-            // del mondo contro un errore. Prima qui c'era un "else if" e a quel ramo non si
-            // arrivava mai: su domain-d.test il pannello scriveva "in attesa dei passi precedenti"
-            // mentre il record era pubblicato, con un id vecchio, e la politica dava 526. Cieco
-            // esattamente sulla cosa che questa scheda esiste per sorvegliare.
+            // The TXT is ALWAYS read, and above all when the policy does NOT answer: that is exactly
+            // the combination to discover, a record already published that sends the world's
+            // senders against an error. Before, there was an "else if" here and that branch was
+            // never reached: on domain-d.test the panel wrote "waiting for the previous steps"
+            // while the record was published, with an old id, and the policy gave 526. Blind
+            // exactly to the thing this tab exists to watch over.
             txtReviews.add(new TxtReview(d, answers, readTxt(d)));
         }
         steps.addAll(testAndTxtSteps(txtReviews, expectedTxt()));
@@ -171,10 +173,10 @@ public class MtaStsSetup {
             else if ("uncertain".equals(p.state)) uncertain++;
         }
         r.put("steps", a).put("toDo", toDo).put("uncertain", uncertain);
-        // "completo" accende la spunta verde e fa sparire il pulsante, quindi non puo' bastare
-        // che non ci sia niente DA FARE: serve anche che non sia rimasto niente da VERIFICARE.
-        // Con la sola condizione toDo==0, un passo "incerto" — cioe' uno che il pannello non
-        // ha potuto controllare — sarebbe bastato da solo a dichiarare "attivo su tutti i domini".
+        // "complete" turns on the green tick and makes the button disappear, so it cannot be
+        // enough that there is nothing TO DO: there must also be nothing left to VERIFY.
+        // With the condition toDo==0 alone, an "uncertain" step (that is, one the panel
+        // could not check) would have been enough on its own to declare "active on all domains".
         boolean complete = toDo == 0 && uncertain == 0;
         r.put("complete", complete);
         String uncertainCount = uncertain == 1 ? I18n.tr("server.sts.steps.one") : I18n.tr("server.sts.steps.other", java.util.Map.of("n", String.valueOf(uncertain)));
@@ -188,7 +190,7 @@ public class MtaStsSetup {
         return r;
     }
 
-    /** Cosa si e' visto di un dominio per i passi della prova e del record. */
+    /** What was seen of a domain for the test step and the record step. */
     static final class TxtReview {
         final String domain; final boolean answers; final TxtReading txt;
         TxtReview(String domain, boolean answers, TxtReading txt) {
@@ -197,10 +199,10 @@ public class MtaStsSetup {
     }
 
     /**
-     * I passi "prova" e "txt" del piano, da cio' che si e' visto dominio per dominio. E' qui
-     * che il passo del record diventa "fatto", e sta da solo perche' le prove lo verifichino
-     * con letture costruite, senza DNS e senza la politica vera: due record v=STSv1 non
-     * devono poterlo far diventare "fatto".
+     * The "test" and "txt" steps of the plan, from what was seen domain by domain. It is here
+     * that the record step becomes "done", and it stands alone so that the tests can verify it
+     * with constructed readings, without DNS and without the real policy: two v=STSv1 records
+     * must not be able to make it "done".
      */
     static List<Step> testAndTxtSteps(List<TxtReview> reviews, String expected) {
         List<String> notAnswering = new ArrayList<>(), withoutTxt = new ArrayList<>(),
@@ -211,8 +213,9 @@ public class MtaStsSetup {
             TxtReading txt = e.txt;
             if (!e.answers) {
                 notAnswering.add(d);
-                // Anche con piu' record: se uno e' scritto male, i mittenti che lo scartano
-                // contano solo l'altro, e quello li manda contro la politica che non risponde.
+                // Even with several records: if one is malformed, the senders that discard it
+                // count only the other, and that one sends them against the policy that does
+                // not answer.
                 if (txt.outcome == TxtOutcome.PRESENT || txt.outcome == TxtOutcome.TOO_MANY)
                     unmaintained.add(d + " -> " + String.join("  ||  ", txt.values));
                 continue;
@@ -259,18 +262,19 @@ public class MtaStsSetup {
     }
 
     /**
-     * Come i domini esaminati si distribuiscono fra i passi del piano.
+     * How the examined domains are distributed among the steps of the plan.
      *
-     * Sta in un metodo suo, staccato da plan(), per una ragione precisa: e' QUI che sono nati
-     * i falsi verdi. Un dominio senza record che rispondeva grazie a un jolly proxato non
-     * entrava nel conto del proxy, e il passo diceva "nessuno passa da Cloudflare"; un record
-     * insieme SBAGLIATO e PROXATO finiva nel solo conto del proxy — perche' la classificazione
-     * cercava la parola "Cloudflare" dentro una frase scritta per un essere umano — e il passo
-     * dei CNAME dichiarava "tutti presenti e giusti" un record che puntava altrove.
+     * It is in a method of its own, detached from plan(), for a precise reason: it is HERE that
+     * the false greens were born. A domain without a record that answered thanks to a proxied
+     * wildcard did not enter the proxy count, and the step said "nobody goes through Cloudflare";
+     * a record both WRONG and PROXIED ended up only in the proxy count (because the
+     * classification looked for the word "Cloudflare" inside a sentence written for a human
+     * being) and the CNAME step declared "all present and correct" a record that pointed
+     * elsewhere.
      *
-     * Dentro plan(), che per esistere ha bisogno del database e di Cloudflare, questa logica
-     * non si poteva provare con un test. Una logica che nessun test puo' raggiungere e' una
-     * logica che nessuno controlla: qui infatti non la controllava nessuno.
+     * Inside plan(), which needs the database and Cloudflare to exist, this logic could not be
+     * tested. Logic that no test can reach is logic nobody checks: here, in fact, nobody
+     * checked it.
      */
     static final class Breakdown {
         final List<String> absent = new ArrayList<>(), crooked = new ArrayList<>(),
@@ -282,9 +286,9 @@ public class MtaStsSetup {
     static Breakdown split(List<NameReview> reviews) {
         Breakdown r = new Breakdown();
         for (NameReview e : reviews) {
-            // Il proxy si conta per conto suo, da un booleano: un record puo' essere insieme
-            // sbagliato E proxato, e i due fatti devono comparire tutti e due, nei due passi
-            // a cui appartengono.
+            // The proxy is counted on its own, from a boolean: a record can be both
+            // wrong AND proxied, and both facts must appear, in the two steps they
+            // belong to.
             if (e.goesThroughProxy) {
                 boolean fromWildcard = e.state == NameState.ABSENT;
                 if (fromWildcard) r.proxyFromWildcard = true;
@@ -304,11 +308,11 @@ public class MtaStsSetup {
     }
 
     /**
-     * Il tempo, passato da fuori.
+     * Time, passed in from outside.
      *
-     * Serve solo perche' l'attesa qui sotto possa essere provata: incollata a Thread.sleep e
-     * a System.currentTimeMillis, un test avrebbe dovuto aspettare sei minuti veri per
-     * esercitarla, cioe' non l'avrebbe esercitata mai.
+     * It is needed only so that the wait below can be tested: glued to Thread.sleep and
+     * System.currentTimeMillis, a test would have had to wait six real minutes to exercise it,
+     * that is, it would never have exercised it.
      */
     interface Clock {
         long now();
@@ -321,12 +325,12 @@ public class MtaStsSetup {
     };
 
     /**
-     * Aspetta che i domini indicati rispondano, e restituisce quelli che non ce l'hanno fatta.
+     * Waits for the given domains to answer, and returns those that did not make it.
      *
-     * Tre proprieta' che devono valere, e che il test verifica una per una: si prova SUBITO
-     * prima di dormire (se rispondono gia', non si aspetta un istante); si smette appena la
-     * lista si svuota; e si smette comunque alla scadenza, perche' un ciclo di attesa senza
-     * un'uscita garantita, dentro un pannello di produzione, e' un blocco che non finisce piu'.
+     * Three properties that must hold, and that the test verifies one by one: it tries
+     * IMMEDIATELY before sleeping (if they already answer, it does not wait an instant); it stops
+     * as soon as the list is empty; and it stops anyway at the deadline, because a wait loop
+     * without a guaranteed exit, inside a production panel, is a hang that never ends.
      */
     static List<String> waitForPropagation(List<String> domains,
                                             java.util.function.Predicate<String> answers,
@@ -349,32 +353,34 @@ public class MtaStsSetup {
         return remain;
     }
 
-    /* ===================================================================
-     * L'esecuzione
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The execution
+     * ===================================================================
+     */
 
     public static JSONObject run() { return run(null, null); }
 
     public static JSONObject run(UpdateManager.Job job) { return run(job, null); }
 
     /**
-     * I domini su cui la sequenza deve agire.
+     * The domains the sequence must act on.
      *
-     * Un elenco vuoto NON e' "nessun dominio da fare": vuol dire che il nome chiesto non
-     * esiste, e chi chiama deve accorgersene invece di vedere una sequenza che "riesce"
-     * senza aver toccato niente.
+     * An empty list is NOT "no domain to do": it means the requested name does not exist, and
+     * the caller must notice it instead of seeing a sequence that "succeeds" without having
+     * touched anything.
      */
     private static List<MailDatabase.Domain> domainsToTouch(String domainOnly) throws Exception {
         return filter(Main.mailDatabase.getDomains(), domainOnly);
     }
 
     /**
-     * Il filtro vero e proprio, separato dalla lettura del database perche' possa essere
-     * provato: dentro domainsToTouch sarebbe raggiungibile solo con un database vivo, e un
-     * test che non arriva alla riga che deve verificare non verifica niente.
+     * The actual filter, separate from reading the database so that it can be tested: inside
+     * domainsToTouch it would be reachable only with a live database, and a test that does not
+     * reach the line it must verify verifies nothing.
      *
-     * Il confronto e' senza distinzione di maiuscole perche' i nomi di dominio non ne hanno,
-     * ed e' ESATTO: "in-d.test" non deve trovare "domain-d.test".
+     * The comparison is case-insensitive because domain names have no case, and it is EXACT:
+     * "in-d.test" must not find "domain-d.test".
      */
     static List<MailDatabase.Domain> filter(List<MailDatabase.Domain> allItems, String domainOnly) {
         List<MailDatabase.Domain> out = new ArrayList<>();
@@ -386,16 +392,16 @@ public class MtaStsSetup {
     }
 
     /**
-     * @param job se presente, l'avanzamento viene scritto li' mentre accade.
-     * @param domainOnly se presente, i passi per dominio toccano solo quello. I primi tre —
-     *        include di nginx, 443, jail — restano globali perche' quella superficie e' una
-     *        sola per tutti i domini, e installarla e' idempotente. Il certificato resta
-     *        globale per una ragione piu' seria, spiegata al suo passo.
+     * @param job if present, the progress is written there as it happens.
+     * @param domainOnly if present, the per-domain steps touch only that one. The first three
+     *        (nginx include, 443, jail) stay global because that surface is a single one for
+     *        all domains, and installing it is idempotent. The certificate stays global for a
+     *        more serious reason, explained at its step.
      *
-     * L'emissione del certificato dura piu' del limite di tempo di un proxy: tenendo aperta
-     * la richiesta HTTP, il browser riceve una pagina di errore mentre sul server
-     * l'operazione continua. Chi guarda non sa piu' cosa sia successo — e uno stato
-     * sconosciuto su un certificato di produzione e' l'anticamera del danno.
+     * Issuing the certificate takes longer than a proxy's time limit: if the HTTP request is
+     * kept open, the browser receives an error page while on the server the operation goes on.
+     * Whoever is watching no longer knows what happened, and an unknown state on a production
+     * certificate is the antechamber of damage.
      */
     public static JSONObject run(UpdateManager.Job job, String domainOnly) {
         JSONObject r = new JSONObject();
@@ -403,10 +409,10 @@ public class MtaStsSetup {
         if (job != null) job.write("=== " + I18n.tr("server.sts.jobTitle") + " ==="
                 + (domainOnly == null ? "" : " " + I18n.tr("server.sts.onlyDomain", java.util.Map.of("d", String.valueOf(domainOnly)))));
 
-        // Un nome che non corrisponde a nessun dominio non deve produrre una sequenza che
-        // "riesce": i cicli per dominio girerebbero a vuoto, nessun passo fallirebbe, e
-        // l'esito direbbe che e' andato tutto bene senza che sia stato toccato niente. E'
-        // il falso successo piu' silenzioso di tutti, e va fermato qui.
+        // A name that matches no domain must not produce a sequence that "succeeds":
+        // the per-domain loops would run empty, no step would fail, and the outcome
+        // would say everything went well without anything having been touched. It is
+        // the quietest false success of all, and it must be stopped here.
         if (domainOnly != null) {
             try {
                 if (domainsToTouch(domainOnly).isEmpty())
@@ -428,7 +434,7 @@ public class MtaStsSetup {
                     I18n.tr("server.sts.noIncludeStop"));
         } else doneOnes.put(already("include", I18n.tr("server.sts.includeTitle")));
 
-        // 2. la 443
+        // 2. port 443
         if (!WebProtection.state().optBoolean("installed", false)) {
             JSONObject e = WebProtection.install("", "");
             doneOnes.put(outcome("config443", I18n.tr("server.sts.config443Title"), e));
@@ -438,32 +444,33 @@ public class MtaStsSetup {
                     I18n.tr("server.sts.no443Stop"));
         } else doneOnes.put(already("config443", I18n.tr("server.sts.config443Title")));
 
-        // 3. la jail
+        // 3. the jail
         if (!jailActive()) {
             JSONObject e = WebProtection.installJail();
             doneOnes.put(outcome("jail", "Jail fail2ban", e));
-            // Una jail mancante non impedisce a MTA-STS di funzionare: si annota e si prosegue.
+            // A missing jail does not prevent MTA-STS from working: it is noted and we go on.
         } else doneOnes.put(already("jail", "Jail fail2ban"));
 
-        // 4. i CNAME
+        // 4. the CNAMEs
         //
-        // I domini in cui qualcosa CAMBIA davvero si segnano: sono gli unici per cui, piu'
-        // avanti, ha senso aspettare la propagazione. Dove non e' cambiato niente non c'e'
-        // niente da propagare, e un'attesa sarebbe solo tempo tolto a chi guarda.
+        // The domains in which something really CHANGES are marked: they are the only ones for
+        // which, further on, it makes sense to wait for propagation. Where nothing changed there is
+        // nothing to propagate, and a wait would only be time taken from whoever is watching.
         LinkedHashSet<String> justChanged = new LinkedHashSet<>();
         JSONArray cname = new JSONArray();
         try {
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
             for (MailDatabase.Domain d : domainsToTouch(domainOnly)) {
-                // Prima qui c'era una scorciatoia: se "mta-sts.<dominio>" RISPONDEVA, il record
-                // si dava per fatto. Ma rispondere non vuol dire esistere: un jolly "*.domain"
-                // fa rispondere qualunque nome. Su domain-d.test era esattamente cosi' — il nome
-                // rispondeva grazie al jolly, dietro Cloudflare, e la politica tornava 526.
-                // createOptional guarda il record col nome ESATTO dentro la zona, corregge quelli
-                // sbagliati o dietro proxy e crea quelli mancanti: e' lui che deve decidere.
+                // Before, there was a shortcut here: if "mta-sts.<domain>" ANSWERED, the
+                // record was taken as done. But answering does not mean existing: a
+                // wildcard "*.domain" makes any name answer. On domain-d.test it was
+                // exactly so: the name answered thanks to the wildcard, behind
+                // Cloudflare, and the policy returned 526. createOptional looks at the
+                // record with the EXACT name inside the zone, fixes the wrong or proxied
+                // ones and creates the missing ones: it is the one that must decide.
                 JSONObject e = auto.createOptional(d.id, "mta_sts");
                 if (e.optBoolean("unmanaged", false)) {
-                    // Dominio non su Cloudflare: non e' un errore, ma nemmeno una conferma.
+                    // Domain not on Cloudflare: it is not an error, but not a confirmation either.
                     boolean answers = resolves("mta-sts." + d.domain);
                     cname.put(note(d.domain, answers,
                             answers ? I18n.tr("server.sts.answersNoCf")
@@ -482,12 +489,12 @@ public class MtaStsSetup {
                 .put("detail", cname));
         if (job != null) { job.advance(4, 8); job.write("[4/8] " + I18n.tr("server.sts.cnameExamined", java.util.Map.of("n", String.valueOf(cname.length())))); }
 
-        // 4-bis. I nomi mta-sts devono puntare dritti al server.
-        // Ogni dominio riporta COSA HO VISTO. Prima questo passo diceva "era gia' a posto"
-        // ogni volta che non aveva FATTO nulla — compreso quando non aveva VISTO nulla:
-        // account assente, zona non trovata, API muta. "Non ho potuto controllare"
-        // travestito da "va tutto bene" e' il modo piu' rapido per prendere una decisione
-        // sbagliata: qui, pubblicare un record MTA-STS su un nome che passa da Cloudflare.
+        // 4-bis. The mta-sts names must point straight to the server.
+        // Each domain reports WHAT I SAW. Before, this step said "it was already in place"
+        // every time it had not DONE anything, including when it had not SEEN anything:
+        // account missing, zone not found, API silent. "I could not check" disguised as
+        // "everything is fine" is the fastest way to make a wrong decision: here,
+        // publishing an MTA-STS record on a name that goes through Cloudflare.
         JSONArray proxy = new JSONArray();
         int fixed = 0, straight = 0, blind = 0;
         try {
@@ -510,7 +517,7 @@ public class MtaStsSetup {
                 try {
                     allItems = cf.listRecords(a.apiToken, zl.zoneId);
                 } catch (CloudflareManager.ZoneReadException e) {
-                    // Una zona che non si legge non e' una zona senza il nome: non si tocca niente.
+                    // A zone that cannot be read is not a zone without the name: nothing is touched.
                     blind++;
                     proxy.put(note(d.domain, false, e.getMessage()));
                     continue;
@@ -550,13 +557,13 @@ public class MtaStsSetup {
                 .put("detail", proxy));
         if (job != null) job.write("[5/8] " + I18n.tr("server.sts.proxySummary", java.util.Map.of("d", String.valueOf(straight), "s", String.valueOf(fixed), "c", String.valueOf(blind))));
 
-        // 5. il certificato
+        // 5. the certificate
         //
-        // Questo passo NON rispetta il filtro per dominio, ed e' voluto: il certificato e'
-        // uno solo e "--issue --force" RIDEFINISCE l'insieme dei nomi. Emetterlo con i soli
-        // nomi del dominio corrente cancellerebbe dal certificato i mta-sts.* e autoconfig.*
-        // di tutti gli altri — e con i record MTA-STS gia' pubblicati, quella e' posta
-        // rifiutata. Si guardano sempre tutti i nomi, si emette solo se ne manca qualcuno.
+        // This step does NOT respect the per-domain filter, and that is intended: the certificate
+        // is a single one and "--issue --force" REDEFINES the set of names. Issuing it with only
+        // the names of the current domain would remove from the certificate the mta-sts.* and
+        // autoconfig.* of all the others, and with the MTA-STS records already published, that is
+        // rejected mail. All the names are always looked at; it is issued only if some are missing.
         List<String> names = namesToCover();
         List<String> uncovered = new ArrayList<>();
         for (String n : names) if (!certificateCovers(n)) uncovered.add(n);
@@ -564,24 +571,24 @@ public class MtaStsSetup {
             AcmeManager acme = new AcmeManager(Main.mailDatabase);
             String host = MtaSts.mailHost();
 
-            // La guardia "scoperti.isEmpty()" qui sopra evita di riemettere quando i nomi
-            // ci sono gia': Let's Encrypt concede 5 emissioni a settimana per lo stesso
-            // insieme di nomi, e un pulsante che riemette a ogni pressione consuma quel
-            // margine lasciando senza rinnovo proprio quando servirebbe.
+            // The "scoperti.isEmpty()" guard above avoids reissuing when the names are
+            // already there: Let's Encrypt allows 5 issuances a week for the same set
+            // of names, and a button that reissues at every press uses up that margin,
+            // leaving no renewal exactly when it would be needed.
             if (job != null) { job.advance(6, 8); job.write("[6/8] " + I18n.tr("server.sts.issuingCert", java.util.Map.of("n", String.valueOf(names.size()), "m", String.valueOf(uncovered.size())))); }
             AcmeManager.CertificateResult cr = acme.emitWithNames(host, names);
-            // "Emissione fallita" da solo non serve a nessuno: la ragione vera sta nell'uscita
-            // di acme.sh — un dominio che il token non copre, un limite di Let's Encrypt, una
-            // zona non visibile. Senza quella riga non si diagnostica niente.
+            // "Issuance failed" alone helps nobody: the real reason is in the output of
+            // acme.sh (a domain the token does not cover, a Let's Encrypt limit, a zone
+            // that is not visible). Without that line nothing can be diagnosed.
             String detail = cr.output == null ? "" : cr.output.trim();
             if (detail.length() > 4000) detail = detail.substring(detail.length() - 4000);
             JSONObject e = new JSONObject().put("success", cr.success)
                     .put("note", cr.message).put("error", cr.message);
             JSONObject line = outcome("certificate", I18n.tr("server.sts.certTitle"), e);
             line.put("names", new JSONArray(names));
-            // L'uscita si mostra SEMPRE, non solo quando fallisce. Buttarla via quando il
-            // comando "riesce" toglie la prova proprio nel caso peggiore: quello in cui
-            // riesce ma non ha fatto quello che credevamo.
+            // The output is ALWAYS shown, not only when it fails. Throwing it away when
+            // the command "succeeds" removes the evidence exactly in the worst case: the
+            // one in which it succeeds but did not do what we believed.
             line.put("output", detail);
             doneOnes.put(line);
             if (job != null) {
@@ -593,19 +600,18 @@ public class MtaStsSetup {
                     I18n.tr("server.sts.noCertStop"));
         } else doneOnes.put(already("certificate", I18n.tr("server.sts.certTitle")));
 
-        // 6-bis. L'attesa della propagazione, e solo dove serve.
+        // 6-bis. Waiting for propagation, and only where needed.
         //
-        // Un record DNS appena creato non e' visibile subito: chi ha in cache la risposta
-        // precedente la tiene per il suo TTL. Su un nome coperto da un jolly Cloudflare quel
-        // TTL vale 300 secondi, quindi la politica puo' restare irraggiungibile per cinque
-        // minuti dopo che il CNAME e' stato creato. Provando subito, la sequenza si fermerebbe
-        // sempre un passo prima della fine e lascerebbe a chi guarda il compito di ripremere
-        // piu' tardi — cioe' esattamente il lavoro a mano che questo pulsante esiste per
-        // togliere, e per giunta senza dire quanto tardi.
+        // A newly created DNS record is not visible right away: whoever has the previous answer
+        // in cache keeps it for its TTL. On a name covered by a Cloudflare wildcard that TTL is
+        // 300 seconds, so the policy can stay unreachable for five minutes after the CNAME was
+        // created. Testing immediately, the sequence would always stop one step before the end and
+        // leave whoever is watching the task of pressing again later: exactly the manual work this
+        // button exists to remove, and on top of that without saying how much later.
         //
-        // Quindi si aspetta. Ma solo per i domini in cui qualcosa e' cambiato, si prova subito
-        // prima di dormire, e si smette appena rispondono: un'attesa che non finisce mai
-        // quando l'esito e' gia' buono e' un difetto tanto quanto non aspettare.
+        // So it waits. But only for the domains in which something changed; it tests immediately
+        // before sleeping, and it stops as soon as they answer: a wait that never ends when the
+        // outcome is already good is as much a defect as not waiting.
         if (!justChanged.isEmpty()) {
             if (job != null) job.write("[7/8] " + I18n.tr("server.sts.waitingDns", java.util.Map.of("n", String.valueOf(justChanged.size()), "min", String.valueOf((MAX_WAIT_MS / 60000)))));
             List<String> remain = waitForPropagation(
@@ -618,7 +624,7 @@ public class MtaStsSetup {
                     : "    " + I18n.tr("server.sts.stillNot", java.util.Map.of("list", String.valueOf(String.join(", ", remain)))));
         }
 
-        // 6-7. la prova e il record, dominio per dominio
+        // 6-7. the test and the record, domain by domain
         JSONArray finals = new JSONArray();
         try {
             AutoDns auto = new AutoDns(Main.mailDatabase, new CloudflareManager(Main.mailDatabase));
@@ -628,9 +634,9 @@ public class MtaStsSetup {
                     finals.put(note(d.domain, false, I18n.tr("server.sts.policyNotYet", java.util.Map.of("e", String.valueOf(test.optString("error", ""))))));
                     continue;
                 }
-                // Non si salta piu' quando il record c'e': va controllato che l'id corrisponda
-                // alla politica servita. I record creati dal vecchio pannello hanno un id fisso
-                // che non cambierebbe mai.
+                // It is no longer skipped when the record is there: it must be checked that
+                // the id matches the served policy. The records created by the old panel
+                // have a fixed id that would never change.
                 JSONObject e = auto.createTxtMtaSts(d.id);
                 finals.put(note(d.domain, e.optBoolean("success", false),
                         e.optString("note", e.optString("error", ""))));
@@ -647,16 +653,16 @@ public class MtaStsSetup {
     }
 
     /**
-     * L'esito della sequenza tradotto nelle righe che la pagina DNS gia' sa disegnare
-     * ({titolo, ok, messaggio}).
+     * The outcome of the sequence translated into the rows the DNS page already knows how to
+     * draw ({title, ok, message}).
      *
-     * La traduzione sta QUI e non nella pagina DNS perche' le forme che escono da run()
-     * sono di questa classe: se le conoscesse anche chi chiama, ogni cambiamento qui dentro
-     * andrebbe ricordato la' — ed e' cosi' che due pezzi di codice cominciano a divergere.
+     * The translation is HERE and not in the DNS page because the shapes that come out of run()
+     * belong to this class: if the caller knew them too, every change in here would have to be
+     * remembered there, and that is how two pieces of code start to diverge.
      *
-     * Un passo interrotto non sparisce: se la sequenza si e' fermata, l'ultima riga dice
-     * perche'. Un elenco di passi riusciti che si interrompe senza spiegazioni sarebbe la
-     * cosa peggiore da mostrare, perche' somiglia a un successo.
+     * An interrupted step does not disappear: if the sequence stopped, the last row says why.
+     * A list of successful steps that breaks off without explanation would be the worst thing
+     * to show, because it looks like a success.
      */
     public static JSONArray asEntries(JSONObject outcome) {
         JSONArray entries = new JSONArray();
@@ -672,8 +678,9 @@ public class MtaStsSetup {
                         .put("messageText", p.optString("messageText", "")));
                 continue;
             }
-            // Un passo per dominio: riuscito solo se lo sono tutte le righe, e il messaggio
-            // le riporta tutte. Riassumerlo in "fatto" perderebbe l'unica riga che spiega.
+            // One step per domain: successful only if all its rows are, and the message
+            // reports them all. Summarising it as "done" would lose the only row that
+            // explains.
             boolean all = detail.length() > 0;
             List<String> lines = new ArrayList<>();
             for (int j = 0; j < detail.length(); j++) {
@@ -711,9 +718,11 @@ public class MtaStsSetup {
         return new JSONObject().put("domain", domain).put("ok", ok).put("messageText", message);
     }
 
-    /* ===================================================================
-     * Misure
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Measurements
+     * ===================================================================
+     */
 
     private static List<String> domains() {
         List<String> l = new ArrayList<>();
@@ -721,7 +730,7 @@ public class MtaStsSetup {
         return l;
     }
 
-    /** I nomi che il certificato deve coprire: l'hostname piu' mta-sts e autoconfig dei domini. */
+    /** The names the certificate must cover: the hostname plus the domains' mta-sts and autoconfig names. */
     public static List<String> namesToCover() {
         LinkedHashSet<String> n = new LinkedHashSet<>();
         List<String> excluded = domainsOnOtherAccount();
@@ -734,11 +743,11 @@ public class MtaStsSetup {
     }
 
     /**
-     * I domini che stanno su un account Cloudflare diverso da quello del certificato.
+     * The domains that are on a Cloudflare account different from the certificate's.
      *
-     * Non e' pignoleria: acme.sh valida tutti i nomi di un certificato con un solo token, e
-     * un nome che non si riesce a validare fa fallire l'emissione INTERA. Escluderli prima
-     * significa ottenere un certificato valido per gli altri, invece di nessun certificato.
+     * It is not pedantry: acme.sh validates all the names of a certificate with a single token, and
+     * a name that cannot be validated makes the WHOLE issuance fail. Excluding them first means
+     * getting a certificate valid for the others, instead of no certificate at all.
      */
     public static List<String> domainsOnOtherAccount() {
         List<String> outside = new ArrayList<>();
@@ -765,8 +774,8 @@ public class MtaStsSetup {
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes());
             p.waitFor();
-            // Una sola implementazione della lettura dei nomi, condivisa con AcmeManager:
-            // due letture separate finiscono per divergere, e una delle due sbaglia in silenzio.
+            // A single implementation of reading the names, shared with AcmeManager:
+            // two separate readings end up diverging, and one of the two goes wrong silently.
             for (String n : AcmeManager.namesFromSubjectAltName(out))
                 if (n.equalsIgnoreCase(name)) return true;
         } catch (Exception ignore) {}
@@ -774,13 +783,13 @@ public class MtaStsSetup {
     }
 
     /**
-     * Cosa il pannello sa DAVVERO del nome mta-sts di un dominio.
+     * What the panel REALLY knows about a domain's mta-sts name.
      *
-     * Prima c'erano due controlli separati — "il nome risolve?" e "il record e' proxato?" —
-     * e tutti e due rispondevano "va bene" quando non avevano visto niente. Su domain-d.test
-     * questo ha prodotto la contraddizione: il piano diceva "CNAME presente" perche' il nome
-     * rispondeva (grazie a un jolly della zona), mentre nella zona non esisteva alcun record
-     * con quel nome. Una sola domanda, una sola risposta, e un valore apposta per "non lo so".
+     * Before, there were two separate checks ("does the name resolve?" and "is the record
+     * proxied?") and both answered "fine" when they had seen nothing. On domain-d.test this
+     * produced the contradiction: the plan said "CNAME present" because the name answered
+     * (thanks to a wildcard in the zone), while no record with that name existed in the zone.
+     * A single question, a single answer, and a dedicated value for "I don't know".
      */
     public enum NameState { RIGHT, TO_FIX, ABSENT, BLIND }
 
@@ -788,19 +797,19 @@ public class MtaStsSetup {
         public final String domain; public final NameState state;
         public final String reason; public final boolean resolves;
         /**
-         * Il nome risponde ATTRAVERSO Cloudflare: o il record esplicito e' proxato, o il
-         * record manca e a rispondere e' un jolly proxato. Nei due casi l'effetto e' lo
-         * stesso — chi legge la politica non parla mai con il server — ma il rimedio no,
-         * e per questo il fatto viaggia come booleano invece che dentro una frase.
+         * The name answers THROUGH Cloudflare: either the explicit record is proxied, or the
+         * record is missing and what answers is a proxied wildcard. In both cases the effect is
+         * the same (whoever reads the policy never talks to the server) but the remedy is not,
+         * and that is why the fact travels as a boolean instead of inside a sentence.
          *
-         * Prima il piano ricavava questa informazione cercando la parola "Cloudflare" nel
-         * motivo. Un record insieme SBAGLIATO e PROXATO finiva cosi' nel solo conto del
-         * proxy, e il passo dei CNAME dichiarava "tutti presenti e giusti" un record che
-         * puntava altrove. Una classificazione si calcola dove stanno i fatti, non
-         * rileggendo il testo scritto per un essere umano.
+         * Before, the plan derived this information by looking for the word "Cloudflare" in the
+         * reason. A record both WRONG and PROXIED thus ended up only in the proxy count, and the
+         * CNAME step declared "all present and correct" a record that pointed elsewhere. A
+         * classification is computed where the facts are, not by rereading the text written for a
+         * human being.
          */
         public final boolean goesThroughProxy;
-        /** Il record c'e' ma il contenuto e' sbagliato: tipo errato o destinazione errata. */
+        /** The record is there but its content is wrong: wrong type or wrong destination. */
         public final boolean wrongContent;
         NameReview(String d, NameState s, String m, boolean r) { this(d, s, m, r, false, false); }
         NameReview(String d, NameState s, String m, boolean r, boolean proxy, boolean crooked) {
@@ -817,7 +826,7 @@ public class MtaStsSetup {
             cf = new CloudflareManager(Main.mailDatabase);
             domains = Main.mailDatabase.getDomains();
         } catch (Exception e) {
-            // Nessun dominio esaminato: chi chiama vede una lista vuota, non un falso "a posto".
+            // No domain examined: the caller sees an empty list, not a false "in place".
             return out;
         }
         for (MailDatabase.Domain d : domains) {
@@ -855,11 +864,11 @@ public class MtaStsSetup {
                         found = t; break;
                     }
                 if (found == null) {
-                    // "Quasi certamente c'e' un jolly" era una supposizione, scritta mentre la
-                    // lista completa dei record della zona era gia' in mano. Il jolly si guarda.
-                    // E la differenza pesa: un jolly DIETRO PROXY non e' solo il motivo per cui
-                    // il nome risponde, e' il motivo per cui risponde 526 — un fatto che il
-                    // passo del proxy deve sapere, e che una supposizione non gli puo' dare.
+                    // "Almost certainly there is a wildcard" was a guess, written while the
+                    // complete list of the zone's records was already in hand. The wildcard is
+                    // checked. And the difference matters: a wildcard BEHIND A PROXY is not
+                    // only the reason the name answers, it is the reason it answers 526: a
+                    // fact the proxy step must know, and that a guess cannot give it.
                     CloudflareManager.DnsRecordInfo wildcard = null;
                     String wildcardName = ("*." + d.domain).toLowerCase(Locale.ROOT);
                     for (CloudflareManager.DnsRecordInfo t : allItems)
@@ -868,8 +877,8 @@ public class MtaStsSetup {
                         }
                     String why;
                     if (wildcard != null)
-                        // Niente parentesi qui dentro: questo motivo viene mostrato gia' dentro
-                        // una parentesi, e due livelli annidati si leggono male.
+                        // No parentheses in here: this reason is already shown inside
+                        // parentheses, and two nested levels read badly.
                         why = ", " + (wildcard.proxied
                                 ? I18n.tr("server.sts.wildcardProxied", java.util.Map.of("d", String.valueOf(d.domain), "kind", String.valueOf(wildcard.type), "v", String.valueOf(wildcard.content)))
                                 : I18n.tr("server.sts.wildcardStraight", java.util.Map.of("d", String.valueOf(d.domain), "kind", String.valueOf(wildcard.type), "v", String.valueOf(wildcard.content))));
@@ -921,35 +930,38 @@ public class MtaStsSetup {
     }
 
     /**
-     * Cosa dice il DNS del record _mta-sts, con un valore apposta per "non l'ho chiesto".
+     * What DNS says about the _mta-sts record, with a dedicated value for "I did not ask".
      *
-     * Prima questa lettura era un booleano solo — "il record c'e' ed e' quello giusto?" — e
-     * rispondeva NO in tre casi diversissimi: record assente, record presente con un id
-     * vecchio, e interrogazione DNS fallita. Il piano non poteva distinguerli, e infatti il
-     * secondo caso — l'unico pericoloso, perche' e' una dichiarazione pubblica gia' in aria —
-     * spariva. Tre risposte diverse vogliono tre valori diversi.
+     * Before, this reading was a single boolean ("is the record there and is it the right one?")
+     * and it answered NO in three very different cases: record missing, record present with an
+     * old id, and DNS query failed. The plan could not tell them apart, and in fact the second
+     * case (the only dangerous one, because it is a public declaration already out there)
+     * disappeared. Three different answers want three different values.
      *
-     * NON_CHIESTO vuol dire "non lo so": dig che non parte, un DNS che non risponde, oppure un
-     * DNS che risponde con un errore (SERVFAIL, REFUSED) invece che con il contenuto del nome.
+     * NON_CHIESTO means "I don't know": dig that does not start, a DNS that does not answer, or a
+     * DNS that answers with an error (SERVFAIL, REFUSED) instead of with the content of the name.
      *
-     * TROPPI vuol dire piu' di un record v=STSv1 sullo stesso nome: per i mittenti e' come non
-     * averne nessuno (RFC 8461 §3.1, vedi DnsRules.onlyMtaSts). Prima si leggeva il primo e si
-     * diceva PRESENTE, e il passo poteva risultare fatto su un MTA-STS che nessuno usa.
+     * TROPPI means more than one v=STSv1 record on the same name: for senders it is like having
+     * none (RFC 8461 Section 3.1, see DnsRules.onlyMtaSts). Before, the first one was read and the
+     * answer was PRESENTE, and the step could appear done on an MTA-STS nobody uses.
      *
-     * E' pubblica perche' la stessa lettura serve alla pagina DNS: due letture dello stesso
-     * record sono due letture che un giorno rispondono in modo diverso.
+     * It is public because the DNS page needs the same reading: two readings of the same record
+     * are two readings that one day answer differently.
      */
     public enum TxtOutcome { PRESENT, ABSENT, TOO_MANY, NOT_ASKED }
 
     public static final class TxtReading {
         public final TxtOutcome outcome;
-        /** Con PRESENTE, il record. Altrimenti vuoto, anche con TROPPI: li' "il" record non c'e'. */
+        /**
+         * With PRESENTE, the record. Otherwise empty, even with TROPPI: there, "the" record does not
+         * exist.
+         */
         public final String content;
-        /** Tutti i record v=STSv1 trovati: uno con PRESENTE, piu' d'uno con TROPPI. */
+        /** All the v=STSv1 records found: one with PRESENTE, more than one with TROPPI. */
         public final List<String> values;
         /**
-         * Con NON_CHIESTO, il perche': "il DNS risponde SERVFAIL" e "nessun DNS risponde"
-         * portano a cercare il guasto in posti diversi.
+         * With NON_CHIESTO, the reason: "the DNS answers SERVFAIL" and "no DNS answers"
+         * lead to looking for the fault in different places.
          */
         public final String reason;
 
@@ -961,7 +973,7 @@ public class MtaStsSetup {
         }
     }
 
-    /** Dai record v=STSv1 del nome: nessuno, uno solo, o troppi. */
+    /** From the name's v=STSv1 records: none, only one, or too many. */
     private static TxtReading found(List<String> sts) {
         TxtOutcome e = sts.isEmpty() ? TxtOutcome.ABSENT
                    : sts.size() == 1 ? TxtOutcome.PRESENT : TxtOutcome.TOO_MANY;
@@ -974,10 +986,10 @@ public class MtaStsSetup {
 
     public static TxtReading readTxt(String domain) {
         try {
-            // Senza +short: serve lo stato della risposta. Con +short un SERVFAIL (una zona
-            // rotta, un DNSSEC che non torna) esce con 0 e non stampa niente, esattamente come un
-            // nome senza record: il piano leggeva "assente" e proponeva di pubblicare un record
-            // che forse c'e' gia'.
+            // Without +short: the status of the answer is needed. With +short a SERVFAIL (a broken
+            // zone, a DNSSEC that does not validate) exits with 0 and prints nothing, exactly like a
+            // name without records: the plan read "absent" and offered to publish a record that
+            // might already be there.
             ProcessBuilder pb = new ProcessBuilder("dig", "+noall", "+comments", "+answer",
                     "TXT", "_mta-sts." + domain);
             Shell.applyPath(pb);
@@ -986,33 +998,33 @@ public class MtaStsSetup {
             String out = new String(p.getInputStream().readAllBytes());
             return parseTxt(p.waitFor(), out);
         } catch (Exception e) {
-            // dig che non c'e' o non parte: non ho chiesto niente a nessuno.
+            // dig missing or not starting: I asked nobody anything.
             return unknown(I18n.tr("server.sts.digNoStart"));
         }
     }
 
     // ";; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 55131"
     private static final Pattern DIG_STATE = Pattern.compile("->>HEADER<<-.*\\bstatus:\\s*([A-Z]+)");
-    // "_mta-sts.domain-d.test.  3600  IN  TXT  "v=STSv1; id=..."": nome, TTL e classe, poi il tipo
+    // "_mta-sts.domain-d.test.  3600  IN  TXT  "v=STSv1; id=..."": name, TTL and class, then the type
     private static final Pattern LINE_TXT = Pattern.compile("^\\S+\\s+(?:\\d+\\s+)?(?:IN\\s+)?TXT\\s+(.+)$",
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * Cosa vuol dire l'uscita di "dig +noall +comments +answer TXT _mta-sts.<dominio>": il
-     * codice con cui dig e' uscito e cio' che ha stampato. Sta da sola perche' le prove la
-     * verifichino con uscite di dig registrate, senza bisogno di un DNS raggiungibile; e'
-     * pubblica perche' la usano anche le prove della pagina DNS, che stanno in un altro pacchetto.
+     * What the output of "dig +noall +comments +answer TXT _mta-sts.<domain>" means: the code
+     * dig exited with and what it printed. It stands alone so that the tests can verify it with
+     * recorded dig outputs, without needing a reachable DNS; it is public because the DNS page
+     * tests use it too, and they are in another package.
      *
-     * Lo stato della risposta decide prima del contenuto:
-     *   NOERROR  -> il nome c'e': si contano i suoi record v=STSv1. Nessuno e' ASSENTE, uno
-     *               e' PRESENTE, piu' d'uno e' TROPPI;
-     *   NXDOMAIN -> il nome non esiste: ASSENTE;
-     *   un altro stato (SERVFAIL, REFUSED...) o nessuno -> il DNS non ha detto che cosa c'e':
+     * The status of the answer decides before the content:
+     *   NOERROR  -> the name exists: its v=STSv1 records are counted. None is ASSENTE, one
+     *               is PRESENTE, more than one is TROPPI;
+     *   NXDOMAIN -> the name does not exist: ASSENTE;
+     *   another status (SERVFAIL, REFUSED...) or none -> the DNS did not say what is there:
      *   NON_CHIESTO.
      */
     public static TxtReading parseTxt(int digOutput, String printed) {
-        // dig torna 0 anche quando il nome non esiste: un'uscita diversa da zero vuol dire
-        // che non ho CHIESTO, non che la risposta sia "niente". Sono cose opposte.
+        // dig returns 0 even when the name does not exist: a non-zero exit means that I
+        // did not ASK, not that the answer is "nothing". They are opposite things.
         if (digOutput == 9) return unknown(I18n.tr("server.sts.noDnsAnswers"));
         if (digOutput != 0 || printed == null) return unknown(I18n.tr("server.sts.digExit", java.util.Map.of("c", String.valueOf(digOutput))));
         Matcher state = DIG_STATE.matcher(printed);
@@ -1020,30 +1032,30 @@ public class MtaStsSetup {
         if (s.equals("NXDOMAIN")) return found(List.of());
         if (s.isEmpty()) return unknown(I18n.tr("server.sts.digNoStatus"));
         if (!s.equals("NOERROR")) return unknown(I18n.tr("server.sts.dnsAnswers", java.util.Map.of("s", String.valueOf(s))));
-        // Tutti i TXT del nome, non il primo che va bene: il conto dei record v=STSv1 e' parte
-        // della risposta.
+        // All the TXT records of the name, not the first one that fits: the count of v=STSv1
+        // records is part of the answer.
         List<String> txt = new ArrayList<>();
         for (String line : printed.split("\n")) {
             String t = line.trim();
             if (t.isEmpty() || t.startsWith(";")) continue;
-            Matcher m = LINE_TXT.matcher(t);          // un CNAME davanti al TXT si salta
+            Matcher m = LINE_TXT.matcher(t);          // a CNAME in front of the TXT is skipped
             if (m.matches()) txt.addAll(DnsRules.recordTxt(m.group(1)));
         }
         return found(DnsRules.onlyMtaSts(txt));
     }
 
     /**
-     * Il record TXT che questo pannello scriverebbe adesso.
+     * The TXT record this panel would write now.
      *
-     * Non basta che il record esista: l'id deve corrispondere alla politica servita, altrimenti
-     * i mittenti non si accorgeranno delle modifiche future. I record creati dal vecchio
-     * pannello hanno un id fisso — un orologio scritto una volta sola — che non cambierebbe
-     * mai. Un piano che li desse per "fatti" nasconderebbe proprio la cosa da sistemare.
+     * It is not enough that the record exists: the id must match the served policy, otherwise
+     * senders will not notice future changes. The records created by the old panel have a
+     * fixed id (a clock reading written once only) that would never change. A plan that took
+     * them as "done" would hide exactly the thing to fix.
      */
     private static String expectedTxt() {
-        // Non si ricalcola qui: lo sa MtaSts, che e' anche chi serve la politica. Tre punti
-        // che compongono la stessa stringa sono tre stringhe che un giorno divergono — ed e'
-        // gia' successo, con l'id da orologio del riepilogo DNS.
+        // It is not recomputed here: MtaSts knows it, and it is also what serves the policy.
+        // Three places that compose the same string are three strings that one day diverge,
+        // and it has already happened, with the clock-based id of the DNS summary.
         return MtaSts.currentTxtRecord();
     }
 

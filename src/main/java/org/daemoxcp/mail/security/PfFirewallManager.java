@@ -13,25 +13,25 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /**
- * Gestione firewall pf con:
- *  - Whitelist/blacklist CIDR manuali (es. 109.105.211.0/24)
- *  - Whitelist/blacklist paesi via GeoIP (range CIDR da ipdeny.com)
- *  - Anchor separato 'panel-fw' su /etc/pf.conf
- *  - Apply atomico con syntax check + rollback
+ * pf firewall management with:
+ *  - Manual CIDR whitelist/blacklist (e.g. 109.105.211.0/24)
+ *  - Country whitelist/blacklist via GeoIP (CIDR ranges from ipdeny.com)
+ *  - Separate 'panel-fw' anchor on /etc/pf.conf
+ *  - Atomic apply with syntax check + rollback
  *
- * File di stato (configurazione persistente):
+ * State file (persistent configuration):
  *   /usr/local/etc/daemoxcp-mail/firewall.json
  *
- * Storage GeoIP (zone files):
+ * GeoIP storage (zone files):
  *   /var/db/daemoxcp-mail/geoip/{cc}.zone
  *
- * Anchor pf generato:
+ * Generated pf anchor:
  *   /etc/pf.anchors/panel-fw.conf
  *
  * SAFETY:
- *  - Ogni modifica pf.conf fa backup .bak.&lt;timestamp&gt;
- *  - pfctl -nf per syntax check prima di applicare
- *  - Whitelist mode SOLO sulle porte AUTH (no port 25) per evitare di bloccare la consegna mail in entrata
+ *  - Every pf.conf change makes a .bak.&lt;timestamp&gt; backup
+ *  - pfctl -nf for the syntax check before applying
+ *  - Whitelist mode ONLY on the AUTH ports (no port 25) to avoid blocking incoming mail delivery
  */
 public class PfFirewallManager {
 
@@ -44,11 +44,11 @@ public class PfFirewallManager {
     private static final String ANCHOR_FILE = "/etc/pf.anchors/panel-fw.conf";
     private static final String PF_CONF    = "/etc/pf.conf";
 
-    // === Porte protette dalla geo-whitelist (AUTH/USER-facing) ===
-    // Port 25 (SMTP receive) NON e' in whitelist by default: i mail server esteri
-    // devono poter consegnare. Si puo' bloccare se l'utente lo vuole esplicitamente.
-    // POP3 (110, 995) solo se l'amministratore l'ha acceso (Pop3): spento, Dovecot non lo serve e pf
-    // non lo fa entrare (PfPolicy), e qui non c'e'.
+    // === Ports protected by the geo-whitelist (AUTH/USER-facing) ===
+    // Port 25 (SMTP receive) is NOT in the whitelist by default: foreign mail servers
+    // must be able to deliver. It can be blocked if the user explicitly wants it.
+    // POP3 (110, 995) only if the administrator has switched it on (Pop3): when off, Dovecot does not serve it and pf
+    // does not let it in (PfPolicy), and it is not here.
     private static String authPorts() {
         return org.daemoxcp.mail.system.Pop3.wanted() ? "{ 465, 587, 143, 993, 110, 995 }" : "{ 465, 587, 143, 993 }";
     }
@@ -57,12 +57,12 @@ public class PfFirewallManager {
         return org.daemoxcp.mail.system.Pop3.wanted() ? "{ 25, 465, 587, 143, 993, 110, 995 }" : "{ 25, 465, 587, 143, 993 }";
     }
 
-    // === Modi ===
+    // === Modes ===
     public enum Mode {
-        DISABLED,         // anchor caricato vuoto
-        CIDR_ONLY,        // solo whitelist/blacklist manuali
-        GEO_WHITELIST,    // solo paesi in lista possono accedere alle porte AUTH
-        GEO_BLACKLIST     // paesi in lista bloccati (su tutte le porte mail)
+        DISABLED,         // anchor loaded empty
+        CIDR_ONLY,        // manual whitelist/blacklist only
+        GEO_WHITELIST,    // only listed countries can reach the AUTH ports
+        GEO_BLACKLIST     // listed countries blocked (on all mail ports)
     }
 
     public static class FirewallState {
@@ -75,25 +75,25 @@ public class PfFirewallManager {
         public boolean applyGeoToPort25 = false;
         // === Auto-sync GeoIP ===
         public boolean autoSyncEnabled = false;
-        public int autoSyncIntervalDays = 7;   // ogni quanti giorni considerare "stale" un paese
-        public long lastAutoSyncCheck = 0;     // epoch ms ultimo check (non download)
-        public long lastAutoSyncRun = 0;       // epoch ms ultimo download fatto dall'auto-sync
+        public int autoSyncIntervalDays = 7;   // after how many days a country is considered "stale"
+        public long lastAutoSyncCheck = 0;     // epoch ms of the last check (not download)
+        public long lastAutoSyncRun = 0;       // epoch ms of the last download made by the auto-sync
     }
 
-    /** Stato 'freschezza' di un paese sincronizzato. */
+    /** 'Freshness' state of a synchronised country. */
     public enum Freshness {
-        NEVER,    // mai scaricato
-        FRESH,    // < 7 giorni
-        AGING,    // 7-30 giorni
-        STALE,    // 30-90 giorni
-        VERY_STALE // > 90 giorni
+        NEVER,    // never downloaded
+        FRESH,    // < 7 days
+        AGING,    // 7-30 days
+        STALE,    // 30-90 days
+        VERY_STALE // > 90 days
     }
 
     public static Freshness computeFreshness(long lastSyncMs, int intervalDays) {
         if (lastSyncMs <= 0) return Freshness.NEVER;
         long ageMs = System.currentTimeMillis() - lastSyncMs;
         long ageDays = ageMs / (24L * 3600L * 1000L);
-        // Soglie relative all'intervallo configurato dall'utente
+        // Thresholds relative to the interval configured by the user
         long fresh = Math.max(1, intervalDays);
         if (ageDays < fresh) return Freshness.FRESH;
         if (ageDays < fresh * 2L) return Freshness.AGING;
@@ -115,13 +115,13 @@ public class PfFirewallManager {
         this(true);
     }
 
-    /** background false: solo lo stato salvato, senza riapplicare all'avvio e senza la sincronizzazione dei paesi. */
+    /** background false: only the saved state, without re-applying at startup and without synchronising the countries. */
     private PfFirewallManager(boolean background) {
         loadState();
         if (!background) return;
-        // Auto-apply al boot: se il firewall era ATTIVO prima del riavvio, ri-applica
-        // l'anchor nel kernel. Importante perche' in pf.conf non c'e' "load anchor",
-        // quindi al boot l'anchor panel-fw e' vuoto finche' il pannello non lo carica.
+        // Auto-apply at boot: if the firewall was ACTIVE before the restart, re-apply
+        // the anchor in the kernel. Important because pf.conf has no "load anchor",
+        // so at boot the panel-fw anchor is empty until the panel loads it.
         if (state.enabled && state.mode != Mode.DISABLED) {
             scheduler.schedule(() -> {
                 try {
@@ -133,16 +133,16 @@ public class PfFirewallManager {
                 }
             }, 10, java.util.concurrent.TimeUnit.SECONDS);
         }
-        // Avvia auto-sync ogni ora (controlla, scarica solo se serve)
+        // Start the hourly auto-sync (checks, downloads only if needed)
         scheduler.scheduleWithFixedDelay(this::autoSyncTick,
             5, 60 * 60, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     /**
-     * L'anchor panel-fw di nuovo, dallo stato salvato, senza avviare i lavori in sottofondo: per la console, che cambia
-     * la scelta IPv4/IPv6 (Main --ip-family) e poi esce. L'anchor dipende dalla scelta (il rifiuto della famiglia
-     * chiusa e' la sua prima regola): dalla pagina lo ricarica gia' /api/ip-family, dalla console non lo ricaricava
-     * nessuno. Null se il firewall del pannello e' spento o disattivato: allora l'anchor e' vuoto e decide pf.conf.
+     * The panel-fw anchor again, from the saved state, without starting the background jobs: for the console, which changes
+     * the IPv4/IPv6 choice (Main --ip-family) and then exits. The anchor depends on the choice (refusing the closed
+     * family is its first rule): from the page /api/ip-family already reloads it, from the console nobody
+     * reloaded it. Null if the panel firewall is off or disabled: then the anchor is empty and pf.conf decides.
      */
     public static ApplyResult reapplySaved() {
         PfFirewallManager m = new PfFirewallManager(false);
@@ -151,11 +151,11 @@ public class PfFirewallManager {
     }
 
     /**
-     * Tick periodico (1/h) del scheduler. Controlla quali paesi sono "stale"
-     * (oltre l'intervallo configurato) e li ri-scarica. NOOP se auto-sync disattivato.
+     * Periodic scheduler tick (1/h). Checks which countries are "stale"
+     * (beyond the configured interval) and downloads them again. NOOP if auto-sync is disabled.
      *
-     * Strategia: scarica al massimo 5 paesi per tick per non saturare la banda.
-     * Se ci sono piu' di 5 paesi stale, gli altri verranno presi al prossimo tick.
+     * Strategy: download at most 5 countries per tick so as not to saturate the bandwidth.
+     * If there are more than 5 stale countries, the others will be picked up at the next tick.
      */
     private void autoSyncTick() {
         try {
@@ -203,7 +203,7 @@ public class PfFirewallManager {
     // STATO: load / save JSON
     // ================================================================
     public synchronized FirewallState getState() {
-        // Ritorna una copia per evitare mutazioni accidentali
+        // Returns a copy to avoid accidental mutations
         FirewallState copy = new FirewallState();
         copy.mode = state.mode;
         copy.enabled = state.enabled;
@@ -290,16 +290,16 @@ public class PfFirewallManager {
     }
 
     // ================================================================
-    // VALIDAZIONE
+    // VALIDATION
     // ================================================================
-    /** Valida un IP/CIDR. Accetta v4, v6, con o senza /N. */
+    /** Validates an IP/CIDR. Accepts v4, v6, with or without /N. */
     public static boolean isValidCidr(String cidr) {
         if (cidr == null) return false;
         cidr = cidr.trim();
         return cidr.matches("^[0-9a-fA-F:.]+(/[0-9]{1,3})?$") && cidr.length() <= 64;
     }
 
-    /** Valida un codice paese ISO-3166-1 alpha-2. */
+    /** Validates an ISO-3166-1 alpha-2 country code. */
     public static boolean isValidCountryCode(String cc) {
         if (cc == null) return false;
         return cc.toLowerCase().matches("^[a-z]{2}$");
@@ -364,8 +364,8 @@ public class PfFirewallManager {
     }
 
     /**
-     * Aggiunge una lista di paesi (es. tutti i membri UE). Salta i codici non validi.
-     * Ritorna il numero di paesi effettivamente aggiunti (esclusi duplicati).
+     * Adds a list of countries (e.g. all EU members). Skips invalid codes.
+     * Returns the number of countries actually added (duplicates excluded).
      */
     public synchronized int bulkAddCountries(Collection<String> codes) {
         int added = 0;
@@ -379,7 +379,7 @@ public class PfFirewallManager {
     }
 
     /**
-     * Rimuove una lista di paesi.
+     * Removes a list of countries.
      */
     public synchronized int bulkRemoveCountries(Collection<String> codes) {
         int removed = 0;
@@ -390,7 +390,7 @@ public class PfFirewallManager {
         return removed;
     }
 
-    /** Svuota completamente la lista paesi selezionati. */
+    /** Completely empties the list of selected countries. */
     public synchronized int clearCountries() {
         int n = state.geoCountries.size();
         state.geoCountries.clear();
@@ -399,13 +399,13 @@ public class PfFirewallManager {
     }
 
     /**
-     * Scarica gli indirizzi di un paese da ipdeny.com, IPv4 e IPv6, nello stesso file: una tabella di pf tiene tutte e
-     * due le famiglie. Prima c'era solo la lista IPv4: con la whitelist ogni client IPv6 restava fuori dalle porte di
-     * accesso, con la blacklist nessun IPv6 del paese veniva bloccato.
-     * Sorgenti: https://www.ipdeny.com/ipblocks/data/aggregated/{cc}-aggregated.zone (IPv4) e
+     * Downloads a country's addresses from ipdeny.com, IPv4 and IPv6, into the same file: a pf table holds both
+     * families. There used to be only the IPv4 list: with the whitelist every IPv6 client stayed out of the access
+     * ports, with the blacklist no IPv6 address of the country was blocked.
+     * Sources: https://www.ipdeny.com/ipblocks/data/aggregated/{cc}-aggregated.zone (IPv4) and
      * https://www.ipdeny.com/ipv6/ipaddresses/aggregated/{cc}-aggregated.zone (IPv6).
-     * Senza la lista IPv4 non si scrive niente; senza quella IPv6 (un paese senza indirizzi IPv6, o ipdeny che non
-     * risponde) si scrive la sola IPv4 e lo si dice.
+     * Without the IPv4 list nothing is written; without the IPv6 one (a country without IPv6 addresses, or ipdeny not
+     * answering) only the IPv4 one is written, and that is reported.
      */
     public SyncResult syncCountry(String cc) {
         SyncResult res = new SyncResult();
@@ -414,8 +414,8 @@ public class PfFirewallManager {
             res.error = I18n.tr("server.pffw.badCountry");
             return res;
         }
-        // ipdeny.com non ha l'IPv6 (nessun AAAA, 18/11/2026): senza IPv4 non si scarica, e lo si dice subito invece di
-        // aspettare il tempo massimo. Le liste gia' scaricate restano in uso.
+        // ipdeny.com has no IPv6 (no AAAA, 2026-11-18): without IPv4 nothing is downloaded, and that is said at once
+        // instead of waiting for the maximum time. The lists already downloaded stay in use.
         if (!org.daemoxcp.mail.system.ServerAddresses.read().v4().present()) {
             res.error = I18n.tr("server.pffw.noIpv4Source");
             return res;
@@ -448,7 +448,7 @@ public class PfFirewallManager {
         return res;
     }
 
-    /** Le righe CIDR (IPv4 o IPv6) di una lista. */
+    /** The CIDR lines (IPv4 or IPv6) of a list. */
     public static int countCidr(String body) {
         int n = 0;
         for (String line : body.split("\n")) {
@@ -458,7 +458,7 @@ public class PfFirewallManager {
         return n;
     }
 
-    /** {testo, null} se la lista e' arrivata e ha almeno una riga CIDR; altrimenti {null, motivo}. */
+    /** {text, null} if the list arrived and has at least one CIDR line; otherwise {null, reason}. */
     private static String[] fetchZone(String url) {
         try {
             java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
@@ -478,7 +478,7 @@ public class PfFirewallManager {
         }
     }
 
-    /** Sync di tutti i paesi attualmente selezionati. */
+    /** Sync of all the currently selected countries. */
     public List<SyncResult> syncAllSelectedCountries() {
         List<SyncResult> out = new ArrayList<>();
         for (String cc : new LinkedHashSet<>(state.geoCountries)) {
@@ -495,7 +495,7 @@ public class PfFirewallManager {
         public String error;
     }
 
-    /** Numero di CIDR scaricati per un paese (o 0 se zone file mancante). */
+    /** Number of CIDRs downloaded for a country (or 0 if the zone file is missing). */
     public int getCountryCidrCount(String cc) {
         try {
             Path p = Paths.get(GEOIP_DIR, cc.toLowerCase() + ".zone");
@@ -512,20 +512,20 @@ public class PfFirewallManager {
     }
 
     // ================================================================
-    // GENERAZIONE ANCHOR PF + APPLY
+    // PF ANCHOR GENERATION + APPLY
     // ================================================================
     /**
-     * La riga di una tabella dell'anchor. Vuota si scrive {@code { }}: senza graffe pf, ricaricando l'anchor, tiene il
-     * contenuto di prima, e l'ultimo indirizzo tolto da una lista (consentiti o bloccati) restava attivo in pf fino al
-     * riavvio (prova di tutte le funzioni del pannello 0.9.0 su FreeBSD 15.1, 18/11/2026: con {@code { }} la tabella si
-     * svuota). pf non accetta commenti dentro le graffe.
+     * The line of an anchor table. An empty one is written {@code { }}: without braces pf, when reloading the anchor,
+     * keeps the previous content, and the last address removed from a list (allowed or blocked) stayed active in pf
+     * until the restart (test of all the panel functions 0.9.0 on FreeBSD 15.1, 2026-11-18: with {@code { }} the table
+     * is emptied). pf does not accept comments inside the braces.
      */
     static String tableLine(String name, java.util.Collection<String> cidrs) {
         return "table <" + name + "> persist { " + String.join(", ", cidrs) + (cidrs.isEmpty() ? "" : " ") + "}\n";
     }
 
     /**
-     * Genera il contenuto dell'anchor panel-fw secondo lo stato corrente e la scelta IPv4/IPv6 (IpFamily).
+     * Generates the content of the panel-fw anchor according to the current state and the IPv4/IPv6 choice (IpFamily).
      */
     public String generateAnchorContent() {
         StringBuilder sb = new StringBuilder();
@@ -544,9 +544,9 @@ public class PfFirewallManager {
     }
 
     /**
-     * Le tabelle e le regole dell'anchor. geoFiles: le liste dei paesi gia' scaricate; refusal: il rifiuto della famiglia
-     * chiusa dalla scelta IPv4/IPv6 (PfPolicy.closedRefusal, quick), o null. Puro, a parte le porte di POP3 (senza
-     * database POP3 e' spento).
+     * The anchor's tables and rules. geoFiles: the country lists already downloaded; refusal: the refusal of the family
+     * closed by the IPv4/IPv6 choice (PfPolicy.closedRefusal, quick), or null. Pure, apart from the POP3 ports (without a
+     * database POP3 is off).
      */
     static String anchorBody(FirewallState state, List<String> geoFiles, String refusal) {
         StringBuilder sb = new StringBuilder();
@@ -555,13 +555,13 @@ public class PfFirewallManager {
             return sb.toString();
         }
 
-        // Definizione tabelle (tableLine: vuote con { }, mai senza graffe).
+        // Table definitions (tableLine: empty ones with { }, never without braces).
         sb.append(tableLine("panel_wl_cidrs", state.whitelistCidrs));
         sb.append(tableLine("panel_bl_cidrs", state.blacklistCidrs));
 
-        // Geo: una tabella unica con TUTTI i CIDR dei paesi selezionati
-        // Se modalita' GEO ma nessun zone file disponibile, salta le regole geo
-        // (altrimenti GEO_WHITELIST con tabella vuota = lockout totale!)
+        // Geo: a single table with ALL the CIDRs of the selected countries
+        // If GEO mode but no zone file available, skip the geo rules
+        // (otherwise GEO_WHITELIST with an empty table = total lockout!)
         boolean geoActive = false;
         if (state.mode == Mode.GEO_WHITELIST || state.mode == Mode.GEO_BLACKLIST) {
             geoActive = !geoFiles.isEmpty();
@@ -582,25 +582,26 @@ public class PfFirewallManager {
 
         sb.append("\n");
 
-        // === Regole ===
-        // 0. La famiglia chiusa dalla scelta IPv4/IPv6 (IpFamily): un rifiuto subito, prima di tutto il resto. Senza,
-        //    le regole quick qui sotto decidevano da sole: l'IPv6 di un paese consentito o di un indirizzo consentito
-        //    entrava anche con la posta in IPv6 solo in uscita, e quello degli altri spariva in silenzio invece del «no».
-        //    SSH non c'e': la sua regola non la cambia il pannello, e da li' si torna sempre indietro.
+        // === Rules ===
+        // 0. The family closed by the IPv4/IPv6 choice (IpFamily): an immediate refusal, before everything else.
+        //    Without it, the quick rules below decided on their own: the IPv6 address of an allowed country or of an
+        //    allowed address got in even with mail in IPv6 outgoing only, and that of the others vanished silently
+        //    instead of the "no". SSH is not here: its rule is not changed by the panel, and from there one can always
+        //    go back.
         if (refusal != null) {
             sb.append("# The family closed by the IPv4/IPv6 choice: refused at once, before lists and countries\n");
             sb.append(refusal).append("\n");
         }
 
-        // 1. CIDR whitelist: sempre pass (override tutto)
+        // 1. CIDR whitelist: always pass (overrides everything)
         sb.append("# CIDR allow list: always allowed\n");
         sb.append("pass in quick from <panel_wl_cidrs> to any keep state\n");
 
-        // 2. CIDR blacklist: sempre block
+        // 2. CIDR blacklist: always block
         sb.append("# CIDR block list: always blocked\n");
         sb.append("block in quick from <panel_bl_cidrs> to any\n");
 
-        // 3. Geo rules — solo se geoActive (zone files presenti)
+        // 3. Geo rules - only if geoActive (zone files present)
         if (geoActive && state.mode == Mode.GEO_WHITELIST) {
             String ports = state.applyGeoToPort25
                 ? mailPorts()
@@ -621,18 +622,18 @@ public class PfFirewallManager {
     }
 
     /**
-     * Apply atomico:
-     *  1. Scrive nuovo anchor in temp
-     *  2. pfctl -nf -a panel-fw temp  → syntax check
-     *  3. Se OK: cp temp → ANCHOR_FILE
-     *  4. pfctl -a panel-fw -f ANCHOR_FILE → carica nel kernel
-     *  5. Backup vecchio anchor con .bak.timestamp
+     * Atomic apply:
+     *  1. Writes the new anchor to temp
+     *  2. pfctl -nf -a panel-fw temp  -> syntax check
+     *  3. If OK: cp temp -> ANCHOR_FILE
+     *  4. pfctl -a panel-fw -f ANCHOR_FILE -> loads into the kernel
+     *  5. Backs up the old anchor with .bak.timestamp
      *
-     * In caso di errore, anchor precedente rimane attivo.
+     * In case of error, the previous anchor stays active.
      */
     /**
-     * Calcola il numero totale di CIDR caricati nelle zone files dei paesi selezionati.
-     * Serve per dimensionare net.pf.request_maxcount.
+     * Computes the total number of CIDRs loaded in the zone files of the selected countries.
+     * Used to size net.pf.request_maxcount.
      */
     private long countTotalGeoCidrs() {
         long total = 0;
@@ -643,40 +644,40 @@ public class PfFirewallManager {
     }
 
     /**
-     * Assicura che net.pf.request_maxcount sia abbastanza alto per le nostre tabelle.
-     * Default FreeBSD = 65535. Per geo whitelist di EU+altri serve facilmente 100k+.
-     * Imposta runtime + rende persistente al boot via /etc/sysctl.conf.
+     * Makes sure net.pf.request_maxcount is high enough for our tables.
+     * FreeBSD default = 65535. A geo whitelist of EU+others easily needs 100k+.
+     * Sets it at runtime + makes it persistent at boot via /etc/sysctl.conf.
      */
     private void ensurePfRequestMaxcount(long needed) {
-        // Margine di sicurezza: ci serve 2× il numero atteso per crescita futura
+        // Safety margin: we need 2x the expected number for future growth
         long target = Math.max(needed * 2L, 200_000L);
-        // Arrotonda al milione successivo per non dover toccare ogni volta
+        // Round up to the next million so we do not have to touch it every time
         if (target > 1_000_000L) target = ((target / 1_000_000L) + 1L) * 1_000_000L;
         else target = 1_000_000L;
 
         try {
-            // Verifica valore corrente
+            // Check the current value
             Shell.Result q = Shell.run(Duration.ofSeconds(5),
                 "/sbin/sysctl", "-n", "net.pf.request_maxcount");
             long current = 0;
             try { current = Long.parseLong(q.outputTrim()); } catch (Exception ignored) {}
-            if (current >= target) return; // gia' sufficiente
+            if (current >= target) return; // already enough
 
-            // Imposta a runtime
+            // Set at runtime
             Shell.run(Duration.ofSeconds(5),
                 "/sbin/sysctl", "net.pf.request_maxcount=" + target);
 
-            // Persistenza in /etc/sysctl.conf
+            // Persistence in /etc/sysctl.conf
             Path sysctl = Paths.get("/etc/sysctl.conf");
             String existing = Files.exists(sysctl) ? Files.readString(sysctl) : "";
-            // Rimuovi eventuali righe vecchie net.pf.request_maxcount=
+            // Remove any old net.pf.request_maxcount= lines
             StringBuilder cleaned = new StringBuilder();
             for (String line : existing.split("\n", -1)) {
                 if (!line.trim().startsWith("net.pf.request_maxcount=")) {
                     cleaned.append(line).append("\n");
                 }
             }
-            // Rimuovi trailing newline doppi
+            // Remove double trailing newlines
             String cleanedStr = cleaned.toString().replaceAll("\n+$", "\n");
             cleanedStr += "# Panel: raised for pf tables with many CIDRs (GeoIP)\n";
             cleanedStr += "net.pf.request_maxcount=" + target + "\n";
@@ -697,8 +698,8 @@ public class PfFirewallManager {
         try {
             Files.createDirectories(Paths.get("/etc/pf.anchors"));
 
-            // 0. PRE-CHECK: se geo mode attiva, assicura che net.pf.request_maxcount
-            //    sia abbastanza alto. Default FreeBSD = 65535 — troppo basso per EU+geo.
+            // 0. PRE-CHECK: if geo mode is active, make sure net.pf.request_maxcount
+            //    is high enough. FreeBSD default = 65535 - too low for EU+geo.
             if (state.mode == Mode.GEO_WHITELIST || state.mode == Mode.GEO_BLACKLIST) {
                 long totalCidrs = countTotalGeoCidrs();
                 if (totalCidrs > 0) {
@@ -706,7 +707,7 @@ public class PfFirewallManager {
                 }
             }
 
-            // 1. Genera nuovo contenuto
+            // 1. Generate the new content
             String newContent = generateAnchorContent();
             Path tempFile = Paths.get(ANCHOR_FILE + ".new");
             Files.writeString(tempFile, newContent, StandardCharsets.UTF_8);
@@ -721,7 +722,7 @@ public class PfFirewallManager {
                 return r;
             }
 
-            // 3. Backup attuale (se esiste)
+            // 3. Back up the current one (if it exists)
             Path current = Paths.get(ANCHOR_FILE);
             if (Files.exists(current)) {
                 Path backup = org.daemoxcp.mail.system.ConfigBackups.copy(current);
@@ -731,10 +732,10 @@ public class PfFirewallManager {
             // 4. Replace
             Files.move(tempFile, current, StandardCopyOption.REPLACE_EXISTING);
 
-            // 5. Assicurati che pf.conf includa l'anchor panel-fw
+            // 5. Make sure pf.conf includes the panel-fw anchor
             ensureAnchorInPfConf();
 
-            // 6. Carica nel kernel
+            // 6. Load into the kernel
             Shell.Result load = Shell.run(Duration.ofSeconds(20),
                 "/sbin/pfctl", "-a", "panel-fw", "-f", ANCHOR_FILE);
             if (!load.success()) {
@@ -764,24 +765,24 @@ public class PfFirewallManager {
     }
 
     /**
-     * Verifica che /etc/pf.conf includa 'anchor "panel-fw"' e 'load anchor panel-fw'.
-     * Se manca, lo aggiunge (con backup).
+     * Checks that /etc/pf.conf includes 'anchor "panel-fw"' and 'load anchor panel-fw'.
+     * If missing, adds it (with a backup).
      */
     private void ensureAnchorInPfConf() throws IOException {
         Path pfConf = Paths.get(PF_CONF);
         if (!Files.exists(pfConf)) return;
         String content = Files.readString(pfConf);
         boolean hasAnchor = content.contains("anchor \"panel-fw\"") || content.contains("anchor panel-fw");
-        // IMPORTANTE: NON usiamo "load anchor" in pf.conf. Pf carica atomicamente
-        // l'intera config con il limit VECCHIO della tabella attivo durante il parse,
-        // quindi se proviamo a caricare 100k+ CIDR via "load anchor" con limit=200k
-        // di default, fallisce ANCHE se subito sopra c'e' "set limit ... 2000000".
-        // Soluzione: il pannello carica l'anchor SEPARATAMENTE via "pfctl -a panel-fw -f"
-        // DOPO che pf.conf ha aumentato il limit. Quindi rimuoviamo eventuali
-        // "load anchor panel-fw" gia' presenti.
+        // IMPORTANT: we do NOT use "load anchor" in pf.conf. Pf loads the whole config
+        // atomically with the OLD table limit active during the parse,
+        // so if we try to load 100k+ CIDRs via "load anchor" with the default limit=200k,
+        // it fails EVEN IF right above there is "set limit ... 2000000".
+        // Solution: the panel loads the anchor SEPARATELY via "pfctl -a panel-fw -f"
+        // AFTER pf.conf has raised the limit. So we remove any
+        // "load anchor panel-fw" already present.
 
         boolean hasTableLimit = false;
-        // Verifica righe non-commento per "set limit table-entries"
+        // Check non-comment lines for "set limit table-entries"
         for (String line : content.split("\n")) {
             String t = line.trim();
             if (t.startsWith("#") || t.isEmpty()) continue;
@@ -793,7 +794,7 @@ public class PfFirewallManager {
 
         boolean hasLoadAnchor = content.contains("load anchor \"panel-fw\"") || content.contains("load anchor panel-fw");
 
-        if (hasAnchor && hasTableLimit && !hasLoadAnchor) return; // gia' OK
+        if (hasAnchor && hasTableLimit && !hasLoadAnchor) return; // already OK
 
         long totalCidrs = countTotalGeoCidrs() + state.whitelistCidrs.size() + state.blacklistCidrs.size();
         long targetLimit = Math.max(totalCidrs * 2L, 2_000_000L);
@@ -803,7 +804,7 @@ public class PfFirewallManager {
 
         String newContent = content;
 
-        // 1. RIMUOVI eventuali "load anchor panel-fw" — non li vogliamo in pf.conf
+        // 1. REMOVE any "load anchor panel-fw" -- we do not want them in pf.conf
         if (hasLoadAnchor) {
             StringBuilder out = new StringBuilder();
             for (String line : newContent.split("\n", -1)) {
@@ -817,7 +818,7 @@ public class PfFirewallManager {
             newContent = out.toString().replaceAll("\n+$", "\n");
         }
 
-        // 2. Aggiungi/aggiorna "set limit table-entries" all'inizio (PRIMA di qualsiasi altra direttiva)
+        // 2. Add/update "set limit table-entries" at the top (BEFORE any other directive)
         if (!hasTableLimit) {
             String[] lines = newContent.split("\n", -1);
             StringBuilder out = new StringBuilder();
@@ -836,7 +837,7 @@ public class PfFirewallManager {
             newContent = out.toString().replaceAll("\n+$", "\n");
         }
 
-        // 3. Aggiungi "anchor panel-fw" (senza load anchor!) se mancante
+        // 3. Add "anchor panel-fw" (without load anchor!) if missing
         if (!hasAnchor) {
             if (!newContent.endsWith("\n")) newContent += "\n";
             newContent += "\n# Panel firewall anchor (loaded by the panel with pfctl -a)\n";
@@ -845,7 +846,7 @@ public class PfFirewallManager {
 
         Files.writeString(pfConf, newContent, StandardCharsets.UTF_8);
 
-        // Reload pf.conf — adesso senza "load anchor" il reload e' solo per set limit + struttura
+        // Reload pf.conf - now without "load anchor" the reload is only for set limit + structure
         Shell.Result reload = Shell.run(Duration.ofSeconds(30), "/sbin/pfctl", "-f", PF_CONF);
         if (!reload.success()) {
             LOGGER.warning("pf.conf reload failed: " + reload.output());
@@ -855,22 +856,22 @@ public class PfFirewallManager {
     }
 
     /**
-     * Conta gli IP/CIDR attualmente caricati nelle tabelle pf (a runtime).
+     * Counts the IPs/CIDRs currently loaded in the pf tables (at runtime).
      */
     public Map<String, Integer> getTableSizes() {
         Map<String, Integer> sizes = new LinkedHashMap<>();
         for (String t : List.of("panel_wl_cidrs", "panel_bl_cidrs", "panel_geo_wl", "panel_geo_bl")) {
-            // Timeout 30s: tabelle geo possono avere 100k+ entries e l'output e' grande.
+            // Timeout 30s: geo tables can have 100k+ entries and the output is large.
             Shell.Result r = Shell.run(Duration.ofSeconds(30),
                 "/sbin/pfctl", "-a", "panel-fw", "-t", t, "-T", "show");
             if (r.success()) {
                 int count = 0;
                 String out = r.output();
-                // Conta solo righe che hanno un CIDR/IP (escludi warning ALTQ ed eventuali errori)
+                // Count only lines that have a CIDR/IP (exclude ALTQ warnings and any errors)
                 for (String line : out.split("\n")) {
                     String tr = line.trim();
                     if (tr.isEmpty()) continue;
-                    // Riga valida: inizia con cifra o esadecimale (IPv4 o IPv6)
+                    // Valid line: starts with a digit or a hex digit (IPv4 or IPv6)
                     if (tr.matches("^[0-9a-fA-F].*")) count++;
                 }
                 sizes.put(t, count);

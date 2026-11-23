@@ -26,16 +26,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
- * La parte root del pannello consegna a Rspamd i messaggi che gli utenti hanno spostato nella Junk o fuori (SpamLearning),
- * ogni minuto, e li cancella.
+ * The root part of the panel hands over to Rspamd the messages that users have moved into Junk or out of it
+ * (SpamLearning), every minute, and deletes them.
  *
- * La password del controller («enable», l'unica che fa imparare) resta nei segreti di root e viaggia solo da qui a
- * 127.0.0.1:11334, nell'intestazione Password. La cartella di raccolta e' di vmail: qui nessun collegamento si segue
- * (un collegamento verso un file di root diventerebbe testo dato in pasto a Rspamd), e conta solo un file vero, intero
- * (i nomi che cominciano col punto sono quelli che il programma sta ancora scrivendo). Un messaggio vuoto, piu' grande
- * di SpamLearning.MAX_BYTES o piu' vecchio di una settimana si cancella senza consegnarlo; uno che Rspamd rifiuta come
- * messaggio (400, 413) anche. Se Rspamd non risponde, o non accetta la password, i messaggi restano e si riprova al giro
- * dopo. Del contenuto non si scrive niente nel registro: solo quanti.
+ * The controller password ("enable", the only one that makes it learn) stays in root's secrets and travels only from
+ * here to 127.0.0.1:11334, in the Password header. The collection folder belongs to vmail: here no link is followed
+ * (a link to a root file would become text fed to Rspamd), and only a real, complete file counts (the names that
+ * start with a dot are those the program is still writing). A message that is empty, larger than
+ * SpamLearning.MAX_BYTES or older than a week is deleted without being handed over; so is one that Rspamd rejects
+ * as a message (400, 413). If Rspamd does not answer, or does not accept the password, the messages stay and it
+ * tries again on the next round. Nothing of the content is written to the log: only how many.
  */
 public final class SpamLearner {
 
@@ -47,16 +47,16 @@ public final class SpamLearner {
 
     private SpamLearner() {}
 
-    /** Come Rspamd ha risposto: il codice HTTP, -1 se non ha risposto. */
+    /** How Rspamd answered: the HTTP code, -1 if it did not answer. */
     @FunctionalInterface
     interface Teacher {
         int learn(String kind, byte[] message);
     }
 
-    /** Il giro: quanti imparati, quanti scartati, e se ci si e' fermati perche' Rspamd non c'era. */
+    /** The round: how many learned, how many discarded, and whether it stopped because Rspamd was not there. */
     record Round(int learned, int dropped, boolean stopped, int lastStatus) {}
 
-    /** Un giro su una cartella di raccolta qualsiasi. Puro rispetto a Teacher; now per l'eta' dei messaggi. */
+    /** One round on any collection folder. Pure with respect to Teacher; now for the age of the messages. */
     static Round round(Path spool, Teacher teacher, Instant now) throws IOException {
         int learned = 0, dropped = 0;
         for (String kind : SpamLearning.KINDS) {
@@ -82,7 +82,7 @@ public final class SpamLearner {
         return new Round(learned, dropped, false, 0);
     }
 
-    /** I messaggi interi di una cartella, i piu' vecchi prima (il nome comincia con l'ora), al massimo PER_ROUND. */
+    /** The complete messages of a folder, oldest first (the name starts with the time), at most PER_ROUND. */
     static List<Path> waiting(Path dir) throws IOException {
         List<Path> out = new ArrayList<>();
         try (DirectoryStream<Path> s = Files.newDirectoryStream(dir)) {
@@ -92,7 +92,7 @@ public final class SpamLearner {
         return out.size() > PER_ROUND ? out.subList(0, PER_ROUND) : out;
     }
 
-    /** Il file senza seguire collegamenti, al massimo expected byte; null se e' cambiato sotto le mani. */
+    /** The file without following links, at most expected bytes; null if it changed while being read. */
     static byte[] read(Path f, int expected) throws IOException {
         try (SeekableByteChannel c = Files.newByteChannel(f, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS))) {
             ByteBuffer b = ByteBuffer.allocate(expected);
@@ -105,13 +105,13 @@ public final class SpamLearner {
     }
 
     /**
-     * HTTP/1.1: su http in chiaro il client di Java prova prima a passare a HTTP/2 (h2c), e il controller di Rspamd
-     * riceveva la richiesta senza il corpo («got zero length body», 400: misurato sulla VM il 20/11/2026).
+     * HTTP/1.1: over plain http the Java client first tries to upgrade to HTTP/2 (h2c), and the Rspamd controller
+     * received the request without the body ("got zero length body", 400: measured on the VM on 2026-11-20).
      */
     private static final HttpClient HTTP = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(5)).build();
 
-    /** Il controller di Rspamd sulla macchina stessa, con la password dei segreti di root. */
+    /** The Rspamd controller on the machine itself, with the password from root's secrets. */
     static Teacher rspamd(String password) {
         return (kind, message) -> {
             try {
@@ -158,7 +158,7 @@ public final class SpamLearner {
         return true;
     }
 
-    /** Al massimo un avviso all'ora: Rspamd fermo non deve riempire il registro. */
+    /** At most one warning an hour: a stopped Rspamd must not fill the log. */
     private static void warn(String what) {
         Instant now = Instant.now();
         if (now.isBefore(lastWarning.plus(Duration.ofHours(1)))) return;
@@ -166,7 +166,7 @@ public final class SpamLearner {
         LOGGER.warning("[SpamLearning] " + what);
     }
 
-    /** Nella parte root, una volta: un giro al minuto. */
+    /** In the root part, once: one round a minute. */
     public static void start() {
         ScheduledExecutorService s = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "spam-learner");

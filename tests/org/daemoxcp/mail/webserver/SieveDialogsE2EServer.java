@@ -13,15 +13,15 @@ import java.nio.file.Path;
 import java.util.concurrent.Executors;
 
 /**
- * The real panel server for sieve-dialogs-browser-test.js (reperto 224): the Java handlers, the generated pages, the test
- * MySQL and the REAL SieveGenerator, which writes as root under /var/mail/sieve and has sievec compile the rules. Over
- * HTTPS with the name panel.localhost; a superadmin's session goes to stdout ("SESSION ..."), valid only with the
+ * The real panel server for sieve-dialogs-browser-test.js (finding 224): the Java handlers, the generated pages, the
+ * test MySQL and the REAL SieveGenerator, which writes as root under /var/mail/sieve and has sievec compile the rules.
+ * Over HTTPS with the name panel.localhost; a superadmin's session goes to stdout ("SESSION ..."), valid only with the
  * User-Agent "SieveDialogsE2EServer" (WebSessions ties it to the browser).
  *
  * <p>Seeded: the domain sieve-dialog-fields.test, the mailbox alice@ with no filters and one forward,
  * seeded@elsewhere.example, put in the database directly (so that deleting it is tried even if adding one did not
  * work). Whether root writes the rules is the machine's say: with /var/mail without its sticky bit (FreeBSD's 0775)
- * every save is refused (reperto 221); with 1775, as the panel leaves it at start, they are written.
+ * every save is refused (finding 221); with 1775, as the panel leaves it at start, they are written.
  *
  * <p>Usage (as root on the test VM, from an empty folder):
  * <pre>

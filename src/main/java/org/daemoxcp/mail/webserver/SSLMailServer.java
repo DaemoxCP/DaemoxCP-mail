@@ -45,55 +45,56 @@ import java.util.logging.Logger;
 public class SSLMailServer {
 
     /**
-     * Come gira questo server:
+     * How this server runs:
      * <ul>
-     *   <li>LEGACY: il modo di oggi, un processo root che serve tutto;</li>
-     *   <li>ROOT_PART: la parte root del pannello separato. Nessuna porta: serve solo le API che la web le
-     *       passa sul socket (serveForwarded), e fa riparazioni e lavori in background come oggi;</li>
-     *   <li>WEB_PART: la parte web, con l'utente daemoxcp_mail. La porta del pannello, i filtri, l'accesso, le
-     *       pagine e le rotte pubbliche; le API di chi ha fatto l'accesso le passa alla root
-     *       (forwardToRoot). Nessuna riparazione ne' lavoro in background.</li>
+     *   <li>LEGACY: today's mode, a single root process that serves everything;</li>
+     *   <li>ROOT_PART: the root part of the separated panel. No port: it only serves the APIs that the web part
+     *       passes to it on the socket (serveForwarded), and does repairs and background jobs as today;</li>
+     *   <li>WEB_PART: the web part, with the daemoxcp_mail user. The panel's port, the filters, the login, the
+     *       pages and the public routes; the APIs of logged-in users it passes to the root part
+     *       (forwardToRoot). No repairs and no background jobs.</li>
      * </ul>
      */
     public enum Mode { LEGACY, ROOT_PART, WEB_PART }
 
     /**
-     * Le API che la parte web serve da se', con l'utente daemoxcp_mail: non
-     * hanno bisogno di root (MySQL, SQLite in lettura, la chiave del vault in lettura, la rete). Domini e
-     * caselle chiedono alla root una sola cosa, l'operazione chiusa «mail-folders» (rootOperations), senza
-     * parametri. Tutte le altre API vanno alla root, anche /api/account: amministratori, passkey, codici e
-     * sessioni li scrive solo la root (0.8.2, A).
+     * The APIs that the web part serves by itself, with the daemoxcp_mail user: they do not need root (MySQL, SQLite read-only, the vault key read-only, the network). Domains
+     * and mailboxes ask the root part for one thing only, the closed operation "mail-folders" (rootOperations),
+     * without parameters. All the other APIs go to the root part, /api/account included: administrators,
+     * passkeys, codes and sessions are written only by the root part (0.8.2, A).
      */
     static final java.util.Set<String> WEB_LOCAL_API = java.util.Set.of("/api/theme", "/api/domains",
             "/api/mailboxes", "/api/mailconfig", "/api/webmail", "/api/statistics", "/api/apple-profile",
             "/api/blacklist_check");
-    // /apple-profile (lo scaricamento) non c'e' piu' dal 23/11/2026: il profilo si firma con la chiave del certificato
-    // della posta, che legge solo root (AppleProfile.sign). Lo stato e l'anteprima (/api/apple-profile) restano qui.
+    // /apple-profile (the download) has been gone since 2026-11-23: the profile is signed with the key of the
+    // mail certificate, which only root can read (AppleProfile.sign). The status and the preview
+    // (/api/apple-profile) stay here.
 
     /**
-     * Le operazioni che la parte web chiede alla root per nome, senza parametri, invece di passarle una
-     * richiesta: il nome, chi la puo' chiedere (uno dei permessi), cosa fa. La root rilegge la sessione e il
-     * ruolo dal database come per le richieste inoltrate.
+     * The operations that the web part asks the root part for by name, without parameters, instead of passing
+     * it a request: the name, who can ask for it (one of the permissions), what it does. The root part rereads
+     * the session and the role from the database, as for forwarded requests.
      */
     private record RootOperation(java.util.Set<String> anyOf,
                                  java.util.function.BiConsumer<WebSessions.Current, RootChannel.Request> work) {}
 
     private Map<String, RootOperation> rootOperations() {
         return Map.of(
-                // Le cartelle della posta delle caselle (dai nomi di MySQL, ricontrollati da SafeNames) e il reload
-                // di Postfix e Dovecot, dopo aver aggiunto o tolto un dominio o una casella.
+                // The mail folders of the mailboxes (from the names in MySQL, rechecked by SafeNames) and the reload
+                // of Postfix and Dovecot, after adding or removing a domain or a mailbox.
                 "mail-folders", new RootOperation(java.util.Set.of(DOMAINS, MAILBOXES), (s, r) -> regenerateMailConfigs()),
-                // L'uscita: la sessione di chi la chiede, e nessun'altra. Le sessioni le toglie solo la root (A).
+                // Logout: the session of whoever asks for it, and no other. Sessions are removed only by the root
+                // part (A).
                 "logout", new RootOperation(java.util.Set.of(ACCOUNT), (s, r) -> {
                     Main.sessions.revokeById(s.id(), s.admin().id());
                     logAudit("LOGOUT", r.clientIp(), "user=" + s.admin().username());
                 }));
     }
 
-    /** Il server HTTPS; null nella parte root, che non ha porte (lo crea becomeLegacy se serve). */
+    /** The HTTPS server; null in the root part, which has no ports (becomeLegacy creates it if needed). */
     private HttpsServer server;
     private SSLContext tlsContext;
-    /** Le rotte nell'ordine in cui si dichiarano: becomeLegacy le registra sul server che crea. */
+    /** The routes in the order they are declared: becomeLegacy registers them on the server it creates. */
     private final java.util.List<Object[]> declared = new java.util.ArrayList<>();
     private final int port;
     private volatile Mode mode = Mode.LEGACY;
@@ -113,7 +114,7 @@ public class SSLMailServer {
     private RoundcubeSsoManager ssoManager;
     private Fail2banManager fail2banManager;
     private org.daemoxcp.mail.security.PfFirewallManager firewallManager;
-    /** L'accesso senza password: /api/login e /api/account. */
+    /** Passwordless login: /api/login and /api/account. */
     private final AuthHandlers auth = new AuthHandlers(this);
     final WebmailPasswordHandler webmail = new WebmailPasswordHandler(this);
 
@@ -151,10 +152,10 @@ public class SSLMailServer {
     }
 
     /**
-     * Con il modo. In ROOT_PART non si crea nessun server HTTPS: le rotte ci sono (routes, handlers) ma
-     * non c'e' nemmeno un socket. HttpsServer.create() senza indirizzo apre comunque un socket TCP non
-     * legato, che sockstat mostra (misurato sulla VM il 07/11/2026). Se la parte web non parte,
-     * becomeLegacy() crea il server sulla porta e il pannello serve tutto da root come prima.
+     * With the mode. In ROOT_PART no HTTPS server is created: the routes are there (routes, handlers) but
+     * there is not even a socket. HttpsServer.create() without an address still opens an unbound TCP socket,
+     * which sockstat shows (measured on the VM on 2026-11-07). If the web part does not start,
+     * becomeLegacy() creates the server on the port and the panel serves everything from root as before.
      */
     public SSLMailServer(int port, String certContent, String keyContent, Mode mode) throws Exception {
         this.port = port;
@@ -170,7 +171,7 @@ public class SSLMailServer {
         setupRoutes();
     }
 
-    /** Il server HTTPS sulla porta, col contesto TLS del pannello. */
+    /** The HTTPS server on the port, with the panel's TLS context. */
     private HttpsServer newHttpsServer() throws IOException {
         HttpsServer s = HttpsServer.create(new InetSocketAddress(port), 0);
         s.setHttpsConfigurator(new HttpsConfigurator(tlsContext) {
@@ -187,7 +188,7 @@ public class SSLMailServer {
         return s;
     }
 
-    // I permessi, per nome: le stesse stringhe di AuthStore.
+    // The permissions, by name: the same strings as AuthStore.
     private static final String HOME = "home.view", ACCOUNT = "account.self";
     private static final String MAIL_VIEW = "mail.view", MAILBOXES = "mailboxes.manage", DOMAINS = "domains.manage";
     private static final String QUEUE_VIEW = "queue.view", QUEUE_MANAGE = "queue.manage";
@@ -197,23 +198,26 @@ public class SSLMailServer {
     private static final String SETTINGS = "settings.manage", ADMINS = "admins.manage", VAULT = "vault.manage", SSH_KEYS = "ssh.manage";
 
     /**
-     * L'intestazione del 403 di un'operazione pericolosa senza una conferma recente: l'involucro di fetch delle pagine
-     * apre la finestra comune di conferma (panel-confirm.js) e ripete la richiesta.
+     * The header of the 403 for a dangerous operation without a recent confirmation: the pages' fetch wrapper
+     * opens the common confirmation window (panel-confirm.js) and repeats the request.
      */
     static final String CONFIRMATION_HEADER = "X-Panel-Confirmation";
 
-    /** L'intestazione del 401 di una sessione che non c'e' (piu'): la pagina aperta va all'accesso (reperto 184). */
+    /**
+     * The header of the 401 for a session that does not exist (any more): the open page goes to the login
+     * (finding 184).
+     */
     static final String SESSION_ENDED_HEADER = "X-Panel-Session";
     /**
-     * Il database non risponde, quindi la sessione non si e' potuta leggere: 503 con questa intestazione, mai 401.
-     * Sul server vero, il 09/11/2026, MySQL si e' riavviato dentro «Aggiorna tutto»: per 9 secondi ogni richiesta ha
-     * avuto «non autorizzato», la scheda ha perso il lavoro in corso e si e' riempita di errori, e una pagina aperta in
-     * quel momento portava all'accesso con una sessione buona (reperto 209). La richiesta e' fermata prima di fare
-     * qualunque cosa: le pagine la ripetono da sole quando il database torna (l'involucro di fetch nella testa).
+     * The database does not answer, so the session could not be read: 503 with this header, never 401.
+     * On the production server, on 2026-11-09, MySQL restarted inside "Update all": for 9 seconds every request
+     * got "unauthorized", the tab lost the job in progress and filled up with errors, and a page opened at that
+     * moment led to the login with a good session (finding 209). The request is stopped before doing anything:
+     * the pages repeat it by themselves when the database comes back (the fetch wrapper in the head).
      */
     static final String DATABASE_HEADER = "X-Panel-Database";
 
-    /** /api/updates: le azioni che leggono (anteprime, stati, diagnosi). Tutte le altre cambiano il sistema. */
+    /** /api/updates: the actions that read (previews, states, diagnoses). All the others change the system. */
     static final Map<String, String> UPDATES_ACTIONS = Access.actions(SYSTEM_VIEW,
         "packages_status", "packages_overview", "updates_status", "compatibility", "dovecot_config_dump", "maintenance_preview", "plan",
         "mysql84_preflight", "dovecot24_preflight", "broken_libs", "mysql_client_diag", "defaults_check", "branch_status", "branch_preview",
@@ -227,42 +231,42 @@ public class SSLMailServer {
         "roundcube_diag", "roundcube_nginx_preview", "package_preflight", "job_status", "interruption_status",
         "journal_list", "journal_read", "package_turn", "provider_firewall", "smtp_out");
 
-    /** Le rotte dichiarate, con il loro accesso: le prove controllano che ci siano tutte. */
+    /** The declared routes, with their access: the tests check that they are all there. */
     private final Map<String, Access> routes = new java.util.LinkedHashMap<>();
-    /** Il gestore di ogni rotta: la parte root lo chiama per le richieste che le passa la web. */
+    /** The handler of each route: the root part calls it for the requests that the web part passes to it. */
     private final Map<String, HttpHandler> handlers = new java.util.HashMap<>();
 
-    /** Ogni rotta registrata e chi la puo' usare. */
+    /** Every registered route and who can use it. */
     public Map<String, Access> routes() {
         return java.util.Collections.unmodifiableMap(routes);
     }
 
     private void setupRoutes() {
-        // ---------- Pubbliche ----------
-        // Rotta PUBBLICA per forza: e' Thunderbird a chiederla, prima ancora che l'utente abbia
-        // inserito una password. Restituisce solo nomi di server e numeri di porta, gia' pubblici
-        // nei record DNS, e solo per i domini che questo pannello ospita davvero.
+        // ---------- Public ----------
+        // A route that is PUBLIC by necessity: it is Thunderbird that asks for it, before the user has
+        // even entered a password. It returns only server names and port numbers, already public
+        // in the DNS records, and only for the domains that this panel really hosts.
         context("/autoconfig", Access.PUBLIC, this::handlePublicAutoconfig);
-        // La politica MTA-STS la leggono i server mittenti del mondo, senza credenziali: contiene
-        // solo il nome del proprio MX, che sta gia' nei record DNS.
+        // The MTA-STS policy is read by sending servers all over the world, without credentials: it
+        // contains only the name of our own MX, which is already in the DNS records.
         context("/mta-sts", Access.PUBLIC, this::handlePublicMtaSts);
-        // Font Awesome e Bootstrap dal jar: servono anche alla pagina di accesso.
+        // Font Awesome and Bootstrap from the jar: the login page needs them too.
         context("/fa", Access.PUBLIC, this::handleStatic);
         context("/vendor", Access.PUBLIC, this::handleStatic);
-        // Il dizionario degli script e il cambio di lingua: le pagine di accesso e di installazione
-        // hanno gia' la scelta IT/EN. /api/language controlla da se' il token della pagina.
+        // The scripts' dictionary and the language switch: the login and installation pages
+        // already have the IT/EN choice. /api/language checks the page token by itself.
         context("/i18n/", Access.PUBLIC, this::handleI18nScript);
-        // Gli script e gli stili delle pagine come file (PageAssets): quelli delle pagine protette
-        // solo a chi e' entrato, lo controlla il gestore.
+        // The pages' scripts and stylesheets as files (PageAssets): those of the protected pages
+        // only to logged-in users, the handler checks it.
         context("/assets/", Access.PUBLIC, this::handleAsset);
         context("/api/language", Access.PUBLIC, this::handleApiLanguage);
         context("/", Access.PUBLIC, this::handleRoot);
         context("/index", Access.PUBLIC, this::handleIndex);
         context("/api/login", Access.PUBLIC, auth::handleLogin);
         context("/setup", Access.PUBLIC, this::handleSetup);
-        // Chiude solo la sessione di chi la chiama.
+        // Closes only the session of the caller.
         context("/api/logout", Access.PUBLIC, this::handleLogout);
-        // Solo per la webmail sullo stesso server (loopback + chiave): cambio password e copia nel vault
+        // Only for the webmail on the same server (loopback + key): password change and copy into the vault
         context(org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, Access.PUBLIC, webmail::handlePasswordChange);
         context(org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH, Access.PUBLIC, webmail::handleVaultCopy);
         context(org.daemoxcp.mail.integration.WebmailPasswordConfig.CLEANUP_PATH, Access.PUBLIC, webmail::handleCleanup);
@@ -281,21 +285,22 @@ public class SSLMailServer {
         context("/api/domains", Access.api(MAIL_VIEW, DOMAINS), this::handleApiDomains);
         context("/mailboxes", Access.page(MAIL_VIEW), this::handleProtectedPage);
         context("/api/mailboxes", Access.api(MAIL_VIEW, MAILBOXES), this::handleApiMailboxes);
-        // «Mostra password»: la copia dal vault la legge solo la root, che sola ha la chiave privata (0.8, punto 3).
+        // "Show password": the copy in the vault is read only by the root part, which alone has the
+        // private key (0.8, point 3).
         context("/api/mailbox-password", Access.api(MAILBOXES).confirmingAlways(), this::handleApiMailboxPassword);
         context("/api/mailconfig", Access.api(MAIL_VIEW), this::handleApiMailConfig);
         context("/aliases", Access.page(MAIL_VIEW), this::handleProtectedPage);
         context("/api/aliases", Access.api(MAIL_VIEW, DOMAINS), this::handleApiAliases);
-        // Quanto usa ogni casella del suo limite (DovecotQuota, doveadm quota get): solo lettura, dalla root.
+        // How much of its limit each mailbox uses (DovecotQuota, doveadm quota get): read-only, from the root part.
         context("/api/mailbox-quota", Access.api(MAIL_VIEW), this::handleApiMailboxQuota);
-        // Entrare nella webmail di una casella vuol dire leggerne la posta.
+        // Entering a mailbox's webmail means reading its mail.
         context("/api/webmail", Access.api(MAILBOXES), this::handleApiWebmail);
         context("/api/webmail/open", Access.api(MAILBOXES), this::handleApiWebmailOpen);
         context("/api/autoresponder", Access.api(MAIL_VIEW, MAILBOXES), this::handleApiAutoResponder);
         context("/api/sieve", Access.api(MAIL_VIEW, MAILBOXES), this::handleApiSieve);
         context("/api/forwarding", Access.api(MAIL_VIEW, MAILBOXES), this::handleApiForwarding);
         context("/queue", Access.page(QUEUE_VIEW), this::handleProtectedPage);
-        // Il contenuto di un messaggio in coda e' posta di qualcuno: ?action=message vuole queue.manage.
+        // The content of a queued message is someone's mail: ?action=message requires queue.manage.
         context("/api/queue", Access.api(QUEUE_VIEW, QUEUE_MANAGE, Access.actions(QUEUE_MANAGE, "message")), this::handleApiQueue);
         context("/ratelimits", Access.page(MAIL_VIEW), this::handleProtectedPage);
         context("/api/ratelimits", Access.api(MAIL_VIEW, DOMAINS), this::handleApiRateLimits);
@@ -304,11 +309,11 @@ public class SSLMailServer {
         context("/api/apple-profile", Access.api(MAIL_VIEW, DNS_MANAGE, Access.actions(MAIL_VIEW, "status", "preview")), this::handleApiAppleProfile);
         context("/apple-profile", Access.api(MAIL_VIEW), this::handleDownloadAppleProfile);
 
-        // ---------- DNS e certificati ----------
+        // ---------- DNS and certificates ----------
         context("/dns", Access.page(DNS_VIEW), this::handleProtectedPage);
         context("/api/dns", Access.api(DNS_VIEW, DNS_MANAGE), this::handleApiDns);
-        // Le azioni che leggono soltanto (controllato metodo per metodo: nessuna scrittura): passano anche col riavvio
-        // programmato. rotate_check e verify_active_dns scrivono lo stato o il registro della rotazione: cambiano.
+        // The actions that only read (checked method by method: no writes): they pass even during a scheduled
+        // restart. rotate_check and verify_active_dns write the state or the log of the rotation: they change things.
         context("/api/dkim", Access.api(DNS_VIEW, DNS_MANAGE).reading("domains_summary", "orphans_scan", "rotate_status", "schedule_get"),
                 this::handleApiDkim);
         context("/ssl", Access.page(DNS_VIEW), this::handleProtectedPage);
@@ -322,7 +327,7 @@ public class SSLMailServer {
                 DOMAINS, "alias_create")), this::handleApiAutoDns);
         context("/api/autoconfig", Access.api(DNS_VIEW, DNS_MANAGE, Access.actions(DNS_VIEW, "status", "preview")), this::handleApiAutoconfig);
 
-        // ---------- Sicurezza ----------
+        // ---------- Security ----------
         context("/security", Access.page(SECURITY_VIEW), this::handleProtectedPage);
         context("/firewall", Access.page(SECURITY_VIEW), this::handleProtectedPage);
         context("/api/fail2ban", Access.api(SECURITY_VIEW, SECURITY_MANAGE, Access.actions(SECURITY_VIEW, "verify_filter", "pf_comparison"))
@@ -342,35 +347,35 @@ public class SSLMailServer {
         context("/api/logs", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE).reading("search"), this::handleApiLogs);
         context("/paths", Access.page(SYSTEM_VIEW), this::handleProtectedPage);
         context("/api/system_paths", Access.api(SYSTEM_VIEW), this::handleApiSystemPaths);
-        // La scheda del pannello in cima alla dashboard (reperto 183): da quando gira per chi vede la
-        // dashboard, i dettagli tecnici (versione, build, impronta del jar, processo) con system.view.
+        // The panel card at the top of the dashboard (finding 183): since it runs for whoever sees the
+        // dashboard, the technical details (version, build, jar fingerprint, process) require system.view.
         context("/api/panel_info", Access.api(HOME, HOME, Access.actions(SYSTEM_VIEW, "details")), this::handleApiPanelInfo);
         context("/api/service", Access.api(SYSTEM_MANAGE), this::handleApiService);
         context("/api/timezone-diag", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiTimezoneDiag);
         context("/api/postfix-aliases-health", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE), this::handleApiPostfixAliases);
         context("/api/sso", Access.api(SYSTEM_VIEW, SYSTEM_MANAGE).reading("status"), this::handleApiSso);
         context("/admins", Access.page(ADMINS), this::handleProtectedPage);
-        // La chiave del vault: esportarla o cambiarla vuole vault.manage (e una conferma recente).
+        // The vault key: exporting or changing it requires vault.manage (and a recent confirmation).
         context("/api/admins", Access.api(ADMINS, ADMINS, Access.actions(VAULT, "vault_backup_key", "vault_rotate_key")), this::handleApiAdmins);
         context("/settings", Access.page(SETTINGS), this::handleProtectedPage);
         context("/api/report", Access.api(SETTINGS).reading("identity", "preview", "status"), this::handleApiReport);
         context("/api/hostname", Access.api(SETTINGS).reading("check_dns"), this::handleApiHostname);
         context("/api/roundcube-domain", Access.api(SETTINGS).reading("check_dns"), this::handleApiRoundcubeDomain);
-        // Le chiavi SSH di root: vederle, aggiungerne, toglierne (con una conferma recente). Mai sshd_config.
+        // Root's SSH keys: viewing them, adding some, removing some (with a recent confirmation). Never sshd_config.
         context("/api/ssh-keys", Access.api(SSH_KEYS), this::handleApiSshKeys);
-        // POP3 acceso o spento: Dovecot, le porte di pf e delle regole dei paesi (Pop3, PfPolicy).
+        // POP3 on or off: Dovecot, the pf ports and those of the country rules (Pop3, PfPolicy).
         context("/api/pop3", Access.api(SETTINGS), this::handleApiPop3);
-        // IPv4, IPv6 o tutte e due: Postfix, Dovecot, nginx e pf (IpFamily). SSH non segue mai la scelta.
+        // IPv4, IPv6 or both: Postfix, Dovecot, nginx and pf (IpFamily). SSH never follows the choice.
         context("/api/ip-family", Access.api(SETTINGS), this::handleApiIpFamily);
-        // Gli indirizzi del server e la guida fra IPv4 e IPv6, in tutte e due le direzioni (ServerAddresses).
+        // The server's addresses and the guide between IPv4 and IPv6, in both directions (ServerAddresses).
         context("/api/server-addresses", Access.api(SETTINGS), this::handleApiServerAddresses);
     }
 
     /**
-     * Una rotta, con la lingua della richiesta fissata per tutto il tempo in cui il gestore la
-     * serve: i messaggi del server (I18n.tr) escono nella lingua di chi chiede. Qui basta il cookie
-     * della lingua (o, senza, la lingua del browser): ogni pagina lo allinea alla scelta salvata
-     * nell'account (renderPage), e le chiamate degli script arrivano da una pagina.
+     * A route, with the request's language fixed for the whole time the handler
+     * serves it: the server's messages (I18n.tr) come out in the requester's language. Here the language
+     * cookie is enough (or, without it, the browser's language): every page aligns it with the choice saved
+     * in the account (renderPage), and the scripts' calls come from a page.
      */
     private void context(String path, Access access, HttpHandler handler) {
         java.util.Objects.requireNonNull(access, "every route declares its access");
@@ -380,10 +385,10 @@ public class SSLMailServer {
         if (server != null) createContext(path, access, handler);
     }
 
-    /** La rotta sul server HTTPS, coi filtri: Host, lingua, permesso, CSRF. */
+    /** The route on the HTTPS server, with the filters: Host, language, permission, CSRF. */
     private HttpContext createContext(String path, Access access, HttpHandler handler) {
-        // Nella parte web le API di chi ha fatto l'accesso vanno alla root, dopo tutti i filtri qui sotto; e
-        // anche l'accesso, che decide la root (A).
+        // In the web part the APIs of logged-in users go to the root part, after all the filters below; and
+        // so does the login, which the root part decides (A).
         HttpHandler served = handler;
         if (mode == Mode.WEB_PART && access.kind() == Access.Kind.API && !WEB_LOCAL_API.contains(path))
             served = exchange -> forwardToRoot(exchange, path);
@@ -392,8 +397,8 @@ public class SSLMailServer {
         else if (mode == Mode.WEB_PART && WEBMAIL_ROUTES.contains(path))
             served = exchange -> forwardWebmail(exchange, path);
         HttpContext context = server.createContext(path, served);
-        // Per prima, una HEAD diventa per tutti quelli che seguono una GET senza corpo (HeadExchange): ogni
-        // gestore scrive la risposta come sempre, e nessuno deve sapere delle HEAD.
+        // First of all, a HEAD becomes a GET without a body for all those that follow (HeadExchange): every
+        // handler writes the response as always, and nobody needs to know about HEADs.
         context.getFilters().add(new Filter() {
             @Override
             public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
@@ -464,7 +469,8 @@ public class SSLMailServer {
             });
         }
         if (access.kind() == Access.Kind.API) {
-            // Prima della conferma recente: con un riavvio programmato non si chiede la passkey per poi rifiutare.
+            // Before the recent confirmation: with a scheduled restart we do not ask for the passkey only to
+            // refuse afterwards.
             context.getFilters().add(new Filter() {
                 @Override
                 public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
@@ -492,21 +498,22 @@ public class SSLMailServer {
     }
 
     /**
-     * Il permesso della rotta per questa richiesta. Vero se la richiesta puo' proseguire; falso se
-     * la risposta e' gia' partita: senza sessione una pagina rimanda all'accesso e una API dice
-     * 401; senza permesso una pagina mostra "accesso negato" (403) nella cornice del pannello e
-     * una API risponde 403 con forbidden: true. Per le API a azioni l'azione viene da ?action= o
-     * dal corpo JSON, che si rimette al suo posto per il gestore.
+     * The route's permission for this request. True if the request can go on; false if
+     * the response has already been sent: without a session a page redirects to the login and an API says
+     * 401; without the permission a page shows "access denied" (403) in the panel frame and
+     * an API answers 403 with forbidden: true. For action-based APIs the action comes from ?action= or
+     * from the JSON body, which is put back in its place for the handler.
      */
-    /** Dove accessAllowed lascia l'azione della richiesta che ha letto (dal corpo, per una POST). */
+    /** Where accessAllowed leaves the action of the request it has read (from the body, for a POST). */
     private static final String ACTION_ATTRIBUTE = "daemoxcp.mail.action";
 
     /**
-     * Un'operazione pericolosa senza una conferma recente (Access.needsConfirmation): vero, e la risposta e' gia'
-     * data (sendConfirmationNeeded). La data della conferma la scrive solo la root, che verifica passkey e codici
-     * (A); la root la rilegge dal database per ogni richiesta che le arriva e la controlla anche lei, quindi una web
-     * che saltasse questo controllo non ottiene niente. Va dopo il permesso, e nella web anche dopo il CSRF: una
-     * richiesta di un altro sito non arriva fin qui.
+     * A dangerous operation without a recent confirmation (Access.needsConfirmation): true, and the response
+     * has already been sent (sendConfirmationNeeded). The confirmation date is written only by the root part,
+     * which verifies passkeys and codes (A); the root part rereads it from the database for every request that
+     * reaches it and checks it too, so a web part that skipped this check would gain nothing. It comes after
+     * the permission, and in the web part also after the CSRF: a request from another site does not get this
+     * far.
      */
     private boolean confirmationMissing(HttpExchange exchange, Access access) throws IOException {
         Object action = exchange.getAttribute(ACTION_ATTRIBUTE);
@@ -517,16 +524,17 @@ public class SSLMailServer {
         return true;
     }
 
-    /** L'intestazione della risposta che rifiuta un cambiamento col riavvio programmato: le pagine rileggono la striscia. */
+    /** The header of the response that refuses a change during a scheduled restart: the pages reread the banner. */
     static final String RESTART_HEADER = "X-Panel-Restart";
 
     /**
-     * Un riavvio del server e' programmato e questa richiesta cambierebbe qualcosa (Access.changes): vero, e la
-     * risposta e' gia' data (409). Restano le letture, annullare il riavvio e riavviare subito (RestartLock.exempt).
-     * Lo decide chi sa: la root e il pannello in un pezzo solo guardano il processo shutdown; la web, che non vede
-     * i processi della root, lo chiede alla root, per ogni cambiamento (prima della conferma recente, che altrimenti
-     * chiederebbe la passkey per una richiesta che la root rifiutera'); la root lo ricontrolla per quelle che le passa.
-     * Se non si riesce a sapere, si rifiuta: un cambiamento rimandato di un minuto costa meno di uno lasciato a meta'.
+     * A server restart is scheduled and this request would change something (Access.changes): true, and the
+     * response has already been sent (409). Reads, cancelling the restart and restarting now remain allowed
+     * (RestartLock.exempt). Whoever knows decides: the root part and the single-piece panel look at the
+     * shutdown process; the web part, which cannot see the root's processes, asks the root part, for every
+     * change (before the recent confirmation, which otherwise would ask for the passkey for a request that the
+     * root part will refuse); the root part checks again for those it is passed. If it cannot be known, the
+     * request is refused: a change postponed by a minute costs less than one left half-done.
      */
     private boolean restartLocked(HttpExchange exchange, Access access, String route) throws IOException {
         if (access.kind() != Access.Kind.API) return false;
@@ -551,7 +559,10 @@ public class SSLMailServer {
         return true;
     }
 
-    /** La parte web chiede alla root se c'e' un riavvio programmato, per chi ha fatto la richiesta in corso. */
+    /**
+     * The web part asks the root part whether a restart is scheduled, on behalf of whoever made the current
+     * request.
+     */
     @SuppressWarnings("unchecked")
     private org.daemoxcp.mail.system.RestartLock.State askRootRestartState() {
         Object[] cached = CURRENT_SESSION.get();
@@ -571,7 +582,10 @@ public class SSLMailServer {
         }
     }
 
-    /** 403 con needs_reauth: serve una conferma recente (passkey o codice via email), poi la richiesta si ripete. */
+    /**
+     * 403 with needs_reauth: a recent confirmation is needed (passkey or code by email), then the request is
+     * repeated.
+     */
     private void sendConfirmationNeeded(HttpExchange exchange) throws IOException {
         byte[] json = new JSONObject().put("success", false).put("needs_reauth", true)
                 .put("error", I18n.tr("server.reauth.needed")).toString().getBytes(StandardCharsets.UTF_8);
@@ -590,19 +604,19 @@ public class SSLMailServer {
             return false;
         }
         if (session.isEmpty()) {
-            // Un cookie di sessione che non vale (il jar e' ripartito, o la sessione e' scaduta): si
-            // toglie, e la pagina d'accesso dice perche' si e' di nuovo li' (reperto 184).
-            // Col database fermo non si sa: il cookie resta, e quando torna la sessione vale ancora. Fermo
-            // vuol dire anche una lettura che e' appena fallita (MySQL che si riavvia, o che si spegne
-            // prima del pannello durante un riavvio del server: reperto 185).
+            // A session cookie that is not valid (the jar has restarted, or the session has expired): it is
+            // removed, and the login page says why you are there again (finding 184).
+            // With the database down nobody knows: the cookie stays, and when the database comes back the
+            // session is still valid. Down also means a read that has just failed (MySQL restarting, or shutting
+            // down before the panel during a server restart: finding 185).
             boolean known = Main.mysqlAvailable && !Main.setupRequired && !WebSessions.lastCheckFailed();
             boolean ended = known && WebSessions.wellFormed(cookieValue(exchange, WebSessions.COOKIE));
             if (ended) exchange.getResponseHeaders().add("Set-Cookie", WebSessions.clearCookieHeader());
             if (pageGet) {
                 redirect(exchange, ended ? "/index?session=ended" : "/index");
             } else {
-                // Il segnale per le pagine aperte (l'involucro di fetch nella testa): questo 401 e' la
-                // sessione che non c'e' piu', non un codice di conferma sbagliato (anche quello e' 401).
+                // The signal for the open pages (the fetch wrapper in the head): this 401 is the
+                // session that no longer exists, not a wrong confirmation code (that is 401 too).
                 if (known) exchange.getResponseHeaders().set(SESSION_ENDED_HEADER, "ended");
                 sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
             }
@@ -623,14 +637,15 @@ public class SSLMailServer {
                 try {
                     if (body.trim().startsWith("{")) action = new JSONObject(body).optString("action", null);
                 } catch (org.json.JSONException e) {
-                    // Non e' JSON: niente azione, vale il permesso del metodo. Il gestore rispondera' 400.
+                    // It is not JSON: no action, the method's permission applies. The handler will answer 400.
                 }
             }
         }
         String permission = access.permissionFor(method, action);
         AuthStore.Admin admin = session.get().admin();
         if (AuthStore.may(admin, permission)) {
-            // L'azione letta qui serve anche alla conferma recente (confirmationMissing), che viene dopo il CSRF.
+            // The action read here is also used by the recent confirmation (confirmationMissing), which comes
+            // after the CSRF.
             if (action != null) exchange.setAttribute(ACTION_ATTRIBUTE, action);
             return true;
         }
@@ -640,8 +655,8 @@ public class SSLMailServer {
                 + " path=" + exchange.getRequestURI().getPath());
         if (pageGet) {
             addSecurityHeaders(exchange);
-            // Costruita qui come prima, con gli script in file (PageAssets): sono quelli che
-            // generateAllContent ha gia' scritto all'avvio (scrive anche forbidden.html).
+            // Built here as before, with the scripts in files (PageAssets): they are the ones that
+            // generateAllContent has already written at startup (it also writes forbidden.html).
             byte[] html = renderPage(exchange, withTheme(exchange, org.daemoxcp.mail.content.PageAssets.externalize(
                     org.daemoxcp.mail.content.PanelContent.getForbiddenHtml(), false)), getCsrfToken(exchange)).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
@@ -659,51 +674,51 @@ public class SSLMailServer {
     }
 
     /**
-     * Le rotte che si usano PRIMA di entrare: non c'e' ancora una sessione a cui legare il token.
-     * Il token lo controllano da se': quello della pagina, legato al browser dal cookie
-     * __Host-DaemoxCPMailPre (/api/language anche quello della sessione).
+     * The routes used BEFORE logging in: there is no session yet to bind the token to.
+     * They check the token by themselves: the page's token, bound to the browser by the cookie
+     * __Host-DaemoxCPMailPre (/api/language also the session's one).
      */
     private static final java.util.Set<String> CSRF_EXEMPT = java.util.Set.of(
         "/api/login", "/api/language",
-        // Le chiama la webmail, non un browser: niente cookie, si autentica con la sua chiave
+        // Called by the webmail, not by a browser: no cookie, it authenticates with its key
         org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.CLEANUP_PATH);
 
     /**
-     * Le rotte che un Host diverso da quello del pannello lo ricevono per mestiere.
+     * The routes that receive a Host other than the panel's by their very nature.
      *
-     * <p>Le prime due sono pubbliche per forza e il loro Host e' <em>un dominio di posta</em>,
-     * non il nome del pannello: Thunderbird chiede l'autoconfigurazione a
-     * {@code autoconfig.esempio.it} e un server mittente chiede la politica MTA-STS a
-     * {@code mta-sts.esempio.it}. Non restano senza controllo: i due gestori confrontano da se'
-     * quel nome con l'elenco dei domini che questo pannello ospita davvero, e rispondono 404
-     * se non e' uno di quelli.
+     * <p>The first two are public by necessity and their Host is <em>a mail domain</em>,
+     * not the panel's name: Thunderbird asks for autoconfiguration at
+     * {@code autoconfig.esempio.it} and a sending server asks for the MTA-STS policy at
+     * {@code mta-sts.esempio.it}. They are not left unchecked: the two handlers compare
+     * that name by themselves with the list of domains that this panel really hosts, and answer
+     * 404 if it is not one of them.
      *
-     * <p>Le altre due le chiama la webmail sulla stessa macchina, a
-     * {@code https://127.0.0.1:&lt;porta&gt;}: con un nome configurato in "Modify Data", un Host
-     * {@code 127.0.0.1} verrebbe rifiutato e il cambio password della webmail smetterebbe di
-     * funzionare. Non restano scoperte: WebmailPasswordHandler pretende che la connessione
-     * arrivi davvero dal loopback, senza intestazioni di proxy davanti, e con la chiave della
-     * webmail.
+     * <p>The other two are called by the webmail on the same machine, at
+     * {@code https://127.0.0.1:&lt;porta&gt;}: with a name configured in "Modify Data", a Host
+     * {@code 127.0.0.1} would be refused and the webmail's password change would stop
+     * working. They are not left exposed: WebmailPasswordHandler requires the connection
+     * to really come from the loopback, with no proxy headers in front, and with the
+     * webmail's key.
      */
     private static final java.util.Set<String> HOST_CHECK_EXEMPT = java.util.Set.of(
         "/autoconfig", "/mta-sts",
         org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.CLEANUP_PATH);
 
     /**
-     * Le due rotte della webmail: col pannello separato le serve la root, che sola scrive le password delle caselle
-     * (forwardWebmail, serveWebmail).
+     * The two webmail routes: with the separated panel they are served by the root part, which alone writes
+     * the mailboxes' passwords (forwardWebmail, serveWebmail).
      */
     static final java.util.Set<String> WEBMAIL_ROUTES = java.util.Set.of(
         org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.CLEANUP_PATH);
 
     /**
-     * L'Host della richiesta raggiunge questo pannello? Vedi {@link HostCheck} per il perche'
-     * del confronto esatto, della porta fuori dal confronto e del DNS mai interrogato.
+     * Does the request's Host reach this panel? See {@link HostCheck} for why the comparison
+     * is exact, why the port is left out of it and why DNS is never queried.
      *
-     * <p>Anche da Cloudflare: Cloudflare passa l'Host com'e', quindi chi apre il pannello col suo
-     * nome passa. Prima qualunque Host era accettato se la richiesta arrivava da Cloudflare (o da
-     * una rete privata con le intestazioni di Cloudflare): bastava una zona Cloudflare qualsiasi
-     * fatta puntare a questo server per raggiungere il pannello con un altro nome.
+     * <p>Also from Cloudflare: Cloudflare passes the Host as it is, so whoever opens the panel with
+     * its name gets through. Before, any Host was accepted if the request came from Cloudflare (or
+     * from a private network with Cloudflare's headers): any Cloudflare zone pointed at this server
+     * was enough to reach the panel under another name.
      */
     private boolean hostAllowed(HttpExchange exchange) {
         String host = exchange.getRequestHeaders().getFirst("Host");
@@ -711,8 +726,8 @@ public class SSLMailServer {
         try (java.sql.ResultSet r = Main.dbManager.get_data_config()) {
             if (r.next()) configured = r.getString("panel_host");
         } catch (Exception e) {
-            // Non si sa a che nome risponde il pannello: si lascia passare solo il loopback,
-            // cosi' la macchina resta amministrabile e nessun nome di fuori entra.
+            // It is not known which name the panel answers to: only the loopback is let through,
+            // so the machine stays manageable and no outside name gets in.
             LOGGER.warning("Cannot read the configured panel host: " + e.getMessage());
             String name = HostCheck.hostName(host);
             return name.equals("localhost") || "127.0.0.1".equals(HostCheck.literalIp(name))
@@ -723,7 +738,7 @@ public class SSLMailServer {
         return false;
     }
 
-    /** 421: questo server non e' quello per il nome chiesto. Nessun dettaglio a chi chiede. */
+    /** 421: this server is not the one for the requested name. No details to the requester. */
     private void sendMisdirected(HttpExchange exchange) throws IOException {
         byte[] body = "Misdirected request\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
@@ -733,12 +748,12 @@ public class SSLMailServer {
     }
 
     /**
-     * Il token CSRF per ogni richiesta che cambia qualcosa, in un punto solo invece che gestore per
-     * gestore: venticinque rotte autenticate accettavano POST senza chiederlo. Le pagine lo
-     * mandano nell'intestazione X-CSRF-Token (lo script in getHead lo aggiunge a ogni fetch); un
-     * corpo JSON con csrf_token vale lo stesso, e il corpo letto per guardarlo si rimette al suo
-     * posto per il gestore. Senza una sessione valida si lascia passare: risponde il gestore, con
-     * il suo 401.
+     * The CSRF token for every request that changes something, in a single place instead of handler by
+     * handler: twenty-five authenticated routes accepted POSTs without asking for it. The pages
+     * send it in the X-CSRF-Token header (the script in getHead adds it to every fetch); a
+     * JSON body with csrf_token works as well, and the body read to look at it is put back in its
+     * place for the handler. Without a valid session the request is let through: the handler answers,
+     * with its 401.
      */
     private boolean csrfAllowed(HttpExchange exchange) throws IOException {
         String method = exchange.getRequestMethod();
@@ -776,252 +791,278 @@ public class SSLMailServer {
             this.rspamdManager = new RspamdManager();
             this.sieveGenerator = new SieveGenerator();
 
-            // Le colonne delle versioni successive (le tabelle dell'accesso le sistema Main prima dell'avvio)
+            // The columns of later versions (the login tables are set up by Main before startup)
             ensureSchemaUpgrades();
 
-            // I token di Cloudflare scritti in chiaro dalle versioni di prima: cifrati, una riga alla volta, solo se
-            // nessuno l'ha cambiata intanto (CloudflareTokens). Dopo le colonne, che creano la tabella.
+            // The Cloudflare tokens written in clear text by earlier versions: encrypted, one row at a time, only
+            // if nobody changed it in the meantime (CloudflareTokens). After the columns, which create the table.
             org.daemoxcp.mail.security.CloudflareTokens.ensureAtBoot(Main.mailDatabase);
 
             // Auto-setup Fail2ban: log file + filter + jail + log rotation + reload
-            // Idempotente, fail-safe: salta tutto se Fail2ban non è installato.
+            // Idempotent, fail-safe: skips everything if Fail2ban is not installed.
             org.daemoxcp.mail.security.Fail2banAutoSetup.run();
 
-            // pf fa entrare solo quello che serve (SSH come prima, posta, web, webmail, pannello): sul
-            // pf.conf del pannello, dopo Fail2banAutoSetup che ci aggiunge l'anchor e la tabella permaban.
+            // pf lets in only what is needed (SSH as before, mail, web, webmail, panel): on the
+            // panel's pf.conf, after Fail2banAutoSetup, which adds the anchor and the permaban table to it.
             org.daemoxcp.mail.security.PfPolicy.ensureAtBoot();
 
-            // La superficie pubblica sulla 443 col nome di adesso (daemoxcp-mail-public) sui server
-            // installati prima: nginx, il suo log, filtro e jail di fail2ban, tutto insieme o
-            // niente. Dopo Fail2banAutoSetup, che ricarica fail2ban per conto suo.
+            // The public surface on 443 with today's name (daemoxcp-mail-public) on servers
+            // installed earlier: nginx, its log, fail2ban's filter and jail, all together or
+            // nothing. After Fail2banAutoSetup, which reloads fail2ban on its own.
             org.daemoxcp.mail.system.PublicSurfaceRename.ensureAtBoot();
 
-            // La politica MTA-STS leggibile da nginx sui server dove era nata coi permessi del servizio (0700 e 0600):
-            // nginx rispondeva 403, e MTA-STS non si attivava (reperto 250). Solo permessi, mai attraverso collegamenti.
+            // The MTA-STS policy readable by nginx on servers where it was created with the service's
+            // permissions (0700 and 0600): nginx answered 403, and MTA-STS did not activate (finding 250).
+            // Only permissions, never through links.
             org.daemoxcp.mail.system.PublicPolicyAccess.ensureAtBoot();
 
-            // Le firme dei file del pannello in inglese sui server installati prima: solo righe di
-            // commento, quindi niente reload. Dopo la rinomina, che porta i file ai nomi di adesso.
+            // The signatures of the panel's files in English on servers installed earlier: comment lines
+            // only, so no reload. After the rename, which brings the files to today's names.
             org.daemoxcp.mail.system.PanelMarker.ensureAtBoot();
 
-            // I commenti che una rinomina fatta sul testo aveva rovinato in php.ini, nginx.conf,
-            // nella lista permaban e negli script d'installazione: anche qui solo commenti.
+            // The comments that a rename done on the text had damaged in php.ini, nginx.conf,
+            // in the permaban list and in the installation scripts: here too, comments only.
             org.daemoxcp.mail.system.CommentRepair.ensureAtBoot();
 
-            // Le copie di sicurezza dei file di configurazione oltre le ultime dieci per file: le versioni di prima non
-            // ne cancellavano nessuna (sul server vero centinaia di pf.conf e dell'anchor del firewall). Dopo PfPolicy e
-            // Fail2banAutoSetup, che possono farne una (ConfigBackups).
+            // The backup copies of configuration files beyond the last ten per file: earlier versions did not
+            // delete any (on the production server hundreds of pf.conf and of the firewall anchor). After
+            // PfPolicy and Fail2banAutoSetup, which can make one (ConfigBackups).
             org.daemoxcp.mail.system.ConfigBackups.ensureAtBoot();
 
-            // Root di MySQL con la sua password sui server installati prima che l'installatore la
-            // impostasse: senza, entrava come root chiunque avesse un utente sulla macchina. Prima di
-            // tutto quello che dopo parla con MySQL da root (RoundcubeDbUser, l'updater).
+            // MySQL root with its own password on servers installed before the installer
+            // set it: without it, anyone with a user on the machine got in as root. Before
+            // everything that later talks to MySQL as root (RoundcubeDbUser, the updater).
             org.daemoxcp.mail.database.MysqlRoot.ensureAtBoot();
 
-            // Il processo di Dovecot che cerca le password non gira piu' da root: le cerca in MySQL,
-            // root non gli serve. Si verifica con una ricerca vera, e se non va si rimette com'era.
+            // The Dovecot process that looks up passwords no longer runs as root: it looks them up in MySQL,
+            // it does not need root. It is verified with a real lookup, and if that fails it is put back as it
+            // was.
             org.daemoxcp.mail.system.DovecotAuthWorker.ensureAtBoot();
 
-            // I socket di Dovecot aperti a tutti (0666) che il pannello non usa: indexer, imap-urlauth, auth-token. Solo
-            // nella 2.4; serve un riavvio, verificato, e se Dovecot non riparte si toglie il file (DovecotSockets).
+            // The Dovecot sockets open to everyone (0666) that the panel does not use: indexer, imap-urlauth,
+            // auth-token. Only in 2.4; a restart is needed, verified, and if Dovecot does not come back up the
+            // file is removed (DovecotSockets).
             org.daemoxcp.mail.system.DovecotSockets.ensureAtBoot();
 
-            // ManageSieve (4190) solo su 127.0.0.1, dove la usa la webmail: prima ascoltava su tutte le interfacce e la
-            // fermava solo pf. Riavvio verificato, e se qualcosa non torna si toglie il file (ManageSieveLocal).
+            // ManageSieve (4190) only on 127.0.0.1, where the webmail uses it: before, it listened on all
+            // interfaces and only pf stopped it. Restart verified, and if something does not add up the file is
+            // removed (ManageSieveLocal).
             org.daemoxcp.mail.system.ManageSieveLocal.ensureAtBoot();
 
-            // nginx non dice la sua versione e la webmail manda HSTS, nosniff e Referrer-Policy: sui server installati prima
-            // si aggiungono solo le righe che mancano, con nginx -t, reload e una richiesta vera; se no torna com'era.
+            // nginx does not reveal its version and the webmail sends HSTS, nosniff and Referrer-Policy: on servers
+            // installed earlier only the missing lines are added, with nginx -t, reload and a real request;
+            // otherwise it goes back as it was.
             org.daemoxcp.mail.system.NginxMain.ensureAtBoot();
 
-            // VRFY spento: diceva a chiunque sulla 25 quali caselle esistono (r6). postconf -e, postfix check, reload e un
-            // VRFY vero che deve ricevere 502; se no torna com'era (PostfixVrfy).
+            // VRFY off: it told anyone on port 25 which mailboxes exist (r6). postconf -e, postfix check, reload
+            // and a real VRFY that must get 502; otherwise it goes back as it was (PostfixVrfy).
             org.daemoxcp.mail.system.PostfixVrfy.ensureAtBoot();
 
-            // AUTH solo sulle porte di invio (587, 465), non sulla 25: solo se master.cf la accende su tutte e due, con
-            // la prova vera con STARTTLS; se no torna com'era (PostfixSubmissionAuth).
+            // AUTH only on the submission ports (587, 465), not on 25: only if master.cf turns it on for both,
+            // with the real test with STARTTLS; otherwise it goes back as it was (PostfixSubmissionAuth).
             org.daemoxcp.mail.system.PostfixSubmissionAuth.ensureAtBoot();
-            // DANE per la posta in uscita, col risolutore locale che convalida DNSSEC (PostfixDane).
+            // DANE for outgoing mail, with the local resolver that validates DNSSEC (PostfixDane).
             org.daemoxcp.mail.system.PostfixDane.ensureAtBoot();
 
-            // POP3 come l'ha scelto l'amministratore, spento se non ha scelto: nessuno lo usava, e le sue porte
-            // erano solo bersagli (Pop3 verifica e torna indietro).
+            // POP3 as the administrator chose it, off if no choice was made: nobody used it, and its ports
+            // were only targets (Pop3 verifies and rolls back).
             org.daemoxcp.mail.system.Pop3.ensureAtBoot();
 
-            // /var/mail col bit sticky: chi ha il gruppo mail (postfix, clamav, dma) non rinomina piu' la cartella delle
-            // regole Sieve del pannello per metterne un'altra al suo posto. Prima di SieveForcedKeep: root scrive le
-            // regole solo se nessun altro puo' cambiare il percorso (RootOnlyPath). E i processi delle caselle di Dovecot
-            // senza il gruppo mail, che serviva solo alle INBOX mbox (reperto 221; tutti e due verificano e tornano
-            // indietro). Prima ancora la cartella delle regole di nuovo di root, dove l'installazione di prima l'aveva data a
-            // vmail: altrimenti RootOnlyPath non ci scrive e MailSpoolSticky la segnala (reperto 225; non tocca niente se
-            // trova collegamenti o file di altri, e se non torna rimette com'era).
+            // /var/mail with the sticky bit: whoever has the mail group (postfix, clamav, dma) can no longer
+            // rename the folder of the panel's Sieve rules to put another one in its place. Before
+            // SieveForcedKeep: root writes the rules only if nobody else can change the path (RootOnlyPath).
+            // And Dovecot's mailbox processes without the mail group, which was needed only for mbox INBOXes
+            // (finding 221; both verify and roll back). Even before that, the rules folder owned by root
+            // again, where the earlier installation had given it to vmail: otherwise RootOnlyPath does not
+            // write there and MailSpoolSticky reports it (finding 225; it touches nothing if it finds links
+            // or files of others, and if something does not add up it puts things back as they were).
             org.daemoxcp.mail.system.SieveRulesOwner.ensureAtBoot();
             org.daemoxcp.mail.system.MailSpoolSticky.ensureAtBoot();
             org.daemoxcp.mail.system.DovecotPrivilegedGroup.ensureAtBoot();
 
-            // La home di Dovecot di ogni casella nella sua cartella home/, non nella radice della posta: i file di Dovecot
-            // (la memoria delle risposte automatiche e degli inoltri) comparivano fra le cartelle della webmail (DovecotHome
-            // li porta nella home come vmail, verifica con doveadm user, e se non va torna com'era).
+            // Dovecot's home for each mailbox in its home/ folder, not in the mail root: Dovecot's files
+            // (the memory of auto-replies and forwards) showed up among the webmail's folders (DovecotHome
+            // moves them into the home as vmail, verifies with doveadm user, and if it fails goes back as it
+            // was).
             org.daemoxcp.mail.system.DovecotHome.ensureAtBoot();
 
-            // Le cartelle Maildir/ vuote che lo script delle caselle creava e Dovecot non usava (la posta sta nella radice della
-            // casella): via con rmdir come vmail, che non toglie niente che non sia vuoto (UnusedMaildir).
+            // The empty Maildir/ folders that the mailbox script created and Dovecot did not use (the mail is in
+            // the root of the mailbox): removed with rmdir as vmail, which removes nothing that is not empty
+            // (UnusedMaildir).
             org.daemoxcp.mail.system.UnusedMaildir.ensureAtBoot();
 
-            // Postfix consegna a Dovecot dal socket nella sua coda (0600 suo) e non piu' dalla porta 24 o dal socket 0666, da
-            // cui qualunque processo della macchina consegnava in qualunque casella (reperto 234). In tre tempi, la posta
-            // non resta mai senza strada; se qualcosa non va torna com'era.
+            // Postfix delivers to Dovecot through the socket in its own queue (0600, its own) and no longer
+            // through port 24 or the 0666 socket, from which any process on the machine could deliver into any
+            // mailbox (finding 234). In three stages, the mail is never left without a route; if something goes
+            // wrong it goes back as it was.
             org.daemoxcp.mail.system.LmtpSocket.ensureAtBoot();
-            // Gli script Sieve dell'utente (ManageSieve, i Filtri della webmail) nella sua cartella di posta, e le regole
-            // del pannello prima di loro: prima non si salvava niente, la cartella era di root (SieveStorage verifica e
-            // torna indietro).
+            // The user's Sieve scripts (ManageSieve, the webmail's "Filters") in their mail folder, and the
+            // panel's rules before them: before, nothing was saved, the folder belonged to root (SieveStorage
+            // verifies and rolls back).
             org.daemoxcp.mail.system.SieveStorage.ensureAtBoot();
-            // Le regole Sieve del pannello gia' scritte senza il keep forzato in fondo: con quello «Sposta» lasciava anche
-            // la INBOX e «Inoltra» senza copia ne teneva una (SieveForcedKeep ricompila, e se sievec non accetta torna com'era).
+            // The panel's Sieve rules already written without the forced keep at the end: with that, "Move" also
+            // left the message in the INBOX and "Forward" without a copy kept one (SieveForcedKeep recompiles,
+            // and if sievec does not accept it goes back as it was).
             org.daemoxcp.mail.system.SieveForcedKeep.ensureAtBoot();
-            // Le regole del pannello riscritte dal database come le scrive adesso, dove sono diverse: «Sposta» e «Copia»
-            // creano la cartella che non c'e' (reperto 229). Solo i file del pannello; al secondo avvio non scrive niente.
+            // The panel's rules rewritten from the database the way it writes them now, where they differ:
+            // "Move" and "Copy" create the folder that does not exist (finding 229). Only the panel's files;
+            // on the second boot it writes nothing.
             org.daemoxcp.mail.system.SieveRulesRefresh.ensureAtBoot(this.sieveGenerator);
-            // Il compilato delle regole del pannello che il reset delle risposte automatiche toglieva: senza, Dovecot le
-            // ricompila a ogni consegna e scrive un errore nel maillog (VacationTracking ricompila solo quelle cosi').
+            // The compiled form of the panel's rules that the auto-reply reset removed: without it, Dovecot
+            // recompiles them at every delivery and writes an error in the maillog (VacationTracking recompiles
+            // only the rules in that state).
             org.daemoxcp.mail.system.VacationTracking.ensureAtBoot();
-            // Il compilato delle regole del pannello fatto da un altro Pigeonhole (la 2.3 prima del passaggio alla 2.4):
-            // Dovecot le ricompilava a ogni consegna con due errori nel maillog. Si sostituisce solo dove e' diverso
-            // da quello che fa il sievec installato (reperto 241); al secondo avvio non scrive niente.
+            // The compiled form of the panel's rules made by another Pigeonhole (2.3 before the move to 2.4):
+            // Dovecot recompiled them at every delivery with two errors in the maillog. It is replaced only where
+            // it differs from what the installed sievec produces (finding 241); on the second boot it writes
+            // nothing.
             org.daemoxcp.mail.system.SieveBinaries.ensureAtBoot();
-            // Le cartelle speciali (Bozze, Inviata, Cestino, Junk) segnate per i programmi di posta, e lo spam che Rspamd
-            // segna nella Junk prima di ogni regola: niente risposta automatica ne' inoltro sullo spam (SpecialFolders
-            // verifica con IMAP, e se non va torna com'era).
+            // The special folders (Drafts, Sent, Trash, Junk) marked for mail clients, and the spam that Rspamd
+            // flags filed into Junk before any rule: no auto-reply nor forward on spam (SpecialFolders verifies
+            // with IMAP, and if it fails goes back as it was).
             org.daemoxcp.mail.system.SpecialFolders.ensureAtBoot();
-            // Rspamd impara dagli utenti: spostato nella Junk e' spam, tolto dalla Junk e' posta buona (SpamLearning, Dovecot 2.4:
-            // IMAPSieve deposita il messaggio, la parte root lo consegna a Rspamd con SpamLearner, dopo RspamdController).
+            // Rspamd learns from users: moved into Junk is spam, moved out of Junk is good mail (SpamLearning,
+            // Dovecot 2.4: IMAPSieve deposits the message, the root part hands it to Rspamd with SpamLearner,
+            // after RspamdController).
             org.daemoxcp.mail.system.SpamLearning.ensureAtBoot();
 
-            // MySQL solo da questa macchina e senza il protocollo X (33060 su tutti gli indirizzi),
-            // syslogd senza la porta 514, la posta in /var/vmail leggibile solo da vmail anche dentro.
-            // Ognuna si verifica, e se non va torna com'era; al secondo avvio non fanno niente.
+            // MySQL only from this machine and without the X protocol (33060 on all addresses),
+            // syslogd without port 514, the mail in /var/vmail readable only by vmail, inside too.
+            // Each one is verified, and if it fails goes back as it was; on the second boot they do nothing.
             org.daemoxcp.mail.system.MysqlListen.ensureAtBoot();
-            // Postfix e Dovecot in MySQL coi loro utenti, che leggono solo le colonne che usano, e non piu' con
-            // quello del pannello: dopo MysqlRoot (serve la root di MySQL) e MysqlListen (MySQL com'e' davvero).
+            // Postfix and Dovecot in MySQL with their own users, which read only the columns they use, and no
+            // longer with the panel's one: after MysqlRoot (it needs MySQL's root) and MysqlListen (MySQL as it
+            // really is).
             org.daemoxcp.mail.system.MailDbUsers.ensureAtBoot();
-            // Ogni casella punta a se stessa dopo gli alias (MailboxAddressMap): un catch-all prende solo gli indirizzi
-            // che non sono ne' alias ne' caselle. Dopo MailDbUsers: la mappa copia la connessione di quella degli alias.
+            // Every mailbox points to itself after the aliases (MailboxAddressMap): a catch-all takes only the
+            // addresses that are neither aliases nor mailboxes. After MailDbUsers: the map copies the connection
+            // of the aliases map.
             org.daemoxcp.mail.system.MailboxAddressMap.ensureAtBoot();
-            // Chi si autentica spedisce solo dai suoi indirizzi (la casella, gli alias che puntano a lei): prima una
-            // casella poteva spedire come un'altra, firmata DKIM, o come chiunque (SenderLoginMap). Stessa connessione.
+            // Whoever authenticates sends only from their own addresses (the mailbox, the aliases pointing to
+            // it): before, a mailbox could send as another one, DKIM-signed, or as anyone (SenderLoginMap). Same
+            // connection.
             org.daemoxcp.mail.system.SenderLoginMap.ensureAtBoot();
 
-            // Le quote delle caselle applicate da Dovecot 2.4, e chieste da Postfix prima di accettare (DovecotQuota). Dopo
-            // MailDbUsers: l'utente MySQL di Dovecot deve gia' poter leggere quota_mb.
+            // Mailbox quotas enforced by Dovecot 2.4, and checked by Postfix before accepting (DovecotQuota).
+            // After MailDbUsers: Dovecot's MySQL user must already be able to read quota_mb.
             org.daemoxcp.mail.system.DovecotQuota.ensureAtBoot();
 
-            // I limiti d'invio delle caselle: il pannello fa da servizio di policy per Postfix (SendingLimits), poi Postfix
-            // glielo chiede prima di ogni messaggio che una casella manda.
+            // The mailboxes' sending limits: the panel acts as a policy service for Postfix (SendingLimits),
+            // then Postfix asks it before every message that a mailbox sends.
             if (org.daemoxcp.mail.system.SendingLimits.start()) org.daemoxcp.mail.system.SendingLimits.ensurePostfix();
 
-            // I conteggi di posta mandata e ricevuta, dal registro di Postfix, ogni minuto (MailLogStats): la pagina
-            // Statistiche li legge da email_statistics.
+            // The counts of sent and received mail, from Postfix's log, every minute (MailLogStats): the
+            // Statistics page reads them from email_statistics.
             org.daemoxcp.mail.system.MailLogStats.start();
             org.daemoxcp.mail.system.SyslogNetwork.ensureAtBoot();
             org.daemoxcp.mail.system.VmailPermissions.ensureAtBoot();
-            // rspamd tutto col suo utente, anche il processo principale: le sue porte sono sopra la 1023 e
-            // i suoi file sono gia' suoi (RspamdUser, con una scansione vera prima e dopo).
+            // rspamd entirely with its own user, the main process included: its ports are above 1023 and
+            // its files are already its own (RspamdUser, with a real scan before and after).
             org.daemoxcp.mail.system.RspamdUser.ensureAtBoot();
-            // I servizi dietro rspamd solo per lui: redis sul socket Unix del gruppo redis (RedisSocket, reperto 235),
-            // clamd sul socket del gruppo clamav (ClamdSocket, 237), il controller solo con la password (RspamdController, 236).
+            // The services behind rspamd only for it: redis on the Unix socket of the redis group (RedisSocket,
+            // finding 235), clamd on the socket of the clamav group (ClamdSocket, 237), the controller only with
+            // the password (RspamdController, 236).
             org.daemoxcp.mail.system.RedisSocket.ensureAtBoot();
             org.daemoxcp.mail.system.ClamdSocket.ensureAtBoot();
             org.daemoxcp.mail.system.RspamdController.ensureAtBoot();
-            // Chi si autentica scrive nel From solo un indirizzo suo: la busta la controlla Postfix (SenderLoginMap),
-            // il From una regola di Rspamd, che dal milter sa chi si e' autenticato (HeaderFromCheck).
+            // Whoever authenticates writes in From only an address of their own: the envelope is checked by
+            // Postfix (SenderLoginMap), the From by an Rspamd rule, which knows from the milter who authenticated
+            // (HeaderFromCheck).
             org.daemoxcp.mail.system.HeaderFromCheck.ensureAtBoot();
-            // Rspamd firma solo i domini con la loro chiave DKIM: niente piu' «cannot load dkim key» per gli altri (DkimFallback).
+            // Rspamd signs only the domains with their own DKIM key: no more "cannot load dkim key" for the
+            // others (DkimFallback).
             org.daemoxcp.mail.system.DkimFallback.ensureAtBoot();
-            // I messaggi che gli utenti spostano nella Junk o fuori, a Rspamd con la password del controller (SpamLearning).
+            // The messages that users move into Junk or out of it, to Rspamd with the controller's password
+            // (SpamLearning).
             org.daemoxcp.mail.system.SpamLearner.start();
 
-            // Auto-setup Postfix aliases: crea /etc/aliases (o /etc/mail/aliases) se manca
-            // + compila il .db. Risolve l'errore comune "open database /etc/aliases.db: No such file".
-            // Idempotente: se è tutto OK non fa nulla.
+            // Auto-setup Postfix aliases: creates /etc/aliases (or /etc/mail/aliases) if missing
+            // + compiles the .db. Fixes the common error "open database /etc/aliases.db: No such file".
+            // Idempotent: if everything is OK it does nothing.
             try {
                 new org.daemoxcp.mail.security.PostfixAliasesManager().ensureAtBoot();
             } catch (Throwable t) {
                 LOGGER.warning("PostfixAliases ensureAtBoot failed: " + t.getMessage());
             }
 
-            // Postfix come MTA locale sui server installati prima che l'installatore lo facesse:
-            // dopo gli alias, perche' senza aliases.db la posta di sistema resterebbe in coda.
-            // Idempotente, e non attiva niente se la posta di sistema rimbalzerebbe.
+            // Postfix as the local MTA on servers installed before the installer did it:
+            // after the aliases, because without aliases.db the system mail would stay in the queue.
+            // Idempotent, and it activates nothing if the system mail would bounce.
             org.daemoxcp.mail.system.LocalMtaRepair.ensureAtBoot();
-            // I commenti dei record Cloudflare scritti in italiano prima del 30/10/2026 passano all'inglese (reperto 211):
-            // solo il commento, in un thread suo.
+            // The Cloudflare record comments written in Italian before 2026-10-30 switch to English
+            // (finding 211): only the comment, in a thread of its own.
             org.daemoxcp.mail.security.CloudflareCommentsEnglish.ensureAtBoot(cloudflareManager, Main.mailDatabase);
-            // inet_protocols scritto in chiaro col valore in uso: senza, lo script di ogni aggiornamento di postfix
-            // scrive ipv4 e al riavvio IPv6 sparisce (reperti 42, 207). Non cambia niente di quello che Postfix fa.
+            // inet_protocols written explicitly with the value in use: without it, the script of every postfix
+            // update writes ipv4 and on restart IPv6 disappears (findings 42, 207). It changes nothing in what
+            // Postfix does.
             org.daemoxcp.mail.system.PostfixInetProtocols.ensureAtBoot();
-            // La famiglia di indirizzi scelta nelle Impostazioni (IpFamily): Postfix, Dovecot, nginx. Senza scelta non fa niente.
+            // The address family chosen in Settings (IpFamily): Postfix, Dovecot, nginx. Without a choice it does
+            // nothing.
             org.daemoxcp.mail.system.IpFamily.ensureAtBoot();
-            // Il nome del jar senza versione (0.9.0): sui server di prima, il collegamento daemoxcp-mail.jar.
+            // The jar name without a version (0.9.0): on earlier servers, the daemoxcp-mail.jar link.
             org.daemoxcp.mail.system.JarName.ensureAtBoot();
 
-            // Roundcube col suo utente e il suo pool di php-fpm, non piu' con l'utente di nginx: sui
-            // server installati prima. Prima del plugin SSO, che da' la sua configurazione al gruppo
-            // con cui gira la webmail.
-            // php.ini se manca (il server vero girava sui valori compilati dentro) e security.limit_extensions nel pool
-            // di Roundcube (PhpHardening, reperto 238); prima di RoundcubeUser, che ripassa i proprietari.
+            // Roundcube with its own user and its own php-fpm pool, no longer with nginx's user: on
+            // servers installed earlier. Before the SSO plugin, which gives its configuration to the group
+            // the webmail runs with.
+            // php.ini if missing (the production server ran on the values compiled in) and
+            // security.limit_extensions in Roundcube's pool (PhpHardening, finding 238); before RoundcubeUser,
+            // which goes over the owners again.
             org.daemoxcp.mail.system.PhpHardening.ensureAtBoot();
             org.daemoxcp.mail.system.RoundcubeUser.ensureAtBoot();
 
-            // L'utente master di Dovecot con cui «Apri webmail» entra: gli script d'installazione lo
-            // lasciavano senza hash (o in un file che Dovecot non poteva leggere). Prima del plugin SSO
-            // e di chi, dopo, prova un accesso vero con lui.
+            // The Dovecot master user with which "Open webmail" logs in: the installation scripts
+            // left it without a hash (or in a file that Dovecot could not read). Before the SSO plugin
+            // and whatever later tries a real login with it.
             org.daemoxcp.mail.system.DovecotMasterUser.ensureAtBoot();
 
-            // Start auto-renewal for certificates (prima, nello stesso thread, acme.sh passa da root
-            // all'utente acme: AcmeUser.ensureAtBoot)
+            // Start auto-renewal for certificates (before that, in the same thread, acme.sh moves from root
+            // to the acme user: AcmeUser.ensureAtBoot)
             acmeManager.startAutoRenewal();
 
             // Start DKIM rotation scheduler (polls DNS propagation hourly)
             this.dkimRotationScheduler = new DkimRotationScheduler(Main.mailDatabase, dkimManager);
             this.dkimRotationScheduler.start();
 
-            // Il rapporto periodico: sa leggere il certificato solo se glielo si passa.
+            // The periodic report: it can read the certificate only if it is given to it.
             org.daemoxcp.mail.system.PeriodicReport.link(this.acmeManager);
             this.periodicReport = new org.daemoxcp.mail.system.PeriodicReport();
             this.periodicReport.start();
 
-            // Una versione nuova del pannello fra le release di GitHub, una volta al giorno (ReleaseCheck): la dicono
-            // la dashboard, la pagina Aggiornamenti e il rapporto periodico. Niente si scarica e niente si installa.
+            // A new version of the panel among the GitHub releases, once a day (ReleaseCheck): the dashboard, the
+            // Updates page and the periodic report say so. Nothing is downloaded and nothing is installed.
             org.daemoxcp.mail.system.ReleaseCheck.start();
 
             // Auto-install/update Roundcube SSO plugin if Roundcube is installed
-            // (e il cambio password della webmail che passa dal pannello)
+            // (and the webmail password change that goes through the panel)
             autoInstallSsoPlugin();
 
-            // La webmail entra in MySQL col suo utente (roundcube, solo il database di Roundcube) e
-            // non piu' con quello del pannello: sui server installati prima. Dopo il plugin SSO,
-            // perche' la verifica fa un accesso vero come il pulsante «Apri webmail».
+            // The webmail logs into MySQL with its own user (roundcube, only Roundcube's database) and
+            // no longer with the panel's: on servers installed earlier. After the SSO plugin,
+            // because the check does a real login like the "Open webmail" button.
             org.daemoxcp.mail.system.RoundcubeDbUser.ensureAtBoot(ssoManager);
-            // AES-256-CBC per la password IMAP nella sessione di Roundcube, non DES-EDE3-CBC (RoundcubeCipher, reperto 239).
+            // AES-256-CBC for the IMAP password in the Roundcube session, not DES-EDE3-CBC (RoundcubeCipher,
+            // finding 239).
             org.daemoxcp.mail.system.RoundcubeCipher.ensureAtBoot(ssoManager);
 
-            // La password dell'utente MySQL del pannello cambiata una volta: sui server installati prima e' stata per anni
-            // in config.inc.php della webmail (reperto 232). Dopo RoundcubeDbUser e MailDbUsers: nessun altro la usa piu'.
-            // Con la doppia password di MySQL non si ferma niente; se qualcosa non torna, MySQL torna com'era.
+            // The password of the panel's MySQL user changed once: on servers installed earlier it sat for years
+            // in the webmail's config.inc.php (finding 232). After RoundcubeDbUser and MailDbUsers: nobody else
+            // uses it any more. With MySQL's dual password nothing stops; if something does not add up, MySQL
+            // goes back as it was.
             org.daemoxcp.mail.system.PanelDbPassword.ensureAtBoot();
 
-            // Dopo: la webmail non scrive piu' password in chiaro, quelle rimaste si sistemano
+            // After: the webmail no longer writes passwords in clear text, the remaining ones get fixed
             repairPlaintextMailboxPasswords();
 
-            // Con quale utente gira ogni servizio, e gli avvisi nel log: lo dice il thread dei
-            // rinnovi, dopo la migrazione di acme.sh (AcmeManager.startAutoRenewal).
+            // Which user each service runs as, and the warnings in the log: the renewal thread
+            // reports it, after the acme.sh migration (AcmeManager.startAutoRenewal).
         }
     }
 
     /**
-     * Le caselle a cui la webmail aveva scritto la password in chiaro (driver sql del plugin
-     * password di Roundcube, algoritmo 'clear'): hash bcrypt e copia nel vault. Su un server gia'
-     * avviato succede al primo avvio della nuova versione; poi non trova piu' niente.
+     * The mailboxes whose password the webmail had written in clear text (the sql driver of Roundcube's
+     * password plugin, algorithm 'clear'): bcrypt hash and copy into the vault. On an already running
+     * server it happens at the first boot of the new version; after that it finds nothing more.
      */
     private void repairPlaintextMailboxPasswords() {
         try {
@@ -1035,14 +1076,14 @@ public class SSLMailServer {
         }
     }
 
-    /** Le colonne aggiunte dalle versioni successive, per le installazioni di prima. */
+    /** The columns added by later versions, for earlier installations. */
     private void ensureSchemaUpgrades() {
         try {
             Main.mailDatabase.ensureColumnUpgrades();
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Schema upgrade failed", e);
         }
-        // Il vault a chiave asimmetrica: la coppia di chiavi, poi le copie di prima ricifrate con la pubblica.
+        // The asymmetric-key vault: the key pair, then the earlier copies re-encrypted with the public key.
         try {
             org.daemoxcp.mail.security.PasswordVault.ensureKeyPair();
             org.daemoxcp.mail.security.PasswordVault.Reencrypted r = org.daemoxcp.mail.security.PasswordVault.reencryptOldCopies(Main.mailDatabase);
@@ -1082,18 +1123,18 @@ public class SSLMailServer {
     }
 
     public void start() {
-        // Virtual threads (Java 21+): ogni richiesta gira su un virtual thread
-        // leggerissimo invece che su un thread piattaforma da pool fisso a 10.
-        // Vantaggi:
-        //  - nessun limite pratico sul numero di richieste concorrenti
-        //  - quando una richiesta blocca su I/O (es. fail2ban-client, shell command,
-        //    query DB), il carrier thread va a servirne un'altra → niente starvation
-        //  - memoria: ~200 byte/virtual thread vs ~1MB/thread piattaforma
+        // Virtual threads (Java 21+): each request runs on a very lightweight
+        // virtual thread instead of a platform thread from a fixed pool of 10.
+        // Advantages:
+        //  - no practical limit on the number of concurrent requests
+        //  - when a request blocks on I/O (e.g. fail2ban-client, shell command,
+        //    DB query), the carrier thread goes on to serve another -> no starvation
+        //  - memory: ~200 bytes/virtual thread vs ~1MB/platform thread
         if (mode == Mode.ROOT_PART) {
-            // Nessuna porta: le API arrivano dal socket (serveForwarded). Le sessioni le crea e le toglie la
-            // root (A), con la chiave di questo avvio che la web le chiede: quelle dell'avvio di prima non
-            // valgono gia' piu', e qui si tolgono anche dal database. Poi le riparazioni e i lavori in
-            // background, come oggi.
+            // No port: the APIs arrive from the socket (serveForwarded). Sessions are created and removed by
+            // the root part (A), with this boot's key, which the web part asks it for: those of the previous
+            // boot are already invalid, and here they are removed from the database too. Then the repairs and
+            // the background jobs, as today.
             if (Main.mysqlAvailable && !Main.setupRequired && Main.sessions != null) {
                 int closed = Main.sessions.beginRun();
                 if (closed > 0) LOGGER.info("Closed " + closed + " panel session(s) of the previous start: every administrator signs in again");
@@ -1104,17 +1145,18 @@ public class SSLMailServer {
             return;
         }
         server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
-        // Le sessioni sono di questo avvio del jar (reperto 184): quelle di prima non valgono gia'
-        // piu' (WebSessions ha una chiave nuova), e qui si tolgono anche dal database. La porta e'
-        // gia' presa (il costruttore): un secondo processo che non puo' servire non tocca niente. La
-        // parte web no: la chiave e' della root, che le ha gia' tolte, e le sessioni non le scrive (A).
+        // Sessions belong to this boot of the jar (finding 184): those from before are already
+        // invalid (WebSessions has a new key), and here they are removed from the database too. The port
+        // is already taken (the constructor): a second process that cannot serve touches nothing. Not the
+        // web part: the key belongs to the root part, which has already removed them, and the web part does
+        // not write sessions (A).
         if (mode != Mode.WEB_PART && Main.mysqlAvailable && !Main.setupRequired && Main.sessions != null) {
             int closed = Main.sessions.beginRun();
             if (closed > 0) LOGGER.info("Closed " + closed + " panel session(s) of the previous start: every administrator signs in again");
         }
         server.start();
         if (mode == Mode.WEB_PART) {
-            // I gestori della web che lo usano (il controllo delle blacklist): MySQL e rete, niente root.
+            // The web part's handlers that use it (the blacklist check): MySQL and network, no root.
             if (Main.mailDatabase != null && Main.mysqlAvailable) this.dnsGenerator = new DnsRecordsGenerator(Main.mailDatabase);
             LOGGER.info(org.daemoxcp.mail.system.Product.NAME + " web part started on port " + port + " as " + System.getProperty("user.name")
                     + ": the signed-in API go to the root part");
@@ -1127,8 +1169,8 @@ public class SSLMailServer {
     public Mode mode() { return mode; }
 
     /**
-     * La parte web non e' partita: questo server prende la porta e serve tutto da root, come prima. Le
-     * rotte hanno gia' i gestori veri (l'inoltro c'e' solo in WEB_PART).
+     * The web part did not start: this server takes the port and serves everything from root, as before.
+     * The routes already have the real handlers (forwarding exists only in WEB_PART).
      */
     public void becomeLegacy() throws IOException {
         if (mode != Mode.ROOT_PART) return;
@@ -1293,7 +1335,7 @@ public class SSLMailServer {
      * Load private key from PEM string
      */
     private java.security.PrivateKey loadPrivateKeyFromString(String keyContent) throws Exception {
-        // La stessa lettura del controllo della voce 2 del menu (PemTls, reperto 243).
+        // The same read as the check of menu option 2 (PemTls, finding 243).
         return org.daemoxcp.mail.security.PemTls.privateKey(keyContent);
     }
 
@@ -1323,13 +1365,13 @@ public class SSLMailServer {
 
     // ============== AUTH HELPERS ==============
 
-    /** La sessione della richiesta in corso, cercata una volta sola: {exchange, risultato}. */
+    /** The session of the current request, looked up only once: {exchange, result}. */
     private static final ThreadLocal<Object[]> CURRENT_SESSION = new ThreadLocal<>();
 
     /**
-     * La sessione valida di questa richiesta (cookie __Host-DaemoxCPMail, nel database). La si cerca
-     * una volta: filtro CSRF, gestore e pagina la chiedono tutti. Il filtro di ogni rotta la
-     * dimentica a fine richiesta.
+     * The valid session of this request (cookie __Host-DaemoxCPMail, in the database). It is looked
+     * up once: the CSRF filter, the handler and the page all ask for it. Each route's filter
+     * forgets it at the end of the request.
      */
     @SuppressWarnings("unchecked")
     Optional<WebSessions.Current> currentSession(HttpExchange exchange) {
@@ -1344,18 +1386,18 @@ public class SSLMailServer {
         return session;
     }
 
-    /** Dopo un login o un'uscita la sessione della richiesta cambia: si dimentica quella cercata. */
+    /** After a login or a logout the request's session changes: the one looked up is forgotten. */
     static void forgetCurrentSession() {
         CURRENT_SESSION.remove();
         org.daemoxcp.mail.database.CatalogGuard.forgetSession();
     }
 
-    // ============== IL PANNELLO SEPARATO: L'INOLTRO ==============
+    // ============== THE SEPARATED PANEL: FORWARDING ==============
 
     /**
-     * La rotta che HttpServer sceglie per un percorso: il context col prefisso piu' lungo. La parte root
-     * accetta una richiesta inoltrata solo se la rotta che dice la web e' proprio questa: altrimenti la web
-     * potrebbe far controllare il permesso di una rotta e servire il percorso di un'altra.
+     * The route that HttpServer chooses for a path: the context with the longest prefix. The root part
+     * accepts a forwarded request only if the route the web part names is exactly this one: otherwise the
+     * web part could have the permission of one route checked and serve the path of another.
      */
     String routeFor(String path) {
         String best = null;
@@ -1365,11 +1407,11 @@ public class SSLMailServer {
     }
 
     /**
-     * La parte root: una richiesta che la web le ha passato sul socket (RootChannel). Si accetta solo una
-     * API di chi ha fatto l'accesso, che non sia di quelle che restano nella web. Chi ha fatto l'accesso
-     * si rilegge dal database: la sessione deve esserci ancora ed essere di quell'amministratore, e ruolo,
-     * permessi e conferma recente sono quelli del database, non quelli che dice la web. Poi lo stesso
-     * controllo del permesso di ogni richiesta (accessAllowed) e lo stesso gestore di oggi.
+     * The root part: a request that the web part passed to it on the socket (RootChannel). Only an API of
+     * a logged-in user is accepted, and not one of those that stay in the web part. The logged-in user is
+     * reread from the database: the session must still exist and belong to that administrator, and role,
+     * permissions and recent confirmation are those in the database, not those the web part claims. Then
+     * the same permission check as for every request (accessAllowed) and the same handler as today.
      */
     public void serveForwarded(RootChannel.Request r, ForwardedExchange exchange) throws IOException {
         if (r.route().startsWith("/op/")) {
@@ -1395,8 +1437,8 @@ public class SSLMailServer {
                 sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
                 return;
             }
-            // L'elenco chiuso (RootGate): il metodo della rotta, la forma di ogni valore, quella stretta dei
-            // parametri che finiscono in comandi e configurazioni. Il motivo nel registro, mai il valore.
+            // The closed list (RootGate): the route's method, the shape of each value, the strict one for
+            // parameters that end up in commands and configurations. The reason goes in the log, never the value.
             String refused = RootGate.check(r);
             if (refused != null) {
                 LOGGER.warning("Root part: forwarded request refused: " + refused);
@@ -1414,8 +1456,9 @@ public class SSLMailServer {
                 sendJsonError(exchange, 401, I18n.tr("server.unauthorized"));
                 return;
             }
-            // Come sulla porta (HeadExchange): una HEAD il gestore la serve come una GET, e il corpo si scarta. La web
-            // le passa gia' come GET; qui arriva una HEAD solo se qualcuno la scrive sul socket.
+            // As on the port (HeadExchange): the handler serves a HEAD like a GET, and the body is discarded.
+            // The web part already passes them as GET; a HEAD arrives here only if someone writes it on the
+            // socket.
             HttpExchange ex = "HEAD".equals(r.method()) ? new HeadExchange(exchange) : exchange;
             CURRENT_SESSION.set(new Object[]{ex, session});
             if (!accessAllowed(ex, access)) return;
@@ -1429,10 +1472,11 @@ public class SSLMailServer {
     }
 
     /**
-     * La parte root: l'accesso (POST /api/login), che la web le passa senza amministratore (A). La web ha gia'
-     * controllato Host e il token CSRF della pagina di accesso, che e' legato al suo cookie __Host-DaemoxCPMailPre:
-     * quel cookie qui non arriva. Il resto lo decide la root: passkey e codici con le sfide nella sua memoria,
-     * la sessione nel database, il cookie nella risposta, che la web lascia passare solo da qui.
+     * The root part: the login (POST /api/login), which the web part passes to it without an administrator
+     * (A). The web part has already checked Host and the CSRF token of the login page, which is bound to its
+     * cookie __Host-DaemoxCPMailPre: that cookie does not arrive here. The rest is decided by the root part:
+     * passkeys and codes with the challenges in its memory, the session in the database, the cookie in the
+     * response, which the web part lets through only from here.
      */
     private void serveSignIn(RootChannel.Request r, ForwardedExchange exchange) throws IOException {
         I18n.setCurrent(I18n.LANGUAGES.contains(r.lang()) ? r.lang() : I18n.FALLBACK_LANGUAGE);
@@ -1458,11 +1502,11 @@ public class SSLMailServer {
     }
 
     /**
-     * La parte root: una delle due rotte della webmail (cambio password, copia nel vault), che la web le passa senza
-     * amministratore dopo aver controllato che a chiamare sia la webmail sulla stessa macchina. La root non vede
-     * quel controllo e non ne ha bisogno: cambia o copia una password solo se quella attuale corrisponde all'hash
-     * (bcrypt), con il suo limite di tentativi per casella. Chi avesse preso la web non ottiene di piu' di chi
-     * conosce gia' la password della casella.
+     * The root part: one of the two webmail routes (password change, copy into the vault), which the web
+     * part passes to it without an administrator after checking that the caller is the webmail on the same
+     * machine. The root part does not see that check and does not need it: it changes or copies a password
+     * only if the current one matches the hash (bcrypt), with its own attempt limit per mailbox. Whoever had
+     * taken over the web part gets no more than someone who already knows the mailbox's password.
      */
     private void serveWebmail(RootChannel.Request r, ForwardedExchange exchange) throws IOException {
         I18n.setCurrent(I18n.LANGUAGES.contains(r.lang()) ? r.lang() : I18n.FALLBACK_LANGUAGE);
@@ -1491,10 +1535,11 @@ public class SSLMailServer {
     }
 
     /**
-     * La parte root: un'operazione chiusa (rootOperations) chiesta dalla web. Solo POST, nessun corpo, il
-     * percorso uguale al nome; la sessione deve esserci ancora, e il ruolo dal database deve avere uno dei
-     * permessi dell'operazione. Senza sessione c'e' solo session-key: la chiave delle sessioni di questo avvio,
-     * che la web chiede all'avvio (sul socket entra solo l'utente della web, SO_PEERCRED).
+     * The root part: a closed operation (rootOperations) requested by the web part. POST only, no body,
+     * the path equal to the name; the session must still exist, and the role from the database must have
+     * one of the operation's permissions. Without a session there is only session-key: the session key of
+     * this boot, which the web part asks for at startup (only the web part's user gets into the socket,
+     * SO_PEERCRED).
      */
     private void serveOperation(RootChannel.Request r, ForwardedExchange exchange) throws IOException {
         I18n.setCurrent(I18n.LANGUAGES.contains(r.lang()) ? r.lang() : I18n.FALLBACK_LANGUAGE);
@@ -1511,8 +1556,9 @@ public class SSLMailServer {
                 return;
             }
             if (r.route().equals("/op/restart-state")) {
-                // La web non vede i processi della root (see_other_uids=0): lo chiede qui, per le sue rotte. Basta
-                // una sessione valida: e' lo stesso fatto che la striscia mostra a chi vede il sistema.
+                // The web part cannot see the root's processes (see_other_uids=0): it asks here, for its routes.
+                // A valid session is enough: it is the same fact that the banner shows to whoever can see the
+                // system.
                 if (mode != Mode.ROOT_PART || !"POST".equals(r.method()) || !r.route().equals(r.path())
                         || r.body().length > 0 || r.query() != null) {
                     sendJsonError(exchange, 404, I18n.tr("server.access.forbidden"));
@@ -1553,9 +1599,9 @@ public class SSLMailServer {
     }
 
     /**
-     * La parte web chiede alla root un'operazione chiusa, per chi ha fatto la richiesta in corso (la sessione
-     * del thread). Se la root non risponde lo si dice nel registro: il cambiamento in MySQL c'e' comunque, e le
-     * cartelle le crea Dovecot al primo accesso.
+     * The web part asks the root part for a closed operation, on behalf of whoever made the current request
+     * (the thread's session). If the root part does not answer, the log says so: the change in MySQL is
+     * there anyway, and Dovecot creates the folders at the first login.
      */
     @SuppressWarnings("unchecked")
     private void askRoot(String operation) {
@@ -1579,9 +1625,10 @@ public class SSLMailServer {
     }
 
     /**
-     * La parte web: un'API di chi ha fatto l'accesso, che ha gia' passato Host, lingua, permesso e CSRF,
-     * va alla root con chi l'ha chiesta (id dell'amministratore e della sessione), l'IP e la lingua. Mai
-     * i cookie ne' il token: vedi RootChannel. La risposta torna com'e', senza Set-Cookie.
+     * The web part: an API of a logged-in user, which has already passed Host, language, permission and
+     * CSRF, goes to the root part with who asked for it (administrator and session id), the IP and the
+     * language. Never the cookies nor the token: see RootChannel. The response comes back as it is,
+     * without Set-Cookie.
      */
     private void forwardToRoot(HttpExchange exchange, String route) throws IOException {
         try {
@@ -1607,9 +1654,10 @@ public class SSLMailServer {
     }
 
     /**
-     * La parte web: una delle due rotte della webmail. Qui solo quello che la root non puo' vedere, cioe' che a
-     * chiamare sia la webmail sulla stessa macchina (loopback senza proxy, con la sua chiave), e un POST; altrimenti
-     * 404 o 405 come oggi, senza disturbare la root. Poi la richiesta va alla root senza amministratore.
+     * The web part: one of the two webmail routes. Here only what the root part cannot see, i.e. that the
+     * caller is the webmail on the same machine (loopback without a proxy, with its key), and a POST;
+     * otherwise 404 or 405 as today, without bothering the root part. Then the request goes to the root
+     * part without an administrator.
      */
     private void forwardWebmail(HttpExchange exchange, String route) throws IOException {
         try {
@@ -1630,14 +1678,14 @@ public class SSLMailServer {
         }
     }
 
-    /** Quanto puo' essere grande una richiesta di accesso (come AuthHandlers). */
+    /** How large a login request can be (like AuthHandlers). */
     private static final int SIGN_IN_MAX_BODY = 32 * 1024;
 
     /**
-     * La parte web: l'accesso (POST /api/login) lo decide la root (A). Qui solo quello che la root non puo'
-     * vedere: il token CSRF della pagina di accesso, legato al cookie __Host-DaemoxCPMailPre di questo browser.
-     * Poi la richiesta va alla root senza amministratore, e dalla sua risposta passa un solo cookie, quello
-     * della sessione che la root ha creato.
+     * The web part: the login (POST /api/login) is decided by the root part (A). Here only what the root
+     * part cannot see: the CSRF token of the login page, bound to this browser's __Host-DaemoxCPMailPre
+     * cookie. Then the request goes to the root part without an administrator, and from its response only
+     * one cookie passes, the one of the session that the root part created.
      */
     private void forwardSignIn(HttpExchange exchange) throws IOException {
         try {
@@ -1677,8 +1725,8 @@ public class SSLMailServer {
     }
 
     /**
-     * La richiesta alla root e la sua risposta al browser. Dalla root non passa nessun Set-Cookie, salvo,
-     * se sessionCookie, quello della sessione (l'accesso).
+     * The request to the root part and its response to the browser. No Set-Cookie passes from the root
+     * part, except, if sessionCookie, the session's one (the login).
      */
     private void relay(HttpExchange exchange, String route, long adminId, long sessionId, byte[] body,
                        boolean sessionCookie) throws IOException {
@@ -1687,7 +1735,7 @@ public class SSLMailServer {
             String v = exchange.getRequestHeaders().getFirst(h);
             if (v == null) continue;
             if (v.length() > 512) v = v.substring(0, 512);
-            // Un valore fuori dall'ASCII stampabile la root lo rifiuterebbe: non si manda, e basta.
+            // A value outside printable ASCII would be refused by the root part: it is not sent, and that is it.
             if (v.matches("[\\x20-\\x7E]*")) headers.put(h, v);
         }
         java.net.URI uri = exchange.getRequestURI();
@@ -1703,8 +1751,8 @@ public class SSLMailServer {
             return;
         }
         try (answer) {
-            // Le intestazioni della root sostituiscono quelle con lo stesso nome che la web avesse gia' messo
-            // (le intestazioni di sicurezza le mette anche la root): nessun doppione.
+            // The root part's headers replace those with the same name that the web part may have already set
+            // (the root part sets the security headers too): no duplicates.
             Headers out = exchange.getResponseHeaders();
             Set<String> fromRoot = new HashSet<>();
             for (String[] kv : answer.head().headers()) {
@@ -1732,9 +1780,9 @@ public class SSLMailServer {
     }
 
     /**
-     * La parte web, all'avvio: la chiave delle sessioni di questo avvio della root (A). Prova per un po',
-     * perche' la root apre il socket prima di avviare la web ma puo' essere ancora occupata. Null se non
-     * risponde: allora la web non parte (daemon la riavvia).
+     * The web part, at startup: the session key of this boot of the root part (A). It tries for a while,
+     * because the root part opens the socket before starting the web part but may still be busy. Null if it
+     * does not answer: then the web part does not start (daemon restarts it).
      */
     public static byte[] sessionKeyFromRoot(long waitMs) {
         long until = System.currentTimeMillis() + waitMs;
@@ -1769,7 +1817,7 @@ public class SSLMailServer {
         return currentSession(exchange).isPresent();
     }
 
-    /** Il valore di un cookie della richiesta, o null. */
+    /** The value of a request cookie, or null. */
     static String cookieValue(HttpExchange exchange, String name) {
         List<String> headers = exchange.getRequestHeaders().get("Cookie");
         if (headers == null) return null;
@@ -1787,9 +1835,9 @@ public class SSLMailServer {
     }
 
     /**
-     * Il token CSRF delle pagine di prima del login (accesso, installazione): l'HMAC del cookie
-     * __Host-DaemoxCPMailPre, che si crea qui se manca. Niente sul server: prima ogni visita alla
-     * pagina di accesso apriva una sessione in memoria.
+     * The CSRF token of the pages before login (login, installation): the HMAC of the cookie
+     * __Host-DaemoxCPMailPre, which is created here if missing. Nothing on the server: before, every
+     * visit to the login page opened a session in memory.
      */
     private String preLoginToken(HttpExchange exchange) {
         String current = cookieValue(exchange, WebSessions.PRE_COOKIE);
@@ -1801,8 +1849,8 @@ public class SSLMailServer {
     // ============== PAGE HANDLERS ==============
 
     /**
-     * Cosa mostrare quando MySQL non risponde: il pannello non puo' leggere domini, caselle e
-     * amministratori. Si dice cosa succede e come si rimedia, nella lingua di chi chiede.
+     * What to show when MySQL does not answer: the panel cannot read domains, mailboxes and
+     * administrators. It says what is happening and how to fix it, in the requester's language.
      */
     private void pageUnavailable(HttpExchange exchange) throws IOException {
         String lang = I18n.current();
@@ -1825,8 +1873,9 @@ public class SSLMailServer {
     }
 
     /**
-     * Dove manda la porta d'ingresso: MySQL giu' -> la pagina che lo dice; nessun amministratore
-     * -> /setup, che spiega come crearlo dalla console. Vero se la risposta e' gia' partita.
+     * Where the front door leads: MySQL down -> the page that says so; no administrator
+     * -> /setup, which explains how to create one from the console. True if the response has already
+     * been sent.
      */
     private boolean notReady(HttpExchange exchange) throws IOException {
         Main.refreshSetupState();
@@ -1866,9 +1915,9 @@ public class SSLMailServer {
     }
 
     /**
-     * /setup: il pannello non ha ancora un amministratore. Non lo si crea da qui (chi arrivasse
-     * per primo diventerebbe amministratore): la pagina mostra il comando da lanciare sul server,
-     * --create-admin. Con un amministratore gia' presente si va all'accesso.
+     * /setup: the panel has no administrator yet. It is not created from here (whoever arrived
+     * first would become administrator): the page shows the command to run on the server,
+     * --create-admin. With an administrator already present it goes to the login.
      */
     private void handleSetup(HttpExchange exchange) throws IOException {
         Main.refreshSetupState();
@@ -1880,7 +1929,7 @@ public class SSLMailServer {
             redirect(exchange, "/index");
             return;
         }
-        // Il token della pagina serve solo al cambio di lingua.
+        // The page token is only needed for the language switch.
         sendHtml(exchange, renderPage(exchange, readHtmlFile("setup.html"), preLoginToken(exchange)));
     }
 
@@ -1898,15 +1947,15 @@ public class SSLMailServer {
             if (html == null) {
                 html = readHtmlFile("home.html");
             }
-            // Il tema scelto dall'admin, dentro la pagina: la <head> lo applica prima del primo
-            // disegno, invece di scoprirlo dopo con /api/theme (era il lampo bianco).
+            // The theme chosen by the admin, inside the page: the <head> applies it before the first
+            // paint, instead of finding it out later with /api/theme (that was the white flash).
             html = withTheme(exchange, html);
             // Replace system info placeholders
             html = html.replace("{{JAVA_VERSION}}", "Java " + System.getProperty("java.version") + " (OpenJDK)");
             html = html.replace("{{PLATFORM}}", System.getProperty("os.name") + " " + System.getProperty("os.version"));
             html = html.replace("{{DATABASE}}", Main.mysqlAvailable ? "MySQL" : I18n.tr("server.notConnected"));
-            // Il nome del server di posta (configurato all'installazione) e il dominio della webmail,
-            // escapati: finiscono nel testo della pagina e dentro stringhe degli script.
+            // The mail server's name (configured at installation) and the webmail's domain,
+            // escaped: they end up in the page's text and inside script strings.
             String notConfigured = I18n.tr("server.notConfigured");
             String mailHostname = Main.dbManager != null ? Main.dbManager.getMailHostname() : null;
             html = html.replace("{{MAIL_HOSTNAME}}", I18n.escapeHtml(mailHostname != null && !mailHostname.isEmpty() ? mailHostname : notConfigured));
@@ -1920,27 +1969,27 @@ public class SSLMailServer {
     }
 
     /**
-     * Il tema scelto dall'admin, dentro la pagina: la <head> lo applica prima del primo disegno,
-     * invece di scoprirlo dopo con /api/theme (era il lampo bianco).
+     * The theme chosen by the admin, inside the page: the <head> applies it before the first paint,
+     * instead of finding it out later with /api/theme (that was the white flash).
      */
     private String withTheme(HttpExchange exchange, String html) {
         String theme = savedTheme(exchange);
         return html.replace("{{THEME}}", theme).replace("{{COLOR_SCHEME}}", "auto".equals(theme) ? "light dark" : theme);
     }
 
-    // ============== LINGUA ==============
+    // ============== LANGUAGE ==============
 
     /**
-     * Il passo comune a ogni pagina HTML, a ogni richiesta: il token CSRF, la cornice (barra
-     * laterale e barra in alto) e i testi nella lingua di chi chiede. La lingua: quella salvata
-     * nell'account, poi il cookie di questo browser, poi quella del browser; per un browser che non
-     * chiede ne' italiano ne' inglese, l'inglese.
+     * The step common to every HTML page, on every request: the CSRF token, the frame (sidebar
+     * and top bar) and the texts in the requester's language. The language: the one saved
+     * in the account, then this browser's cookie, then the browser's own; for a browser that
+     * asks for neither Italian nor English, English.
      */
     private String renderPage(HttpExchange exchange, String html, String csrfToken) {
         String saved = savedLanguage(exchange);
         String lang = I18n.languageOf(exchange, saved);
-        // La scelta salvata nell'account vale anche per le chiamate degli script, che leggono il
-        // cookie: se il cookie dice altro (un browser nuovo), lo si allinea.
+        // The choice saved in the account also applies to the scripts' calls, which read the
+        // cookie: if the cookie says otherwise (a new browser), it is aligned.
         if (saved != null && !saved.equals(I18n.fromCookie(exchange.getRequestHeaders().get("Cookie")))) {
             exchange.getResponseHeaders().add("Set-Cookie", I18n.cookieHeader(saved));
         }
@@ -1950,13 +1999,16 @@ public class SSLMailServer {
         return I18n.render(page, lang);
     }
 
-    /** Chi guarda la pagina: nome, ruolo e permessi dell'amministratore della sessione; prima di entrare, nessuno. */
+    /**
+     * Who is looking at the page: name, role and permissions of the session's administrator; before login,
+     * nobody.
+     */
     private Layout.Viewer viewer(HttpExchange exchange) {
         return currentSession(exchange).map(s -> new Layout.Viewer(s.admin().username(), s.admin().role(),
                 AuthStore.permissionsOf(s.admin().role()))).orElse(Layout.Viewer.NOBODY);
     }
 
-    /** La lingua salvata dall'amministratore di questa sessione, o null (prima di entrare, o mai scelta). */
+    /** The language saved by this session's administrator, or null (before login, or never chosen). */
     private String savedLanguage(HttpExchange exchange) {
         try {
             if (Main.mailDatabase == null || !isAuthenticated(exchange)) return null;
@@ -1968,14 +2020,14 @@ public class SSLMailServer {
     }
 
     /**
-     * GET /i18n/(lingua).js: il dizionario degli script, con t() e tn(). Pubblico (ci sono solo i
-     * testi dell'interfaccia, e serve anche alla pagina di accesso) e da tenere in cache:
-     * l'indirizzo cambia con i testi (?v=impronta).
+     * GET /i18n/(language).js: the scripts' dictionary, with t() and tn(). Public (it holds only the
+     * interface texts, and the login page needs it too) and cacheable:
+     * the address changes with the texts (?v=fingerprint).
      */
     /**
-     * GET /assets/...: uno script o un foglio di stile di una pagina (PageAssets). Il nome e'
-     * l'impronta del contenuto, quindi il file non cambia mai e si tiene in cache per un anno.
-     * Quelli delle pagine protette solo a chi e' entrato: agli altri 404, come se non ci fossero.
+     * GET /assets/...: a script or stylesheet of a page (PageAssets). The name is the
+     * fingerprint of the content, so the file never changes and is cached for a year.
+     * Those of the protected pages only to logged-in users: to the others 404, as if they did not exist.
      */
     private void handleAsset(HttpExchange exchange) throws IOException {
         try (exchange) {
@@ -2020,9 +2072,9 @@ public class SSLMailServer {
     }
 
     /**
-     * POST /api/language: cambia la lingua. Per chi e' entrato si salva nell'account (lo segue su
-     * ogni browser) e nel cookie; sulle pagine di accesso e di installazione solo nel cookie. Sempre
-     * col token CSRF: quello della sessione, o prima di entrare quello della pagina.
+     * POST /api/language: changes the language. For a logged-in user it is saved in the account (it
+     * follows them on every browser) and in the cookie; on the login and installation pages only in the
+     * cookie. Always with the CSRF token: the session's one, or before login the page's one.
      */
     private void handleApiLanguage(HttpExchange exchange) throws IOException {
         try {
@@ -2065,15 +2117,15 @@ public class SSLMailServer {
         }
     }
 
-    /** POST /api/logout: chiude la sessione, anche nel database, e toglie il cookie. */
+    /** POST /api/logout: closes the session, in the database too, and removes the cookie. */
     private void handleLogout(HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {
             sendJsonError(exchange, 405, I18n.tr("server.methodNotAllowed"));
             return;
         }
         currentSession(exchange).ifPresent(s -> {
-            // Col pannello separato la sessione la toglie la root, che sola scrive le sessioni (A); il cookie
-            // qui sotto lo toglie comunque, anche se la root non risponde.
+            // With the separated panel the session is removed by the root part, which alone writes sessions (A);
+            // the cookie is removed below anyway, even if the root part does not answer.
             if (mode == Mode.WEB_PART) {
                 askRoot("logout");
                 return;
@@ -2083,11 +2135,11 @@ public class SSLMailServer {
         });
         forgetCurrentSession();
         exchange.getResponseHeaders().add("Set-Cookie", WebSessions.clearCookieHeader());
-        // r14: all'uscita il browser dimentica anche cache e dati delle pagine del pannello. Non
-        // "cookies": varrebbe per tutto il dominio, anche per la webmail sui nomi vicini.
+        // r14: on logout the browser also forgets the cache and data of the panel's pages. Not
+        // "cookies": it would apply to the whole domain, the webmail on neighbouring names included.
         exchange.getResponseHeaders().add("Clear-Site-Data", "\"cache\", \"storage\"");
-        // I cookie coi nomi di prima (prima di __Host-, poi del nome vecchio del pannello), se un browser li ha ancora:
-        // i nomi stanno nel file di dati, sezione "sessionCookies"
+        // Cookies with the earlier names (before __Host-, then the panel's old name), if a browser still has
+        // them: the names are in the data file, section "sessionCookies"
         for (String[] old : org.daemoxcp.mail.system.LegacyNames.pairs("sessionCookies"))
             exchange.getResponseHeaders().add("Set-Cookie", old[0] + "=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0");
         sendJsonResponse(exchange, new JSONObject().put("success", true));
@@ -2297,7 +2349,7 @@ public class SSLMailServer {
                 case "GET" -> {
                     String transform = queryParameter(exchange.getRequestURI().getRawQuery(), "transform");
                     if (transform != null) {
-                        // Anteprima di "casella -> alias": cosa si perde, cosa resta. Non cambia niente.
+                        // Preview of "mailbox -> alias": what is lost, what remains. It changes nothing.
                         int tid;
                         try { tid = Integer.parseInt(transform); } catch (NumberFormatException e) { tid = 0; }
                         MailDatabase.Mailbox tm = tid > 0 ? Main.mailDatabase.getMailbox(tid) : null;
@@ -2329,8 +2381,8 @@ public class SSLMailServer {
                             mbox.put("junk_expunge_days", m.junkExpungeDays);
                             mbox.put("trash_expunge_days", m.trashExpungeDays);
                             mbox.put("last_login", m.lastLogin != null ? m.lastLogin.toString() : I18n.tr("server.never"));
-                            // Flag: la casella ha una password archiviata nel vault?
-                            // Usato dalla UI per mostrare/nascondere l'icona "rivela password".
+                            // Flag: does the mailbox have a password stored in the vault?
+                            // Used by the UI to show/hide the "reveal password" icon.
                             try {
                                 mbox.put("has_encrypted_password",
                                     Main.mailDatabase.mailboxHasEncryptedPassword(m.id));
@@ -2381,7 +2433,7 @@ public class SSLMailServer {
                         return;
                     }
 
-                    // Sub-routing per action specifiche (no email/password richieste)
+                    // Sub-routing for specific actions (no email/password required)
                     String action = req.optString("action", "");
 
                     if ("transform_to_alias".equals(action)) {
@@ -2390,21 +2442,21 @@ public class SSLMailServer {
                     }
 
                     if ("bulk_rotate_passwords".equals(action)) {
-                        // Genera + aggiorna in massa le password di N caselle.
-                        // Le password in chiaro tornano UNA SOLA volta nella response
-                        // (perché poi vengono cifrate nel vault con la chiave master attuale).
+                        // Generates + bulk-updates the passwords of N mailboxes.
+                        // The plain-text passwords come back ONLY ONCE in the response
+                        // (because they are then encrypted in the vault with the current master key).
                         //
                         // INPUT:
-                        //   mailbox_ids: array di INT (oppure "all" come stringa per "tutte")
-                        //   length:      lunghezza password (default 20)
+                        //   mailbox_ids: array of INT (or "all" as a string for "all of them")
+                        //   length:      password length (default 20)
                         //
                         // OUTPUT:
-                        //   results: array di {id, email, password, success, error?}
+                        //   results: array of {id, email, password, success, error?}
                         //   summary: {total, succeeded, failed}
                         Object ids = req.opt("mailbox_ids");
                         java.util.List<Integer> idList = new java.util.ArrayList<>();
-                        // Pattern matching for instanceof (Java 16+): la variabile 'idsArr'
-                        // e' tipata e in scope solo nel branch dove serve.
+                        // Pattern matching for instanceof (Java 16+): the variable 'idsArr'
+                        // is typed and in scope only in the branch where it is needed.
                         if ("all".equals(ids)) {
                             for (MailDatabase.Mailbox m : Main.mailDatabase.getAllMailboxes()) idList.add(m.id);
                         } else if (ids instanceof org.json.JSONArray idsArr) {
@@ -2417,7 +2469,7 @@ public class SSLMailServer {
                             return;
                         }
                         int length = req.optInt("length", 20);
-                        // Opzioni avanzate (stesso schema di generate_password)
+                        // Advanced options (same scheme as generate_password)
                         String type = req.optString("type", "easy_to_read");
                         boolean inclLocal = req.optBoolean("include_lowercase", true);
                         boolean inclUpdated = req.optBoolean("include_uppercase", true);
@@ -2473,8 +2525,8 @@ public class SSLMailServer {
                     }
 
                     if ("generate_password".equals(action)) {
-                        // Genera una password sicura random — non la salva, solo la ritorna alla UI.
-                        // Accetta opzioni avanzate (type, include lower/upper/numbers/symbols).
+                        // Generates a secure random password -- does not save it, only returns it to the UI.
+                        // Accepts advanced options (type, include lower/upper/numbers/symbols).
                         int len = req.optInt("length", 20);
                         String type = req.optString("type", "easy_to_read"); // easy_to_say / easy_to_read / all_chars
                         boolean lo = req.optBoolean("include_lowercase", true);
@@ -2487,9 +2539,9 @@ public class SSLMailServer {
                         response.put("password", pw);
                         response.put("length", pw.length());
                         response.put("type", type);
-                        // Stima dell'entropia, sugli stessi insiemi che il generatore ha appena usato.
-                        // Il livello e' un codice (weak, fair, strong, very_strong): il nome da
-                        // mostrare lo mette la pagina, nella lingua di chi guarda.
+                        // Entropy estimate, on the same sets that the generator has just used.
+                        // The level is a code (weak, fair, strong, very_strong): the name to
+                        // show is set by the page, in the viewer's language.
                         int poolSize = org.daemoxcp.mail.security.PasswordVault.poolSize(type, lo, up, nu, sy);
                         double entropy = org.daemoxcp.mail.security.PasswordVault.estimateEntropy(pw.length(), poolSize);
                         response.put("entropy_bits", Math.round(entropy * 10.0) / 10.0);
@@ -2504,7 +2556,7 @@ public class SSLMailServer {
                     }
 
 
-                    // Default: creazione casella (codice esistente)
+                    // Default: mailbox creation (existing code)
                     String email = req.optString("email", "").toLowerCase().trim();
                     String password = req.optString("password", "");
                     String name = req.optString("name", "");
@@ -2563,8 +2615,8 @@ public class SSLMailServer {
                         boolean active = req.optBoolean("active", true);
                         boolean receiveEnabled = req.optBoolean("receive_enabled", true);
                         String newPassword = req.optString("password", "");
-                        // Lo svuotamento automatico: solo i giorni dell'elenco (0 = mai); se la richiesta non li porta,
-                        // restano quelli di adesso, cosi' un client di prima non li azzera.
+                        // Automatic emptying: only the days in the list (0 = never); if the request does not carry
+                        // them, the current ones remain, so an older client does not reset them.
                         MailDatabase.Mailbox current = Main.mailDatabase.getMailboxById(id);
                         int junkDays = req.has("junk_expunge_days") ? req.optInt("junk_expunge_days", -1) : current != null ? current.junkExpungeDays : 0;
                         int trashDays = req.has("trash_expunge_days") ? req.optInt("trash_expunge_days", -1) : current != null ? current.trashExpungeDays : 0;
@@ -2590,7 +2642,7 @@ public class SSLMailServer {
                         if (updated) {
                             response.put("success", true);
                             response.put("message", I18n.tr("server.mailbox.updated"));
-                            // Lo svuotamento automatico nel registro di controllo, col prima e il dopo (r22)
+                            // Automatic emptying in the audit log, with the before and after (r22)
                             if (current != null && (current.junkExpungeDays != junkDays || current.trashExpungeDays != trashDays))
                                 logAudit("MAILBOX_CLEANUP_CHANGED", getClientIp(exchange), "mailbox_id=" + id + " email=" + current.email
                                         + " junk_days=" + current.junkExpungeDays + "->" + junkDays + " trash_days=" + current.trashExpungeDays + "->" + trashDays);
@@ -2602,7 +2654,7 @@ public class SSLMailServer {
                     }
                 }
                 case "DELETE" -> {
-                    // Eliminare cambia lo stato: stesso controllo CSRF di creazione e modifica (prima mancava).
+                    // Deleting changes state: same CSRF check as creation and modification (it was missing before).
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
                         sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
@@ -2671,7 +2723,7 @@ public class SSLMailServer {
             imap.put("auth_method", I18n.tr("server.autoconf.normalPassword"));
             response.put("imap", imap);
 
-            // POP3 solo se l'amministratore l'ha acceso (Impostazioni): spento, le sue porte sono chiuse.
+            // POP3 only if the administrator has turned it on (Settings): when off, its ports are closed.
             if (org.daemoxcp.mail.system.Pop3.wanted()) {
                 JSONObject pop3 = new JSONObject();
                 pop3.put("server", mailServer);
@@ -2743,28 +2795,31 @@ public class SSLMailServer {
     }
 
     /**
-     * Perche' un alias "indirizzo -> se stesso" viene rifiutato quando l'indirizzo non e' una casella.
-     * Su una casella e' permesso: e' proprio il modo di tenerne una copia (revisione:
-     * la nota lo consigliava e il controllo lo rifiutava).
+     * Why an "address -> itself" alias is refused when the address is not a mailbox.
+     * On a mailbox it is allowed: it is precisely the way to keep a copy (review:
+     * the note recommended it and the check refused it).
      */
     private static String aliasOnItself(String address) {
         return I18n.tr("server.alias.selfOnlyMailbox", Map.of("address", address));
     }
 
     /**
-     * Che cosa succede ora alla posta per {@code address}, quando c'e' da saperlo; null altrimenti.
+     * What happens now to the mail for {@code address}, when it is worth knowing; null otherwise.
      *
-     * Postfix legge solo gli alias con active=1, e li applica prima delle caselle: una casella con
-     * alias attivi ma senza "se stessa -> se stessa" attivo non riceve piu' niente, e un indirizzo
-     * che non e' una casella esiste solo finche' ha un alias attivo (o il dominio un catch-all).
-     * Serve dopo ogni cambio: creare, modificare, disattivare, eliminare.
+     * Postfix reads only the aliases with active=1, and applies them before the mailboxes: a mailbox with
+     * active aliases but without an active "itself -> itself" no longer receives anything, and an address
+     * that is not a mailbox exists only as long as it has an active alias (or the domain a catch-all).
+     * Needed after every change: create, modify, deactivate, delete.
      */
     private static String afterAliases(String address, int domainId) throws java.sql.SQLException {
         return afterAliases(address, Main.mailDatabase.getMailboxByEmail(address) != null,
                 Main.mailDatabase.getAliases(domainId));
     }
 
-    /** La decisione di {@link #afterAliases(String, int)} senza database: la esercita tests/.../AliasMessagesTest. */
+    /**
+     * The decision of {@link #afterAliases(String, int)} without a database: exercised by
+     * tests/.../AliasMessagesTest.
+     */
     static String afterAliases(String address, boolean mailbox, List<MailDatabase.Alias> ofDomain) {
         int at = address.indexOf('@');
         String catchAll = at >= 0 ? address.substring(at) : null;
@@ -2788,19 +2843,19 @@ public class SSLMailServer {
         return I18n.tr("server.alias.nowRejected", Map.of("address", address));
     }
 
-    /** La sorgente di un catch-all: @ e un nome di dominio valido, 254 caratteri in tutto. */
+    /** The source of a catch-all: @ and a valid domain name, 254 characters in total. */
     static boolean validCatchAllSource(String source) {
         return source != null && source.length() <= 254 && source.startsWith("@") && SecurityUtils.isValidDomain(source.substring(1));
     }
 
     /**
-     * Perche' un catch-all non si puo' creare o puntare li', o null se si puo'.
+     * Why a catch-all cannot be created or pointed there, or null if it can.
      * <ul>
-     *   <li>Postfix deve avere la mappa delle caselle dopo gli alias (MailboxAddressMap): senza, il catch-all prenderebbe
-     *       anche la posta delle caselle;</li>
-     *   <li>una destinazione nello stesso dominio deve essere una casella attiva che riceve: un indirizzo che non esiste,
-     *       o una casella spenta o che non riceve, tornerebbe al catch-all stesso, e Postfix fermerebbe la posta per il
-     *       giro senza fine.</li>
+     *   <li>Postfix must have the mailbox map after the aliases (MailboxAddressMap): without it, the
+     *       catch-all would take the mailboxes' mail too;</li>
+     *   <li>a destination in the same domain must be an active mailbox that receives: an address that
+     *       does not exist, or a mailbox that is off or does not receive, would go back to the catch-all
+     *       itself, and Postfix would stop the mail for the endless loop.</li>
      * </ul>
      */
     private static String catchAllRefused(String source, String destination) throws java.sql.SQLException {
@@ -2810,7 +2865,7 @@ public class SSLMailServer {
         return catchAllLoop(source, destination, m != null && m.active && m.receiveEnabled);
     }
 
-    /** La seconda regola di {@link #catchAllRefused}, senza database: la esercita CatchAllTest. */
+    /** The second rule of {@link #catchAllRefused}, without a database: exercised by CatchAllTest. */
     static String catchAllLoop(String source, String destination, boolean destinationIsMailbox) {
         String domain = source.substring(1);
         int at = destination.lastIndexOf('@');
@@ -2819,18 +2874,22 @@ public class SSLMailServer {
         return null;
     }
 
-    /** Un indirizzo per un alias: i caratteri ammessi da isValidEmail e i limiti della RFC 5321 (254 in tutto, 64 prima della @). */
+    /**
+     * An address for an alias: the characters allowed by isValidEmail and the limits of RFC 5321
+     * (254 in total, 64 before the @).
+     */
     private static boolean validAliasAddress(String email) {
         return email != null && email.length() <= 254 && SecurityUtils.isValidEmail(email) && email.indexOf('@') <= 64;
     }
 
     /**
-     * Modifica un alias: la destinazione ({@code destination}) e/o se e' attivo ({@code active}).
+     * Modifies an alias: the destination ({@code destination}) and/or whether it is active
+     * ({@code active}).
      *
-     * Prima la pagina non lo permetteva: l'unico modo era eliminare e ricreare, e fra le due
-     * operazioni la sorgente restava senza alias. Qui e' un solo UPDATE, e Postfix, che legge la
-     * tabella a ogni messaggio, segue la nuova regola dal messaggio successivo. Disattivare
-     * lascia la riga dov'e': Postfix considera solo gli alias con active=1.
+     * Before, the page did not allow it: the only way was to delete and recreate it, and between the two
+     * operations the source was left without an alias. Here it is a single UPDATE, and Postfix, which reads
+     * the table at every message, follows the new rule from the next message. Deactivating
+     * leaves the row where it is: Postfix considers only the aliases with active=1.
      */
     private JSONObject editAlias(JSONObject req, String ip) throws java.sql.SQLException {
         JSONObject r = new JSONObject();
@@ -2894,7 +2953,7 @@ public class SSLMailServer {
                 case "GET" -> {
                     String transform = queryParameter(exchange.getRequestURI().getRawQuery(), "transform");
                     if (transform != null) {
-                        // Anteprima di "alias -> casella": cosa succede, o perche' non si puo'. Non cambia niente.
+                        // Preview of "alias -> mailbox": what happens, or why it cannot be done. It changes nothing.
                         String address = transform.trim().toLowerCase(java.util.Locale.ROOT);
                         if (address.length() > 254) {
                             response.put("success", false).put("error", I18n.tr("server.badAddress"));
@@ -2939,8 +2998,8 @@ public class SSLMailServer {
 
                     String source = req.optString("source", "").toLowerCase().trim();
                     String destination = req.optString("destination", "").toLowerCase().trim();
-                    // Un catch-all e' un alias con sorgente @dominio: la posta di ogni indirizzo del dominio che non e'
-                    // ne' alias ne' casella (MailboxAddressMap).
+                    // A catch-all is an alias with source @domain: the mail of every address of the domain that is
+                    // neither an alias nor a mailbox (MailboxAddressMap).
                     boolean catchAll = source.startsWith("@");
                     String catchAllRefused = null;
 
@@ -2951,8 +3010,8 @@ public class SSLMailServer {
                         response.put("success", false);
                         response.put("error", catchAllRefused);
                     } else if (source.equals(destination) && Main.mailDatabase.getMailboxByEmail(source) == null) {
-                        // "casella -> se stessa" e' il modo di tenerne una copia quando la posta e'
-                        // inoltrata altrove; su un indirizzo che non e' una casella non porta da nessuna parte.
+                        // "mailbox -> itself" is the way to keep a copy when the mail is
+                        // forwarded elsewhere; on an address that is not a mailbox it leads nowhere.
                         response.put("success", false);
                         response.put("error", aliasOnItself(source));
                     } else {
@@ -2967,7 +3026,7 @@ public class SSLMailServer {
                             try {
                                 id = Main.mailDatabase.addAlias(domain.id, source, destination);
                             } catch (java.sql.SQLIntegrityConstraintViolationException dup) {
-                                // Vincolo UNIQUE (source, destination): prima tornava il testo di MySQL.
+                                // UNIQUE constraint (source, destination): before, MySQL's text came back.
                                 id = -1;
                             }
                             if (id > 0) {
@@ -2975,10 +3034,10 @@ public class SSLMailServer {
                                 response.put("id", id);
                                 logAudit("ALIAS_CREATED", getClientIp(exchange), source + " -> " + destination);
                                 regenerateMailConfigs();
-                                // Se la sorgente e' anche una casella, da ora la sua posta va solo alle destinazioni.
+                                // If the source is also a mailbox, from now on its mail goes only to the destinations.
                                 String note = afterAliases(source, domain.id);
                                 if (note != null) response.put("note", I18n.tr("server.alias.created") + " " + note);
-                                // Un catch-all raccoglie anche lo spam verso indirizzi inventati: lo si dice subito.
+                                // A catch-all also collects spam to made-up addresses: say so right away.
                                 if (catchAll) response.put("note", I18n.tr("server.alias.catchAllCreated",
                                         Map.of("domain", domainName, "destination", destination)));
                             } else {
@@ -2989,7 +3048,7 @@ public class SSLMailServer {
                     }
                 }
                 case "PUT" -> {
-                    // Modifica: nuova destinazione e/o attivo si'/no, stesso controllo CSRF.
+                    // Edit: new target and/or active yes/no, same CSRF check.
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
                         sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
@@ -3003,7 +3062,7 @@ public class SSLMailServer {
                     response = editAlias(req, getClientIp(exchange));
                 }
                 case "DELETE" -> {
-                    // Anche l'eliminazione cambia lo stato: stesso controllo CSRF della creazione.
+                    // Deleting also changes state: same CSRF check as creation.
                     String body = readRequestBodyWithLimit(exchange);
                     if (body == null) {
                         sendJsonError(exchange, 413, I18n.tr("server.requestTooLarge"));
@@ -3016,7 +3075,7 @@ public class SSLMailServer {
                     String query = exchange.getRequestURI().getQuery();
                     int id = extractIdFromQuery(query);
                     if (id > 0) {
-                        // Letto prima: dopo non c'e' piu', e serve a dire che cosa resta alla sorgente.
+                        // Read before: afterwards it is gone, and it is needed to say what remains for the source.
                         MailDatabase.Alias via = Main.mailDatabase.getAliasById(id);
                         boolean deleted = Main.mailDatabase.deleteAlias(id);
                         response.put("success", deleted);
@@ -3096,8 +3155,8 @@ public class SSLMailServer {
                 return;
             }
             JSONObject req = new JSONObject(body);
-            // Avviare, fermare e riavviare un servizio cambia lo stato del server: senza token
-            // una pagina di un altro sito aperta dall'amministratore potrebbe fermare la posta.
+            // Starting, stopping and restarting a service changes the server's state: without a token
+            // a page from another site opened by the administrator could stop the mail.
             if (!validateCsrfForRequest(exchange, req)) {
                 sendCsrfError(exchange);
                 return;
@@ -3137,8 +3196,8 @@ public class SSLMailServer {
             System.out.println("[SERVICE] Result: " + (success ? "OK" : "FAILED"));
             logAudit("SERVICE_" + action.toUpperCase(Locale.ROOT), getClientIp(exchange),
                     "service=" + service + (success ? "" : " (failed)"));
-            // Dopo un riavvio "da riavviare" deve sparire subito, non fra trenta secondi. Senza
-            // prendere il lock delle letture: una lettura in corso non deve trattenere questa risposta.
+            // After a restart "needs restart" must disappear immediately, not in thirty seconds. Without
+            // taking the reads lock: a read in progress must not hold back this response.
             ACTION_VERSIONS.incrementAndGet();
 
             JSONObject response = new JSONObject();
@@ -3155,8 +3214,8 @@ public class SSLMailServer {
     }
 
     /**
-     * Ultima lettura delle versioni (SoftwareVersions), quando e' stata fatta e quante azioni sui
-     * servizi c'erano state quando e' partita: un'azione arrivata dopo la rende vecchia.
+     * Last reading of the versions (SoftwareVersions), when it was done and how many actions on the
+     * services there had been when it started: an action arriving afterwards makes it stale.
      */
     private static final Object VERSIONS_LOCK = new Object();
     private static final java.util.concurrent.atomic.AtomicLong ACTION_VERSIONS = new java.util.concurrent.atomic.AtomicLong();
@@ -3164,11 +3223,11 @@ public class SSLMailServer {
     private static long readVersionsMs, readActionVersions;
 
     /**
-     * Le versioni del software per la Home (colonna Versione di "Servizi Mail" e "Altro software").
-     * Una lettura lancia una quindicina di comandi brevi: si tiene per trenta secondi, cosi' piu'
-     * schede aperte o ricaricate non li rilanciano ogni volta. "?fresh=1" (il pulsante Rileggi)
-     * rilegge subito, ma non piu' di una volta ogni tre secondi; dopo un'azione su un servizio si
-     * rilegge comunque. Le letture vanno una alla volta.
+     * The software versions for the Home page (Version column of "Mail Services" and "Other software").
+     * A reading launches about fifteen short commands: it is kept for thirty seconds, so that several
+     * open or reloaded tabs do not relaunch them every time. "?fresh=1" (the "Reload" button)
+     * reads again immediately, but not more than once every three seconds; after an action on a service
+     * it reads again anyway. Readings go one at a time.
      */
     private void handleApiVersions(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
@@ -3192,7 +3251,7 @@ public class SSLMailServer {
                 if (readVersions == null || actions != readActionVersions || age > 30_000 || (fresh != null && age > 3_000)) {
                     readVersions = org.daemoxcp.mail.system.SoftwareVersions.read(org.daemoxcp.mail.system.SoftwareVersions.real(
                             () -> Main.mysqlAvailable && Main.mailDatabase != null ? Main.mailDatabase.serverVersion() : null));
-                    // Il ramo accanto alle versioni: quali versioni arrivano dipende da li'.
+                    // The branch next to the versions: which versions arrive depends on it.
                     JSONObject branch = org.daemoxcp.mail.system.PkgBranch.state(org.daemoxcp.mail.system.PkgBranch.real());
                     if (branch.optBoolean("success")) readVersions.put("branch", branch.getString("branch"));
                     readVersionsMs = System.currentTimeMillis();
@@ -3209,11 +3268,11 @@ public class SSLMailServer {
     }
 
     /**
-     * Esegue un'installazione di pacchetti sul turno dei lavori sui pacchetti (vedi
-     * PackageQueue): uno alla volta. Se un altro lavoro sta cambiando i pacchetti, o c'e'
-     * l'elenco di uno che non si e' chiuso, non parte e la risposta dice perche'.
+     * Runs a package installation on the package turn (see
+     * PackageQueue): one at a time. If another job is changing the packages, or the list
+     * of one that never closed is still there, it does not start and the response says why.
      */
-    /** Un fuso per MySQL: offset (+02:00), SYSTEM o un nome IANA (Europe/Rome). */
+    /** A time zone for MySQL: offset (+02:00), SYSTEM or an IANA name (Europe/Rome). */
     private static final java.util.regex.Pattern TIME_ZONE_VALUE =
             java.util.regex.Pattern.compile("[+-](0\\d|1[0-4]):[0-5]\\d|SYSTEM|[A-Za-z][A-Za-z0-9_+-]{0,30}(/[A-Za-z0-9_+-]{1,30}){0,2}");
 
@@ -3227,7 +3286,7 @@ public class SSLMailServer {
 
     // ============== HELPER METHODS ==============
 
-    /** Un parametro della query (grezza), decodificato; null se non c'e'. */
+    /** A query parameter (raw), decoded; null if absent. */
     static String queryParameter(String rawQuery, String name) {
         if (rawQuery == null) return null;
         for (String pair : rawQuery.split("&")) {
@@ -3244,9 +3303,9 @@ public class SSLMailServer {
     }
 
     /**
-     * Alias -> casella (AddressTransform): controlli, posta di prima messa da parte se chiesto,
-     * una transazione nel database, i filtri rimasti di una casella di prima riscritti vuoti.
-     * Se qualcosa non riesce, non cambia niente.
+     * Alias -> mailbox (AddressTransform): checks, earlier mail set aside if requested,
+     * one database transaction, the leftover filters of an earlier mailbox rewritten empty.
+     * If something fails, nothing changes.
      */
     private JSONObject aliasToMailbox(JSONObject req, String ip) throws Exception {
         JSONObject r = new JSONObject();
@@ -3298,9 +3357,9 @@ public class SSLMailServer {
         logAudit("ALIAS_TO_MAILBOX", ip, address + (keep ? " (forwards kept, copy in the mailbox)" : " (aliases removed)")
                 + (archive ? ", old mail set aside" : s.mail().present() ? ", old mail found again" : ""));
         regenerateMailConfigs();
-        // I filtri compilati di una casella di prima non devono valere per questa: si riscrivono, vuoti. Se non si
-        // possono scrivere la casella c'e' lo stesso, ma quei filtri valgono ancora e la pagina lo deve dire, non
-        // rispondere che e' fatto (reperto 223).
+        // The compiled filters of an earlier mailbox must not apply to this one: they are rewritten, empty.
+        // If they cannot be written the mailbox exists anyway, but those filters still apply and the page
+        // must say so, not answer that it is done (finding 223).
         boolean oldFiltersKept = !archive && s.mail().filters() && !regenerateSieveScript(id);
         StringBuilder msg = new StringBuilder(I18n.tr("server.convert.nowMailbox", Map.of("address", address)));
         if (keep) msg.append(' ').append(I18n.tr("server.convert.forwardsKept"));
@@ -3314,9 +3373,9 @@ public class SSLMailServer {
     }
 
     /**
-     * Casella -> alias (AddressTransform): l'indirizzo scritto per conferma, destinazioni
-     * controllate (valide, esistenti se sono tue, senza giri), una transazione nel database.
-     * La posta gia' arrivata resta sul disco.
+     * Mailbox -> alias (AddressTransform): the address typed for confirmation, destinations
+     * checked (valid, existing if they are yours, no loops), one database transaction.
+     * The mail that has already arrived stays on disk.
      */
     private JSONObject mailboxToAlias(JSONObject req, String ip) throws Exception {
         JSONObject r = new JSONObject();
@@ -3366,7 +3425,7 @@ public class SSLMailServer {
     }
 
     private void regenerateMailConfigs() {
-        // Nella parte web niente script: lo chiede alla root, che lo compone dai nomi di MySQL ricontrollati.
+        // In the web part no script: it asks the root part, which builds it from the rechecked MySQL names.
         if (mode == Mode.WEB_PART) {
             askRoot("mail-folders");
             return;
@@ -3374,8 +3433,9 @@ public class SSLMailServer {
         try {
             if (Main.mailDatabase != null && Main.mysqlAvailable) {
                 String script = new ConfigRegeneratorScript(Main.mailDatabase).getScriptContent();
-                // Gli avvisi dello script nel registro: prima l'uscita si buttava, e un file con piu' nomi lasciato
-                // com'era (SafeOwnership, reperto 252) o una casella col nome sbagliato non li vedeva nessuno.
+                // The script's warnings in the log: before, the output was thrown away, and nobody saw a file
+                // with several names left as it was (SafeOwnership, finding 252) or a mailbox with the wrong
+                // name.
                 for (String line : executeScript(script, "config_regen").split("\n"))
                     if (line.startsWith("WARNING") || line.startsWith("[WARNING]") || line.startsWith("[ERROR]"))
                         LOGGER.warning("[ConfigRegenerator] " + line);
@@ -3453,9 +3513,9 @@ public class SSLMailServer {
      */
     private boolean checkPackageInstalledByPattern(String pattern) {
         try {
-            // SECURITY: pattern arriva da chiamate interne con costanti, ma defense-in-depth:
-            // accetta solo lettere, numeri, dash, underscore, dot, asterisco e percent
-            // (caratteri tipici dei nomi pacchetti pkg). Blocca apici, ;, |, &, $, backtick.
+            // SECURITY: pattern comes from internal calls with constants, but defense-in-depth:
+            // accepts only letters, digits, dash, underscore, dot, asterisk and percent
+            // (characters typical of pkg package names). Blocks quotes, ;, |, &, $, backtick.
             if (pattern == null || !pattern.matches("^[a-zA-Z0-9._%*-]+$")) {
                 return false;
             }
@@ -3509,7 +3569,7 @@ public class SSLMailServer {
 
         // Dovecot: check for dovecot-mysql (required for SQL auth) or base dovecot
         // On FreeBSD, dovecot-mysql REPLACES dovecot package
-        // Dopo il passaggio guidato alla 2.4 (reperto 213) il sapore MySQL e' dovecot24-mysql.
+        // After the guided move to 2.4 (finding 213) the MySQL flavor is dovecot24-mysql.
         boolean dovecotInstalled = checkPackageInstalled("dovecot") || checkPackageInstalled("dovecot24");
         boolean dovecotMysqlInstalled = checkPackageInstalled("dovecot-mysql") || checkPackageInstalled("dovecot24-mysql");
         boolean dovecotMarked = Main.mailDatabase.isComponentInstalled("dovecot");
@@ -3646,26 +3706,26 @@ public class SSLMailServer {
     }
 
     /**
-     * Serve i file statici dalle risorse del jar: Font Awesome sotto /fa, Bootstrap e
-     * Chart.js sotto /vendor.
+     * Serves the static files from the jar's resources: Font Awesome under /fa, Bootstrap and
+     * Chart.js under /vendor.
      *
-     * Prima arrivavano da un CDN, fermi alla 6.0.0-beta3, dove due delle icone usate non
-     * esistevano affatto. Ora viaggiano dentro il jar (356 KB in tutto): il pannello non
-     * dipende piu' da un sito esterno, e la versione e' quella scelta, non quella che
-     * l'indirizzo del CDN si porta dietro.
+     * Before, they came from a CDN, stuck at 6.0.0-beta3, where two of the icons used did not
+     * exist at all. Now they travel inside the jar (356 KB in all): the panel no longer
+     * depends on an external site, and the version is the chosen one, not the one that
+     * the CDN address carries with it.
      *
-     * Il percorso richiesto viene ripulito prima di essere usato: e' l'unico punto del
-     * pannello in cui una stringa che arriva dalla rete diventa il nome di una risorsa da
-     * leggere, quindi "../" e i nomi strani non devono passare.
+     * The requested path is cleaned before being used: it is the only place in the
+     * panel where a string coming from the network becomes the name of a resource to
+     * read, so "../" and strange names must not get through.
      */
     /**
-     * Il file che Thunderbird cerca da solo. Nessuna autenticazione: e' il client a chiederlo
-     * prima di sapere qualsiasi cosa dell'utente.
+     * The file that Thunderbird looks for by itself. No authentication: it is the client that asks
+     * for it before knowing anything about the user.
      *
-     * Il dominio si ricava dal parametro emailaddress, e in mancanza dall'intestazione Host
-     * che nginx passa avanti. In entrambi i casi viene confrontato con l'elenco dei domini
-     * gestiti: se non e' uno di quelli, 404. Cosi' il valore che arriva da fuori non finisce
-     * mai dentro il file: quello che si scrive e' sempre il nome preso dal database.
+     * The domain is taken from the emailaddress parameter, and failing that from the Host header
+     * that nginx forwards. In both cases it is compared with the list of managed
+     * domains: if it is not one of them, 404. So the value that comes from outside never ends up
+     * inside the file: what gets written is always the name taken from the database.
      */
     private void handlePublicAutoconfig(HttpExchange exchange) throws IOException {
         try {
@@ -3704,7 +3764,7 @@ public class SSLMailServer {
         }
     }
 
-    /** Un parametro dalla query, senza portarsi dietro una libreria per farlo. */
+    /** A parameter from the query, without dragging in a library to do it. */
     private static String parameter(String query, String name) {
         if (query == null || query.isEmpty()) return null;
         for (String pair : query.split("&")) {
@@ -3719,9 +3779,9 @@ public class SSLMailServer {
     }
 
     /**
-     * La politica MTA-STS, come la chiede un server mittente. Il dominio si ricava
-     * dall'intestazione Host che nginx passa avanti, e viene confrontato con l'elenco dei
-     * domini gestiti: se non e' uno di quelli, 404.
+     * The MTA-STS policy, as a sending server asks for it. The domain is taken
+     * from the Host header that nginx forwards, and it is compared with the list of
+     * managed domains: if it is not one of them, 404.
      */
     private void handlePublicMtaSts(HttpExchange exchange) throws IOException {
         try {
@@ -3781,9 +3841,9 @@ public class SSLMailServer {
     }
 
     /**
-     * Scarica il profilo di configurazione per Apple Mail. E' una GET perche' deve essere un
-     * link che il browser scarica, ma richiede la sessione: il profilo contiene il nome di
-     * una casella, e non ha motivo di essere pubblico. Non contiene la password.
+     * Downloads the configuration profile for Apple Mail. It is a GET because it must be a
+     * link that the browser downloads, but it requires the session: the profile contains the name
+     * of a mailbox, and has no reason to be public. It does not contain the password.
      */
     private void handleDownloadAppleProfile(HttpExchange exchange) throws IOException {
         try {
@@ -3802,13 +3862,13 @@ public class SSLMailServer {
             String profile = org.daemoxcp.mail.system.AppleProfile
                     .mobileconfig(mailbox.email(), mailbox.name(), host, host);
             if (!org.daemoxcp.mail.system.AppleProfile.wellFormed(profile)) {
-                // Non si consegna un file rotto: Mail lo rifiuterebbe senza spiegare perche'.
+                // A broken file is not delivered: Mail would reject it without explaining why.
                 exchange.sendResponseHeaders(500, -1);
                 return;
             }
             byte[] data = profile.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            // Firmato col certificato della posta quando un telefono se ne fida (AppleProfile.signer): l'iPhone lo
-            // mostra «Verificato». Se la firma non riesce si consegna quello non firmato, e lo si dice nel registro.
+            // Signed with the mail certificate when a phone trusts it (AppleProfile.signer): the iPhone shows
+            // it as "Verified". If signing fails the unsigned one is delivered, and the log says so.
             boolean signed = false;
             if (org.daemoxcp.mail.system.AppleProfile.signer(host).ok()) {
                 byte[] der = org.daemoxcp.mail.system.AppleProfile.sign(data);
@@ -3850,10 +3910,10 @@ public class SSLMailServer {
         String path = exchange.getRequestURI().getPath();
         String resource = null;
         if (path.startsWith("/fa/")) {
-            String rel = path.substring(4);                        // css/... oppure webfonts/...
+            String rel = path.substring(4);                        // css/... or webfonts/...
             if (rel.matches("(css|webfonts)/[A-Za-z0-9._-]{1,64}")) resource = "/fa/" + rel;
         } else if (path.startsWith("/vendor/")) {
-            String rel = path.substring(8);                        // un solo livello, nessuna cartella
+            String rel = path.substring(8);                        // one level only, no folders
             if (rel.matches("[A-Za-z0-9._-]{1,64}")) resource = "/vendor/" + rel;
         }
         if (resource == null) {
@@ -3866,7 +3926,7 @@ public class SSLMailServer {
                     : resource.endsWith(".woff2") ? "font/woff2"
                     : resource.endsWith(".woff") ? "font/woff"
                     : resource.endsWith(".ttf") ? "font/ttf"
-                    // L'icona delle pagine (vendor/favicon.svg): un file nostro, senza script.
+                    // The pages' icon (vendor/favicon.svg): a file of our own, without scripts.
                     : resource.endsWith(".svg") ? "image/svg+xml"
                     : "application/octet-stream";
         byte[] data;
@@ -3880,7 +3940,7 @@ public class SSLMailServer {
         }
         exchange.getResponseHeaders().add("Content-Type", type);
         exchange.getResponseHeaders().add("X-Content-Type-Options", "nosniff");
-        // Il contenuto cambia solo quando cambia il jar: si puo' tenere in cache a lungo.
+        // The content changes only when the jar changes: it can be cached for a long time.
         exchange.getResponseHeaders().add("Cache-Control", "public, max-age=604800");
         exchange.sendResponseHeaders(200, data.length);
         try (OutputStream os = exchange.getResponseBody()) {
@@ -3920,9 +3980,9 @@ public class SSLMailServer {
     }
 
     /**
-     * La risposta quando la sessione non si e' potuta leggere perche' il database non risponde (DATABASE_HEADER): alle
-     * richieste delle pagine un 503 che dicono di ripetere; a una pagina aperta in quel momento una pagina che lo dice
-     * e si ricarica da sola, invece dell'accesso.
+     * The response when the session could not be read because the database does not answer
+     * (DATABASE_HEADER): to the pages' requests a 503 that tells them to repeat; to a page opened at that
+     * moment a page that says so and reloads by itself, instead of the login.
      */
     private void databaseUnavailable(HttpExchange exchange, boolean page) throws IOException {
         exchange.getResponseHeaders().set(DATABASE_HEADER, "unavailable");
@@ -3954,33 +4014,33 @@ public class SSLMailServer {
         headers.set("X-XSS-Protection", "1; mode=block");
         headers.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
         headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-        // HSTS: un anno di solo-HTTPS per questo nome, sottodomini compresi.
+        // HSTS: one year of HTTPS-only for this name, subdomains included.
         //
-        // Il token "preload" c'era ed e' stato tolto il 02/09/2026. Non faceva niente: la lista
-        // di preload e' compilata dentro il browser, e servire il token e' solo un REQUISITO per
-        // candidarsi — la candidatura va presentata a hstspreload.org. Verificato quel giorno:
-        // ne' domain-b.test ne' mail.domain-b.test risultano nella lista ("status": "unknown").
-        // Era quindi una dichiarazione pubblica mai presentata: la stessa forma del record TXT
-        // MTA-STS pubblicato senza una politica che risponde.
+        // The "preload" token was there and was removed on 2026-09-02. It did nothing: the preload
+        // list is compiled into the browser, and serving the token is only a REQUIREMENT for
+        // applying -- the application must be submitted at hstspreload.org. Verified that day:
+        // neither domain-b.test nor mail.domain-b.test is on the list ("status": "unknown").
+        // So it was a public declaration never submitted: the same shape as the MTA-STS TXT
+        // record published without a policy that answers.
         //
-        // E toglierlo protegge dal caso peggiore: che un domani qualcuno candidi il dominio
-        // vedendo il token gia' li'. Da quel momento la regola vive dentro il binario dei
-        // browser, e rimuoverla richiede mesi — mentre qui basta che il certificato del
-        // pannello si rompa una volta per restare fuori proprio quando serve entrare a
-        // ripararlo (HSTS toglie il "prosegui comunque" sugli avvisi di certificato).
+        // And removing it protects against the worst case: that some day someone applies for the
+        // domain seeing the token already there. From that moment the rule lives inside the
+        // browsers' binary, and removing it takes months -- while here it is enough for the
+        // panel's certificate to break once to be locked out exactly when you need to get in to
+        // fix it (HSTS removes the "proceed anyway" on certificate warnings).
         //
-        // Cosa resta, e perche': max-age si rinnova a ogni visita e includeSubDomains vale per
-        // i sottodomini di QUESTO nome. Si tengono perche' il certificato si rinnova da solo e
-        // il pannello ne sorveglia la scadenza. Nota: la regola e' per NOME, non per porta
-        // (RFC 6797 §8.1), quindi servita dalla 2096 vale per quel nome ovunque.
+        // What remains, and why: max-age is renewed at every visit and includeSubDomains applies
+        // to the subdomains of THIS name. They are kept because the certificate renews itself and
+        // the panel watches its expiry. Note: the rule is per NAME, not per port
+        // (RFC 6797 section 8.1), so served from 2096 it applies to that name everywhere.
         headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-        // Content Security Policy senza 'unsafe-inline' (SecurityHeaders, reperto 178).
+        // Content Security Policy without 'unsafe-inline' (SecurityHeaders, finding 178).
         headers.set("Content-Security-Policy", SecurityHeaders.CONTENT_SECURITY_POLICY);
         // Permissions Policy - Disable unnecessary features
         headers.set("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
     }
 
-    /** Converte ISO LocalDateTime in formato leggibile, nella lingua della richiesta; "Mai" se vuoto */
+    /** Converts an ISO LocalDateTime to a readable format, in the request's language; "Never" if empty */
     private static String humanizeDateTime(String iso) {
         if (iso == null || iso.isEmpty()) return I18n.tr("server.never");
         try {
@@ -4015,18 +4075,18 @@ public class SSLMailServer {
     // ============== DKIM API ==============
 
     /**
-     * Serializza un {@link java.sql.Timestamp} in ISO 8601 UTC ("2026-05-15T21:00:00Z").
-     * Costruito dall'epoch milliseconds, bypassando completamente la timezone del JVM.
+     * Serializes a {@link java.sql.Timestamp} as ISO 8601 UTC ("2026-05-15T21:00:00Z").
+     * Built from the epoch milliseconds, completely bypassing the JVM's timezone.
      */
     private static String tsIso(java.sql.Timestamp ts) {
         return ts == null ? null : java.time.Instant.ofEpochMilli(ts.getTime()).toString();
     }
 
     /**
-     * Helper per scrivere un timestamp in JSON con DUE campi:
-     *   key       → ISO 8601 UTC ("2026-05-15T21:00:00Z")
-     *   key + "_ms" → epoch milliseconds (long, unambiguo)
-     * Il browser preferisce _ms se presente, altrimenti il fallback ISO.
+     * Helper that writes a timestamp to JSON as TWO fields:
+     *   key       -> ISO 8601 UTC ("2026-05-15T21:00:00Z")
+     *   key + "_ms" -> epoch milliseconds (long, unambiguous)
+     * The browser prefers _ms when present, otherwise the ISO fallback.
      */
     private static void putTs(org.json.JSONObject obj, String key, java.sql.Timestamp ts) {
         if (ts == null) return;
@@ -4093,9 +4153,9 @@ public class SSLMailServer {
                         response.put("success", false);
                         response.put("error", I18n.tr("server.domainNotFound"));
                     } else if (domain.hasDkim) {
-                        // SAFETY: 'generate' è solo per il SETUP INIZIALE. Se DKIM è già configurato,
-                        // sovrascrivere la chiave senza rotazione causerebbe DKIM-fail su mail in transito.
-                        // L'utente DEVE usare 'rotate_start' per cambiare la chiave su un dominio già attivo.
+                        // SAFETY: 'generate' is only for the INITIAL SETUP. If DKIM is already configured,
+                        // overwriting the key without a rotation would cause DKIM-fail on mail in transit.
+                        // The user MUST use 'rotate_start' to change the key on a domain that is already active.
                         response.put("success", false);
                         response.put("error",
                             I18n.tr("server.dkim.alreadyConfigured", Map.of("selector", String.valueOf(domain.dkimSelector))));
@@ -4126,8 +4186,8 @@ public class SSLMailServer {
                     response.put("success", deleted);
 
                 } else if ("rotate_start".equals(action)) {
-                    // FASE 1: genera nuova chiave pending, restituisce record DNS da pubblicare.
-                    // Se "auto"=true e Cloudflare configurato, il record viene creato via API.
+                    // PHASE 1: generate a new pending key, return the DNS record to publish.
+                    // If "auto"=true and Cloudflare is configured, the record is created through the API.
                     int domainId = req.optInt("domain_id", 0);
                     boolean auto = req.optBoolean("auto", false);
                     DkimManager.RotationStartResult r = dkimManager.startRotation(domainId, auto);
@@ -4136,7 +4196,7 @@ public class SSLMailServer {
                         response.put("pending_selector", r.pendingSelector);
                         response.put("dns_record_name", r.dnsRecordName);
                         response.put("dns_record_value", r.dnsRecordValue);
-                        // r.error qui è usato come "warning" non bloccante (es. CF non trovata)
+                        // r.error is used here as a non-blocking "warning" (e.g. CF not found)
                         if (r.error != null && !r.error.isEmpty()) {
                             response.put("warning", r.error);
                             response.put("message", I18n.tr("server.dkim.generatedWarning", Map.of("warning", String.valueOf(r.error))));
@@ -4150,7 +4210,7 @@ public class SSLMailServer {
                     }
 
                 } else if ("rotate_check".equals(action)) {
-                    // FASE 2: verifica propagazione DNS della chiave pending
+                    // PHASE 2: check the DNS propagation of the pending key
                     int domainId = req.optInt("domain_id", 0);
                     DkimManager.PropagationCheckResult r = dkimManager.checkPropagation(domainId);
                     response.put("success", r.success);
@@ -4161,7 +4221,7 @@ public class SSLMailServer {
                     }
 
                 } else if ("rotate_activate".equals(action)) {
-                    // FASE 3: pending → active, active → previous, reload Rspamd
+                    // PHASE 3: pending -> active, active -> previous, reload Rspamd
                     int domainId = req.optInt("domain_id", 0);
                     boolean force = req.optBoolean("force", false);
                     DkimManager.RotationActionResult r = dkimManager.activatePending(domainId, force);
@@ -4169,21 +4229,21 @@ public class SSLMailServer {
                     response.put("message", r.message);
 
                 } else if ("rotate_complete".equals(action)) {
-                    // FASE 4: rimuove la previous key (fine grace period)
+                    // PHASE 4: removes the previous key (end of the grace period)
                     int domainId = req.optInt("domain_id", 0);
                     DkimManager.RotationActionResult r = dkimManager.completeRotation(domainId);
                     response.put("success", r.success);
                     response.put("message", r.message);
 
                 } else if ("rotate_cancel".equals(action)) {
-                    // Annulla rotazione pre-attivazione
+                    // Cancel a rotation before activation
                     int domainId = req.optInt("domain_id", 0);
                     DkimManager.RotationActionResult r = dkimManager.cancelRotation(domainId);
                     response.put("success", r.success);
                     response.put("message", r.message);
 
                 } else if ("rotate_status".equals(action)) {
-                    // Stato corrente della rotazione (per la UI)
+                    // Current state of the rotation (for the UI)
                     int domainId = req.optInt("domain_id", 0);
                     DkimManager.RotationInfo info = dkimManager.getRotationInfo(domainId);
                     if (info == null) {
@@ -4193,14 +4253,14 @@ public class SSLMailServer {
                         response.put("success", true);
                         response.put("domain", info.domain);
                         response.put("has_dkim", info.hasDkim);
-                        // Schedule corrente (per il banner "prossima rotazione")
+                        // Current schedule (for the "next rotation" banner)
                         DkimManager.ScheduleResult sched = dkimManager.getRotationSchedule(domainId);
                         if (sched != null && sched.success) {
                             response.put("schedule_interval_days", sched.intervalDays);
                             putTs(response, "schedule_last_rotation_at", sched.lastRotationAt);
                             putTs(response, "schedule_next_rotation_at", sched.nextRotationAt);
                         }
-                        // Account Cloudflare assegnato a questo dominio (se c'è)
+                        // Cloudflare account assigned to this domain (if any)
                         if (cloudflareManager != null) {
                             MailDatabase.CloudflareAccount acct = cloudflareManager.getAccountForDomain(domainId);
                             response.put("cloudflare_configured", acct != null);
@@ -4214,18 +4274,18 @@ public class SSLMailServer {
                         }
                         response.put("current_selector", info.currentSelector);
                         response.put("rotation_state", info.rotationState == null ? "" : info.rotationState);
-                        // Le due durate arrivano SEMPRE, non solo nel ramo del grace period:
-                        // la scheda le mostra gia' allo stato "propagated" per dire quando
-                        // scatta l'attivazione automatica. Senza, ripiegherebbe su 24 e 7
-                        // scritti nella pagina — numeri giusti oggi e silenziosamente falsi
-                        // il giorno in cui qualcuno cambia le costanti.
+                        // The two durations are ALWAYS sent, not only in the grace-period branch:
+                        // the card already shows them in the "propagated" state, to say when
+                        // the automatic activation kicks in. Without them, it would fall back on the 24
+                        // and 7 written in the page: numbers that are right today and silently wrong
+                        // the day someone changes the constants.
                         response.put("auto_activate_after_hours",
                             org.daemoxcp.mail.security.DkimRotationScheduler.AUTO_ACTIVATE_AFTER_HOURS);
                         response.put("grace_period_days",
                             org.daemoxcp.mail.security.DkimRotationScheduler.GRACE_PERIOD_DAYS);
-                        // Lo scheduler vive dentro questo server web: se il pannello non
-                        // riparte da solo dopo un riavvio, i passi 3 e 4 restano fermi. La
-                        // scheda deve poterlo DIRE, non lasciarlo scoprire.
+                        // The scheduler lives inside this web server: if the panel does not
+                        // restart on its own after a reboot, steps 3 and 4 stay stuck. The
+                        // card must be able to SAY so, not leave it to be discovered.
                         response.put("auto_start",
                             UpdateManager.autoStart().optBoolean("active", false));
                         putTs(response, "started_at", info.startedAt);
@@ -4243,27 +4303,27 @@ public class SSLMailServer {
                         if (info.previousSelector != null) {
                             response.put("previous_selector", info.previousSelector);
                             response.put("previous_dns_name", info.previousDnsName);
-                            // La scheda dichiarava "la vecchia chiave deve restare nel DNS per
-                            // 7 giorni" senza guardare se ci fosse. Su domain-b.test non c'era
-                            // gia' prima della rotazione — il pannello lo aveva verificato tre
-                            // volte e scritto nel registro — e lo dichiarava lo stesso.
-                            // Un'istruzione da seguire su una cosa che non esiste fa cercare
-                            // un guasto dove non c'e', e nasconde quello vero: che quella
-                            // chiave non e' mai stata pubblicata.
+                            // The card stated "the old key must stay in the DNS for
+                            // 7 days" without checking whether it was there. On domain-b.test it
+                            // was already missing before the rotation -- the panel had checked it
+                            // three times and written it in the log -- and the card stated it anyway.
+                            // An instruction to follow about something that does not exist sends
+                            // you looking for a fault where there is none, and hides the real one:
+                            // that the key was never published.
                             try {
                                 DkimManager.DkimVerifyResult pv =
                                     dkimManager.verifyDkimDns(info.domain, info.previousSelector);
                                 response.put("previous_in_dns", pv != null && pv.valid);
                             } catch (Exception e) {
-                                // Non sapere non e' ne' si' ne' no: si omette il campo e la
-                                // scheda torna a dire la cosa prudente.
+                                // Not knowing is neither yes nor no: the field is omitted and the
+                                // card goes back to saying the cautious thing.
                             }
                         }
                     }
 
                 } else if ("orphans_scan".equals(action)) {
-                    // Scansiona Cloudflare per trovare TUTTI i record _domainkey del dominio,
-                    // distinguendo tra current/pending/previous (attivi) e orphan (da pulire).
+                    // Scans Cloudflare to find ALL the _domainkey records of the domain,
+                    // telling current/pending/previous (active) apart from orphan (to be cleaned up).
                     int domainId = req.optInt("domain_id", 0);
                     DkimManager.OrphanScanResult r = dkimManager.scanDkimRecords(domainId);
                     response.put("success", r.success);
@@ -4297,7 +4357,7 @@ public class SSLMailServer {
                     }
 
                 } else if ("orphans_delete".equals(action)) {
-                    // Cancella un singolo record (per record_id) via Cloudflare API.
+                    // Deletes a single record (by record_id) via the Cloudflare API.
                     int domainId = req.optInt("domain_id", 0);
                     String recordId = req.optString("record_id", "");
                     if (domainId <= 0 || recordId.isEmpty()) {
@@ -4310,8 +4370,8 @@ public class SSLMailServer {
                     }
 
                 } else if ("last_rotation_reset".equals(action)) {
-                    // Sovrascrive dkim_last_rotation_at con NOW (Java JVM clock).
-                    // Usare per pulire valori "fossili" memorizzati con tz sbagliata.
+                    // Overwrites dkim_last_rotation_at with NOW (Java JVM clock).
+                    // Use it to clean up "fossil" values stored with the wrong tz.
                     int domainId = req.optInt("domain_id", 0);
                     if (domainId <= 0) {
                         response.put("success", false);
@@ -4323,7 +4383,7 @@ public class SSLMailServer {
                     }
 
                 } else if ("last_rotation_clear".equals(action)) {
-                    // Resetta a NULL — l'UI mostrerà "Mai effettuata"
+                    // Reset to NULL -- the UI will show "Never done"
                     int domainId = req.optInt("domain_id", 0);
                     if (domainId <= 0) {
                         response.put("success", false);
@@ -4344,12 +4404,13 @@ public class SSLMailServer {
                         response.put("interval_days", s.intervalDays);
                         putTs(response, "last_rotation_at", s.lastRotationAt);
                         putTs(response, "next_rotation_at", s.nextRotationAt);
-                        // Clock del server in epoch ms (per diagnosi disallineamenti vs browser)
+                        // Server clock in epoch ms (to diagnose drift against the browser)
                         response.put("server_now_ms", System.currentTimeMillis());
-                        // Se una rotazione e' GIA' in corso, il riquadro "Prossima rotazione"
-                        // deve saperlo: senza questo campo continuava a scrivere "Dovuta, parte
-                        // al prossimo controllo" mentre la chiave nuova era gia' stata generata
-                        // e pubblicata. Una promessa al futuro su una cosa gia' accaduta.
+                        // If a rotation is ALREADY in progress, the "Next rotation" box
+                        // must know it: without this field it kept writing "Due, starts
+                        // at the next check" while the new key had already been generated
+                        // and published. A promise about the future on something that had
+                        // already happened.
                         try {
                             DkimManager.RotationInfo ri = dkimManager.getRotationInfo(domainId);
                             if (ri != null && ri.rotationState != null && !ri.rotationState.isBlank()) {
@@ -4358,18 +4419,18 @@ public class SSLMailServer {
                                     response.put("rotation_pending_selector", ri.pendingSelector);
                             }
                         } catch (Exception ignore) {
-                            // Nessuno stato: il riquadro torna a dire la cosa prudente.
+                            // No state: the box goes back to saying the cautious thing.
                         }
                         response.put("auto_activate_after_hours", org.daemoxcp.mail.security.DkimRotationScheduler.AUTO_ACTIVATE_AFTER_HOURS);
                         response.put("grace_period_days", org.daemoxcp.mail.security.DkimRotationScheduler.GRACE_PERIOD_DAYS);
-                        // Se il dominio ha un account Cloudflare, lo dice QUESTA risposta.
+                        // If the domain has a Cloudflare account, THIS response says so.
                         //
-                        // La scheda lo leggeva da una variabile globale che veniva impostata da
-                        // un ALTRO caricatore, quello dello stato rotazione. Se questo arrivava
-                        // prima, la globale valeva ancora false e compariva l'avviso "senza CF
-                        // lo schedule resta inattivo" — proprio sotto al riquadro che diceva
-                        // "account collegato: Pietro". Un dato che si legge dall'aria dipende
-                        // dall'ordine di due richieste, e prima o poi quell'ordine cambia.
+                        // The card read it from a global variable that was set by
+                        // ANOTHER loader, the rotation-state one. If that one arrived
+                        // first, the global was still false and the warning "without CF
+                        // the schedule stays inactive" appeared -- right under the box that
+                        // said "linked account: <name>". A value read out of thin air depends
+                        // on the order of two requests, and sooner or later that order changes.
                         response.put("auto_start",
                             UpdateManager.autoStart().optBoolean("active", false));
                         try {
@@ -4378,7 +4439,7 @@ public class SSLMailServer {
                                 && Main.mailDatabase.getDomain(domainId) != null
                                 && Main.mailDatabase.getDomain(domainId).cloudflareAccountId > 0);
                         } catch (Exception ignore) { }
-                        // Preset consigliati (per la UI)
+                        // Recommended presets (for the UI)
                         JSONArray presets = new JSONArray();
                         presets.put(new JSONObject().put("days", 0).put("label", I18n.tr("server.dkim.preset.off")));
                         presets.put(new JSONObject().put("days", DkimManager.PRESET_AGGRESSIVE).put("label", I18n.tr("server.dkim.preset.monthly")));
@@ -4429,9 +4490,9 @@ public class SSLMailServer {
                     }
 
                 } else if ("domains_summary".equals(action)) {
-                    // Interroga il DNS una volta per dominio: e' lento come una verifica
-                    // singola moltiplicata per il numero di domini, ed e' il prezzo di una
-                    // risposta vera invece di una lettura del database.
+                    // Queries the DNS once per domain: it is as slow as a single check
+                    // multiplied by the number of domains, and that is the price of a
+                    // true answer instead of a database read.
                     response = dkimManager.allDomainsSummary();
 
                 } else if ("verify_active_dns".equals(action)) {
@@ -4494,8 +4555,9 @@ public class SSLMailServer {
                     String serverIp = dnsGenerator.detectServerIp();
                     String mailHostname = Main.mailDatabase.getSetting("mail_hostname", "mail." + domain);
 
-                    // Solo da mostrare, per chi scrive i record a mano: un segnaposto che si vede, non "ip4:" vuoto.
-                    // Niente di questo va su Cloudflare (AutoDns calcola l'SPF per conto suo e senza IP non lo scrive).
+                    // Only for display, for whoever writes the records by hand: a placeholder you can
+                    // see, not an empty "ip4:". None of this goes to Cloudflare (AutoDns computes the
+                    // SPF on its own and does not write it without an IP).
                     DnsRecordsGenerator.DnsRecordSet records = dnsGenerator.generateAllRecords(domain, mailHostname,
                             serverIp.isEmpty() ? "YOUR_SERVER_IP" : serverIp);
 
@@ -4598,14 +4660,14 @@ public class SSLMailServer {
     // ============== Cloudflare API integration ==============
 
     /**
-     * Endpoint /api/cloudflare — multi-account.
+     * Endpoint /api/cloudflare -- multi-account.
      *
-     * GET                                 -> lista account + assegnazione domini
-     * POST { action: "test", token }      -> verifica token (no save)
-     * POST { action: "add", label, email, token } -> aggiunge account (verifica e salva)
-     * POST { action: "update", account_id, label, email, token? } -> aggiorna account
-     * POST { action: "delete", account_id } -> elimina account (disassocia i domini)
-     * POST { action: "assign", domain_id, account_id } -> lega un dominio a un account (account_id=0 = manuale)
+     * GET                                 -> account list + domain assignment
+     * POST { action: "test", token }      -> verify token (no save)
+     * POST { action: "add", label, email, token } -> add account (verify and save)
+     * POST { action: "update", account_id, label, email, token? } -> update account
+     * POST { action: "delete", account_id } -> delete account (unlinks the domains)
+     * POST { action: "assign", domain_id, account_id } -> link a domain to an account (account_id=0 = manual)
      */
     private void handleApiCloudflare(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
@@ -4635,7 +4697,7 @@ public class SSLMailServer {
                 response.put("success", true);
                 response.put("accounts", accounts);
 
-                // Lista domini con assegnazione corrente
+                // List of domains with the current assignment
                 org.json.JSONArray domains = new org.json.JSONArray();
                 for (MailDatabase.Domain d : Main.mailDatabase.getDomains()) {
                     org.json.JSONObject obj = new org.json.JSONObject();
@@ -4646,13 +4708,13 @@ public class SSLMailServer {
                 }
                 response.put("domains", domains);
 
-                // Server mail (Mail Hostname): il certificato SSL è emesso per questo
-                // hostname, il cui dominio base può NON essere tra i domini mail.
+                // Mail server (Mail Hostname): the SSL certificate is issued for this
+                // hostname, whose base domain may NOT be among the mail domains.
                 org.json.JSONObject mailServer = new org.json.JSONObject();
                 String mailHostname = Main.dbManager != null ? Main.dbManager.getMailHostname() : null;
                 mailServer.put("hostname", mailHostname == null ? "" : mailHostname);
-                // Riporta l'id solo se l'account esiste davvero: così badge/select restano
-                // coerenti con la logica di rinnovo (che ignora id orfani).
+                // Return the id only if the account really exists: that way badge/select stay
+                // consistent with the renewal logic (which ignores orphan ids).
                 int msAccId = acmeManager != null ? acmeManager.getMailCertCloudflareAccountId() : 0;
                 if (msAccId > 0 && Main.mailDatabase.getCloudflareAccount(msAccId) == null) {
                     msAccId = 0;
@@ -4722,7 +4784,7 @@ public class SSLMailServer {
 
             } else if ("assign".equals(action)) {
                 int domainId = req.optInt("domain_id", 0);
-                int accountId = req.optInt("account_id", 0); // 0 = manuale
+                int accountId = req.optInt("account_id", 0); // 0 = manual
                 if (domainId <= 0) {
                     response.put("success", false);
                     response.put("error", I18n.tr("server.domain.idRequired"));
@@ -4735,8 +4797,8 @@ public class SSLMailServer {
                 }
 
             } else if ("test_mailserver".equals(action)) {
-                // Verifica che l'account scelto: (1) abbia un token valido e (2) gestisca
-                // la zona DNS del Mail Hostname (così il rinnovo dns_cf funzionerà davvero).
+                // Checks that the chosen account: (1) has a valid token and (2) manages
+                // the DNS zone of the Mail Hostname (so the dns_cf renewal will really work).
                 int accountId = req.optInt("account_id", 0);
                 String mh = Main.dbManager != null ? Main.dbManager.getMailHostname() : null;
                 if (mh == null || mh.isBlank()) {
@@ -4772,8 +4834,8 @@ public class SSLMailServer {
                 }
 
             } else if ("test_domain".equals(action)) {
-                // Verifica che l'account assegnato a un dominio caselle abbia un token
-                // valido e gestisca la zona DNS di quel dominio.
+                // Checks that the account assigned to a mailbox domain has a valid
+                // token and manages the DNS zone of that domain.
                 int domainId = req.optInt("domain_id", 0);
                 if (domainId <= 0) {
                     response.put("success", false);
@@ -4809,8 +4871,8 @@ public class SSLMailServer {
                 }
 
             } else if ("assign_mailserver".equals(action)) {
-                // Account Cloudflare per il certificato del server mail (Mail Hostname)
-                int accountId = req.optInt("account_id", 0); // 0 = manuale
+                // Cloudflare account for the mail server's certificate (Mail Hostname)
+                int accountId = req.optInt("account_id", 0); // 0 = manual
                 if (acmeManager == null) {
                     response.put("success", false);
                     response.put("error", I18n.tr("server.acme.notReady"));
@@ -4841,17 +4903,17 @@ public class SSLMailServer {
     // ============== Timezone diagnostics & fix ==============
 
     /**
-     * Endpoint /api/timezone-diag — strumento diagnostico per allineare timezone.
+     * Endpoint /api/timezone-diag -- diagnostic tool to align time zones.
      *
-     * GET → restituisce stato attuale:
-     *   - server OS time (epoch ms) e tz JVM
+     * GET -> returns the current state:
+     *   - server OS time (epoch ms) and JVM tz
      *   - MySQL @@global.time_zone, @@session.time_zone, NOW(), UTC_TIMESTAMP()
-     *   - "alignment": OK se mysql NOW() ≈ jvm now (delta < 60s), MISMATCH altrimenti
+     *   - "alignment": OK if mysql NOW() ~= jvm now (delta < 60s), MISMATCH otherwise
      *
-     * POST { action: "sync_to_system" } → imposta MySQL global+session time_zone
-     *   all'offset corrente del JVM (es. "+02:00"). Richiede privilegio SUPER su MySQL.
+     * POST { action: "sync_to_system" } -> sets MySQL global+session time_zone
+     *   to the current JVM offset (e.g. "+02:00"). Requires the SUPER privilege on MySQL.
      *
-     * POST { action: "set", value: "+02:00" | "SYSTEM" | "Europe/Rome" } → manuale.
+     * POST { action: "set", value: "+02:00" | "SYSTEM" | "Europe/Rome" } -> manual.
      */
     private void handleApiTimezoneDiag(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
@@ -4887,7 +4949,7 @@ public class SSLMailServer {
                         return;
                     }
                 } else {
-                    // Calcola l'offset attuale del JVM rispetto a UTC in formato "+HH:MM"
+                    // Compute the JVM's current offset from UTC in "+HH:MM" format
                     java.time.ZoneOffset off = java.time.ZonedDateTime.now().getOffset();
                     int sec = off.getTotalSeconds();
                     String sign = sec >= 0 ? "+" : "-";
@@ -4904,17 +4966,17 @@ public class SSLMailServer {
                     sendJsonResponse(exchange, response);
                     return;
                 }
-                // Il valore passa come parametro, mai incollato nella query
+                // The value is passed as a parameter, never pasted into the query
                 try (java.sql.PreparedStatement global = Main.mailDatabase.getConnection().prepareStatement(SqlCatalog.SERVER_HANDLE_API_TIMEZONE_DIAG);
                      java.sql.PreparedStatement session = Main.mailDatabase.getConnection().prepareStatement(SqlCatalog.SERVER_HANDLE_API_TIMEZONE_DIAG_2)) {
-                    // Prova global (richiede SUPER), poi session
+                    // Try global (requires SUPER), then session
                     try {
                         global.setString(1, desired);
                         global.executeUpdate();
                         log.append("✓ ").append(I18n.tr("server.tz.globalSet", Map.of("value", desired))).append("\n");
                     } catch (Exception ex) {
                         log.append("✗ ").append(I18n.tr("server.tz.globalFailed", Map.of("error", String.valueOf(ex.getMessage())))).append("\n");
-                        // Continua comunque a impostare session per la connessione corrente
+                        // Go on setting session for the current connection anyway
                     }
                     try {
                         session.setString(1, desired);
@@ -4947,7 +5009,7 @@ public class SSLMailServer {
         }
     }
 
-    /** Riempie response con i campi di diagnostica timezone. */
+    /** Fills response with the timezone diagnostic fields. */
     private void fillTimezoneDiagnostics(org.json.JSONObject response) {
         response.put("success", true);
 
@@ -4959,8 +5021,8 @@ public class SSLMailServer {
         java.time.ZoneOffset off = java.time.ZonedDateTime.now().getOffset();
         response.put("jvm_offset", off.getId().equals("Z") ? "+00:00" : off.getId());
 
-        // 2) OS clock via comando "date" (FreeBSD/Linux): più affidabile in caso di JVM
-        //    settata a tz diversa dall'OS
+        // 2) OS clock via the "date" command (FreeBSD/Linux): more reliable when the JVM
+        //    is set to a different tz than the OS
         try {
             // TODO: migrate to Shell.run when touched
             Process p = new ProcessBuilder("date", "+%s|%z|%Z").redirectErrorStream(true).start();
@@ -5003,8 +5065,8 @@ public class SSLMailServer {
     /**
      * Endpoint /api/postfix-aliases-health.
      *   GET                       -> diagnose
-     *   POST { action: "fix" }    -> auto-fix (crea sorgente + postalias + reload)
-     *   POST { action: "set_root_forward", forward_to: "..." } -> aggiorna root forward
+     *   POST { action: "fix" }    -> auto-fix (create source + postalias + reload)
+     *   POST { action: "set_root_forward", forward_to: "..." } -> update root forward
      */
     private void handleApiPostfixAliases(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
@@ -5040,7 +5102,7 @@ public class SSLMailServer {
                 if (r.aliasDbFile != null) response.put("alias_db_file", r.aliasDbFile);
                 logAudit(r.success ? "POSTFIX_ALIASES_FIXED" : "POSTFIX_ALIASES_FIX_FAILED",
                     getClientIp(exchange), "msg=" + r.message);
-                // Includi anche lo status aggiornato
+                // Also include the updated status
                 fillAliasesStatus(response, mgr.diagnose());
                 sendJsonResponse(exchange, response);
                 return;
@@ -5088,22 +5150,22 @@ public class SSLMailServer {
     }
 
     /**
-     * Helper: popola un JSONObject con l'output strutturato di un JailLiveState.
+     * Helper: fills a JSONObject with the structured output of a JailLiveState.
      */
     private void fillJailLiveStateJson(org.json.JSONObject obj, Fail2banManager.JailLiveState s) {
         if (s == null) return;
         obj.put("name", s.name == null ? "" : s.name);
         if (s.error != null) obj.put("error", s.error);
-        // Raw output dei comandi "get"
+        // Raw output of the "get" commands
         obj.put("maxretry", s.maxretry == null ? "" : s.maxretry);
         obj.put("findtime", s.findtime == null ? "" : s.findtime);
         obj.put("bantime", s.bantime == null ? "" : s.bantime);
         obj.put("logpath", s.logpath == null ? "" : s.logpath);
         obj.put("ignoreip", s.ignoreip == null ? "" : s.ignoreip);
         obj.put("filter", s.filter == null ? "" : s.filter);
-        // Output completo "fail2ban-client status <jail>"
+        // Full output of "fail2ban-client status <jail>"
         obj.put("status_raw", s.statusRaw == null ? "" : s.statusRaw);
-        // Campi parsati
+        // Parsed fields
         obj.put("currently_failed", s.currentlyFailed);
         obj.put("total_failed", s.totalFailed);
         obj.put("currently_banned", s.currentlyBanned);
@@ -5182,7 +5244,7 @@ public class SSLMailServer {
                             response.put("success", false);
                             response.put("error", I18n.tr("server.acme.emailRequired"));
                         } else {
-                            // installAcme fa "pkg install curl socat": aspetta il turno dei lavori sui pacchetti.
+                            // installAcme runs "pkg install curl socat": it waits for the package turn.
                             JSONObject outcome = onPackageTurn(I18n.tr("server.install.jobName", Map.of("component", "acme.sh")), () -> {
                                 AcmeManager.InstallResult result = acmeManager.installAcme(email);
                                 JSONObject r = new JSONObject().put("success", result.success).put("message", result.message);
@@ -5269,7 +5331,7 @@ public class SSLMailServer {
                                 response.put("last_result_html", "<span class=\"text-muted\">-</span>");
                             }
 
-                            // Calcola prossimo check (se enabled): 24h dopo l'ultimo
+                            // Compute the next check (if enabled): 24h after the last one
                             if (acmeManager.isAutoRenewalEnabled() && lastCheck != null && !lastCheck.isEmpty()) {
                                 try {
                                     java.time.LocalDateTime last = java.time.LocalDateTime.parse(lastCheck);
@@ -5571,7 +5633,7 @@ public class SSLMailServer {
 
     // ============== STATS API ==============
 
-    // Cache stats per evitare di parsare maillog ad ogni request (TTL 60s)
+    // Stats cache, to avoid parsing maillog on every request (TTL 60s)
     private static volatile JSONObject CACHED_STATS = null;
     private static volatile long CACHED_STATS_AT = 0;
     private static final long STATS_CACHE_TTL_MS = 60_000;
@@ -5605,7 +5667,7 @@ public class SSLMailServer {
             response.put("generated_at", java.time.LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
             response.put("period", "total");
 
-            // SMTP stats — solo conteggi base da Rspamd (no parsing log)
+            // SMTP stats -- only basic counts from Rspamd (no log parsing)
             JSONObject smtp = new JSONObject();
             smtp.put("rejected", rspamdStats != null ? rspamdStats.spamCount : 0);
             smtp.put("source", "rspamd");
@@ -5636,7 +5698,7 @@ public class SSLMailServer {
             response.put("error", ErrorText.forPage("handleApiStats", e));
         }
 
-        // Cache aggiornato
+        // Cache updated
         CACHED_STATS = response;
         CACHED_STATS_AT = System.currentTimeMillis();
 
@@ -5673,7 +5735,7 @@ public class SSLMailServer {
                     response.put("hold", stats.hold);
                     response.put("incoming", stats.incoming);
                     response.put("permanent", stats.permanent);
-                    // UTC con la Z: l'ora locale la mette il browser di chi guarda
+                    // UTC with the Z: the local time is added by the viewer's browser
                     if (stats.oldestMessage != null) response.put("oldest_message", stats.oldestMessage.toString());
                     response.put("top_senders", topFive(stats.topSenders));
                     response.put("top_destinations", topFive(stats.topDestinations));
@@ -5708,7 +5770,7 @@ public class SSLMailServer {
                     return;
                 }
                 JSONObject json = body.isBlank() ? new JSONObject() : new JSONObject(body);
-                // Ogni azione cambia la coda: senza il token della sessione non parte niente.
+                // Every action changes the queue: without the session token nothing starts.
                 if (!validateCsrfForRequest(exchange, json)) {
                     sendCsrfError(exchange);
                     return;
@@ -5741,10 +5803,10 @@ public class SSLMailServer {
                         if (result.success) logAudit("QUEUE_RELEASE", ip, "Released every held message");
                     }
                     case "purge_permfails" -> {
-                        // Prima si mostra COSA verrebbe eliminato, poi si elimina. Cancellare
-                        // posta e' irreversibile: una finestra di conferma che non dice quanti
-                        // e quali messaggi tocca non e' una conferma, e' un pulsante. La conferma
-                        // porta gli identificativi visti e il loro numero, scritto a mano.
+                        // First show WHAT would be deleted, then delete. Deleting mail is
+                        // irreversible: a confirmation dialog that does not say how many and
+                        // which messages it touches is not a confirmation, it is a button. The
+                        // confirmation carries the identifiers seen and their number, typed by hand.
                         JSONArray ids = json.optJSONArray("ids");
                         if (ids == null) {
                             java.util.List<MailQueueManager.QueuedMessage> perm = queueManager.permanentFailures();
@@ -5785,7 +5847,7 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
-    /** Un messaggio della coda per la pagina: ogni campo e' testo, la pagina lo passa per escHtml. */
+    /** A queue message for the page: every field is text, the page passes it through escHtml. */
     private static JSONObject queueMessageJson(MailQueueManager.QueuedMessage msg) {
         JSONArray recipients = new JSONArray();
         for (MailQueueManager.Recipient r : msg.recipients) {
@@ -5803,7 +5865,7 @@ public class SSLMailServer {
                 .put("permanent", msg.isPermanentFailure());
     }
 
-    /** Le cinque voci piu' numerose, in ordine. */
+    /** The five most frequent entries, in order. */
     private static JSONArray topFive(Map<String, Integer> counts) {
         JSONArray out = new JSONArray();
         counts.entrySet().stream()
@@ -6052,8 +6114,8 @@ public class SSLMailServer {
                     }
 
                 } else if ("live_state".equals(action)) {
-                    // Per UNA singola jail: output di fail2ban-client get maxretry/findtime/bantime/...
-                    // + fail2ban-client status <jail>. Restituiamo sia il raw sia i campi parsati.
+                    // For ONE single jail: output of fail2ban-client get maxretry/findtime/bantime/...
+                    // + fail2ban-client status <jail>. We return both the raw output and the parsed fields.
                     String jailName = extractParamFromQuery(query, "name");
                     if (jailName == null || !org.daemoxcp.mail.security.InputValidator.isValidJailName(jailName)) {
                         response.put("success", false);
@@ -6066,11 +6128,11 @@ public class SSLMailServer {
                     }
 
                 } else if ("live_state_all".equals(action)) {
-                    // Per TUTTE le jail attive: live state di ognuna IN PARALLELO.
-                    // Con N jail, prima ci voleva N * ~1s. Ora ~1s totale perche'
-                    // tutte le jail vengono interrogate in parallelo via virtual
-                    // threads, e dentro ciascuna anche i 6 fail2ban-client get
-                    // sono paralleli.
+                    // For ALL the active jails: the live state of each one IN PARALLEL.
+                    // With N jails, it used to take N * ~1s. Now ~1s in total, because
+                    // all the jails are queried in parallel via virtual
+                    // threads, and inside each one the 6 fail2ban-client get calls
+                    // are parallel too.
                     Fail2banManager.Fail2banStatus overall = fail2banManager.getStatus();
                     response.put("success", true);
                     response.put("installed", overall.installed);
@@ -6167,9 +6229,9 @@ public class SSLMailServer {
                 String action = json.optString("action", "");
 
                 switch (action) {
-                    // Legge e basta: fa girare fail2ban-regex sul log della jail e dice se il
-                    // filtro aggancia qualcosa. Serve a distinguere "nessuno ha attaccato" da
-                    // "la jail non vede niente", che a schermo sono lo stesso zero.
+                    // Read-only: runs fail2ban-regex on the jail's log and says whether the
+                    // filter matches anything. It tells "nobody attacked" apart from
+                    // "the jail sees nothing", which on screen are the same zero.
                     case "verify_filter" -> {
                         String jail = json.optString("jail", "");
                         Fail2banManager.FilterCheck c = fail2banManager.verifyFilter(jail);
@@ -6179,9 +6241,9 @@ public class SSLMailServer {
                                 .put("log_lines", c.logLines2).put("messageText", c.message)
                                 .put("output", c.output);
                     }
-                    // Legge e basta: mette a confronto gli indirizzi che Fail2ban crede
-                    // bannati con quelli che pf blocca davvero. "Currently banned" dice che il
-                    // comando di ban e' stato eseguito, non che l'indirizzo sia bloccato.
+                    // Read-only: compares the addresses Fail2ban believes are
+                    // banned with the ones pf really blocks. "Currently banned" says that the
+                    // ban command was run, not that the address is blocked.
                     case "pf_comparison" -> {
                         Fail2banManager.PfComparison c = fail2banManager.compareBansWithPf();
                         JSONArray jj = new JSONArray();
@@ -6210,7 +6272,7 @@ public class SSLMailServer {
                     case "ban" -> {
                         String ip = json.getString("ip");
                         String jail = json.getString("jail");
-                        // SECURITY: validare prima di passarli a shell
+                        // SECURITY: validate before passing them to the shell
                         if (!org.daemoxcp.mail.security.InputValidator.isValidIp(ip)) {
                             response.put("success", false);
                             response.put("message", I18n.tr("server.badIp"));
@@ -6279,7 +6341,7 @@ public class SSLMailServer {
                     }
                     case "update_jail_config" -> {
                         String jailName = json.getString("jail");
-                        // SECURITY: validate jail name (concatenato in shell)
+                        // SECURITY: validate jail name (concatenated into a shell command)
                         if (!org.daemoxcp.mail.security.InputValidator.isValidJailName(jailName)) {
                             response.put("success", false);
                             response.put("message", I18n.tr("server.f2b.badJail"));
@@ -6288,7 +6350,7 @@ public class SSLMailServer {
                         int maxRetry = json.optInt("max_retry", 5);
                         int findTime = json.optInt("find_time", 600);
                         int banTime = json.optInt("ban_time", 3600);
-                        // Range sani per evitare config nonsense
+                        // Sane ranges to avoid nonsense config
                         if (maxRetry < 1 || maxRetry > 100 ||
                             findTime < 30 || findTime > 86400 ||
                             banTime  < 60 || banTime  > 31_536_000) {
@@ -6352,7 +6414,7 @@ public class SSLMailServer {
                             response.put("message", I18n.tr(added ? "server.f2b.permabanAdded" : "server.f2b.permabanPresent"));
                             logAudit(added ? "PERMABAN_ADDED" : "PERMABAN_ALREADY_PRESENT",
                                 getClientIp(exchange), "target_ip=" + ip);
-                            // Sbanna anche da tutte le jail Fail2ban (l'utente potrebbe essere già bannato temporaneamente)
+                            // Also unban from all the Fail2ban jails (the user might already be temporarily banned)
                             try { fail2banManager.unbanIpFromAll(ip); } catch (Exception ignored) {}
                         } catch (Exception e) {
                             response.put("success", false);
@@ -6421,7 +6483,7 @@ public class SSLMailServer {
                             response.put("enabled", cfg.enabled);
                             response.put("filter", cfg.filter == null ? "" : cfg.filter);
                             response.put("logpath", cfg.logpath == null ? "" : cfg.logpath);
-                            // Lista degli ignoreip a runtime (piu' affidabile che da file)
+                            // List of the ignoreip entries at runtime (more reliable than from the file)
                             JSONArray ignArr = new JSONArray();
                             for (String s : fail2banManager.getIgnoreIps(jailName)) ignArr.put(s);
                             response.put("ignoreip", ignArr);
@@ -6489,28 +6551,28 @@ public class SSLMailServer {
 
     // ============== FAIL2BAN HEALTH CHECK ==============
 
-    /** Endpoint per diagnosi e setup automatico di Fail2ban. */
+    /** Endpoint for Fail2ban diagnosis and automatic setup. */
     // ============== UNBOUND HEALTH CHECK (Resolver DNS locale) ==============
     // ============== FIREWALL API ==============
 
     /**
-     * Endpoint /api/firewall — gestione firewall pf con CIDR + GeoIP.
+     * Endpoint /api/firewall -- pf firewall management with CIDR + GeoIP.
      *
-     * GET  /api/firewall                → ritorna stato corrente (mode, liste, country selezionati,
-     *                                     dimensione tabelle pf a runtime, catalogo paesi)
-     * POST /api/firewall  action=...    → mutazioni
-     *      Azioni supportate:
+     * GET  /api/firewall                -> returns the current state (mode, lists, selected countries,
+     *                                     size of the pf tables at runtime, country catalogue)
+     * POST /api/firewall  action=...    -> mutations
+     *      Supported actions:
      *        - set_mode           {mode: DISABLED|CIDR_ONLY|GEO_WHITELIST|GEO_BLACKLIST}
-     *        - set_port25_geo     {value: true|false}    (applica geo anche a porta 25)
+     *        - set_port25_geo     {value: true|false}    (applies geo to port 25 too)
      *        - add_cidr_wl        {cidr: "..."}
      *        - remove_cidr_wl     {cidr: "..."}
      *        - add_cidr_bl        {cidr: "..."}
      *        - remove_cidr_bl     {cidr: "..."}
      *        - add_country        {country: "it"}
      *        - remove_country     {country: "it"}
-     *        - sync_geo           {country: "it"}        (scarica zone file da ipdeny)
-     *        - sync_geo_all       (scarica zone files per tutti i paesi selezionati)
-     *        - apply              (rigenera anchor + syntax check + carica nel kernel)
+     *        - sync_geo           {country: "it"}        (downloads the zone file from ipdeny)
+     *        - sync_geo_all       (downloads the zone files for all the selected countries)
+     *        - apply              (regenerates the anchor + syntax check + loads it into the kernel)
      */
     private void handleApiFirewall(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
@@ -6642,7 +6704,7 @@ public class SSLMailServer {
                             response.put("success", false);
                             response.put("error", I18n.tr("server.fw.unknownPreset", Map.of("group", groupId)));
                         } else {
-                            // Sostituisce completamente la selezione corrente con quella del gruppo
+                            // Completely replaces the current selection with the group's one
                             firewallManager.clearCountries();
                             int added = firewallManager.bulkAddCountries(grp.codes());
                             response.put("success", true);
@@ -6701,7 +6763,7 @@ public class SSLMailServer {
         }
     }
 
-    /** Costruisce il JSON di stato per /api/firewall GET. */
+    /** Builds the status JSON for /api/firewall GET. */
     private JSONObject buildFirewallStatusJson() {
         JSONObject out = new JSONObject();
         org.daemoxcp.mail.security.PfFirewallManager.FirewallState s = firewallManager.getState();
@@ -6713,7 +6775,7 @@ public class SSLMailServer {
         out.put("blacklist_cidrs", new JSONArray(s.blacklistCidrs));
         out.put("geo_countries", new JSONArray(s.geoCountries));
 
-        // Per ogni paese selezionato: ultimo sync + numero CIDR + freshness
+        // For each selected country: last sync + number of CIDRs + freshness
         JSONArray geoDetail = new JSONArray();
         for (String cc : s.geoCountries) {
             JSONObject c = new JSONObject();
@@ -6725,7 +6787,7 @@ public class SSLMailServer {
             org.daemoxcp.mail.security.PfFirewallManager.Freshness fresh =
                 org.daemoxcp.mail.security.PfFirewallManager.computeFreshness(lastMs, s.autoSyncIntervalDays);
             c.put("freshness", fresh.name());
-            // ago_seconds: utile per UI ("3 giorni fa")
+            // ago_seconds: useful for the UI ("3 days ago")
             c.put("ago_seconds", lastMs > 0 ? (System.currentTimeMillis() - lastMs) / 1000 : 0);
             org.daemoxcp.mail.security.CountryCatalog.Country meta =
                 org.daemoxcp.mail.security.CountryCatalog.byCode(cc);
@@ -6737,13 +6799,13 @@ public class SSLMailServer {
         }
         out.put("geo_detail", geoDetail);
 
-        // Auto-sync settings + statistiche
+        // Auto-sync settings + statistics
         JSONObject autoSync = new JSONObject();
         autoSync.put("enabled", s.autoSyncEnabled);
         autoSync.put("interval_days", s.autoSyncIntervalDays);
         autoSync.put("last_check_ms", s.lastAutoSyncCheck);
         autoSync.put("last_run_ms", s.lastAutoSyncRun);
-        // Conta paesi stale (necessari di update)
+        // Count stale countries (needing an update)
         int staleCount = 0;
         for (String cc : s.geoCountries) {
             long lm = s.geoLastSync.getOrDefault(cc, 0L);
@@ -6754,16 +6816,16 @@ public class SSLMailServer {
         autoSync.put("stale_countries_count", staleCount);
         out.put("auto_sync", autoSync);
 
-        // Tabelle pf a runtime
+        // pf tables at runtime
         java.util.Map<String, Integer> sizes = firewallManager.getTableSizes();
         JSONObject tableSizes = new JSONObject();
         sizes.forEach(tableSizes::put);
         out.put("table_sizes", tableSizes);
 
-        // Catalogo paesi (per UI)
+        // Country catalog (for the UI)
         out.put("country_catalog", org.daemoxcp.mail.security.CountryCatalog.toJsonArray());
 
-        // Gruppi preset (UE, G7, NATO, ecc.) per la UI
+        // Preset groups (EU, G7, `NATO`, etc.) for the UI
         out.put("preset_groups", org.daemoxcp.mail.security.CountryCatalog.groupsToJsonArray());
 
         return out;
@@ -6919,8 +6981,8 @@ public class SSLMailServer {
         JSONObject r = new JSONObject();
         JSONArray checks = new JSONArray();
 
-        // 1. Resolver locale disponibile (unbound pkg OPPURE local_unbound base system)
-        //    Su FreeBSD c'è 'local_unbound' nel base system: stesso effetto, già installato di default.
+        // 1. Local resolver available (unbound pkg OR local_unbound from the base system)
+        //    On FreeBSD there is 'local_unbound' in the base system: same effect, already installed by default.
         boolean pkgInstalled;
         try {
             // TODO: migrate to Shell.run when touched
@@ -6949,7 +7011,7 @@ public class SSLMailServer {
             installed ? null : "install_unbound",
             I18n.tr("server.unbound.fixInstalled")));
 
-        // 2. Config file: solo se usi il pacchetto pkg, non serve per local_unbound (config in /var/unbound/)
+        // 2. Config file: only if you use the pkg package, not needed for local_unbound (config in /var/unbound/)
         boolean confPresent = java.nio.file.Files.exists(java.nio.file.Paths.get(UNBOUND_CONF_PATH));
         boolean baseConfPresent = java.nio.file.Files.exists(java.nio.file.Paths.get("/var/unbound/unbound.conf"));
         boolean confValid = false;
@@ -6959,7 +7021,7 @@ public class SSLMailServer {
                 confValid = c.contains("interface: 127.0.0.1") && c.contains("access-control");
             } catch (Exception ignored) {}
         }
-        // Se local_unbound è già attivo, considera la config "OK" anche senza il file pkg
+        // If local_unbound is already active, consider the config "OK" even without the pkg file
         boolean configOk = confValid || baseConfPresent || baseUnboundRunning;
         String configStatus;
         if (confValid) configStatus = UNBOUND_CONF_PATH + " (pkg unbound)";
@@ -6974,7 +7036,7 @@ public class SSLMailServer {
             (configOk || !installed || baseUnboundAvailable) ? null : "configure_unbound",
             I18n.tr("server.unbound.fixConfig", Map.of("path", UNBOUND_CONF_PATH))));
 
-        // 3. Abilitato al boot — verifica sia unbound_enable che local_unbound_enable
+        // 3. Enabled at boot -- check both unbound_enable and local_unbound_enable
         boolean unboundEnabledBoot = isSysrcYes("unbound_enable");
         boolean localUnboundEnabledBoot = isSysrcYes("local_unbound_enable");
         boolean enabledBoot = unboundEnabledBoot || localUnboundEnabledBoot;
@@ -6983,7 +7045,7 @@ public class SSLMailServer {
         else if (unboundEnabledBoot) bootStatus = "unbound_enable=YES (pkg)";
         else if (localUnboundEnabledBoot) bootStatus = "local_unbound_enable=YES (base system)";
         else bootStatus = I18n.tr("server.unbound.bootNone");
-        // Fix appropriato: se base system esiste, abilita quello, altrimenti pkg
+        // Appropriate fix: if the base system one exists, enable that, otherwise pkg
         String bootFixAction = enabledBoot ? null : (baseUnboundAvailable && !pkgInstalled ? "enable_local_unbound_at_boot" : "enable_unbound_at_boot");
         String bootFixDesc = baseUnboundAvailable && !pkgInstalled
             ? I18n.tr("server.unbound.fixBootBase")
@@ -6995,7 +7057,7 @@ public class SSLMailServer {
             (enabledBoot || !installed) ? null : bootFixAction,
             bootFixDesc));
 
-        // 4. In esecuzione (pkg unbound OPPURE local_unbound)
+        // 4. Running (pkg unbound OR local_unbound)
         boolean pkgRunning = isServiceRunning("unbound");
         boolean running = pkgRunning || baseUnboundRunning;
         String runningStatus;
@@ -7014,7 +7076,7 @@ public class SSLMailServer {
             (running || !installed) ? null : runningFixAction,
             runningFixDesc));
 
-        // 5. Ascolta su 127.0.0.1:53
+        // 5. Listens on 127.0.0.1:53
         boolean listening53 = isPortListeningOnLocalhost(53);
         checks.put(makeCheck("unbound-listening", I18n.tr("server.unbound.checkListening"),
             listening53,
@@ -7022,11 +7084,11 @@ public class SSLMailServer {
             listening53 ? null : I18n.tr("server.unbound.impactListening"),
             null, null));
 
-        // 6. /etc/resolv.conf punta a 127.0.0.1
+        // 6. /etc/resolv.conf points to 127.0.0.1
         boolean resolvOk = false;
         try {
             String resolv = java.nio.file.Files.readString(java.nio.file.Paths.get("/etc/resolv.conf"));
-            // Prima riga nameserver utile deve essere 127.0.0.1
+            // The first useful nameserver line must be 127.0.0.1
             for (String line : resolv.split("\n")) {
                 String t = line.trim();
                 if (t.startsWith("#")) continue;
@@ -7044,7 +7106,7 @@ public class SSLMailServer {
             (resolvOk || !running || !listening53) ? null : "switch_resolv_conf",
             I18n.tr("server.unbound.fixResolv")));
 
-        // 7. Query di test funziona
+        // 7. Test query works
         boolean queryOk = testUnboundQuerySimple();
         checks.put(makeCheck("unbound-query-works", I18n.tr("server.unbound.checkQuery"),
             queryOk,
@@ -7053,9 +7115,9 @@ public class SSLMailServer {
             queryOk ? null : I18n.tr("server.unbound.impactQuery"),
             null, null));
 
-        // 8. Modalità RICORSIVA (no forwarder) — fondamentale per Spamhaus/SURBL
-        //    Se local_unbound usa forward-zone verso 1.1.1.1, Spamhaus vede ancora le query
-        //    arrivare da resolver pubblico → 127.255.255.254 (blocked).
+        // 8. RECURSIVE mode (no forwarder) -- essential for Spamhaus/SURBL
+        //    If local_unbound uses a forward-zone towards 1.1.1.1, Spamhaus still sees the queries
+        //    coming from a public resolver -> 127.255.255.254 (blocked).
         boolean isForwarding = isUnboundUsingForwarder();
         boolean dnsblWorking = testDnsblQuery();
         checks.put(makeCheck("unbound-recursive", I18n.tr("server.unbound.checkRecursive"),
@@ -7085,14 +7147,14 @@ public class SSLMailServer {
             Process p = pb.start();
             java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()));
             String line;
-            // FreeBSD sockstat usa "IP.PORT" (con punto), Linux usa "IP:PORT"
+            // FreeBSD sockstat uses "IP.PORT" (with a dot), Linux uses "IP:PORT"
             String[] patterns = {
                 "127.0.0.1:" + port, "127.0.0.1." + port,
                 "*:" + port, "*." + port,
                 "::1:" + port, "::1." + port
             };
             while ((line = reader.readLine()) != null) {
-                // Cerchiamo che termini con il pattern o sia seguito da spazio (parte del campo address)
+                // We check that it ends with the pattern or is followed by a space (part of the address field)
                 for (String pat : patterns) {
                     if (line.contains(pat + " ") || line.endsWith(pat) || line.contains(pat + "\t")) {
                         p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS);
@@ -7106,12 +7168,12 @@ public class SSLMailServer {
     }
 
     /**
-     * Verifica se local_unbound è configurato come FORWARDER (forward-zone definito).
-     * Se sì, le query DNSBL passano per i forwarder pubblici e Spamhaus le blocca.
+     * Checks whether local_unbound is configured as a FORWARDER (forward-zone defined).
+     * If so, the DNSBL queries go through the public forwarders and Spamhaus blocks them.
      */
     private boolean isUnboundUsingForwarder() {
         try {
-            // Cerca forward-zone in tutti i possibili file di config di local_unbound
+            // Look for forward-zone in all the possible config files of local_unbound
             String[] confFiles = {
                 "/var/unbound/forward.conf",
                 "/var/unbound/unbound.conf",
@@ -7122,7 +7184,7 @@ public class SSLMailServer {
                 java.nio.file.Path p = java.nio.file.Paths.get(path);
                 if (!java.nio.file.Files.exists(p)) continue;
                 String content = java.nio.file.Files.readString(p);
-                // Cerca direttiva 'forward-zone:' non commentata
+                // Look for an uncommented 'forward-zone:' directive
                 for (String line : content.split("\n")) {
                     String t = line.trim();
                     if (t.startsWith("#")) continue;
@@ -7131,16 +7193,16 @@ public class SSLMailServer {
             }
             return false;
         } catch (Exception e) {
-            return false; // Default: assume NOT forwarding se non riusciamo a leggere
+            return false; // Default: assume NOT forwarding if we cannot read it
         }
     }
 
     /**
-     * Esegue una query DNSBL di test contro Spamhaus.
-     * 2.0.0.127.zen.spamhaus.org è un IP "sempre listato" usato per test.
-     * Se la risposta è 127.0.0.X (escluso 127.255.X) → il resolver funziona bene per DNSBL.
-     * Se è 127.255.255.254 → Spamhaus ci blocca (forwarder/public resolver).
-     * Se è vuoto → query fallita.
+     * Runs a test DNSBL query against Spamhaus.
+     * 2.0.0.127.zen.spamhaus.org is an "always listed" IP used for testing.
+     * If the answer is 127.0.0.X (excluding 127.255.X) -> the resolver works fine for DNSBL.
+     * If it is 127.255.255.254 -> Spamhaus is blocking us (forwarder/public resolver).
+     * If it is empty -> the query failed.
      */
     private boolean testDnsblQuery() {
         try {
@@ -7157,9 +7219,9 @@ public class SSLMailServer {
             for (String line : out.split("\n")) {
                 String t = line.trim();
                 if (t.isEmpty()) continue;
-                // 127.0.0.X (escluso 127.255.255.X) = LISTED davvero = query funziona
+                // 127.0.0.X (excluding 127.255.255.X) = really LISTED = query works
                 if (t.matches("^127\\.0\\.0\\.\\d{1,3}$")) return true;
-                // 127.255.255.X = blocco di Spamhaus = NON funziona
+                // 127.255.255.X = Spamhaus block = does NOT work
                 if (t.startsWith("127.255.255.")) return false;
             }
             return false;
@@ -7171,26 +7233,26 @@ public class SSLMailServer {
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("dig", "@127.0.0.1", "+short", "+time=3", "+tries=1", "A", "freebsd.org");
             org.daemoxcp.mail.util.Shell.applyPath(pb);
-            // NIENTE redirectErrorStream: stderr di dig (es. "communications error") va separato
-            // così non lo confondiamo con una risposta valida.
+            // NO redirectErrorStream: dig's stderr (e.g. "communications error") must be kept separate
+            // so we do not mistake it for a valid answer.
             pb.redirectError(ProcessBuilder.Redirect.DISCARD);
             Process p = pb.start();
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             boolean done = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
             if (!done) { p.destroyForcibly(); return false; }
-            // dig +short stampa SOLO il valore (es. "1.2.3.4") in stdout se ha successo,
-            // niente se non c'è risposta. Errori vanno in stderr (scartati sopra).
-            // Inoltre: dig exit code != 0 quando fallisce.
+            // dig +short prints ONLY the value (e.g. "1.2.3.4") on stdout if it succeeds,
+            // nothing if there is no answer. Errors go to stderr (discarded above).
+            // Also: dig's exit code is != 0 when it fails.
             if (p.exitValue() != 0) return false;
-            // Verifica che la PRIMA riga utile sia un IPv4 valido (non un messaggio strano)
+            // Check that the FIRST useful line is a valid IPv4 (not some odd message)
             for (String line : out.split("\n")) {
                 String t = line.trim();
                 if (t.isEmpty()) continue;
-                // Deve essere un IPv4 puro (eventualmente CNAME → IP nelle righe successive)
+                // It must be a pure IPv4 (possibly CNAME -> IP on the following lines)
                 if (t.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$")) return true;
-                // Se la prima riga utile è un CNAME, controlla la successiva
+                // If the first useful line is a CNAME, check the next one
                 if (t.endsWith(".") && t.matches("^[a-zA-Z0-9.-]+\\.$")) continue;
-                // Altrimenti è qualcosa di strano, fallisci
+                // Otherwise it is something odd: fail
                 return false;
             }
             return false;
@@ -7230,7 +7292,7 @@ public class SSLMailServer {
             if (parent != null && !java.nio.file.Files.exists(parent)) {
                 java.nio.file.Files.createDirectories(parent);
             }
-            // Backup se esiste
+            // Backup if it exists
             if (java.nio.file.Files.exists(confPath)) {
                 org.daemoxcp.mail.system.ConfigBackups.copy(confPath);
             }
@@ -7238,7 +7300,7 @@ public class SSLMailServer {
             try { java.nio.file.Files.setPosixFilePermissions(confPath,
                 java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--")); } catch (Exception ignored) {}
 
-            // Test sintassi con unbound-checkconf se disponibile
+            // Syntax test with unbound-checkconf if available
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("/usr/local/sbin/unbound-checkconf", UNBOUND_CONF_PATH);
@@ -7264,18 +7326,18 @@ public class SSLMailServer {
     }
 
     /**
-     * Sostituisce /etc/resolv.conf in modo SAFE:
-     *  - backup automatico con timestamp
-     *  - pre-flight test: prima verifica che dig @127.0.0.1 risolva, SOLO se OK procede
-     *  - scrive 127.0.0.1 come primary + 1.1.1.1 come fallback
-     *  - post-flight test: dopo scrittura ri-verifica che il sistema risolva ancora
-     *  - rollback automatico se post-flight fail
+     * Replaces /etc/resolv.conf in a SAFE way:
+     *  - automatic backup with a timestamp
+     *  - pre-flight test: first checks that dig @127.0.0.1 resolves, and goes on ONLY if OK
+     *  - writes 127.0.0.1 as primary + 1.1.1.1 as fallback
+     *  - post-flight test: after writing, checks again that the system still resolves
+     *  - automatic rollback if the post-flight fails
      */
     private JSONObject switchResolvConfToUnbound() {
         JSONObject r = new JSONObject();
         java.nio.file.Path resolvPath = java.nio.file.Paths.get("/etc/resolv.conf");
         try {
-            // 1. Pre-flight: unbound deve rispondere
+            // 1. Pre-flight: unbound must answer
             if (!testUnboundQuerySimple()) {
                 r.put("success", false);
                 r.put("message", I18n.tr("server.unbound.preflightFail"));
@@ -7283,7 +7345,7 @@ public class SSLMailServer {
             }
             // 2. Backup
             java.nio.file.Path bak = java.nio.file.Files.exists(resolvPath) ? org.daemoxcp.mail.system.ConfigBackups.copy(resolvPath) : null;
-            // 3. Scrivi nuovo
+            // 3. Write the new one
             String content = ""
                 + "# Configured by DaemoxCP Mail\n"
                 + "# Primary resolver: local unbound\n"
@@ -7294,7 +7356,7 @@ public class SSLMailServer {
                 + "options timeout:2 attempts:3\n";
             java.nio.file.Files.writeString(resolvPath, content, java.nio.charset.StandardCharsets.UTF_8);
 
-            // 4. Post-flight test (risolvi con il sistema, non più @127.0.0.1)
+            // 4. Post-flight test (resolve with the system, no longer @127.0.0.1)
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pb = new ProcessBuilder("dig", "+short", "+time=3", "+tries=2", "A", "freebsd.org");
@@ -7329,14 +7391,14 @@ public class SSLMailServer {
     }
 
     /**
-     * Trasforma local_unbound da forwarder a resolver ricorsivo:
-     *  1. Backup di /var/unbound/forward.conf (e /var/unbound/unbound.conf se contiene forward-zone)
-     *  2. Svuota forward.conf
+     * Turns local_unbound from a forwarder into a recursive resolver:
+     *  1. Backup of /var/unbound/forward.conf (and /var/unbound/unbound.conf if it contains forward-zone)
+     *  2. Empty forward.conf
      *  3. Reload local_unbound
      *
-     * Dopo questa operazione, local_unbound chiede direttamente ai root server
-     * invece di girare le query a forwarder esterni (1.1.1.1, ecc). Spamhaus vede
-     * la query arrivare dal tuo IP server → risponde correttamente.
+     * After this operation, local_unbound asks the root servers directly
+     * instead of passing the queries on to external forwarders (1.1.1.1, etc). Spamhaus sees
+     * the query coming from your server's IP -> it answers correctly.
      */
     private JSONObject disableUnboundForwarder() {
         JSONObject r = new JSONObject();
@@ -7348,7 +7410,8 @@ public class SSLMailServer {
                 java.nio.file.Path p = java.nio.file.Paths.get(path);
                 if (!java.nio.file.Files.exists(p)) continue;
                 String content = java.nio.file.Files.readString(p);
-                // Rileva se c'è effettivamente forward-zone (anche commentati: skippiamo solo i veri)
+                // Detect whether there really is a forward-zone (there may be commented ones too: we strip
+                // only the real ones)
                 boolean hasForwardZone = false;
                 StringBuilder cleaned = new StringBuilder();
                 boolean inForwardZone = false;
@@ -7364,9 +7427,9 @@ public class SSLMailServer {
                             cleaned.append(line).append("\n");
                         }
                     } else {
-                        // Siamo dentro un blocco forward-zone — commentiamo tutto fino al prossimo blocco
+                        // We are inside a forward-zone block -- comment out everything up to the next block
                         if (t.isEmpty() || (!t.startsWith("forward-") && !t.startsWith("name:") && !t.startsWith("#"))) {
-                            // Fine del blocco
+                            // End of the block
                             inForwardZone = false;
                             cleaned.append(line).append("\n");
                         } else {
@@ -7383,14 +7446,14 @@ public class SSLMailServer {
                 }
             }
 
-            // === FIX PERSISTENZA AL REBOOT ===
-            // FreeBSD rigenera /var/unbound/forward.conf a vari trigger (pkg upgrade,
-            // local-unbound-setup, dhclient newresolv hook) leggendo dueriferimenti:
+            // === FIX FOR PERSISTENCE ACROSS REBOOTS ===
+            // FreeBSD regenerates /var/unbound/forward.conf on various triggers (pkg upgrade,
+            // local-unbound-setup, dhclient newresolv hook), reading two references:
             //   1. local_unbound_forwarders in /etc/rc.conf
-            //   2. /etc/resolv.conf  (nameserver != 127.0.0.1 vengono presi come forwarder)
-            // Se non li sistemiamo entrambi, dopo un reboot torniamo in modalita' forwarder.
+            //   2. /etc/resolv.conf  (nameserver != 127.0.0.1 entries are taken as forwarders)
+            // If we do not fix both, after a reboot we are back in forwarder mode.
 
-            // 1) Svuota local_unbound_forwarders in rc.conf (se presente)
+            // 1) Empty local_unbound_forwarders in rc.conf (if present)
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pbGet = new ProcessBuilder("/usr/sbin/sysrc", "-n", "local_unbound_forwarders");
@@ -7414,7 +7477,7 @@ public class SSLMailServer {
                 log.append("⚠ ").append(I18n.tr("server.unbound.log.rcConfFailed", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
-            // 2) Assicurati che /etc/resolv.conf abbia 127.0.0.1 come PRIMO nameserver
+            // 2) Make sure /etc/resolv.conf has 127.0.0.1 as the FIRST nameserver
             try {
                 java.nio.file.Path resolv = java.nio.file.Paths.get("/etc/resolv.conf");
                 if (java.nio.file.Files.exists(resolv)) {
@@ -7441,7 +7504,7 @@ public class SSLMailServer {
                 log.append("⚠ ").append(I18n.tr("server.unbound.log.resolvFailed", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
-            // 3) Disabilita resolvconf se attivo (altrimenti DHCP riscrive resolv.conf al reboot)
+            // 3) Disable resolvconf if active (otherwise DHCP rewrites resolv.conf at reboot)
             try {
                 // TODO: migrate to Shell.run when touched
                 ProcessBuilder pbGet = new ProcessBuilder("/usr/sbin/sysrc", "-n", "resolvconf_enable");
@@ -7463,9 +7526,9 @@ public class SSLMailServer {
                 log.append("⚠ ").append(I18n.tr("server.unbound.log.resolvconfFailed", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
-            // 4) FIX DEFINITIVO: rimuovi 'include: forward.conf' da unbound.conf.
-            //    Anche se forward.conf venisse rigenerato da local-unbound-setup
-            //    (pkg upgrade, hook DHCP, ecc), non verrebbe piu' caricato.
+            // 4) DEFINITIVE FIX: remove 'include: forward.conf' from unbound.conf.
+            //    Even if forward.conf were regenerated by local-unbound-setup
+            //    (pkg upgrade, DHCP hook, etc), it would no longer be loaded.
             try {
                 java.nio.file.Path ucPath = java.nio.file.Paths.get("/var/unbound/unbound.conf");
                 if (java.nio.file.Files.exists(ucPath)) {
@@ -7475,7 +7538,7 @@ public class SSLMailServer {
                     StringBuilder sb = new StringBuilder();
                     for (String line : lines) {
                         String trimmed = line.trim();
-                        // Cattura "include: ..forward.conf" anche con virgolette o spazi
+                        // Catch "include: ..forward.conf" even with quotes or spaces
                         if (!trimmed.startsWith("#") && trimmed.toLowerCase().startsWith("include:")
                                 && trimmed.toLowerCase().contains("forward.conf")) {
                             sb.append("# Disabled by DaemoxCP Mail (the forward-zone got Spamhaus queries blocked): ").append(line).append("\n");
@@ -7486,7 +7549,7 @@ public class SSLMailServer {
                     }
                     if (changed) {
                         org.daemoxcp.mail.system.ConfigBackups.copy(ucPath);
-                        // toString aggiunge un \n extra alla fine — lo togliamo se serve
+                        // toString adds an extra \n at the end -- we remove it if needed
                         String newContent = sb.toString();
                         if (newContent.endsWith("\n\n")) newContent = newContent.substring(0, newContent.length() - 1);
                         java.nio.file.Files.writeString(ucPath, newContent, java.nio.charset.StandardCharsets.UTF_8);
@@ -7499,11 +7562,11 @@ public class SSLMailServer {
                 log.append("⚠ ").append(I18n.tr("server.unbound.log.unboundConfFailed", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
-            // 5) Svuota forward.conf (anche se non e' piu' incluso, per pulizia)
+            // 5) Empty forward.conf (even though it is no longer included, for tidiness)
             try {
                 java.nio.file.Path fcPath = java.nio.file.Paths.get("/var/unbound/forward.conf");
                 if (java.nio.file.Files.exists(fcPath)) {
-                    // Rimuovi flag immutabile se gia' presente (per poter sovrascrivere)
+                    // Remove the immutable flag if already present (to be able to overwrite)
                     try {
                         // TODO: migrate to Shell.run when touched
                         new ProcessBuilder("/bin/chflags", "noschg", "/var/unbound/forward.conf")
@@ -7519,7 +7582,7 @@ public class SSLMailServer {
                 log.append("⚠ ").append(I18n.tr("server.unbound.log.forwardConfFailed", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
-            // 6) Rendi forward.conf IMMUTABILE — local-unbound-setup non puo' piu' sovrascriverlo
+            // 6) Make forward.conf IMMUTABLE -- local-unbound-setup can no longer overwrite it
             try {
                 // TODO: migrate to Shell.run when touched
                 Process pCh = new ProcessBuilder("/bin/chflags", "schg", "/var/unbound/forward.conf")
@@ -7534,7 +7597,7 @@ public class SSLMailServer {
                 log.append("⚠ ").append(I18n.tr("server.unbound.log.chflagsError", Map.of("error", String.valueOf(e.getMessage())))).append("\n");
             }
 
-            // 7) RESTART (non reload) — il reload non ricarica forward.conf se l'include e' cambiato
+            // 7) RESTART (not reload) -- reload does not reread forward.conf if the include has changed
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "local_unbound", "restart");
             org.daemoxcp.mail.util.Shell.applyPath(pb);
@@ -7561,7 +7624,7 @@ public class SSLMailServer {
         return r;
     }
 
-    /** Ripristina l'ultimo backup di /etc/resolv.conf creato dal pannello. */
+    /** Restores the last backup of /etc/resolv.conf created by the panel. */
     private JSONObject rollbackResolvConf() {
         JSONObject r = new JSONObject();
         try {
@@ -7595,10 +7658,10 @@ public class SSLMailServer {
     private JSONObject testUnboundQuery() {
         JSONObject r = new JSONObject();
         try {
-            // Test 1: query semplice
+            // Test 1: simple query
             boolean basic = testUnboundQuerySimple();
-            // Test 2: query DNSBL Spamhaus con un IP standard (1.0.0.127.zen.spamhaus.org sempre TRUE)
-            //         "127.0.0.2" reverse = "2.0.0.127.zen.spamhaus.org" → sempre listed (test address)
+            // Test 2: Spamhaus DNSBL query with a standard IP (1.0.0.127.zen.spamhaus.org always TRUE)
+            //         "127.0.0.2" reverse = "2.0.0.127.zen.spamhaus.org" -> always listed (test address)
             String dnsblOut = "";
             boolean dnsblOk = false;
             try {
@@ -7609,7 +7672,7 @@ public class SSLMailServer {
                 Process p = pb.start();
                 dnsblOut = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
                 p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-                // Se la risposta inizia con 127.0.0.* (escluso 127.255.*) → query Spamhaus funziona
+                // If the answer starts with 127.0.0.* (excluding 127.255.*) -> the Spamhaus query works
                 if (!dnsblOut.isEmpty()) {
                     String first = dnsblOut.split("\n")[0].trim();
                     dnsblOk = first.startsWith("127.0.0.") || first.startsWith("127.0.0.2");
@@ -7638,8 +7701,8 @@ public class SSLMailServer {
         JSONArray steps = new JSONArray();
         boolean anyFailed = false;
 
-        // Strategia: preferisci local_unbound (base system, già installato)
-        //            se non è disponibile, usa pkg unbound
+        // Strategy: prefer local_unbound (base system, already installed)
+        //           if it is not available, use pkg unbound
         boolean baseAvailable = java.nio.file.Files.exists(java.nio.file.Paths.get("/usr/sbin/local-unbound"));
         boolean pkgInstalled;
         try {
@@ -7652,7 +7715,7 @@ public class SSLMailServer {
             pkgInstalled = p.exitValue() == 0;
         } catch (Exception e) { pkgInstalled = false; }
 
-        // Se local_unbound è disponibile, lo usiamo (zero install, già nel base)
+        // If local_unbound is available, we use it (zero install, already in the base)
         String svcName;
         String sysrcKey;
         if (baseAvailable) {
@@ -7664,7 +7727,7 @@ public class SSLMailServer {
             sysrcKey = "unbound_enable";
             steps.put(buildSkipStep("install_unbound", I18n.tr("server.unbound.step.pkgInstalled")));
         } else {
-            // Niente di disponibile: installa pkg
+            // Nothing available: install pkg
             JSONObject res = installUnbound();
             steps.put(buildStep("install_unbound", I18n.tr("server.unbound.step.installPkg"), res));
             if (!res.optBoolean("success")) {
@@ -7676,7 +7739,7 @@ public class SSLMailServer {
             sysrcKey = "unbound_enable";
         }
 
-        // 2. Config — solo per pkg unbound (local_unbound ha config in /var/unbound gestita dal base)
+        // 2. Config -- only for pkg unbound (local_unbound has its config in /var/unbound, managed by the base)
         if ("unbound".equals(svcName)) {
             boolean confValid = false;
             if (java.nio.file.Files.exists(java.nio.file.Paths.get(UNBOUND_CONF_PATH))) {
@@ -7714,11 +7777,11 @@ public class SSLMailServer {
             steps.put(buildSkipStep("start_resolver", I18n.tr("server.unbound.step.running", Map.of("service", svcName))));
         }
 
-        // 5. Aspetta un attimo che unbound sia pronto
+        // 5. Wait a moment for unbound to be ready
         try { Thread.sleep(1500); } catch (Exception ignored) {}
 
-        // 6. Switch /etc/resolv.conf (con safety)
-        // Verifica preventiva
+        // 6. Switch /etc/resolv.conf (with safety)
+        // Preliminary check
         boolean unboundReady = testUnboundQuerySimple();
         if (!unboundReady) {
             steps.put(buildErrorStep("switch_resolv_conf", I18n.tr("server.unbound.preflightFail")));
@@ -7746,7 +7809,7 @@ public class SSLMailServer {
             }
         }
 
-        // 7. Disabilita forwarder (forward-zone in unbound.conf) — necessario per DNSBL
+        // 7. Disable the forwarder (forward-zone in unbound.conf) -- needed for DNSBL
         if (isUnboundUsingForwarder()) {
             JSONObject res = disableUnboundForwarder();
             steps.put(buildStep("disable_forwarder", I18n.tr("server.unbound.step.disableForwarder"), res));
@@ -7776,13 +7839,13 @@ public class SSLMailServer {
             org.daemoxcp.mail.security.BlacklistChecker checker = new org.daemoxcp.mail.security.BlacklistChecker();
             JSONArray reports = new JSONArray();
 
-            // Se non specificato, usa IP del server + tutti i domini del DB
+            // If not specified, use the server IP + all the domains in the DB
             if ((ip == null || ip.isEmpty()) && (domain == null || domain.isEmpty())) {
                 String serverIp = dnsGenerator != null ? dnsGenerator.detectServerIp() : null;
                 if (serverIp != null && !serverIp.isEmpty()) {
                     reports.put(reportToJson(checker.checkIp(serverIp)));
                 }
-                // Domini configurati nel pannello
+                // Domains configured in the panel
                 try {
                     java.util.List<MailDatabase.Domain> domains = Main.mailDatabase.getDomains();
                     for (MailDatabase.Domain d : domains) {
@@ -7847,12 +7910,12 @@ public class SSLMailServer {
 
     // ============== CLAMAV HEALTH CHECK ==============
     /**
-     * Protezione dei pacchetti, aggiornamenti e vulnerabilita'.
+     * Package protection, updates and vulnerabilities.
      *
-     * GET restituisce lo stato dei pacchetti, che e' la lettura piu' leggera. Tutto il resto
-     * passa da POST con token CSRF: anche le sole letture, perche' interrogano la rete e
-     * durano decine di secondi, e perche' le azioni vere (sblocco, aggiornamento) non devono
-     * poter essere innescate da una richiesta preparata altrove.
+     * GET returns the state of the packages, which is the lightest read. Everything else
+     * goes through POST with a CSRF token: even the pure reads, because they query the network
+     * and last tens of seconds, and because the real actions (unlock, update) must not be
+     * triggerable by a request prepared elsewhere.
      */
     private void handleApiUpdates(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
@@ -7880,8 +7943,8 @@ public class SSLMailServer {
                 case "compatibility" -> response = UpdateManager.compatibilityReport();
                 case "dovecot_config_dump" -> response = UpdateManager.dumpDovecotConfig();
                 case "dovecot_config_regen" -> {
-                    // Riscrive la sola configurazione, senza toccare i pacchetti. La conferma
-                    // scritta a mano c'e' perche' l'operazione ricarica un servizio vivo.
+                    // Rewrites only the configuration, without touching the packages. The
+                    // confirmation typed by hand is there because the operation reloads a live service.
                     if (!"REGENERATE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
@@ -7904,8 +7967,8 @@ public class SSLMailServer {
                 case "package_turn" -> response = UpdateManager.packageTurn();
                 case "branch_preview" -> response = UpdateManager.branchPreview(req.optString("destination", ""));
                 case "branch_change" -> {
-                    // La conferma e' il nome del ramo scritto a mano, e l'impronta e' quella
-                    // dell'anteprima: si cambia solo cio' che si e' visto.
+                    // The confirmation is the name of the branch typed by hand, and the fingerprint is the
+                    // one of the preview: only what was seen gets changed.
                     String target = req.optString("destination", "");
                     if (target.isEmpty() || !target.equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.updates.typeBranch"));
@@ -7915,8 +7978,8 @@ public class SSLMailServer {
                     logAudit("PKG_BRANCH_CHANGE", ip, "to " + target + (response.optBoolean("success")
                             ? " (started, job " + response.optString("jobId") + ")" : " (not started: " + response.optString("error") + ")"));
                 }
-                // La versione del pannello e le release di GitHub (ReleaseCheck): leggere, controllare adesso, il
-                // controllo di ogni giorno acceso o spento.
+                // The panel version and the GitHub releases (ReleaseCheck): reading, checking now, the
+                // daily check on or off.
                 case "panel_release" -> response = org.daemoxcp.mail.system.ReleaseCheck.status();
                 case "panel_release_check" -> response = org.daemoxcp.mail.system.ReleaseCheck.checkNow();
                 case "panel_release_auto" -> {
@@ -7927,7 +7990,7 @@ public class SSLMailServer {
                 case "system_report" -> response = UpdateManager.systemReport();
                 case "os_status" -> response = UpdateManager.operatingSystem();
                 case "reboot_preview" -> response = UpdateManager.restartServer(false, 1);
-                // Per la striscia in alto di ogni pagina: serve un riavvio? (reperto 185)
+                // For the strip at the top of every page: is a restart needed? (finding 185)
                 case "reboot_state" -> response = UpdateManager.rebootState();
                 case "reboot_cancel" -> {
                     response = UpdateManager.cancelReboot();
@@ -7944,9 +8007,10 @@ public class SSLMailServer {
                 case "rc_state" -> response = UpdateManager.autoStart();
                 case "system_summary" -> response = UpdateManager.systemSummary();
                 case "cf_intervals" -> response = UpdateManager.cloudflareRanges();
-                // Il firewall del provider: la lista di Cloudflare da metterci e se e' quella confermata (reperto 245).
+                // The provider's firewall: the Cloudflare list to put in it, and whether it is the
+                // confirmed one (finding 245).
                 case "provider_firewall" -> response = org.daemoxcp.mail.security.ProviderFirewall.state();
-                // La porta 25 in uscita (reperto 246): si legge solo il saluto di un grande server di posta.
+                // Outbound port 25 (finding 246): only the greeting of a big mail server is read.
                 case "smtp_out" -> response = org.daemoxcp.mail.system.OutboundSmtp.check();
                 case "provider_firewall_ack" -> {
                     if (!"UPDATED".equals(req.optString("confirm", ""))) {
@@ -7985,10 +8049,10 @@ public class SSLMailServer {
                 case "os_upgrade_verify" -> response = UpdateManager.verifyAfterUpdate();
                 case "jump_state" -> response = UpdateManager.versionJumpStatus();
                 case "be_list" -> response = UpdateManager.bootEnvironments();
-                // Un lavoro sui pacchetti interrotto: l'avviso, e chiuderlo dopo aver controllato.
+                // An interrupted package job: the warning, and closing it after checking.
                 case "interruption_status" -> response = org.daemoxcp.mail.system.PackageRecovery.status();
-                // Tornare al server di prima di una reinstallazione completa (ReinstallReturn): la
-                // posta di adesso fusa dentro, bectl activate, e il riavvio fra un minuto.
+                // Going back to the server as it was before a full reinstall (ReinstallReturn): the
+                // current mail merged into it, bectl activate, and the restart in one minute.
                 case "reinstall_way_back" -> {
                     if (!"GO BACK".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
@@ -8062,9 +8126,9 @@ public class SSLMailServer {
                 case "watch" -> response = org.daemoxcp.mail.system.StandardsWatch.check();
                 case "watch_changes" -> response = org.daemoxcp.mail.system.StandardsWatch.whatChanged(
                         req.optString("rfc", ""),
-                        // Per un aggiornamento il documento nuovo e la specifica del pannello
-                        // sono due numeri diversi: gli identificatori da incrociare sono quelli
-                        // della specifica, non del documento che la aggiorna.
+                        // For an update, the new document and the panel's specification
+                        // are two different numbers: the identifiers to cross-check are those
+                        // of the specification, not of the document that updates it.
                         req.optString("reference", req.optString("rfc", "")));
                 case "openssl_expiry" -> response = org.daemoxcp.mail.system.OpensslExpiry.state();
                 case "port465_status" -> response = org.daemoxcp.mail.system.SubmissionPort.state();
@@ -8132,7 +8196,7 @@ public class SSLMailServer {
                     logAudit("OS_UPGRADE_PREPARE", ip, req.optString("target", ""));
                 }
                 case "updates_search" -> {
-                    // Scarica cataloghi, vulnerabilita' e patch: non installa niente (reperto 186).
+                    // Downloads catalogues, vulnerabilities and patches: installs nothing (finding 186).
                     if (!"SEARCH".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
@@ -8141,7 +8205,7 @@ public class SSLMailServer {
                     logAudit("UPDATES_SEARCH", ip, response.optString("jobId", response.optString("error", "")));
                 }
                 case "os_patch_install" -> {
-                    // Scarica e installa le patch del sistema di base, con un ambiente di avvio prima (reperto 185).
+                    // Downloads and installs the base system patches, with a boot environment first (finding 185).
                     if (!"INSTALL PATCHES".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
@@ -8222,8 +8286,8 @@ public class SSLMailServer {
                     logAudit("RELINK_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "rspamd_clean_cache" -> {
-                    // E' una cancellazione: la conferma si scrive a mano, e il percorso non
-                    // arriva dalla richiesta ma e' fissato nel codice.
+                    // It is a deletion: the confirmation is typed by hand, and the path does not
+                    // come from the request but is fixed in the code.
                     if (!"DELETE CACHE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
@@ -8253,9 +8317,9 @@ public class SSLMailServer {
                              : UpdateManager.packagePreflight(req.optString("package", ""));
                 }
                 case "package_update" -> {
-                    // La conferma e' il NOME DEL PACCHETTO scritto a mano: cosi' non si puo'
-                    // aggiornare per sbaglio quello sbagliato dopo aver letto il referto di
-                    // un altro. Un "sei sicuro?" non lo impedirebbe.
+                    // The confirmation is the PACKAGE NAME typed by hand: that way you cannot
+                    // update the wrong one by mistake after reading the report of
+                    // another. An "are you sure?" would not prevent it.
                     String pk = req.optString("package", "");
                     if (!pk.equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false)
@@ -8266,9 +8330,9 @@ public class SSLMailServer {
                     logAudit("GUIDED_UPDATE_STARTED", ip, pk + " -> " + response.optString("jobId", ""));
                 }
                 case "update_everything" -> {
-                    // «Aggiorna tutto» (reperto 207): i passi nell'ordine, ognuno con l'impronta del piano letto, e i
-                    // cambiamenti che la conferma ha mostrato. La conferma e' la finestra del pannello che li elenca
-                    // tutti; la parola la manda la pagina, come per il piano degli altri pacchetti.
+                    // "Update all" (finding 207): the steps in order, each one with the fingerprint of the plan
+                    // read, and the changes that the confirmation showed. The confirmation is the panel dialog
+                    // that lists them all; the page sends the word, as for the plan of the other packages.
                     if (!"UPDATE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
@@ -8299,8 +8363,8 @@ public class SSLMailServer {
                             (only.isEmpty() ? "all" : only) + " -> " + response.optInt("changed", 0) + " changed");
                 }
                 case "updates_apply" -> {
-                    // La conferma scritta a mano non e' burocrazia: distingue un click di
-                    // riflesso da una decisione. Qui si modifica un server di posta vivo.
+                    // The confirmation typed by hand is not red tape: it tells a reflex click
+                    // apart from a decision. Here a live mail server is being modified.
                     if (!"UPDATE".equals(req.optString("confirm", ""))) {
                         response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                         break;
@@ -8317,18 +8381,18 @@ public class SSLMailServer {
                     logAudit("MAINTENANCE_STARTED", ip, response.optString("jobId", ""));
                 }
                 case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
-                // I registri su disco dei lavori (JobJournal): restano dopo i riavvii, e si leggono da Diagnostica.
+                // The on-disk logs of the jobs (JobJournal): they survive restarts, and are read from Diagnostics.
                 case "journal_list" -> response = org.daemoxcp.mail.system.JobJournal.list(40);
                 case "journal_read" -> response = org.daemoxcp.mail.system.JobJournal.read(req.optString("name", ""));
                 default -> response = new JSONObject().put("success", false).put("error", I18n.tr("server.unknownAction"));
             }
             sendJsonResponse(exchange, response);
         } catch (java.io.IOException e) {
-            // "Broken pipe" non e' un guasto del server: e' il browser che ha chiuso prima che
-            // la risposta fosse scritta, tipicamente perche' l'operazione durava. Il lavoro e'
-            // stato fatto, si e' persa la risposta. Registrarlo come SEVERE con tutta la traccia
-            // fa credere che sia crollato qualcosa, ed e' esattamente cio' che e' successo il
-            // 31/08/2026: un messaggio allarmante per un cliente che se n'era andato.
+            // "Broken pipe" is not a server fault: it is the browser that closed before the
+            // response was written, typically because the operation was taking long. The job
+            // was done, the response was lost. Logging it as SEVERE with the whole stack trace
+            // makes people believe something crashed, and that is exactly what happened on
+            // 2026-08-31: an alarming message for a client that had gone away.
             String m = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
             if (m.contains("broken pipe") || m.contains("insufficient bytes")
                     || m.contains("connection reset")) {
@@ -8433,7 +8497,7 @@ public class SSLMailServer {
         JSONObject r = new JSONObject();
         JSONArray checks = new JSONArray();
 
-        // 1. ClamAV installato
+        // 1. ClamAV installed
         boolean installed;
         try {
             // TODO: migrate to Shell.run when touched
@@ -8450,7 +8514,7 @@ public class SSLMailServer {
             installed ? null : "install_clamav",
             I18n.tr("server.runs", Map.of("command", "pkg install -y clamav"))));
 
-        // 2. freshclam abilitato al boot
+        // 2. freshclam enabled at boot
         boolean freshclamEnabledBoot = isSysrcYes("clamav_freshclam_enable");
         checks.put(makeCheck("freshclam-enabled-boot", I18n.tr("server.clam.checkFreshclamBoot"),
             freshclamEnabledBoot,
@@ -8459,7 +8523,7 @@ public class SSLMailServer {
             (freshclamEnabledBoot || !installed) ? null : "enable_freshclam_at_boot",
             "sysrc clamav_freshclam_enable=YES"));
 
-        // 3. clamd abilitato al boot
+        // 3. clamd enabled at boot
         boolean clamdEnabledBoot = isSysrcYes("clamav_clamd_enable");
         checks.put(makeCheck("clamd-enabled-boot", I18n.tr("server.clam.checkClamdBoot"),
             clamdEnabledBoot,
@@ -8468,7 +8532,7 @@ public class SSLMailServer {
             (clamdEnabledBoot || !installed) ? null : "enable_clamd_at_boot",
             "sysrc clamav_clamd_enable=YES"));
 
-        // 4. Database virus presenti (cerca .cvd, .cld, .cud — tutti i formati ClamAV)
+        // 4. Virus databases present (look for .cvd, .cld, .cud -- all the ClamAV formats)
         boolean dbPresent = false;
         long dbAgeDays = -1;
         try {
@@ -8478,7 +8542,7 @@ public class SSLMailServer {
                     java.util.List<java.nio.file.Path> dbFiles = s
                         .filter(p -> {
                             String n = p.getFileName().toString().toLowerCase();
-                            // Formati signature di ClamAV: .cvd (compressed), .cld (downloaded),
+                            // ClamAV signature formats: .cvd (compressed), .cld (downloaded),
                             // .cud (compressed updates), .hdb, .ndb, .ldb, .fp
                             return (n.endsWith(".cvd") || n.endsWith(".cld") || n.endsWith(".cud"))
                                 && (n.startsWith("main") || n.startsWith("daily") || n.startsWith("bytecode"));
@@ -8493,7 +8557,7 @@ public class SSLMailServer {
                 }
             }
         } catch (Exception ignored) {}
-        // Fallback: se clamd risponde a clamdscan, il DB c'è anche se non ne riconosciamo i file
+        // Fallback: if clamd answers clamdscan, the DB is there even if we do not recognise its files
         if (!dbPresent) {
             try {
                 // TODO: migrate to Shell.run when touched
@@ -8503,11 +8567,11 @@ public class SSLMailServer {
                 Process p = pb.start();
                 String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
                 p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-                // clamdscan --version ritorna info su clamd inclusa la versione del database
-                // es: "ClamAV 1.5.1/27582/Wed May 14 ..."
+                // clamdscan --version returns info on clamd including the database version
+                // e.g.: "ClamAV 1.5.1/27582/Wed May 14 ..."
                 if (out.contains("/") && out.matches("(?s).*\\d+/.*")) {
                     dbPresent = true;
-                    // età stimata 0 perché clamd risponde correttamente
+                    // estimated age 0 because clamd answers correctly
                     if (dbAgeDays < 0) dbAgeDays = 0;
                 }
             } catch (Exception ignored) {}
@@ -8527,7 +8591,7 @@ public class SSLMailServer {
             (dbOk || !installed) ? null : "update_db",
             I18n.tr("server.clam.fixDb")));
 
-        // 5. clamd in esecuzione
+        // 5. clamd running
         boolean clamdRunning = isServiceRunning("clamav_clamd");
         checks.put(makeCheck("clamd-running", I18n.tr("server.clam.checkClamdRunning"),
             clamdRunning,
@@ -8538,9 +8602,9 @@ public class SSLMailServer {
             (clamdRunning || !installed || !dbPresent) ? null : "start_clamd",
             I18n.tr("server.clam.fixClamdRunning")));
 
-        // 6. freshclam in esecuzione (auto-update) — check rigoroso
+        // 6. freshclam running (auto-update) -- strict check
         boolean freshclamRunning = isServiceRunning("clamav_freshclam");
-        // Analisi log: cerca "is up to date" o "downloading" nelle ultime 48h
+        // Log analysis: look for "is up to date" or "downloading" in the last 48h
         FreshclamLogStatus fcLog = analyzeFreshclamLog();
         boolean autoUpdateOk = freshclamRunning && fcLog.lastUpdateAgeHours >= 0 && fcLog.lastUpdateAgeHours <= 48;
         String fcStatusText;
@@ -8569,7 +8633,7 @@ public class SSLMailServer {
                 : (freshclamRunning ? "update_db" : "start_freshclam"),
             freshclamRunning ? I18n.tr("server.clam.fixFcForce") : "service clamav_freshclam start"));
 
-        // 7. Rspamd → ClamAV configurato
+        // 7. Rspamd -> ClamAV configured
         boolean rspamdHasAntivirus = false;
         try {
             java.nio.file.Path conf = java.nio.file.Paths.get("/usr/local/etc/rspamd/local.d/antivirus.conf");
@@ -8596,17 +8660,17 @@ public class SSLMailServer {
         return r;
     }
 
-    /** Status di freshclam dal suo log. */
+    /** freshclam status from its log. */
     private static class FreshclamLogStatus {
-        /** Età in ore dell'ultima evidenza di update/check. -1 se nessuna. */
+        /** Age in hours of the latest evidence of an update/check. -1 if none. */
         long lastUpdateAgeHours = -1;
-        /** Eventuale messaggio di errore recente. */
+        /** Any recent error message. */
         String lastErrorMessage = null;
     }
 
     /**
-     * Analizza /var/log/clamav/freshclam.log per stabilire SE freshclam sta
-     * davvero aggiornando i database o ha errori. Cerca pattern tipici:
+     * Analyses /var/log/clamav/freshclam.log to establish WHETHER freshclam is
+     * really updating the databases or has errors. Looks for typical patterns:
      *   - "Time: ... update completed"
      *   - "main.cvd is up to date"
      *   - "Downloading"
@@ -8618,20 +8682,20 @@ public class SSLMailServer {
         if (!java.nio.file.Files.exists(logPath)) return result;
 
         try {
-            // Leggi le ultime ~200 righe del log
+            // Read the last ~200 lines of the log
             java.util.List<String> lines = new java.util.ArrayList<>();
             try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(logPath.toFile(), "r")) {
                 long fileSize = raf.length();
-                long start = Math.max(0, fileSize - 32 * 1024); // ultimi 32KB
+                long start = Math.max(0, fileSize - 32 * 1024); // last 32KB
                 raf.seek(start);
-                if (start > 0) raf.readLine(); // scarta riga parziale
+                if (start > 0) raf.readLine(); // discard the partial line
                 String line;
                 while ((line = raf.readLine()) != null) lines.add(line);
             }
 
-            // Cerca dall'ultima verso la prima la riga indicativa di update o check riuscito
-            // Pattern positivi: "up-to-date", "is up to date", "updated", "Downloading", "Time:"
-            // Pattern negativi (errore): "ERROR:", "Can't download", "Mirror error"
+            // Search from the last line back to the first for the line showing a successful update or check
+            // Positive patterns: "up-to-date", "is up to date", "updated", "Downloading", "Time:"
+            // Negative patterns (error): "ERROR:", "Can't download", "Mirror error"
             java.util.regex.Pattern timestampPat = java.util.regex.Pattern.compile(
                 "(?:^|\\s)([A-Z][a-z]{2}\\s+\\w+\\s+\\d+\\s+\\d{2}:\\d{2}:\\d{2}\\s+\\d{4})"
             );
@@ -8646,7 +8710,7 @@ public class SSLMailServer {
                 if (lower.contains("up to date") || lower.contains("up-to-date")
                     || lower.contains("updated.") || lower.contains("downloading")
                     || lower.contains("daily.cvd updated") || lower.contains("main.cvd updated")) {
-                    // Trova timestamp nella riga (cerca pattern "Mon Day HH:MM:SS YYYY" o ISO)
+                    // Find a timestamp in the line (look for the pattern "Mon Day HH:MM:SS YYYY" or ISO)
                     java.util.regex.Matcher m = timestampPat.matcher(ln);
                     if (m.find()) {
                         try {
@@ -8658,8 +8722,8 @@ public class SSLMailServer {
                             break;
                         } catch (Exception ignored) {}
                     }
-                    // Se non riesce a parsare il timestamp ma c'è la riga "up to date",
-                    // marca comunque come "presente ma età sconosciuta" → 0 (assumiamo recente)
+                    // If it cannot parse the timestamp but the "up to date" line is there,
+                    // mark it anyway as "present but age unknown" -> 0 (we assume recent)
                     if (result.lastUpdateAgeHours < 0) result.lastUpdateAgeHours = 0;
                     break;
                 }
@@ -8785,30 +8849,30 @@ public class SSLMailServer {
     }
 
     /**
-     * Test EICAR end-to-end:
-     *  1. Crea un file temporaneo con il payload EICAR (virus standard innocuo)
-     *  2. Esegue clamdscan sul file
-     *  3. Verifica che la risposta contenga "FOUND" (clamd ha rilevato il virus)
-     *  4. Cleanup file
+     * End-to-end EICAR test:
+     *  1. Creates a temporary file with the EICAR payload (harmless standard virus)
+     *  2. Runs clamdscan on the file
+     *  3. Checks that the answer contains "FOUND" (clamd detected the virus)
+     *  4. Cleans up the file
      *
-     * Questo conferma che la pipeline clamd→clamdscan funziona end-to-end.
-     * Se passa, ClamAV protegge davvero. Se fallisce, c'è un problema concreto.
+     * This confirms that the clamd->clamdscan pipeline works end to end.
+     * If it passes, ClamAV really protects. If it fails, there is a concrete problem.
      */
     private JSONObject runEicarTest() {
         JSONObject r = new JSONObject();
         java.nio.file.Path tmp = null;
         try {
-            // EICAR standard test string — riconosciuta da TUTTI gli antivirus, innocua
+            // EICAR standard test string -- recognised by ALL antivirus software, harmless
             String eicar = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
             tmp = java.nio.file.Files.createTempFile("eicar-test-", ".txt");
             java.nio.file.Files.writeString(tmp, eicar, java.nio.charset.StandardCharsets.US_ASCII);
-            // Perm 644 così clamav user può leggere
+            // Perm 644 so the clamav user can read it
             try {
                 java.nio.file.Files.setPosixFilePermissions(tmp,
                     java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--"));
             } catch (Exception ignored) {}
 
-            // Esegui clamdscan
+            // Run clamdscan
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/local/bin/clamdscan", "--no-summary", tmp.toString());
             org.daemoxcp.mail.util.Shell.applyPath(pb);
@@ -8819,10 +8883,10 @@ public class SSLMailServer {
             if (!done) { p.destroyForcibly(); r.put("success", false); r.put("message", I18n.tr("server.clam.scanTimeout")); return r; }
             int exit = p.exitValue();
 
-            // Interpretazione exit code di clamdscan:
-            //   0 = nessun virus
-            //   1 = VIRUS TROVATO (è quello che vogliamo!)
-            //   2 = errore
+            // Interpreting the clamdscan exit code:
+            //   0 = no virus
+            //   1 = VIRUS FOUND (that is what we want!)
+            //   2 = error
             if (exit == 1 && out.contains("FOUND") && (out.contains("EICAR") || out.contains("Eicar"))) {
                 r.put("success", true);
                 r.put("message", "✅ " + I18n.tr("server.clam.eicarOk"));
@@ -8871,7 +8935,7 @@ public class SSLMailServer {
                 + "  scan_text_mime = false;\n"
                 + "  scan_image_mime = false;\n"
                 + "}\n";
-            // Backup se esiste
+            // Backup if it exists
             if (java.nio.file.Files.exists(conf)) {
                 org.daemoxcp.mail.system.ConfigBackups.copy(conf);
             }
@@ -8894,7 +8958,7 @@ public class SSLMailServer {
         return r;
     }
 
-    /** Esegue tutti i fix necessari per ClamAV in ordine corretto. */
+    /** Runs all the fixes needed for ClamAV in the correct order. */
     private JSONObject runClamavFixAll() {
         JSONObject r = new JSONObject();
         JSONArray steps = new JSONArray();
@@ -8945,7 +9009,7 @@ public class SSLMailServer {
             steps.put(buildSkipStep("enable_clamd_boot", I18n.tr("server.unbound.step.bootAlready", Map.of("service", "clamd"))));
         }
 
-        // 4. Update database (può richiedere minuti)
+        // 4. Update the database (may take minutes)
         boolean dbPresent = false;
         try {
             java.nio.file.Path dbDir = java.nio.file.Paths.get("/var/db/clamav");
@@ -8984,7 +9048,7 @@ public class SSLMailServer {
             steps.put(buildSkipStep("start_clamd", I18n.tr("server.unbound.step.running", Map.of("service", "clamd"))));
         }
 
-        // 7. Configura Rspamd → ClamAV
+        // 7. Configure Rspamd -> ClamAV
         boolean rspamdConfigured = false;
         try {
             java.nio.file.Path conf = java.nio.file.Paths.get("/usr/local/etc/rspamd/local.d/antivirus.conf");
@@ -9129,10 +9193,10 @@ public class SSLMailServer {
     }
 
     /**
-     * GET /api/panel_info?action=uptime|details: la scheda del pannello in cima alla dashboard
-     * (PanelInfo, reperto 183). Il permesso lo ha gia' controllato il filtro (Access): uptime con
-     * home.view, details con system.view. La risposta di uptime dice se chi guarda puo' chiedere
-     * anche i dettagli, cosi' la pagina mostra l'occhio solo a lui.
+     * GET /api/panel_info?action=uptime|details: the panel card at the top of the dashboard
+     * (PanelInfo, finding 183). The filter (Access) has already checked the permission: uptime with
+     * home.view, details with system.view. The uptime response says whether the viewer can also
+     * ask for the details, so that the page shows the eye only to them.
      */
     private void handleApiMailboxQuota(HttpExchange exchange) throws IOException {
         if (!"GET".equals(exchange.getRequestMethod())) {
@@ -9152,8 +9216,8 @@ public class SSLMailServer {
             case "uptime" -> {
                 boolean details = currentSession(exchange).map(s -> AuthStore.may(s.admin(), SYSTEM_VIEW)).orElse(false);
                 JSONObject r = org.daemoxcp.mail.system.PanelInfo.uptime(java.time.Instant.now(), details);
-                // Una versione nuova su GitHub (ReleaseCheck), a chi vede le pagine del sistema: l'ultimo esito salvato,
-                // senza rete.
+                // A new version on GitHub (ReleaseCheck), for whoever sees the system pages: the last saved
+                // result, without the network.
                 if (details) r.put("release", org.daemoxcp.mail.system.ReleaseCheck.available());
                 sendJsonResponse(exchange, r);
             }
@@ -9163,9 +9227,9 @@ public class SSLMailServer {
     }
 
     /**
-     * Endpoint diagnostico: ritorna tutti i path che il pannello sta usando,
-     * raggruppati per categoria, ognuno con status (esiste / dimensione / mtime).
-     * Utile per debugging e per copia/incolla rapidi durante troubleshooting.
+     * Diagnostic endpoint: returns all the paths the panel is using,
+     * grouped by category, each one with a status (exists / size / mtime).
+     * Useful for debugging and for quick copy/paste during troubleshooting.
      */
     private void handleApiSystemPaths(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
@@ -9211,7 +9275,7 @@ public class SSLMailServer {
             JSONArray panelEntries = new JSONArray();
             panelEntries.put(pathEntry(I18n.tr("server.paths.panelAuthLog"), "/var/log/daemoxcp-mail-auth.log", I18n.tr("server.paths.panelAuthLogDesc")));
             panelEntries.put(pathEntry(I18n.tr("server.paths.newsyslog"), "/usr/local/etc/newsyslog.conf.d/daemoxcp-mail-auth.conf", I18n.tr("server.paths.newsyslogDesc")));
-            // Il pannello separato (PanelSeparation): il registro della parte web e il socket della root.
+            // The separated panel (PanelSeparation): the web part's log and the root's socket.
             panelEntries.put(pathEntry(I18n.tr("server.paths.panelWebLog"), "/var/db/daemoxcp-mail/panel-web.log", I18n.tr("server.paths.panelWebLogDesc")));
             panelEntries.put(pathEntry(I18n.tr("server.paths.rootSocket"), org.daemoxcp.mail.system.PanelSeparation.socket().toString(), I18n.tr("server.paths.rootSocketDesc")));
             categories.put(new JSONObject().put("name", I18n.tr("brand.name")).put("entries", panelEntries));
@@ -9238,7 +9302,7 @@ public class SSLMailServer {
             JSONArray sslEntries = new JSONArray();
             sslEntries.put(pathEntry(I18n.tr("server.paths.certChain"), "/usr/local/etc/ssl/mail/fullchain.pem", I18n.tr("server.paths.certChainDesc")));
             sslEntries.put(pathEntry(I18n.tr("server.paths.privKey"), "/usr/local/etc/ssl/mail/privkey.pem", I18n.tr("server.paths.privKeyDesc")));
-            // Dove sta davvero: in /var/db/acme come acme, in /root/.acme.sh finche' la migrazione non l'ha spostato.
+            // Where it really is: in /var/db/acme as acme, in /root/.acme.sh until the migration has moved it.
             org.daemoxcp.mail.security.AcmeUser.Layout acmeAt = org.daemoxcp.mail.security.AcmeUser.layout();
             sslEntries.put(pathEntry(I18n.tr("server.paths.acmeHome"), acmeAt == null ? org.daemoxcp.mail.security.AcmeUser.HOME : acmeAt.home(), I18n.tr("server.paths.acmeHomeDesc")));
             sslEntries.put(pathEntry(I18n.tr("server.paths.acmeBin"), acmeAt == null ? org.daemoxcp.mail.security.AcmeUser.SCRIPT : acmeAt.script(), I18n.tr("server.paths.acmeBinDesc")));
@@ -9255,7 +9319,7 @@ public class SSLMailServer {
             categories.put(new JSONObject().put("name", "Nginx / Web").put("entries", webEntries));
 
             // === Database (panel) ===
-            // Path SQLite del pannello: relativo a CWD di esecuzione, di solito /home/panel/
+            // SQLite path of the panel: relative to the execution CWD, usually /home/panel/
             JSONArray dbEntries = new JSONArray();
             String sqliteDbPath = "./database/daemoxcp-mail.db";
             try {
@@ -9269,17 +9333,17 @@ public class SSLMailServer {
 
             response.put("success", true);
             response.put("categories", categories);
-            // Hostname: tentativi multipli, mai bloccante
+            // Hostname: multiple attempts, never blocking
             String hostname = I18n.tr("server.notAvailable");
             try {
                 hostname = java.net.InetAddress.getLocalHost().getHostName();
             } catch (Exception ignoredEx) {
-                // Fallback 1: variabile d'ambiente HOSTNAME
+                // Fallback 1: HOSTNAME environment variable
                 String envHost = System.getenv("HOSTNAME");
                 if (envHost != null && !envHost.isEmpty()) {
                     hostname = envHost;
                 } else {
-                    // Fallback 2: comando hostname
+                    // Fallback 2: hostname command
                     try {
                         // TODO: migrate to Shell.run when touched
                         ProcessBuilder pb = new ProcessBuilder("/bin/hostname");
@@ -9301,7 +9365,7 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
-    /** Costruisce un entry JSON con metadata del file/directory. */
+    /** Builds a JSON entry with the metadata of the file/directory. */
     private JSONObject pathEntry(String label, String path, String description) {
         JSONObject e = new JSONObject();
         e.put("label", label);
@@ -9383,8 +9447,8 @@ public class SSLMailServer {
             (panelSetupOk || !f2bInstalled) ? null : "setup_mail_jail",
             I18n.tr("server.f2b.fixPanelJail")));
 
-        // Jail per i servizi mail (Postfix, Dovecot, Roundcube, Rspamd)
-        // Verifica DOPPIA: file esiste E le jail sono effettivamente attive nel runtime di Fail2ban
+        // Jails for the mail services (Postfix, Dovecot, Roundcube, Rspamd)
+        // DOUBLE check: the file exists AND the jails are really active in the Fail2ban runtime
         java.util.List<String> expectedMailJails = java.util.Arrays.asList("dovecot", "postfix-auth", "roundcube-auth", "rspamd");
         boolean mailFileExists = false;
         java.util.Set<String> jailsInFile = new java.util.HashSet<>();
@@ -9399,15 +9463,15 @@ public class SSLMailServer {
             }
         } catch (Exception ignored) {}
 
-        // Quali jail sono ATTIVE a runtime?
-        // FIX (regression del check precedente): prima parsavamo la riga "Jail list:"
-        // dell'output globale `fail2ban-client status`. Quel parsing era fragile —
-        // se il formato dell'output cambia (whitespace, tab, encoding), TUTTE le jail
-        // venivano marcate come "non attive" anche se in realtà giravano normalmente.
+        // Which jails are ACTIVE at runtime?
+        // FIX (regression of the previous check): we used to parse the "Jail list:" line
+        // of the global `fail2ban-client status` output. That parsing was fragile --
+        // if the output format changes (whitespace, tab, encoding), ALL the jails
+        // were marked as "not active" even if they were actually running normally.
         //
-        // Approccio robusto: per ciascuna jail attesa eseguiamo `status <jail>` —
-        // se ritorna un output normale (non "does not exist") significa che la jail
-        // E' caricata e attiva nel runtime di Fail2ban.
+        // Robust approach: for each expected jail we run `status <jail>` --
+        // if it returns normal output (not "does not exist") it means that the jail
+        // IS loaded and active in the Fail2ban runtime.
         java.util.Set<String> activeJails = new java.util.HashSet<>();
         if (f2bRunning) {
             for (String jail : expectedMailJails) {
@@ -9422,7 +9486,7 @@ public class SSLMailServer {
             }
         }
 
-        // Per ogni jail mancante a runtime, capisci PERCHÉ
+        // For every jail missing at runtime, find out WHY
         java.util.List<String> missingActive = new java.util.ArrayList<>();
         java.util.List<String> reasons = new java.util.ArrayList<>();
         for (String jail : expectedMailJails) {
@@ -9444,11 +9508,11 @@ public class SSLMailServer {
         String impact = mailJailsActive ? null
             : I18n.tr("server.f2b.impactMailJails");
 
-        // Fix appropriato:
-        //   - file mancante o jail non attive a runtime → install_mail_jails (rigenera mail.local
-        //     con path corretti, crea log file mancanti, riscrive filter, reload)
-        //   - install_mail_jails è idempotente e gestisce tutti i casi, quindi è sempre la
-        //     scelta più safe rispetto al solo reload
+        // Appropriate fix:
+        //   - missing file or jails not active at runtime -> install_mail_jails (regenerates mail.local
+        //     with the correct paths, creates missing log files, rewrites filters, reload)
+        //   - install_mail_jails is idempotent and handles all the cases, so it is always the
+        //     safer choice compared with a reload alone
         String fixAction = null;
         String fixDesc = null;
         if (f2bInstalled && (!mailFileExists || !missingActive.isEmpty())) {
@@ -9464,16 +9528,16 @@ public class SSLMailServer {
             fixAction,
             fixDesc));
 
-        // ========== Le jail guardano file capaci di dirgli qualcosa? ==========
-        // Il controllo qui sopra chiede "la jail e' caricata". roundcube-auth lo era, e la
-        // pagina dava verde mentre sorvegliava "userlogins" invece di "userlogins.log" scritto
-        // accanto: non avrebbe bannato nessuno, e proprio perche' la diagnosi non vedeva niente
-        // di storto il pulsante "Risolvi tutto" restava nascosto. Questa e' la seconda domanda.
-        // Il verde di questo controllo deve dire "ho guardato N jail e stanno bene", mai
-        // "non ho trovato problemi" quando il motivo e' che non ho guardato niente: una lista
-        // vuota per esito e una lista vuota per fallimento sono indistinguibili, e quella
-        // ambiguita' e' esattamente la forma del difetto che questo controllo esiste per
-        // scoprire. Quindi si conta, e il conteggio finisce a schermo.
+        // ========== Are the jails watching files that can tell them something? ==========
+        // The check above asks "is the jail loaded". roundcube-auth was, and the page
+        // showed green while it was watching "userlogins" instead of the "userlogins.log" written
+        // next to it: it would not have banned anyone, and precisely because the diagnosis saw
+        // nothing wrong the "Fix all" button stayed hidden. This is the second question.
+        // The green of this check must say "I looked at N jails and they are fine", never
+        // "I found no problems" when the reason is that I looked at nothing: an empty list
+        // as a result and an empty list from a failure are indistinguishable, and that
+        // ambiguity is exactly the shape of the defect this check exists to
+        // uncover. So we count, and the count ends up on screen.
         Fail2banManager.LogReview review = null;
         String reviewError = null;
         try {
@@ -9508,13 +9572,13 @@ public class SSLMailServer {
                 first = false;
             }
         }
-        // ========== Il comando che banna esiste su questo sistema? ==========
-        // La causa vera del guasto piu' grave trovato finora. Cinque jail dichiaravano
-        // "action = pf[...]", due no: non dichiarandola ereditavano il valore predefinito di
-        // jail.conf, costruito su iptables, che su FreeBSD non esiste. Quelle due rilevavano,
-        // contavano i tentativi e incrementavano i ban — 14.370 e 46 sulla jail della 443 —
-        // senza bloccare niente, e nessuna schermata poteva accorgersene perche' nessuna
-        // guardava se il comando di ban fosse un comando. Questo lo guarda.
+        // ========== Does the command that bans exist on this system? ==========
+        // The real cause of the most serious fault found so far. Five jails declared
+        // "action = pf[...]", two did not: by not declaring it they inherited the default value of
+        // jail.conf, built on iptables, which does not exist on FreeBSD. Those two detected,
+        // counted the attempts and incremented the bans -- 14,370 and 46 on the 443 jail --
+        // without blocking anything, and no screen could notice it because none of them
+        // checked whether the ban command was a command. This one checks it.
         JSONObject diagBan = new JSONObject().put("broken", new JSONArray());
         boolean banRunnable = true;
         String banDetail;
@@ -9535,18 +9599,18 @@ public class SSLMailServer {
             } else {
                 banDetail = I18n.tr("server.f2b.ban.allOk", Map.of("n", reviewedBans));
                 if (notJudged != null && notJudged.length() > 0) {
-                    // Non giudicata non e' promossa. Se una jail non riporta la propria azione,
-                    // il piu' delle volte e' perche' quell'azione non si e' caricata — cioe' non
-                    // banna affatto — e lasciare verde il controllo per le altre nasconderebbe
-                    // esattamente il caso peggiore dietro la maggioranza sana.
+                    // Not judged is not passed. If a jail does not report its own action,
+                    // most of the time it is because that action did not load -- that is, it
+                    // does not ban at all -- and leaving the check green for the others would
+                    // hide exactly the worst case behind the healthy majority.
                     banRunnable = false;
                     StringBuilder ng = new StringBuilder();
                     for (int i = 0; i < notJudged.length(); i++) {
                         JSONObject x = notJudged.getJSONObject(i);
                         if (ng.length() > 0) ng.append(" | ");
                         ng.append(x.optString("jail")).append(": ").append(x.optString("why"));
-                        // L'evidenza accanto al verdetto: cosa ha risposto fail2ban, e cosa ha
-                        // scritto nel proprio log. Senza, la riga dice solo che non si sa.
+                        // The evidence next to the verdict: what fail2ban answered, and what it
+                        // wrote in its own log. Without it, the line only says that it is not known.
                         String u = x.optString("output", "");
                         if (!u.isEmpty()) ng.append(" [").append(I18n.tr("server.f2b.ban.answers", Map.of("answer", u))).append("]");
                         String lg = x.optString("log", "");
@@ -9574,16 +9638,17 @@ public class SSLMailServer {
             (banRunnable || !f2bRunning) ? null : "repair_ban_action",
             I18n.tr("server.f2b.ban.fix")));
 
-        // ========== I ban arrivano davvero a pf? ==========
-        // E' il controllo piu' profondo che il pannello sappia fare, e finora viveva soltanto
-        // nella scheda del confronto: il verdetto in cima diceva "Tutto OK" mentre recidive
-        // aveva una tabella che nessuna regola legge. Un riepilogo che non comprende il
-        // controllo piu' severo non e' un riepilogo: e' la stessa mezza verita' che ha tenuto
-        // nascoste per mesi una jail cieca e due che bannavano nel vuoto.
+        // ========== Do the bans really reach pf? ==========
+        // It is the deepest check the panel can do, and until now it lived only
+        // in the comparison card: the verdict at the top said "All OK" while recidive
+        // had a table that no rule reads. A summary that does not include the
+        // most severe check is not a summary: it is the same half-truth that kept
+        // a blind jail, and two that banned into thin air, hidden for months.
         boolean appliedBans = true;
-        // Solo jail che non si sono potute leggere, e nessun guasto trovato: non e' un guasto, e' un "non ho potuto
-        // guardare" (09/11/2026: sul server vero mailpanel-public «non misurata» per un momento, con il rimedio delle
-        // jail della posta, che non la tocca, e «se non lo sistemi»). Si dice il motivo e si chiede di riprovare.
+        // Only jails that could not be read, and no fault found: it is not a fault, it is an "I could not
+        // look" (2026-11-09: on the production server mailpanel-public "not measured" for a moment, with
+        // the mail jails remedy, which does not touch it, and "if you do not fix it"). The reason is given
+        // and a retry is asked for.
         boolean appliedBansUnmeasured = false;
         String appliedBansDetail;
         try {
@@ -9593,8 +9658,8 @@ public class SSLMailServer {
             } else {
                 Fail2banManager.PfComparison cf = fail2banManager.compareBansWithPf();
                 if (cf.totalUnmeasured() > 0) {
-                    // Fail2ban che non risponde in tempo (un reload, un registro grande da rileggere) dura un attimo:
-                    // una seconda lettura dopo qualche secondo, prima di dire qualcosa.
+                    // Fail2ban not answering in time (a reload, a big log to reread) lasts a moment:
+                    // a second read after a few seconds, before saying anything.
                     try { Thread.sleep(3000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
                     cf = fail2banManager.compareBansWithPf();
                 }
@@ -9635,7 +9700,7 @@ public class SSLMailServer {
             appliedBansDetail = I18n.tr("server.f2b.pf.compareFailed", Map.of("error", ErrorText.detail("buildFail2banHealthReport", e)));
         }
         if (appliedBansUnmeasured) {
-            // Nessun rimedio da proporre: rigenerare le jail della posta non tocca una jail che non si e' letta.
+            // No remedy to offer: regenerating the mail jails does not touch a jail that could not be read.
             checks.put(makeCheck("bans-applied-in-pf", I18n.tr("server.f2b.pf.check"), false, appliedBansDetail,
                     I18n.tr("server.f2b.pf.unmeasuredImpact"), null, null).put("unknown", true));
         } else {
@@ -9658,7 +9723,7 @@ public class SSLMailServer {
             (logOk || !f2bInstalled) ? null : "install_mail_jails",
             I18n.tr("server.f2b.log.fix")));
 
-        // ========== Verifica pf (firewall FreeBSD) ==========
+        // ========== pf check (FreeBSD firewall) ==========
         boolean pfEnabledAtBoot = isPfEnabledAtBoot();
         boolean pfRunning = isPfRunning();
         boolean pfConfExists = java.nio.file.Files.exists(java.nio.file.Paths.get("/etc/pf.conf"));
@@ -9670,7 +9735,7 @@ public class SSLMailServer {
             }
         } catch (Exception ignored) {}
 
-        // Check del modulo kernel pf (deve venire PRIMA di tutto il resto pf)
+        // Check of the pf kernel module (must come BEFORE all the rest of pf)
         boolean pfModuleLoaded = isPfModuleLoaded();
         boolean inJail = isRunningInsideFreebsdJail();
         checks.put(makeCheck("pf-module-loaded",
@@ -9685,14 +9750,14 @@ public class SSLMailServer {
             (pfModuleLoaded || inJail) ? null : "load_pf_module",
             I18n.tr("server.pf.fixModule")));
 
-        // ========== L'anchor di Fail2ban viene raggiunta? ==========
-        // pf valuta le regole in ordine e "quick" ferma la valutazione alla prima che
-        // corrisponde. Le regole di Fail2ban sono "block quick", ma un "pass ... quick" che
-        // stia PRIMA dell'anchor f2b vince: da quelle sorgenti non si viene bannati, e i ban
-        // risultano eseguiti. Il pannello scrive il proprio anchor panel-fw in fondo a pf.conf,
-        // e quell'anchor contiene "pass in quick from <panel_wl_cidrs>" e la lista geografica:
-        // se finisce prima di f2b, la whitelist non e' piu' una precedenza voluta ma una
-        // esenzione dai ban di cui nessuno sa. Qui si guarda l'ordine reale del file.
+        // ========== Is the Fail2ban anchor reached? ==========
+        // pf evaluates the rules in order and "quick" stops the evaluation at the first one that
+        // matches. The Fail2ban rules are "block quick", but a "pass ... quick" that
+        // comes BEFORE the f2b anchor wins: from those sources you do not get banned, and the bans
+        // look executed. The panel writes its own anchor panel-fw at the end of pf.conf,
+        // and that anchor contains "pass in quick from <panel_wl_cidrs>" and the geographic list:
+        // if it ends up before f2b, the whitelist is no longer an intended precedence but an
+        // exemption from bans that nobody knows about. Here the real order of the file is checked.
         boolean orderOk = true;
         String detailOrder;
         java.util.List<String> beforeF2b = new java.util.ArrayList<>();
@@ -9708,18 +9773,18 @@ public class SSLMailServer {
                         f2bLine = i;
                         break;
                     }
-                    // Solo cio' che puo' davvero far saltare un ban in entrata.
-                    // "pass out ... quick" riguarda il traffico in uscita e non c'entra:
-                    // segnalarlo farebbe diventare rossa una pf.conf sana, e un controllo che
-                    // grida a vuoto smette di essere letto.
+                    // Only what can really make an inbound ban be bypassed.
+                    // "pass out ... quick" concerns outbound traffic and is irrelevant:
+                    // flagging it would turn a healthy pf.conf red, and a check that
+                    // cries wolf stops being read.
                     if (t.startsWith("pass") && t.contains("quick")
                             && !t.matches("^pass\\s+out\\b.*")) {
                         beforeF2b.add(I18n.tr("server.pf.line", Map.of("n", i + 1)) + ": " + t);
                         continue;
                     }
-                    // Un anchor precedente conta solo se contiene davvero un pass quick: lo si
-                    // chiede a pf invece di presumerlo dal nome. Se non si riesce a leggerlo,
-                    // lo si dice — non lo si assolve.
+                    // A preceding anchor counts only if it really contains a pass quick: we
+                    // ask pf instead of assuming it from the name. If it cannot be read,
+                    // we say so -- we do not acquit it.
                     if (t.startsWith("anchor ")) {
                         String name = t.substring(7).trim().replace("\"", "");
                         int sp = name.indexOf(' ');
@@ -9765,7 +9830,7 @@ public class SSLMailServer {
             null,
             null));
 
-        // Check separato per esistenza pf.conf (deve venire prima)
+        // Separate check for the existence of pf.conf (must come first)
         checks.put(makeCheck("pf-conf-exists",
             I18n.tr("server.pf.checkConf"),
             pfConfExists,
@@ -9806,19 +9871,19 @@ public class SSLMailServer {
             (pfAnchorPresent || !pfConfExists) ? null : "add_pf_anchor",
             I18n.tr("server.pf.fixAnchor")));
 
-        // Il verdetto complessivo si legge dai controlli, non da un elenco di booleani scritto
-        // a mano. Quell'elenco era una seconda versione della stessa verita', e le due
-        // divergevano appena se ne aggiungeva uno: il controllo nuovo compariva rosso nella
-        // lista mentre in cima restava "Tutto OK" e il pulsante per rimediare restava nascosto,
-        // perche' nessuno si era ricordato di nominarlo anche qui. Contando le righe rosse la
-        // dimenticanza non e' piu' possibile.
+        // The overall verdict is read from the checks, not from a list of booleans written
+        // by hand. That list was a second version of the same truth, and the two
+        // diverged as soon as a check was added: the new check appeared red in the
+        // list while at the top "All OK" remained and the button to fix it stayed hidden,
+        // because nobody had remembered to name it here as well. By counting the red rows
+        // the oversight is no longer possible.
         boolean allOk = true;
         boolean somethingToRepair = false;
         int unchecked = 0;
         for (int i = 0; i < checks.length(); i++) {
             JSONObject c = checks.getJSONObject(i);
             if (c.optBoolean("ok", false)) continue;
-            // Un controllo che non ha potuto guardare non e' un guasto: non chiede rimedi, chiede di riprovare.
+            // A check that could not look is not a fault: it does not ask for remedies, it asks for a retry.
             if (c.optBoolean("unknown", false)) { unchecked++; continue; }
             allOk = false;
             if (c.has("fix_action")) somethingToRepair = true;
@@ -9828,20 +9893,20 @@ public class SSLMailServer {
         r.put("all_ok", allOk);
         r.put("unchecked", unchecked);
         r.put("checks", checks);
-        // Stato CSRF token per i POST successivi
+        // CSRF token state for the following POSTs
         try {
-            // riusiamo il token di sessione dell'exchange — si ottiene fuori. Qui generichiamo il check.
+            // we reuse the exchange's session token -- it is obtained outside. Here we generate the check.
         } catch (Exception ignored) {}
         return r;
     }
 
     /**
-     * Versione esatta di Fail2ban e del pacchetto, testuali.
+     * Exact version of Fail2ban and of the package, as text.
      *
-     * Serve a leggere la documentazione giusta. Le opzioni di un'azione cambiano fra versioni, e
-     * una pagina letta per la versione sbagliata porta a scrivere una configurazione che il
-     * sistema rifiuta — con l'aggravante che il rifiuto puo' essere silenzioso, come quando una
-     * jail viene caricata senza nessuna azione e continua a contare i tentativi.
+     * It serves to read the right documentation. The options of an action change between versions,
+     * and a page read for the wrong version leads to writing a configuration that the
+     * system rejects -- made worse by the fact that the rejection can be silent, as when a
+     * jail is loaded without any action and keeps counting the attempts.
      */
     private String fail2banVersion() {
         StringBuilder b = new StringBuilder();
@@ -9878,18 +9943,18 @@ public class SSLMailServer {
     }
 
     /**
-     * Il pacchetto di fail2ban si nomina per ORIGINE, non per nome.
+     * The fail2ban package is named by ORIGIN, not by name.
      *
-     * <p>Il nome porta davanti la versione di Python di quel momento, e cambia da sola sotto
-     * i piedi: qui c'era scritto {@code py311-fail2ban} in tre punti, e su FreeBSD 15.1 oggi
-     * quel pacchetto non esiste piu' — {@code pkg install -y py311-fail2ban} risponde "No
-     * packages available to install matching", mentre quello buono si chiama
-     * {@code py312-fail2ban}. Cioe' il pulsante "installa fail2ban" della pagina Firewall non
-     * poteva funzionare. L'origine invece non cambia mai.
+     * <p>The name carries the Python version of the moment in front, and it changes by itself under
+     * your feet: here {@code py311-fail2ban} was written in three places, and on FreeBSD 15.1 today
+     * that package no longer exists -- {@code pkg install -y py311-fail2ban} answers "No
+     * packages available to install matching", while the good one is called
+     * {@code py312-fail2ban}. That is, the "install fail2ban" button of the Firewall page could
+     * not work. The origin, instead, never changes.
      */
     private static final String FAIL2BAN_ORIGIN = "security/py-fail2ban";
 
-    /** Per CHIEDERE la versione installata: pkg query vuole un nome, e qui va a modello. */
+    /** To ASK for the installed version: pkg query wants a name, and here it goes by pattern. */
     private static final String FAIL2BAN_PACKAGE_GLOB = "py*-fail2ban";
 
     private boolean isFail2banEnabledAtBoot() {
@@ -9970,19 +10035,19 @@ public class SSLMailServer {
         }
     }
 
-    /** Verifica se il modulo kernel pf è caricato (kldstat). */
-    /** Il modulo pf nel kernel. Stessa implementazione di Fail2banAutoSetup. */
+    /** Checks whether the pf kernel module is loaded (kldstat). */
+    /** The pf module in the kernel. Same implementation as Fail2banAutoSetup. */
     private boolean isPfModuleLoaded() {
         return org.daemoxcp.mail.security.Fail2banAutoSetup.pfModuleLoaded();
     }
 
-    /** Verifica se il pannello sta girando dentro una jail FreeBSD (security.jail.jailed). */
-    /** Dentro una jail di FreeBSD non si caricano moduli. Stessa implementazione. */
+    /** Checks whether the panel is running inside a FreeBSD jail (security.jail.jailed). */
+    /** Inside a FreeBSD jail modules cannot be loaded. Same implementation. */
     private boolean isRunningInsideFreebsdJail() {
         return org.daemoxcp.mail.security.Fail2banAutoSetup.insideFreebsdJail();
     }
 
-    /** Carica il modulo kernel pf con kldload. */
+    /** Loads the pf kernel module with kldload. */
     private JSONObject loadPfModule() {
         JSONObject r = new JSONObject();
         try {
@@ -10008,7 +10073,7 @@ public class SSLMailServer {
             r.put("message", ok ? I18n.tr("server.pf.loaded") : I18n.tr("server.pf.loadFailed", Map.of("exit", p.exitValue())));
             r.put("output", out);
 
-            // Persistenza: aggiungi pf_load=YES a /boot/loader.conf se manca
+            // Persistence: add pf_load=YES to /boot/loader.conf if missing
             if (ok) {
                 try {
                     java.nio.file.Path loaderConf = java.nio.file.Paths.get("/boot/loader.conf");
@@ -10043,7 +10108,7 @@ public class SSLMailServer {
         } catch (Exception e) { return false; }
     }
 
-    /** pf acceso. L'implementazione sta in Fail2banAutoSetup, una sola per tutto il pannello. */
+    /** pf on. The implementation lives in Fail2banAutoSetup, a single one for the whole panel. */
     private boolean isPfRunning() {
         return org.daemoxcp.mail.security.Fail2banAutoSetup.pfEnabled();
     }
@@ -10051,7 +10116,7 @@ public class SSLMailServer {
     private JSONObject startPfService() {
         JSONObject r = new JSONObject();
         try {
-            // PRE-FLIGHT 1: verifica esistenza pf.conf
+            // PRE-FLIGHT 1: check that pf.conf exists
             java.nio.file.Path pfConfPath = java.nio.file.Paths.get("/etc/pf.conf");
             if (!java.nio.file.Files.exists(pfConfPath)) {
                 r.put("success", false);
@@ -10059,8 +10124,8 @@ public class SSLMailServer {
                 return r;
             }
 
-            // PRE-FLIGHT 2: pfctl -nf controlla la sintassi senza caricare le regole.
-            // Se la sintassi è invalida, non lanciamo il servizio.
+            // PRE-FLIGHT 2: pfctl -nf checks the syntax without loading the rules.
+            // If the syntax is invalid, we do not start the service.
             // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", "/etc/pf.conf");
             org.daemoxcp.mail.util.Shell.applyPath(testPb);
@@ -10075,7 +10140,7 @@ public class SSLMailServer {
                 return r;
             }
 
-            // OK — avvio
+            // OK -- start
             // TODO: migrate to Shell.run when touched
             ProcessBuilder pb = new ProcessBuilder("/usr/sbin/service", "pf", "start");
             org.daemoxcp.mail.util.Shell.applyPath(pb);
@@ -10084,7 +10149,7 @@ public class SSLMailServer {
             String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
             boolean ok = p.exitValue() == 0;
-            // Verifica che ora sia effettivamente in stato "Enabled"
+            // Check that it is now really in the "Enabled" state
             if (ok && !isPfRunning()) {
                 ok = false;
                 out += "\n\n" + I18n.tr("server.pf.stillDisabled");
@@ -10122,15 +10187,15 @@ public class SSLMailServer {
     }
 
     /**
-     * Crea /etc/pf.conf da zero con regole MINIME e SICURE:
-     *   - skip on lo (loopback non viene filtrato)
-     *   - anchor "f2b/*" (Fail2ban può inserire i suoi block-quick qui)
-     *   - pass (default permissivo: niente viene bloccato a parte gli IP banditi)
+     * Creates /etc/pf.conf from scratch with MINIMAL and SAFE rules:
+     *   - skip on lo (loopback is not filtered)
+     *   - anchor "f2b/*" (Fail2ban can insert its block-quick rules here)
+     *   - pass (permissive default: nothing is blocked apart from the banned IPs)
      *
-     * Il pf.conf di PfPolicy: entrano SSH (le porte su cui sshd ascolta, e la 22), la posta, il web, la
-     * webmail e il pannello; il resto si scarta. I blocchi di fail2ban vengono prima.
+     * The pf.conf of PfPolicy: SSH (the ports sshd listens on, and 22), mail, web, webmail
+     * and the panel get in; the rest is dropped. The fail2ban blocks come first.
      *
-     * Refused se pf.conf esiste già (per non sovrascrivere config customizzate).
+     * Refused if pf.conf already exists (so as not to overwrite custom configs).
      */
     private JSONObject createPfConfMinimal() {
         JSONObject r = new JSONObject();
@@ -10141,12 +10206,12 @@ public class SSLMailServer {
                 r.put("message", I18n.tr("server.pf.confExistsUseAnchor"));
                 return r;
             }
-            // Lo stesso pf.conf che il pannello tiene a ogni avvio (PfPolicy): entra solo quello che serve,
-            // SSH compreso sulle porte su cui sshd ascolta.
+            // The same pf.conf the panel keeps at every start (PfPolicy): only what is needed gets in,
+            // SSH included on the ports sshd listens on.
             String content = org.daemoxcp.mail.security.PfPolicy.renderNow();
 
-            // Test sintassi prima di scrivere su /etc/pf.conf:
-            // scriviamo prima in temp, validiamo, poi copiamo.
+            // Syntax test before writing to /etc/pf.conf:
+            // we first write to a temp file, validate, then copy.
             java.nio.file.Path tmp = java.nio.file.Files.createTempFile("pf-conf-", ".tmp");
             java.nio.file.Files.writeString(tmp, content, java.nio.charset.StandardCharsets.UTF_8);
             // TODO: migrate to Shell.run when touched
@@ -10162,7 +10227,7 @@ public class SSLMailServer {
                 r.put("message", I18n.tr("server.pf.badSyntax", Map.of("output", testOut)));
                 return r;
             }
-            // Tutto OK, scrivi
+            // All OK, write
             java.nio.file.Files.move(tmp, pfConfPath);
             try { java.nio.file.Files.setPosixFilePermissions(pfConfPath,
                 java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--")); } catch (Exception ignored) {}
@@ -10177,16 +10242,16 @@ public class SSLMailServer {
     }
 
     /**
-     * Esegue tutti i fix necessari nell'ordine corretto.
-     * Ritorna un report passo-passo con cosa è stato fatto e cosa è andato male.
+     * Runs all the necessary fixes in the correct order.
+     * Returns a step-by-step report of what was done and what went wrong.
      *
-     * Ordine:
+     * Order:
      *  1. Install Fail2ban
      *  2. Enable Fail2ban at boot
      *  3. Setup daemoxcp-mail-auth jail
      *  4. Install mail jails (Postfix/Dovecot/Roundcube/Rspamd)
-     *  5. Create /etc/pf.conf minimo se manca
-     *  6. Add anchor "f2b/*" a pf.conf se manca
+     *  5. Create a minimal /etc/pf.conf if missing
+     *  6. Add anchor "f2b/*" to pf.conf if missing
      *  7. Enable pf at boot
      *  8. Start pf service
      *  9. Start Fail2ban service
@@ -10221,7 +10286,7 @@ public class SSLMailServer {
         steps.put(buildStep("setup_panel_jail", I18n.tr("server.f2bfix.panelJail"),
             new JSONObject().put("success", true).put("message", I18n.tr("server.f2bfix.doneIdempotent"))));
 
-        // Step 4: install mail jails (verifica file + runtime)
+        // Step 4: install mail jails (check file + runtime)
         try {
             java.nio.file.Path mailLocal = java.nio.file.Paths.get("/usr/local/etc/fail2ban/jail.d/mail.local");
             boolean mailFileOk = false;
@@ -10229,7 +10294,7 @@ public class SSLMailServer {
                 String c = java.nio.file.Files.readString(mailLocal);
                 mailFileOk = c.contains("[dovecot]") && c.contains("[postfix-auth]");
             }
-            // Check runtime: tutte le 4 jail attive?
+            // Runtime check: all 4 jails active?
             java.util.Set<String> activeJailsNow = new java.util.HashSet<>();
             if (isFail2banRunning()) {
                 try {
@@ -10246,28 +10311,28 @@ public class SSLMailServer {
             }
             boolean allActive = activeJailsNow.contains("dovecot") && activeJailsNow.contains("postfix-auth");
 
-            // "Il file nomina le jail" e "le jail sono accese" non dicono che stiano guardando
-            // qualcosa. Con roundcube-auth erano entrambe vere mentre la jail sorvegliava un
-            // file vuoto accanto a quello scritto: qui il passo veniva saltato con la motivazione
-            // "gia' configurate e attive", e il percorso sbagliato sarebbe rimasto per sempre.
+            // "The file names the jails" and "the jails are on" do not say that they are watching
+            // anything. With roundcube-auth both were true while the jail was watching an
+            // empty file next to the one being written: here the step was skipped with the reason
+            // "already configured and active", and the wrong path would have stayed forever.
             boolean wrongLogs = false;
             try {
                 wrongLogs = !fail2banManager.reviewWatchedLogs(activeJailsNow).issues.isEmpty();
             } catch (Exception ignored) { }
 
-            // E nemmeno "le jail ci sono e guardano il file giusto" basta: recidive aveva la
-            // tabella pf e nessuna regola che la legge, quindi bannava nel vuoto, e questo passo
-            // veniva saltato perche' il file la nominava ed era attiva. Ogni volta che il
-            // cancello ha guardato una cosa piu' facile di quella che conta, il guasto e' passato.
+            // And not even "the jails are there and watch the right file" is enough: recidive had the
+            // pf table and no rule reading it, so it banned into thin air, and this step
+            // was skipped because the file named it and it was active. Every time the
+            // gate looked at something easier than what matters, the fault got through.
             boolean withoutRule = false;
             try {
                 withoutRule = fail2banManager.compareBansWithPf().totalWithoutRule() > 0;
             } catch (Exception ignored) { }
 
             if (f2bInstalled && (!mailFileOk || !allActive || wrongLogs || withoutRule)) {
-                // File mancante O runtime non allineato → install (rigenera tutto: path
-                // corretti dall'auto-detect, log file mancanti, filter aggiornati, reload).
-                // install_mail_jails è idempotente: safe da chiamare anche se quasi tutto è OK.
+                // Missing file OR runtime not aligned -> install (regenerates everything: correct
+                // paths from the auto-detect, missing log files, updated filters, reload).
+                // install_mail_jails is idempotent: safe to call even if almost everything is OK.
                 Fail2banManager.InstallResult res = fail2banManager.installMailJails();
                 JSONObject jres = new JSONObject().put("success", res.success)
                     .put("message", res.success ? res.message : (res.error != null ? res.error : I18n.tr("server.operationFailed")));
@@ -10283,9 +10348,9 @@ public class SSLMailServer {
             anyFailed = true;
         }
 
-        // Step 4b: le jail bannano con un comando che esiste su questo sistema?
-        // Installarle non basta: due di loro ereditavano un'azione basata su iptables, che su
-        // FreeBSD non esiste, e bannavano nel vuoto contando i ban come riusciti.
+        // Step 4b: do the jails ban with a command that exists on this system?
+        // Installing them is not enough: two of them inherited an action based on iptables, which
+        // does not exist on FreeBSD, and banned into thin air, counting the bans as successful.
         try {
             JSONObject diag = org.daemoxcp.mail.security.BanActionRepair.diagnosis();
             JSONArray broken = diag.optJSONArray("broken");
@@ -10306,12 +10371,12 @@ public class SSLMailServer {
             anyFailed = true;
         }
 
-        // Step 5a: PRE-step — verifica che NON siamo in jail, e carica il modulo pf
+        // Step 5a: PRE-step -- check that we are NOT in a jail, and load the pf module
         boolean inJail = isRunningInsideFreebsdJail();
         if (inJail) {
             steps.put(buildErrorStep("load_pf_module",
                 I18n.tr("server.f2bfix.inJail")));
-            // skip tutti i passi pf
+            // skip all the pf steps
             r.put("success", false);
             r.put("steps", steps);
             r.put("message", I18n.tr("server.f2bfix.inJailDone"));
@@ -10323,7 +10388,7 @@ public class SSLMailServer {
             steps.put(buildStep("load_pf_module", I18n.tr("server.f2bfix.loadModule"), res));
             if (!res.optBoolean("success")) {
                 anyFailed = true;
-                // Senza modulo pf, tutti i passi successivi falliranno: stop qui
+                // Without the pf module, all the following steps would fail: stop here
                 r.put("success", false);
                 r.put("steps", steps);
                 r.put("message", I18n.tr("server.f2bfix.moduleFailed"));
@@ -10421,11 +10486,11 @@ public class SSLMailServer {
     }
 
     /**
-     * Aggiunge l'anchor f2b a /etc/pf.conf se manca. Operazione safe:
-     *  - non rimuove regole esistenti
-     *  - aggiunge una sola riga "anchor \"f2b/*\""
-     *  - fa backup del file con timestamp
-     *  - se aggiunto, ricarica pf con pfctl -f /etc/pf.conf
+     * Adds the f2b anchor to /etc/pf.conf if missing. Safe operation:
+     *  - does not remove existing rules
+     *  - adds a single line "anchor \"f2b/*\""
+     *  - backs up the file with a timestamp
+     *  - if added, reloads pf with pfctl -f /etc/pf.conf
      */
     private JSONObject addPfAnchorF2b() {
         JSONObject r = new JSONObject();
@@ -10444,16 +10509,16 @@ public class SSLMailServer {
             }
             // Backup
             String bakPath = org.daemoxcp.mail.system.ConfigBackups.copy(pfConfPath).toString();
-            // L'anchor va messo PRIMA delle regole pass/block. La posizione raccomandata
-            // è subito dopo le tabelle, prima delle regole filter. Approccio safe:
-            // appendiamo in fondo con un commento — pf valuta gli anchor in ordine,
-            // e per fail2ban (che fa block) va in fondo va comunque bene.
+            // The anchor should go BEFORE the pass/block rules. The recommended position
+            // is right after the tables, before the filter rules. Safe approach:
+            // we append it at the end with a comment -- pf evaluates the anchors in order,
+            // and for fail2ban (which blocks) at the end is fine anyway.
             String append = "\n# Fail2ban anchor (added by the panel)\nanchor \"f2b/*\"\n";
             java.nio.file.Files.writeString(pfConfPath,
                 content + append,
                 java.nio.charset.StandardCharsets.UTF_8);
 
-            // Test sintassi prima di ricaricare
+            // Syntax test before reloading
             // TODO: migrate to Shell.run when touched
             ProcessBuilder testPb = new ProcessBuilder("/sbin/pfctl", "-nf", "/etc/pf.conf");
             org.daemoxcp.mail.util.Shell.applyPath(testPb);
@@ -10469,8 +10534,8 @@ public class SSLMailServer {
                 r.put("message", I18n.tr("server.f2bfix.anchorBadSyntax", Map.of("output", testOut)));
                 return r;
             }
-            // Ricarica live (solo se pf è in esecuzione, altrimenti l'anchor verrà
-            // caricato al prossimo start)
+            // Live reload (only if pf is running, otherwise the anchor will be
+            // loaded at the next start)
             String loadOut = "";
             if (isPfRunning()) {
                 // TODO: migrate to Shell.run when touched
@@ -10481,10 +10546,10 @@ public class SSLMailServer {
                 loadOut = new String(lp.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
                 lp.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
                 if (lp.exitValue() != 0) {
-                    // Rollback se il load fallisce a runtime (config era valida ma rifiuta il reload?)
+                    // Rollback if the load fails at runtime (the config was valid but the reload is refused?)
                     java.nio.file.Files.copy(java.nio.file.Paths.get(bakPath), pfConfPath,
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    // Re-load la versione di backup
+                    // Re-load the backup version
                     // TODO: migrate to Shell.run when touched
                     new ProcessBuilder("/sbin/pfctl", "-f", "/etc/pf.conf").redirectErrorStream(true).start().waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
                     r.put("success", false);
@@ -10507,13 +10572,13 @@ public class SSLMailServer {
     }
 
     /**
-     * Diagnostica perché una jail mail non è attiva a runtime.
-     * Controlla in ordine: file, logpath esistente, filter esistente, errori da fail2ban-client.
+     * Diagnoses why a mail jail is not active at runtime.
+     * Checks in order: file, existing logpath, existing filter, errors from fail2ban-client.
      */
     private String diagnoseMailJailIssue(String jailName, boolean inFile) {
         if (!inFile) return I18n.tr("server.f2bfix.diag.notInFile");
 
-        // Logpath previsto per ogni jail mail (path di roundcube auto-detected)
+        // Expected logpath for each mail jail (roundcube path auto-detected)
         String logpath = switch (jailName) {
             case "dovecot", "postfix-auth" -> "/var/log/maillog";
             case "roundcube-auth" -> {
@@ -10537,7 +10602,7 @@ public class SSLMailServer {
             return I18n.tr("server.f2bfix.diag.noFilter", Map.of("filter", filterName));
         }
 
-        // Chiedi a fail2ban-client il motivo specifico
+        // Ask fail2ban-client for the specific reason
         var r = org.daemoxcp.mail.util.Shell.run(java.time.Duration.ofSeconds(5),
             "/usr/local/bin/fail2ban-client", "status", jailName);
         String out = r.output();
@@ -10548,23 +10613,23 @@ public class SSLMailServer {
         if (!r.success()) {
             return "exit=" + r.exitCode() + " (" + (out.isBlank() ? I18n.tr("server.f2bfix.diag.noOutput") : out.trim().replace('\n', ' ')) + ")";
         }
-        // Se siamo qui, lo status command ha risposto normalmente (con i contatori
-        // "Currently failed", "Banned IP list", ecc). La jail E' caricata e attiva,
-        // ma per qualche motivo il check chiamante non l'ha rilevata. Non e' un errore
-        // della jail: ritorniamo una stringa che fa capire che e' un falso allarme.
+        // If we are here, the status command answered normally (with the counters
+        // "Currently failed", "Banned IP list", etc). The jail IS loaded and active,
+        // but for some reason the calling check did not detect it. It is not an error
+        // of the jail: we return a string that makes clear it is a false alarm.
         return I18n.tr("server.f2bfix.diag.activeAfterAll");
     }
 
     /**
-     * Reload Fail2ban con fail2ban-client reload.
-     * Prima del reload assicura i prerequisiti che potrebbero far fallire
-     * il caricamento di alcune jail (es. file userlogins di Roundcube).
-     * Se una sola jail fallisce, fail2ban rifiuta TUTTO il reload — quindi
-     * conviene sempre essere proattivi.
+     * Reloads Fail2ban with fail2ban-client reload.
+     * Before the reload it ensures the prerequisites that could make the loading of
+     * some jails fail (e.g. Roundcube's userlogins file).
+     * If a single jail fails, fail2ban rejects the WHOLE reload -- so
+     * it is always better to be proactive.
      */
     /**
-     * Helper: converte un {@link org.daemoxcp.mail.util.Shell.Result} in JSONObject
-     * con campi success/message/output, riducendo boilerplate.
+     * Helper: converts a {@link org.daemoxcp.mail.util.Shell.Result} into a JSONObject
+     * with success/message/output fields, reducing boilerplate.
      */
     private JSONObject shellResultToJson(org.daemoxcp.mail.util.Shell.Result r, String okMessage, String failPrefix) {
         return new JSONObject()
@@ -10576,7 +10641,7 @@ public class SSLMailServer {
     }
 
     private JSONObject reloadFail2banAction() {
-        // Prereq: log file Roundcube (se manca, roundcube-auth jail fa fallire l'intero reload)
+        // Prereq: Roundcube log file (if missing, the roundcube-auth jail makes the whole reload fail)
         try { fail2banManager.ensureRoundcubeLoggingEnabled(); } catch (Exception ignored) {}
         var r = org.daemoxcp.mail.util.Shell.run(java.time.Duration.ofSeconds(15),
             "/usr/local/bin/fail2ban-client", "reload");
@@ -10590,10 +10655,10 @@ public class SSLMailServer {
     }
 
     /**
-     * Restart pulito del servizio fail2ban (equivalente di `service fail2ban restart`).
-     * A differenza di "reload", questo killa il daemon e lo riavvia da zero — utile per
-     * uscire da stati confusi (es. dopo molti reload consecutivi).
-     * NB: azzera anche i contatori "Currently failed" e "Total failed" di tutte le jail.
+     * Clean restart of the fail2ban service (equivalent of `service fail2ban restart`).
+     * Unlike "reload", this kills the daemon and restarts it from scratch -- useful to
+     * get out of confused states (e.g. after many consecutive reloads).
+     * NB: it also resets the "Currently failed" and "Total failed" counters of all the jails.
      */
     private JSONObject restartFail2banService() {
         var r = org.daemoxcp.mail.util.Shell.run(java.time.Duration.ofSeconds(30),
@@ -10604,15 +10669,16 @@ public class SSLMailServer {
     // ============== ADMIN MANAGEMENT API ==============
 
     /**
-     * Il rapporto periodico appartiene alle IMPOSTAZIONI, non agli aggiornamenti: destinatario,
-     * mittente e frequenza sono scelte, non diagnosi. Era finito nella pagina degli
-     * aggiornamenti solo perche' li' l'impianto delle chiamate esisteva gia' — comodo per chi
-     * scrive, non per chi usa — e per giunta il piede dell'email diceva gia' di cercarlo qui.
+     * The periodic report belongs to the SETTINGS, not to the updates: recipient,
+     * sender and frequency are choices, not diagnosis. It had ended up in the Updates
+     * page only because the call plumbing already existed there -- convenient for
+     * whoever writes the code, not for whoever uses it -- and on top of that the email
+     * footer already said to look for it here.
      */
     /**
-     * Creazione automatica su Cloudflare dei record che finora si aggiungevano a mano.
-     * L'automatismo esisteva gia' ma solo dentro la rotazione DKIM: stessi strumenti, non
-     * collegati a niente altro.
+     * Automatic creation on Cloudflare of the records that until now were added by hand.
+     * The automation already existed, but only inside the DKIM rotation: same tools, not
+     * connected to anything else.
      */
     private void handleApiAutoDns(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) { sendJsonError(exchange, 401, I18n.tr("server.unauthorized")); return; }
@@ -10637,8 +10703,8 @@ public class SSLMailServer {
                     break;
                 }
                 String which = req.optString("which", "");
-                // Il predefinito e' "none", non "quarantine": RFC 9989 §5.1.5. Un valore
-                // predefinito che blocca posta e' una trappola per chi preme senza scegliere.
+                // The default is "none", not "quarantine": RFC 9989 section 5.1.5. A default
+                // value that blocks mail is a trap for whoever presses without choosing.
                 response = auto.create(domainId, which, req.optString("policy", "none"));
                 logAudit("AUTODNS_CREATE", ip, which + " on domain " + domainId
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
@@ -10660,8 +10726,8 @@ public class SSLMailServer {
                     break;
                 }
                 response = auto.createTxtMtaSts(domainId);
-                // I record MTA-STS in piu' che la scrittura toglie sono cancellazioni nel DNS:
-                // restano scritte anche qui, non solo nella risposta.
+                // The extra MTA-STS records that the write removes are deletions in the DNS:
+                // they stay written here too, not only in the response.
                 JSONArray removed = response.optJSONArray("removed");
                 logAudit("MTASTS_TXT", ip, "domain " + domainId
                         + (response.optBoolean("success") ? " - published" : " - NOT published: "
@@ -10680,16 +10746,16 @@ public class SSLMailServer {
                         + (response.optBoolean("success") ? " - created" : " - NOT created: "
                            + response.optString("error", "?")));
             }
-            // La pagina DNS deve poter seguire il lavoro che ha appena avviato: senza questo
-            // caso resterebbe con un identificativo e nessun modo di sapere com'e' finito.
+            // The DNS page must be able to follow the job it has just started: without this
+            // case it would be left with an identifier and no way to know how it ended.
             case "job_status" -> response = UpdateManager.jobStatus(req.optString("jobId", ""));
             case "configure_all" -> {
                 if (!"CONFIGURE".equals(req.optString("confirm", ""))) {
                     response = new JSONObject().put("success", false).put("error", I18n.tr("server.confirmMissing"));
                     break;
                 }
-                // Prima di toccare qualunque cosa: un account Cloudflare che veda la zona, assegnato al dominio se e'
-                // l'unico che la vede (reperto 250).
+                // Before touching anything: a Cloudflare account that sees the zone, assigned to the domain
+                // if it is the only one that sees it (finding 250).
                 org.daemoxcp.mail.system.DomainSetup.CloudflareChoice cfc = org.daemoxcp.mail.system.DomainSetup.cloudflareFor(domainId);
                 if (!cfc.ready()) {
                     response = new JSONObject().put("success", false).put("error", cfc.error());
@@ -10773,12 +10839,12 @@ public class SSLMailServer {
     }
 
     /**
-     * /api/admins: gli amministratori (permesso admins.manage) e la chiave del vault delle password
-     * delle caselle (permesso vault.manage).
+     * /api/admins: the administrators (permission admins.manage) and the key of the mailbox password
+     * vault (permission vault.manage).
      *
-     * Nessuna password: un amministratore nuovo ha un nome, un'email e un ruolo, ed entra con un
-     * codice mandato a quell'email. Le due operazioni sul vault chiedevano la password attuale;
-     * adesso vogliono una conferma recente con passkey o con un codice (REAUTH_SECONDS).
+     * No passwords: a new administrator has a name, an email and a role, and gets in with a
+     * code sent to that email. The two vault operations used to ask for the current password;
+     * now they want a recent confirmation with a passkey or with a code (REAUTH_SECONDS).
      *
      *  GET  ?action=list
      *  POST {action: create, username, email, role} | {action: update, id, role, email}
@@ -10829,7 +10895,7 @@ public class SSLMailServer {
                     sendJsonError(exchange, 403, I18n.tr("server.admins.forbidden"));
                     return;
                 }
-                // La conferma recente l'ha gia' chiesta il filtro della rotta (Access.needsConfirmation).
+                // The recent confirmation was already asked for by the route's filter (Access.needsConfirmation).
                 if ("vault_backup_key".equals(action)) vaultBackupKey(response, me, ip);
                 else vaultRotateKey(response, me, ip);
                 sendJsonResponse(exchange, response);
@@ -10904,7 +10970,7 @@ public class SSLMailServer {
                     } else if ("superadmin".equals(target.get().role()) && AuthStore.activeSuperadmins() <= 1) {
                         response.put("success", false).put("error", I18n.tr("server.admins.lastSuperadmin"));
                     } else if (AuthStore.deleteAdmin(id)) {
-                        // Con lui se ne vanno, per ON DELETE CASCADE, le sue passkey, sessioni e codici.
+                        // Along with them go, via ON DELETE CASCADE, their passkeys, sessions and codes.
                         logAudit("ADMIN_DELETED", ip, "by=" + me.username() + " admin_id=" + id);
                         response.put("success", true);
                     } else {
@@ -10923,7 +10989,7 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
-    /** Esporta la chiave privata del vault in base64, per la copia di sicurezza. Solo la root (la rotta e' sua). */
+    /** Exports the private key of the vault in base64, for the backup copy. Only the root (the route is its own). */
     private void vaultBackupKey(JSONObject response, AuthStore.Admin me, String ip) {
         try {
             org.daemoxcp.mail.security.PasswordVault vault = org.daemoxcp.mail.security.PasswordVault.getInstance();
@@ -10939,14 +11005,14 @@ public class SSLMailServer {
     }
 
     /**
-     * Rotazione delle chiavi del vault: una coppia nuova, tutte le copie delle password ricifrate con la sua pubblica,
-     * la privata di prima tenuta accanto nel file di root (PasswordVault.rotate).
+     * Rotation of the vault keys: a new pair, all the password copies re-encrypted with its public key,
+     * the previous private key kept alongside in root's file (PasswordVault.rotate).
      */
     private void vaultRotateKey(JSONObject response, AuthStore.Admin me, String ip) {
         try {
             org.daemoxcp.mail.security.PasswordVault.Reencrypted r = org.daemoxcp.mail.security.PasswordVault.getInstance().rotate(Main.mailDatabase);
             if (r.reencrypted() == 0 && r.total() > 0) {
-                // Nessuna si decifra: le chiavi attuali sono gia' rotte. La coppia nuova non si salva.
+                // None can be decrypted: the current keys are already broken. The new pair is not saved.
                 response.put("success", false).put("error", I18n.tr("server.vault.allFailed", java.util.Map.of("total", r.total())));
                 return;
             }
@@ -11007,10 +11073,10 @@ public class SSLMailServer {
                     String action = req.optString("action", "save");
 
                     if ("reset_tracking".equals(action)) {
-                        // Azzera la memoria delle risposte automatiche: solo .dovecot.lda-dupes nella home della casella.
-                        // Non piu' il compilato delle regole (Dovecot non lo puo' risalvare nella cartella di root, e
-                        // ricompilava a ogni consegna con un errore nel maillog) ne' il riavvio di tutto Dovecot (la memoria
-                        // si rilegge a ogni consegna): VacationTracking, reperto 219.
+                        // Clears the memory of the automatic replies: only .dovecot.lda-dupes in the mailbox's home.
+                        // No longer the compiled rules (Dovecot cannot save them again in root's folder, and it
+                        // recompiled them on every delivery with an error in the maillog) nor the restart of the
+                        // whole of Dovecot (the memory is reread on every delivery): VacationTracking, finding 219.
                         int mailboxId = req.optInt("mailbox_id", 0);
                         MailDatabase.Mailbox mailbox = Main.mailDatabase.getMailboxById(mailboxId);
                         if (mailbox != null) {
@@ -11072,13 +11138,14 @@ public class SSLMailServer {
     // ============== SIEVE FILTERS API ==============
 
     /**
-     * I filtri Sieve di una casella. Fino al reperto 224 la finestra dei filtri non riusciva a fare niente: mandava
-     * condizioni e azioni come testo JSON, che optJSONArray legge come null (NullPointerException, col suo messaggio
-     * inglese nella pagina); per modificare chiedeva ?id=, che la GET non conosceva, e mandava id al posto di
-     * filter_id. Ora condizioni e azioni sono array di oggetti, e quello che non lo e' si rifiuta con un messaggio,
-     * prima di toccare il database. Modifica ed eliminazione riscrivono le regole della casella della RIGA, letta dal
-     * database: la casella che dice la richiesta non conta (con un numero sbagliato si riscriveva un'altra casella, e
-     * quella del filtro restava con le regole di prima).
+     * The Sieve filters of a mailbox. Until finding 224 the filters dialog could not do anything: it
+     * sent conditions and actions as JSON text, which optJSONArray reads as null (NullPointerException,
+     * with its English message in the page); to edit, it asked for ?id=, which the GET did not know,
+     * and it sent id instead of filter_id. Now conditions and actions are arrays of objects, and
+     * whatever is not is rejected with a message, before touching the database. Edit and delete
+     * rewrite the rules of the ROW's mailbox, read from the database: the mailbox named by the
+     * request does not count (with a wrong number another mailbox was rewritten, and the filter's
+     * mailbox kept its old rules).
      */
     private void handleApiSieve(HttpExchange exchange) throws IOException {
         if (!isAuthenticated(exchange)) {
@@ -11096,7 +11163,7 @@ public class SSLMailServer {
                     String filterIdStr = extractParamFromQuery(query, "id");
                     String mailboxIdStr = extractParamFromQuery(query, "mailbox_id");
                     if (filterIdStr != null) {
-                        // Un filtro solo: quello che la finestra apre per modificarlo.
+                        // A single filter: the one the dialog opens to edit it.
                         MailDatabase.SieveFilter f = Main.mailDatabase.getSieveFilter(positiveId(filterIdStr));
                         if (f != null) {
                             response.put("success", true);
@@ -11140,7 +11207,7 @@ public class SSLMailServer {
                                 response.put("error", I18n.tr("server.filter.badRules"));
                             } else if (Main.mailDatabase.createSieveFilter(mailboxId, name, priority, enabled,
                                     conditions.toString(), actions.toString())) {
-                                // La casella della riga appena creata: quella che c'e' (il vincolo della tabella).
+                                // The mailbox of the row just created: the one that exists (the table's constraint).
                                 putRulesOutcome(response, regenerateSieveScript(mailboxId));
                             } else {
                                 response.put("success", false);
@@ -11172,7 +11239,7 @@ public class SSLMailServer {
                         }
                         case "delete" -> {
                             int filterId = req.optInt("filter_id", 0);
-                            // Letta prima di eliminarla: dopo non si saprebbe piu' di quale casella era.
+                            // Read before deleting it: afterwards we could no longer tell which mailbox it was.
                             MailDatabase.SieveFilter row = Main.mailDatabase.getSieveFilter(filterId);
 
                             if (row == null) {
@@ -11197,7 +11264,7 @@ public class SSLMailServer {
                 }
             }
         } catch (Exception e) {
-            // Il messaggio dell'eccezione e' inglese e parla del codice: nel log, non nella pagina.
+            // The exception's message is in English and talks about the code: in the log, not in the page.
             LOGGER.log(Level.WARNING, "Sieve filters request failed", e);
             response = new JSONObject();
             response.put("success", false);
@@ -11207,7 +11274,7 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
-    /** Un filtro come lo legge la finestra: condizioni e azioni come array, non come il testo della colonna. */
+    /** A filter as the dialog reads it: conditions and actions as arrays, not as the column's text. */
     private static JSONObject sieveFilterJson(MailDatabase.SieveFilter f) {
         JSONObject filter = new JSONObject();
         filter.put("id", f.id);
@@ -11221,11 +11288,11 @@ public class SSLMailServer {
     }
 
     /**
-     * Le condizioni o le azioni di un filtro come le manda la pagina: un array non vuoto di oggetti. Null per tutto il
-     * resto, compreso lo stesso array scritto come testo (quello che mandava la pagina prima del reperto 224, e che
-     * optJSONArray da' come null): un filtro
-     * senza condizioni o senza azioni SieveGenerator non lo scrive, e il pannello direbbe salvato un filtro che non fa
-     * niente.
+     * The conditions or the actions of a filter as the page sends them: a non-empty array of objects.
+     * Null for everything else, including the same array written as text (what the page sent before
+     * finding 224, and which optJSONArray gives as null): SieveGenerator does not write a filter
+     * without conditions or without actions, and the panel would report as saved a filter that does
+     * nothing.
      */
     static JSONArray sieveRules(JSONArray rules) {
         if (rules == null || rules.isEmpty()) return null;
@@ -11235,7 +11302,7 @@ public class SSLMailServer {
         return rules;
     }
 
-    /** Il numero di una riga dalla query: 0 (nessuna riga) se non e' un intero positivo, invece di un'eccezione. */
+    /** The number of a row from the query: 0 (no row) if it is not a positive integer, instead of an exception. */
     private static int positiveId(String value) {
         try {
             int id = Integer.parseInt(value.trim());
@@ -11246,10 +11313,10 @@ public class SSLMailServer {
     }
 
     /**
-     * Riscrive dal database le regole Sieve della casella: risposta automatica, inoltri e filtri, tutte insieme. Falso
-     * se non sono state scritte: la casella non c'e', o SieveGenerator rifiuta (l'indirizzo, oppure una cartella da / a
-     * quella della casella che altri possono cambiare, RootOnlyPath del reperto 221), col motivo nel log del pannello.
-     * Allora Dovecot continua con le regole di prima.
+     * Rewrites the mailbox's Sieve rules from the database: automatic reply, forwards and filters, all
+     * together. False if they were not written: the mailbox does not exist, or SieveGenerator refuses (the
+     * address, or a folder on the path from / to the mailbox's one that others can change, RootOnlyPath of
+     * finding 221), with the reason in the panel log. Then Dovecot carries on with the previous rules.
      */
     private boolean regenerateSieveScript(int mailboxId) {
         if (sieveGenerator == null) {
@@ -11265,10 +11332,11 @@ public class SSLMailServer {
     }
 
     /**
-     * La risposta di un salvataggio che ha gia' cambiato il database e poi ha riscritto le regole Sieve. Prima l'esito
-     * della scrittura si perdeva e la pagina diceva che era fatto, mentre Dovecot continuava con le regole di prima
-     * (reperto 223). Il database resta com'e' e la risposta lo dice ("saved"): la pagina mostra la riga salvata, e chi
-     * riprova non la crea due volte. Le regole si riscrivono intere al prossimo salvataggio della casella che riesce.
+     * The response of a save that has already changed the database and then rewrote the Sieve rules.
+     * Before, the outcome of the write was lost and the page said it was done, while Dovecot carried on
+     * with the previous rules (finding 223). The database stays as it is and the response says so
+     * ("saved"): the page shows the saved row, and whoever retries does not create it twice. The rules
+     * are rewritten in full at the next successful save of the mailbox.
      */
     private static void putRulesOutcome(JSONObject response, boolean written) {
         if (written) {
@@ -11322,8 +11390,8 @@ public class SSLMailServer {
                     JSONObject req = new JSONObject(body);
                     String action = req.optString("action", "create");
 
-                    // Modifica ed eliminazione riscrivono le regole della casella della RIGA, letta dal database, non
-                    // di quella che dice la richiesta (reperto 224: la pagina, eliminando, non la mandava nemmeno).
+                    // Edit and delete rewrite the rules of the ROW's mailbox, read from the database, not
+                    // of the one the request names (finding 224: the page, when deleting, did not even send it).
                     switch (action) {
                         case "create" -> {
                             int mailboxId = req.optInt("mailbox_id", 0);
@@ -11356,7 +11424,7 @@ public class SSLMailServer {
                         }
                         case "delete" -> {
                             int ruleId = req.optInt("rule_id", 0);
-                            // Letta prima di eliminarla: dopo non si saprebbe piu' di quale casella era.
+                            // Read before deleting it: afterwards we could no longer tell which mailbox it was.
                             MailDatabase.ForwardingRule row = Main.mailDatabase.getForwardingRule(ruleId);
 
                             if (row == null) {
@@ -11381,7 +11449,7 @@ public class SSLMailServer {
                 }
             }
         } catch (Exception e) {
-            // Il messaggio dell'eccezione e' inglese e parla del codice: nel log, non nella pagina.
+            // The exception's message is in English and talks about the code: in the log, not in the page.
             LOGGER.log(Level.WARNING, "Forwarding request failed", e);
             response = new JSONObject();
             response.put("success", false);
@@ -11405,10 +11473,10 @@ public class SSLMailServer {
         try {
             switch (method) {
                 case "GET" -> {
-                    // La pagina leggeva "limits.hourly" da quello che era un ARRAY, e i campi
-                    // delle righe con nomi che il server non ha mai prodotto: la tabella
-                    // mostrava "undefined" e il modulo si riempiva di valori predefiniti.
-                    // Qui la risposta prende la forma che la pagina legge davvero.
+                    // The page read "limits.hourly" from what was an ARRAY, and the fields
+                    // of the rows with names the server never produced: the table
+                    // showed "undefined" and the form filled up with default values.
+                    // Here the response takes the shape the page really reads.
                     JSONArray limits = new JSONArray();
                     JSONObject global = null;
                     for (MailDatabase.RateLimit rl : Main.mailDatabase.getRateLimits()) {
@@ -11431,8 +11499,8 @@ public class SSLMailServer {
                     if (global == null)
                         global = new JSONObject().put("hourly", 50).put("daily", 500)
                                                  .put("max_recipients", 50).put("notSet", true);
-                    // La dimensione massima non sta nel database: e' un parametro di Postfix,
-                    // e si legge da li' invece di tenerne una copia che diverge.
+                    // The maximum size is not in the database: it is a Postfix parameter,
+                    // and it is read from there instead of keeping a copy of it that diverges.
                     int mb = org.daemoxcp.mail.system.MessageSizeLimit.readMegabytes();
                     global.put("max_size_mb", mb < 0 ? JSONObject.NULL : mb);
                     if (mb < 0) global.put("max_size_note", I18n.tr("server.rl.sizeUnreadable"));
@@ -11440,7 +11508,8 @@ public class SSLMailServer {
                     response.put("success", true);
                     response.put("limits", limits);
                     response.put("global", global);
-                    // Se i limiti si applicano, e quanto ha mandato ogni casella nell'ultima ora e nelle ultime 24 (SendingLimits).
+                    // Whether the limits apply, and how much each mailbox sent in the last hour and in the last 24
+                    // (SendingLimits).
                     response.put("enforcement", org.daemoxcp.mail.system.SendingLimits.status());
                 }
                 case "POST" -> {
@@ -11458,8 +11527,8 @@ public class SSLMailServer {
 
                     switch (action) {
                         case "save_mailbox" -> {
-                            // Un limite per una casella: la riga (mailbox, id) e' unica, quindi
-                            // salvare di nuovo la stessa casella la aggiorna invece di duplicarla.
+                            // A limit for a mailbox: the row (mailbox, id) is unique, so
+                            // saving the same mailbox again updates it instead of duplicating it.
                             int mailboxId = req.optInt("mailbox_id", 0);
                             int hourly = req.optInt("hourly", 0);
                             int daily = req.optInt("daily", 0);
@@ -11493,8 +11562,8 @@ public class SSLMailServer {
                                 response.put("success", false).put("error", problem);
                                 break;
                             }
-                            // Il conteggio dei destinatari per messaggio non e' in questo modulo:
-                            // si conserva quello gia' salvato invece di azzerarlo di nascosto.
+                            // The count of recipients per message is not in this form:
+                            // the one already saved is kept instead of being silently reset.
                             int recipients = 50;
                             for (MailDatabase.RateLimit rl : Main.mailDatabase.getRateLimits())
                                 if ("global".equalsIgnoreCase(rl.targetType)) recipients = rl.maxRecipients;
@@ -11513,9 +11582,9 @@ public class SSLMailServer {
                                 if (dim.optBoolean("success", false)) {
                                     note += " " + dim.optString("note", "");
                                 } else {
-                                    // I limiti sono salvati, la dimensione no: si dice esattamente
-                                    // questo, invece di un "errore" generico che farebbe credere
-                                    // che non sia stato salvato niente.
+                                    // The limits are saved, the size is not: we say exactly
+                                    // this, instead of a generic "error" that would make people
+                                    // believe that nothing was saved.
                                     response.put("success", false).put("error", note + " "
                                             + I18n.tr("server.rl.sizeNotChanged", Map.of("error", dim.optString("error", ""))));
                                     break;
@@ -11550,9 +11619,9 @@ public class SSLMailServer {
     }
 
     /**
-     * Cosa non va in un limite orario e giornaliero, o null. Zero non vuol dire "nessun limite":
-     * vorrebbe dire che non parte piu' niente. E un giornaliero piu' basso dell'orario renderebbe
-     * l'orario irraggiungibile.
+     * What is wrong with an hourly and daily limit, or null. Zero does not mean "no limit":
+     * it would mean that nothing goes out any more. And a daily limit lower than the hourly one
+     * would make the hourly one unreachable.
      */
     static String rateLimitProblem(int hourly, int daily) {
         if (hourly < 1 || daily < 1 || hourly > 1_000_000 || daily > 10_000_000) return I18n.tr("server.rl.atLeastOne");
@@ -11697,8 +11766,8 @@ public class SSLMailServer {
 
         try {
             if ("GET".equals(method)) {
-                // Solo i periodi che la pagina offre: un numero qualsiasi (negativo, enorme, non un
-                // numero) finiva dritto nella query o in un'eccezione mostrata cosi' com'era.
+                // Only the periods the page offers: any number (negative, huge, not a
+                // number) went straight into the query or into an exception shown as it was.
                 String daysStr = extractParamFromQuery(exchange.getRequestURI().getQuery(), "days");
                 int days = switch (daysStr == null ? "7" : daysStr) {
                     case "1" -> 1;
@@ -11712,9 +11781,9 @@ public class SSLMailServer {
                     return;
                 }
 
-                // email_statistics ha una riga per giorno e per (casella, dominio): le righe senza
-                // casella ne' dominio sono il totale del server, quelle con il solo dominio il totale
-                // del dominio. Si sommano qui, una volta, invece che nella pagina.
+                // email_statistics has one row per day and per (mailbox, domain): the rows with neither
+                // mailbox nor domain are the server total, those with only the domain the total
+                // of the domain. They are summed here, once, instead of in the page.
                 long[] totals = new long[5];
                 java.util.TreeMap<String, long[]> daily = new java.util.TreeMap<>();
                 java.util.TreeMap<String, long[]> perDomain = new java.util.TreeMap<>();
@@ -11753,14 +11822,14 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
-    /** I cinque conteggi di email_statistics, nell'ordine di handleApiStatistics. */
+    /** The five counts of email_statistics, in the order of handleApiStatistics. */
     private static JSONObject statJson(long[] v) {
         return new JSONObject().put("sent", v[0]).put("received", v[1]).put("spam", v[2]).put("virus", v[3]).put("bounced", v[4]);
     }
 
     // ============== THEME API ==============
 
-    /** La preferenza di tema dell'admin di questa sessione, da scrivere nella pagina: auto, light o dark, mai altro. */
+    /** The theme preference of this session's admin, to write into the page: auto, light or dark, never anything else. */
     private String savedTheme(HttpExchange exchange) {
         try {
             String theme = Main.mailDatabase != null ? Main.mailDatabase.getAdminTheme(getSessionUsername(exchange)) : null;
@@ -11800,7 +11869,7 @@ public class SSLMailServer {
                     return;
                 }
                 JSONObject req = new JSONObject(body);
-                // Cambia una preferenza salvata: stesso controllo CSRF di ogni altra modifica.
+                // Changes a saved preference: same CSRF check as every other change.
                 if (!validateCsrfForRequest(exchange, req)) {
                     sendCsrfError(exchange);
                     return;
@@ -11847,14 +11916,14 @@ public class SSLMailServer {
      *   8. Return a checklist of what was done and what the user must do manually (DNS, SSL cert)
      */
     /**
-     * GET: se POP3 e' acceso. POST {"enabled": true|false}: lo accende o lo spegne (Pop3.choose), poi le
-     * regole dei paesi, se attive, si rifanno con le porte di adesso. Una scelta che non si puo' applicare
-     * lascia tutto com'era.
+     * GET: whether POP3 is on. POST {"enabled": true|false}: turns it on or off (Pop3.choose), then the
+     * country rules, if active, are redone with the current ports. A choice that cannot be applied
+     * leaves everything as it was.
      */
     /**
-     * «Mostra password» (POST {id}): la copia della password dal vault, solo se e' ancora la password della casella
-     * (confronto con l'hash di adesso), perche' una copia vecchia non si mostra. La serve la root: la web non ha la
-     * chiave privata del vault. Ogni rivelazione va nel registro di controllo.
+     * "Show password" (POST {id}): the copy of the password from the vault, only if it is still the
+     * mailbox's password (compared with the current hash), because an old copy is not shown. The root
+     * serves it: the web part does not have the private key of the vault. Every reveal goes into the audit log.
      */
     private void handleApiMailboxPassword(HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {
@@ -11945,23 +12014,23 @@ public class SSLMailServer {
     }
 
     /**
-     * GET: la famiglia scelta (o null) e quella in uso. POST {"family": "both"|"ipv4"|"ipv6", "confirmed": bool}: la
-     * applica (IpFamily.choose). Senza conferma, se ci sono avvisi, li restituisce e non cambia niente.
+     * GET: the chosen family (or null) and the one in use. POST {"family": "both"|"ipv4"|"ipv6", "confirmed": bool}:
+     * applies it (IpFamily.choose). Without confirmation, if there are warnings, it returns them and changes nothing.
      */
     private void handleApiIpFamily(HttpExchange exchange) throws IOException {
         JSONObject response = new JSONObject();
         try {
             String method = exchange.getRequestMethod();
-            // Chi sceglie, come lo vede il pannello: col pannello separato e' l'IP che la parte web ha ricavato
-            // (r18, dietro Cloudflare quello del browser).
+            // Who chooses, as the panel sees it: with the separated panel it is the IP that the web part derived
+            // (r18, behind Cloudflare the browser's one).
             String via = exchange.getRemoteAddress() == null || exchange.getRemoteAddress().getAddress() == null
                     ? null : exchange.getRemoteAddress().getAddress().getHostAddress();
             if ("GET".equals(method)) {
                 org.daemoxcp.mail.system.IpFamily.Family c = org.daemoxcp.mail.system.IpFamily.chosen();
                 response.put("success", true).put("chosen", c == null ? JSONObject.NULL : c.key)
                         .put("effective", org.daemoxcp.mail.system.IpFamily.effective().key);
-                // ?family=...: gli avvisi che quella scelta darebbe, senza farla. La casella «La posta entra anche in
-                // IPv6» della guida li mette nella sua sola conferma, prima di applicare.
+                // ?family=...: the warnings that choice would give, without making it. The guide's checkbox "Mail
+                // also comes in over IPv6" puts them in its single confirmation, before applying.
                 String asked = extractParamFromQuery(exchange.getRequestURI().getQuery(), "family");
                 if (asked != null) {
                     org.daemoxcp.mail.system.IpFamily.Family f = org.daemoxcp.mail.system.IpFamily.Family.of(asked);
@@ -12006,11 +12075,11 @@ public class SSLMailServer {
     }
 
     /**
-     * /api/server-addresses: gli indirizzi del server e la guida per passare fra IPv4 e IPv6, solo IPv4, solo IPv6, in
-     * tutte e due le direzioni (ServerAddresses, AddressGuide, HostRecords, ReverseDns). Permesso settings.manage: ogni
-     * cambiamento vuole una conferma recente (Access.CONFIRMED). SSH non si tocca mai.
+     * /api/server-addresses: the server's addresses and the guide for switching between IPv4 and IPv6, IPv4
+     * only, IPv6 only, in both directions (ServerAddresses, AddressGuide, HostRecords, ReverseDns). Permission
+     * settings.manage: every change wants a recent confirmation (Access.CONFIRMED). SSH is never touched.
      *
-     *  GET  ?goal=both|ipv4|ipv6|send6  lo stato, i fatti e i passi della guida verso quell'obiettivo
+     *  GET  ?goal=both|ipv4|ipv6|send6  the state, the facts and the guide's steps towards that goal
      *  POST {action: add-ipv6 (address, prefix, gateway) | remove-ipv6 | add-ipv4 | clean-ipv4 | confirm-firewall |
      *        dns (type A|AAAA, op add|remove) | web-aaaa | web-a}
      */
@@ -12040,10 +12109,10 @@ public class SSLMailServer {
         sendJsonResponse(exchange, response);
     }
 
-    /** L'amministratore ha guardato il firewall del provider e lascia entrare l'IPv6 (istante UTC), vuoto se no. */
+    /** The administrator has looked at the provider's firewall and lets IPv6 in (UTC instant), empty if not. */
     private static final String ADDRESS_V6_FIREWALL = "address_v6_firewall_confirmed";
 
-    /** Lo stato degli indirizzi, i fatti DNS e i passi della guida verso l'obiettivo. */
+    /** The state of the addresses, the DNS facts and the guide's steps towards the goal. */
     private JSONObject addressGuideState(org.daemoxcp.mail.system.AddressGuide.Goal goal,
                                          org.daemoxcp.mail.system.IpFamily.Family viaFamily) throws Exception {
         org.daemoxcp.mail.system.ServerAddresses.State s = org.daemoxcp.mail.system.ServerAddresses.readForGuide();
@@ -12057,8 +12126,8 @@ public class SSLMailServer {
                 : hostOk ? org.daemoxcp.mail.security.HostRecords.hasAny(host, "A") : null;
         Boolean aaaa = hostOk && !ip6.isEmpty() ? org.daemoxcp.mail.security.HostRecords.published(host, "AAAA", ip6)
                 : hostOk ? org.daemoxcp.mail.security.HostRecords.hasAny(host, "AAAA") : null;
-        // Il passo del DNS inverso e' fatto quando il PTR da' il nome della posta (givesName): il ritorno all'indirizzo
-        // (A o AAAA) e' il passo dopo, del pannello, e la posta in quella famiglia aspetta tutti e due (AddressGuide).
+        // The reverse DNS step is done when the PTR gives the mail name (givesName): the way back to the address
+        // (A or AAAA) is the next step, the panel's, and mail in that family waits for both (AddressGuide).
         org.daemoxcp.mail.security.ReverseDns.Check ptr4Check = hostOk && !ip4.isEmpty() ? org.daemoxcp.mail.security.ReverseDns.check(ip4, host) : null;
         Boolean ptr4 = ptr4Check == null ? null : ptr4Check.givesName();
         org.daemoxcp.mail.security.ReverseDns.Check ptr6Check = hostOk && !ip6.isEmpty()
@@ -12093,7 +12162,8 @@ public class SSLMailServer {
                 .put("webA", webA == null ? JSONObject.NULL : webA)
                 .put("cloudflare", hostOk && org.daemoxcp.mail.security.HostRecords.canWrite(Main.mailDatabase, cloudflareManager, host));
         org.daemoxcp.mail.system.ServerAddresses.Suggestion sg = s.suggestion();
-        // Consigliato: com'e' gia' la posta se riceve anche in IPv6 (o solo IPv6), altrimenti l'IPv6 solo in uscita.
+        // Recommended: the way mail already is if it also receives over IPv6 (or IPv6 only), otherwise
+        // IPv6 outbound only.
         String recommended = mail == org.daemoxcp.mail.system.IpFamily.Family.BOTH ? "both"
                 : mail == org.daemoxcp.mail.system.IpFamily.Family.IPV6 ? "ipv6" : "send6";
         return new JSONObject().put("success", true).put("goal", goal.key).put("recommended", recommended)
@@ -12107,9 +12177,10 @@ public class SSLMailServer {
     }
 
     /**
-     * Se i nomi del pannello e della webmail, su Cloudflare, arrivano al server in IPv6 (v6 true: AAAA verso l'IPv6 e
-     * nessun A verso l'IPv4) o in IPv4 (v6 false: A verso l'IPv4 e nessun AAAA verso l'IPv6). Con A e AAAA insieme
-     * Cloudflare usa l'IPv4. Nessun nome: TRUE (niente da fare). Nessun account che veda la zona: null.
+     * Whether the names of the panel and the webmail, on Cloudflare, reach the server over IPv6 (v6 true:
+     * AAAA towards the IPv6 and no A towards the IPv4) or over IPv4 (v6 false: A towards the IPv4 and no
+     * AAAA towards the IPv6). With A and AAAA together Cloudflare uses IPv4. No names: TRUE (nothing to
+     * do). No account that sees the zone: null.
      */
     private Boolean webNamesOn(boolean v6, String ip4, String ip6) {
         String want = v6 ? ip6 : ip4, other = v6 ? ip4 : ip6;
@@ -12130,7 +12201,7 @@ public class SSLMailServer {
         return true;
     }
 
-    /** I nomi del pannello e della webmail, dalla configurazione (quelli che passano da Cloudflare col proxy). */
+    /** The panel and webmail names, from the configuration (those that go through Cloudflare with the proxy). */
     private java.util.List<String> webNames() {
         java.util.List<String> names = new java.util.ArrayList<>();
         if (Main.dbManager == null) return names;
@@ -12143,12 +12214,12 @@ public class SSLMailServer {
                 }
             }
         } catch (Exception ignored) {
-            // nessuna configurazione: nessun nome
+            // no configuration: no name
         }
         return names;
     }
 
-    /** Un passo della guida: chi lo chiede, cosa fa, e il registro delle azioni. */
+    /** A step of the guide: who asks for it, what it does, and the log of the actions. */
     private JSONObject addressGuideAction(JSONObject req, org.daemoxcp.mail.system.IpFamily.Family viaFamily, String clientIp) throws Exception {
         String action = req.optString("action", "");
         org.daemoxcp.mail.system.ServerAddresses.Result r;
@@ -12162,7 +12233,8 @@ public class SSLMailServer {
             }
             case "add-ipv4" -> r = org.daemoxcp.mail.system.ServerAddresses.addIpv4();
             case "confirm-firewall" -> {
-                // Il firewall del provider dal server non si vede: lo conferma l'amministratore, e resta finche' c'e' l'IPv6.
+                // The provider's firewall cannot be seen from the server: the administrator confirms it, and it
+                // stays as long as there is IPv6.
                 if (Main.mailDatabase == null) return new JSONObject().put("success", false).put("error", I18n.tr("server.requestFailed"));
                 Main.mailDatabase.setSetting(ADDRESS_V6_FIREWALL, java.time.Instant.now().toString());
                 logAudit("SERVER_ADDRESSES_V6_FIREWALL_CONFIRMED", clientIp, "provider firewall lets IPv6 in");
@@ -12182,14 +12254,14 @@ public class SSLMailServer {
                 return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
             }
         }
-        // Senza IPv6 la conferma del firewall non vale piu': se torna, si guarda di nuovo.
+        // Without IPv6 the firewall confirmation is no longer valid: if it comes back, it is looked at again.
         if (r.ok() && "remove-ipv6".equals(action) && Main.mailDatabase != null) Main.mailDatabase.setSetting(ADDRESS_V6_FIREWALL, "");
         logAudit(r.ok() ? "SERVER_ADDRESSES_" + action.toUpperCase(java.util.Locale.ROOT).replace('-', '_')
                 : "SERVER_ADDRESSES_" + action.toUpperCase(java.util.Locale.ROOT).replace('-', '_') + "_FAILED", clientIp, r.journal());
         return new JSONObject().put("success", r.ok()).put(r.ok() ? "message" : "error", I18n.tr(r.message())).put("journal", r.journal());
     }
 
-    /** Il record A o AAAA del nome della posta: crearlo (senza proxy) o toglierlo. */
+    /** The A or AAAA record of the mail name: create it (without proxy) or remove it. */
     private JSONObject addressDnsAction(String type, String op, String clientIp) {
         if (!"A".equals(type) && !"AAAA".equals(type)) return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
         if (!"add".equals(op) && !"remove".equals(op)) return new JSONObject().put("success", false).put("error", I18n.tr("server.badRequest"));
@@ -12198,7 +12270,8 @@ public class SSLMailServer {
         String ip = "A".equals(type) ? (dnsGenerator != null ? dnsGenerator.detectServerIp() : "")
                 : s.v6().addresses().isEmpty() ? "" : s.v6().addresses().get(0);
         if ("remove".equals(op) && ip.isEmpty()) {
-            // Senza quell'indirizzo il server non sa piu' quale era: si toglie il record del nome che il DNS pubblico mostra.
+            // Without that address the server no longer knows which one it was: the record of the name that the
+            // public DNS shows is removed.
             ip = org.daemoxcp.mail.security.FreshDns.query(type, host).split("\n")[0].trim();
         }
         if (ip.isEmpty()) return new JSONObject().put("success", false).put("error", I18n.tr("server.hr.noIp", Map.of("t", type)));
@@ -12210,9 +12283,10 @@ public class SSLMailServer {
     }
 
     /**
-     * I nomi del pannello e della webmail su Cloudflare (col proxy) verso una sola famiglia: v6 true AAAA verso l'IPv6 e
-     * via gli A verso l'IPv4 (per un server che restera' solo IPv6), v6 false il contrario (per tornare a solo IPv4).
-     * Prima si crea il record nuovo, poi si toglie l'altro: in mezzo i nomi funzionano sempre.
+     * The names of the panel and the webmail on Cloudflare (with the proxy) towards a single family: v6
+     * true AAAA towards the IPv6 and away with the A records towards the IPv4 (for a server that will stay
+     * IPv6 only), v6 false the opposite (to go back to IPv4 only). First the new record is created, then
+     * the other one is removed: in between the names always work.
      */
     private JSONObject addressWebNames(boolean v6, String clientIp) {
         org.daemoxcp.mail.system.ServerAddresses.State s = org.daemoxcp.mail.system.ServerAddresses.read();
@@ -12241,12 +12315,12 @@ public class SSLMailServer {
     }
 
     /**
-     * /api/ssh-keys: le chiavi SSH di root (RootSshKeys), permesso ssh.manage. Aggiungere e togliere vogliono
-     * anche una conferma recente con passkey o con un codice (REAUTH_SECONDS), come il vault: una chiave di
-     * root e' l'accesso completo al server. Solo il file authorized_keys di root: sshd_config, la porta 22 e
-     * pf non si toccano.
+     * /api/ssh-keys: root's SSH keys (RootSshKeys), permission ssh.manage. Adding and removing also want
+     * a recent confirmation with a passkey or with a code (REAUTH_SECONDS), like the vault: a root
+     * key is full access to the server. Only root's authorized_keys file: sshd_config, port 22 and
+     * pf are not touched.
      *
-     *  GET  le chiavi: tipo, impronta, commento, se ha opzioni scritte a mano
+     *  GET  the keys: type, fingerprint, comment, whether it has options written by hand
      *  POST {action: add, key} | {action: remove, fingerprint}
      */
     private void handleApiSshKeys(HttpExchange exchange) throws IOException {
@@ -12284,7 +12358,7 @@ public class SSLMailServer {
                 sendJsonError(exchange, 400, I18n.tr("server.unknownAction"));
                 return;
             }
-            // La conferma recente l'ha gia' chiesta il filtro della rotta (Access.needsConfirmation).
+            // The recent confirmation was already asked for by the route's filter (Access.needsConfirmation).
             org.daemoxcp.mail.system.RootSshKeys.Outcome o = action.equals("add")
                     ? org.daemoxcp.mail.system.RootSshKeys.add(req.optString("key", ""))
                     : org.daemoxcp.mail.system.RootSshKeys.remove(req.optString("fingerprint", ""));
@@ -12533,8 +12607,9 @@ public class SSLMailServer {
 
                     JSONArray checks = new JSONArray();
 
-                    // A e AAAA secondo la famiglia scelta nelle Impostazioni (IpFamily): con solo IPv6 l'A non serve; con
-                    // tutte e due l'AAAA si controlla quando il server ha un IPv6 pubblico, con solo IPv6 sempre.
+                    // A and AAAA according to the family chosen in the Settings (IpFamily): with IPv6 only the A is
+                    // not needed; with both, the AAAA is checked when the server has a public IPv6, with IPv6 only
+                    // always.
                     org.daemoxcp.mail.system.IpFamily.Family family = org.daemoxcp.mail.system.IpFamily.effective();
                     boolean aOk = true, aaaaOk = true;
                     String serverIp = "";
@@ -12569,7 +12644,7 @@ public class SSLMailServer {
                             .put("current", mxResult.isEmpty() ? I18n.tr("server.dns.notFound") : mxResult)
                             .put("expected", "10 " + hostname + "."));
 
-                    // Il DNS inverso di ogni indirizzo che il server usa: IPv4 e/o IPv6, come sopra.
+                    // The reverse DNS of every address the server uses: IPv4 and/or IPv6, as above.
                     boolean ptrOk = true;
                     java.util.List<String> ptrIps = new java.util.ArrayList<>();
                     if (family.v4()) ptrIps.add(serverIp);
@@ -12824,10 +12899,10 @@ public class SSLMailServer {
                         return;
                     }
 
-                    // Lo stesso controllo del menu (voce 3, PemTls): il certificato si legge, vale adesso, copre il nome della
-                    // webmail, e la chiave e' proprio la sua. Prima si salvavano file e database anche con una chiave
-                    // sbagliata, e se ne accorgeva solo nginx (prova dal vivo sulla VM, 20/11/2026): il database restava
-                    // con dei certificati che non funzionano. Niente si scrive finche' il controllo non passa.
+                    // The same check as menu option 3 (PemTls): the certificate can be read, is valid now, covers the
+                    // webmail's name, and the key really is its own. Before, files and database were saved even with
+                    // a wrong key, and only nginx noticed (live test on the VM, 2026-11-20): the database was left
+                    // with certificates that do not work. Nothing is written until the check passes.
                     if (!certContent.isEmpty() || !keyContent.isEmpty()) {
                         String rcDomain = Main.dbManager != null ? Main.dbManager.getRoundcubeDomain() : null;
                         org.daemoxcp.mail.security.PemTls.Check pair = org.daemoxcp.mail.security.PemTls.check("webmail",
@@ -13036,20 +13111,20 @@ public class SSLMailServer {
             if (sslCert == null || sslCert.isEmpty()) sslCert = "/usr/local/etc/ssl/mail/fullchain.pem";
             if (sslKey == null || sslKey.isEmpty()) sslKey = "/usr/local/etc/ssl/mail/privkey.pem";
 
-            // Dalla 1.7 Roundcube non serve piu' i file dalla radice dell'applicazione ma dalla
-            // sottocartella public_html: e' una protezione voluta, e con la radice vecchia la
-            // webmail risponde 404 su tutto. La scelta non si fa sul numero di versione ma su
-            // cosa c'e' davvero sul disco, cosi' la stessa riga vale prima e dopo il salto.
+            // Since 1.7 Roundcube no longer serves the files from the application's root but from the
+            // public_html subfolder: it is a deliberate protection, and with the old root the
+            // webmail answers 404 to everything. The choice is not made on the version number but on
+            // what is really on disk, so the same line holds before and after the jump.
             String rcRoot = "/usr/local/www/roundcube";
             if (Files.isDirectory(Path.of(rcRoot, "public_html"))) rcRoot = rcRoot + "/public_html";
 
-            // Il file intero da una fonte sola (NginxMain, la stessa dell'installatore). Prima qui c'era un altro modello:
-            // riscriveva il file da capo togliendo l'include della 443 (MTA-STS, autoconfig), e lo scriveva senza
-            // nginx -t e senza copia (installazione dal README, 20/11/2026).
+            // The whole file from a single source (NginxMain, the same as the installer's). Before, there was
+            // another template here: it rewrote the file from scratch removing the include of the 443 (MTA-STS,
+            // autoconfig), and wrote it without nginx -t and without a copy (install from the README, 2026-11-20).
             String config = org.daemoxcp.mail.system.NginxMain.content(domain, port, sslCert, sslKey, rcRoot,
-                    // Il pool di Roundcube: il suo socket, o quello di prima se la migrazione non c'e' ancora.
+                    // The Roundcube pool: its socket, or the previous one if the migration is not there yet.
                     org.daemoxcp.mail.system.RoundcubeUser.fastcgiPass());
-            // Le righe listen della famiglia scelta nelle Impostazioni (IpFamily); senza scelta restano come sono.
+            // The listen lines of the family chosen in the Settings (IpFamily); with no choice they stay as they are.
             if (port.trim().matches("[0-9]{1,5}"))
                 config = org.daemoxcp.mail.system.IpFamily.withNginxListen(config, Integer.parseInt(port.trim()),
                         org.daemoxcp.mail.system.IpFamily.chosen());
@@ -13257,10 +13332,10 @@ public class SSLMailServer {
     private boolean validateCsrfForRequest(HttpExchange exchange, JSONObject request) {
         Optional<WebSessions.Current> session = currentSession(exchange);
         if (session.isEmpty()) return false;
-        // Una richiesta inoltrata dalla parte web: il token l'ha controllato il suo filtro CSRF, e qui non
-        // c'e' (la root non riceve ne' il token della sessione ne' quello CSRF).
+        // A request forwarded by the web part: the token was checked by its CSRF filter, and here it is
+        // not there (the root receives neither the session token nor the CSRF one).
         if (HeadExchange.unwrap(exchange) instanceof ForwardedExchange) return true;
-        // L'intestazione che lo script di ogni pagina aggiunge (getHead), oppure il campo del corpo
+        // The header that every page's script adds (getHead), or else the body field
         String header = exchange.getRequestHeaders().getFirst("X-CSRF-Token");
         String providedToken = header != null ? header : request.optString("csrf_token", "");
         return WebSessions.validCsrf(session.get().token(), providedToken);
@@ -13278,13 +13353,13 @@ public class SSLMailServer {
 
     /**
      * Log an audit event to database AND to a parallel text file
-     * for external tooling (Fail2ban, log shippers, ecc.).
+     * for external tooling (Fail2ban, log shippers, etc.).
      *
      * File path (default): /var/log/daemoxcp-mail-auth.log
-     * Configurabile via setting "audit_log_file_path" nel DB.
-     * Se il file non è scrivibile, l'errore non blocca l'app.
+     * Configurable via the setting "audit_log_file_path" in the DB.
+     * If the file is not writable, the error does not block the app.
      *
-     * Formato di linea (parsabile da Fail2ban con regex semplice), in UTC:
+     * Line format (parsable by Fail2ban with a simple regex), in UTC:
      *   2026-10-17T21:20:28Z [ACTION] ip=1.2.3.4 user=admin details="..."
      */
     void logAudit(String action, String ipAddress, String details) {
@@ -13297,11 +13372,11 @@ public class SSLMailServer {
         } catch (Exception e) {
             LOGGER.warning("Failed to log audit event to DB: " + e.getMessage());
         }
-        // 2) File testuale parallelo per Fail2ban / log shippers
+        // 2) Parallel text file for Fail2ban / log shippers
         try {
             writeAuditToFile(action, ipAddress, username, details);
         } catch (Exception e) {
-            // Non propagare — il logging non deve mai rompere l'app
+            // Do not propagate -- logging must never break the app
         }
     }
 
@@ -13311,9 +13386,9 @@ public class SSLMailServer {
         if (CACHED_AUDIT_LOG_PATH != null) return CACHED_AUDIT_LOG_PATH;
         String path = "/var/log/daemoxcp-mail-auth.log";
         try {
-            // Col pannello separato la root non prende il percorso dal database (audit_log_file_path, che
-            // usano le prove): il database lo scrive anche la parte web, e la root scriverebbe dove le
-            // dice lei.
+            // With the separated panel the root does not take the path from the database (audit_log_file_path,
+            // which the tests use): the database is written by the web part too, and the root would write
+            // wherever the web part tells it to.
             if (Main.mailDatabase != null && !org.daemoxcp.mail.system.PanelSeparation.rootPart()) {
                 String fromDb = Main.mailDatabase.getSetting("audit_log_file_path", null);
                 if (fromDb != null && !fromDb.isEmpty()) path = fromDb;
@@ -13324,22 +13399,22 @@ public class SSLMailServer {
     }
 
     /**
-     * Una riga del registro di autenticazione, quella che legge fail2ban.
+     * A line of the authentication log, the one fail2ban reads.
      *
-     * <p>Il momento e' in UTC con la Z, al secondo. Prima era
-     * {@code LocalDateTime.now()} con {@code ISO_LOCAL_DATE_TIME}: l'ora <em>locale</em> del
-     * server, senza niente che dicesse quale fuso fosse, contro r13 — e con i decimali dei
-     * nanosecondi attaccati, perche' quel formato li stampa quando ci sono. Quei decimali
-     * tenevano in piedi per caso il filtro di fail2ban: facevano da primo campo dopo che
-     * fail2ban aveva tolto la data, e le poche righe cadute sul secondo intero non venivano
-     * riconosciute.
+     * <p>The moment is in UTC with the Z, to the second. Before, it was
+     * {@code LocalDateTime.now()} with {@code ISO_LOCAL_DATE_TIME}: the server's <em>local</em> time,
+     * with nothing saying which time zone it was, against r13 -- and with the nanosecond
+     * decimals attached, because that format prints them when they are there. Those decimals
+     * were holding up fail2ban's filter by chance: they acted as the first field after
+     * fail2ban had removed the date, and the few lines that fell on a whole second were not
+     * recognised.
      *
-     * <p>Questa forma e' meta' di un contratto: l'altra meta' e'
-     * {@code Fail2banAutoSetup.filterContent()}. Cambiarne una sola non rompe niente a
-     * vista — semplicemente non viene piu' bloccato nessuno.
+     * <p>This form is half of a contract: the other half is
+     * {@code Fail2banAutoSetup.filterContent()}. Changing only one of them breaks nothing
+     * visibly -- simply nobody gets blocked any more.
      */
     public static String auditLine(String action, String ip, String username, String details) {
-        // Sanitizza newline / quote per evitare CRLF injection nei log
+        // Sanitize newlines / quotes to avoid CRLF injection in the logs
         String safeAction = action == null ? "-" : action.replaceAll("[\\r\\n\\t]", " ");
         String safeIp = ip == null ? "-" : ip.replaceAll("[\\r\\n\\t\\s]", "");
         String safeUser = username == null || username.isEmpty() ? "-" : username.replaceAll("[\\r\\n\\t\"]", "_");
@@ -13355,7 +13430,7 @@ public class SSLMailServer {
 
         java.nio.file.Path p = java.nio.file.Paths.get(path);
         try {
-            // Crea la directory se non esiste (best effort)
+            // Create the directory if it does not exist (best effort)
             java.nio.file.Path parent = p.getParent();
             if (parent != null && !java.nio.file.Files.exists(parent)) {
                 java.nio.file.Files.createDirectories(parent);
@@ -13368,13 +13443,13 @@ public class SSLMailServer {
                 java.nio.file.StandardOpenOption.APPEND
             );
         } catch (java.io.IOException e) {
-            // Permessi mancanti, disco pieno, ecc. — silenzioso, non bloccare
+            // Missing permissions, full disk, etc. -- silent, do not block
         }
     }
 
     String getClientIp(HttpExchange exchange) {
-        // L'indirizzo TCP non si puo' inventare; CF-Connecting-IP si', e conta solo se la connessione arriva
-        // davvero da Cloudflare (r18, TrustedProxy.clientAddress). X-Forwarded-For e X-Real-IP mai.
+        // The TCP address cannot be made up; CF-Connecting-IP can, and it counts only if the connection
+        // really comes from Cloudflare (r18, TrustedProxy.clientAddress). X-Forwarded-For and X-Real-IP never.
         return org.daemoxcp.mail.security.TrustedProxy.clientAddress(
                 exchange.getRemoteAddress().getAddress().getHostAddress(),
                 exchange.getRequestHeaders().getFirst("CF-Connecting-IP"));

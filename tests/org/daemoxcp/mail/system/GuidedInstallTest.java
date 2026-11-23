@@ -9,7 +9,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * The guided installation's checks that need no system (reperti 242, 244, 246):
+ * The guided installation's checks that need no system (findings 242, 244, 246):
  *  1. the time zone of menu option 1: an IANA name known to Java and present as a plain file in zoneinfo; never a
  *     path, a link, ".." or a made-up name; the current one read from /var/db/zoneinfo, UTC when unknown;
  *  2. the three names before installing from the menu: the webmail name no longer the factory example, every name a

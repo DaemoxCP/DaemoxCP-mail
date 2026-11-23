@@ -13,20 +13,21 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * All'avvio del servizio: gli utenti di sistema del pannello prendono il nome nuovo (DaemoxCP Mail, 17/11/2026).
+ * At service startup: the panel's system users take the new name (DaemoxCP Mail, 2026-11-17).
  *
- * <p>L'utente e il gruppo della parte web, mailpanel, diventano daemoxcp_mail; il commento suo e quello di sievec
- * dicono il nome nuovo. Si rinominano con pw, che tiene uid e gid: i file della parte web (i segreti che legge, il
- * database SQLite, le pagine, il socket) restano suoi senza toccarne nessuno, perche' il sistema li conosce per
- * numero. PanelUser controlla il commento parola per parola: senza questo passaggio l'utente di prima non sarebbe
- * piu' "del pannello", e la parte web non partirebbe.
+ * <p>The web part's user and group, mailpanel, become daemoxcp_mail; its comment and sievec's state the new
+ * name. They are renamed with pw, which keeps uid and gid: the web part's files (the secrets it reads, the SQLite
+ * database, the pages, the socket) remain its own without touching any of them, because the system knows them by
+ * number. PanelUser checks the comment word for word: without this switch the earlier user would no longer be
+ * "the panel's", and the web part would not start.
  *
- * <p>Si rinomina solo l'utente che il pannello ha creato: nome, commento di prima, gruppo suo, nessun altro membro
- * (PanelUser.problem). Se esiste gia' un utente col nome nuovo, o quello vecchio non e' del pannello, non si tocca
- * niente e lo si dice. Dopo la rinomina si controlla che il nome nuovo abbia lo stesso uid e lo stesso gid di prima,
- * e che nessun gruppo lo citi ancora col nome vecchio; se non torna, si rimette il nome di prima.
+ * <p>Only the user the panel created is renamed: name, earlier comment, its own group, no other member
+ * (PanelUser.problem). If a user with the new name already exists, or the old one does not belong to the panel,
+ * nothing is touched and this is said. After the rename we check that the new name has the same uid and the same
+ * gid as before, and that no group still mentions it by the old name; if that does not add up, the earlier name
+ * is put back.
  *
- * <p>I nomi e i commenti di prima stanno in legacy-names.json (sezioni "unixUsers" e "unixUserComments").
+ * <p>The earlier names and comments are in legacy-names.json (sections "unixUsers" and "unixUserComments").
  */
 public final class PanelUserRename {
 
@@ -37,19 +38,19 @@ public final class PanelUserRename {
 
     record Report(Outcome outcome, String detail) {}
 
-    /** pw e i file del sistema, separati per provarli senza toccare gli utenti veri. */
+    /** pw and the system files, kept separate so they can be tested without touching the real users. */
     interface Services {
-        /** La riga di pw usershow (formato di master.passwd), o null se l'utente non c'e'. */
+        /** The pw usershow line (master.passwd format), or null if the user does not exist. */
         String user(String name);
-        /** La riga di pw groupshow (nome:password:gid:membri), o null se il gruppo non c'e'. */
+        /** The pw groupshow line (name:password:gid:members), or null if the group does not exist. */
         String group(String name);
-        /** Esegue pw con questi argomenti: null se e' andato, altrimenti cosa dice. */
+        /** Runs pw with these arguments: null if it worked, otherwise what it says. */
         String pw(String... args);
-        /** Le righe di /etc/group. */
+        /** The lines of /etc/group. */
         List<String> groups();
-        /** La cartella dei crontab degli utenti. */
+        /** The folder of the users' crontabs. */
         Path cronTabs();
-        /** La cartella delle caselle di sistema (/var/mail), dove pw useradd crea quella vuota dell'utente. */
+        /** The folder of the system mailboxes (/var/mail), where pw useradd creates the user's empty one. */
         Path mailSpool();
     }
 
@@ -58,7 +59,7 @@ public final class PanelUserRename {
     public static void ensureAtBoot() {
         Services sv = new RealServices();
         for (String[] p : LegacyNames.pairs("unixUsers")) report(rename(p[0], p[1], PanelSeparation.GECOS, sv));
-        // Il commento di sievec: l'utente non cambia nome, solo il commento con cui il pannello lo riconosce.
+        // sievec's comment: the user does not change name, only the comment by which the panel recognises it.
         report(recomment(SieveCompiler.USER, SieveCompiler.COMPILER_USER.gecos(), sv));
     }
 
@@ -68,7 +69,7 @@ public final class PanelUserRename {
         if (r.outcome() == Outcome.DONE) LOGGER.info(line); else LOGGER.warning(line);
     }
 
-    /** I commenti di prima che oggi sono {@code gecos}. */
+    /** The earlier comments that are now {@code gecos}. */
     static List<String> oldComments(String gecos) {
         return LegacyNames.oldNamesOf("unixUserComments", gecos);
     }
@@ -82,7 +83,7 @@ public final class PanelUserRename {
         if (oldGroup == null) return new Report(Outcome.LEFT, "the user " + oldName + " has no group of its own: left as it is");
         String[] u = oldUser.split(":", -1);
         if (u.length < 10) return new Report(Outcome.LEFT, "the user " + oldName + " cannot be read");
-        // Del pannello: com'era il giorno in cui l'ha creato (il commento di prima o gia' quello di adesso).
+        // The panel's: as it was on the day it created it (the earlier comment or already the current one).
         String why = null;
         for (String c : with(oldComments(gecos), gecos)) {
             why = new PanelUser(oldName, c).problem(oldUser, oldGroup);
@@ -101,7 +102,7 @@ public final class PanelUserRename {
             return new Report(Outcome.ROLLED_BACK, "pw usermod: " + problem + "; the group got its name back");
         }
 
-        // Il controllo: stesso uid, stesso gid, il gruppo suo, e nessun gruppo che lo cita col nome di prima.
+        // The check: same uid, same gid, its own group, and no group that mentions it by the earlier name.
         String after = sv.user(newName), afterGroup = sv.group(newName);
         String[] a = after == null ? new String[0] : after.split(":", -1);
         String[] g = afterGroup == null ? new String[0] : afterGroup.split(":", -1);
@@ -116,7 +117,7 @@ public final class PanelUserRename {
                 if (f.length < 4 || f[3].isEmpty()) continue;
                 for (String m : f[3].split(",")) {
                     if (!m.equals(oldName)) continue;
-                    // Un gruppo che cita ancora il nome di prima: lo si porta al nome nuovo.
+                    // A group that still mentions the earlier name: it is brought to the new name.
                     String p = sv.pw("groupmod", f[0], "-d", oldName, "-m", newName);
                     if (p != null) wrong = "the group " + f[0] + " still names " + oldName + ": " + p;
                 }
@@ -128,7 +129,7 @@ public final class PanelUserRename {
             return new Report(Outcome.ROLLED_BACK, wrong + "; the old names put back");
         }
 
-        // Il crontab dell'utente, se ne ha uno: cron lo cerca col nome.
+        // The user's crontab, if it has one: cron looks for it by name.
         String cron = "";
         Path oldTab = sv.cronTabs().resolve(oldName), newTab = sv.cronTabs().resolve(newName);
         try {
@@ -139,8 +140,9 @@ public final class PanelUserRename {
         } catch (IOException e) {
             cron = ", its crontab NOT moved (" + e.getMessage() + ")";
         }
-        // La casella di sistema: pw usermod -l non la sposta, e col nome di prima resterebbe in /var/mail (fuori dai
-        // boot environment) un file di un utente che non c'e' piu'. Il contenuto e' dello stesso uid: si sposta e basta.
+        // The system mailbox: pw usermod -l does not move it, and with the earlier name there would remain in
+        // /var/mail (outside the boot environments) a file of a user who no longer exists. The content belongs to the
+        // same uid: it is simply moved.
         Path oldBox = sv.mailSpool().resolve(oldName), newBox = sv.mailSpool().resolve(newName);
         String box = "";
         try {
@@ -155,7 +157,7 @@ public final class PanelUserRename {
                 + ", gid " + gid + ", comment '" + gecos + "')" + cron + box);
     }
 
-    /** Il commento di un utente del pannello che non cambia nome: se e' uno di prima, diventa quello di adesso. */
+    /** The comment of a panel user that does not change name: if it is an earlier one, it becomes the current one. */
     static Report recomment(String name, String gecos, Services sv) {
         String line = sv.user(name);
         if (line == null) return new Report(Outcome.NOTHING, "");

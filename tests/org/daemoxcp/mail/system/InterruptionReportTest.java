@@ -9,7 +9,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * The notice of an interrupted package job in the periodic report (reperto 172). It was already
+ * The notice of an interrupted package job in the periodic report (finding 172). It was already
  * there (UpdateManager.reportData), with the urgency and title of any job, the reinstallation
  * included, which may have left mail stopped.
  *  - without a notice, nothing; with the notice of any job, a thing to do;

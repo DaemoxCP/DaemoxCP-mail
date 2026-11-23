@@ -16,36 +16,36 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * La mappa di Postfix che rende sicuro il catch-all: ogni casella punta a se stessa, dopo gli alias.
+ * The Postfix map that makes the catch-all safe: every mailbox points to itself, after the aliases.
  *
- * <p>Un catch-all e' un alias con sorgente {@code @dominio} (tabella aliases). Postfix cerca un indirizzo nelle
- * virtual_alias_maps prima nella forma {@code nome@dominio}, in tutte le tabelle e nel loro ordine, e solo dopo nella
- * forma {@code @dominio}. Con la sola tabella degli alias, la posta per una casella che non ha un alias suo finirebbe
- * al catch-all: la casella non riceverebbe piu' niente, e una casella come destinazione del catch-all farebbe un giro
- * senza fine. Con questa mappa dopo gli alias:
+ * <p>A catch-all is an alias with source {@code @domain} (aliases table). Postfix looks up an address in the
+ * virtual_alias_maps first in the form {@code name@domain}, in all the tables and in their order, and only
+ * afterwards in the form {@code @domain}. With the aliases table alone, mail for a mailbox that has no alias of its
+ * own would end up at the catch-all: the mailbox would no longer receive anything, and a mailbox as destination of
+ * the catch-all would loop endlessly. With this map after the aliases:
  * <ul>
- *   <li>un alias esplicito vince ancora (viene prima): copie e inoltri restano come sono;</li>
- *   <li>una casella che riceve si trova da sola, e la sua posta va a lei;</li>
- *   <li>solo un indirizzo che non e' ne' alias ne' casella che riceve arriva a {@code @dominio}: anche una casella
- *       spenta o che non riceve, la cui posta senza catch-all viene rifiutata.</li>
+ *   <li>an explicit alias still wins (it comes first): copies and forwards stay as they are;</li>
+ *   <li>a mailbox that receives finds itself, and its mail goes to it;</li>
+ *   <li>only an address that is neither an alias nor a receiving mailbox reaches {@code @domain}: this includes a
+ *       mailbox that is disabled or does not receive, whose mail without a catch-all is rejected.</li>
  * </ul>
- * Solo le caselle che ricevono, con la stessa condizione di virtual_mailbox_maps: Postfix prende per valido ogni
- * indirizzo che trova nelle virtual_alias_maps, e con tutte le caselle una casella che non riceve avrebbe accettato
- * posta dall'esterno anche senza catch-all (misurato sulla VM il 18/11/2026). Cosi', senza catch-all, non cambia
- * niente: un indirizzo che punta a se stesso e' quello che Postfix fa gia'.
+ * Only the mailboxes that receive, with the same condition as virtual_mailbox_maps: Postfix takes as valid every
+ * address it finds in the virtual_alias_maps, and with all the mailboxes a mailbox that does not receive would have
+ * accepted mail from outside even without a catch-all (measured on the VM on 2026-11-18). So, without a catch-all,
+ * nothing changes: an address that points to itself is what Postfix already does.
  *
- * <p>La mappa usa la stessa connessione di {@value #ALIASES} (utente di Postfix, MailDbUsers: SELECT su
- * mailboxes.email c'e' gia') e la sua domanda (scripts.PostfixMaps). Le installazioni nuove la scrivono da sole; sui
- * server installati prima la scrive {@link #ensureAtBoot()}, dopo MailDbUsers:
+ * <p>The map uses the same connection as {@value #ALIASES} (the Postfix user, MailDbUsers: SELECT on
+ * mailboxes.email is already there) and its query (scripts.PostfixMaps). New installations write it on their own;
+ * on servers installed before, {@link #ensureAtBoot()} writes it, after MailDbUsers:
  * <ol>
- *   <li>il file, con proprietario, gruppo e permessi di {@value #ALIASES};</li>
- *   <li>postmap -q: una chiave che non c'e' risponde vuoto, una casella risponde se stessa;</li>
- *   <li>virtual_alias_maps con la mappa dopo gli alias, solo se diceva esattamente la mappa degli alias del
- *       pannello (una configurazione scritta a mano resta com'e', e il catch-all non si crea);</li>
- *   <li>postfix check e reload. Se una prova non torna, main.cf torna com'era byte per byte, il file nuovo si
- *       toglie, e Postfix si ricarica.</li>
+ *   <li>the file, with the owner, group and permissions of {@value #ALIASES};</li>
+ *   <li>postmap -q: a key that does not exist answers empty, a mailbox answers itself;</li>
+ *   <li>virtual_alias_maps with the map after the aliases, only if it said exactly the panel's aliases map (a
+ *       configuration written by hand stays as it is, and the catch-all is not created);</li>
+ *   <li>postfix check and reload. If a test does not match, main.cf goes back as it was byte for byte, the new
+ *       file is removed, and Postfix is reloaded.</li>
  * </ol>
- * Al secondo avvio non fa niente.
+ * At the second startup it does nothing.
  */
 public final class MailboxAddressMap {
 
@@ -55,11 +55,11 @@ public final class MailboxAddressMap {
     static final String POSTFIX = "/usr/local/sbin/postfix";
     static final String POSTMAP = "/usr/local/sbin/postmap";
 
-    /** La mappa degli alias del pannello. */
+    /** The panel's aliases map. */
     static final String ALIASES = "mysql-virtual-aliases.cf";
-    /** Questa mappa. */
+    /** This map. */
     public static final String FILE = org.daemoxcp.mail.scripts.PostfixMaps.MAILBOX_ADDRESSES_FILE;
-    /** Ogni casella, attiva o no, e' se stessa: cosi' un catch-all non le prende la posta. */
+    /** Every mailbox, active or not, is itself: so a catch-all does not take its mail. */
     public static final String QUERY = org.daemoxcp.mail.scripts.PostfixMaps.MAILBOX_ADDRESSES_QUERY;
 
     private static final Pattern QUERY_LINE = Pattern.compile("^\\s*query\\s*=.*$");
@@ -71,7 +71,7 @@ public final class MailboxAddressMap {
 
     record Decision(Action action, String newValue, String reason) {}
 
-    /** Le tabelle di virtual_alias_maps, nell'ordine. */
+    /** The tables of virtual_alias_maps, in order. */
     static List<String> tables(String value) {
         List<String> l = new ArrayList<>();
         if (value == null) return l;
@@ -80,17 +80,17 @@ public final class MailboxAddressMap {
     }
 
     /**
-     * Funzione pura: che cosa fare con virtual_alias_maps ({@code postconf -h}) e la cartella di Postfix.
+     * Pure function: what to do with virtual_alias_maps ({@code postconf -h}) and the Postfix folder.
      *
-     * @param aliasesFile se {@value #ALIASES} esiste: senza, Postfix non e' quello del pannello
+     * @param aliasesFile whether {@value #ALIASES} exists: without it, Postfix is not the panel's
      */
     static Decision decide(boolean installed, String configDirectory, String virtualAliasMaps, boolean aliasesFile) {
         return decide(installed, configDirectory, virtualAliasMaps, aliasesFile, true);
     }
 
     /**
-     * Come sopra, sapendo anche se il file della mappa dice gia' il testo atteso ({@link #mapText}): uno diverso (una
-     * domanda di prima, una connessione cambiata) si riscrive, con le stesse prove.
+     * As above, also knowing whether the map file already says the expected text ({@link #mapText}): a different one
+     * (an earlier query, a changed connection) is rewritten, with the same tests.
      */
     static Decision decide(boolean installed, String configDirectory, String virtualAliasMaps, boolean aliasesFile, boolean fileCurrent) {
         if (!installed) return new Decision(Action.NOTHING, null, "Postfix is not installed");
@@ -106,14 +106,14 @@ public final class MailboxAddressMap {
     }
 
     /**
-     * Il testo della mappa, dalla mappa degli alias: la stessa connessione, la domanda {@link #QUERY}. Null se il
-     * file degli alias non ha esattamente una riga query (non e' quello che scrive il pannello).
+     * The map text, from the aliases map: the same connection, the query {@link #QUERY}. Null if the aliases file does
+     * not have exactly one query line (it is not the one the panel writes).
      */
     static String mapText(String aliasesText) {
         return mapText(aliasesText, QUERY);
     }
 
-    /** Lo stesso con un'altra domanda: la connessione della mappa degli alias (SenderLoginMap). */
+    /** The same with another query: the connection of the aliases map (SenderLoginMap). */
     static String mapText(String aliasesText, String query) {
         if (aliasesText == null) return null;
         StringBuilder out = new StringBuilder();
@@ -133,8 +133,8 @@ public final class MailboxAddressMap {
     }
 
     /**
-     * Se un catch-all si puo' creare: null se si', altrimenti il perche' (in inglese, per il registro e la pagina, che
-     * lo mette dentro un suo testo). Funzione pura sul valore di virtual_alias_maps.
+     * Whether a catch-all can be created: null if yes, otherwise the reason (in English, for the log and the page,
+     * which puts it inside a text of its own). Pure function on the value of virtual_alias_maps.
      */
     static String notReady(String configDirectory, String virtualAliasMaps) {
         String aliases = "mysql:" + configDirectory + "/" + ALIASES, own = "mysql:" + configDirectory + "/" + FILE;
@@ -145,7 +145,7 @@ public final class MailboxAddressMap {
         return null;
     }
 
-    /** {@link #notReady(String, String)} su questo server. */
+    /** {@link #notReady(String, String)} on this server. */
     public static String notReady() {
         if (!Files.isExecutable(Path.of(POSTCONF))) return "Postfix is not installed";
         return notReady(postconf("-h", "config_directory"), postconf("-h", "virtual_alias_maps"));
@@ -235,8 +235,8 @@ public final class MailboxAddressMap {
     }
 
     /**
-     * postmap -q su una chiave che non c'e': MySQL risponde vuoto (uscita 1, niente scritto); un errore scrive sempre
-     * qualcosa. Poi, se c'e' una casella, la casella risponde se stessa.
+     * postmap -q on a key that does not exist: MySQL answers empty (exit 1, nothing written); an error always writes
+     * something. Then, if there is a mailbox, the mailbox answers itself.
      */
     private static String probe(Path file) {
         Shell.Result r = Shell.run(Duration.ofSeconds(30), POSTMAP, "-q", MailDbUsers.PROBE, "mysql:" + file);
@@ -249,7 +249,7 @@ public final class MailboxAddressMap {
         return null;
     }
 
-    /** Una casella qualunque, per la prova; null se non ce n'e' o il database non risponde. */
+    /** Any mailbox, for the test; null if there is none or the database does not answer. */
     static String anyMailbox() {
         try {
             if (org.daemoxcp.mail.Main.mailDatabase == null) return null;
@@ -258,7 +258,7 @@ public final class MailboxAddressMap {
         return null;
     }
 
-    /** Scrittura atomica, con proprietario, gruppo e permessi di un altro file (la mappa degli alias). */
+    /** Atomic write, with the owner, group and permissions of another file (the aliases map). */
     static void writeLike(Path file, String text, PosixFileAttributes like) throws Exception {
         Path tmp = file.resolveSibling("." + file.getFileName() + ".tmp");
         Files.deleteIfExists(tmp);

@@ -10,24 +10,24 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.regex.Pattern;
 
 /**
- * Il cambio password dalla webmail passa dal pannello.
+ * The password change from the webmail goes through the panel.
  *
- * Prima il plugin password di Roundcube scriveva da se' nella tabella mailboxes (driver sql),
- * con l'algoritmo predefinito del plugin, che e' 'clear': nella colonna finiva la password in
- * chiaro. Dovecot legge BLF-CRYPT, quindi la casella non entrava piu', e la copia cifrata del
- * pannello restava quella di prima. Adesso il plugin usa il driver httpapi e manda utente,
- * password attuale e password nuova a /api/internal/mailbox-password sul pannello (solo da
- * 127.0.0.1, con la chiave X-DaemoxCP-Key): il pannello controlla la password attuale e scrive
- * insieme l'hash bcrypt e la copia cifrata.
+ * Before, Roundcube's password plugin wrote by itself into the mailboxes table (sql driver),
+ * with the plugin's default algorithm, which is 'clear': the column got the password in
+ * clear text. Dovecot reads BLF-CRYPT, so the mailbox could no longer log in, and the panel's encrypted
+ * copy stayed the previous one. Now the plugin uses the httpapi driver and sends user,
+ * current password and new password to /api/internal/mailbox-password on the panel (only from
+ * 127.0.0.1, with the X-DaemoxCP-Key key): the panel checks the current password and writes
+ * the bcrypt hash and the encrypted copy together.
  *
- * Le impostazioni stanno in un blocco in fondo a config.inc.php, che il pannello riscrive a ogni
- * avvio; in PHP vince l'ultima assegnazione, e le righe del driver sql di prima si tolgono (dentro
- * c'era anche la password MySQL del pannello, che la webmail non deve piu' conoscere).
+ * The settings are in a block at the end of config.inc.php, which the panel rewrites at every
+ * boot; in PHP the last assignment wins, and the lines of the previous sql driver are removed (they
+ * also contained the panel's MySQL password, which the webmail must no longer know).
  *
- * <p>Il blocco accende anche il plugin password, se manca dall'elenco: l'installazione completa scriveva solo
- * archive e zipdownload, e la pagina per cambiare password nella webmail non c'era (sulla VM, 18/11/2026). Lo
- * aggiunge solo quando l'elenco sta in questo stesso file: Roundcube unisce i file sostituendo l'elenco intero, e
- * un elenco nuovo qui toglierebbe i plugin scritti altrove.
+ * <p>The block also turns on the password plugin, if it is missing from the list: the full installation wrote
+ * only archive and zipdownload, and the page to change the password in the webmail was not there (on the VM,
+ * 2026-11-18). It adds it only when the list is in this same file: Roundcube merges the files by replacing the
+ * whole list, and a new list here would remove the plugins written elsewhere.
  */
 public final class WebmailPasswordConfig {
 
@@ -35,53 +35,53 @@ public final class WebmailPasswordConfig {
 
     static final String BEGIN = "// BEGIN daemoxcp-mail: webmail password changes (rewritten by the panel at startup)";
     static final String END = "// END daemoxcp-mail: webmail password changes";
-    /** Il percorso della rotta sul pannello. */
+    /** The path of the route on the panel. */
     public static final String PATH = "/api/internal/mailbox-password";
-    /** La rotta della copia nel vault dopo un accesso alla webmail (RoundcubeSsoManager, plugin daemoxcp_mail_sso). */
+    /** The route of the copy into the vault after a webmail login (RoundcubeSsoManager, plugin daemoxcp_mail_sso). */
     public static final String VAULT_PATH = "/api/internal/mailbox-vault";
     /**
-     * La rotta dello svuotamento automatico della Junk e del Cestino, dalle impostazioni della webmail (il plugin
-     * daemoxcp_mail_cleanup): leggere e scegliere i giorni della propria casella.
+     * The route of the automatic emptying of the Junk and the Trash, from the webmail settings (the plugin
+     * daemoxcp_mail_cleanup): reading and choosing the days for one's own mailbox.
      */
     public static final String CLEANUP_PATH = "/api/internal/mailbox-cleanup";
 
-    /** Le righe del plugin password che il blocco sostituisce, scritte da noi o a mano. */
+    /** The lines of the password plugin that the block replaces, written by us or by hand. */
     private static final Pattern OLD_LINE = Pattern.compile(
             "(?m)^[ \\t]*\\$config\\[['\"]password_(driver|db_dsn|query|crypt_hash|algorithm|algorithm_prefix|"
             + "httpapi_[a-z_]+|http_client|minimum_length)['\"]\\][ \\t]*=[^\\n]*;[ \\t]*\\r?\\n?");
     private static final Pattern KEY = Pattern.compile("[A-Za-z0-9_-]{20,128}");
 
-    /** La riga che accende il plugin password (vedi sopra): solo se l'elenco e' in questo file, e una volta sola. */
+    /** The line that turns on the password plugin (see above): only if the list is in this file, and only once. */
     static final String PLUGIN_LINE = "if (isset($config['plugins']) && is_array($config['plugins']) && !in_array('password', $config['plugins'], true)) "
             + "{ $config['plugins'][] = 'password'; }";
 
     /**
-     * Il pulsante «Spam» / «Non spam» della webmail (il plugin markasjunk di Roundcube): sposta il messaggio nella Junk o
-     * nella INBOX, e da quello spostamento Rspamd impara (SpamLearning). Senza driver di apprendimento il plugin sposta e
-     * basta (il suo config.inc.php.dist). Stessa regola del plugin password: solo se l'elenco e' in questo file, una volta.
+     * The webmail's "Spam" / "Not spam" button (Roundcube's markasjunk plugin): it moves the message to the Junk or
+     * to the INBOX, and Rspamd learns from that move (SpamLearning). Without a learning driver the plugin just moves
+     * (its config.inc.php.dist). Same rule as the password plugin: only if the list is in this file, once.
      */
     static final String JUNK_PLUGIN_LINE = "if (isset($config['plugins']) && is_array($config['plugins']) && !in_array('markasjunk', $config['plugins'], true)) "
             + "{ $config['plugins'][] = 'markasjunk'; }";
 
     /**
-     * Lo svuotamento automatico della Junk e del Cestino nelle impostazioni della webmail (WebmailCleanupPlugin): il
-     * plugin del pannello, acceso come gli altri due, solo se l'elenco e' in questo file e una volta sola.
+     * The automatic emptying of the Junk and the Trash in the webmail settings (WebmailCleanupPlugin): the
+     * panel's plugin, turned on like the other two, only if the list is in this file and only once.
      */
     static final String CLEANUP_PLUGIN_LINE = "if (isset($config['plugins']) && is_array($config['plugins']) && !in_array('"
             + WebmailCleanupPlugin.NAME + "', $config['plugins'], true)) { $config['plugins'][] = '" + WebmailCleanupPlugin.NAME + "'; }";
 
-    /** L'intestazione con cui Roundcube manda la chiave della webmail (WebmailPasswordHandler la legge). */
+    /** The header with which Roundcube sends the webmail's key (WebmailPasswordHandler reads it). */
     public static final String KEY_HEADER = "X-DaemoxCP-Key";
 
     /**
-     * La configurazione con il blocco del pannello al posto delle impostazioni di prima.
-     * La chiave e' base64url (solo lettere, cifre, - e _): dentro gli apici PHP non serve altro.
+     * The configuration with the panel's block in place of the previous settings.
+     * The key is base64url (only letters, digits, - and _): inside the PHP quotes nothing else is needed.
      */
     public static String apply(String config, int port, String key) {
         if (port < 1 || port > 65535) throw new IllegalArgumentException("Invalid panel port: " + port);
         if (key == null || !KEY.matcher(key).matches()) throw new IllegalArgumentException("Invalid webmail key");
-        // Il blocco scritto da una versione di prima ha i marcatori col nome di prima del prodotto: si leggono come
-        // quelli di adesso (legacy-names.json, sezione "productComments"), cosi' si toglie anche lui.
+        // The block written by a previous version has the markers with the product's previous name: they are read
+        // like the current ones (legacy-names.json, section "productComments"), so it is removed too.
         String s = org.daemoxcp.mail.system.PanelMarker.current(config == null ? "" : config, "productComments");
         int b = s.indexOf(BEGIN);
         while (b >= 0) {
@@ -93,7 +93,7 @@ public final class WebmailPasswordConfig {
             b = s.indexOf(BEGIN);
         }
         s = OLD_LINE.matcher(s).replaceAll("");
-        // Un "?>" in fondo chiuderebbe il PHP prima del blocco
+        // A "?>" at the end would close the PHP before the block
         String trimmed = s.stripTrailing();
         if (trimmed.endsWith("?>")) s = trimmed.substring(0, trimmed.length() - 2);
         s = s.stripTrailing() + "\n\n" + block(port, key);
@@ -130,8 +130,8 @@ public final class WebmailPasswordConfig {
     }
 
     /**
-     * Riscrive config.inc.php se serve (scrittura atomica, stessi permessi e proprietario di
-     * prima, mai leggibile da tutti). Ritorna true se il file e' cambiato.
+     * Rewrites config.inc.php if needed (atomic write, same permissions and owner as
+     * before, never world-readable). Returns true if the file changed.
      */
     public static boolean ensure(Path configFile, int port, String key) throws IOException {
         String before = Files.readString(configFile, StandardCharsets.UTF_8);
@@ -150,10 +150,10 @@ public final class WebmailPasswordConfig {
                 Files.setAttribute(tmp, "posix:group", Files.readAttributes(configFile,
                         java.nio.file.attribute.PosixFileAttributes.class).group());
             } catch (IOException | UnsupportedOperationException ignored) {
-                // Senza permesso di cambiare proprietario resta quello del pannello
+                // Without permission to change the owner, the panel's one stays
             }
         } catch (UnsupportedOperationException ignored) {
-            // File system senza permessi POSIX
+            // File system without POSIX permissions
         }
         Files.writeString(tmp, after, StandardCharsets.UTF_8);
         try {
@@ -164,7 +164,7 @@ public final class WebmailPasswordConfig {
         return true;
     }
 
-    /** Dentro c'e' la chiave (e la password MySQL della webmail): niente lettura per gli altri utenti. */
+    /** The key is inside (and the webmail's MySQL password): no reading for other users. */
     private static void restrict(Path f) {
         try {
             var perms = Files.getPosixFilePermissions(f);
@@ -173,7 +173,7 @@ public final class WebmailPasswordConfig {
             perms.remove(java.nio.file.attribute.PosixFilePermission.OTHERS_EXECUTE);
             Files.setPosixFilePermissions(f, perms);
         } catch (IOException | UnsupportedOperationException ignored) {
-            // Resta com'e'
+            // Stays as it is
         }
     }
 }

@@ -17,12 +17,12 @@ import java.util.TreeMap;
 import java.util.stream.Stream;
 
 /**
- * The panel's Sieve rules folder is given back to root at start (reperto 225).
+ * The panel's Sieve rules folder is given back to root at start (finding 225).
  *
- * <p>On the real server /var/mail/sieve belonged to vmail (the installation of 11/10/2026), and since reperto 221 root
- * does not write rules where somebody else can change the path: the panel would have said "not written" for every save
- * of those mailboxes. SieveRulesOwner gives the folders and the rule files back to root, and refuses to touch anything
- * when the tree holds something it should not follow or expose.
+ * <p>On the real server /var/mail/sieve belonged to vmail (the installation of 2026-10-11), and since finding 221
+ * root does not write rules where somebody else can change the path: the panel would have said "not written" for
+ * every save of those mailboxes. SieveRulesOwner gives the folders and the rule files back to root, and refuses to
+ * touch anything when the tree holds something it should not follow or expose.
  *
  * <p>In a test folder under /var/tmp, as root (the owners are real ones: vmail, nobody), with the layout copied from the
  * real server (owners, groups, modes; contents made up):

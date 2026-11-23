@@ -12,17 +12,17 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 
 /**
- * Una richiesta HEAD vista dai filtri e dal gestore come una GET (anche getRequestMethod dice GET): il
- * permesso, il rimando all'accesso, il 405 dei gestori che vogliono GET sono quelli della GET. Il gestore
- * scrive la sua risposta come sempre, e qui la lunghezza diventa l'intestazione Content-Length e il corpo
- * si scarta. Prima una HEAD su una pagina protetta dava 401 invece del rimando, e su un'API 405.
+ * A HEAD request seen by the filters and the handler as a GET (getRequestMethod says GET too): the
+ * permission, the redirect to login, the 405 of the handlers that want GET are those of the GET. The handler
+ * writes its response as always, and here the length becomes the Content-Length header and the body
+ * is discarded. Before, a HEAD on a protected page gave 401 instead of the redirect, and on an API 405.
  *
- * <p>Ogni gestore chiama sendResponseHeaders(codice, lunghezza) e poi scrive il corpo. Con una HEAD il
- * server HTTP di Java (sun.net.httpserver.ExchangeImpl) registra «being invoked with a content length
- * for a HEAD request» e poi rifiuta la scrittura («stream closed»), che il gestore registrava come
- * errore grave: misurato sul server vero il 07/11/2026 con una sola `curl -I` sulla pagina di accesso.
- * RFC 9110 9.3.2: la risposta a una HEAD ha le stesse intestazioni di quella alla GET, senza corpo; il
- * server di Java manda la Content-Length scritta fra le intestazioni quando gli si passa -1.
+ * <p>Every handler calls sendResponseHeaders(code, length) and then writes the body. With a HEAD the
+ * Java HTTP server (sun.net.httpserver.ExchangeImpl) logs "being invoked with a content length
+ * for a HEAD request" and then refuses the write ("stream closed"), which the handler logged as a
+ * severe error: measured on the production server on 2026-11-07 with a single `curl -I` on the login page.
+ * RFC 9110 9.3.2: the response to a HEAD has the same headers as the one to the GET, without a body; the
+ * Java server sends the Content-Length written among the headers when it is passed -1.
  */
 final class HeadExchange extends HttpExchange {
 
@@ -33,12 +33,12 @@ final class HeadExchange extends HttpExchange {
         this.real = real;
     }
 
-    /** La richiesta vera sotto, se questa e' una HEAD avvolta; se no quella data. */
+    /** The real request underneath, if this is a wrapped HEAD; otherwise the one given. */
     static HttpExchange unwrap(HttpExchange e) {
         return e instanceof HeadExchange h ? h.real : e;
     }
 
-    /** Il corpo non va da nessuna parte; chiuderlo chiude la risposta vera. */
+    /** The body goes nowhere; closing it closes the real response. */
     private final OutputStream discard = new OutputStream() {
         @Override public void write(int b) { }
         @Override public void write(byte[] b, int off, int len) { }
@@ -63,7 +63,7 @@ final class HeadExchange extends HttpExchange {
 
     @Override public URI getRequestURI() { return real.getRequestURI(); }
 
-    /** GET: per tutti quelli che seguono, una HEAD e' una GET (RFC 9110 9.3.2). */
+    /** GET: for everyone that follows, a HEAD is a GET (RFC 9110 9.3.2). */
     @Override public String getRequestMethod() { return "GET"; }
 
     @Override public HttpContext getHttpContext() { return real.getHttpContext(); }

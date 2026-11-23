@@ -22,42 +22,43 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * La parte web del pannello separato entra in MySQL con un utente suo, {@value #WEB_USER}, che puo' solo chiamare
- * le procedure della web. Questa e' la migrazione che lo prepara: la
- * fa la root a ogni avvio, prima di accendere la web, come root di MySQL (la password sta nel file di root).
+ * The web part of the separated panel logs into MySQL with its own user, {@value #WEB_USER}, which can only call
+ * the procedures of the web part. This is the migration that prepares
+ * it: the root part runs it at every boot, before turning on the web part, as MySQL root (the password is in
+ * root's file).
  *
  * <ol>
- *   <li>I permessi dei ruoli nel database (panel_role_permissions), copiati da quelli del Java: le procedure li
- *       leggono per decidere che cosa puo' fare la sessione che le chiama.</li>
- *   <li>{@value #ROUTINES_USER}: chi possiede le procedure, bloccato, con i soli permessi che servono loro.</li>
- *   <li>Le procedure (SqlCatalog, WEB_CREATE_), ognuna col suo testo; si ricreano solo quelle cambiate, riconosciute
- *       dal commento, che e' l'impronta del testo con cui sono state create.</li>
- *   <li>{@value #WEB_USER}, coi due nomi con cui entra (localhost e 127.0.0.1): solo EXECUTE su quelle procedure.
- *       Se avesse altro, gli si toglie tutto e gli si ridanno le procedure.</li>
- *   <li>La prova: entra, una procedura pubblica risponde, una legata alla sessione senza sessione no, e una SELECT
- *       diretta su una tabella e' rifiutata da MySQL.</li>
- *   <li>Solo se la prova torna: la sua password nel file della web, e quella dell'utente del pannello nel file di
- *       root (PanelSecrets.giveWebItsOwnUser). Da quel momento la web non puo' piu' entrare come il pannello.</li>
+ *   <li>The role permissions in the database (panel_role_permissions), copied from the Java ones: the procedures
+ *       read them to decide what the session calling them may do.</li>
+ *   <li>{@value #ROUTINES_USER}: who owns the procedures, locked, with only the permissions they need.</li>
+ *   <li>The procedures (SqlCatalog, WEB_CREATE_), each with its own text; only the changed ones are recreated,
+ *       recognised by the comment, which is the fingerprint of the text they were created with.</li>
+ *   <li>{@value #WEB_USER}, with the two names it logs in with (localhost and 127.0.0.1): only EXECUTE on those
+ *       procedures. If it had anything else, everything is revoked and the procedures are granted again.</li>
+ *   <li>The test: it logs in, a public procedure answers, one tied to the session does not answer without a
+ *       session, and a direct SELECT on a table is refused by MySQL.</li>
+ *   <li>Only if the test passes: its password in the web part's file, and the panel user's one in root's file
+ *       (PanelSecrets.giveWebItsOwnUser). From that moment the web part can no longer log in as the panel.</li>
  * </ol>
  *
- * Se qualcosa non torna, la web resta com'era (con l'utente del pannello, se lo aveva) e il registro dice perche'.
- * Un secondo avvio senza niente da cambiare non cambia niente e non scrive niente.
+ * If something does not add up, the web part stays as it was (with the panel's user, if it had it) and the log
+ * says why. A second boot with nothing to change changes nothing and writes nothing.
  */
 public final class WebDbAccess {
 
     private static final Logger LOGGER = Logger.getLogger(WebDbAccess.class.getName());
 
-    /** L'utente MySQL della parte web. */
+    /** The MySQL user of the web part. */
     public static final String WEB_USER = org.daemoxcp.mail.system.Product.ID + "_web";
-    /** Chi possiede le procedure: nessuno entra con lui. */
+    /** Who owns the procedures: nobody logs in as it. */
     static final String ROUTINES_USER = org.daemoxcp.mail.system.Product.ID + "_routines";
-    /** Come lo scrivono information_schema e mysql.procs_priv. */
+    /** As information_schema and mysql.procs_priv write it. */
     private static final String ROUTINES_DEFINER = ROUTINES_USER + "@localhost";
     private static final List<String> WEB_HOSTS = List.of("localhost", "127.0.0.1");
-    /** Il commento di ogni procedura comincia cosi', seguito dall'impronta del testo. */
+    /** The comment of every procedure starts like this, followed by the fingerprint of the text. */
     static final String COMMENT_PREFIX = org.daemoxcp.mail.system.Product.ID + " ";
 
-    /** I permessi di chi possiede le procedure: tutti idempotenti, si danno a ogni avvio. */
+    /** The permissions of the procedures' owner: all idempotent, granted at every boot. */
     private static final List<String> ROUTINES_GRANTS = List.of(
             SqlCatalog.WEB_DB_GRANT_ROUTINES_EXECUTE, SqlCatalog.WEB_DB_GRANT_ROUTINES_SESSIONS,
             SqlCatalog.WEB_DB_GRANT_ROUTINES_ADMINS, SqlCatalog.WEB_DB_GRANT_ROUTINES_ROLES,
@@ -68,16 +69,16 @@ public final class WebDbAccess {
             SqlCatalog.WEB_DB_GRANT_ROUTINES_FILTERS, SqlCatalog.WEB_DB_GRANT_ROUTINES_STATISTICS,
             SqlCatalog.WEB_DB_GRANT_ROUTINES_TRAINING, SqlCatalog.WEB_DB_GRANT_ROUTINES_WEBMAIL_TOKENS);
 
-    /** Le procedure che la web non ha piu': si tolgono dove ci sono, e con loro il suo permesso. */
+    /** The procedures the web part no longer has: they are dropped where they exist, and with them its grant. */
     private static final List<String> RETIRED = List.of(SqlCatalog.WEB_DROP_RETIRED_GET_MAILBOX_VAULT_COPY,
             SqlCatalog.WEB_DROP_RETIRED_GET_MAILBOX_PASSWORD_HASH);
 
     private WebDbAccess() {}
 
-    /** Una procedura da creare: il nome, il testo che la crea e quello che la toglie. */
+    /** A procedure to create: the name, the text that creates it and the one that drops it. */
     record Definition(String name, String create, String drop) {}
 
-    /** Tutte, prima quella che le altre chiamano. */
+    /** All of them, first the one the others call. */
     static List<Definition> definitions() {
         List<Definition> all = new ArrayList<>();
         all.add(new Definition(nameOf(SqlCatalog.WEB_DROP_SESSION_ADMIN), SqlCatalog.WEB_CREATE_SESSION_ADMIN,
@@ -86,12 +87,12 @@ public final class WebDbAccess {
         return all;
     }
 
-    /** Il nome di una procedura dal testo che la toglie: l'ultima parola. */
+    /** The name of a procedure from the text that drops it: the last word. */
     static String nameOf(String drop) {
         return drop.substring(drop.lastIndexOf(' ') + 1);
     }
 
-    /** Il commento di una procedura: l'impronta (SHA-256, i primi 16 caratteri) del testo che la crea. */
+    /** The comment of a procedure: the fingerprint (SHA-256, the first 16 characters) of the text that creates it. */
     static String commentOf(String create) {
         try {
             byte[] h = MessageDigest.getInstance("SHA-256").digest(create.getBytes(StandardCharsets.UTF_8));
@@ -102,8 +103,8 @@ public final class WebDbAccess {
     }
 
     /**
-     * All'avvio della parte root, prima di accendere la web. Null se la web puo' entrare col suo utente (e il suo
-     * file dei segreti ne ha la password); altrimenti il perche', e la web resta com'era.
+     * At the boot of the root part, before turning on the web part. Null if the web part can log in with its own
+     * user (and its secrets file has the password); otherwise the reason, and the web part stays as it was.
      */
     public static synchronized String ensure(MailDatabase db) {
         String rootPassword = PanelSecrets.text(PanelSecrets.MYSQL_ROOT_PASSWORD);
@@ -112,13 +113,13 @@ public final class WebDbAccess {
         return ensure(db, rootPassword);
     }
 
-    /** Con la password di root di MySQL data (le prove: il MySQL di prova non ne ha). */
+    /** With the given MySQL root password (the tests: the test MySQL has none). */
     static synchronized String ensure(MailDatabase db, String rootPassword) {
-        // Le colonne delle versioni successive prima dei permessi per colonna (theme, language...).
+        // The columns of later versions before the per-column permissions (theme, language...).
         db.ensureColumnUpgrades();
-        // Senza il ricollegamento automatico: con quello il driver, a una password sbagliata, riprova e poi
-        // risponde «Could not create connection» invece di «Access denied» (1045), e la prova d'accesso non lo
-        // riconoscerebbe. Le connessioni di qui durano un avvio.
+        // Without automatic reconnection: with it, the driver, on a wrong password, retries and then
+        // answers "Could not create connection" instead of "Access denied" (1045), and the login test would not
+        // recognise it. The connections here last for one boot.
         String url = db.existingDatabaseUrl().replace("&autoReconnect=true", "");
         List<String> done = new ArrayList<>();
         String webPassword = PanelSecrets.text(PanelSecrets.MYSQL_WEB_PASSWORD);
@@ -144,9 +145,9 @@ public final class WebDbAccess {
         return null;
     }
 
-    // ===================== I passi =====================
+    // ===================== The steps =====================
 
-    /** I permessi di ogni ruolo, come nel Java. Si riscrivono solo se sono cambiati. */
+    /** The permissions of each role, as in the Java code. They are rewritten only if they have changed. */
     private static void roles(Connection root, List<String> done) throws SQLException {
         try (Statement st = root.createStatement()) {
             st.execute(SqlCatalog.ROLES_CREATE_TABLE);
@@ -183,7 +184,7 @@ public final class WebDbAccess {
         done.add("role permissions (" + want.size() + ")");
     }
 
-    /** Gli utenti che ci sono, user@host, e se sono bloccati. */
+    /** The users that exist, user@host, and whether they are locked. */
     private static Map<String, Boolean> users(Connection root) throws SQLException {
         Map<String, Boolean> users = new HashMap<>();
         try (Statement st = root.createStatement(); ResultSet rs = st.executeQuery(SqlCatalog.WEB_DB_USERS)) {
@@ -211,7 +212,7 @@ public final class WebDbAccess {
         }
     }
 
-    /** Le procedure che mancano o hanno un testo diverso (il commento) si ricreano; le altre restano. */
+    /** The procedures that are missing or have a different text (the comment) are recreated; the others stay. */
     private static void routines(Connection root, List<String> done) throws SQLException {
         Map<String, String[]> have = new HashMap<>();
         try (Statement st = root.createStatement(); ResultSet rs = st.executeQuery(SqlCatalog.WEB_DB_ROUTINES)) {
@@ -256,7 +257,7 @@ public final class WebDbAccess {
             created = true;
             done.add("user " + WEB_USER);
         }
-        // Niente altro che le procedure: un permesso in piu', da chiunque venga, li toglie tutti.
+        // Nothing but the procedures: one extra permission, wherever it comes from, gets all of them revoked.
         boolean other;
         try (PreparedStatement ps = root.prepareStatement(SqlCatalog.WEB_DB_WEB_OTHER_PRIVILEGES)) {
             for (int i = 0; i < 8; i += 2) {
@@ -313,7 +314,7 @@ public final class WebDbAccess {
         }
     }
 
-    /** L'utente della web entra con questa password? (Un altro errore che non sia «accesso negato» si ferma qui.) */
+    /** Does the web user log in with this password? (Any error other than "access denied" stops here.) */
     private static boolean canLogIn(String url, String password) throws SQLException {
         try (Connection c = CatalogGuard.open(url, WEB_USER, password)) {
             return c.isValid(5);
@@ -324,8 +325,8 @@ public final class WebDbAccess {
     }
 
     /**
-     * Da utente della web: una procedura pubblica risponde; una legata alla sessione, senza sessione, no (SIGNAL
-     * 45000); una SELECT diretta su una tabella MySQL la rifiuta (1142). Null se e' tutto cosi'.
+     * As the web user: a public procedure answers; one tied to the session, without a session, does not (SIGNAL
+     * 45000); a direct SELECT on a table is refused by MySQL (1142). Null if it is all like this.
      */
     static String verify(String url, String password) {
         CatalogGuard.forgetSession();

@@ -37,28 +37,29 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * Il canale fra le due parti del pannello separato: un socket unix
- * della parte root, {@code /var/run/daemoxcp-mail/root.sock}, su cui la parte web (utente daemoxcp_mail) le
- * passa le API di chi ha fatto l'accesso, dopo i suoi filtri (Host, lingua, permesso, CSRF).
+ * The channel between the two parts of the separated panel: a unix socket
+ * of the root part, {@code /var/run/daemoxcp-mail/root.sock}, on which the web part (user daemoxcp_mail)
+ * passes it the APIs of whoever has logged in, after its own filters (Host, language, permission, CSRF).
  *
- * <p>Una richiesta per connessione. La web scrive {@code "MPR1"}, la lunghezza dell'intestazione (int),
- * l'intestazione in JSON (UTF-8), la lunghezza del corpo (long) e il corpo. La root risponde
- * {@code "MPS1"}, la lunghezza (int) e l'intestazione in JSON (stato, lunghezza del corpo con lo stesso
- * significato di {@code sendResponseHeaders}, intestazioni), poi il corpo fino alla chiusura.
+ * <p>One request per connection. The web part writes {@code "MPR1"}, the length of the header (int),
+ * the header in JSON (UTF-8), the length of the body (long) and the body. The root part answers
+ * {@code "MPS1"}, the length (int) and the header in JSON (status, body length with the same
+ * meaning as in {@code sendResponseHeaders}, headers), then the body until the connection closes.
  *
- * <p>Nell'intestazione: la rotta che la web ha scelto, metodo, percorso e query grezzi, le intestazioni
- * dell'elenco {@link #HEADERS} e nessun'altra, l'IP del client per il registro, la lingua, e chi ha
- * fatto l'accesso: l'id dell'amministratore e quello della sua sessione. <strong>Mai i cookie ne' il
- * token della sessione</strong> che manda il browser. Amministratore, permessi e conferma recente la root
- * li rilegge dal database (WebSessions.forwarded), senza fidarsi di quello che le dice la web.
+ * <p>In the header: the route the web part chose, the raw method, path and query, the headers
+ * in the {@link #HEADERS} list and no other, the client IP for the log, the language, and who has
+ * logged in: the id of the administrator and that of their session. <strong>Never the cookies nor the
+ * session token</strong> that the browser sends. Administrator, permissions and recent confirmation are
+ * reread by the root part from the database (WebSessions.forwarded), without trusting what the web part
+ * tells it.
  *
- * <p>Senza amministratore (id 0 e 0) passano solo le rotte di {@link #BEFORE_SIGN_IN}: l'accesso, che
- * decide la root, e la chiave delle sessioni, che la web chiede
- * all'avvio.
+ * <p>Without an administrator (id 0 and 0) only the routes in {@link #BEFORE_SIGN_IN} pass: the login, which
+ * the root part decides, and the session key, which the web part asks for
+ * at startup.
  *
- * <p>Il socket sta in una cartella 0750 root:daemoxcp_mail e il socket e' 0660 root:daemoxcp_mail; in piu' la
- * root accetta solo connessioni il cui processo e' dell'utente della web (SO_PEERCRED, che Java 25 su
- * FreeBSD restituisce: misurato sulla VM il 07/11/2026).
+ * <p>The socket is in a 0750 root:daemoxcp_mail folder and the socket is 0660 root:daemoxcp_mail; in addition
+ * the root part only accepts connections whose process belongs to the web part's user (SO_PEERCRED, which
+ * Java 25 on FreeBSD returns: measured on the VM on 2026-11-07).
  */
 public final class RootChannel implements Closeable {
 
@@ -66,25 +67,26 @@ public final class RootChannel implements Closeable {
 
     static final byte[] REQUEST_MAGIC = "MPR1".getBytes(StandardCharsets.US_ASCII);
     static final byte[] RESPONSE_MAGIC = "MPS1".getBytes(StandardCharsets.US_ASCII);
-    /** L'intestazione di una richiesta o di una risposta: abbondante per poche intestazioni corte. */
+    /** The header of a request or of a response: generous for a few short headers. */
     static final int MAX_HEAD = 64 * 1024;
-    /** Il corpo di una richiesta: lo stesso limite di SSLMailServer.readRequestBodyWithLimit. */
+    /** The body of a request: the same limit as SSLMailServer.readRequestBodyWithLimit. */
     static final long MAX_BODY = 10L * 1024 * 1024;
-    /** Quanto puo' metterci la web a mandare la richiesta intera, una volta collegata. */
+    /** How long the web part may take to send the whole request, once connected. */
     static final long READ_SECONDS = 60;
 
     /**
-     * Le sole intestazioni della richiesta che passano alla root, coi nomi come li scrive Headers. Il
-     * resto (Cookie, X-CSRF-Token, Authorization, le intestazioni dei proxy) non passa mai: i filtri che
-     * le usano li ha gia' fatti la web, e l'IP del client arriva in un campo suo. Host passa: la web lo ha
-     * gia' confrontato coi nomi del pannello (HostCheck), e la root lo usa per l'rpId delle passkey.
+     * The only request headers that pass to the root part, with the names as Headers writes them. The
+     * rest (Cookie, X-CSRF-Token, Authorization, the proxy headers) never passes: the filters that
+     * use them have already been applied by the web part, and the client IP arrives in a field of its own.
+     * Host passes: the web part has already compared it with the panel's names (HostCheck), and the root
+     * part uses it for the passkey rpId.
      */
     static final List<String> HEADERS = List.of("Content-type", "Accept-language", "User-agent", "Accept", "Host");
 
     /**
-     * Le rotte che la web passa senza un amministratore (id 0 e 0): l'accesso, la chiave delle sessioni, e le tre
-     * della webmail (cambio password, copia nel vault, svuotamento automatico), che la web ha gia' controllato
-     * (loopback e chiave).
+     * The routes the web part passes without an administrator (id 0 and 0): the login, the session key, and the
+     * three webmail ones (password change, copy into the vault, automatic emptying), which the web part has
+     * already checked (loopback and key).
      */
     public static final java.util.Set<String> BEFORE_SIGN_IN = java.util.Set.of("/api/login", "/op/session-key",
             org.daemoxcp.mail.integration.WebmailPasswordConfig.PATH, org.daemoxcp.mail.integration.WebmailPasswordConfig.VAULT_PATH,
@@ -92,17 +94,17 @@ public final class RootChannel implements Closeable {
 
     static final List<String> METHODS = List.of("GET", "HEAD", "POST", "PUT", "DELETE", "PATCH");
 
-    /** Una rotta come la registra SSLMailServer.context: un percorso assoluto, senza "..". */
+    /** A route as SSLMailServer.context registers it: an absolute path, without "..". */
     private static final Pattern ROUTE = Pattern.compile("/[A-Za-z0-9/_.-]{0,200}");
-    /** Il percorso grezzo della richiesta: in piu' i caratteri di una codifica %XX e la tilde. */
+    /** The raw path of the request: in addition, the characters of a %XX encoding and the tilde. */
     private static final Pattern PATH = Pattern.compile("/[A-Za-z0-9/_.~%-]{0,1000}");
-    /** La query grezza: ASCII stampabile senza spazi (gli spazi arrivano codificati). */
+    /** The raw query: printable ASCII without spaces (spaces arrive encoded). */
     private static final Pattern QUERY = Pattern.compile("[\\x21-\\x7E]{0,8192}");
-    /** Il valore di un'intestazione: ASCII stampabile, niente a capo. */
+    /** The value of a header: printable ASCII, no line breaks. */
     private static final Pattern HEADER_VALUE = Pattern.compile("[\\x20-\\x7E]{0,1024}");
     private static final Pattern LANG = Pattern.compile("[a-z]{2}");
 
-    /** Una richiesta inoltrata, gia' controllata nella forma. */
+    /** A forwarded request, whose shape has already been checked. */
     public record Request(String route, String method, String path, String query, Map<String, String> headers,
                           String clientIp, String lang, long adminId, long sessionId, byte[] body) {
         public Request {
@@ -111,15 +113,15 @@ public final class RootChannel implements Closeable {
         }
     }
 
-    /** L'intestazione di una risposta: stato, lunghezza come in sendResponseHeaders, intestazioni. */
+    /** The header of a response: status, length as in sendResponseHeaders, headers. */
     public record ResponseHead(int status, long length, List<String[]> headers) {}
 
-    /** Chi serve le richieste dalla parte root: SSLMailServer in modo ROOT_PART. */
+    /** Who serves the requests on the root part's side: SSLMailServer in ROOT_PART mode. */
     public interface Dispatcher {
         void serve(Request request, ForwardedExchange exchange) throws IOException;
     }
 
-    // ===================== Il formato =====================
+    // ===================== The format =====================
 
     static void writeRequest(OutputStream out, Request r) throws IOException {
         JSONObject h = new JSONObject()
@@ -142,8 +144,8 @@ public final class RootChannel implements Closeable {
     }
 
     /**
-     * Legge e controlla una richiesta. Un campo fuori forma la rifiuta tutta (IllegalArgumentException):
-     * non si ripulisce niente. Le intestazioni fuori elenco invece si scartano e basta.
+     * Reads and checks a request. A field with the wrong shape rejects all of it (IllegalArgumentException):
+     * nothing is cleaned up. Headers not on the list, instead, are simply discarded.
      */
     static Request readRequest(InputStream in) throws IOException {
         DataInputStream d = new DataInputStream(in);
@@ -228,7 +230,7 @@ public final class RootChannel implements Closeable {
         return new ResponseHead(status, length, headers);
     }
 
-    // ===================== La parte root: il socket =====================
+    // ===================== The root part: the socket =====================
 
     private final ServerSocketChannel channel;
     private final Path socket;
@@ -249,10 +251,11 @@ public final class RootChannel implements Closeable {
     }
 
     /**
-     * Apre il socket e comincia ad accettare. La cartella la prepara chi chiama (PanelSeparation): qui si
-     * toglie un socket rimasto da un avvio di prima e, appena creato, lo si porta a 0660 col gruppo dato.
+     * Opens the socket and starts accepting. The folder is prepared by the caller (PanelSeparation): here a
+     * socket left over from a previous start is removed and, as soon as the new one is created, it is set to 0660
+     * with the given group.
      *
-     * @param peerUser l'utente del solo processo che puo' parlare con la root; null per le prove
+     * @param peerUser the user of the only process that can talk to the root part; null for the tests
      */
     public static RootChannel open(Path socket, String group, String peerUser, Dispatcher dispatcher) throws IOException {
         if (Files.isSymbolicLink(socket)) throw new IOException(socket + " is a symbolic link");
@@ -260,8 +263,8 @@ public final class RootChannel implements Closeable {
         ServerSocketChannel ch = ServerSocketChannel.open(StandardProtocolFamily.UNIX);
         try {
             ch.bind(UnixDomainSocketAddress.of(socket));
-            // Appena creato il socket ha i permessi dell'umask (0755 misurato): solo root ci scrive, quindi
-            // fino al chmod nessun altro si collega.
+            // Right after creation the socket has the umask permissions (0755 measured): only root writes to it, so
+            // until the chmod nobody else connects.
             Files.setPosixFilePermissions(socket, PosixFilePermissions.fromString("rw-rw----"));
             if (group != null) {
                 Files.getFileAttributeView(socket, PosixFileAttributeView.class)
@@ -308,7 +311,7 @@ public final class RootChannel implements Closeable {
             InputStream in = Channels.newInputStream(c);
             OutputStream out = Channels.newOutputStream(c);
             Request request;
-            // Chi si collega e poi tace non tiene un thread per sempre: dopo READ_SECONDS si chiude.
+            // Whoever connects and then stays silent does not hold a thread forever: after READ_SECONDS it is closed.
             ScheduledFuture<?> deadline = timer.schedule(() -> { try { c.close(); } catch (IOException ignored) { } },
                     READ_SECONDS, TimeUnit.SECONDS);
             try {
@@ -350,11 +353,11 @@ public final class RootChannel implements Closeable {
         try { Files.deleteIfExists(socket); } catch (IOException ignored) { }
     }
 
-    // ===================== La parte web: un inoltro =====================
+    // ===================== The web part: a forward =====================
 
     /**
-     * Manda una richiesta alla root e ne legge l'intestazione della risposta; il corpo resta da leggere in
-     * {@code connection}. Lancia IOException se la root non risponde.
+     * Sends a request to the root part and reads the header of the response; the body remains to be read in
+     * {@code connection}. Throws IOException if the root part does not answer.
      */
     static Exchange send(Path socket, Request request) throws IOException {
         SocketChannel c = SocketChannel.open(StandardProtocolFamily.UNIX);
@@ -370,12 +373,12 @@ public final class RootChannel implements Closeable {
         }
     }
 
-    /** Una risposta della root in arrivo: l'intestazione letta, il corpo da copiare. */
+    /** An incoming response from the root part: the header already read, the body to be copied. */
     record Exchange(SocketChannel connection, ResponseHead head, InputStream body) implements Closeable {
         @Override public void close() throws IOException { connection.close(); }
     }
 
-    /** Legge il corpo di una richiesta del browser fino a MAX_BODY: null se e' piu' lungo. */
+    /** Reads the body of a browser request up to MAX_BODY: null if it is longer. */
     static byte[] readBody(InputStream in) throws IOException {
         ByteArrayOutputStream b = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];

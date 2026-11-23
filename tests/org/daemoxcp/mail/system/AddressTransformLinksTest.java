@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
- * Setting aside the old mail of an address without following vmail's links (reperto 222).
+ * Setting aside the old mail of an address without following vmail's links (finding 222).
  *
  * When an alias becomes a mailbox and the administrator chooses to set the old mail aside, AddressTransform.archive moves
  * /var/vmail/domain/name into /var/vmail/.panel-archive/domain, and the panel's rules (/var/mail/sieve/domain/name) out

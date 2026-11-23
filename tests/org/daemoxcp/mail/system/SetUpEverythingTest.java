@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * "Set up everything" on a server installed from scratch (reperto 250, found following the installation guide on a
+ * "Set up everything" on a server installed from scratch (finding 250, found following the installation guide on a
  * clean VM):
  *  1. the MTA-STS policy is written readable by nginx (folder 0755, file 0644) even when the panel runs with umask
  *     077, as the service does: before, they were born 0700 and 0600 and nginx answered 403;

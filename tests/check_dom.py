@@ -2,7 +2,7 @@
 """The DOM namespace crosses FOUR surfaces, not three:
    pages/*.js, pages/*.html, the JavaScript inside the .java files, and tests/*.js.
 The browser tests are CONSUMERS: they look for ids and selectors the application must create,
-but they create none. Not looking at them let 35 dead references through when the "ramo"
+but they create none. Not looking at them let 35 dead references through when the `ramo`
 family became "branch".
 
 It checks on the union:
@@ -13,8 +13,7 @@ It checks on the union:
 Three things to know, or the net shouts for nothing:
   - passwordField("X") generates ids X, XErr, XShow, XCopy via %1$s
   - the built ids ('ver-' + k) give a PREFIX, not an id
-  - in the tests, a selector with .count() === 0 asserts that it is NOT there
-"""
+  - in the tests, a selector with .count() === 0 asserts that it is NOT there"""
 import re, sys, glob, os
 
 # The root is the first argument that is NOT an option. Before it was argv[1] whatever it was,
@@ -71,7 +70,7 @@ for m in re.finditer(r'passwordField\(\s*"([A-Za-z0-9_-]+)"', A):
     b = m.group(1); created |= {b, b+"Err", b+"Show", b+"Copy"}
 # A function that gives its element the id it receives: function panelInfoCode(text, id, title) { ... code.id = id; }.
 # The literal passed in that place is an id created (panelInfoCommit): before, the tests looking for it were reported
-# as dead although the Home page makes it (reperto 230).
+# as dead although the Home page makes it (finding 230).
 def call_args(text, i):
     """The arguments of the call whose '(' is at i, split at the outer commas (strings skipped)."""
     depth, j, start, out = 0, i, i + 1, []
@@ -156,7 +155,7 @@ dead = {i: v for i, v in from_tests.items() if not resolved(i)}
 # A link to a card carries its id after the hash: href="/updates#branch",
 # a.href = '/updates#branch', data-bs-target="#hetznerGuide". If the id changes and the anchor
 # does not, the link opens the page and no longer leads to the card, without errors. Measured on
-# 29/10/2026: Home sent to /updates#ramo since the card has been called branch.
+# 2026-10-29: Home sent to `/updates#ramo` since the card has been called branch.
 ANCHOR = re.compile(r"""(?:href|data-bs-target)\s*=\s*\\{0,2}["'][^"'#\s]*#([A-Za-z][A-Za-z0-9_-]*)\\{0,2}["']"""
                     r"""|\.href\s*=\s*\\{0,2}['"][^'"#\s]*#([A-Za-z][A-Za-z0-9_-]*)\\{0,2}['"]""")
 anchors = sorted(set(m.group(1) or m.group(2) for m in ANCHOR.finditer(A)))

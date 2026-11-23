@@ -66,7 +66,7 @@ public class InstallSideEffectsTest {
             write(etc.resolve("comments-perms.cf"), "w = 4\n", "rw-r-----");
             // A file of ANOTHER package, which the job did not touch.
             write(other.resolve("dovecot-owned.conf"), "protocols = imap\n", "rw-r--r--");
-            // Reperto 201, as ca_root_nss lays it out: the sample is a LINK to a file of the package outside the
+            // Finding 201, as ca_root_nss lays it out: the sample is a LINK to a file of the package outside the
             // configuration (etc/ssl/cert.pem.sample -> ../../share/certs/ca-root-nss.crt), the live file a copy.
             Path ssl = Files.createDirectories(d.resolve("etc/ssl"));
             Path certs = Files.createDirectories(d.resolve("share/certs"));
@@ -96,7 +96,7 @@ public class InstallSideEffectsTest {
             InstallSideEffects.ConfigSnapshot before =
                     InstallSideEffects.configSnapshot(List.of(d.resolve("etc")), List.of(), owners);
 
-            // Reperto 42: the script adds a line to main.cf.
+            // Finding 42: the script adds a line to main.cf.
             append(etc.resolve("main.cf"), "inet_protocols = ipv4\n");
             // And four commented entries to master.cf.
             append(etc.resolve("master.cf"), "#postscreen inet  n       -       n       -       1       postscreen\n#tlsproxy  unix  -       -       n       -       0       tlsproxy\n");
@@ -378,7 +378,7 @@ public class InstallSideEffectsTest {
                 dirs.size() == 1 && dirs.get(0).toString().equals("/usr/local/www/roundcube/config"));
     }
 
-    // ===== a sample that is a link: its target is kept (reperto 201) =====
+    // ===== a sample that is a link: its target is kept (finding 201) =====
     private static void linkedOwners() throws Exception {
         Path d = Files.createTempDirectory("side-effects-links");
         try {
@@ -422,7 +422,7 @@ public class InstallSideEffectsTest {
         check("  the udp ones do not", p.keySet().stream().noneMatch(k -> k.startsWith("udp")));
         check("  tcp46 does", "java".equals(p.get("tcp46 *:2096")));
 
-        // Reperto 42 after the restart: postfix started again with another pid, without IPv6.
+        // Finding 42 after the restart: postfix started again with another pid, without IPv6.
         String after = before.replace("90660", "91234")
                 .replace("root   master     91234 14 tcp6  *:25                  *:*\n", "")
                 .replace("root   master     91234 19 tcp6  *:587                 *:*\n", "")

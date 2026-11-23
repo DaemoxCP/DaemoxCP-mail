@@ -17,21 +17,22 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * ManageSieve (la porta 4190) solo sulla macchina stessa.
+ * ManageSieve (port 4190) only on the machine itself.
  *
- * Misurato il 20/11/2026 installando da zero dal README sulla VM: Dovecot ascoltava la 4190 su tutte le interfacce
- * (`*:4190`), anche dopo il primo avvio del pannello. Da fuori la fermava pf, che non la apre, ma il README la da' per
- * «solo locale», ed e' l'unico che la usa: Roundcube, col plugin managesieve, su 127.0.0.1:4190 (RoundcubeScript). Un
- * servizio che nessuno deve raggiungere da fuori non deve nemmeno essere in ascolto fuori: se un giorno pf venisse
- * spento o riscritto a mano, la porta resterebbe chiusa lo stesso.
+ * Measured on 2026-11-20 during a clean install from the README on the VM: Dovecot listened on 4190 on all
+ * interfaces (`*:4190`), even after the first panel startup. From outside pf stopped it, since it does not open it,
+ * but the README calls it "local only", and the only one using it is Roundcube, with the managesieve plugin, on
+ * 127.0.0.1:4190 (RoundcubeScript). A service nobody must reach from outside must not even be listening outside: if
+ * one day pf were turned off or rewritten by hand, the port would stay closed anyway.
  *
- * Il file conf.d/10-managesieve-local.conf aggiunge al listener «sieve» di managesieve-login l'indirizzo 127.0.0.1;
- * la porta resta quella del file principale, perche' Dovecot unisce i blocchi con lo stesso nome. Nella 2.3 la riga si
- * chiama address, nella 2.4 listen (la 2.4 rifiuta address: «Unknown setting», visto sul listener LMTP). L'installatore
- * lo scrive da adesso (DovecotConfig); sui server installati prima lo scrive questa riparazione all'avvio, con lo stesso
- * contenuto. Prima di toccare qualcosa controlla che l'autenticazione funzioni; dopo, che Dovecot giri, che
- * l'autenticazione funzioni ancora, che IMAP sia in ascolto e che la 4190 risponda su 127.0.0.1 e solo li'. Se
- * qualcosa non torna toglie il file e riavvia: Dovecot torna com'era. Al secondo avvio non fa niente.
+ * The file conf.d/10-managesieve-local.conf adds the address 127.0.0.1 to the "sieve" listener of
+ * managesieve-login; the port stays the one in the main file, because Dovecot merges blocks with the same name. In
+ * 2.3 the line is called address, in 2.4 listen (2.4 rejects address: "Unknown setting", seen on the LMTP
+ * listener). The installer writes it from now on (DovecotConfig); on servers installed before, this boot repair
+ * writes it, with the same content. Before touching anything it checks that authentication works; afterwards, that
+ * Dovecot runs, that authentication still works, that IMAP is listening and that 4190 answers on 127.0.0.1 and only
+ * there. If something does not match it removes the file and restarts: Dovecot goes back as it was. At the second
+ * startup it does nothing.
  */
 public final class ManageSieveLocal {
 
@@ -46,7 +47,7 @@ public final class ManageSieveLocal {
 
     private ManageSieveLocal() {}
 
-    /** Il contenuto del file: lo stesso per l'installatore (DovecotConfig) e per la riparazione. */
+    /** The content of the file: the same for the installer (DovecotConfig) and for the repair. */
     public static String fileContent(boolean dovecot24) {
         return "# " + PanelMarker.WRITTEN + ".\n"
              + "# ManageSieve (4190) only on the machine itself: only the webmail uses it, on " + ADDRESS + ".\n"
@@ -57,7 +58,10 @@ public final class ManageSieveLocal {
              + "}\n";
     }
 
-    /** Vero per Dovecot 2.4 e successivi, dall'uscita di `dovecot --version` («2.4.5 (...)»); falso se non si capisce. */
+    /**
+     * True for Dovecot 2.4 and later, from the output of `dovecot --version` ("2.4.5 (...)"); false if it cannot be
+     * understood.
+     */
     static boolean is24(String version) {
         Matcher m = VERSION.matcher(version == null ? "" : version.trim());
         if (!m.find()) return false;
@@ -66,8 +70,8 @@ public final class ManageSieveLocal {
     }
 
     /**
-     * Gli indirizzi su cui Dovecot ascolta la 4190, dall'uscita di `sockstat -46l -P tcp -p 4190`: per esempio
-     * «*:4190» oppure «127.0.0.1:4190». Funzione pura, per provarla.
+     * The addresses on which Dovecot listens on 4190, from the output of `sockstat -46l -P tcp -p 4190`: for example
+     * "*:4190" or "127.0.0.1:4190". Pure function, so that it can be tested.
      */
     static java.util.List<String> listening(String sockstat) {
         java.util.List<String> out = new java.util.ArrayList<>();
@@ -80,7 +84,7 @@ public final class ManageSieveLocal {
         return out;
     }
 
-    /** Solo su 127.0.0.1: nessun altro indirizzo in ascolto sulla 4190. */
+    /** Only on 127.0.0.1: no other address listening on 4190. */
     static boolean onlyLocal(java.util.List<String> addresses) {
         return !addresses.isEmpty() && addresses.stream().allMatch((ADDRESS + ":" + PORT)::equals);
     }
@@ -122,7 +126,7 @@ public final class ManageSieveLocal {
                         + "): nothing changed");
                 return false;
             }
-            // Un listener che cambia indirizzo si riapre solo col riavvio: con il reload Dovecot tiene quello aperto.
+            // A listener that changes address is reopened only by a restart: on a reload Dovecot keeps the open one.
             restart();
             String problem = verify();
             if (problem != null) {
@@ -138,7 +142,7 @@ public final class ManageSieveLocal {
         }
     }
 
-    /** Dopo il riavvio: Dovecot gira, l'autenticazione passa, IMAP ascolta, la 4190 risponde solo su 127.0.0.1. */
+    /** After the restart: Dovecot runs, authentication passes, IMAP listens, 4190 answers only on 127.0.0.1. */
     static String verify() throws InterruptedException {
         String last = "Dovecot did not come back";
         for (int i = 0; i < 20; i++) {
@@ -156,7 +160,7 @@ public final class ManageSieveLocal {
         return last;
     }
 
-    /** La 4190 su 127.0.0.1 saluta come ManageSieve: una riga che comincia con «"IMPLEMENTATION"». */
+    /** 4190 on 127.0.0.1 greets like ManageSieve: a line that starts with ""IMPLEMENTATION"". */
     static boolean greets() {
         try (Socket s = new Socket()) {
             s.connect(new InetSocketAddress(ADDRESS, PORT), 3000);

@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The panel's Sieve rules compiled by the Pigeonhole installed now (reperto 241). After the move to Dovecot 2.4 the
+ * The panel's Sieve rules compiled by the Pigeonhole installed now (finding 241). After the move to Dovecot 2.4 the
  * binaries next to the panel's rules were still 2.3's: Dovecot compiled the rules again at every message and logged two
  * errors each time, and neither the move nor the panel's start noticed. Without sievec, against a fake compiler and a
  * folder made here:

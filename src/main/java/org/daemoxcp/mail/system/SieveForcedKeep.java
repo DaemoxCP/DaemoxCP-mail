@@ -16,21 +16,22 @@ import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 /**
- * Il keep esplicito che il pannello metteva in fondo alle sue regole Sieve, tolto dagli script gia' scritti (reperto 216).
+ * The explicit keep that the panel put at the end of its Sieve rules, removed from the scripts already
+ * written (finding 216).
  *
- * Fino al 09/11/2026 SieveGenerator chiudeva ogni script con «# Default action» e «keep;». Il messaggio restava cosi'
- * sempre nella INBOX: «Sposta» lo lasciava nella cartella E nella INBOX, «Inoltra» senza copia ne teneva una, «Elimina»
- * non eliminava niente. Adesso SieveGenerator non lo scrive piu'; qui si toglie dagli script che aveva gia' scritto, in
- * /var/mail/sieve/dominio/nome/.dovecot.sieve, e si ricompilano con sievec (la cartella e' di root: Dovecot, che consegna
- * come vmail, non potrebbe salvare il compilato da solo). sievec gira con l'utente sievec, non da root, e root installa
- * solo il compilato (SieveCompiler, reperto 218).
+ * Until 2026-11-09 SieveGenerator closed every script with "# Default action" and "keep;". So the message
+ * always stayed in the INBOX: "Move" left it in the folder AND in the INBOX, "Forward" without a copy kept
+ * one, "Delete" deleted nothing. Now SieveGenerator no longer writes it; here it is removed from the scripts it
+ * had already written, in /var/mail/sieve/domain/name/.dovecot.sieve, and they are recompiled with sievec (the
+ * folder belongs to root: Dovecot, which delivers as vmail, could not save the compiled file by itself). sievec
+ * runs as the sievec user, not as root, and root installs only the compiled file (SieveCompiler, finding 218).
  *
- * Si tocca solo uno script del pannello: un file vero (un collegamento lo fa ManageSieve, non il pannello), che comincia
- * con una delle due righe require che il pannello ha scritto (prima e dopo l'aggiunta di "date") e finisce con quella coda
- * esatta. Si toglie solo la coda: il resto resta byte per byte, e il risultato e' quello che SieveGenerator scrive adesso
- * per le stesse regole. Il file nuovo ha proprietario e permessi del vecchio; se sievec lo rifiuta, torna com'era. Al
- * secondo avvio non trova niente da fare. Root legge e scrive senza seguire collegamenti e solo dove nessun altro puo'
- * cambiare il percorso (RootOnlyPath, reperto 221).
+ * Only a panel script is touched: a real file (a link is made by ManageSieve, not by the panel), which starts
+ * with one of the two require lines the panel wrote (before and after adding "date") and ends with that exact
+ * tail. Only the tail is removed: the rest stays byte for byte, and the result is what SieveGenerator writes
+ * now for the same rules. The new file has the owner and permissions of the old one; if sievec rejects it, it
+ * goes back to how it was. At the second startup it finds nothing to do. Root reads and writes without
+ * following links and only where nobody else can change the path (RootOnlyPath, finding 221).
  */
 public final class SieveForcedKeep {
 
@@ -39,21 +40,21 @@ public final class SieveForcedKeep {
     static final Path PANEL_RULES = Path.of("/var/mail/sieve");
     static final String SCRIPT = ".dovecot.sieve";
 
-    /** La riga require che il pannello scriveva prima di aggiungere "date" (stessa coda, stesso resto). */
+    /** The require line the panel wrote before adding "date" (same tail, same rest). */
     static final String REQUIRE_WITHOUT_DATE = SieveGenerator.REQUIRE_BEFORE_MAILBOX.replace(", \"date\"];", "];");
 
     private SieveForcedKeep() {}
 
-    /** Lo script senza il keep forzato, o null se non e' uno script del pannello con quella coda. Funzione pura. */
+    /** The script without the forced keep, or null if it is not a panel script with that tail. Pure function. */
     static String fixed(String script) {
         if (script == null || !script.endsWith(SieveGenerator.OLD_FORCED_KEEP)) return null;
-        // Le righe require che il pannello ha scritto col keep forzato: senza date e con date. Quella di adesso (con
-        // mailbox, reperto 229) non ha mai avuto il keep forzato.
+        // The require lines the panel wrote with the forced keep: without date and with date. The current one
+        // (with mailbox, finding 229) never had the forced keep.
         if (!script.startsWith(SieveGenerator.REQUIRE_BEFORE_MAILBOX) && !script.startsWith(REQUIRE_WITHOUT_DATE)) return null;
         return script.substring(0, script.length() - SieveGenerator.OLD_FORCED_KEEP.length());
     }
 
-    /** Gli script del pannello: radice/dominio/nome/.dovecot.sieve, solo file veri (Files.walk non segue i collegamenti). */
+    /** The panel's scripts: root/domain/name/.dovecot.sieve, only real files (Files.walk does not follow links). */
     static List<Path> panelScripts(Path root) {
         List<Path> out = new ArrayList<>();
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) return out;
@@ -67,18 +68,19 @@ public final class SieveForcedKeep {
     }
 
     /**
-     * Il risultato di un giro: quanti script sistemati, quelli rimasti com'erano perche' sievec non li accettava, e
-     * quelli non toccati perche' una cartella da / allo script la puo' cambiare un altro (RootOnlyPath, reperto 221).
+     * The result of a pass: how many scripts were fixed, those left as they were because sievec did not accept
+     * them, and those not touched because a folder from / to the script can be changed by someone else
+     * (RootOnlyPath, finding 221).
      */
     record Outcome(int fixed, List<Path> putBack, List<String> unsafe) {}
 
-    /** Uno script del pannello e' piccolo: Pigeonhole ne rifiuta oltre 1 MB. */
+    /** A panel script is small: Pigeonhole rejects scripts over 1 MB. */
     static final int MAX_SCRIPT = 1 << 20;
 
     /**
-     * Toglie la coda da ogni script del pannello sotto root e lo ricompila con compile (vero se sievec l'ha accettato).
-     * Se compile dice di no, lo script torna com'era e si ricompila quello. Root legge e scrive senza seguire
-     * collegamenti, e solo dove nessun altro puo' cambiare il percorso.
+     * Removes the tail from every panel script under root and recompiles it with compile (true if sievec
+     * accepted it). If compile says no, the script goes back to how it was and that one is recompiled. Root reads
+     * and writes without following links, and only where nobody else can change the path.
      */
     static Outcome repair(Path root, Predicate<Path> compile) throws IOException {
         int done = 0;
@@ -107,15 +109,15 @@ public final class SieveForcedKeep {
     }
 
     /**
-     * Riscrive il file in un colpo solo (file nuovo accanto con proprietario, gruppo e permessi di prima, poi rename): chi
-     * consegna non lo vede a meta', e un collegamento al suo posto non si segue.
+     * Rewrites the file in one go (a new file beside it with the previous owner, group and permissions, then
+     * rename): whoever delivers does not see it half written, and a link in its place is not followed.
      */
     private static void replace(Path script, String content, PosixFileAttributes like) throws IOException {
         RootOnlyPath.replace(script.getParent(), SCRIPT, content.getBytes(StandardCharsets.UTF_8), like.owner(), like.group(),
                 like.permissions());
     }
 
-    /** All'avvio della parte root. */
+    /** At the start of the root part. */
     public static void ensureAtBoot() {
         try {
             SieveGenerator compiler = new SieveGenerator();

@@ -33,53 +33,53 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Le versioni del software del server di posta, lette dal server a ogni richiesta: la colonna
- * Versione di "Servizi Mail" e la tabella "Altro software" della Home.
+ * The versions of the mail server's software, read from the server on every request: the Version column
+ * of "Mail services" and the "Other software" table on the Home page.
  *
- * Ogni programma si interroga per quello che e', e il piu' vicino possibile a cio' che gira:
- *  - MySQL con SELECT VERSION() sulla connessione del pannello: risponde il server in esecuzione;
- *  - ClamAV chiedendo VERSION al demone clamd sul suo socket: il motore e le firme che usa adesso;
- *  - Java dal processo stesso del pannello, il kernel con freebsd-version -r;
- *  - gli altri dal proprio binario (postconf -h mail_version, dovecot --version, nginx -v...).
+ * Each program is asked for what it is, and as close as possible to what is running:
+ *  - MySQL with SELECT VERSION() on the panel's connection: the running server answers;
+ *  - ClamAV by asking the clamd daemon for VERSION on its socket: the engine and signatures it uses now;
+ *  - Java from the panel's own process, the kernel with freebsd-version -r;
+ *  - the others from their own binary (postconf -h mail_version, dovecot --version, nginx -v...).
  *
- * Il pacchetto si trova con "pkg which" sul binario, non per nome: il pannello installa
- * postfix-mysql e dovecot-mysql, e "pkg query %v postfix" su quei server non trova niente (lo
- * stesso inciampo e' raccontato in DovecotConfig).
+ * The package is found with "pkg which" on the binary, not by name: the panel installs
+ * postfix-mysql and dovecot-mysql, and "pkg query %v postfix" on those servers finds nothing (the
+ * same stumble is described in DovecotConfig).
  *
- * Gira ancora la versione di prima? Per MySQL, ClamAV e Java si confronta la risposta del processo
- * con il pacchetto installato; per il kernel, freebsd-version -k con -r. Per gli altri demoni si
- * confronta l'ora di avvio del processo (dal suo pidfile) con l'ora di installazione del pacchetto
- * (pkg query %t): partito prima, sta eseguendo il codice di prima. Quando una delle due ore manca
- * non si dice niente: nessuna indicazione e' meglio di una sbagliata. Per lo stesso motivo PHP-FPM
- * non si controlla cosi': il suo reload rilancia il binario nuovo nello stesso processo, che
- * conserva l'ora di avvio, e dopo un reload l'avviso sarebbe falso.
+ * Is the previous version still running? For MySQL, ClamAV and Java the answer of the process is
+ * compared with the installed package; for the kernel, freebsd-version -k with -r. For the other
+ * daemons the start time of the process (from its pidfile) is compared with the installation time of
+ * the package (pkg query %t): if it started before, it is running the previous code. When one of the
+ * two times is missing nothing is said: no indication is better than a wrong one. For the same reason
+ * PHP-FPM is not checked this way: its reload relaunches the new binary in the same process, which
+ * keeps its start time, and after a reload the warning would be false.
  */
 public final class SoftwareVersions {
 
     private SoftwareVersions() {}
 
-    /** Il sistema da interrogare: quello vero del server, o uno finto nelle prove. */
+    /** The system to query: the real one of the server, or a fake one in tests. */
     public interface SystemAccess {
-        /** Uscita (stdout e stderr) del comando anche se esce con errore; null se non parte o non finisce in tempo. */
+        /** Command output (stdout and stderr) even if it exits with an error; null if it fails to start or times out. */
         String run(String... argv);
         boolean exists(String path);
-        /** Un file piccolo, o null se manca o e' troppo grande. */
+        /** A small file, or null if it is missing or too large. */
         String read(String path);
-        /** La risposta di clamd a VERSION sul suo socket, o null se non risponde. */
+        /** The answer of clamd to VERSION on its socket, or null if it does not answer. */
         String askClamd2();
-        /** SELECT VERSION() sulla connessione del pannello, o null. */
+        /** SELECT VERSION() on the panel's connection, or null. */
         String mysqlVersion();
-        /** Quando e' partito il processo, o null se non c'e' o non si sa. */
+        /** When the process started, or null if there is no process or it is not known. */
         Instant startup(long pid);
-        /** Runtime.version() della Java che esegue il pannello. */
+        /** Runtime.version() of the Java that runs the panel. */
         String javaVersion();
-        /** java.home della Java che esegue il pannello. */
+        /** java.home of the Java that runs the panel. */
         String javaFolder();
         Instant now();
         ZoneId zone();
     }
 
-    /** Firme di ClamAV piu' vecchie di cosi' sono un avviso: la stessa soglia del controllo di ClamAV (Sicurezza). */
+    /** ClamAV signatures older than this are a warning: the same threshold as the ClamAV check (Security). */
     static final int SIGNATURE_DAYS = 7;
     static final String PKG = "/usr/local/sbin/pkg";
     static final String SOCKET_CLAMD = "/var/run/clamav/clamd.sock";
@@ -90,17 +90,17 @@ public final class SoftwareVersions {
     static final String OPENSSL_BASE = "/usr/bin/openssl";
     static final String OPENSSL_PKG = "/usr/local/bin/openssl";
 
-    /** Una versione: solo caratteri stampabili senza spazi, come le scrivono i programmi e pkg. */
+    /** A version: printable characters only, without spaces, as the programs and pkg write them. */
     private static final Pattern VALID_VERSION = Pattern.compile("[0-9A-Za-z.+_,:~-]{1,40}");
     private static final Pattern VALID_PATH = Pattern.compile("/[0-9A-Za-z._/+-]{1,200}");
     private static final String V = "(\\d[0-9A-Za-z.+_~-]*)";
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-    /** Con i secondi sempre: toString() li omette quando sono zero, e la pagina li taglia per posizione. */
+    /** Always with the seconds: toString() omits them when they are zero, and the page cuts them by position. */
     private static final DateTimeFormatter INSTANT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
 
     /**
-     * Un programma letto dal suo binario: dove sta, come gli si chiede la versione (null: solo dal
-     * pacchetto), come la si riconosce nella risposta e, per i demoni, dove scrive il suo pid.
+     * A program read from its binary: where it is, how it is asked for its version (null: only from the
+     * package), how the version is recognised in the answer and, for daemons, where it writes its pid.
      */
     record Entry(String key, String name, String role, String binary, String[] command, Pattern version, String pidfile) {}
 
@@ -124,12 +124,12 @@ public final class SoftwareVersions {
             "/usr/local/bin/fail2ban-client", null, null, "/var/run/fail2ban/fail2ban.pid");
     static final Entry UNBOUND = new Entry("unbound", "Unbound", "server.ver.role.unbound",
             "/usr/local/sbin/unbound", new String[]{"/usr/local/sbin/unbound", "-V"}, line("^Version " + V), null);
-    /** Quello del sistema base c'e' su ogni FreeBSD: si mostra solo se gira (il pidfile serve a questo). */
+    /** The base system one is present on every FreeBSD: it is shown only if it runs (that is what the pidfile is for). */
     static final Entry LOCAL_UNBOUND = new Entry("local_unbound", "server.ver.name.localUnbound", "server.ver.role.unbound",
             "/usr/sbin/local-unbound", new String[]{"/usr/sbin/local-unbound", "-V"}, line("^Version " + V), null);
     static final String PIDFILE_LOCAL_UNBOUND = "/var/run/local_unbound.pid";
 
-    /** Le versioni di tutto: "servizi" per le righe di Servizi Mail, "altro" per il resto. */
+    /** The versions of everything: "services" for the Mail services rows, "other" for the rest. */
     public static JSONObject read(SystemAccess s) {
         String javaBin = javaBin(s);
         List<String> binaries = new ArrayList<>();
@@ -138,7 +138,7 @@ public final class SoftwareVersions {
                 UNBOUND.binary(), LOCAL_UNBOUND.binary(), OPENSSL_PKG, javaBin}) {
             if (b != null && s.exists(b)) binaries.add(b);
         }
-        // Chi possiede ogni binario e quando e' stato installato: due chiamate a pkg per tutti.
+        // Who owns each binary and when it was installed: two calls to pkg for all of them.
         Map<String, String> packageOf = new HashMap<>();
         Map<String, Long> installedOn = new HashMap<>();
         if (s.exists(PKG) && !binaries.isEmpty()) {
@@ -175,19 +175,19 @@ public final class SoftwareVersions {
                 .put("readAt", s.now().atZone(s.zone()).format(INSTANT));
     }
 
-    /** Il binario della Java che esegue il pannello, se il percorso e' di quelli che ci si aspetta. */
+    /** The binary of the Java that runs the panel, if its path is one of those expected. */
     private static String javaBin(SystemAccess s) {
         String home = s.javaFolder();
         if (home == null || !VALID_PATH.matcher(home).matches() || home.contains("..")) return null;
         return home + "/bin/java";
     }
 
-    /** Le letture di una richiesta: il sistema e quello che pkg ha detto dei pacchetti. */
+    /** What one request reads: the system, and what pkg said about the packages. */
     private record Reading(SystemAccess s, Map<String, String> packageOf, Map<String, Long> installedOn) {
 
         String pkgName(String binary) { return binary == null ? "" : packageOf.getOrDefault(binary, ""); }
 
-        /** Versione dal binario, o dal pacchetto se il binario non risponde; per i demoni, l'ora di avvio. */
+        /** Version from the binary, or from the package if the binary does not answer; for daemons, the start time. */
         JSONObject fromBinary(Entry v) {
             JSONObject r = entry(v.key(), v.name(), v.role());
             if (!s.exists(v.binary())) return r;
@@ -201,7 +201,7 @@ public final class SoftwareVersions {
             return r;
         }
 
-        /** Il processo e' partito prima che il suo pacchetto fosse installato: sta eseguendo la versione di prima. */
+        /** The process started before its package was installed: it is running the previous version. */
         void startupAndInstall(JSONObject r, String pidfile, String packageName, String who) {
             Long pid = pid(s.read(pidfile));
             Instant startup = pid == null ? null : s.startup(pid);
@@ -217,7 +217,7 @@ public final class SoftwareVersions {
             return pid != null && s.startup(pid) != null;
         }
 
-        /** Il processo risponde con una versione diversa da quella del pacchetto: va riavviato. */
+        /** The process answers with a version different from the package's: it must be restarted. */
         void compare(JSONObject r, String running, String installed, String who, String remedy) {
             String a = numbers(running), b = numbers(installed);
             if (a.isEmpty() || b.isEmpty() || a.equals(b)) return;
@@ -308,10 +308,10 @@ public final class SoftwareVersions {
             String running = validate(before(s.run(FREEBSD_VERSION, "-r")));
             String installed = validate(before(s.run(FREEBSD_VERSION, "-k")));
             r.put("installed", true).put("version", userland).put("source", "freebsd-version -u");
-            // Kernel e userland possono avere patch diverse per buone ragioni (una correzione che
-            // tocca solo l'una o l'altro): si dice, ma non e' un problema.
+            // Kernel and userland can have different patch levels for good reasons (a fix that
+            // touches only one or the other): it is reported, but it is not a problem.
             if (running != null && !running.equals(userland)) r.put("detail", I18n.tr("server.ver.kernelRunning", java.util.Map.of("v", String.valueOf(running))));
-            // L'Handbook: kernel installato diverso da quello in esecuzione vuol dire riavvio mancante.
+            // The Handbook: an installed kernel different from the running one means a reboot is missing.
             if (installed != null && running != null && !installed.equals(running)) {
                 r.put("restart", true).put("installedVersion", installed).put("restartNote", I18n.tr("server.ver.kernelReboot", java.util.Map.of("inst", String.valueOf(installed), "run", String.valueOf(running))));
             }
@@ -333,7 +333,7 @@ public final class SoftwareVersions {
                     try {
                         LocalDate d = LocalDate.parse(m.group(2), DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH));
                         r.put("detail", I18n.tr("server.ver.released", java.util.Map.of("date", String.valueOf(d.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))))));
-                    } catch (Exception ignored) { /* la data e' un di piu' */ }
+                    } catch (Exception ignored) { /* the date is an extra */ }
                 }
             } else if (!pkg.isEmpty()) {
                 r.put("version", upstream(pkg)).put("source", "pkg which " + binary);
@@ -348,7 +348,7 @@ public final class SoftwareVersions {
         return new JSONObject().put("key", key).put("name", I18n.tr(name)).put("role", I18n.tr(role)).put("installed", false);
     }
 
-    /** Il primo gruppo del modello nell'uscita, se e' una versione; altrimenti null. */
+    /** The first group of the pattern in the output, if it is a version; otherwise null. */
     static String extract(Pattern template, String output) {
         if (output == null) return null;
         Matcher m = template.matcher(output);
@@ -370,7 +370,7 @@ public final class SoftwareVersions {
 
     /**
      * "pkg which": "/usr/local/sbin/postconf was installed by package postfix-mysql-3.10.4,1".
-     * I file che nessun pacchetto possiede ("was not found in the database") non compaiono.
+     * Files that no package owns ("was not found in the database") do not appear.
      */
     static Map<String, String> owners(String output) {
         Map<String, String> m = new HashMap<>();
@@ -385,7 +385,7 @@ public final class SoftwareVersions {
         return m;
     }
 
-    /** "pkg query '%n %t'": nome del pacchetto e ora di installazione (secondi dal 1970). */
+    /** "pkg query '%n %t'": package name and installation time (seconds since 1970). */
     static Map<String, Long> installs(String output) {
         Map<String, Long> m = new HashMap<>();
         if (output == null) return m;
@@ -394,14 +394,14 @@ public final class SoftwareVersions {
         return m;
     }
 
-    /** Il nome di un pacchetto da "nome-versione": la versione e' dopo l'ultimo trattino. */
+    /** The name of a package from "name-version": the version is after the last hyphen. */
     static String name(String versionName) {
         int t = versionName.lastIndexOf('-');
         return t > 0 ? versionName.substring(0, t) : versionName;
     }
 
     /**
-     * La versione del programma da quella del pacchetto, senza la revisione del port e l'epoca:
+     * The version of the program from that of the package, without the port revision and the epoch:
      * "postfix-mysql-3.10.4,1" -> "3.10.4", "dovecot-mysql-2.3.21.1_8" -> "2.3.21.1".
      */
     static String upstream(String versionName) {
@@ -410,14 +410,14 @@ public final class SoftwareVersions {
         return v.replaceFirst(",\\d+$", "").replaceFirst("_\\d+$", "");
     }
 
-    /** La parte numerica iniziale, per confrontare: "8.0.43-debug" -> "8.0.43", "25.0.1+8-LTS" -> "25.0.1". */
+    /** The leading numeric part, for comparing: "8.0.43-debug" -> "8.0.43", "25.0.1+8-LTS" -> "25.0.1". */
     static String numbers(String v) {
         if (v == null) return "";
         Matcher m = Pattern.compile("^\\d+(?:\\.\\d+)*").matcher(v.strip());
         return m.find() ? m.group() : "";
     }
 
-    /** Il pid scritto in un pidfile (Postfix lo allinea a destra con degli spazi). */
+    /** The pid written in a pidfile (Postfix right-aligns it with spaces). */
     static Long pid(String content) {
         if (content == null) return null;
         String t = content.strip();
@@ -426,12 +426,12 @@ public final class SoftwareVersions {
         return p > 1 ? p : null;
     }
 
-    /** La risposta di clamd: motore, numero delle firme e loro data (null se non ci sono). */
+    /** The answer of clamd: engine, number of signatures and their date (null if they are missing). */
     record Clamd(String engine, String signatures, Instant del) {}
 
     /**
-     * "ClamAV 1.4.3/27780/Thu Oct  2 08:24:28 2026": la data e' quella di ctime(), nell'ora locale
-     * del server, cioe' la stessa zona della JVM che la legge qui.
+     * "ClamAV 1.4.3/27780/Thu Oct  2 08:24:28 2026": the date is the one from ctime(), in the local time
+     * of the server, that is the same zone as the JVM that reads it here.
      */
     static Clamd clamd(String answer, ZoneId zone) {
         if (answer == null) return null;
@@ -445,14 +445,14 @@ public final class SoftwareVersions {
             try {
                 del = LocalDateTime.parse(m.group(3).replaceAll(" +", " "),
                         DateTimeFormatter.ofPattern("EEE MMM d HH:mm:ss yyyy", Locale.ENGLISH)).atZone(zone).toInstant();
-            } catch (Exception ignored) { /* senza data si mostra solo il numero */ }
+            } catch (Exception ignored) { /* without a date only the number is shown */ }
         }
         return new Clamd(engine, m.group(2), del);
     }
 
-    // ===== Il sistema vero =====
+    // ===== The real system =====
 
-    /** Il server: comandi con Shell (argomenti separati, niente shell), file, socket di clamd. */
+    /** The server: commands with Shell (separate arguments, no shell), files, the socket of clamd. */
     public static SystemAccess real(Supplier<String> mysqlVersion) {
         return new SystemAccess() {
             public String run(String... argv) {
@@ -486,9 +486,9 @@ public final class SoftwareVersions {
     }
 
     /**
-     * Chiede VERSION a clamd ("z": comando e risposta terminati da un byte zero). Al massimo tre
-     * secondi: una lettura bloccata su un clamd che non risponde fermerebbe la richiesta per
-     * sempre, e chiudere il socket (in uscita dal try) e' cio' che la sblocca.
+     * Asks clamd for VERSION ("z": command and answer terminated by a zero byte). At most three
+     * seconds: a read blocked on a clamd that does not answer would stop the request forever, and
+     * closing the socket (on leaving the try) is what unblocks it.
      */
     static String askClamd(Path socket) {
         if (!Files.exists(socket)) return null;

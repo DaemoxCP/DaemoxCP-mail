@@ -16,42 +16,43 @@ import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 /**
- * La cartella delle regole Sieve del pannello di nuovo di root (reperto 225).
+ * The folder of the panel's Sieve rules owned by root again (finding 225).
  *
- * <p>Sul server vero (10/11/2026) /var/mail/sieve era di vmail:vmail 755, e cosi' la cartella del dominio, global e due
- * delle tre cartelle delle caselle; le regole del pannello in parte di vmail (755), in parte di root:vmail (644), piu' il
- * registro di Dovecot (vmail, 600). Cosi' l'aveva lasciata l'installazione dell'11/10/2026, e nessuna migrazione la
- * restituiva a root: il reperto 220 aveva corretto solo lo script che la dava a vmail. Dal reperto 221 root scrive le
- * regole solo dove nessun altro puo' cambiare il percorso (RootOnlyPath): con la cartella di vmail rifiuta, e il pannello
- * avrebbe risposto «non scritte» a ogni salvataggio di quelle caselle, e lasciato le loro regole col keep forzato
- * (SieveForcedKeep). Visto nella fotografia prima del passaggio, che si e' fermato li'.
+ * <p>On the production server (2026-11-10) /var/mail/sieve was vmail:vmail 755, and so were the domain's
+ * folder, global and two of the three mailbox folders; the panel's rules were partly owned by vmail (755),
+ * partly root:vmail (644), plus the Dovecot log (vmail, 600). The installation of 2026-10-11 had left it like
+ * that, and no migration gave it back to root: finding 220 had fixed only the script that gave it to vmail.
+ * Since finding 221 root writes the rules only where nobody else can change the path (RootOnlyPath): with the
+ * folder owned by vmail it refuses, and the panel would have answered "not written" at every save of those
+ * mailboxes, and left their rules with the forced keep (SieveForcedKeep). Seen in the snapshot taken before
+ * the switch, which stopped there.
  *
- * <p>Qui, all'avvio della parte root e prima di MailSpoolSticky (che altrimenti segnalerebbe la cartella come un
- * problema):
+ * <p>Here, at the start of the root part and before MailSpoolSticky (which would otherwise report the folder as
+ * a problem):
  * <ul>
- *   <li>si guarda tutto l'albero senza seguire collegamenti. Se c'e' un collegamento, un file con piu' nomi (un
- *       collegamento fisico: vmail poteva darne uno a un file di root dello stesso disco, per esempio /var/mail/root, e
- *       renderlo leggibile a tutti), qualcosa che non e' un file o una cartella, o qualcosa che non e' di root o di
- *       vmail, non si cambia niente: si dice cosa e perche';</li>
- *   <li>altrimenti, dall'alto in basso, le cartelle e i file delle regole (.dovecot.sieve e il suo compilato
- *       .dovecot.svbin) diventano di root: quelli che erano di vmail root:mail, cartelle 0755 e regole 0644 (Dovecot,
- *       che consegna come vmail, li legge ancora); quelli gia' di root perdono solo la scrittura per gli altri. Ogni voce
- *       si rilegge subito prima di toccarla: la cartella sopra e' gia' di root, quindi vmail non la puo' piu' scambiare.
- *       Gli altri file (il registro di Dovecot, .dovecot.sieve.log) restano come sono;</li>
- *   <li>dopo si rilegge tutto; se qualcosa non torna, ogni voce torna com'era.</li>
+ *   <li>the whole tree is examined without following links. If there is a link, a file with more than one
+ *       name (a hard link: vmail could make one to a root file on the same disk, for example /var/mail/root,
+ *       and make it readable by everyone), something that is not a file or a folder, or something that is not
+ *       owned by root or vmail, nothing is changed: it says what and why;</li>
+ *   <li>otherwise, from top to bottom, the folders and the rule files (.dovecot.sieve and its compiled
+ *       .dovecot.svbin) become root's: those that were vmail's become root:mail, folders 0755 and rules 0644
+ *       (Dovecot, which delivers as vmail, still reads them); those already root's only lose write for others.
+ *       Each entry is re-read right before touching it: the folder above is already root's, so vmail can no
+ *       longer swap it. The other files (the Dovecot log, .dovecot.sieve.log) stay as they are;</li>
+ *   <li>afterwards everything is re-read; if something does not add up, every entry goes back to how it was.</li>
  * </ul>
- * Niente si allarga: una cartella di root resta col suo modo meno la scrittura per gli altri. Al secondo avvio non c'e'
- * niente da fare. Le regole col keep forzato le sistema subito dopo SieveForcedKeep, che le ricompila.
+ * Nothing is widened: a root folder keeps its mode minus write for others. At the second startup there is
+ * nothing to do. The rules with the forced keep are fixed right after by SieveForcedKeep, which recompiles them.
  */
 public final class SieveRulesOwner {
 
     private static final Logger LOGGER = Logger.getLogger(SieveRulesOwner.class.getName());
 
-    /** La cartella delle regole: non final, le prove la spostano. */
+    /** The rules folder: not final, the tests move it. */
     static Path rules = Path.of("/var/mail/sieve");
     static final String MAIL_USER = "vmail";
     static final String GROUP = "mail";
-    /** I file del pannello in una cartella di casella: le regole e il loro compilato. */
+    /** The panel's files in a mailbox folder: the rules and their compiled file. */
     static final Set<String> PANEL_FILES = Set.of(".dovecot.sieve", ".dovecot.svbin");
     static final int MAX_ENTRIES = 100_000;
 
@@ -59,22 +60,25 @@ public final class SieveRulesOwner {
 
     private SieveRulesOwner() {}
 
-    /** Una voce dell'albero com'era prima: per sapere cosa cambiare e per rimetterla. */
+    /** An entry of the tree as it was before: to know what to change and to put it back. */
     record Entry(Path path, boolean folder, boolean panelFile, String owner, int uid, int gid, int mode) {
 
-        /** Tocca a questa voce: una cartella o un file delle regole di vmail, o scrivibile da altri. */
+        /** This entry is to be handled: a folder or a rules file owned by vmail, or writable by others. */
         boolean needsChange() {
             return (folder || panelFile) && (uid != 0 || (mode & OTHERS_WRITE) != 0);
         }
 
-        /** Il modo che deve avere: preso a vmail, quello che Dovecot legge; gia' di root, il suo senza la scrittura degli altri. */
+        /**
+         * The mode it must have: taken from vmail, the one Dovecot reads; already root's, its own without write
+         * for others.
+         */
         int wantedMode() {
             if (uid != 0) return folder ? 0755 : 0644;
             return mode & ~OTHERS_WRITE;
         }
     }
 
-    /** All'avvio della parte root. */
+    /** At the start of the root part. */
     public static void ensureAtBoot() {
         try {
             String r = ensure(rules, MAIL_USER, GROUP);
@@ -87,8 +91,8 @@ public final class SieveRulesOwner {
     }
 
     /**
-     * Null se non c'era niente da fare; "DONE: ..." se fatto; "ROLLED_BACK: ..." se tornato com'era; altrimenti perche'
-     * resta com'e' (e niente e' stato cambiato).
+     * Null if there was nothing to do; "DONE: ..." if done; "ROLLED_BACK: ..." if put back as it was; otherwise
+     * why it stays as it is (and nothing has been changed).
      */
     static synchronized String ensure(Path root, String mailUser, String groupName) throws IOException {
         if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return null;
@@ -105,7 +109,7 @@ public final class SieveRulesOwner {
         GroupPrincipal group = look.lookupPrincipalByGroupName(groupName);
         List<Entry> changed = new ArrayList<>();
         try {
-            // L'albero e' in ordine dall'alto in basso (prima la cartella, poi quello che contiene).
+            // The tree is in top-down order (first the folder, then what it contains).
             for (Entry e : todo) {
                 String again = check(e.path(), mailUser, e.folder());
                 if (again != null) throw new IOException(again);
@@ -137,8 +141,9 @@ public final class SieveRulesOwner {
     }
 
     /**
-     * L'albero dall'alto in basso, senza seguire collegamenti. Il motivo se qualcosa non va: un collegamento, un file con
-     * piu' nomi, qualcosa che non e' un file o una cartella, di un altro utente; null se si puo' procedere.
+     * The tree from top to bottom, without following links. The reason if something is wrong: a link, a file
+     * with more than one name, something that is not a file or a folder, owned by another user; null if it can
+     * proceed.
      */
     static String scan(Path root, String mailUser, List<Entry> out) throws IOException {
         String why = check(root, mailUser, true);
@@ -162,13 +167,13 @@ public final class SieveRulesOwner {
                 out.add(entry(child, folder, !folder && PANEL_FILES.contains(child.getFileName().toString())));
             }
         }
-        // Dall'alto in basso: ogni cartella prima di quello che contiene (l'elenco per cartelle lo garantisce gia' per i
-        // figli diretti; si ordina per profondita' per i livelli sotto).
+        // From top to bottom: each folder before what it contains (listing by folder already guarantees it for the
+        // direct children; sorting by depth handles the levels below).
         out.sort((x, y) -> Integer.compare(x.path().getNameCount(), y.path().getNameCount()));
         return null;
     }
 
-    /** Una voce sola, riletta senza seguire collegamenti: null se e' come ci si aspetta. */
+    /** A single entry, re-read without following links: null if it is as expected. */
     static String check(Path p, String mailUser, boolean folder) throws IOException {
         Map<String, Object> a = Files.readAttributes(p, "unix:mode,uid,owner,nlink", LinkOption.NOFOLLOW_LINKS);
         int type = (Integer) a.get("mode") & TYPE;
@@ -188,7 +193,7 @@ public final class SieveRulesOwner {
                 (Integer) a.get("uid"), (Integer) a.get("gid"), (Integer) a.get("mode") & 07777);
     }
 
-    /** La cartella che contiene quella delle regole (/var/mail): vera e di root, o non si tocca niente. */
+    /** The folder that contains the rules folder (/var/mail): real and owned by root, or nothing is touched. */
     static String parentProblem(Path parent) throws IOException {
         if (parent == null) return "no folder above the rules";
         Map<String, Object> a = Files.readAttributes(parent, "unix:mode,uid", LinkOption.NOFOLLOW_LINKS);
@@ -197,7 +202,7 @@ public final class SieveRulesOwner {
         return null;
     }
 
-    /** Ogni voce cambiata e' come deve essere: di root, col modo voluto. Il motivo se no. */
+    /** Every changed entry is as it must be: root's, with the intended mode. The reason if not. */
     static String verify(List<Entry> todo) throws IOException {
         for (Entry e : todo) {
             Map<String, Object> a = Files.readAttributes(e.path(), "unix:mode,uid", LinkOption.NOFOLLOW_LINKS);
@@ -211,9 +216,9 @@ public final class SieveRulesOwner {
     }
 
     /**
-     * Le voci cambiate com'erano, dal basso in alto. Null se tutte tornate; altrimenti quelle che non tornano. Una voce
-     * gia' com'era si salta: e' quella su cui il cambio e' fallito (per esempio un file col flag schg), che non si puo'
-     * nemmeno rimettere.
+     * The changed entries put back as they were, from bottom to top. Null if all are back; otherwise those that
+     * are not. An entry already as it was is skipped: it is the one on which the change failed (for example a
+     * file with the schg flag), which cannot even be put back.
      */
     static String putBack(List<Entry> changed) {
         List<String> failed = new ArrayList<>();

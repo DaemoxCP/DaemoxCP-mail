@@ -8,7 +8,7 @@ import java.time.Duration;
 import org.daemoxcp.mail.util.Shell;
 
 /**
- * Reperti 238 and 239 on the VM's real PHP, php-fpm, nginx and Roundcube, as root with -De2e.vm=yes, from an
+ * Findings 238 and 239 on the VM's real PHP, php-fpm, nginx and Roundcube, as root with -De2e.vm=yes, from an
  * installation of before (php.ini as the installer of before wrote it, the pool without the limit, config.inc.php with
  * a 24-character des_key and no cipher_method). The path of tests/mail-login-probe.sh is -De2e.probe.
  *  1. 238 as on the real server: php.ini taken away, php-fpm reloaded: the webmail answers with X-Powered-By (the

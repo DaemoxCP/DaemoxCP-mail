@@ -16,7 +16,7 @@ import java.util.*;
  * - DKIM Record: DomainKeys Identified Mail
  * - DMARC Record: Domain-based Message Authentication
  * - PTR Record: Reverse DNS (info only, requires ISP)
- * - Autoconfig e SRV: come i client trovano da soli server e porte
+ * - Autoconfig and SRV: how clients find servers and ports on their own
  *
  * Also verifies existing DNS configuration.
  */
@@ -45,14 +45,14 @@ public class DnsRecordsGenerator {
         // 1. MX Record
         records.records.add(generateMxRecord(domain, mailServerHostname));
 
-        // NOTA: Il record A per il mail server hostname (es. mail.example.com)
-        // viene mostrato nella HOME page con avviso di configurazione essenziale,
-        // NON qui nella lista DNS per evitare duplicazioni.
+        // NOTE: The A record for the mail server hostname (e.g. mail.example.com)
+        // is shown on the HOME page with an essential-configuration warning,
+        // NOT here in the DNS list, to avoid duplication.
 
         // 2. SPF Record
         org.daemoxcp.mail.system.IpFamily.Family family = org.daemoxcp.mail.system.IpFamily.effective();
-        // L'ip6 nell'SPF quando la posta esce in IPv6, anche solo in uscita: «mx» lo copre gia' con l'AAAA del nome della
-        // posta, l'ip6 lo dice esplicito.
+        // The ip6 in the SPF when mail goes out over IPv6, even outbound only: "mx" already covers it with the AAAA
+        // of the mail name, the ip6 states it explicitly.
         records.records.add(generateSpfRecord(domain, family.v4() ? serverIp : "", family.sends6() ? detectServerIpv6() : "", family));
 
         // 4. DKIM Record (if configured)
@@ -68,8 +68,8 @@ public class DnsRecordsGenerator {
             dkimPlaceholder.ttl = DEFAULT_TTL;
             dkimPlaceholder.dnsZone = domain;
             dkimPlaceholder.description = I18n.tr("server.dnsg.descDkimTodo");
-            // Anche il segnaposto dichiara la sua verifica: senza, sarebbe l'unico record a
-            // ripiegare sull'appaiamento per nome, cioe' proprio sul difetto appena corretto.
+            // The placeholder also declares its check: without it, it would be the only record to
+            // fall back on matching by name, i.e. on exactly the defect just fixed.
             dkimPlaceholder.checkType = "DKIM";
             dkimPlaceholder.required = true;
             dkimPlaceholder.configured = false;
@@ -80,7 +80,7 @@ public class DnsRecordsGenerator {
         // 5. DMARC Record
         records.records.add(generateDmarcRecord(domain));
 
-        // 6. I record con cui i client trovano da soli le impostazioni
+        // 6. The records with which clients find the settings on their own
         records.records.addAll(generateClientDiscoveryRecord(domain, mailServerHostname));
 
         // 7. PTR Record (informational)
@@ -149,7 +149,7 @@ public class DnsRecordsGenerator {
         DnsRecord record = new DnsRecord();
         record.type = "TXT";
         record.name = "@";
-        // Da mostrare: con IPv4 il segnaposto si vede anche se l'indirizzo non si conosce; IPv6 solo se si conosce.
+        // To show: with IPv4 the placeholder is shown even if the address is not known; IPv6 only if it is known.
         String spfValue = "v=spf1" + (family.v4() ? " ip4:" + serverIp : "")
                 + (serverIp6 != null && !serverIp6.isEmpty() ? " ip6:" + serverIp6 : "") + " mx -all";
         record.value = spfValue;
@@ -199,9 +199,9 @@ public class DnsRecordsGenerator {
         DnsRecord record = new DnsRecord();
         record.type = "TXT";
         record.name = "_dmarc";
-        // RFC 9989 §5.1.5: si parte da "none". Proporre "quarantine" come primo record
-        // significa mandare in quarantena la propria posta legittima prima di aver letto un
-        // solo rapporto — ed e' esattamente cio' che i rapporti servono a evitare.
+        // RFC 9989 Section 5.1.5: start from "none". Proposing "quarantine" as the first record
+        // means quarantining your own legitimate mail before having read a
+        // single report -- and that is exactly what the reports are there to prevent.
         String dmarcValue = "v=DMARC1; p=none; rua=mailto:dmarc@" + domain;
         record.value = dmarcValue;
         record.ttl = DEFAULT_TTL;
@@ -218,9 +218,9 @@ public class DnsRecordsGenerator {
     }
 
     /**
-     * I record che aiutano i client a configurarsi: il CNAME autoconfig (Thunderbird) e i
-     * due SRV di RFC 6186. Il CNAME "autodiscover" non c'e' piu': serviva solo a Outlook, e
-     * un metodo che si chiama ancora come cio' che non fa piu' e' un tranello per chi legge.
+     * The records that help clients configure themselves: the autoconfig CNAME (Thunderbird) and the
+     * two SRV records of RFC 6186. The "autodiscover" CNAME is gone: it only served Outlook, and
+     * a method still named after what it no longer does is a trap for whoever reads it.
      */
     private List<DnsRecord> generateClientDiscoveryRecord(String domain, String mailServer) {
         List<DnsRecord> records = new ArrayList<>();
@@ -241,7 +241,7 @@ public class DnsRecordsGenerator {
             + "<small class=\"text-muted\">" + tx("autoconfig.note") + "</small>\n";
         records.add(autoconfig);
 
-        // I due SRV di RFC 6186: questi funzionano da soli, senza alcun file da servire.
+        // The two SRV records of RFC 6186: these work on their own, without any file to serve.
         DnsRecord srvImap = new DnsRecord();
         srvImap.type = "SRV";
         srvImap.name = "_imaps._tcp";
@@ -251,7 +251,7 @@ public class DnsRecordsGenerator {
         srvImap.dnsZone = domain;
         srvImap.description = I18n.tr("server.dnsg.descSrvImap", java.util.Map.of("d", String.valueOf(domain)));
         srvImap.checkType = "SRV (_imaps)";
-        // Un SRV non e' scrivibile senza priorita', peso e porta: qui c'e' il record intero.
+        // An SRV cannot be written without priority, weight and port: here is the whole record.
         srvImap.fullValue = "0 1 993 " + mailServer;
         srvImap.required = false;
         srvImap.explanation = zone(domain)
@@ -302,21 +302,21 @@ public class DnsRecordsGenerator {
         DnsRecord record = new DnsRecord();
         record.type = "TXT";
         record.name = "_mta-sts";
-        // Il valore e' quello VERO, lo stesso che il pannello pubblica: si chiede a chi lo
-        // sa, non se ne inventa un altro qui.
+        // The value is the REAL one, the same one the panel publishes: we ask whoever
+        // knows it, we do not invent another one here.
         //
-        // Prima era "v=STSv1; id=" + System.currentTimeMillis(): un id preso dall'orologio,
-        // ricalcolato a ogni caricamento della pagina. Due difetti in una riga. Il primo: chi
-        // seguiva queste istruzioni pubblicava un id che non corrisponde alla politica servita
-        // e che non cambia mai piu', quindi i mittenti non si accorgono delle modifiche —
-        // esattamente il difetto che i record del vecchio pannello si portavano dietro. Il
-        // secondo: il valore mostrato cambiava a ogni sguardo, mentre la riga accanto diceva
-        // "configurato correttamente". Due modi di calcolare lo stesso record sono due record
-        // che un giorno divergono; qui divergevano subito.
+        // Before, it was "v=STSv1; id=" + System.currentTimeMillis(): an id taken from the clock,
+        // recomputed at every page load. Two defects in one line. The first: whoever
+        // followed these instructions published an id that does not match the policy served
+        // and never changes again, so senders do not notice the changes --
+        // exactly the defect the old panel's records carried along. The
+        // second: the value shown changed at every glance, while the line next to it said
+        // "configured correctly". Two ways of computing the same record are two records
+        // that one day diverge; here they diverged right away.
         String mtaStsValue = org.daemoxcp.mail.system.MtaSts.currentTxtRecord();
-        // currentTxtRecord() torna vuoto quando non riesce a calcolarlo: meglio niente che un
-        // valore inventato. Ma una casella "Content" vuota nelle istruzioni non aiuta nessuno,
-        // quindi si dice a parole cosa ci andra', senza suggerire di incollare una sciocchezza.
+        // currentTxtRecord() returns empty when it cannot compute it: better nothing than an
+        // invented value. But an empty "Content" box in the instructions helps nobody,
+        // so it says in words what will go there, without suggesting to paste nonsense.
         if (mtaStsValue == null || mtaStsValue.isBlank())
             mtaStsValue = "v=STSv1; id=<" + I18n.tr("server.dnsg.idByPanel") + ">";
         record.value = mtaStsValue;
@@ -332,24 +332,24 @@ public class DnsRecordsGenerator {
         return record;
     }
 
-    // ============== Le spiegazioni: la struttura qui, le frasi nei file di lingua ==============
+    // ============== The explanations: the structure here, the sentences in the language files ==============
     //
-    // Le frasi stanno in server.dnsx.*. Le etichette dei campi (Type, Name, Content, TTL, Proxy
-    // status) restano in inglese: sono quelle che si leggono nel pannello di Cloudflare. I valori
-    // (dominio, IP, hostname) entrano sempre con l'escape; nelle chiavi .html il testo ha solo
-    // strong, code e br, e lo controlla I18nTest.
+    // The sentences live in server.dnsx.*. The field labels (Type, Name, Content, TTL, Proxy
+    // status) stay in English: they are the ones you read in the Cloudflare dashboard. The values
+    // (domain, IP, hostname) always go in escaped; in the .html keys the text has only
+    // strong, code and br, and I18nTest checks it.
 
-    /** Una frase senza HTML, pronta per la pagina. Gli argomenti vanno a coppie: nome, valore. */
+    /** A sentence without HTML, ready for the page. The arguments come in pairs: name, value. */
     private static String tx(String key, String... kv) {
         return I18n.escapeHtml(I18n.tr("server.dnsx." + key, pairs(kv, true)));
     }
 
-    /** Una frase con dentro strong, code o br (chiave .html): l'escape tocca i valori, non il testo. */
+    /** A sentence with strong, code or br inside (.html key): the escape touches the values, not the text. */
     private static String th(String key, String... kv) {
         return I18n.tr("server.dnsx." + key + ".html", pairs(kv, true));
     }
 
-    /** Come th, con un solo valore che e' gia' HTML scritto qui (un collegamento). */
+    /** Like th, with a single value that is already HTML written here (a link). */
     private static String thLink(String key, String linkHtml) {
         return I18n.tr("server.dnsx." + key + ".html", java.util.Map.of("link", linkHtml));
     }
@@ -366,7 +366,7 @@ public class DnsRecordsGenerator {
 
     private static String[] row(String label, String valueHtml) { return new String[] {label, valueHtml}; }
 
-    /** Una riga col valore lungo che va a capo dove capita (la chiave DKIM). */
+    /** A row whose long value wraps wherever it happens to (the DKIM key). */
     private static String[] wideRow(String label, String valueHtml) { return new String[] {label, valueHtml, "wide"}; }
 
     private static String table(String[]... rows) {
@@ -395,7 +395,7 @@ public class DnsRecordsGenerator {
             + "<div class=\"accordion-body\">\n" + body + "</div>\n</div>\n</div>\n";
     }
 
-    /** DKIM non ancora generato: cosa fare, con i nomi di pagina e di pulsante che si vedono davvero. */
+    /** DKIM not generated yet: what to do, with the page and button names that are really shown. */
     private static String dkimPlaceholderExplanation(String domain) {
         return "<div class=\"alert alert-warning mb-2\">\n<strong>⚠️ " + tx("dkimTodo.title") + "</strong>\n</div>\n"
             + "<div class=\"alert alert-primary mb-2\">\n<strong>📍 " + tx("dkimTodo.zone", "zone", domain) + "</strong>\n</div>\n"
@@ -407,7 +407,7 @@ public class DnsRecordsGenerator {
             + "</ol>\n";
     }
 
-    /** Il PTR non si configura su Cloudflare: la guida per i provider piu' comuni. */
+    /** PTR is not configured on Cloudflare: the guide for the most common providers. */
     private static String ptrExplanation(String ip, String hostname) {
         return "<div class=\"alert alert-danger mb-3\">\n⚠️ " + th("ptr.notCf") + "<br>\n<small>" + tx("ptr.onlyHost") + "</small>\n</div>\n\n"
             + "<div class=\"alert alert-dark mb-3\">\n<strong>🎯 " + tx("ptr.what") + "</strong>\n"
@@ -495,20 +495,20 @@ public class DnsRecordsGenerator {
                 aCheck.message = I18n.tr("server.dnsg.wrongIp", java.util.Map.of("found", String.valueOf(foundIp), "expected", String.valueOf(serverIp)));
             }
         } else if (aCheck.message == null || aCheck.message.equals(I18n.tr("server.dnsg.notFound"))) {
-            // Solo se la query e' andata a buon fine e non ha trovato niente. Se invece era
-            // fallita, il messaggio preciso c'e' gia' e sovrascriverlo con "non trovato"
-            // trasforma uno strumento rotto in un record DNS mancante: due problemi con due
-            // rimedi opposti, e chi legge va a cercare nel posto sbagliato.
+            // Only if the query succeeded and found nothing. If instead it had
+            // failed, the precise message is already there, and overwriting it with "not found"
+            // turns a broken tool into a missing DNS record: two problems with two
+            // opposite remedies, and the reader goes looking in the wrong place.
             aCheck.message = I18n.tr("server.dnsg.noA", java.util.Map.of("h", String.valueOf(mailHostname)));
         }
-        // Con solo IPv6 il record A non serve: il controllo resta da vedere, ma non conta.
+        // With IPv6 only the A record is not needed: the check is still shown, but does not count.
         org.daemoxcp.mail.system.IpFamily.Family family = org.daemoxcp.mail.system.IpFamily.effective();
         result.checks.add(aCheck);
         if (!aCheck.passed && family.v4()) result.allPassed = false;
 
-        // 1-bis. AAAA, quando la posta usa l'IPv6 (anche solo in uscita: un nome solo, che ha l'AAAA e il DNS inverso;
-        // chi prova a consegnare in IPv6 riceve subito un rifiuto da pf) e il server ha un IPv6 pubblico (con solo IPv6,
-        // sempre).
+        // 1-bis. AAAA, when mail uses IPv6 (even outbound only: a single name, which has the AAAA and the reverse DNS;
+        // whoever tries to deliver over IPv6 is refused right away by pf) and the server has a public IPv6 (with IPv6
+        // only, always).
         String ip6Now = family.sends6() ? detectServerIpv6() : "";
         String serverIp6 = ip6Now;
         if (family == org.daemoxcp.mail.system.IpFamily.Family.IPV6 || !serverIp6.isEmpty()) {
@@ -534,10 +534,10 @@ public class DnsRecordsGenerator {
         DnsCheck mxCheck = verifyRecord(domain, "MX");
         mxCheck.expectedValue = "10 " + mailHostname + ".";
         if (mxCheck.passed && mxCheck.currentValue != null) {
-            // Un dominio puo' avere piu' MX: basta che UNO punti qui. Ma il confronto e'
-            // esatto sul nome di destinazione, non per contenimento: un MX verso
-            // "xmail.esempio.it" contiene "mail.esempio.it" e passava per giusto, mentre la
-            // posta sarebbe finita a un server che non e' questo.
+            // A domain can have several MX records: it is enough that ONE points here. But the comparison is
+            // exact on the target name, not by containment: an MX pointing to
+            // "xmail.esempio.it" contains "mail.esempio.it" and passed as correct, while the
+            // mail would have ended up at a server that is not this one.
             java.util.List<String> elsewhere = new java.util.ArrayList<>();
             boolean ours = false;
             for (String line : mxCheck.currentValue.split("\n")) {
@@ -564,11 +564,11 @@ public class DnsRecordsGenerator {
 
         // 3. Check SPF - verify it contains our server IP
         String expectedSpf = "v=spf1 ip4:" + serverIp + " mx -all";
-        // Si legge il TXT grezzo e si applicano le regole di RFC 7208, invece di cercare
-        // sottostringhe. Il vecchio controllo faceva contains("mx"): un SPF come
-        // "v=spf1 include:_spf.mxlogic.com -all", che NON autorizza questo server, passava
-        // perche' la parola "mx" compare dentro un nome di dominio. Un controllo che dice
-        // "tutto a posto" davanti a un SPF che non ti autorizza e' peggio di nessun controllo.
+        // The raw TXT is read and the rules of RFC 7208 are applied, instead of searching for
+        // substrings. The old check did contains("mx"): an SPF like
+        // "v=spf1 include:_spf.mxlogic.com -all", which does NOT authorize this server, passed
+        // because the word "mx" appears inside a domain name. A check that says
+        // "all good" in front of an SPF that does not authorize you is worse than no check.
         DnsCheck spfCheck = verifyRecord(domain, "TXT");
         spfCheck.recordType = "SPF";
         spfCheck.recordName = domain;
@@ -588,8 +588,8 @@ public class DnsRecordsGenerator {
                 } else if (e.viaA) {
                     spfCheck.message = I18n.tr("server.dnsg.spfOkA");
                 } else if (e.include > 0) {
-                    // Ne' promosso ne' bocciato: detto com'e'. Bocciare un SPF che delega a
-                    // terzi porterebbe a "sistemare" un record che funziona.
+                    // Neither passed nor failed: stated as it is. Failing an SPF that delegates to
+                    // third parties would lead to "fixing" a record that works.
                     spfCheck.message = e.include == 1
                             ? I18n.tr("server.dnsg.spfInclude.one")
                             : I18n.tr("server.dnsg.spfInclude.other", java.util.Map.of("n", String.valueOf(e.include)));
@@ -624,16 +624,16 @@ public class DnsRecordsGenerator {
         dkimCheck.recordType = "DKIM";
         dkimCheck.recordName = selector + "._domainkey." + domain;
         if (wait != null)
-            // substring(0, 20) senza rete di sicurezza: con una chiave corrotta piu' corta di
-            // venti caratteri sollevava un'eccezione che usciva da tutto il metodo e faceva
-            // sparire l'INTERA pagina di verifica, non solo questa riga.
+            // substring(0, 20) without a safety net: with a corrupted key shorter than
+            // twenty characters it raised an exception that escaped the whole method and made
+            // the ENTIRE verification page disappear, not just this row.
             dkimCheck.expectedValue = "v=DKIM1; k=rsa; p="
                     + wait.substring(0, Math.min(20, wait.length())) + "...";
 
         if (dkimCheck.currentValue != null) {
-            // Le chiavi da 2048 bit superano i 255 caratteri, quindi in DNS stanno in piu'
-            // stringhe che vanno unite senza spazi (RFC 7208 §3.3). Confrontare l'uscita
-            // grezza di dig significherebbe confrontare anche le virgolette in mezzo.
+            // 2048-bit keys exceed 255 characters, so in DNS they sit in several
+            // strings that must be joined without spaces (RFC 7208 Section 3.3). Comparing the raw
+            // output of dig would mean comparing the quotes in the middle too.
             java.util.List<String> txt = DnsRules.recordTxt(dkimCheck.currentValue);
             java.util.List<String> keys = DnsRules.onlyDkim(txt);
 
@@ -653,8 +653,8 @@ public class DnsRecordsGenerator {
                 } else if (wait == null) {
                     dkimCheck.message = I18n.tr("server.dnsg.dkimPublished");
                 } else if (published.equals(wait)) {
-                    // Confronto INTERO, non i primi 50 caratteri: una chiave giusta all'inizio
-                    // e corrotta in fondo passava il vecchio controllo e non firmava niente.
+                    // FULL comparison, not the first 50 characters: a key correct at the start
+                    // and corrupted at the end passed the old check and signed nothing.
                     dkimCheck.message = I18n.tr("server.dnsg.dkimOk");
                 } else {
                     dkimCheck.passed = false;
@@ -668,9 +668,9 @@ public class DnsRecordsGenerator {
         if (!dkimCheck.passed) result.allPassed = false;
 
         // 5. Check DMARC - verify policy present
-        // Il record si legge coi tag, non cercando "p=none" dentro la stringa: "p=none"
-        // compare per sottostringa anche in "sp=none", e il verdetto uscirebbe sbagliato.
-        // E p=none NON e' una "policy debole": RFC 9989 §5.1.5 dice di partire da li'.
+        // The record is read by its tags, not by searching for "p=none" inside the string: "p=none"
+        // appears as a substring in "sp=none" too, and the verdict would come out wrong.
+        // And p=none is NOT a "weak policy": RFC 9989 Section 5.1.5 says to start from there.
         DnsCheck dmarcCheck = verifyRecord("_dmarc." + domain, "TXT");
         dmarcCheck.recordType = "DMARC";
         dmarcCheck.recordName = "_dmarc." + domain;
@@ -694,19 +694,19 @@ public class DnsRecordsGenerator {
                 else
                     dmarcCheck.message = I18n.tr("server.dnsg.dmarcPresent");
 
-                // RFC 9990 §4: se il rua punta fuori dominio serve l'autorizzazione, altrimenti
-                // i rapporti non partono e nessuno se ne accorge. Qui non si indovina: si guarda.
+                // RFC 9990 Section 4: if rua points outside the domain, authorization is needed, otherwise
+                // the reports do not go out and nobody notices. Here we do not guess: we look.
                 for (String authName : e.toAuthorize) {
                     DnsCheck authorization = verifyRecord(authName, "TXT");
                     boolean granted = authorization.currentValue != null
                             && !DnsRules.onlyDmarc(DnsRules.recordTxt(authorization.currentValue)).isEmpty();
                     if (!granted) {
-                        // Si SEGNALA senza bocciare. Per sapere se l'autorizzazione serve davvero
-                        // occorre confrontare i domini ORGANIZZATIVI, che RFC 9989 §4.10 ricava con
-                        // il "tree walk": due sottodomini fratelli (a.esempio.it e b.esempio.it)
-                        // appartengono allo stesso dominio organizzativo e non richiedono nulla.
-                        // Senza quel calcolo, bocciare significherebbe dichiarare rotto un DMARC
-                        // che funziona, e spingere a "sistemare" cio' che va gia' bene.
+                        // It is FLAGGED without failing. To know whether the authorization is really needed
+                        // one must compare the ORGANIZATIONAL domains, which RFC 9989 Section 4.10 derives
+                        // with the "tree walk": two sibling subdomains (a.esempio.it and b.esempio.it)
+                        // belong to the same organizational domain and require nothing.
+                        // Without that computation, failing would mean declaring broken a DMARC
+                        // that works, and pushing people to "fix" what is already fine.
                         dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaCheck", java.util.Map.of("name", String.valueOf(authName)));
                     } else {
                         dmarcCheck.message += " " + I18n.tr("server.dnsg.ruaAuthOk", java.util.Map.of("name", String.valueOf(authName)));
@@ -740,8 +740,8 @@ public class DnsRecordsGenerator {
             autoconfigCheck.informational = true;
             autoconfigCheck.message = I18n.tr("server.dnsg.autoconfigOff", java.util.Map.of("d", String.valueOf(domain)));
         } else {
-            // NON si sovrascrive un errore preciso ("dig non raggiungibile") con "non
-            // configurato": sono due guasti diversi e mandano a cercare in posti opposti.
+            // A precise error ("dig not reachable") is NOT overwritten with "not
+            // configured": they are two different faults and send you looking in opposite places.
             autoconfigCheck.passed = false;
         }
         result.checks.add(autoconfigCheck);
@@ -749,15 +749,15 @@ public class DnsRecordsGenerator {
         // if (!autoconfigCheck.passed) result.allPassed = false;
 
         // 8. Check PTR / Reverse DNS + FCrDNS (Forward-Confirmed reverse DNS)
-        //    CRITICO per la deliverability — Gmail e Outlook RIFIUTANO o spammano
-        //    le mail provenienti da IP senza PTR o con FCrDNS rotto.
+        //    CRITICAL for deliverability -- Gmail and Outlook REJECT or mark as spam
+        //    mail coming from IPs without a PTR or with broken FCrDNS.
         DnsCheck ptrCheck = checkPtrAndFcrdns(serverIp, mailHostname);
         result.checks.add(ptrCheck);
         if (!ptrCheck.passed) result.allPassed = false;
 
-        // 8-bis. Il DNS inverso dell'IPv6, quando la posta esce anche in IPv6: Gmail («550 5.7.1 ... IPv6 sending
-        // guidelines regarding PTR records») e Microsoft (450 4.7.25) lo pretendono. Il controllo di sopra cerca un A,
-        // e per un IPv6 non poteva tornare: questo cerca un AAAA (ReverseDns).
+        // 8-bis. The IPv6 reverse DNS, when mail also goes out over IPv6: Gmail ("550 5.7.1 ... IPv6 sending
+        // guidelines regarding PTR records") and Microsoft (450 4.7.25) require it. The check above looks for an A,
+        // and for an IPv6 it could never work: this one looks for an AAAA (ReverseDns).
         if (family.sends6() && !ip6Now.isEmpty()) {
             String want = mailHostname;
             ReverseDns.Check r6 = ReverseDns.check(ip6Now, want);
@@ -796,13 +796,13 @@ public class DnsRecordsGenerator {
         checkSrv(srvSmtpCheck, mailHostname, 587, I18n.tr("server.dnsg.outgoing"));
         result.checks.add(srvSmtpCheck);
 
-        // Il punteggio conta i record indispensabili: A, MX, SPF, DKIM, DMARC.
+        // The score counts the essential records: A, MX, SPF, DKIM, DMARC.
         //
-        // Prima li contava PER POSIZIONE, "i primi cinque della lista". Funzionava, ma basta
-        // che qualcuno inserisca un controllo in mezzo o ne sposti uno perche' il punteggio
-        // cominci a misurare tutt'altro senza che niente si rompa e senza che nessuno lo
-        // noti: resterebbe un numero plausibile, e sarebbe falso. Ora ogni controllo dice
-        // di se' se conta, e la posizione non c'entra piu' nulla.
+        // Before, it counted them BY POSITION, "the first five in the list". It worked, but it only
+        // takes someone inserting a check in the middle or moving one for the score to start
+        // measuring something else entirely without anything breaking and without anyone
+        // noticing: it would remain a plausible number, and it would be false. Now each check says
+        // of itself whether it counts, and the position no longer has anything to do with it.
         for (DnsCheck c : result.checks) {
             String t = c.recordType == null ? "" : c.recordType;
             c.indispensable = t.equals("A") || t.equals("MX") || t.equals("SPF")
@@ -822,19 +822,19 @@ public class DnsRecordsGenerator {
     /**
      * Check PTR (reverse DNS) + FCrDNS (Forward-Confirmed reverse DNS).
      *
-     * Cosa verifica:
-     *  1. L'IP del server ha un record PTR pubblico?
-     *  2. Il PTR punta esattamente al mail hostname configurato?
-     *  3. FCrDNS: risolvendo il PTR ottenuto, si torna allo stesso IP?
-     *     (es. PTR di 1.2.3.4 = mail.dom.tld; A di mail.dom.tld = 1.2.3.4)
+     * What it checks:
+     *  1. Does the server's IP have a public PTR record?
+     *  2. Does the PTR point exactly to the configured mail hostname?
+     *  3. FCrDNS: resolving the PTR obtained, do we get back to the same IP?
+     *     (e.g. PTR of 1.2.3.4 = mail.dom.tld; A of mail.dom.tld = 1.2.3.4)
      *
-     * Senza questi:
-     *  - Gmail mette tutte le tue mail in spam (o le rifiuta)
-     *  - Outlook applica score di reputation molto basso
-     *  - Alcuni provider rifiutano direttamente la consegna SMTP
+     * Without these:
+     *  - Gmail puts all your mail in spam (or rejects it)
+     *  - Outlook applies a very low reputation score
+     *  - Some providers reject SMTP delivery outright
      *
-     * Per fixare il PTR: solo il provider hosting può farlo (richiede ticket o
-     * pannello cloud, NON è gestibile da DNS classico).
+     * To fix the PTR: only the hosting provider can do it (it requires a ticket or
+     * the cloud panel, it CANNOT be managed from classic DNS).
      */
     private DnsCheck checkPtrAndFcrdns(String serverIp, String mailHostname) {
         DnsCheck check = new DnsCheck();
@@ -871,9 +871,9 @@ public class DnsRecordsGenerator {
                 return check;
             }
 
-            // Prendi il primo PTR (potrebbero esserci multipli, anomalia)
+            // Take the first PTR (there could be several, an anomaly)
             String ptr = revOut.split("\n")[0].trim();
-            // Rimuovi trailing dot tipico delle risposte DNS
+            // Remove the trailing dot typical of DNS answers
             if (ptr.endsWith(".")) ptr = ptr.substring(0, ptr.length() - 1);
             check.currentValue = ptr;
 
@@ -885,7 +885,7 @@ public class DnsRecordsGenerator {
                 return check;
             }
 
-            // 3. FCrDNS — risolvi il PTR e verifica che torni allo stesso IP
+            // 3. FCrDNS -- resolve the PTR and check that it leads back to the same IP
             // TODO: migrate to Shell.run when touched
             ProcessBuilder fwdPb = new ProcessBuilder("dig", "+short", "A", ptr);
             org.daemoxcp.mail.util.Shell.applyPath(fwdPb);
@@ -925,12 +925,12 @@ public class DnsRecordsGenerator {
     }
 
     /**
-     * Controlla un record SRV per davvero: destinazione E PORTA.
+     * Checks an SRV record for real: target AND PORT.
      *
-     * Il controllo precedente guardava solo se il nome dell'host compariva da qualche parte
-     * nella riga. Due cose gli sfuggivano: un SRV che punta a "xmail.esempio.it" (che
-     * CONTIENE "mail.esempio.it") passava per giusto, e la porta non veniva guardata affatto
-     * — mentre la porta e' l'unica ragione per cui quel record esiste.
+     * The previous check only looked at whether the host name appeared somewhere
+     * in the line. Two things escaped it: an SRV pointing to "xmail.esempio.it" (which
+     * CONTAINS "mail.esempio.it") passed as correct, and the port was not looked at at all
+     * -- while the port is the only reason that record exists.
      */
     private void checkSrv(DnsCheck check, String mailHostname, int expectedPort, String purpose) {
         if (check.currentValue == null) {
@@ -962,13 +962,14 @@ public class DnsRecordsGenerator {
     }
 
     /**
-     * La riga MTA-STS della pagina DNS, da cio' che dice il DNS del record e da come risponde
-     * la politica.
+     * The MTA-STS row of the DNS page, from what DNS says about the record and from how the
+     * policy answers.
      *
-     * Il record si legge con la stessa funzione del piano MTA-STS (MtaStsSetup.readTxt).
-     * Prima qui bastava che "v=STSv1" comparisse nell'uscita di "dig +short": due record, che
-     * per i mittenti valgono zero (RFC 8461 §3.1), davano "Attivo", e un SERVFAIL dava "Non
-     * attivo". Sta da sola perche' le prove la verifichino senza DNS e senza la politica vera.
+     * The record is read with the same function as the MTA-STS plan (MtaStsSetup.readTxt).
+     * Before, it was enough here for "v=STSv1" to appear in the output of "dig +short": two records,
+     * which for senders count as zero (RFC 8461 Section 3.1), gave "Active", and a SERVFAIL gave
+     * "Not active". It stands on its own so that the tests can check it without DNS and without the
+     * real policy.
      */
     static DnsCheck mtaStsCheck(String domain, org.daemoxcp.mail.system.MtaStsSetup.TxtReading txtSts,
                                     java.util.function.Function<String, org.json.JSONObject> publicTest) {
@@ -977,10 +978,10 @@ public class DnsRecordsGenerator {
         mtaStsCheck.recordType = "MTA-STS";
         if (!txtSts.values.isEmpty()) mtaStsCheck.currentValue = String.join("  ||  ", txtSts.values);
         if (txtSts.outcome == org.daemoxcp.mail.system.MtaStsSetup.TxtOutcome.PRESENT) {
-            // Il record c'e': ora si va a CHIEDERE la politica. Guardare solo il TXT diceva
-            // "fatto" su domini che dichiarano pubblicamente una protezione e poi non la
-            // servono. E' una promessa non mantenuta, e il pannello la mostrava come esito
-            // positivo — misurare il cartello invece della cosa.
+            // The record is there: now we go and ASK for the policy. Looking only at the TXT said
+            // "done" on domains that publicly declare a protection and then do not
+            // serve it. It is a broken promise, and the panel showed it as a positive
+            // outcome -- measuring the sign instead of the thing.
             org.json.JSONObject test = publicTest.apply(domain);
             if (test.optBoolean("ok", false)) {
                 mtaStsCheck.passed = true;
@@ -993,8 +994,8 @@ public class DnsRecordsGenerator {
             mtaStsCheck.passed = false;
             mtaStsCheck.message = I18n.tr("server.dnsg.stsMany", java.util.Map.of("n", String.valueOf(txtSts.values.size()), "d", String.valueOf(domain)));
         } else if (txtSts.outcome == org.daemoxcp.mail.system.MtaStsSetup.TxtOutcome.NOT_ASKED) {
-            // NON si scrive "non attivo" su una domanda rimasta senza risposta: sono due guasti
-            // diversi e mandano a cercare in posti opposti (come per autoconfig, in verifyAllRecords).
+            // "not active" is NOT written for a question left without an answer: they are two different
+            // faults and send you looking in opposite places (as for autoconfig, in verifyAllRecords).
             mtaStsCheck.passed = false;
             mtaStsCheck.message = I18n.tr("server.dnsg.stsUnknown", java.util.Map.of("why", String.valueOf(txtSts.reason)));
         } else {
@@ -1050,12 +1051,12 @@ public class DnsRecordsGenerator {
     }
 
     /**
-     * L'IPv4 pubblico del server, o "" se non lo si conosce.
+     * The server's public IPv4, or "" if it is not known.
      *
-     * Prima, quando non lo trovava, restituiva il testo "YOUR_SERVER_IP": chi controlla "vuoto = non so" lo prendeva
-     * per un indirizzo, e "Configura tutto" poteva pubblicare "v=spf1 ip4:YOUR_SERVER_IP mx -all". E dalla scheda di
-     * rete accettava anche un 100.64.x.x (NAT del fornitore) o un 172.32.x.x scartato per sbaglio. Adesso: un
-     * indirizzo che non e' pubblico non vale, da nessuna delle due strade.
+     * Before, when it did not find it, it returned the text "YOUR_SERVER_IP": whoever checks "empty = I don't know"
+     * took it for an address, and "Configure everything" could publish "v=spf1 ip4:YOUR_SERVER_IP mx -all". And
+     * from the network interfaces it also accepted a 100.64.x.x (provider NAT), or discarded a 172.32.x.x by
+     * mistake. Now: an address that is not public does not count, from either path.
      */
     public String detectServerIp() {
         // Try multiple services for reliability
@@ -1107,9 +1108,9 @@ public class DnsRecordsGenerator {
     }
 
     /**
-     * Vero solo per un IPv4 pubblico, scritto in forma decimale con quattro parti. Fuori: 0/8, 10/8, 100.64/10 (NAT del
-     * fornitore), 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.0.2/24, 192.168/16, 198.18/15, 198.51.100/24,
-     * 203.0.113/24 (documentazione) e da 224 in su (multicast e riservati). Puro.
+     * True only for a public IPv4, written in decimal form with four parts. Excluded: 0/8, 10/8, 100.64/10 (provider
+     * NAT), 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.0.2/24, 192.168/16, 198.18/15, 198.51.100/24,
+     * 203.0.113/24 (documentation) and from 224 up (multicast and reserved). Pure.
      */
     public static boolean isPublicIpv4(String ip) {
         if (ip == null || !ip.matches("(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}"))
@@ -1129,9 +1130,9 @@ public class DnsRecordsGenerator {
     }
 
     /**
-     * L'IPv6 pubblico del server, o "" se non lo si conosce. Prima chiede a un servizio raggiungibile solo in IPv6
-     * (quindi risponde solo se il server esce davvero in IPv6), poi guarda le schede di rete. Solo indirizzi globali
-     * (2000::/3), mai quelli di documentazione, locali o link-local.
+     * The server's public IPv6, or "" if it is not known. First it asks a service reachable only over IPv6
+     * (so it answers only if the server really goes out over IPv6), then it looks at the network interfaces. Only
+     * global addresses (2000::/3), never documentation, local or link-local ones.
      */
     public String detectServerIpv6() {
         try {
@@ -1144,7 +1145,7 @@ public class DnsRecordsGenerator {
                 if (isPublicIpv6(ip)) return ip;
             }
         } catch (Exception e) {
-            // le schede di rete
+            // the network interfaces
         }
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
@@ -1166,7 +1167,7 @@ public class DnsRecordsGenerator {
         return "";
     }
 
-    /** Vero solo per un IPv6 globale: 2000::/3, tranne la documentazione (2001:db8::/32). Puro. */
+    /** True only for a global IPv6: 2000::/3, except documentation (2001:db8::/32). Pure. */
     public static boolean isPublicIpv6(String ip) {
         if (ip == null || !ip.matches("[0-9a-fA-F:]{2,39}") || !ip.contains(":")) return false;
         try {
@@ -1179,7 +1180,7 @@ public class DnsRecordsGenerator {
         }
     }
 
-    /** Vero se fra gli indirizzi di un'uscita di dig c'e' quello (confronto da indirizzo, non da testo). Puro. */
+    /** True if that address is among the addresses in a dig output (compared as an address, not as text). Pure. */
     public static boolean containsAddress(String digOutput, String ip) {
         if (digOutput == null || ip == null || ip.isEmpty()) return false;
         try {
@@ -1189,7 +1190,7 @@ public class DnsRecordsGenerator {
                 try {
                     if (InetAddress.getByName(tok).equals(want)) return true;
                 } catch (Exception ignore) {
-                    // non e' un indirizzo
+                    // not an address
                 }
             }
         } catch (Exception e) {
@@ -1199,14 +1200,14 @@ public class DnsRecordsGenerator {
     }
 
     /**
-     * Il valore SPF del server per quella famiglia: ip4 e/o ip6 con gli indirizzi che si conoscono, poi mx e -all. Null
-     * se non se ne conosce nessuno della famiglia: meglio nessun record che uno sbagliato. Puro.
+     * The server's SPF value for that family: ip4 and/or ip6 with the addresses that are known, then mx and -all.
+     * Null if none of that family is known: better no record than a wrong one. Pure.
      */
     public static String spfValue(String ip4, String ip6, org.daemoxcp.mail.system.IpFamily.Family family) {
         StringBuilder b = new StringBuilder("v=spf1");
         boolean any = false;
         if (family.v4() && isPublicIpv4(ip4)) { b.append(" ip4:").append(ip4); any = true; }
-        // ip6 quando la posta esce in IPv6, anche solo in uscita (esplicito: «mx» lo copre gia' con l'AAAA).
+        // ip6 when mail goes out over IPv6, even outbound only (explicit: "mx" already covers it with the AAAA).
         if (family.sends6() && isPublicIpv6(ip6)) { b.append(" ip6:").append(ip6); any = true; }
         return any ? b.append(" mx -all").toString() : null;
     }
@@ -1233,25 +1234,25 @@ public class DnsRecordsGenerator {
         public String copyValue;     // Value to copy (simpler version)
         public String dnsZone;       // Which DNS zone to configure this in (e.g., "domain-d.test" or "example.com")
         /**
-         * A quale verifica appartiene questa scheda: lo stesso valore di DnsCheck.recordType.
+         * Which check this card belongs to: the same value as DnsCheck.recordType.
          *
-         * Prima la pagina appaiava schede e verifiche per NOME. All'apice del dominio ci sono
-         * pero' due record diversi con lo stesso nome — MX e SPF — e il secondo sovrascriveva
-         * il primo nella mappa: la scheda MX finiva per mostrare il verdetto e il valore
-         * dell'SPF ("OK: autorizza esplicitamente 203.0.113.77" sotto "Mail Exchange").
-         * Un accoppiamento indovinato dal nome e' un accoppiamento che prima o poi sbaglia:
-         * qui viaggia esplicito.
+         * Before, the page paired cards and checks by NAME. At the domain apex, however, there
+         * are two different records with the same name -- MX and SPF -- and the second overwrote
+         * the first in the map: the MX card ended up showing the verdict and the value
+         * of the SPF ("OK: explicitly authorizes 203.0.113.77" under "Mail Exchange").
+         * A pairing guessed from the name is a pairing that sooner or later goes wrong:
+         * here it travels explicitly.
          */
         public String checkType;
         /**
-         * Il valore per intero, quando "value" da solo non basta a scrivere il record.
+         * The full value, when "value" alone is not enough to write the record.
          *
-         * Per un MX serve anche la priorita', per un SRV anche priorita', peso e porta: in
-         * "value" c'e' la sola destinazione, perche' gli altri campi vivono altrove. La
-         * pagina pero' lo mostrava sotto l'etichetta "Valore consigliato dal pannello", cioe'
-         * prometteva qualcosa da copiare nel proprio provider DNS — e chi lo avesse copiato
-         * avrebbe scritto un MX senza priorita' e un SRV senza porta. Un valore incompleto
-         * presentato come completo e' peggio di nessun valore.
+         * For an MX the priority is needed too, for an SRV also priority, weight and port: in
+         * "value" there is only the target, because the other fields live elsewhere. The
+         * page, however, showed it under the label "Value recommended by the panel", i.e. it
+         * promised something to copy into your own DNS provider -- and whoever copied it
+         * would have written an MX without priority and an SRV without port. An incomplete
+         * value presented as complete is worse than no value.
          */
         public String fullValue;
     }
@@ -1270,12 +1271,12 @@ public class DnsRecordsGenerator {
         public String message;
         public String currentValue;
         public String expectedValue;
-        /** Conta nel punteggio. Gli opzionali no: la posta funziona anche senza. */
+        /** Counts in the score. The optional ones do not: mail works without them too. */
         public boolean indispensable;
         /**
-         * Informativo: non e' un esito, e' una constatazione. Si disegna in grigio, non in
-         * rosso. Una croce rossa su una cosa che si e' deciso di non fare e' rumore, e il
-         * rumore insegna a ignorare tutte le altre righe.
+         * Informational: it is not an outcome, it is an observation. It is drawn in grey, not in
+         * red. A red cross on something one decided not to do is noise, and the
+         * noise teaches people to ignore all the other lines.
          */
         public boolean informational;
     }

@@ -13,7 +13,7 @@ import org.daemoxcp.mail.scripts.FullMailServerScript;
 import org.daemoxcp.mail.scripts.FullMailStackScript;
 
 /**
- * An installation from scratch puts in Dovecot 2.4 where the catalog offers it (reperto 215).
+ * An installation from scratch puts in Dovecot 2.4 where the catalog offers it (finding 215).
  *
  * In the latest branch 2.4 is a separate port (dovecot24-mysql); every installer put in 2.3 all the same, and the
  * server then needed the guided move. Now the choice is one shell snippet (DovecotConfig.packagesShell) used by the

@@ -28,7 +28,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 
 /**
- * The Sieve dialogs of the Mailboxes page and the routes they call speak the same language (reperto 224).
+ * The Sieve dialogs of the Mailboxes page and the routes they call speak the same language (finding 224).
  *
  * <p>Before: the Filters dialog sent conditions and actions as JSON text, which /api/sieve reads with optJSONArray (null
  * for a text), so creating a filter ended in a NullPointerException whose English message reached the page; editing
@@ -46,7 +46,8 @@ import java.util.concurrent.Executors;
  *   <li>a wrong mailbox_id in a change does not move the rewrite to another mailbox;</li>
  *   <li>conditions or actions as text, or empty, are refused with the message of the language files and change
  *       nothing; a number that is not a row gives "not found"; no exception text reaches the page;</li>
- *   <li>when the rules are not written, reperto 223 still holds: success false, saved true, server.sieve.notWritten.</li>
+ *   <li>when the rules are not written, finding 223 still holds: success false, saved true,
+ *       server.sieve.notWritten.</li>
  * </ul>
  *
  * <p>Usage (with the test MySQL of README.md):
@@ -359,7 +360,7 @@ public class SieveDialogFieldsTest {
         return m != null ? m.id : db.addMailbox(domainId, address, "A-long-test-password-42", "Test", 100);
     }
 
-    // Read through the lists, which the server had before reperto 224 too: the test runs against the jar of before.
+    // Read through the lists, which the server had before finding 224 too: the test runs against the jar of before.
     static MailDatabase.SieveFilter filter(MailDatabase db, int mailboxId, int id) {
         return db.getSieveFilters(mailboxId).stream().filter(x -> x.id == id).findFirst().orElse(null);
     }

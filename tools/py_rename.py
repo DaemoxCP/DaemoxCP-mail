@@ -1,13 +1,13 @@
-"""Rinomina nomi Python con il tokenizer, e verifica con l'albero sintattico (r26).
+"""Renames Python names with the tokenizer, and checks with the syntax tree (r26).
 
-Si cambiano i token NAME col nome nella mappa, tranne quelli dopo un punto (attributi di altri
-oggetti: re.compile resta re.compile). Dentro le f-string i nomi sono token anche loro (Python
-3.12+), quindi vengono presi; il testo delle stringhe no. Poi la verifica, che e' la parte che
-conta: l'albero del file dopo dev'essere quello di prima con i nomi passati dalla mappa, nodo per
-nodo; e nessun nome nuovo puo' esistere gia' nel file (catturerebbe l'altro in silenzio).
+The NAME tokens with the name in the map are changed, except those after a dot (attributes of
+other objects: re.compile stays re.compile). Inside f-strings the names are tokens too (Python
+3.12+), so they are taken; the text of the strings is not. Then the check, which is the part that
+matters: the tree of the file afterwards must be the one from before with the names passed through
+the map, node by node; and no new name may already exist in the file (it would silently capture
+the other one).
 
-Uso: python3 tools/py_rename.py <mappa.txt> <file.py>... [--dry]
-"""
+Usage: python3 tools/py_rename.py <map.txt> <file.py>... [--dry]"""
 import ast, io, sys, tokenize, keyword
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 dry = "--dry" in sys.argv
@@ -39,8 +39,8 @@ class Mapped(ast.NodeTransformer):
 
 for f in args[1:]:
     src = open(f, encoding="utf-8").read()
-    # i nomi che si possono catturare: variabili, argomenti, funzioni, classi, import. Non gli
-    # attributi (m.end() non e' una variabile end) ne' gli argomenti per nome di altre funzioni.
+    # the names that can be captured: variables, arguments, functions, classes, imports. Not the
+    # attributes (m.end() is not a variable end) nor the keyword arguments of other functions.
     tree = ast.parse(src)
     names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} \
           | {n.arg for n in ast.walk(tree) if isinstance(n, ast.arg)} \

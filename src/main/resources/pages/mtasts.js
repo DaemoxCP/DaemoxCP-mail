@@ -64,13 +64,13 @@
             });
             h += '</tbody></table></div>';
 
-            // Qui c'era una procedura manuale in quattro passi. Il terzo mandava a premere
-            // "Configura nginx" nella scheda della configurazione automatica: un pulsante che
-            // oggi non va premuto, perche' quella rotta la installa la scheda della 443 e
-            // toccare nginx.conf toglierebbe autoconfig.* e mta-sts.* al blocco protetto.
-            // Una sequenza scritta a parole diverge dal codice appena il codice cambia, e
-            // continua a insegnare l'ordine di ieri: il posto giusto per l'ordine e' il
-            // pulsante che lo esegue.
+            // Here there was a manual procedure in four steps. The third sent people to press
+            // "Set up nginx" in the automatic configuration card: a button that today must
+            // not be pressed, because that route is installed by the 443 card and touching
+            // nginx.conf would take autoconfig.* and mta-sts.* away from the protected block.
+            // A sequence written in words diverges from the code as soon as the code changes,
+            // and keeps teaching yesterday's order: the right place for the order is the
+            // button that runs it.
             h += '<div class="alert alert-secondary py-2 small mb-0"><i class="fas fa-list-ol me-1" aria-hidden="true"></i>'
                + '<strong>' + escHtml(t('sts.noManualOrder')) + '</strong> ' + escHtml(t('sts.noManualOrderHint')) + '</div>'
                + '<div id="stsOutcome" class="mt-2"></div>';

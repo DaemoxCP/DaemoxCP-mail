@@ -5,37 +5,37 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * I token API di Cloudflare cifrati nel database, non in chiaro.
+ * The Cloudflare API tokens encrypted in the database, not in plaintext.
  *
- * Un token di Cloudflare scrive i record DNS di tutte le zone dell'account: chi lo legge puo' dirottare la posta di
- * ogni dominio. Stava in chiaro in cloudflare_accounts.api_token, quindi in ogni copia del database (mysqldump, i
- * backup, un boot environment copiato altrove). Ora si cifra come gli altri dati che il pannello deve rileggere
- * (DataCrypto: AES-256-GCM, un nonce casuale per ogni cifratura, la chiave solo nel file dei segreti): chi ha il
- * database senza quel file non ha il token. Lo legge e lo scrive solo la parte root (RootGate inoltra a lei
- * /api/cloudflare, /api/dns, /api/autodns), che la chiave la legge.
+ * A Cloudflare token writes the DNS records of all the zones of the account: whoever reads it can hijack the mail of
+ * every domain. It was in plaintext in cloudflare_accounts.api_token, so in every copy of the database (mysqldump,
+ * the backups, a boot environment copied elsewhere). Now it is encrypted like the other data the panel has to read
+ * back (DataCrypto: AES-256-GCM, a random nonce for every encryption, the key only in the secrets file): whoever has
+ * the database without that file does not have the token. It is read and written only by the root part (RootGate
+ * forwards /api/cloudflare, /api/dns, /api/autodns to it), which reads the key.
  *
- * I token gia' scritti in chiaro li cifra ensureAtBoot, uno per riga, con l'aggiornamento condizionato al valore di
- * prima: se intanto qualcuno lo ha cambiato, quella riga resta a lui. Un valore in chiaro che arriva prima della
- * migrazione si legge ancora com'e', cosi' niente smette di funzionare a meta'.
+ * The tokens already written in plaintext are encrypted by ensureAtBoot, one per row, with the update conditioned on
+ * the previous value: if someone changed it in the meantime, that row stays theirs. A plaintext value that arrives
+ * before the migration is still read as it is, so nothing stops working halfway.
  */
 public final class CloudflareTokens {
 
     private static final Logger LOGGER = Logger.getLogger(CloudflareTokens.class.getName());
 
-    /** Come DataCrypto marca un valore cifrato. */
+    /** How DataCrypto marks an encrypted value. */
     static final String SEALED_PREFIX = "v1:";
 
     private CloudflareTokens() {}
 
-    /** Il token da scrivere nel database. */
+    /** The token to write into the database. */
     public static String seal(String token) {
         return token == null ? null : DataCrypto.encrypt(token);
     }
 
     /**
-     * Il token letto dal database: cifrato si decifra, in chiaro (scritto prima della migrazione) si usa com'e'. Un
-     * valore cifrato che non si decifra (il file dei segreti cambiato) da' "" e lo si dice nel registro: Cloudflare
-     * risponderebbe solo «token non valido», senza dire perche'.
+     * The token read from the database: if encrypted it is decrypted, if in plaintext (written before the migration)
+     * it is used as it is. An encrypted value that cannot be decrypted (the secrets file changed) gives "" and this is
+     * said in the log: Cloudflare would only answer "invalid token", without saying why.
      */
     public static String open(int accountId, String stored) {
         if (stored == null || !isSealed(stored)) return stored;
@@ -56,11 +56,11 @@ public final class CloudflareTokens {
 
     record Row(int id, String stored) {}
 
-    /** Le righe della tabella: in produzione MySQL, nelle prove una lista. */
+    /** The rows of the table: in production MySQL, in the tests a list. */
     interface Rows {
         List<Row> all() throws Exception;
 
-        /** Scrive sealed solo se la riga ha ancora il valore before; vero se l'ha scritto. */
+        /** Writes sealed only if the row still has the value before; true if it wrote it. */
         boolean replace(int id, String before, String sealed) throws Exception;
     }
 
@@ -69,7 +69,7 @@ public final class CloudflareTokens {
         for (Row r : rows.all()) {
             if (r.stored() == null || r.stored().isEmpty() || isSealed(r.stored())) continue;
             String sealed = seal(r.stored());
-            // Prima di scriverlo, la prova che si rilegge uguale: un token perso non si recupera da qui.
+            // Before writing it, the proof that it reads back the same: a lost token cannot be recovered from here.
             if (!r.stored().equals(DataCrypto.decryptOrEmpty(sealed)) || !rows.replace(r.id(), r.stored(), sealed)) {
                 left.add(r.id());
                 continue;

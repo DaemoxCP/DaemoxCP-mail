@@ -8,25 +8,28 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * La lingua della console (il menu a schermo e i comandi da riga di comando, Main). La console gira da root e non sa chi
- * c'e' davanti al terminale: con piu' amministratori la sola lingua del primo non basta (19/11/2026). Si sceglie, in
- * quest'ordine:
+ * The console language (the on-screen menu and the command-line commands, Main). The console runs as root and does
+ * not know who is in front of the terminal: with several administrators the first one's language alone is not
+ * enough (2026-11-19). It is chosen in this order:
  * <ol>
- *   <li>--lang xx, se il pannello ha quella lingua;</li>
- *   <li>la lingua del terminale (LC_ALL, poi LC_MESSAGES, poi LANG, come POSIX: it_IT.UTF-8 e' l'italiano; C, POSIX e
- *       C.UTF-8 non sono una lingua): ognuno la mette una volta nel suo profilo;</li>
- *   <li>per un comando che riguarda un amministratore (--access-code nome), la lingua che quell'amministratore ha
- *       scelto nel pannello: il codice e' per lui;</li>
- *   <li>la lingua del pannello: quella del primo amministratore attivo che ne ha scelta una;</li>
- *   <li>l'inglese.</li>
+ *   <li>--lang xx, if the panel has that language;</li>
+ *   <li>the terminal's language (LC_ALL, then LC_MESSAGES, then LANG, as in POSIX: it_IT.UTF-8 is Italian; C, POSIX
+ *       and C.UTF-8 are not a language): everyone sets it once in their own profile;</li>
+ *   <li>for a command that concerns an administrator (--access-code followed by a name), the language that
+ *       administrator chose in the panel: the code is for them;</li>
+ *   <li>the panel's language: that of the first active administrator who has chosen one;</li>
+ *   <li>English.</li>
  * </ol>
- * Funzioni pure: Main legge l'ambiente e il database e le chiama.
+ * Pure functions: Main reads the environment and the database and calls them.
  */
 public final class ConsoleLanguage {
 
     private ConsoleLanguage() {}
 
-    /** La lingua di --lang negli argomenti, o null; un valore che il pannello non ha si dice a wrong e non vale. */
+    /**
+     * The language of --lang in the arguments, or null; a value the panel does not have is reported to wrong and
+     * does not count.
+     */
     public static String fromFlag(String[] args, Collection<String> languages, Consumer<String> wrong) {
         String asked = null;
         for (int i = 0; i < args.length; i++) {
@@ -39,9 +42,9 @@ public final class ConsoleLanguage {
     }
 
     /**
-     * La lingua del terminale, o null. Come POSIX vale la prima variabile non vuota fra LC_ALL, LC_MESSAGES e LANG, e
-     * solo quella: LC_ALL=C con LANG=it_IT.UTF-8 e' la lingua C, cioe' nessuna. Della variabile conta la lingua prima
-     * di _ . @ (it_IT.UTF-8, it.UTF-8, it@euro), se il pannello la ha.
+     * The terminal's language, or null. As in POSIX, the first non-empty variable among LC_ALL, LC_MESSAGES and LANG
+     * counts, and only that one: LC_ALL=C with LANG=it_IT.UTF-8 is the C language, that is, none. What counts in the
+     * variable is the language before _ . @ (it_IT.UTF-8, it.UTF-8, it@euro), if the panel has it.
      */
     public static String fromTerminal(Map<String, String> env, Collection<String> languages) {
         for (String name : List.of("LC_ALL", "LC_MESSAGES", "LANG")) {
@@ -53,13 +56,13 @@ public final class ConsoleLanguage {
         return null;
     }
 
-    /** La lingua da usare: la prima che c'e' nell'ordine detto sopra, l'inglese se nessuna. */
+    /** The language to use: the first one present in the order described above, English if none. */
     public static String choose(String flag, String terminal, String commandAdmin, String panel) {
         for (String lang : new String[] {flag, terminal, commandAdmin, panel}) if (lang != null && !lang.isBlank()) return lang;
         return "en";
     }
 
-    /** Gli argomenti senza --lang e il suo valore: cosi' --access-code --lang en non prende «--lang» per un nome. */
+    /** The arguments without --lang and its value: this way --access-code --lang en does not take "--lang" for a name. */
     public static String[] withoutFlag(String[] args) {
         List<String> out = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {

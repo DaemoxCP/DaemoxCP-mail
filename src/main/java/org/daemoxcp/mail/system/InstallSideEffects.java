@@ -29,29 +29,29 @@ import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 /**
- * Cio' che un aggiornamento di pacchetti cambia FUORI dai file che pkg installa: la
- * configurazione viva e gli indirizzi in ascolto.
+ * What a package update changes OUTSIDE the files that pkg installs: the
+ * live configuration and the listening addresses.
  *
- * I lavori dell'updater confrontavano pacchetti, versioni, protezioni e servizi attivi.
- * Nessuna di queste cose vede uno script di installazione che riscrive un file di
- * configurazione. Misurato sulla VM FreeBSD 15.1 il 24/10/2026 (reperto 42): aggiornando
- * postfix-mysql 3.11.7_1,1 -> 3.11.7_3,1 lo script ha scritto {@code inet_protocols = ipv4}
- * in /usr/local/etc/postfix/main.cf mentre postfix ascoltava in IPv4 e IPv6. Al riavvio IPv6
- * sparisce, e per ogni controllo che c'era il lavoro e' riuscito: configurazione valida,
- * servizio attivo, pid cambiato. Un server di posta con un record AAAA smette di ricevere in
- * IPv6 e il pannello dice «in servizio».
+ * The updater's jobs compared packages, versions, locks and active services.
+ * None of these things sees an installation script that rewrites a
+ * configuration file. Measured on the FreeBSD 15.1 VM on 2026-10-24 (finding 42): upgrading
+ * postfix-mysql 3.11.7_1,1 -> 3.11.7_3,1 the script wrote {@code inet_protocols = ipv4}
+ * in /usr/local/etc/postfix/main.cf while postfix was listening on IPv4 and IPv6. At the
+ * restart IPv6 disappears, and by every check there was the job succeeded: valid
+ * configuration, active service, changed pid. A mail server with an AAAA record stops
+ * receiving over IPv6 and the panel says "in service".
  *
- * Le domande sono due, e nessuna dipende dal pacchetto:
+ * There are two questions, and neither depends on the package:
  *
- *  - quali file della configurazione sono cambiati senza essere file di un pacchetto che il
- *    lavoro ha cambiato. Su FreeBSD la configurazione viva non e' di nessun pacchetto: pkg
- *    installa main.cf.sample, main.cf e' dell'amministratore. Un file che nessun pacchetto
- *    aggiornato possiede, e che e' cambiato durante l'installazione, l'ha cambiato uno script.
- *  - quali indirizzi erano in ascolto prima e non lo sono piu' dopo.
+ *  - which configuration files changed without being files of a package that the
+ *    job changed. On FreeBSD the live configuration belongs to no package: pkg
+ *    installs main.cf.sample, main.cf belongs to the administrator. A file that no upgraded
+ *    package owns, and that changed during the installation, was changed by a script.
+ *  - which addresses were listening before and no longer are after.
  *
- * Elencare a mano i file "importanti" di ogni servizio sarebbe invecchiato al primo
- * pacchetto nuovo, ed e' lo stesso errore che questa classe deve prendere: si guarda tutta la
- * configurazione e si chiede a pkg di chi e' ogni file.
+ * Listing by hand the "important" files of each service would have gone stale at the first
+ * new package, and it is the same mistake this class has to catch: the whole
+ * configuration is looked at and pkg is asked who owns each file.
  */
 final class InstallSideEffects {
 
@@ -60,33 +60,36 @@ final class InstallSideEffects {
     private InstallSideEffects() {}
 
     /**
-     * Dove sta la configurazione viva: tutta /usr/local/etc, tutta /etc, e la configurazione
-     * del caricatore. A queste si aggiungono, una per una, le cartelle in cui un pacchetto
-     * installato tiene i suoi .sample fuori da /usr/local/etc (Roundcube, in
-     * /usr/local/www/roundcube/config): la configurazione sta dove sta il suo esempio.
+     * Where the live configuration is: all of /usr/local/etc, all of /etc, and the loader
+     * configuration. To these are added, one by one, the folders in which an installed
+     * package keeps its .sample files outside /usr/local/etc (Roundcube, in
+     * /usr/local/www/roundcube/config): the configuration lives where its example lives.
      *
-     * Di /etc prima si guardavano solo i file di rc.conf, e uno script che scrivesse in
-     * /etc/periodic.conf non si sarebbe visto. Misurato sulla VM il 24/10/2026: 574 file, 3 MB,
-     * nessuno di un pacchetto. Quello che ci cambia da solo, sempre misurato sulla VM negli
-     * ultimi due giorni, ha una regola sua e non da' allarme: gli utenti che un pacchetto crea
-     * (vedi {@link #ACCOUNT_FILES}), i file rigenerati da un altro (vedi {@link #isDerived}), e
-     * resolv.conf (vedi {@link #EXCLUDED}).
+     * Of /etc, before, only the rc.conf files were looked at, and a script that wrote to
+     * /etc/periodic.conf would not have been seen. Measured on the VM on 2026-10-24: 574 files,
+     * 3 MB, none belonging to a package. What changes there by itself, again measured on the VM
+     * over the last two days, has a rule of its own and raises no alarm: the users a package
+     * creates (see {@link #ACCOUNT_FILES}), the files regenerated from another one (see
+     * {@link #isDerived}), and resolv.conf (see {@link #EXCLUDED}).
      */
     static final List<String> CONFIG_ROOTS = List.of(
             "/usr/local/etc", "/etc", "/boot/loader.conf", "/boot/loader.conf.local", "/boot/loader.conf.d");
 
     /**
-     * Cio' che si scrive da solo, in qualunque momento, e che nessun pacchetto installa:
-     *  - la cartella del pannello: la scrive il pannello stesso (la configurazione del
-     *    firewall, i segreti);
-     *  - /etc/resolv.conf: lo riscrivono dhclient e resolvconf a ogni rinnovo dell'indirizzo.
-     *    Misurato: riscritto all'avvio della VM. Dentro un aggiornamento sarebbe un allarme
-     *    contro uno script che non c'entra, e un allarme ferma i riavvii del guidato.
-     * Un loro cambiamento durante l'aggiornamento non dice niente sugli script di installazione.
+     * What gets written by itself, at any moment, and that no package installs:
+     *  - the panel's folder: the panel itself writes it (the firewall
+     *    configuration, the secrets);
+     *  - /etc/resolv.conf: dhclient and resolvconf rewrite it at every address renewal.
+     *    Measured: rewritten at VM startup. Inside an update it would be an alarm
+     *    against a script that has nothing to do with it, and an alarm stops the guided restarts.
+     * A change of theirs during the update says nothing about the installation scripts.
      */
     static final List<String> EXCLUDED = excludedPaths();
 
-    /** La cartella dei segreti, col nome di adesso e con quelli di prima (sezione "productFiles"), e resolv.conf. */
+    /**
+     * The secrets folder, with the current name and with the previous ones (section "productFiles"), and
+     * resolv.conf.
+     */
     private static List<String> excludedPaths() {
         List<String> e = new ArrayList<>(List.of(SECRETS_DIR, "/etc/resolv.conf"));
         e.addAll(LegacyNames.oldNamesOf("productFiles", SECRETS_DIR));
@@ -96,46 +99,49 @@ final class InstallSideEffects {
     static final String SECRETS_DIR = "/usr/local/etc/daemoxcp-mail";
 
     /**
-     * Gli elenchi di utenti e gruppi. Un pacchetto che ha bisogno di un utente lo crea nel suo
-     * script di pre-installazione («===> Creating users», misurato nell'uscita di postfix): una
-     * RIGA AGGIUNTA qui e' un pacchetto che fa il suo mestiere, e si dice senza allarme. Una
-     * riga tolta o cambiata no: e' un utente esistente toccato da uno script.
+     * The lists of users and groups. A package that needs a user creates it in its
+     * pre-installation script ("===> Creating users", measured in postfix's output): a
+     * LINE ADDED here is a package doing its job, and it is reported without an alarm. A
+     * line removed or changed is not: it is an existing user touched by a script.
      */
     static final Set<String> ACCOUNT_FILES = Set.of("/etc/passwd", "/etc/group", "/etc/master.passwd");
 
     /**
-     * La versione di prima dei file che uno script ha cambiato, per poterla rimettere. Sotto
-     * /var/db/daemoxcp-mail, accanto alla nota dei blocchi, e non accanto ai file: in cartelle come
-     * /usr/local/etc/newsyslog.conf.d o /usr/local/etc/periodic si legge, o si ESEGUE, ogni
-     * file che c'e', e una copia messa li' diventerebbe configurazione anche lei.
+     * The previous version of the files that a script changed, so that it can be put back. Under
+     * /var/db/daemoxcp-mail, next to the locks note, and not next to the files: in folders like
+     * /usr/local/etc/newsyslog.conf.d or /usr/local/etc/periodic every file there is read, or
+     * EXECUTED, and a copy put there would become configuration too.
      */
     static final Path BEFORE_UPDATE_DIR = Paths.get("/var/db/daemoxcp-mail/config-before-update");
 
-    /** Quante copie si tengono: le piu' vecchie si tolgono. Contengono anche password, come i file da cui vengono. */
+    /**
+     * How many copies are kept: the oldest are removed. They also contain passwords, like the files they come
+     * from.
+     */
     static final int BEFORE_UPDATE_KEPT = 10;
 
-    /** Il contenuto si tiene, per mostrare che cosa e' cambiato, solo fino a questa misura. */
+    /** The content is kept, to show what changed, only up to this size. */
     static final int MAX_KEPT_BYTES = 256 * 1024;
 
-    /** Righe mostrate per file, per lato: il resto si conta e si dice. */
+    /** Lines shown per file, per side: the rest is counted and reported. */
     static final int MAX_SHOWN_LINES = 12;
 
-    /** Quanto si aspetta, al massimo, un indirizzo che manca: un demone appena riavviato puo' metterci qualche secondo ad aprirlo. */
+    /** How long, at most, a missing address is waited for: a daemon just restarted may take a few seconds to open it. */
     static final int LISTEN_GRACE_SECONDS = 60;
 
     /**
-     * Lo stato di un file: l'impronta del contenuto, i permessi con proprietario e gruppo, e il
-     * contenuto stesso se e' abbastanza piccolo. Il contenuto serve a dire che cosa e' cambiato;
-     * si mostra solo se il file e' leggibile da tutti (vedi {@link #configChanges}).
+     * The state of a file: the fingerprint of the content, the permissions with owner and group, and the
+     * content itself if it is small enough. The content is used to say what changed;
+     * it is shown only if the file is readable by everyone (see {@link #configChanges}).
      */
     record FileState(String sha256, String permissions, boolean worldReadable, byte[] content) {}
 
-    /** La configurazione in un istante: percorso -> stato, e percorso -> pacchetto che lo possiede. */
+    /** The configuration at one instant: path -> state, and path -> package that owns it. */
     record ConfigSnapshot(Map<String, FileState> files, Map<String, String> owners) {}
 
-    // ===================== la configurazione =====================
+    // ===================== the configuration =====================
 
-    /** La configurazione di questa macchina, adesso. */
+    /** The configuration of this machine, now. */
     static ConfigSnapshot configSnapshot() {
         Map<String, String> owners = owners(Shell.runShell(Duration.ofSeconds(60),
                 "pkg query -a '%n\t%Fp' 2>/dev/null").output(), CONFIG_ROOTS);
@@ -145,11 +151,11 @@ final class InstallSideEffects {
     }
 
     /**
-     * La fotografia di un insieme di cartelle, senza chiedere niente a pkg: cosi' si prova.
+     * The snapshot of a set of folders, without asking pkg anything: this is how it is tested.
      *
-     * @param recursive file o cartelle da guardare per intero
-     * @param flat      cartelle da guardare senza scendere nelle sottocartelle
-     * @param owners    percorso -> pacchetto, da {@link #owners(String)}
+     * @param recursive files or folders to look at entirely
+     * @param flat      folders to look at without going down into subfolders
+     * @param owners    path -> package, from {@link #owners(String)}
      */
     static ConfigSnapshot configSnapshot(List<Path> recursive, List<Path> flat, Map<String, String> owners) {
         Map<String, FileState> files = new TreeMap<>();
@@ -160,10 +166,10 @@ final class InstallSideEffects {
 
     private static void collect(Path root, int depth, Map<String, FileState> into) {
         if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return;
-        // walkFileTree e non Files.walk: con Files.walk un file che sparisce mentre si scorre
-        // la cartella (un temporaneo di qualcuno) interrompe TUTTA la fotografia, e
-        // /usr/local/etc resterebbe fuori per un file solo. Qui quel file si salta e basta.
-        // Senza FOLLOW_LINKS: un collegamento verso / non fa fotografare il disco intero.
+        // walkFileTree and not Files.walk: with Files.walk a file that disappears while the folder
+        // is being traversed (someone's temporary file) interrupts the WHOLE snapshot, and
+        // /usr/local/etc would be left out because of a single file. Here that file is simply skipped.
+        // Without FOLLOW_LINKS: a link to / does not make it snapshot the entire disk.
         try {
             Files.walkFileTree(root, Set.of(), depth, new java.nio.file.SimpleFileVisitor<>() {
                 @Override
@@ -196,7 +202,7 @@ final class InstallSideEffects {
         return false;
     }
 
-    /** Lo stato di un file, o null se non si e' potuto leggere. */
+    /** The state of a file, or null if it could not be read. */
     static FileState state(Path p) {
         try {
             PosixFileAttributes a = Files.readAttributes(p, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
@@ -221,15 +227,15 @@ final class InstallSideEffects {
     }
 
     /**
-     * Di chi e' ogni file, da {@code pkg query -a '%n\t%Fp'}: percorso -> nome del pacchetto.
-     * Si tengono solo i file che possono interessare: quelli sotto le radici, e quelli delle
-     * cartelle in cui un pacchetto tiene un .sample o un .dist. Questi ultimi tutti, non solo
-     * gli esempi: accanto a config.inc.php.sample Roundcube installa defaults.inc.php, e un
-     * file del pacchetto preso per configurazione di nessuno darebbe l'allarme a ogni suo
-     * aggiornamento.
+     * Who owns each file, from {@code pkg query -a '%n\t%Fp'}: path -> package name.
+     * Only the files that may matter are kept: those under the roots, and those of the
+     * folders in which a package keeps a .sample or a .dist. All of the latter, not only
+     * the examples: next to config.inc.php.sample Roundcube installs defaults.inc.php, and a
+     * package file taken for nobody's configuration would raise the alarm at every one of its
+     * updates.
      *
-     * E i file a cui punta un .sample che e' un collegamento (vedi {@link #linkedSample}): servono
-     * a dire che il collegamento porta a un file dello stesso pacchetto.
+     * And the files that a .sample which is a link points to (see {@link #linkedSample}): they
+     * are needed to say that the link leads to a file of the same package.
      */
     static Map<String, String> owners(String pkgQueryOutput, List<String> roots) {
         List<String[]> all = new ArrayList<>();
@@ -254,7 +260,7 @@ final class InstallSideEffects {
         return r;
     }
 
-    /** Dove porta un collegamento, un passo solo; null se non e' un collegamento o non si legge. */
+    /** Where a link leads, a single step; null if it is not a link or cannot be read. */
     static Path linkTarget(Path link) {
         try {
             if (!Files.isSymbolicLink(link)) return null;
@@ -278,7 +284,7 @@ final class InstallSideEffects {
         return false;
     }
 
-    /** Le cartelle che contengono un .sample o un .dist di un pacchetto, fuori dalle radici. */
+    /** The folders that contain a .sample or a .dist of a package, outside the roots. */
     static List<Path> sampleDirsOutside(Map<String, String> owners, List<String> roots) {
         Set<String> dirs = new TreeSet<>();
         for (String p : owners.keySet())
@@ -289,27 +295,27 @@ final class InstallSideEffects {
     }
 
     /**
-     * Che cosa e' cambiato fra le due fotografie, e se e' cosa da segnalare.
+     * What changed between the two snapshots, and whether it is something to report.
      *
-     * Quattro casi, e solo l'ultimo fa scattare l'allarme:
-     *  - "package": il file e' di un pacchetto che il lavoro ha cambiato. E' l'aggiornamento
-     *    stesso, si conta e basta.
-     *  - "newDefault": il file vivo non e' di nessuno ed e' adesso identico al .sample nuovo
-     *    del suo pacchetto. Non era mai stato modificato e pkg l'ha sostituito con il
-     *    predefinito nuovo, che e' cio' che fa con un esempio intatto.
-     *  - "rebuilt": il database degli utenti SASL ricreato con gli stessi utenti (vedi
-     *    {@link #SASLDB_NAME}). Si dice, senza allarme.
-     *  - "commentsOnly": cambiato da uno script, ma solo in righe di commento o vuote. Si dice,
-     *    non cambia niente di quello che il servizio legge. Misurato: lo script di postfix
-     *    aggiunge a master.cf quattro voci commentate.
-     *  - "script": cambiato, creato, tolto o con altri permessi, senza che nessun pacchetto del
-     *    lavoro lo possieda. E' il main.cf del reperto 42.
+     * Four cases, and only the last one triggers the alarm:
+     *  - "package": the file belongs to a package that the job changed. It is the update
+     *    itself, it is just counted.
+     *  - "newDefault": the live file belongs to nobody and is now identical to the new .sample
+     *    of its package. It had never been modified and pkg replaced it with the
+     *    new default, which is what it does with an untouched example.
+     *  - "rebuilt": the SASL users database recreated with the same users (see
+     *    {@link #SASLDB_NAME}). It is reported, without an alarm.
+     *  - "commentsOnly": changed by a script, but only in comment or empty lines. It is reported,
+     *    it changes nothing of what the service reads. Measured: the postfix script
+     *    adds four commented-out entries to master.cf.
+     *  - "script": changed, created, removed or with other permissions, without any package of
+     *    the job owning it. It is the main.cf of finding 42.
      *
-     * @param changedPackages i pacchetti che il lavoro ha installato, aggiornato, reinstallato
-     *        o tolto: quelli del piano e quelli cambiati fuori dal piano
-     * @return un oggetto per ogni file cambiato: path, happened (changed, created, removed,
-     *         permissions), owner, kind, alarm; per i file che si possono mostrare
-     *         removedLines e addedLines, per gli altri hidden con il motivo
+     * @param changedPackages the packages that the job installed, upgraded, reinstalled
+     *        or removed: those in the plan and those changed outside the plan
+     * @return an object for each changed file: path, happened (changed, created, removed,
+     *         permissions), owner, kind, alarm; for the files that can be shown
+     *         removedLines and addedLines, for the others hidden with the reason
      */
     static JSONArray configChanges(ConfigSnapshot before, ConfigSnapshot after, Set<String> changedPackages) {
         JSONArray r = new JSONArray();
@@ -334,16 +340,16 @@ final class InstallSideEffects {
             else if (owner == null && a == null && sampleWentWithPackage(p, before, after, changedPackages)) kind = "package";
             else kind = "script";
 
-            // Che cosa e' cambiato dentro, quando lo si puo' sapere. Il contenuto si legge
-            // per decidere se sono solo commenti anche quando non lo si puo' mostrare.
+            // What changed inside, when it can be known. The content is read
+            // to decide whether it is only comments even when it cannot be shown.
             if (!"package".equals(kind) && !"newDefault".equals(kind) && !"derived".equals(kind)) {
                 byte[] oldC = b == null ? new byte[0] : b.content();
                 byte[] newC = a == null ? new byte[0] : a.content();
                 if (oldC != null && newC != null && isText(oldC) && isText(newC)) {
                     List<List<String>> d = lineDiff(new String(oldC, StandardCharsets.UTF_8),
                                                     new String(newC, StandardCharsets.UTF_8));
-                    // Con i permessi cambiati no: un file reso illeggibile al demone, o leggibile a
-                    // tutti, conta anche se dentro sono cambiati solo i commenti.
+                    // Not with changed permissions: a file made unreadable to the daemon, or
+                    // readable by everyone, counts even if only the comments changed inside it.
                     if ("changed".equals(happened) && !c.has("permissionsFrom")
                             && (!d.get(0).isEmpty() || !d.get(1).isEmpty())
                             && allComments(d.get(0)) && allComments(d.get(1)))
@@ -353,17 +359,17 @@ final class InstallSideEffects {
                         kind = "accounts";
                     boolean readable = (b == null || b.worldReadable()) && (a == null || a.worldReadable());
                     if ("changed".equals(happened) && d.get(0).isEmpty() && d.get(1).isEmpty()) {
-                        // Stesse righe, altro ordine: in un file di configurazione l'ordine
-                        // puo' contare (le regole di nginx, le mappe di postfix), quindi resta
-                        // un allarme, ma non c'e' una riga da mostrare.
+                        // Same lines, different order: in a configuration file the order
+                        // can matter (nginx rules, postfix maps), so it stays
+                        // an alarm, but there is no line to show.
                         c.put("hidden", "sameLines");
                     } else if (readable) {
                         c.put("removedLines", shown(d.get(0))).put("removedCount", d.get(0).size());
                         c.put("addedLines", shown(d.get(1))).put("addedCount", d.get(1).size());
                     } else {
-                        // Un file che non tutti possono leggere puo' contenere una password
-                        // (le mappe MySQL di postfix, la connessione SQL di dovecot): il suo
-                        // contenuto non finisce nel log del lavoro, nemmeno oscurato.
+                        // A file that not everyone can read may contain a password
+                        // (postfix's MySQL maps, dovecot's SQL connection): its
+                        // content does not end up in the job's log, not even masked.
                         c.put("hidden", "notWorldReadable");
                     }
                 } else if (!"permissions".equals(happened)) {
@@ -382,14 +388,14 @@ final class InstallSideEffects {
     }
 
     /**
-     * Un file che si rigenera da un altro, e che quindi cambia quando cambia la sua fonte:
-     * l'allarme, se c'e', lo da' la fonte.
-     *  - X.db, X.lmdb, X.cdb accanto a X: le mappe di postmap e newaliases (/etc/aliases.db),
+     * A file regenerated from another one, which therefore changes when its source changes:
+     * the alarm, if any, is raised by the source.
+     *  - X.db, X.lmdb, X.cdb next to X: the maps of postmap and newaliases (/etc/aliases.db),
      *    /etc/login.conf.db;
-     *  - /etc/pwd.db e /etc/spwd.db, che pwd_mkdb ricava da /etc/master.passwd;
-     *  - /etc/ssl/cert.pem, /etc/ssl/certs e /etc/ssl/untrusted, che certctl ricava
-     *    dall'archivio dei certificati. Misurato: circa 190 file rigenerati sulla VM negli
-     *    ultimi due giorni, nessuno scritto da una persona.
+     *  - /etc/pwd.db and /etc/spwd.db, which pwd_mkdb derives from /etc/master.passwd;
+     *  - /etc/ssl/cert.pem, /etc/ssl/certs and /etc/ssl/untrusted, which certctl derives
+     *    from the certificate store. Measured: about 190 files regenerated on the VM over the
+     *    last two days, none written by a person.
      */
     static boolean isDerived(String p, ConfigSnapshot before, ConfigSnapshot after) {
         if (p.equals("/etc/pwd.db") || p.equals("/etc/spwd.db") || p.equals("/etc/ssl/cert.pem")
@@ -403,13 +409,13 @@ final class InstallSideEffects {
     }
 
     /**
-     * Mette da parte la versione di prima dei file indicati, sotto {@code dir} con il loro
-     * percorso intero, con gli stessi permessi, proprietario e gruppo: cosi' {@code cp -p} la
-     * rimette com'era. La cartella e' leggibile solo da root, perche' fra quei file ci sono le
-     * mappe con le password.
+     * Sets aside the previous version of the given files, under {@code dir} with their
+     * full path, with the same permissions, owner and group: so that {@code cp -p} puts it
+     * back as it was. The folder is readable only by root, because among those files are the
+     * maps with the passwords.
      *
-     * @return percorso -> dove e' la copia, oppure il motivo per cui non c'e' ("created": non
-     *         c'era prima; "tooLarge": non se ne teneva il contenuto; "error: ...")
+     * @return path -> where the copy is, or the reason why there is none ("created": it was not
+     *         there before; "tooLarge": its content was not kept; "error: ...")
      */
     static Map<String, String> saveBefore(ConfigSnapshot before, List<String> paths, Path dir) {
         Map<String, String> r = new LinkedHashMap<>();
@@ -440,7 +446,10 @@ final class InstallSideEffects {
         return r;
     }
 
-    /** Toglie le copie piu' vecchie, tenendo le ultime {@code kept}: i nomi sono date UTC, quindi l'ordine e' quello dei nomi. */
+    /**
+     * Removes the oldest copies, keeping the last {@code kept}: the names are UTC dates, so the order is that
+     * of the names.
+     */
     static void pruneBefore(Path root, int kept) {
         try (var s = Files.list(root)) {
             List<Path> dirs = new ArrayList<>(s.filter(Files::isDirectory).sorted().toList());
@@ -454,7 +463,7 @@ final class InstallSideEffects {
         }
     }
 
-    /** Il file vivo e' identico al .sample del suo pacchetto, cioe' e' il predefinito nuovo. */
+    /** The live file is identical to its package's .sample, that is it is the new default. */
     private static boolean isNewDefault(String p, FileState a, ConfigSnapshot after, Set<String> changedPackages) {
         for (String suffix : new String[]{".sample", ".dist"}) {
             String sampleOwner = after.owners().get(p + suffix);
@@ -467,15 +476,15 @@ final class InstallSideEffects {
     }
 
     /**
-     * Il .sample che e' un collegamento: il contenuto del file a cui porta, se e' un file normale
-     * dello STESSO pacchetto; altrimenti null, e il cambiamento resta da segnalare.
+     * The .sample that is a link: the content of the file it leads to, if it is a regular file
+     * of the SAME package; otherwise null, and the change remains to be reported.
      *
-     * Visto sul server vero il 09/11/2026 (reperto 201): ca_root_nss installa
-     * etc/ssl/cert.pem.sample come collegamento a share/certs/ca-root-nss.crt, e aggiornandolo
-     * pkg ha rimesso in cert.pem, intatto, l'elenco nuovo delle autorita' di certificazione. La
-     * fotografia non segue i collegamenti (uno verso / fotograferebbe il disco), quindi il .sample
-     * non c'era, e il predefinito nuovo e' stato preso per uno script: «Passo non riuscito» su un
-     * aggiornamento andato bene. Qui si segue questo collegamento solo, di un passo.
+     * Seen on the production server on 2026-11-09 (finding 201): ca_root_nss installs
+     * etc/ssl/cert.pem.sample as a link to share/certs/ca-root-nss.crt, and when upgrading it
+     * pkg put back into cert.pem, untouched, the new list of certificate authorities. The
+     * snapshot does not follow links (one to / would snapshot the disk), so the .sample
+     * was not there, and the new default was taken for a script: "Step failed" on an
+     * update that went fine. Here only this link is followed, by one step.
      */
     static FileState linkedSample(Path link, String owner, Map<String, String> owners) {
         Path target = linkTarget(link);
@@ -484,7 +493,7 @@ final class InstallSideEffects {
         return state(target);
     }
 
-    /** Il file vivo se n'e' andato insieme al .sample del pacchetto che il lavoro ha tolto. */
+    /** The live file went away together with the .sample of the package that the job removed. */
     private static boolean sampleWentWithPackage(String p, ConfigSnapshot before, ConfigSnapshot after,
                                                  Set<String> changedPackages) {
         for (String suffix : new String[]{".sample", ".dist"}) {
@@ -496,27 +505,27 @@ final class InstallSideEffects {
     }
 
     /**
-     * Il database degli utenti SASL. A ogni reinstallazione di cyrus-sasl lo script di
-     * disinstallazione lo cancella se non contiene utenti, e quello di installazione lo ricrea
-     * vuoto: stesso contenuto, byte diversi. Misurato su latest il 24/10/2026, nell'aggiornamento
-     * dei non protetti («reinstalla cyrus-sasl 2.1.28_6»): un allarme che sarebbe suonato a ogni
-     * reinstallazione, e che nel guidato avrebbe fermato il riavvio di postfix, che dipende da
-     * cyrus-sasl. Con utenti dentro lo script lo lascia stare.
+     * The SASL users database. At every reinstallation of cyrus-sasl the uninstall
+     * script deletes it if it contains no users, and the install script recreates it
+     * empty: same content, different bytes. Measured on latest on 2026-10-24, in the update
+     * of the unlocked packages ("reinstall cyrus-sasl 2.1.28_6"): an alarm that would have gone
+     * off at every reinstallation, and that in the guided update would have stopped the restart
+     * of postfix, which depends on cyrus-sasl. With users inside, the script leaves it alone.
      */
     static final String SASLDB_NAME = "sasldb2.db";
 
     /**
-     * Gli utenti di un database SASL letti dal suo strumento, {@code sasldblistusers2}: righe
-     * «utente@dominio: tipo di attributo», mai i valori. Si confrontano questi, non i byte, che
-     * per un database ricreato cambiano sempre. Null se non si e' potuto leggere (strumento
-     * assente, file illeggibile): allora l'allarme resta.
+     * The users of a SASL database read by its tool, {@code sasldblistusers2}: lines
+     * "user@domain: attribute type", never the values. These are compared, not the bytes, which
+     * for a recreated database always change. Null if it could not be read (tool
+     * missing, unreadable file): then the alarm stays.
      */
     static String saslUsers(byte[] content) {
         Path dir = null;
         try {
-            // Lo strumento aggiunge da solo ".db" al nome che gli si da': con -f .../sasldb2.db
-            // cerca sasldb2.db.db, non lo trova, scrive «listusers failed» ed esce con 0.
-            // Misurato sulla VM: preso cosi', due file qualunque risultavano «stessi utenti».
+            // The tool adds ".db" by itself to the name it is given: with -f .../sasldb2.db
+            // it looks for sasldb2.db.db, does not find it, writes "listusers failed" and exits with 0.
+            // Measured on the VM: taken that way, any two files came out as "same users".
             dir = Files.createTempDirectory("sasldb",
                     PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
             Files.write(dir.resolve(SASLDB_NAME), content);
@@ -526,8 +535,8 @@ final class InstallSideEffects {
             List<String> lines = new ArrayList<>();
             for (String l : r.output().split("\n")) {
                 if (l.isBlank()) continue;
-                // Solo righe «utente@dominio: attributo»: qualunque altra cosa (compreso
-                // «listusers failed», che esce con 0) vuol dire che non ha letto il database.
+                // Only "user@domain: attribute" lines: anything else (including
+                // "listusers failed", which exits with 0) means it did not read the database.
                 if (!l.trim().matches("[^\\s:]+@[^\\s:]*: \\S+")) return null;
                 lines.add(l.trim());
             }
@@ -550,10 +559,10 @@ final class InstallSideEffects {
     }
 
     /**
-     * Le righe tolte e quelle aggiunte, contate come multinsieme: [tolte, aggiunte], ognuna
-     * nell'ordine del proprio file. Per un file di configurazione e' la risposta che serve
-     * («+ inet_protocols = ipv4») senza il costo di una diff vera, che su due file di qualche
-     * migliaio di righe vorrebbe una tabella da milioni di celle.
+     * The removed lines and the added ones, counted as a multiset: [removed, added], each
+     * in the order of its own file. For a configuration file it is the answer that is needed
+     * ("+ inet_protocols = ipv4") without the cost of a real diff, which on two files of a few
+     * thousand lines would need a table of millions of cells.
      */
     static List<List<String>> lineDiff(String oldText, String newText) {
         Map<String, Integer> count = new LinkedHashMap<>();
@@ -574,14 +583,14 @@ final class InstallSideEffects {
         return List.of(removed, added);
     }
 
-    /** Le righe di un testo. Il pezzo vuoto dopo l'ultimo a capo non e' una riga del file. */
+    /** The lines of a text. The empty piece after the last newline is not a line of the file. */
     private static String[] lines(String text) {
         if (text.isEmpty()) return new String[0];
         String t = text.endsWith("\n") ? text.substring(0, text.length() - 1) : text;
         return t.split("\n", -1);
     }
 
-    /** Commento o riga vuota, nelle due grafie dei file di /usr/local/etc: # e ; (php.ini). */
+    /** Comment or empty line, in the two notations of the files in /usr/local/etc: # and ; (php.ini). */
     static boolean allComments(List<String> lines) {
         for (String l : lines) {
             String t = l.trim();
@@ -590,7 +599,7 @@ final class InstallSideEffects {
         return true;
     }
 
-    /** Le righe da mostrare: al massimo MAX_SHOWN_LINES, accorciate, con le credenziali oscurate. */
+    /** The lines to show: at most MAX_SHOWN_LINES, shortened, with the credentials masked. */
     private static JSONArray shown(List<String> lines) {
         JSONArray r = new JSONArray();
         for (int i = 0; i < lines.size() && i < MAX_SHOWN_LINES; i++) {
@@ -600,15 +609,15 @@ final class InstallSideEffects {
         return r;
     }
 
-    // ===================== gli indirizzi in ascolto =====================
+    // ===================== the listening addresses =====================
 
     /**
-     * Gli indirizzi TCP in ascolto adesso: "tcp6 *:25" -> "master". Null se non si e' potuto
-     * chiedere, che non e' "nessuno in ascolto".
+     * The TCP addresses listening right now: "tcp6 *:25" -> "master". Null if they could not be
+     * asked for, which is not "nobody listening".
      *
-     * Solo TCP. In UDP {@code sockstat -l} elenca anche i socket con cui rspamd fa le sue
-     * domande DNS, legati a *:* e diversi a ogni riavvio: misurati 25 su 63 righe sulla VM.
-     * Confrontarli darebbe un allarme a ogni aggiornamento di rspamd.
+     * Only TCP. In UDP {@code sockstat -l} also lists the sockets with which rspamd makes its
+     * DNS queries, bound to *:* and different at every restart: measured 25 out of 63 lines on
+     * the VM. Comparing them would raise an alarm at every rspamd update.
      */
     static Map<String, String> listening() {
         Shell.Result r = Shell.runShell(Duration.ofSeconds(20), "sockstat -46lq -P tcp 2>/dev/null");
@@ -616,9 +625,9 @@ final class InstallSideEffects {
     }
 
     /**
-     * Da {@code sockstat -46lq}: USER COMMAND PID FD PROTO LOCAL FOREIGN. La chiave e'
-     * protocollo e indirizzo locale, non il pid: il pid cambia a ogni riavvio, l'indirizzo
-     * deve restare.
+     * From {@code sockstat -46lq}: USER COMMAND PID FD PROTO LOCAL FOREIGN. The key is
+     * protocol and local address, not the pid: the pid changes at every restart, the address
+     * must stay.
      */
     static Map<String, String> parseSockstat(String out) {
         Map<String, String> r = new TreeMap<>();
@@ -630,7 +639,7 @@ final class InstallSideEffects {
         return r;
     }
 
-    /** Gli indirizzi persi e quelli comparsi: {lost: [...], gained: [...]}, ognuno {address, command}. */
+    /** The addresses lost and those that appeared: {lost: [...], gained: [...]}, each {address, command}. */
     static JSONObject compareListening(Map<String, String> before, Map<String, String> after) {
         JSONArray lost = new JSONArray(), gained = new JSONArray();
         for (Map.Entry<String, String> e : before.entrySet())
@@ -642,16 +651,16 @@ final class InstallSideEffects {
         return new JSONObject().put("lost", lost).put("gained", gained);
     }
 
-    // ===================== un lavoro =====================
+    // ===================== a job =====================
 
     /**
-     * Le due fotografie di un lavoro e i problemi che il confronto ha trovato. Un lavoro ne
-     * crea una, la fotografa subito prima di pkg upgrade e la interroga dopo; alla fine mette
-     * {@link #problems()} nel proprio esito.
+     * The two snapshots of a job and the problems the comparison found. A job
+     * creates one, takes the snapshot right before pkg upgrade and queries it afterwards; at the
+     * end it puts {@link #problems()} in its own outcome.
      *
-     * Sta in un punto solo perche' la chiedono tre lavori (aggiornamento guidato, manutenzione
-     * completa, aggiornamento dei non protetti), e la stessa decisione scritta tre volte e' gia'
-     * diventata, in questa area, tre decisioni diverse.
+     * It is in a single place because three jobs ask for it (guided update, full
+     * maintenance, update of the unlocked packages), and the same decision written three times
+     * has already become, in this area, three different decisions.
      */
     static final class Watch {
         private boolean taken;
@@ -660,7 +669,7 @@ final class InstallSideEffects {
         private Map<String, String> listeningBefore;
         private final List<String> problems = new ArrayList<>();
 
-        /** Subito prima di pkg upgrade: la configurazione e gli indirizzi come li ha lasciati l'amministratore. */
+        /** Right before pkg upgrade: the configuration and the addresses as the administrator left them. */
         void takeBefore() {
             taken = true;
             try {
@@ -672,19 +681,19 @@ final class InstallSideEffects {
         }
 
         /**
-         * Dopo pkg upgrade: che cosa e' cambiato nella configurazione, fuori dai file dei
-         * pacchetti. Si chiama anche quando pkg e' uscito diverso da zero: e' proprio il caso in
-         * cui una macchina puo' essere rimasta a meta'.
+         * After pkg upgrade: what changed in the configuration, outside the packages'
+         * files. It is called also when pkg exited non-zero: that is exactly the case in
+         * which a machine may have been left halfway.
          *
-         * @param plan          il piano firmato, per sapere quali pacchetti il lavoro ha cambiato
-         * @param outsidePlan   i pacchetti cambiati fuori dal piano (gia' segnalati a parte)
-         * @param restartFollows true se il lavoro riavvia i servizi subito dopo (l'aggiornamento
-         *                      guidato): allora la modifica entra in vigore fra poco, non al
-         *                      prossimo riavvio
+         * @param plan          the signed plan, to know which packages the job changed
+         * @param outsidePlan   the packages changed outside the plan (already reported separately)
+         * @param restartFollows true if the job restarts the services right afterwards (the guided
+         *                      update): then the change takes effect shortly, not at the
+         *                      next restart
          */
         void checkConfig(UpdateManager.Job job, JSONObject plan, JSONArray outsidePlan, boolean restartFollows) {
-            // Un lavoro che si e' fermato prima di pkg upgrade non ha cambiato niente: non c'e'
-            // un prima da confrontare, e un «non ho potuto controllare» sarebbe falso.
+            // A job that stopped before pkg upgrade changed nothing: there is no
+            // before to compare, and an "I could not check" would be false.
             if (!taken) return;
             job.write("  " + I18n.tr("server.drift.configHeader"));
             if (configBefore == null) {
@@ -737,15 +746,15 @@ final class InstallSideEffects {
             pruneBefore(BEFORE_UPDATE_DIR, BEFORE_UPDATE_KEPT);
             job.write("  " + I18n.tr(restartFollows ? "server.drift.configNoteHeld" : "server.drift.configNoteLater"));
             problems.add(I18n.tr("server.drift.configProblem", Map.of("files", String.join(", ", alarmed))));
-            // Fuori dal log del lavoro, che vive in memoria: una configurazione cambiata che
-            // nessuno ha approvato deve restare scritta. Solo i percorsi, nessun contenuto (r19).
+            // Outside the job's log, which lives in memory: a changed configuration that
+            // nobody approved must stay written down. Only the paths, no content (r19).
             LOGGER.warning("configuration changed by an installation script: " + alarmed);
         }
 
         /**
-         * Alla fine del lavoro: gli indirizzi che erano in ascolto prima ci sono ancora?
-         * Uno che manca si aspetta fino a {@link #LISTEN_GRACE_SECONDS}, perche' un demone
-         * appena riavviato puo' metterci qualche secondo ad aprirlo.
+         * At the end of the job: are the addresses that were listening before still there?
+         * A missing one is waited for up to {@link #LISTEN_GRACE_SECONDS}, because a daemon
+         * just restarted may take a few seconds to open it.
          */
         void checkListening(UpdateManager.Job job) {
             if (!taken) return;
@@ -787,17 +796,17 @@ final class InstallSideEffects {
             LOGGER.warning("listening addresses lost after an update: " + lostNames);
         }
 
-        /** I problemi da mettere nell'esito del lavoro; vuoti se il confronto non ha trovato niente. */
+        /** The problems to put in the job's outcome; empty if the comparison found nothing. */
         List<String> problems() { return new ArrayList<>(problems); }
 
         /**
-         * True se uno script ha cambiato la configurazione fuori dai file dei pacchetti (un
-         * allarme, non un predefinito rimesso o dei commenti). L'aggiornamento guidato lo
-         * chiede prima di riavviare: vedi runGuidedUpdate.
+         * True if a script changed the configuration outside the packages' files (an
+         * alarm, not a restored default or some comments). The guided update
+         * asks for it before restarting: see runGuidedUpdate.
          */
         boolean configChangedByScript() { return changedByScript; }
 
-        /** Dove e' la versione di prima di ogni file, e come la si rimette. */
+        /** Where the previous version of each file is, and how to put it back. */
         private static void writeSaved(UpdateManager.Job job, Map<String, String> saved) {
             String dir = null;
             for (Map.Entry<String, String> e : saved.entrySet()) {
@@ -825,7 +834,7 @@ final class InstallSideEffects {
         }
     }
 
-    /** I pacchetti che il lavoro ha cambiato: le righe del piano e quelli cambiati fuori dal piano. */
+    /** The packages that the job changed: the lines of the plan and those changed outside the plan. */
     static Set<String> changedPackages(JSONObject plan, JSONArray outsidePlan) {
         Set<String> r = new TreeSet<>();
         JSONArray changes = plan == null ? null : plan.optJSONArray("changes");

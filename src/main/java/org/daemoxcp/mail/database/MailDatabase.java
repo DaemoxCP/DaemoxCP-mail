@@ -52,13 +52,13 @@ public class MailDatabase {
     }
 
     /**
-     * Da dove rileggere la password a ogni collegamento: quella del pannello, nel file dei segreti.
+     * Where to read the password again at every connection: the panel's, in the secrets file.
      *
-     * <p>Senza, il pannello si ricollegava con la password che aveva in memoria dall'avvio. Una
-     * reinstallazione completa dal menu cambia la password dell'utente MySQL del pannello (e la
-     * scrive nel file dei segreti quando MySQL la conosce, PendingDbPassword) e riavvia MySQL: il
-     * servizio --web acceso intanto perdeva la connessione e riprovava per sempre con quella
-     * vecchia, «Access denied», finche' qualcuno non lo riavviava (reperto 156).
+     * <p>Without it, the panel reconnected with the password it had in memory since startup. A
+     * full reinstallation from the menu changes the password of the panel's MySQL user (and
+     * writes it in the secrets file when MySQL knows it, PendingDbPassword) and restarts MySQL: the
+     * --web service running meanwhile lost the connection and retried forever with the
+     * old one, "Access denied", until someone restarted it (finding 156).
      */
     public void setPasswordSource(java.util.function.Supplier<String> source) {
         this.passwordSource = source;
@@ -67,9 +67,9 @@ public class MailDatabase {
     private java.util.function.Supplier<String> passwordSource;
 
     /**
-     * La parte web con il suo utente MySQL (WebDbAccess.WEB_USER): ogni istruzione diventa la chiamata della sua
-     * procedura (CatalogGuard.openRoutines). L'utente puo' solo chiamarle: niente creazione del database
-     * all'avvio della connessione, che il driver farebbe con createDatabaseIfNotExist.
+     * The web part with its own MySQL user (WebDbAccess.WEB_USER): every statement becomes the call of its
+     * procedure (CatalogGuard.openRoutines). The user can only call them: no creation of the database
+     * when the connection starts, which the driver would do with createDatabaseIfNotExist.
      */
     private boolean routines;
 
@@ -80,12 +80,12 @@ public class MailDatabase {
         this.password = password.get();
     }
 
-    /** Vero se la connessione e' quella a procedure della parte web. */
+    /** True if the connection is the web part's procedure connection. */
     public boolean usesRoutines() {
         return routines;
     }
 
-    /** La password per il prossimo collegamento: quella della fonte se ne da' una, altrimenti l'ultima. */
+    /** The password for the next connection: the source's if it gives one, otherwise the last one. */
     private String currentPassword() {
         if (passwordSource != null) {
             try {
@@ -144,9 +144,10 @@ public class MailDatabase {
     static final String MYSQLD = "/usr/local/libexec/mysqld";
 
     /**
-     * Cosa dire quando MySQL non risponde. Su un server nuovo l'installazione comincia prima che MySQL ci sia, e
-     * «MySQL not available: Could not create connection... Giving up» sembrava un guasto a chi installava dal README
-     * (20/11/2026): se MySQL non e' installato lo si dice cosi'. Funzione pura, per provarla.
+     * What to say when MySQL does not answer. On a new server the installation starts before MySQL is there,
+     * and "MySQL not available: Could not create connection... Giving up" looked like a fault to whoever
+     * installed from the README (2026-11-20): if MySQL is not installed, it says so. A pure function, so it can
+     * be tested.
      */
     public static String unavailableMessage(boolean installed, String detail) {
         return installed ? "MySQL not available: " + detail
@@ -161,8 +162,9 @@ public class MailDatabase {
     }
 
     /**
-     * Il database del pannello per chi non lo crea: l'utente della web, e la root di MySQL che ci mette procedure
-     * e permessi (WebDbAccess). Le istruzioni senza database scritto (GRANT ... ON *, CREATE PROCEDURE) valgono qui.
+     * The panel's database for those who do not create it: the web part's user, and MySQL's root, which puts
+     * procedures and permissions in it (WebDbAccess). The statements with no database written (GRANT ... ON *,
+     * CREATE PROCEDURE) apply here.
      */
     public String existingDatabaseUrl() {
         return String.format(
@@ -177,9 +179,9 @@ public class MailDatabase {
     }
 
     /**
-     * Una connessione tutta per chi la chiede, che la chiude. Serve alle transazioni: la
-     * connessione condivisa la usano anche i lavori in background (rapporto, DKIM, MTA-STS), e con
-     * l'autocommit spento i loro comandi finirebbero dentro la transazione di un altro.
+     * A connection all for whoever asks for it, who closes it. It is needed for transactions: the
+     * shared connection is also used by the background jobs (report, DKIM, MTA-STS), and with
+     * autocommit off their commands would end up inside someone else's transaction.
      */
     private Connection ownConnection() throws SQLException {
         return open();
@@ -259,12 +261,12 @@ public class MailDatabase {
             // Create database
             stmt.execute(SqlCatalog.MAIL_CREATE_PANEL_DATABASE);
 
-            // Create user: la password e' un parametro, non un pezzo del testo
+            // Create user: the password is a parameter, not a piece of the text
             createUser(SqlCatalog.MAIL_CREATE_PANEL_USER, panelPassword);
             stmt.execute(SqlCatalog.MAIL_GRANT_PANEL_USER);
 
-            // Il database di Dovecot e' questo: il secondo, mailserver, col suo utente, non c'e' piu' (17/11/2026:
-            // MysqlRename ne ha spostato le tabelle qui sui server installati prima).
+            // Dovecot's database is this one: the second one, mailserver, with its user, no longer exists (2026-11-17:
+            // MysqlRename moved its tables here on the servers installed before).
 
             stmt.execute(SqlCatalog.MAIL_FLUSH_PRIVILEGES);
         }
@@ -274,10 +276,10 @@ public class MailDatabase {
     }
 
     /**
-     * CREATE USER con la password come parametro. MySQL non accetta un segnaposto in IDENTIFIED BY
-     * quando prepara lui l'istruzione; Connector/J pero', se non gli si chiede altro, prepara dalla
-     * parte del client e mette il valore fra apici con il suo escape, apici e barre rovesciate
-     * compresi. Prima la password entrava nel testo con il solo raddoppio degli apici.
+     * CREATE USER with the password as a parameter. MySQL does not accept a placeholder in IDENTIFIED BY
+     * when it prepares the statement itself; Connector/J however, unless asked otherwise, prepares on the
+     * client side and puts the value in quotes with its own escaping, quotes and backslashes
+     * included. Before, the password went into the text with only the quotes doubled.
      */
     private void createUser(String statement, String password) throws SQLException {
         try (PreparedStatement ps = getConnection().prepareStatement(statement)) {
@@ -287,9 +289,9 @@ public class MailDatabase {
     }
 
     /**
-     * Tutte le tabelle che il pannello crea (createSchema e le migrazioni), piu' quelle di versioni
-     * vecchie (virtual_*): le cancella il reset, e nessun'altra del database. Prima le tabelle che
-     * puntano ad altre con una chiave esterna, poi quelle a cui si punta.
+     * All the tables the panel creates (createSchema and the migrations), plus those of old
+     * versions (virtual_*): the reset deletes them, and no other table of the database. First the tables that
+     * point to others with a foreign key, then those pointed to.
      */
     public static final List<String> PANEL_TABLES = List.of(
         "admin_passkeys", "rspamd_training", "panel_sessions",                // -> panel_admin
@@ -303,22 +305,22 @@ public class MailDatabase {
     );
 
     /**
-     * Svuota il database del pannello per il reset: cancella tutte le sue tabelle e torna solo se
-     * non ne resta nessuna. Restituisce quelle che c'erano.
+     * Empties the panel's database for the reset: deletes all its tables and returns only if
+     * none is left. Returns those that were there.
      *
-     * Un solo DROP con tutte le tabelle: MySQL toglie insieme quelle legate da chiavi esterne senza
-     * spegnere i controlli, e su InnoDB il comando e' atomico, o le cancella tutte o nessuna. Il
-     * vecchio reset le cancellava una alla volta: quelle a cui un'altra puntava (mailboxes, domains,
-     * panel_admin) restavano, con i loro dati, e mancavano admin_passkeys, cloudflare_accounts e
-     * dkim_rotation_history. Su una connessione tutta sua, perche' un DROP chiude la transazione
-     * della connessione su cui gira.
+     * A single DROP with all the tables: MySQL removes together those linked by foreign keys without
+     * turning off the checks, and on InnoDB the command is atomic, it deletes either all of them or none. The
+     * old reset deleted them one at a time: those another one pointed to (mailboxes, domains,
+     * panel_admin) remained, with their data, and admin_passkeys, cloudflare_accounts and
+     * dkim_rotation_history were missing. On a connection all its own, because a DROP closes the transaction
+     * of the connection it runs on.
      */
     public List<String> dropAllTables() throws SQLException {
         if (!connected) throw new SQLException("Not connected to MySQL: the reset did not start.");
         try (Connection c = ownConnection()) {
             List<String> before = panelTables(c);
             try (Statement st = c.createStatement()) {
-                // Un DROP non prende parametri: l'elenco e' fisso nel catalogo, uguale a PANEL_TABLES.
+                // A DROP takes no parameters: the list is fixed in the catalog, equal to PANEL_TABLES.
                 st.executeUpdate(SqlCatalog.MAIL_DROP_PANEL_TABLES);
             } catch (SQLException e) {
                 String present;
@@ -339,7 +341,7 @@ public class MailDatabase {
         }
     }
 
-    /** Le tabelle del pannello che ci sono adesso nel database della connessione. */
+    /** The panel's tables that are now in the connection's database. */
     private static List<String> panelTables(Connection c) throws SQLException {
         List<String> found = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement(SqlCatalog.MAIL_PANEL_TABLES);
@@ -369,9 +371,9 @@ public class MailDatabase {
 
         // Domains table
 
-        // Cloudflare accounts table (un account = un token + label informativa)
+        // Cloudflare accounts table (one account = one token + informational label)
 
-        // DKIM rotation history (audit log: ogni evento del workflow viene registrato)
+        // DKIM rotation history (audit log: every workflow event is recorded)
 
         // Mailboxes table (virtual users)
         // quota_mb: 0 = unlimited, >0 = limit in MB
@@ -419,10 +421,10 @@ public class MailDatabase {
     }
 
     /**
-     * Le tabelle dell'accesso senza password: le sessioni e i codici monouso, una tabella per
-     * flusso (accesso via email, accesso dalla console, cambio dell'email, conferma di
-     * un'operazione delicata). Nei codici c'e' solo l'impronta HMAC, mai il codice; della sessione
-     * c'e' solo l'impronta SHA-256 del token. Date in UTC, colonne DATETIME.
+     * The tables of passwordless access: the sessions and the one-time codes, one table per
+     * flow (login via email, login from the console, email change, confirmation of
+     * a sensitive operation). The codes hold only the HMAC fingerprint, never the code; of the session
+     * there is only the SHA-256 fingerprint of the token. Dates in UTC, DATETIME columns.
      */
     private static void createAuthTables(Statement st) throws SQLException {
         st.execute(SqlCatalog.MAIL_CREATE_PANEL_SESSIONS);
@@ -433,20 +435,20 @@ public class MailDatabase {
     }
 
     /**
-     * Da un'installazione con le password a quella senza. Si puo' ripetere: ogni passo guarda prima
-     * se serve. Su una connessione sua con il fuso UTC, perche' passare da TIMESTAMP a DATETIME
-     * converte con il fuso della sessione, e le date devono restare in UTC.
+     * From an installation with passwords to one without. It can be repeated: every step first checks
+     * whether it is needed. On a connection of its own with the UTC time zone, because going from TIMESTAMP to DATETIME
+     * converts with the session's time zone, and the dates must stay in UTC.
      *
-     *  - via password_hash, totp_secret, totp_enabled, backup_codes: nessun hash nel database;
-     *  - email cifrata, indice cieco, user handle delle passkey;
-     *  - le passkey sanno a quale user handle e a quale nome (rpId) appartengono;
-     *  - le date dell'accesso in DATETIME.
+     *  - away with password_hash, totp_secret, totp_enabled, backup_codes: no hash in the database;
+     *  - encrypted email, blind index, user handle of the passkeys;
+     *  - the passkeys know which user handle and which name (rpId) they belong to;
+     *  - the access dates in DATETIME.
      */
     public void ensurePasswordlessSchema() throws SQLException {
         try (Connection c = ownConnection(); Statement st = c.createStatement()) {
             st.execute(SqlCatalog.MAIL_ENSURE_PASSWORDLESS_SCHEMA);
             createAuthTables(st);
-            // Un ALTER non prende parametri: una istruzione fissa per colonna.
+            // An ALTER takes no parameters: one fixed statement per column.
             String[][] old = {
                 {"password_hash", SqlCatalog.MAIL_DROP_ADMIN_PASSWORD_HASH},
                 {"totp_secret", SqlCatalog.MAIL_DROP_ADMIN_TOTP_SECRET},
@@ -479,7 +481,7 @@ public class MailDatabase {
         }
     }
 
-    /** Il tipo di una colonna (minuscolo, "datetime", "varchar"...) o null se la colonna non c'e'. */
+    /** The type of a column (lowercase, "datetime", "varchar"...) or null if the column does not exist. */
     private static String columnType(Connection c, String table, String column) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(SqlCatalog.MAIL_COLUMN_TYPE)) {
             ps.setString(1, table);
@@ -543,8 +545,8 @@ public class MailDatabase {
     }
 
     /**
-     * La lingua scelta dall'amministratore (una delle lingue del pannello), o null se non l'ha mai scelta: allora
-     * vale quella del browser. Lo segue su ogni browser, come il tema.
+     * The language chosen by the administrator (one of the panel's languages), or null if they never chose one: then
+     * the browser's applies. It follows them on every browser, like the theme.
      */
     public String getAdminLanguage(String username) {
         if (username == null) return null;
@@ -563,8 +565,8 @@ public class MailDatabase {
     }
 
     /**
-     * La lingua della console (menu a schermo e comandi): quella del primo amministratore attivo che ne ha scelta una,
-     * o null se nessuno l'ha scelta. La console non ha una sessione: parla la lingua di chi ha installato il pannello.
+     * The console language (on-screen menu and commands): that of the first active administrator who has chosen one,
+     * or null if nobody has. The console has no session: it speaks the language of whoever installed the panel.
      */
     public String getPanelLanguage() {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_PANEL_LANGUAGE);
@@ -579,7 +581,7 @@ public class MailDatabase {
         return null;
     }
 
-    /** Salva la lingua dell'amministratore: solo una delle lingue del pannello (I18n.LANGUAGES). */
+    /** Saves the administrator's language: only one of the panel's languages (I18n.LANGUAGES). */
     public boolean setAdminLanguage(String username, String lang) {
         if (username == null || lang == null || !org.daemoxcp.mail.i18n.I18n.LANGUAGES.contains(lang)) return false;
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_SET_ADMIN_LANGUAGE)) {
@@ -592,23 +594,23 @@ public class MailDatabase {
         }
     }
 
-    /** La colonna della lingua in panel_admin, per le installazioni di prima (NULL: mai scelta). */
+    /** The language column in panel_admin, for earlier installations (NULL: never chosen). */
     /**
-     * Le colonne e le tabelle aggiunte dalle versioni successive, per le installazioni di prima. Le chiama la root
-     * all'avvio (SSLMailServer) e prima di preparare l'utente MySQL della parte web (WebDbAccess), i cui permessi
-     * per colonna le vogliono gia' li'. Non fanno niente se ci sono gia'.
+     * The columns and tables added by later versions, for earlier installations. The root calls them
+     * at startup (SSLMailServer) and before preparing the web part's MySQL user (WebDbAccess), whose per-column
+     * permissions want them already there. They do nothing if they are already there.
      */
     public void ensureColumnUpgrades() {
         ensureMailboxReceiveEnabledColumn();
-        // Lo svuotamento automatico della Junk e del Cestino di ogni casella, spento finche' non si chiede
+        // The automatic emptying of Junk and Trash of every mailbox, off until it is asked for
         ensureMailboxCleanupColumns();
-        // Cifratura password mailbox per recovery dal pannello
+        // Mailbox password encryption for recovery from the panel
         ensureMailboxPasswordVaultColumns();
         ensureThemeColumn();
-        // La lingua scelta dall'amministratore (per le installazioni di prima)
+        // The language chosen by the administrator (for earlier installations)
         ensureLanguageColumn();
         ensureDkimRotationColumns();
-        // Migra il token Cloudflare legacy se presente
+        // Migrates the legacy Cloudflare token if present
         ensureCloudflareAccountsSchema();
         ensureDkimRotationHistoryTable();
     }
@@ -628,11 +630,11 @@ public class MailDatabase {
 
     /**
      * Ensure DKIM rotation columns exist in domains table (for database migration).
-     * Aggiunge in modo idempotente i campi dkim_pending_*, dkim_previous_*,
+     * Idempotently adds the fields dkim_pending_*, dkim_previous_*,
      * dkim_rotation_state, dkim_rotation_started_at, dkim_rotation_activated_at.
      */
     public void ensureDkimRotationColumns() {
-        // Nome della colonna e la sua istruzione fissa: un ALTER non prende parametri.
+        // Column name and its fixed statement: an ALTER takes no parameters.
         String[][] cols = {
             {"dkim_pending_selector", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PENDING_SELECTOR},
             {"dkim_pending_private_key", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PENDING_PRIVATE_KEY},
@@ -643,14 +645,14 @@ public class MailDatabase {
             {"dkim_previous_selector", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PREVIOUS_SELECTOR},
             {"dkim_previous_private_key", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PREVIOUS_PRIVATE_KEY},
             {"dkim_previous_public_key", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PREVIOUS_PUBLIC_KEY},
-            // Cloudflare automation: zone + ID dei record TXT, per cancellarli
+            // Cloudflare automation: zone + IDs of the TXT records, to delete them
             {"dkim_dns_zone_id", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_DNS_ZONE_ID},
             {"dkim_pending_dns_record_id", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PENDING_DNS_RECORD_ID},
             {"dkim_previous_dns_record_id", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_PREVIOUS_DNS_RECORD_ID},
-            // Rotazione programmata
+            // Scheduled rotation
             {"dkim_rotation_interval_days", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_ROTATION_INTERVAL_DAYS},
             {"dkim_last_rotation_at", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_LAST_ROTATION_AT},
-            // Modalità rotazione (ereditata da tutti gli eventi della catena)
+            // Rotation mode (inherited by all the events of the chain)
             {"dkim_rotation_mode", SqlCatalog.MAIL_ADD_DOMAINS_DKIM_ROTATION_MODE}
         };
         try (Statement stmt = getConnection().createStatement()) {
@@ -667,26 +669,26 @@ public class MailDatabase {
 
     /**
      * Ensure cloudflare_accounts table + domains.cloudflare_account_id column exist.
-     * Migra anche il token legacy (panel_settings.cloudflare_api_token) creando un
-     * account "Account principale" e legandolo a tutti i domini esistenti.
+     * Also migrates the legacy token (panel_settings.cloudflare_api_token) by creating an
+     * account `Account principale` (main account) and linking it to all existing domains.
      */
     public void ensureCloudflareAccountsSchema() {
         try (Statement stmt = getConnection().createStatement()) {
             // 1) tabella cloudflare_accounts
             stmt.execute(SqlCatalog.MAIL_ENSURE_CLOUDFLARE_ACCOUNTS_SCHEMA);
 
-            // 2) colonna domains.cloudflare_account_id
+            // 2) column domains.cloudflare_account_id
             ResultSet rs = stmt.executeQuery(SqlCatalog.MAIL_ENSURE_CLOUDFLARE_ACCOUNTS_SCHEMA_2);
             if (rs.next() && rs.getInt(1) == 0) {
                 stmt.executeUpdate(SqlCatalog.MAIL_ENSURE_CLOUDFLARE_ACCOUNTS_SCHEMA_3);
                 System.out.println("Added cloudflare_account_id column to domains table");
             }
 
-            // 3) migrazione token legacy
+            // 3) legacy token migration
             String legacyToken = getSetting("cloudflare_api_token", "");
             String legacyEnabled = getSetting("cloudflare_enabled", "0");
             if (!legacyToken.isEmpty() && "1".equals(legacyEnabled)) {
-                // Verifica che non ci siano già account: se la tabella è vuota, importa
+                // Check that there are no accounts yet: if the table is empty, import
                 ResultSet cnt = stmt.executeQuery(SqlCatalog.MAIL_ENSURE_CLOUDFLARE_ACCOUNTS_SCHEMA_4);
                 if (cnt.next() && cnt.getInt(1) == 0) {
                     try (PreparedStatement ins = getConnection().prepareStatement(SqlCatalog.MAIL_ENSURE_CLOUDFLARE_ACCOUNTS_SCHEMA_5,
@@ -697,7 +699,7 @@ public class MailDatabase {
                         ResultSet gk = ins.getGeneratedKeys();
                         if (gk.next()) {
                             int newId = gk.getInt(1);
-                            // Lega tutti i domini esistenti a questo account (preserva il comportamento)
+                            // Link all existing domains to this account (preserves the behaviour)
                             try (PreparedStatement upd = getConnection().prepareStatement(SqlCatalog.MAIL_ENSURE_CLOUDFLARE_ACCOUNTS_SCHEMA_6)) {
                                 upd.setInt(1, newId);
                                 int affected = upd.executeUpdate();
@@ -706,7 +708,7 @@ public class MailDatabase {
                             }
                         }
                     }
-                    // Cancella il settings legacy così non viene più riusato
+                    // Delete the legacy setting so it is no longer reused
                     deleteSetting("cloudflare_api_token");
                     deleteSetting("cloudflare_enabled");
                 }
@@ -717,18 +719,18 @@ public class MailDatabase {
     }
 
     /**
-     * Ensure dkim_rotation_history table exists (idempotente).
+     * Ensure dkim_rotation_history table exists (idempotent).
      */
     public void ensureDkimRotationHistoryTable() {
         try (Statement stmt = getConnection().createStatement()) {
             stmt.execute(SqlCatalog.MAIL_ENSURE_DKIM_ROTATION_HISTORY_TABLE);
-            // Migrazione: aggiungi triggered_by se la tabella esiste già senza quel campo
+            // Migration: add triggered_by if the table already exists without that field
             ResultSet rs = stmt.executeQuery(SqlCatalog.MAIL_ENSURE_DKIM_ROTATION_HISTORY_TABLE_2);
             if (rs.next() && rs.getInt(1) == 0) {
                 stmt.executeUpdate(SqlCatalog.MAIL_ENSURE_DKIM_ROTATION_HISTORY_TABLE_3);
                 System.out.println("Added triggered_by column to dkim_rotation_history table");
             }
-            // Migrazione: aggiungi previous_selector se la tabella esiste già senza quel campo
+            // Migration: add previous_selector if the table already exists without that field
             ResultSet rs2 = stmt.executeQuery(SqlCatalog.MAIL_ENSURE_DKIM_ROTATION_HISTORY_TABLE_4);
             if (rs2.next() && rs2.getInt(1) == 0) {
                 stmt.executeUpdate(SqlCatalog.MAIL_ENSURE_DKIM_ROTATION_HISTORY_TABLE_5);
@@ -741,9 +743,9 @@ public class MailDatabase {
     }
 
     /**
-     * Registra un evento del workflow di rotazione DKIM.
-     * @param triggeredBy "user" se avviato cliccando un bottone, "scheduler" se dal timer automatico,
-     *                    null per eventi non avviati esplicitamente (verifiche, propagazione, ecc.)
+     * Records an event of the DKIM rotation workflow.
+     * @param triggeredBy "user" if started by clicking a button, "scheduler" if by the automatic timer,
+     *                    null for events not explicitly started (checks, propagation, etc.)
      */
     public void logDkimRotationEvent(int domainId, String domain, String eventType,
                                       String selector, String mode, String triggeredBy,
@@ -778,12 +780,12 @@ public class MailDatabase {
     }
 
     /**
-     * Trova il timestamp più recente di disattivazione di un selector per un dominio.
-     * Un selector è considerato "disattivato" al momento di un evento key_activated dove
-     * compare come previous_selector (cioè quando una nuova chiave l'ha sostituito).
+     * Finds the most recent deactivation timestamp of a selector for a domain.
+     * A selector is considered "deactivated" at the moment of a key_activated event where
+     * it appears as previous_selector (that is, when a new key replaced it).
      *
-     * Ritorna null se il selector non è mai stato registrato come disattivato (probabilmente
-     * non era mai stato il selector attivo nel pannello).
+     * Returns null if the selector was never recorded as deactivated (probably
+     * it had never been the active selector in the panel).
      */
     public Timestamp findSelectorDeactivationTime(int domainId, String selector) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_FIND_SELECTOR_DEACTIVATION_TIME)) {
@@ -797,7 +799,7 @@ public class MailDatabase {
     }
 
     /**
-     * Storico eventi di rotazione DKIM per un dominio, dal più recente.
+     * History of DKIM rotation events for a domain, most recent first.
      */
     public List<DkimRotationEvent> getDkimRotationHistory(int domainId, int limit) throws SQLException {
         List<DkimRotationEvent> result = new ArrayList<>();
@@ -834,7 +836,7 @@ public class MailDatabase {
         public String domain;
         public String eventType;
         public String selector;
-        public String previousSelector;  // valorizzato per key_activated (vecchio selector che è stato rimpiazzato)
+        public String previousSelector;  // set for key_activated (old selector that was replaced)
         public String mode;
         public String triggeredBy;   // "user" / "scheduler" / null
         public int cloudflareAccountId;
@@ -899,7 +901,7 @@ public class MailDatabase {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_ADD_CLOUDFLARE_ACCOUNT, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setString(1, label);
             if (email == null || email.isEmpty()) stmt.setNull(2, Types.VARCHAR); else stmt.setString(2, email);
-            // Cifrato: un token di Cloudflare scrive i DNS di tutte le zone (CloudflareTokens)
+            // Encrypted: a Cloudflare token writes the DNS of all zones (CloudflareTokens)
             stmt.setString(3, org.daemoxcp.mail.security.CloudflareTokens.seal(apiToken));
             stmt.executeUpdate();
             try (ResultSet rs = stmt.getGeneratedKeys()) {
@@ -927,7 +929,7 @@ public class MailDatabase {
     }
 
     public boolean deleteCloudflareAccount(int id) throws SQLException {
-        // Prima disassocia i domini, poi cancella l'account
+        // First unlink the domains, then delete the account
         try (PreparedStatement upd = getConnection().prepareStatement(SqlCatalog.MAIL_DELETE_CLOUDFLARE_ACCOUNT)) {
             upd.setInt(1, id);
             upd.executeUpdate();
@@ -957,7 +959,7 @@ public class MailDatabase {
         return result;
     }
 
-    /** Ritorna l'account CF assegnato a un dominio, o null. */
+    /** Returns the CF account assigned to a domain, or null. */
     public CloudflareAccount getCloudflareAccountForDomain(int domainId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_CLOUDFLARE_ACCOUNT_FOR_DOMAIN)) {
             stmt.setInt(1, domainId);
@@ -968,7 +970,7 @@ public class MailDatabase {
         return null;
     }
 
-    /** I token come stanno nel database (id, valore), per la loro migrazione: CloudflareTokens.ensureAtBoot. */
+    /** The tokens as they are in the database (id, value), for their migration: CloudflareTokens.ensureAtBoot. */
     public List<String[]> cloudflareStoredTokens() throws SQLException {
         List<String[]> out = new ArrayList<>();
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_LIST_CLOUDFLARE_STORED_TOKENS);
@@ -978,7 +980,7 @@ public class MailDatabase {
         return out;
     }
 
-    /** Il token cifrato al posto di quello in chiaro, solo se la riga ha ancora quello: vero se l'ha scritto. */
+    /** The encrypted token in place of the clear-text one, only if the row still has that one: true if it wrote it. */
     public boolean replaceCloudflareStoredToken(int id, String before, String sealed) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_REPLACE_CLOUDFLARE_STORED_TOKEN)) {
             stmt.setString(1, sealed);
@@ -988,7 +990,7 @@ public class MailDatabase {
         }
     }
 
-    /** Assegna (o disassegna passando 0/-1) un account a un dominio. */
+    /** Assigns (or unassigns, by passing 0/-1) an account to a domain. */
     public boolean assignCloudflareAccountToDomain(int domainId, int accountId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_ASSIGN_CLOUDFLARE_ACCOUNT_TO_DOMAIN)) {
             if (accountId <= 0) stmt.setNull(1, Types.INTEGER);
@@ -1134,7 +1136,7 @@ public class MailDatabase {
         return null;
     }
 
-    /** I nomi dei domini ospitati, in minuscolo come stanno nel database (autoconfig, MTA-STS: DomainCache). */
+    /** The names of the hosted domains, lowercase as they are in the database (autoconfig, MTA-STS: DomainCache). */
     public List<String> getDomainNames() throws SQLException {
         List<String> names = new ArrayList<>();
         try (Statement stmt = getConnection().createStatement();
@@ -1167,8 +1169,8 @@ public class MailDatabase {
         d.createdAt = rs.getTimestamp("created_at");
         d.dkimSelector = rs.getString("dkim_selector");
         d.dkimPublicKey = rs.getString("dkim_public_key");
-        // Le chiavi private ci sono solo per la root: le procedure della parte web le lasciano nel database e
-        // dicono soltanto se c'e' la chiave (has_dkim).
+        // The private keys are there only for the root: the web part's procedures leave them in the database and
+        // only say whether the key exists (has_dkim).
         boolean privateKeys = hasColumn(rs, "dkim_private_key");
         d.dkimPrivateKey = privateKeys ? rs.getString("dkim_private_key") : null;
         d.hasDkim = privateKeys ? d.dkimPrivateKey != null && !d.dkimPrivateKey.isEmpty() : rs.getBoolean("has_dkim");
@@ -1183,7 +1185,7 @@ public class MailDatabase {
         d.dkimPreviousSelector = rs.getString("dkim_previous_selector");
         d.dkimPreviousPrivateKey = privateKeys ? rs.getString("dkim_previous_private_key") : null;
         d.dkimPreviousPublicKey = rs.getString("dkim_previous_public_key");
-        // Cloudflare automation (può non esistere su DB legacy se ensureDkimRotationColumns non è ancora girato)
+        // Cloudflare automation (may not exist on a legacy DB if ensureDkimRotationColumns has not run yet)
         try { d.dkimDnsZoneId            = rs.getString("dkim_dns_zone_id"); } catch (SQLException ignore) {}
         try { d.dkimPendingDnsRecordId   = rs.getString("dkim_pending_dns_record_id"); } catch (SQLException ignore) {}
         try { d.dkimPreviousDnsRecordId  = rs.getString("dkim_previous_dns_record_id"); } catch (SQLException ignore) {}
@@ -1210,8 +1212,8 @@ public class MailDatabase {
     // ========== DKIM ROTATION ==========
 
     /**
-     * Salva una chiave DKIM "pending" (nuovo selector + chiavi) e imposta lo stato di rotazione.
-     * Lo stato iniziale è solitamente "pending_dns" (utente deve aggiungere il TXT in DNS).
+     * Saves a "pending" DKIM key (new selector + keys) and sets the rotation state.
+     * The initial state is usually "pending_dns" (the user must add the TXT in DNS).
      */
     public void setDkimPending(int domainId, String pendingSelector, String pendingPrivateKey,
                                 String pendingPublicKey, String state) throws SQLException {
@@ -1233,7 +1235,7 @@ public class MailDatabase {
     }
 
     /**
-     * Aggiorna solo lo stato della rotazione (es. da "pending_dns" a "propagated").
+     * Updates only the rotation state (e.g. from "pending_dns" to "propagated").
      */
     public void setDkimRotationState(int domainId, String state) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_SET_DKIM_ROTATION_STATE)) {
@@ -1244,11 +1246,11 @@ public class MailDatabase {
     }
 
     /**
-     * Promuove la chiave "pending" a "attiva":
-     *  - attuale (dkim_*) → previous (dkim_previous_*)
-     *  - pending (dkim_pending_*) → attuale (dkim_*)
-     *  - pending campi puliti
-     *  - stato → "active_grace"
+     * Promotes the "pending" key to "active":
+     *  - current (dkim_*) -> previous (dkim_previous_*)
+     *  - pending (dkim_pending_*) -> current (dkim_*)
+     *  - pending fields cleared
+     *  - state -> "active_grace"
      *  - dkim_rotation_activated_at = NOW
      */
     public void promotePendingToActive(int domainId) throws SQLException {
@@ -1260,8 +1262,8 @@ public class MailDatabase {
     }
 
     /**
-     * Salva i metadati Cloudflare del record TXT pending (zone + record id),
-     * così possiamo cancellarlo via API se la rotazione viene annullata o completata.
+     * Saves the Cloudflare metadata of the pending TXT record (zone + record id),
+     * so we can delete it via API if the rotation is cancelled or completed.
      */
     public void setDkimPendingCloudflareIds(int domainId, String zoneId, String recordId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_SET_DKIM_PENDING_CLOUDFLARE_IDS)) {
@@ -1273,7 +1275,7 @@ public class MailDatabase {
     }
 
     /**
-     * Annulla una rotazione in corso (cancella la pending key senza promuoverla).
+     * Cancels a rotation in progress (deletes the pending key without promoting it).
      */
     public void clearDkimPending(int domainId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_CLEAR_DKIM_PENDING)) {
@@ -1283,8 +1285,8 @@ public class MailDatabase {
     }
 
     /**
-     * Completa la rotazione: rimuove la previous key e azzera lo stato di rotazione.
-     * Dopo questa chiamata l'utente può rimuovere il vecchio record _domainkey TXT dal DNS.
+     * Completes the rotation: removes the previous key and resets the rotation state.
+     * After this call the user can remove the old _domainkey TXT record from DNS.
      */
     public void clearDkimPrevious(int domainId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_CLEAR_DKIM_PREVIOUS)) {
@@ -1294,7 +1296,7 @@ public class MailDatabase {
     }
 
     /**
-     * Imposta l'intervallo di rotazione programmata (in giorni). 0 = disattivato.
+     * Sets the scheduled rotation interval (in days). 0 = disabled.
      */
     public void setDkimRotationInterval(int domainId, int days) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_SET_DKIM_ROTATION_INTERVAL)) {
@@ -1305,9 +1307,9 @@ public class MailDatabase {
     }
 
     /**
-     * Aggiorna il timestamp dell'ultima rotazione (chiamato all'attivazione della chiave).
-     * Usa Java Instant.now() (UTC, JVM clock) anziché MySQL CURRENT_TIMESTAMP per evitare
-     * ambiguità di timezone tra MySQL session, JDBC e JVM.
+     * Updates the timestamp of the last rotation (called on key activation).
+     * Uses Java Instant.now() (UTC, JVM clock) instead of MySQL CURRENT_TIMESTAMP to avoid
+     * timezone ambiguity between MySQL session, JDBC and JVM.
      */
     public void markDkimRotationActivated(int domainId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_MARK_DKIM_ROTATION_ACTIVATED)) {
@@ -1318,8 +1320,8 @@ public class MailDatabase {
     }
 
     /**
-     * Forza il timestamp dell'ultima rotazione a una data specifica (epoch ms).
-     * Utile per correggere valori "fossili" memorizzati prima del fix timezone.
+     * Forces the timestamp of the last rotation to a specific date (epoch ms).
+     * Useful to correct "fossil" values stored before the timezone fix.
      */
     public void setDkimLastRotationAtMs(int domainId, long epochMs) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_MARK_DKIM_ROTATION_ACTIVATED)) {
@@ -1330,8 +1332,8 @@ public class MailDatabase {
     }
 
     /**
-     * Cancella il timestamp dell'ultima rotazione (NULL).
-     * L'UI lo mostrerà come "Mai effettuata".
+     * Clears the timestamp of the last rotation (NULL).
+     * The UI will show it as "Never done".
      */
     public void clearDkimLastRotation(int domainId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_CLEAR_DKIM_LAST_ROTATION)) {
@@ -1341,7 +1343,7 @@ public class MailDatabase {
     }
 
     /**
-     * Domini con rotazione programmata attiva (intervallo > 0).
+     * Domains with scheduled rotation enabled (interval > 0).
      */
     public List<Domain> getDomainsWithRotationSchedule() throws SQLException {
         List<Domain> result = new ArrayList<>();
@@ -1353,8 +1355,8 @@ public class MailDatabase {
     }
 
     /**
-     * Ritorna tutti i domini con una rotazione DKIM in corso
-     * (stato non null), per i task di background.
+     * Returns all the domains with a DKIM rotation in progress
+     * (state not null), for the background tasks.
      */
     public List<Domain> getDomainsInRotation() throws SQLException {
         List<Domain> result = new ArrayList<>();
@@ -1377,11 +1379,11 @@ public class MailDatabase {
         return insertMailbox(getConnection(), domainId, email, password, name, quotaMb, receiveEnabled);
     }
 
-    /** L'INSERT di una casella sulla connessione data: da sola, o dentro una transazione. */
+    /** The INSERT of a mailbox on the given connection: on its own, or inside a transaction. */
     private int insertMailbox(Connection c, int domainId, String email, String password, String name, int quotaMb, boolean receiveEnabled) throws SQLException {
         // Hash password with bcrypt (compatible with Dovecot)
         String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt(12));
-        // La copia cifrata che il pannello mostra quando serve: senza, la casella non si crea
+        // The encrypted copy the panel shows when needed: without it, the mailbox is not created
         String encryptedPassword = vaultCopy(password);
 
         try (PreparedStatement stmt = c.prepareStatement(SqlCatalog.MAIL_INSERT_MAILBOX, Statement.RETURN_GENERATED_KEYS)) {
@@ -1414,7 +1416,7 @@ public class MailDatabase {
     public boolean updateMailboxPassword(int mailboxId, String newPassword) throws SQLException {
         // Bcrypt hash (compatible with Dovecot)
         String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
-        // Hash e copia cambiano insieme: una copia vecchia accanto a un hash nuovo mostrerebbe la password sbagliata
+        // Hash and copy change together: an old copy next to a new hash would show the wrong password
         String encryptedPassword = vaultCopy(newPassword);
 
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_UPDATE_MAILBOX_PASSWORD)) {
@@ -1427,9 +1429,9 @@ public class MailDatabase {
     }
 
     /**
-     * La copia cifrata (vault) di una password di casella. Le password delle caselle si devono
-     * poter sempre rivedere dal pannello: se il vault non cifra, la password non si salva affatto,
-     * invece di salvare l'hash da solo e scoprire dopo che la copia manca.
+     * The encrypted copy (vault) of a mailbox password. Mailbox passwords must
+     * always be viewable again from the panel: if the vault does not encrypt, the password is not saved at all,
+     * instead of saving the hash alone and finding out later that the copy is missing.
      */
     private static String vaultCopy(String password) throws SQLException {
         try {
@@ -1440,8 +1442,8 @@ public class MailDatabase {
     }
 
     /**
-     * Un hash bcrypt come lo scrivono il pannello ($2a$) e doveadm pw ($2y$, $2b$, anche con {BLF-CRYPT} davanti).
-     * Pubblico perche' serve anche a DovecotMasterUser, per l'hash dell'utente master in master-users.
+     * A bcrypt hash as written by the panel ($2a$) and by doveadm pw ($2y$, $2b$, also with {BLF-CRYPT} in front).
+     * Public because DovecotMasterUser needs it too, for the master user's hash in master-users.
      */
     public static String bcryptPart(String stored) {
         if (stored == null) return null;
@@ -1449,24 +1451,24 @@ public class MailDatabase {
         if (s.startsWith("{BLF-CRYPT}")) s = s.substring("{BLF-CRYPT}".length());
         else if (s.startsWith("{BLF}")) s = s.substring("{BLF}".length());
         if (s.length() == 60 && (s.startsWith("$2a$") || s.startsWith("$2b$") || s.startsWith("$2y$"))) {
-            return "$2a$" + s.substring(4);     // jBCrypt 0.4 conosce solo $2a$: per password fino a 72 byte sono lo stesso algoritmo
+            return "$2a$" + s.substring(4);     // jBCrypt 0.4 knows only $2a$: for passwords up to 72 bytes they are the same algorithm
         }
         return null;
     }
 
     /**
-     * Il valore della colonna password e' testo in chiaro: niente hash bcrypt e niente schema
-     * {NOME} di Dovecot davanti. Succedeva quando la webmail scriveva da se' nella tabella con
-     * l'algoritmo predefinito del plugin password di Roundcube ('clear').
+     * The value of the password column is clear text: no bcrypt hash and no Dovecot {NAME}
+     * scheme in front. It happened when the webmail wrote into the table by itself with
+     * the default algorithm of Roundcube's password plugin ('clear').
      */
     static boolean isPlaintextPassword(String stored) {
         return stored != null && !stored.isEmpty() && bcryptPart(stored) == null && !stored.startsWith("{");
     }
 
     /**
-     * La password data e' quella della casella adesso? Confronta con l'hash bcrypt della colonna
-     * password (o, per una riga rimasta in chiaro, confronta a tempo costante). Lo schema
-     * sconosciuto risponde false: meglio dire "non so" che mostrare una password sbagliata.
+     * Is the given password the mailbox's password now? Compares with the bcrypt hash of the password
+     * column (or, for a row left in clear text, compares in constant time). An unknown
+     * scheme answers false: better to say "I don't know" than to show a wrong password.
      */
     public boolean mailboxPasswordMatches(int mailboxId, String plain) throws SQLException {
         if (plain == null) return false;
@@ -1498,10 +1500,10 @@ public class MailDatabase {
     }
 
     /**
-     * Il vault ha la copia di una password giusta ma la casella non l'ha (caselle di prima del
-     * vault): la aggiunge, solo se la password corrisponde all'hash di adesso. Serve a chi entra
-     * dalla webmail, che e' l'unico momento in cui la password vera passa dal server.
-     * Ritorna true se ha scritto la copia.
+     * The vault has a copy of a correct password but the mailbox does not (mailboxes from before the
+     * vault): adds it, only if the password matches the current hash. It serves those who log in
+     * from the webmail, which is the only moment the real password passes through the server.
+     * Returns true if it wrote the copy.
      */
     public boolean fillMissingVaultCopy(int mailboxId, String plain) throws SQLException {
         if (!mailboxPasswordMatches(mailboxId, plain)) return false;
@@ -1510,7 +1512,7 @@ public class MailDatabase {
             try {
                 if (plain.equals(org.daemoxcp.mail.security.PasswordVault.getInstance().decrypt(current))) return false;
             } catch (RuntimeException e) {
-                // copia illeggibile (chiave cambiata o blob rovinato): la si riscrive
+                // unreadable copy (key changed or blob damaged): it is rewritten
             }
         }
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_FILL_MISSING_VAULT_COPY)) {
@@ -1522,9 +1524,9 @@ public class MailDatabase {
     }
 
     /**
-     * Le righe con la password in chiaro (vedi isPlaintextPassword): l'hash bcrypt al posto del
-     * testo, e la copia nel vault. Dovecot legge BLF-CRYPT: con il testo in chiaro quelle caselle
-     * non entravano piu'. Ritorna quante righe ha sistemato; mai le password nel log.
+     * The rows with the password in clear text (see isPlaintextPassword): the bcrypt hash in place of the
+     * text, and the copy in the vault. Dovecot reads BLF-CRYPT: with clear text those mailboxes
+     * could no longer log in. Returns how many rows it fixed; never the passwords in the log.
      */
     public int repairPlaintextMailboxPasswords() throws SQLException {
         java.util.List<Object[]> rows = new java.util.ArrayList<>();
@@ -1551,9 +1553,9 @@ public class MailDatabase {
     }
 
     /**
-     * Recupera la password cifrata di una casella (per la feature "rivela password").
-     * Ritorna null se non c'è una password cifrata (caselle vecchie pre-vault, o vault non
-     * funzionante al momento del set).
+     * Retrieves the encrypted password of a mailbox (for the "reveal password" feature).
+     * Returns null if there is no encrypted password (old pre-vault mailboxes, or vault not
+     * working at the time of the set).
      */
     public String getMailboxPasswordEncrypted(int mailboxId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_MAILBOX_PASSWORD_ENCRYPTED)) {
@@ -1566,8 +1568,8 @@ public class MailDatabase {
     }
 
     /**
-     * Ritorna true se la casella ha una password cifrata archiviata.
-     * Usato dalla UI per decidere se mostrare l'icona "rivela".
+     * Returns true if the mailbox has a stored encrypted password.
+     * Used by the UI to decide whether to show the "reveal" icon.
      */
     public boolean mailboxHasEncryptedPassword(int mailboxId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_MAILBOX_HAS_ENCRYPTED_PASSWORD)) {
@@ -1579,12 +1581,12 @@ public class MailDatabase {
     }
 
     /**
-     * Lista tutte le caselle che hanno una password cifrata archiviata, restituendo
-     * solo id + blob cifrato. Usato per la rotazione della master key.
+     * Lists all the mailboxes that have a stored encrypted password, returning
+     * only id + encrypted blob. Used for the master key rotation.
      */
     public java.util.List<int[]> listMailboxesWithEncryptedPassword() throws SQLException {
-        // Wrapper semplice: ritorniamo coppie (id, ?) ma serviranno anche i blob.
-        // Usa la variante più completa qui sotto.
+        // Simple wrapper: we return pairs (id, ?) but the blobs will be needed too.
+        // Use the more complete variant below.
         java.util.List<int[]> ids = new java.util.ArrayList<>();
         try (Statement stmt = getConnection().createStatement();
              ResultSet rs = stmt.executeQuery(SqlCatalog.MAIL_LIST_MAILBOXES_WITH_ENCRYPTED_PASSWORD)) {
@@ -1594,7 +1596,7 @@ public class MailDatabase {
     }
 
     /**
-     * Variante con blob cifrato: ritorna (id, encrypted_blob) per ogni casella con vault.
+     * Variant with the encrypted blob: returns (id, encrypted_blob) for every mailbox with a vault.
      */
     public java.util.List<Object[]> listMailboxesWithEncryptedPasswordAndBlob() throws SQLException {
         java.util.List<Object[]> rows = new java.util.ArrayList<>();
@@ -1608,8 +1610,8 @@ public class MailDatabase {
     }
 
     /**
-     * Aggiorna SOLO il blob cifrato di una casella (usato durante la rotazione master key,
-     * dove non rigeneriamo bcrypt — la password resta logicamente la stessa).
+     * Updates ONLY the encrypted blob of a mailbox (used during the master key rotation,
+     * where we do not regenerate bcrypt -- the password logically stays the same).
      */
     public void setMailboxEncryptedPasswordOnly(int mailboxId, String newEncryptedBlob) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_FILL_MISSING_VAULT_COPY)) {
@@ -1673,8 +1675,8 @@ public class MailDatabase {
     }
 
     /**
-     * I giorni che si possono scegliere per lo svuotamento automatico della Junk e del Cestino: 0 = mai (il predefinito,
-     * si accende solo a richiesta). Lo stesso elenco per il pannello e per la webmail (plugin daemoxcp_mail_cleanup).
+     * The days that can be chosen for the automatic emptying of Junk and Trash: 0 = never (the default,
+     * it is turned on only on request). The same list for the panel and for the webmail (plugin daemoxcp_mail_cleanup).
      */
     public static final java.util.List<Integer> CLEANUP_DAYS = java.util.List.of(0, 7, 14, 30, 60, 90);
 
@@ -1683,8 +1685,8 @@ public class MailDatabase {
     }
 
     /**
-     * La webmail per la sua casella (la rotta interna di Roundcube, solo la root): i giorni della Junk e del Cestino.
-     * Falso se la casella non c'e' o non e' attiva.
+     * The webmail for its own mailbox (Roundcube's internal route, root only): the days for Junk and Trash.
+     * False if the mailbox does not exist or is not active.
      */
     public boolean setMailboxCleanup(String email, int junkExpungeDays, int trashExpungeDays) throws SQLException {
         if (!cleanupDaysAllowed(junkExpungeDays) || !cleanupDaysAllowed(trashExpungeDays))
@@ -1697,7 +1699,7 @@ public class MailDatabase {
         }
     }
 
-    /** Le due colonne dello svuotamento automatico, sulle installazioni di prima (0 = mai). */
+    /** The two columns of the automatic emptying, on earlier installations (0 = never). */
     public void ensureMailboxCleanupColumns() {
         String[][] cols = {
             {"junk_expunge_days", SqlCatalog.MAIL_ADD_MAILBOXES_JUNK_EXPUNGE_DAYS},
@@ -1716,9 +1718,9 @@ public class MailDatabase {
     }
 
     /**
-     * Ensure mailbox password vault columns exist (idempotente).
-     * Aggiunge password_encrypted (TEXT) + password_encrypted_at (TIMESTAMP).
-     * Le nuove password create/aggiornate dalla UI verranno cifrate e archiviate qui.
+     * Ensure mailbox password vault columns exist (idempotent).
+     * Adds password_encrypted (TEXT) + password_encrypted_at (TIMESTAMP).
+     * New passwords created/updated from the UI will be encrypted and stored here.
      */
     public void ensureMailboxPasswordVaultColumns() {
         String[][] cols = {
@@ -1851,7 +1853,7 @@ public class MailDatabase {
         return mailboxes;
     }
 
-    /** Il risultato ha questa colonna? */
+    /** Does the result have this column? */
     private static boolean hasColumn(ResultSet rs, String name) throws SQLException {
         java.sql.ResultSetMetaData md = rs.getMetaData();
         for (int i = 1; i <= md.getColumnCount(); i++) {
@@ -1877,7 +1879,7 @@ public class MailDatabase {
         } catch (SQLException ignored) {
             m.receiveEnabled = true; // Default for old databases
         }
-        // Lo svuotamento automatico: 0 = mai, anche quando le colonne non ci sono ancora
+        // The automatic emptying: 0 = never, even when the columns are not there yet
         m.junkExpungeDays = hasColumn(rs, "junk_expunge_days") ? rs.getInt("junk_expunge_days") : 0;
         m.trashExpungeDays = hasColumn(rs, "trash_expunge_days") ? rs.getInt("trash_expunge_days") : 0;
         // Additional UI counts (may not be present in all queries)
@@ -1891,17 +1893,17 @@ public class MailDatabase {
         return m;
     }
 
-    // ========== ALIAS <-> CASELLA ==========
+    // ========== ALIAS <-> MAILBOX ==========
 
     /**
-     * Un indirizzo che oggi e' solo alias diventa una casella, in una transazione: per Postfix,
-     * che legge le tabelle a ogni messaggio, si passa da "alias" a "casella" senza un istante in
-     * mezzo in cui l'indirizzo non esiste o vale in tutti e due i modi.
+     * An address that today is only an alias becomes a mailbox, in a transaction: for Postfix,
+     * which reads the tables at every message, it goes from "alias" to "mailbox" without an instant in
+     * between in which the address does not exist or counts both ways.
      *
-     * @param keepForwards false: le righe con questa sorgente se ne vanno e la posta resta nella
-     *                     casella; true: restano, e un alias "indirizzo -> se stesso" attivo fa
-     *                     arrivare una copia anche nella casella
-     * @return l'id della casella nuova
+     * @param keepForwards false: the rows with this source go away and the mail stays in the
+     *                     mailbox; true: they stay, and an active "address -> itself" alias makes
+     *                     a copy arrive in the mailbox too
+     * @return the id of the new mailbox
      */
     public int transformAliasToMailbox(int domainId, String email, String password, String name, int quotaMb,
                                        boolean keepForwards) throws SQLException {
@@ -1933,11 +1935,11 @@ public class MailDatabase {
     }
 
     /**
-     * Una casella diventa un alias verso le destinazioni date, in una transazione. Se ne vanno la
-     * casella (e con lei, per le chiavi esterne, risposta automatica, filtri, inoltri, token della
-     * webmail), il suo limite di invio e l'alias "se stessa -> se stessa": senza casella porterebbe
-     * a un indirizzo che non esiste. Gli altri alias con questa sorgente restano. La posta gia'
-     * arrivata non e' nel database: resta sul disco.
+     * A mailbox becomes an alias to the given destinations, in a transaction. Gone are the
+     * mailbox (and with it, through the foreign keys, auto-reply, filters, forwards, webmail
+     * tokens), its sending limit and the "itself -> itself" alias: without a mailbox it would lead
+     * to an address that does not exist. The other aliases with this source stay. The mail already
+     * arrived is not in the database: it stays on disk.
      */
     public void transformMailboxToAlias(int mailboxId, int domainId, String email, List<String> destinations) throws SQLException {
         String address = email.toLowerCase();
@@ -1974,7 +1976,7 @@ public class MailDatabase {
         }
     }
 
-    /** Gli alias con questa sorgente, attivi o no. */
+    /** The aliases with this source, active or not. */
     public List<Alias> getAliasesBySource(String source) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_ALIASES_BY_SOURCE)) {
             stmt.setString(1, source.toLowerCase());
@@ -1982,7 +1984,7 @@ public class MailDatabase {
         }
     }
 
-    /** Gli alias che portano a questo indirizzo, da qualunque dominio. */
+    /** The aliases that lead to this address, from any domain. */
     public List<Alias> getAliasesByDestination(String destination) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_ALIASES_BY_DESTINATION)) {
             stmt.setString(1, destination.toLowerCase());
@@ -2029,9 +2031,9 @@ public class MailDatabase {
     }
 
     /**
-     * Cambia la destinazione di un alias con un solo UPDATE: nessun momento in cui la sorgente
-     * resta senza alias, come succederebbe eliminando e ricreando. Una coppia sorgente ->
-     * destinazione gia' esistente fa scattare il vincolo UNIQUE (SQLIntegrityConstraintViolationException).
+     * Changes the destination of an alias with a single UPDATE: no moment in which the source
+     * is left without an alias, as would happen by deleting and recreating. A source ->
+     * destination pair that already exists triggers the UNIQUE constraint (SQLIntegrityConstraintViolationException).
      */
     public boolean updateAliasDestination(int aliasId, String destination) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_UPDATE_ALIAS_DESTINATION)) {
@@ -2041,7 +2043,7 @@ public class MailDatabase {
         }
     }
 
-    /** Un alias per id, o null se non c'e'. */
+    /** An alias by id, or null if there is none. */
     public Alias getAliasById(int aliasId) throws SQLException {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_ALIAS_BY_ID)) {
             stmt.setInt(1, aliasId);
@@ -2156,7 +2158,7 @@ public class MailDatabase {
         return 0;
     }
 
-    /** La versione del server MySQL a cui il pannello e' collegato adesso (SELECT VERSION()), o null. */
+    /** The version of the MySQL server the panel is connected to now (SELECT VERSION()), or null. */
     public String serverVersion() {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_SERVER_VERSION);
              ResultSet rs = stmt.executeQuery()) {
@@ -2231,15 +2233,15 @@ public class MailDatabase {
         public String dkimPrivateKey;
         public String dkimPublicKey;
         public boolean hasDkim;
-        // DKIM rotation - pending key (in attesa di propagazione DNS)
+        // DKIM rotation - pending key (waiting for DNS propagation)
         public String dkimPendingSelector;
         public String dkimPendingPrivateKey;
         public String dkimPendingPublicKey;
-        // Stato rotazione: null (nessuna), "pending_dns", "propagated", "active_grace"
+        // Rotation state: null (none), "pending_dns", "propagated", "active_grace"
         public String dkimRotationState;
         public Timestamp dkimRotationStartedAt;
         public Timestamp dkimRotationActivatedAt;
-        // Vecchia chiave conservata durante il grace period
+        // Old key kept during the grace period
         public String dkimPreviousSelector;
         public String dkimPreviousPrivateKey;
         public String dkimPreviousPublicKey;
@@ -2247,12 +2249,12 @@ public class MailDatabase {
         public String dkimDnsZoneId;
         public String dkimPendingDnsRecordId;
         public String dkimPreviousDnsRecordId;
-        // Account Cloudflare assegnato (0 = nessuno / manuale)
+        // Assigned Cloudflare account (0 = none / manual)
         public int cloudflareAccountId;
-        // Rotazione programmata (0 = disattivata)
+        // Scheduled rotation (0 = disabled)
         public int dkimRotationIntervalDays;
         public Timestamp dkimLastRotationAt;
-        // Modalità rotazione corrente (ereditata da eventi della catena)
+        // Current rotation mode (inherited from events of the chain)
         public String dkimRotationMode;
     }
 
@@ -2265,8 +2267,8 @@ public class MailDatabase {
         public int quotaMb;  // 0 = unlimited
         public boolean active;
         public boolean receiveEnabled;  // false = no-reply (send only)
-        public int junkExpungeDays;     // dopo quanti giorni Dovecot svuota la Junk; 0 = mai
-        public int trashExpungeDays;    // dopo quanti giorni Dovecot svuota il Cestino; 0 = mai
+        public int junkExpungeDays;     // after how many days Dovecot empties Junk; 0 = never
+        public int trashExpungeDays;    // after how many days Dovecot empties Trash; 0 = never
         public Timestamp createdAt;
         public Timestamp lastLogin;
         // Additional counts for UI display
@@ -2405,7 +2407,7 @@ public class MailDatabase {
         return filters;
     }
 
-    /** Un filtro solo, con la sua casella; null se non c'e' (o il database non risponde). */
+    /** A single filter, with its mailbox; null if there is none (or the database does not answer). */
     public SieveFilter getSieveFilter(int filterId) {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_SIEVE_FILTER)) {
             stmt.setInt(1, filterId);
@@ -2500,7 +2502,7 @@ public class MailDatabase {
         return rules;
     }
 
-    /** Un inoltro solo, con la sua casella; null se non c'e' (o il database non risponde). */
+    /** A single forward, with its mailbox; null if there is none (or the database does not answer). */
     public ForwardingRule getForwardingRule(int ruleId) {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_GET_FORWARDING_RULE)) {
             stmt.setInt(1, ruleId);
@@ -2592,12 +2594,12 @@ public class MailDatabase {
     }
 
     /**
-     * Salva un limite di invio, aggiornando la riga che c'e' gia' per lo stesso obiettivo.
+     * Saves a sending limit, updating the row that already exists for the same target.
      *
-     * Il limite globale ha target_id 0 e non NULL: nell'indice UNIQUE (target_type, target_id) di
-     * MySQL due NULL non sono uguali, e ogni salvataggio dei limiti globali aggiungeva una riga
-     * invece di aggiornare quella che c'era. Le righe globali con NULL rimaste da prima si tolgono
-     * nella stessa transazione.
+     * The global limit has target_id 0 and not NULL: in MySQL's UNIQUE index (target_type, target_id)
+     * two NULLs are not equal, and every save of the global limits added a row
+     * instead of updating the one that was there. The global rows with NULL left from before are removed
+     * in the same transaction.
      */
     public boolean saveRateLimit(String targetType, Integer targetId, int maxPerHour, int maxPerDay, int maxRecipients, boolean enabled) {
         boolean global = "global".equals(targetType);
@@ -2706,7 +2708,7 @@ public class MailDatabase {
     }
 
     public void incrementEmailStat(Integer mailboxId, Integer domainId, String statType, int count, long bytes) {
-        // Un'istruzione fissa per tipo: le colonne non sono parametri.
+        // One fixed statement per type: the columns are not parameters.
         String sql = switch (statType) {
             case "sent" -> SqlCatalog.MAIL_ADD_STAT_SENT;
             case "received" -> SqlCatalog.MAIL_ADD_STAT_RECEIVED;
@@ -2739,8 +2741,8 @@ public class MailDatabase {
     }
 
     /**
-     * Come {@link #incrementEmailStat}, nel giorno dato (UTC): quello del messaggio letto dal registro di Postfix
-     * (MailLogStats), non quello in cui lo si conta. Vero se MySQL l'ha scritto.
+     * Like {@link #incrementEmailStat}, on the given day (UTC): that of the message read from Postfix's log
+     * (MailLogStats), not the one on which it is counted. True if MySQL wrote it.
      */
     public boolean incrementEmailStatOn(java.time.LocalDate day, Integer mailboxId, Integer domainId, String statType, int count, long bytes) {
         String sql = switch (statType) {
@@ -2768,7 +2770,7 @@ public class MailDatabase {
         }
     }
 
-    /** I conteggi prima del giorno dato: quante righe ha tolto. */
+    /** The counts before the given day: how many rows it removed. */
     public int deleteEmailStatsBefore(java.time.LocalDate day) {
         try (PreparedStatement stmt = getConnection().prepareStatement(SqlCatalog.MAIL_DELETE_STATS_BEFORE)) {
             stmt.setDate(1, java.sql.Date.valueOf(day));
@@ -2867,8 +2869,8 @@ public class MailDatabase {
      * @return List of audit log entries
      */
     public java.util.List<AuditLogEntry> getAuditLog(String action, String username, String ipAddress, int limit) {
-        // Un filtro vuoto e' NULL, e (? IS NULL OR colonna = ?) lo lascia passare: un'istruzione sola,
-        // invece di comporre il WHERE con i filtri presenti.
+        // An empty filter is NULL, and (? IS NULL OR column = ?) lets it through: a single statement,
+        // instead of composing the WHERE with the filters present.
         String[] filters = {
             action == null || action.isEmpty() ? null : action,
             username == null || username.isEmpty() ? null : username,

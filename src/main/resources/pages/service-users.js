@@ -1,6 +1,6 @@
-        // ---------- Con quale utente gira ogni servizio ----------
-        // Ogni utente del servizio su una riga sua: il nome, i suoi processi e a che cosa serve (reperto 228). Un
-        // server di prima, che non manda roles, mostra gli utenti in fila come allora.
+        // ---------- Which user each service runs as ----------
+        // Each user of the service on a line of its own: the name, its processes and what it is for (finding
+        // 228). An older server, which does not send roles, shows the users in a row as before.
         function svcUsersRoles(s) {
             const roles = s.roles || [];
             if (!roles.length) return '<code>' + updEsc((s.users || []).join(', ')) + '</code>';
@@ -63,8 +63,8 @@
             el.innerHTML = h;
         }
 
-        // Si legge da solo quando la pagina che ha la scheda si apre: e' una sola lettura (ps, i file dei pool, il cron).
-        // Dopo che la pagina e' tutta letta: le funzioni che usa (updApi, t) possono stare in script piu' avanti.
+        // It reads itself when the page that has the card opens: it is a single read (ps, the pool files, the
+        // cron). After the whole page has been read: the functions it uses (updApi, t) can be in later scripts.
         function svcUsersAuto() { if (document.getElementById('upd-svc-users')) svcUsersLoad(); }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', svcUsersAuto);
         else svcUsersAuto();

@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * redis only on its Unix socket, 0770 of the group redis, with rspamd in that group (reperto 235). Against a fake
+ * redis only on its Unix socket, 0770 of the group redis, with rspamd in that group (finding 235). Against a fake
  * redis that listens where its redis.conf says (the last active line wins, as in redis) and a fake rspamd that
  * reaches redis only if it was started in the group redis and is pointed at the socket:
  *  1. the installer writes exactly RedisSocket.FINAL and points rspamd at the socket;

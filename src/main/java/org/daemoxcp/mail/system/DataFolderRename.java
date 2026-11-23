@@ -22,42 +22,42 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * All'avvio del servizio: le cartelle dei dati del pannello prendono il nome nuovo (DaemoxCP Mail, 17/11/2026).
+ * At service startup: the panel's data folders take the new name (DaemoxCP Mail, 2026-11-17).
  *
- * <p>Fino a questa versione il pannello aveva due cartelle in /var/db: /var/db/mailpanel (i suoi registri, lo stato
- * degli aggiornamenti, le chiavi della webmail e di Dovecot, le sessioni PHP di Roundcube, i file pubblici di
- * MTA-STS) e /var/db/mail-panel (la lista dei ban permanenti, le zone geografiche del firewall, le copie di
- * fail2ban). Diventano una sola, /var/db/daemoxcp-mail: nessun nome dell'una c'e' anche nell'altra.
+ * <p>Up to this version the panel had two folders in /var/db: /var/db/mailpanel (its logs, the state of the
+ * updates, the webmail and Dovecot keys, Roundcube's PHP sessions, the public MTA-STS files) and
+ * /var/db/mail-panel (the list of permanent bans, the firewall's geographic zones, the fail2ban copies). They
+ * become a single one, /var/db/daemoxcp-mail: no name in one is also in the other.
  *
- * <p>Non e' una rinomina del solo pannello: le due cartelle le leggono anche altri servizi, e un percorso vecchio
- * rimasto in un loro file diventa un errore senza avviso. Misurato nell'inventario del 17/11/2026:
+ * <p>It is not a rename of the panel alone: the two folders are also read by other services, and an old path
+ * left in one of their files becomes an error without warning. Measured in the inventory of 2026-11-17:
  * <ul>
- *   <li>php.ini, session.save_path: le sessioni di Roundcube (php-fpm le cerca dove diceva all'avvio);</li>
- *   <li>il file di nginx della superficie pubblica, alias del file di MTA-STS: un 404 e la politica sparisce;</li>
- *   <li>/etc/pf.conf (la tabella permaban) e l'ancora panel-fw (le zone geografiche): li rilegge il prossimo
- *       caricamento di pf, che senza il file fallirebbe intero;</li>
- *   <li>l'azione dei ban permanenti di fail2ban, e lo script di avvio del pannello (il suo registro).</li>
+ *   <li>php.ini, session.save_path: Roundcube's sessions (php-fpm looks for them where it was told at startup);</li>
+ *   <li>the nginx file of the public surface, alias of the MTA-STS file: a 404 and the policy disappears;</li>
+ *   <li>/etc/pf.conf (the permaban table) and the panel-fw anchor (the geographic zones): they are re-read by the
+ *       next load of pf, which without the file would fail entirely;</li>
+ *   <li>fail2ban's permanent-ban action, and the panel's startup script (its log).</li>
  * </ul>
- * Quindi tutto insieme: si spostano le cartelle, si riscrivono i percorsi in ogni file che li cita fra quelli dei
- * servizi coinvolti, si controlla ogni servizio toccato (php-fpm -t, nginx -t, pfctl -n, doveconf, postfix check) e
- * si ricaricano quelli che leggono i percorsi solo all'avvio (php-fpm, nginx, fail2ban, Dovecot, Postfix). Poi si
- * verifica che i file a cui puntano gli alias di nginx li possa leggere www. Al primo passo che non torna si rimette
- * tutto com'era, file e cartelle, e si ricarica: al prossimo avvio si riprova.
+ * So everything together: the folders are moved, the paths are rewritten in every file that mentions them among
+ * those of the services involved, every service touched is checked (php-fpm -t, nginx -t, pfctl -n, doveconf,
+ * postfix check) and the ones that read the paths only at startup are reloaded (php-fpm, nginx, fail2ban, Dovecot,
+ * Postfix). Then it checks that www can read the files the nginx aliases point to. At the first step that does not
+ * add up, everything is put back as it was, files and folders, and reloaded: at the next startup it tries again.
  *
- * <p>pf non si ricarica: la tabella permaban e le zone sono gia' nel kernel, e il percorso conta solo al prossimo
- * caricamento, che a quel punto trova il file nuovo. Un ricaricamento di pf in piu' all'avvio non serve a niente.
+ * <p>pf is not reloaded: the permaban table and the zones are already in the kernel, and the path matters only at
+ * the next load, which at that point finds the new file. An extra pf reload at startup would serve no purpose.
  *
- * <p>Si cambia un percorso solo dove e' intero: "/var/db/mailpanel" seguito da "/" o dalla fine della parola, mai
- * "/var/db/mailpanel-qualcosa". I nomi di prima stanno in legacy-names.json (sezione "dataFolders").
+ * <p>A path is changed only where it is whole: "/var/db/mailpanel" followed by "/" or by the end of the word, never
+ * "/var/db/mailpanel-something". The previous names are in legacy-names.json (section "dataFolders").
  */
 public final class DataFolderRename {
 
     private static final Logger LOGGER = Logger.getLogger(DataFolderRename.class.getName());
 
-    /** La cartella di adesso, dal file di dati: e' il secondo nome di ogni coppia. */
+    /** The current folder, from the data file: it is the second name of each pair. */
     static final String NEW = "/var/db/" + Product.SLUG;
 
-    /** I file che possono citare le cartelle, uno per uno. */
+    /** The files that may mention the folders, one by one. */
     static final List<String> FILES = List.of(
             "/usr/local/etc/php.ini", "/usr/local/etc/php-fpm.conf", "/etc/pf.conf",
             "/usr/local/etc/fail2ban/jail.local", "/usr/local/etc/nginx/nginx.conf",
@@ -65,7 +65,7 @@ public final class DataFolderRename {
             "/usr/local/etc/dovecot/dovecot.conf", "/etc/rc.conf",
             "/usr/local/etc/rc.d/mailpanel", "/usr/local/etc/rc.d/" + Product.ID);
 
-    /** Le cartelle i cui file (non le sottocartelle) possono citarle. */
+    /** The folders whose files (not their subfolders) may mention them. */
     static final List<String> FOLDERS = List.of(
             "/usr/local/etc/php-fpm.d", "/etc/pf.anchors", "/usr/local/etc/newsyslog.conf.d",
             "/usr/local/etc/fail2ban/jail.d", "/usr/local/etc/fail2ban/action.d", "/usr/local/etc/fail2ban/filter.d",
@@ -76,19 +76,19 @@ public final class DataFolderRename {
 
     record Report(Outcome outcome, String detail) {}
 
-    /** Quello che serve dai servizi, separato per provarlo senza i servizi veri. */
+    /** What is needed from the services, kept separate to test it without the real services. */
     interface Services {
-        /** Le cartelle che nginx include (nginx -T); vuota senza nginx, null se nginx non risponde. */
+        /** The folders that nginx includes (nginx -T); empty without nginx, null if nginx does not answer. */
         List<String> nginxFolders();
-        /** Il controllo della configurazione di un servizio: null se va bene, altrimenti cosa dice. */
+        /** The configuration check of a service: null if it is fine, otherwise what it says. */
         String test(Kind kind);
-        /** Il ricaricamento: null se e' andato, altrimenti cosa dice. Un servizio spento non si ricarica. */
+        /** The reload: null if it went through, otherwise what it says. A stopped service is not reloaded. */
         String reload(Kind kind);
-        /** Vero se l'utente www puo' leggere il file. */
+        /** True if the www user can read the file. */
         boolean readableByWww(Path file);
     }
 
-    /** I servizi a cui appartiene un file, per sapere cosa controllare e cosa ricaricare. */
+    /** The services a file belongs to, to know what to check and what to reload. */
     enum Kind { PHP, NGINX, PF, FAIL2BAN, DOVECOT, POSTFIX, RSPAMD, OTHER }
 
     private DataFolderRename() {}
@@ -104,9 +104,9 @@ public final class DataFolderRename {
         }
     }
 
-    // ===================== funzioni pure =====================
+    // ===================== pure functions =====================
 
-    /** Il testo coi percorsi delle cartelle di prima sostituiti da quelli di adesso, solo dove il nome e' intero. */
+    /** The text with the paths of the previous folders replaced by the current ones, only where the name is whole. */
     static String rewritten(String text, List<String[]> pairs) {
         String out = text;
         for (String[] p : pairs) {
@@ -116,7 +116,7 @@ public final class DataFolderRename {
         return out;
     }
 
-    /** A quale servizio appartiene un file, dal suo percorso. */
+    /** Which service a file belongs to, from its path. */
     static Kind kindOf(String path, Set<String> nginxFolders) {
         if (path.startsWith("/usr/local/etc/php")) return Kind.PHP;
         if (path.startsWith("/etc/pf.")) return Kind.PF;
@@ -129,7 +129,7 @@ public final class DataFolderRename {
         return Kind.OTHER;
     }
 
-    /** Gli alias di nginx (il file a cui puntano) che stanno nella cartella di adesso. */
+    /** The nginx aliases (the file they point to) that are in the current folder. */
     static List<Path> aliasesInto(String nginxText) {
         List<Path> out = new ArrayList<>();
         Matcher m = Pattern.compile("(?m)^\\s*alias\\s+(" + Pattern.quote(NEW) + "/[^;\\s]+)\\s*;").matcher(nginxText);
@@ -137,12 +137,12 @@ public final class DataFolderRename {
         return out;
     }
 
-    // ===================== la migrazione =====================
+    // ===================== the migration =====================
 
-    /** Un file cambiato: dove sta, com'era, com'e' adesso. */
+    /** A changed file: where it is, how it was, how it is now. */
     private record Changed(Path path, String before, String after, Kind kind) {}
 
-    /** Una cartella o un file spostato, per poterlo rimettere. */
+    /** A moved folder or file, so that it can be put back. */
     private record Moved(Path from, Path to) {}
 
     static Report migrate(List<String[]> pairs, Services sv) {
@@ -150,7 +150,7 @@ public final class DataFolderRename {
         for (String[] p : pairs) if (!p[0].equals(p[1]) && Files.exists(Path.of(p[0]), LinkOption.NOFOLLOW_LINKS)) present.add(p);
         if (present.isEmpty()) return new Report(Outcome.NOTHING, "");
 
-        // Prima di toccare qualcosa: nessun nome di una cartella vecchia gia' presente in quella nuova.
+        // Before touching anything: no name of an old folder already present in the new one.
         for (String[] p : present) {
             Path from = Path.of(p[0]), to = Path.of(p[1]);
             if (Files.isSymbolicLink(from) || !Files.isDirectory(from, LinkOption.NOFOLLOW_LINKS))
@@ -169,7 +169,7 @@ public final class DataFolderRename {
         if (folders == null) return new Report(Outcome.LEFT, "nginx -T failed: nothing moved, retrying at the next start");
         Set<String> nginxFolders = new LinkedHashSet<>(folders);
 
-        // I file che citano le cartelle, con il testo nuovo: letti tutti prima di spostare qualcosa.
+        // The files that mention the folders, with the new text: all read before moving anything.
         Set<Path> candidates = new LinkedHashSet<>();
         for (String f : FILES) candidates.add(Path.of(f));
         Set<String> scan = new LinkedHashSet<>(FOLDERS);
@@ -194,7 +194,7 @@ public final class DataFolderRename {
                 if (changes.stream().anyMatch(x -> x.path().equals(real))) continue;
                 changes.add(new Changed(real, before, after, kindOf(real.toString(), nginxFolders)));
             } catch (IOException | RuntimeException e) {
-                // Un file che non si legge come testo (binario, codifica diversa) non cita le cartelle.
+                // A file that cannot be read as text (binary, different encoding) does not mention the folders.
             }
         }
 
@@ -254,8 +254,8 @@ public final class DataFolderRename {
     }
 
     /**
-     * Sposta una cartella: con un rename se quella nuova non c'e', altrimenti un nome alla volta (la cartella vecchia,
-     * vuota, se ne va). Ogni passo resta in {@code moved}, per poterlo rimettere.
+     * Moves a folder: with a rename if the new one does not exist, otherwise one name at a time (the old folder,
+     * now empty, goes away). Each step stays in {@code moved}, so that it can be put back.
      */
     private static void moveFolder(Path from, Path to, List<Moved> moved) throws IOException {
         if (!Files.exists(to, LinkOption.NOFOLLOW_LINKS)) {
@@ -275,14 +275,14 @@ public final class DataFolderRename {
         PosixFileAttributes a = Files.readAttributes(from, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         Files.delete(from);
         moved.add(new Moved(from, null));
-        // Per rimetterla: con permessi e proprietario di prima.
+        // To put it back: with the permissions and owner it had before.
         removedFolders.put(from, a);
     }
 
-    /** Le cartelle vecchie tolte perche' rimaste vuote, con i loro attributi: per ricrearle uguali. */
+    /** The old folders removed because they were left empty, with their attributes: to recreate them identical. */
     private static final Map<Path, PosixFileAttributes> removedFolders = new LinkedHashMap<>();
 
-    /** Rimette tutto com'era, al contrario: i file, poi gli spostamenti. Dice cosa non e' riuscito. */
+    /** Puts everything back as it was, in reverse: the files, then the moves. Says what did not succeed. */
     private static String putBack(List<Moved> moved, List<Changed> written) {
         List<String> problems = new ArrayList<>();
         for (int i = written.size() - 1; i >= 0; i--) {
@@ -314,7 +314,7 @@ public final class DataFolderRename {
         return problems.isEmpty() ? "; everything put back as it was" : "; NOT put back: " + String.join(", ", problems);
     }
 
-    // ===================== i servizi veri =====================
+    // ===================== the real services =====================
 
     static final class RealServices implements Services {
         private static final Duration SHORT = Duration.ofSeconds(30);

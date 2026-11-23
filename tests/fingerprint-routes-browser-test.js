@@ -1,4 +1,4 @@
-// The two features that send the root part a "fingerprint" the panel itself computed (reperto 204), on the real panel of
+// The two features that send the root part a "fingerprint" the panel itself computed (finding 204), on the real panel of
 // the TEST VM, through the web part and the root part's closed list (RootGate). On the real server the branch change was
 // refused with "The request does not have the shape the panel expects": the gate checked every "fingerprint" against
 // the shape of an SSH key's.

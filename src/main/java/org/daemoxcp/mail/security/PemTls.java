@@ -20,25 +20,25 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Certificato e chiave TLS del pannello in PEM: lettura e controllo (reperto 243).
+ * The panel's TLS certificate and key in PEM: reading and checking (finding 243).
  *
- * <p>Il certificato del pannello si imposta solo dalla voce 2 del menu, e il pannello lo usava cosi' com'era: un
- * certificato che non copre il nome del pannello, scaduto, o una chiave che non e' la sua si scoprivano solo al primo
- * avvio, col server che non partiva o col browser (e Cloudflare in modalita' Full (strict)) che lo rifiutava. Adesso
- * la voce 2 li controlla prima di salvare, e certificato e chiave si possono dare anche come percorso di un file (per
- * esempio l'Origin Certificate di Cloudflare copiato con scp), invece di incollarli in una casella di tre righe.
+ * <p>The panel certificate is set only from menu option 2, and the panel used it as it was: a
+ * certificate that does not cover the panel's name, expired, or a key that is not its own were discovered only at the first
+ * startup, with the server not starting or with the browser (and Cloudflare in Full (strict) mode) rejecting it. Now
+ * menu option 2 checks them before saving, and certificate and key can also be given as the path of a file (for
+ * example the Cloudflare Origin Certificate copied with scp), instead of pasting them into a three-line box.
  *
- * <p>La lettura della chiave e' quella che il server TLS usava gia' (SSLMailServer), spostata qui perche' il server e
- * il controllo leggano allo stesso modo: PKCS#8 (RSA o EC), PKCS#1 RSA convertita in PKCS#8.
+ * <p>Reading the key is what the TLS server already did (SSLMailServer), moved here so that the server and
+ * the check read the same way: PKCS#8 (RSA or EC), PKCS#1 RSA converted to PKCS#8.
  */
 public final class PemTls {
 
     private PemTls() {}
 
-    /** Un file PEM e' piccolo: un certificato con la sua catena sta in pochi KB. */
+    /** A PEM file is small: a certificate with its chain fits in a few KB. */
     public static final long MAX_FILE = 64 << 10;
 
-    /** Righe col fine riga normale, senza spazi ai bordi e senza righe vuote. */
+    /** Lines with the normal line ending, without spaces at the edges and without empty lines. */
     public static String normalize(String pem) {
         if (pem == null) return null;
         pem = pem.replace("\r\n", "\n").replace("\r", "\n");
@@ -50,16 +50,16 @@ public final class PemTls {
         return sb.toString();
     }
 
-    /** Vero se il testo e' il percorso di un file invece che il PEM stesso: una riga sola che comincia con /. */
+    /** True if the text is the path of a file instead of the PEM itself: a single line starting with /. */
     public static boolean isPath(String text) {
         String t = text == null ? "" : text.trim();
         return t.startsWith("/") && !t.contains("\n") && !t.contains("-----BEGIN");
     }
 
     /**
-     * Il PEM in un file: file normale (niente collegamenti), al massimo {@link #MAX_FILE}, con una riga BEGIN.
+     * The PEM in a file: a regular file (no links), at most {@link #MAX_FILE}, with a BEGIN line.
      *
-     * @throws IOException con un messaggio da mostrare a chi ha scritto il percorso
+     * @throws IOException with a message to show to whoever wrote the path
      */
     public static String readFile(Path file) throws IOException {
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
@@ -70,7 +70,7 @@ public final class PemTls {
         return s;
     }
 
-    /** I certificati del PEM, nell'ordine (il primo e' quello del server). */
+    /** The certificates of the PEM, in order (the first one is the server's). */
     public static List<X509Certificate> certificates(String pem) throws Exception {
         CertificateFactory cf = CertificateFactory.getInstance("X.509");
         List<X509Certificate> out = new ArrayList<>();
@@ -82,7 +82,7 @@ public final class PemTls {
         return out;
     }
 
-    /** La chiave privata del PEM: PKCS#8 (RSA o EC) o PKCS#1 RSA. */
+    /** The private key of the PEM: PKCS#8 (RSA or EC) or PKCS#1 RSA. */
     public static PrivateKey privateKey(String keyContent) throws Exception {
         if (keyContent == null || keyContent.trim().isEmpty())
             throw new IllegalArgumentException("Private key content is empty");
@@ -113,7 +113,7 @@ public final class PemTls {
         return Base64.getDecoder().decode(pem.replace(begin, "").replace(end, "").replaceAll("\\s", ""));
     }
 
-    /** PKCS#1 RSA dentro l'involucro PKCS#8 ({@code rsaEncryption}), come la leggeva il server TLS. */
+    /** PKCS#1 RSA inside the PKCS#8 wrapper ({@code rsaEncryption}), as the TLS server used to read it. */
     public static byte[] pkcs1ToPkcs8(byte[] pkcs1Bytes) {
         byte[] pkcs8Header = {
             0x30, (byte) 0x82, 0x00, 0x00, // SEQUENCE, length placeholder
@@ -136,17 +136,17 @@ public final class PemTls {
         return pkcs8Bytes;
     }
 
-    // ===================== Il controllo prima di salvare =====================
+    // ===================== The check before saving =====================
 
     /**
-     * L'esito del controllo: gli errori fermano il salvataggio, gli avvisi si mostrano nella conferma, le righe di
-     * informazione dicono cosa si sta salvando.
+     * The outcome of the check: errors stop the save, warnings are shown in the confirmation, the information
+     * lines say what is being saved.
      */
     public record Check(List<String> errors, List<String> warnings, List<String> info) {
         public boolean ok() { return errors.isEmpty(); }
     }
 
-    /** I nomi che il certificato copre: i DNS dei Subject Alternative Names, o il CN se non ce ne sono. */
+    /** The names the certificate covers: the DNS entries of the Subject Alternative Names, or the CN if there are none. */
     public static List<String> names(X509Certificate c) {
         List<String> out = new ArrayList<>();
         try {
@@ -156,7 +156,7 @@ public final class PemTls {
                     if (san.size() >= 2 && Integer.valueOf(2).equals(san.get(0)) && san.get(1) instanceof String s)
                         out.add(s.toLowerCase(Locale.ROOT));
         } catch (Exception ignored) {
-            // nessun SAN leggibile: si guarda il CN
+            // no readable SAN: look at the CN
         }
         if (out.isEmpty()) {
             for (String part : c.getSubjectX500Principal().getName().split(","))
@@ -165,7 +165,7 @@ public final class PemTls {
         return out;
     }
 
-    /** Il nome e' coperto da uno dei nomi del certificato: uguale, o un * che vale per un'etichetta sola. */
+    /** The name is covered by one of the certificate's names: equal, or a * that stands for a single label. */
     public static boolean covers(List<String> names, String host) {
         String h = host.toLowerCase(Locale.ROOT);
         for (String n : names) {
@@ -178,7 +178,7 @@ public final class PemTls {
         return false;
     }
 
-    /** Un nome DNS vero (con almeno un punto, non un indirizzo IP, non 0.0.0.0). */
+    /** A real DNS name (with at least one dot, not an IP address, not 0.0.0.0). */
     public static boolean dnsName(String host) {
         if (host == null || host.isBlank() || !host.contains(".")) return false;
         if (host.matches("^[0-9.]+$") || host.contains(":")) return false;
@@ -186,14 +186,14 @@ public final class PemTls {
     }
 
     /**
-     * Certificato e chiave per il pannello col nome host: il certificato si legge, vale adesso, copre il nome, e la
-     * chiave e' proprio la sua (una firma fatta con la chiave si verifica con la chiave pubblica del certificato).
+     * Certificate and key for the panel with the host name: the certificate can be read, is valid now, covers the name,
+     * and the key really is its own (a signature made with the key verifies with the certificate's public key).
      */
     public static Check check(String host, String certPem, String keyPem, Instant now) {
         return check("panel", host, certPem, keyPem, now);
     }
 
-    /** Lo stesso controllo per un altro nome (whose: «panel» o «webmail»), detto nei messaggi nella lingua della console. */
+    /** The same check for another name (whose: "panel" or "webmail"), reported in messages in the console language. */
     public static Check check(String whose, String host, String certPem, String keyPem, Instant now) {
         List<String> errors = new ArrayList<>(), warnings = new ArrayList<>(), info = new ArrayList<>();
         List<X509Certificate> chain;
@@ -210,8 +210,8 @@ public final class PemTls {
         info.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.issuer", java.util.Map.of("issuer", leaf.getIssuerX500Principal().getName())));
         info.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.until", java.util.Map.of("date", leaf.getNotAfter().toInstant().toString().substring(0, 10))));
         if (now.isAfter(leaf.getNotAfter().toInstant())) errors.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.expired"));
-        // Dieci minuti di tolleranza: un certificato appena emesso (l'Origin Certificate di Cloudflare) comincia nel
-        // secondo in cui nasce, e un orologio del server un po' indietro non lo deve rifiutare.
+        // Ten minutes of tolerance: a freshly issued certificate (the Cloudflare Origin Certificate) starts in the
+        // second it is born, and a server clock running a little behind must not reject it.
         if (now.plus(java.time.Duration.ofMinutes(10)).isBefore(leaf.getNotBefore().toInstant()))
             errors.add(org.daemoxcp.mail.i18n.I18n.tr("console.tls.notYet"));
         if (dnsName(host)) {

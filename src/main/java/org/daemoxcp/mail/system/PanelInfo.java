@@ -18,17 +18,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Il pannello stesso, per la scheda in cima alla dashboard (reperto 183): da quando gira, e dietro
- * l'occhio con che cosa gira.
+ * The panel itself, for the card at the top of the dashboard (finding 183): since when it has been running,
+ * and, behind the eye, what it runs with.
  *
- * <p>Due letture con due permessi (SSLMailServer, /api/panel_info):
+ * <p>Two reads with two permissions (SSLMailServer, /api/panel_info):
  * <ul>
- *   <li>{@link #uptime}: quando e' partito questo processo. Per chiunque veda la dashboard;</li>
- *   <li>{@link #details}: versione, numero di build, commit, impronta del jar, Java, sistema,
- *   macchina, processo e memoria. Con system.view, come le altre pagine del sistema.</li>
+ *   <li>{@link #uptime}: when this process started. For anyone who sees the dashboard;</li>
+ *   <li>{@link #details}: version, build number, commit, jar fingerprint, Java, system,
+ *   machine, process and memory. With system.view, like the other system pages.</li>
  * </ul>
  *
- * <p>Gli istanti escono in UTC, ISO 8601 (r13): li converte la pagina, quando li mostra.
+ * <p>The instants come out in UTC, ISO 8601 (r13): the page converts them when it shows them.
  */
 public final class PanelInfo {
 
@@ -37,11 +37,11 @@ public final class PanelInfo {
     private PanelInfo() {}
 
     /**
-     * Quello che Maven ha scritto nel jar (src/main/build-info/build-info.properties). Una voce che
-     * chi ha costruito non ha passato e' vuota: version e builtAt ci sono sempre in un jar fatto da
-     * Maven, build e commit solo con tools/build-jar.sh.
+     * What Maven wrote in the jar (src/main/build-info/build-info.properties). An entry that
+     * whoever built it did not pass is empty: version and builtAt are always there in a jar made
+     * by Maven, build and commit only with tools/build-jar.sh.
      *
-     * @param modified vero se nei sorgenti c'erano modifiche fuori da quel commit
+     * @param modified true if the sources had changes outside that commit
      */
     public record Build(String version, String number, String commit, boolean modified, String builtAt) {
 
@@ -55,8 +55,8 @@ public final class PanelInfo {
         }
 
         /**
-         * Un valore che il filtro non ha sostituito resta "${...}" (un jar costruito senza Maven, o
-         * le classi delle prove): vale come non registrato, non come un numero di build.
+         * A value the filter did not replace stays "${...}" (a jar built without Maven, or the
+         * test classes): it counts as not recorded, not as a build number.
          */
         private static String value(Properties p, String key) {
             String v = p.getProperty(key, "").trim();
@@ -74,7 +74,7 @@ public final class PanelInfo {
 
     private static volatile Build build;
 
-    /** Il jar che gira. Si legge una volta: e' dentro il jar, non cambia finche' il processo vive. */
+    /** The running jar. It is read once: it is inside the jar, it does not change while the process lives. */
     public static Build build() {
         Build b = build;
         if (b != null) return b;
@@ -88,16 +88,16 @@ public final class PanelInfo {
         return b;
     }
 
-    /** Quando e' partita la JVM di questo processo. */
+    /** When this process's JVM started. */
     public static Instant startedAt() {
         return Instant.ofEpochMilli(ManagementFactory.getRuntimeMXBean().getStartTime());
     }
 
     /**
-     * Da quando gira il pannello. L'ora del server va con la risposta: la pagina conta i secondi da
-     * li', e un orologio del browser avanti o indietro non cambia il tempo in funzione.
+     * Since when the panel has been running. The server's time goes with the answer: the page counts the
+     * seconds from there, and a browser clock that is ahead or behind does not change the uptime.
      *
-     * @param details vero se chi chiede puo' vedere anche i dettagli (la pagina mostra l'occhio)
+     * @param details true if the requester can also see the details (the page shows the eye)
      */
     public static JSONObject uptime(Instant now, boolean details) {
         Instant start = startedAt();
@@ -110,10 +110,10 @@ public final class PanelInfo {
     }
 
     /**
-     * Tutto il resto. Ogni voce che non si riesce a leggere resta vuota (la pagina dice "non
-     * disponibile"), mai inventata: un comando che manca non ferma le altre.
+     * Everything else. Every entry that cannot be read stays empty (the page says "not
+     * available"), never invented: a missing command does not stop the others.
      *
-     * @param port la porta su cui ascolta il pannello
+     * @param port the port the panel listens on
      */
     public static JSONObject details(int port) {
         Build b = build();
@@ -132,8 +132,8 @@ public final class PanelInfo {
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "panel jar path", e);
         }
-        // L'impronta e' quella che InstallScripts ha preso all'avvio: del jar che gira, anche se nel
-        // frattempo sul disco ne e' arrivato un altro.
+        // The fingerprint is the one InstallScripts took at startup: of the running jar, even if in
+        // the meantime another one has arrived on disk.
         r.put("jarPath", jar).put("jarSha256", InstallScripts.jarSha256());
 
         Runtime.Version v = Runtime.version();
@@ -161,7 +161,7 @@ public final class PanelInfo {
         return r;
     }
 
-    /** Un comando breve, la sua uscita su una riga; "" se non c'e' o non risponde. */
+    /** A short command, its output on one line; "" if it is missing or does not answer. */
     private static String read(String... cmd) {
         Shell.Result res = Shell.run(Duration.ofSeconds(5), cmd);
         return res.success() ? res.outputTrim() : "";
@@ -170,9 +170,9 @@ public final class PanelInfo {
     private static final Pattern BOOT_SECONDS = Pattern.compile("\\{\\s*sec\\s*=\\s*(\\d{1,12})\\s*,");
 
     /**
-     * L'accensione della macchina, da "sysctl -n kern.boottime" di FreeBSD:
-     * "{ sec = 1794062163, usec = 48178 } Sat Nov  7 15:36:03 2026". Si prendono i secondi, non la
-     * data in fondo, che e' nell'ora locale del server. Null se la riga non e' quella.
+     * The machine's boot time, from FreeBSD's "sysctl -n kern.boottime":
+     * "{ sec = 1794062163, usec = 48178 } Sat Nov  7 15:36:03 2026". The seconds are taken, not the
+     * date at the end, which is in the server's local time. Null if the line is not that one.
      */
     static Instant bootTime(String sysctl) {
         if (sysctl == null) return null;

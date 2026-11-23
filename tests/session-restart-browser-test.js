@@ -1,4 +1,4 @@
-// Sessions last for one start of the jar, with Strict cookies (reperto 184): with the real Chrome and the
+// Sessions last for one start of the jar, with Strict cookies (finding 184): with the real Chrome and the
 // real server (HomePanelE2EServer, on the test VM), which the test restarts.
 //
 //  1. The pre-login cookie and the language cookie, as the server sets them: SameSite=Strict, and the

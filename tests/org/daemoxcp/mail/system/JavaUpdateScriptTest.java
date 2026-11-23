@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 import org.daemoxcp.mail.i18n.I18n;
 
 /**
- * The detached script that upgrades the JVM the panel runs on (reperto 195).
+ * The detached script that upgrades the JVM the panel runs on (finding 195).
  *
  * Tried from the browser on the VM on 08/11/2026, the old script reported SUCCEEDED while:
  *  - the panel came back outside its service (no pidfile: "service daemoxcp_mail status" said it was off,

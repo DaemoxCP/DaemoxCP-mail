@@ -14,14 +14,14 @@ import java.util.HexFormat;
 import java.util.Locale;
 
 /**
- * Cifratura dei dati personali che il pannello deve poter rileggere (l'email di accesso di ogni
- * amministratore, l'indirizzo IP e il browser di una sessione) e indice cieco per cercarli.
+ * Encryption of the personal data that the panel must be able to read back (the login email of every
+ * administrator, the IP address and the browser of a session) and a blind index to look them up.
  *
- *  - AES-256-GCM, un nonce casuale di 12 byte per ogni cifratura, mai fisso; il testo cifrato si
- *    salva come "v1:" + base64(nonce || cifrato || tag). Mai AES_ENCRYPT() di MySQL;
- *  - l'indice cieco e' HMAC-SHA256 con una chiave diversa da quella di cifratura: permette di
- *    cercare un'email senza poterla leggere;
- *  - le chiavi stanno solo nel file dei segreti (PanelSecrets), mai nel database.
+ *  - AES-256-GCM, a random 12-byte nonce for every encryption, never fixed; the ciphertext is
+ *    saved as "v1:" + base64(nonce || ciphertext || tag). Never MySQL's AES_ENCRYPT();
+ *  - the blind index is HMAC-SHA256 with a key different from the encryption one: it allows
+ *    looking up an email without being able to read it;
+ *  - the keys are only in the secrets file (PanelSecrets), never in the database.
  */
 public final class DataCrypto {
 
@@ -47,7 +47,7 @@ public final class DataCrypto {
         }
     }
 
-    /** Il testo in chiaro; un valore manomesso o cifrato con un'altra chiave fa eccezione. */
+    /** The plaintext; a tampered value or one encrypted with another key throws an exception. */
     public static String decrypt(String stored) {
         if (stored == null) return null;
         if (!stored.startsWith(PREFIX)) throw new IllegalArgumentException("Not an encrypted value");
@@ -63,7 +63,7 @@ public final class DataCrypto {
         }
     }
 
-    /** Il testo in chiaro, o "" se il valore manca o non si decifra (chiave cambiata, valore rovinato). */
+    /** The plaintext, or "" if the value is missing or cannot be decrypted (key changed, value corrupted). */
     public static String decryptOrEmpty(String stored) {
         if (stored == null || stored.isEmpty()) return "";
         try {
@@ -73,17 +73,17 @@ public final class DataCrypto {
         }
     }
 
-    /** L'indice cieco di un'email: minuscole e senza spazi ai lati, poi HMAC-SHA256 in esadecimale. */
+    /** The blind index of an email: lowercase and without spaces at the ends, then HMAC-SHA256 in hexadecimal. */
     public static String emailIndex(String email) {
         return hmacHex(PanelSecrets.key(PanelSecrets.INDEX_KEY), "email:" + email.trim().toLowerCase(Locale.ROOT));
     }
 
-    /** L'impronta di un codice monouso: nel database c'e' solo questa, mai il codice. */
+    /** The fingerprint of a one-time code: the database holds only this, never the code. */
     public static String codeHash(String purpose, long adminId, String code) {
         return hmacHex(PanelSecrets.key(PanelSecrets.CODE_KEY), purpose + ":" + adminId + ":" + code);
     }
 
-    /** SHA-256 in esadecimale (l'impronta dello User-Agent di una sessione). */
+    /** SHA-256 in hexadecimal (the fingerprint of a session's User-Agent). */
     public static String sha256Hex(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
@@ -92,7 +92,7 @@ public final class DataCrypto {
         }
     }
 
-    /** Confronto a tempo costante di due impronte o token ASCII. */
+    /** Constant-time comparison of two ASCII fingerprints or tokens. */
     public static boolean sameHash(String a, String b) {
         if (a == null || b == null) return false;
         return MessageDigest.isEqual(a.getBytes(StandardCharsets.US_ASCII), b.getBytes(StandardCharsets.US_ASCII));

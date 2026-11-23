@@ -9,21 +9,26 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Le regole Sieve del pannello gia' scritte, riscritte dal database come il pannello le scrive adesso (reperto 229).
+ * The panel's Sieve rules already written, rewritten from the database as the panel writes them now (finding
+ * 229).
  *
- * <p>Quando cambia quello che SieveGenerator scrive, le regole gia' sui server restavano come erano finche' qualcuno non
- * salvava di nuovo la casella. Col reperto 229 «Sposta» e «Copia» creano la cartella che non c'e' (fileinto :create):
- * senza questo passo un filtro scritto prima verso una cartella nuova avrebbe continuato a non spostare niente.
+ * <p>When what SieveGenerator writes changed, the rules already on the servers stayed as they were until
+ * someone saved the mailbox again. With finding 229 "Move" and "Copy" create the folder that does not exist
+ * (fileinto :create): without this step a filter written earlier towards a new folder would have kept moving
+ * nothing.
  *
- * <p>All'avvio della parte root, dopo SieveRulesOwner, MailSpoolSticky, SieveStorage e SieveForcedKeep: per ogni casella
- * del database si genera il testo come adesso e lo si confronta col file. Si scrive solo se:
+ * <p>At the start of the root part, after SieveRulesOwner, MailSpoolSticky, SieveStorage and SieveForcedKeep:
+ * for every mailbox in the database the text is generated as it is now and compared with the file. It is
+ * written only if:
  * <ul>
- *   <li>il file c'e', comincia con una delle righe require che il pannello ha scritto (e' suo, non uno script fatto a
- *       mano) ed e' diverso;</li>
- *   <li>oppure il file non c'e' e la casella ha regole nel database (una scrittura rifiutata prima, reperto 223).</li>
+ *   <li>the file exists, starts with one of the require lines the panel wrote (it is the panel's, not a
+ *       hand-made script) and is different;</li>
+ *   <li>or the file does not exist and the mailbox has rules in the database (a write refused earlier,
+ *       finding 223).</li>
  * </ul>
- * La scrittura e' quella di SieveGenerator.saveSieveScript: RootOnlyPath, compilata con sievec. Al secondo avvio i testi
- * sono uguali e non si scrive niente. Nel log le caselle col loro numero, mai l'indirizzo.
+ * The write is the one of SieveGenerator.saveSieveScript: RootOnlyPath, compiled with sievec. At the second
+ * startup the texts are equal and nothing is written. In the log the mailboxes with their number, never the
+ * address.
  */
 public final class SieveRulesRefresh {
 
@@ -31,31 +36,31 @@ public final class SieveRulesRefresh {
 
     private SieveRulesRefresh() {}
 
-    /** Una casella: il numero (per il log) e l'indirizzo (per il percorso). */
+    /** A mailbox: the number (for the log) and the address (for the path). */
     record Box(int id, String email) {}
 
-    /** Quello che serve, per provarlo senza MySQL ne' /var/mail. */
+    /** What is needed, to test it without MySQL or /var/mail. */
     interface Rules {
         List<Box> mailboxes() throws Exception;
-        /** Il testo che il pannello scriverebbe adesso per la casella. */
+        /** The text the panel would write now for the mailbox. */
         String generate(Box b);
-        /** Il file com'e', null se non c'e'. */
+        /** The file as it is, null if it is not there. */
         String current(Box b);
-        /** Scrive e compila; falso se non e' stato scritto (il motivo e' nel log di chi scrive). */
+        /** Writes and compiles; false if it was not written (the reason is in the writer's log). */
         boolean write(Box b, String script);
     }
 
-    /** Quante caselle riscritte e quali no (i numeri). */
+    /** How many mailboxes rewritten and which not (the numbers). */
     record Outcome(int written, List<Integer> notWritten) {}
 
-    /** Le righe require che il pannello ha scritto, dalla piu' nuova: uno script che comincia cosi' e' suo. */
+    /** The require lines the panel wrote, newest first: a script that starts like that is the panel's. */
     static boolean panelScript(String script) {
         if (script == null) return false;
         return script.startsWith(SieveGenerator.REQUIRE) || script.startsWith(SieveGenerator.REQUIRE_BEFORE_MAILBOX)
                 || script.startsWith(SieveForcedKeep.REQUIRE_WITHOUT_DATE);
     }
 
-    /** Puro rispetto a {@link Rules}. */
+    /** Pure with respect to {@link Rules}. */
     static Outcome refresh(Rules r) throws Exception {
         int written = 0;
         List<Integer> failed = new ArrayList<>();
@@ -64,7 +69,7 @@ public final class SieveRulesRefresh {
             if (now == null) continue;
             String cur = r.current(b);
             boolean write;
-            if (cur == null) write = !now.equals(SieveGenerator.REQUIRE);   // regole nel database, file mancante
+            if (cur == null) write = !now.equals(SieveGenerator.REQUIRE);   // rules in the database, file missing
             else write = panelScript(cur) && !cur.equals(now);
             if (!write) continue;
             if (r.write(b, now)) written++;
@@ -73,7 +78,7 @@ public final class SieveRulesRefresh {
         return new Outcome(written, failed);
     }
 
-    /** All'avvio della parte root, col generatore del server. */
+    /** At the start of the root part, with the server's generator. */
     public static void ensureAtBoot(SieveGenerator generator) {
         try {
             MailDatabase db = Main.mailDatabase;

@@ -7,13 +7,15 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * All'avvio: i record DNS che il pannello ha creato su Cloudflare prima del 30/10/2026 hanno il commento in italiano
- * («Creato dal pannello di posta»); prendono quello in inglese che il pannello scrive da allora (reperto 211). Il
- * committente: «quando aggiunge un record, non usi l'italiano nei commenti ... ma sempre e comunque l'inglese».
+ * At startup: the DNS records that the panel created on Cloudflare before 2026-10-30 have the comment in Italian
+ * (`Creato dal pannello di posta`, "Created by the mail panel"); they get the English one that the panel has written
+ * since then (finding 211). The owner: "when you add a record, do not use Italian in the comments ... but always and
+ * in any case English".
  *
- * Solo nelle zone dei domini del pannello che hanno un account Cloudflare, una volta per zona anche se piu' domini ci
- * stanno. Cambia solo il commento (CloudflareManager.renameLegacyComments): il DNS resta com'e'. In un thread suo, cosi'
- * un Cloudflare lento non ferma l'avvio. Al secondo avvio non trova niente e non scrive niente: una lettura per zona.
+ * Only in the zones of the panel's domains that have a Cloudflare account, once per zone even if several domains are
+ * in it. Only the comment changes (CloudflareManager.renameLegacyComments): DNS stays as it is. In a thread of its
+ * own, so that a slow Cloudflare does not hold up startup. On the second start it finds nothing and writes nothing:
+ * one read per zone.
  */
 public final class CloudflareCommentsEnglish {
 
@@ -28,7 +30,7 @@ public final class CloudflareCommentsEnglish {
         t.start();
     }
 
-    /** Le zone (id -> nome, col token del loro account) e per ognuna i commenti rinominati. Quanti in tutto. */
+    /** The zones (id -> name, with the token of their account) and for each one the renamed comments. How many in all. */
     static int run(CloudflareManager cloudflare, MailDatabase database) {
         int total = 0;
         try {

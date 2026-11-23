@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Pigeonhole's sievec run as the user sievec, never as root (reperto 218, SieveCompiler).
+ * Pigeonhole's sievec run as the user sievec, never as root (finding 218, SieveCompiler).
  *
  *  1. What can be proven without a system: the binary's name beside the script; the minimal configuration (empty for
  *     Dovecot 2.3, the two version lines of the panel's own 2.4 dovecot.conf, nothing that is not a version number);

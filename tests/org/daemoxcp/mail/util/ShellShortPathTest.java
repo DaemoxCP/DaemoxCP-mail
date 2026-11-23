@@ -6,7 +6,7 @@ import java.time.Duration;
 
 /**
  * The panel started with rc.d's short PATH (/sbin:/bin:/usr/sbin:/usr/bin, without /usr/local)
- * still finds the programs in /usr/local (reperto 181).
+ * still finds the programs in /usr/local (finding 181).
  *
  * On the real server, on 07/11/2026, the first start of the new panel left three migrations stuck
  * on "Cannot run program "nginx"": Shell put the full PATH in the child's environment, but Java

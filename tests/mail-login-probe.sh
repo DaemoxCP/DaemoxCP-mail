@@ -1,7 +1,7 @@
 #!/bin/sh
 # A real login on the mail server just installed: IMAP on 993 and SMTP on 587.
 #
-# Why it exists: on 24/10/2026 an installation from scratch put in a Dovecot without MySQL support,
+# Why it exists: on 2026-10-24 an installation from scratch put in a Dovecot without MySQL support,
 # and no check noticed. All services showed as running, `doveconf -n` accepted the configuration,
 # the ports were listening; the fault showed only at somebody's first connection, in the log:
 #     auth: Fatal: Support not compiled in for passdb driver 'sql'
@@ -15,15 +15,15 @@
 #    that is the two ways into the mailboxes (587 goes through Dovecot's authentication:
 #    smtpd_sasl_type = dovecot);
 #  - a real Roundcube login on the webmail's nginx site, then the mailbox page, which opens only if Roundcube
-#    decrypts the IMAP password from its session (reperto 239), then the logout;
-#  - Sieve (reperto 214): a script of the mailbox's own through ManageSieve on 4190 (PUTSCRIPT,
+#    decrypts the IMAP password from its session (finding 239), then the logout;
+#  - Sieve (finding 214): a script of the mailbox's own through ManageSieve on 4190 (PUTSCRIPT,
 #    SETACTIVE), a rule of the panel written as the panel writes it (root, /var/mail/sieve, sievec),
 #    then a real delivery through Postfix: the panel's rule must run first and the mailbox's own
 #    script after it, each filing a copy into its folder; `doveadm sieve list` must open the
 #    mailbox's scripts, and no "dovecot.sieve" may show up among the mail folders; the script's
 #    "duplicate" test writes Dovecot's duplicate database (.dovecot.lda-dupes, as autoreplies and
-#    forwards do), and with the home in the mail root that showed up as folders too (reperto 217);
-#    then (reperto 216) a panel's rule that moves, with no keep at the end as the panel writes it now:
+#    forwards do), and with the home in the mail root that showed up as folders too (finding 217);
+#    then (finding 216) a panel's rule that moves, with no keep at the end as the panel writes it now:
 #    the message only in the panel's folder, not in INBOX, and the mailbox's own script does not run on it;
 #  - it shows the lines of /var/log/maillog written meanwhile;
 #  - at the end it removes mailbox, domain, the mail folder created by the login and the rule.
@@ -147,7 +147,7 @@ fi
 
 echo ""
 echo "== Webmail: a real Roundcube login, then the mailbox =="
-# Roundcube keeps the IMAP password in its session, encrypted with des_key and cipher_method (reperto 239): the
+# Roundcube keeps the IMAP password in its session, encrypted with des_key and cipher_method (finding 239): the
 # mailbox page opens only if Roundcube decrypts it and logs into IMAP with it on that request. The site is the nginx
 # server whose root is Roundcube's; the password goes in a file, not on curl's command line.
 WM=$(nginx -T 2>/dev/null | awk '
@@ -186,7 +186,7 @@ fi
 echo ""
 echo "== Sieve: the mailbox's own script through ManageSieve, the panel's rule before it =="
 USERDIR=$(printf '%s' "$MAILBOX" | cut -d@ -f1)
-# "duplicate" writes Dovecot's duplicate database in the home, as autoreplies and forwards do (reperto 217).
+# "duplicate" writes Dovecot's duplicate database in the home, as autoreplies and forwards do (finding 217).
 printf 'require ["fileinto","mailbox","duplicate"];\r\nif header :contains "subject" "sieve-probe" { if not duplicate { fileinto :create "SieveProbeOwn"; } }\r\n' > "$WORK/own.sieve"
 LEN=$(wc -c < "$WORK/own.sieve" | tr -d ' ')
 { sleep 2; printf 'AUTHENTICATE "PLAIN" "%s"\r\n' "$B64"; sleep 2
@@ -223,7 +223,7 @@ fi
 
 echo ""
 echo "== Sieve: a panel's rule that moves, as the panel writes it (no keep at the end) =="
-# Reperto 216: a move in the panel's rule must take the message out of INBOX, and then the mailbox's own script does
+# Finding 216: a move in the panel's rule must take the message out of INBOX, and then the mailbox's own script does
 # not run on it (Pigeonhole runs the next script only while a keep is in effect). The own script above would file it
 # too: its subject contains "sieve-probe".
 printf 'require ["fileinto","mailbox"];\nif header :contains "subject" "sieve-move" { fileinto :create "SieveProbePanel"; }\n' \

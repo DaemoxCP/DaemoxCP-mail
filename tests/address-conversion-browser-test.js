@@ -167,7 +167,7 @@ async function served(route) {
     console.log('\n== Delete mailbox: now with the CSRF token ==');
     await page.click('#mailboxesTable .dropdown-toggle');
     await page.click('#mailboxesTable .dropdown-item.text-danger');
-    // The panel's window (reperto 198), with the red button: deleting is what it does.
+    // The panel's window (finding 198), with the red button: deleting is what it does.
     await page.waitForSelector('#panelAskModal.show', { timeout: 5000 });
     real('the confirmation says the mail stays on the disk', (await page.innerText('#panelAskModal .modal-body')).includes(IT['mbx.confirmDelete'].split('\n').pop()));
     real('  with the red button', await page.$eval('#panelAskGo', b => b.classList.contains('btn-danger')));

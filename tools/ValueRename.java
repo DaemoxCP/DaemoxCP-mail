@@ -8,17 +8,17 @@ import java.util.*;
 import java.util.stream.Stream;
 
 /**
- * I codici di stato scritti come stringhe nel Java: elencarli e rinominarli, con il compilatore
- * a dire dove sta ogni stringa letterale e dentro che cosa.
+ * The status codes written as strings in the Java: listing them and renaming them, with the compiler
+ * telling where each string literal is and inside what.
  *
- * Un valore come "attendi" puo' essere un codice (level = "attendi", "attendi".equals(x),
- * case "attendi" ->) o il nome di un segnaposto in Map.of("attendi", ...) per I18n.tr. Si
- * rinominano solo i primi: le stringhe dentro una chiamata Map.of, Map.entry o I18n.tr non si
- * toccano (sono della fase delle traduzioni), e nemmeno un intero file escluso (PathMigration:
- * li' "sistema" e' il nome della cartella VECCHIA, da migrare).
+ * A value like "attendi" can be a code (level = "attendi", "attendi".equals(x),
+ * case "attendi" ->) or the name of a placeholder in Map.of("attendi", ...) for I18n.tr. Only
+ * the former are renamed: the strings inside a Map.of, Map.entry or I18n.tr call are not
+ * touched (they belong to the translations phase), and neither is a whole excluded file
+ * (PathMigration: there "sistema" is the name of the OLD folder, to be migrated).
  *
- * Uso:  java ValueRename.java list   <classpath> <valori.txt>   elenca per contesto
- *       java ValueRename.java rename <classpath> <mappa.txt>    applica (vecchio nuovo)
+ * Usage:  java ValueRename.java list   <classpath> <values.txt>   lists by context
+ *         java ValueRename.java rename <classpath> <map.txt>      applies (old new)
  */
 public class ValueRename {
     record Hit(Path file, int pos, int end, String value, String context) {}
@@ -61,7 +61,7 @@ public class ValueRename {
             for (var e : byCtx.entrySet()) System.out.println(e.getKey() + "\t" + e.getValue());
             return;
         }
-        // rename: da fondo a cima per file, verificando il testo
+        // rename: from bottom to top per file, checking the text
         Map<Path, List<Hit>> per = new TreeMap<>();
         for (Hit h : hits) per.computeIfAbsent(h.file(), k -> new ArrayList<>()).add(h);
         int n = 0;
@@ -80,7 +80,7 @@ public class ValueRename {
         System.out.println("valori cambiati: " + n + " in " + per.size() + " file");
     }
 
-    /** Dentro che cosa sta la stringa: decide se e' un codice o un nome di segnaposto. */
+    /** What the string is inside: it decides whether it is a code or a placeholder name. */
     static String context(TreePath p) {
         Tree leaf = p.getLeaf();
         for (TreePath q = p.getParentPath(); q != null; leaf = q.getLeaf(), q = q.getParentPath()) {

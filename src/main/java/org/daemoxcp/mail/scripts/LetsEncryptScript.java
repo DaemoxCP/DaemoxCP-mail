@@ -97,7 +97,7 @@ public class LetsEncryptScript {
         echo ""
         """;
 
-    /** Sempre, tutto o niente, con l'impronta del jar (InstallScripts): mai uno script di una versione di prima. */
+    /** Always, all or nothing, with the jar's fingerprint (InstallScripts): never a script from a previous version. */
     public void write_file() {
         this.writed = InstallScripts.write(SCRIPT_PATH, this.data);
     }

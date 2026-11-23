@@ -16,33 +16,33 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Guarda da solo se e' cambiato qualcosa sotto i piedi del pannello.
+ * Watches on its own whether something has changed under the panel's feet.
  *
- * Il problema che risolve: le regole su cui il pannello e' costruito cambiano, e finora ce
- * ne accorgevamo per caso, mentre stavamo facendo altro. Il 01/09/2026 e' successo con DMARC:
- * il pannello era scritto su RFC 7489, che a maggio 2026 era gia' stato sostituito da tre
- * documenti nuovi — e nessuno lo aveva detto.
+ * The problem it solves: the rules the panel is built on change, and until now we
+ * noticed by chance, while we were doing something else. On 2026-09-01 it happened with DMARC:
+ * the panel was written on RFC 7489, which by May 2026 had already been replaced by three
+ * new documents - and nobody had said so.
  *
- * Quella scoperta pero' si poteva automatizzare, perche' il RFC Editor pubblica lo stato di
- * ogni documento in forma leggibile da un programma:
+ * That discovery, however, could be automated, because the RFC Editor publishes the status of
+ * every document in a form a program can read:
  *   https://www.rfc-editor.org/rfc/rfcNNNN.json  ->  { "obsoleted_by": [...], "updated_by": [...] }
- * Sono 1,3 KB a richiesta. Interrogarli una volta al giorno costa nulla e trasforma una
- * scoperta fortuita in un avviso.
+ * That is 1.3 KB per request. Querying it once a day costs nothing and turns a lucky
+ * discovery into a warning.
  *
- * Cosa NON fa, per non promettere piu' di quello che mantiene: non legge i documenti nuovi e
- * non dice cosa e' cambiato. Dice che sono usciti e su quale parte del pannello incidono.
- * Leggerli resta un lavoro da fare a mano, ma almeno si sa che va fatto.
+ * What it does NOT do, so as not to promise more than it delivers: it does not read the new
+ * documents and does not say what changed. It says that they came out and which part of the
+ * panel they affect. Reading them remains a job to do by hand, but at least we know it has to be done.
  */
 public class StandardsWatch {
 
     /**
-     * Le regole su cui il pannello e' costruito, con cio' che gia' sappiamo di loro.
+     * The rules the panel is built on, with what we already know about them.
      *
-     * Le ultime due colonne sono la fotografia presa il 01/09/2026 leggendo le fonti: servono
-     * a distinguere "sostituito" da "sostituito da qualcosa che sapevamo gia'". Senza,
-     * il pannello segnalerebbe ogni giorno le stesse cose e si imparerebbe a ignorarlo.
+     * The last two columns are the snapshot taken on 2026-09-01 by reading the sources: they serve
+     * to tell "replaced" apart from "replaced by something we already knew". Without them,
+     * the panel would report the same things every day and people would learn to ignore it.
      *
-     * numero | cosa governa nel pannello | sostituito-da noti | aggiornato-da noti
+     * number | what it governs in the panel | known replaced-by | known updated-by
      */
     private static final String[][] STANDARD = {
         { "7208", "server.watch.std.7208",                 "",                  "7372,8553,8616" },
@@ -51,13 +51,13 @@ public class StandardsWatch {
         { "9989", "server.watch.std.9989",                "",                  "" },
         { "9990", "server.watch.std.9990",       "",                  "" },
         { "9991", "server.watch.std.9991",                      "",                  "" },
-        // Questi tre aggiornamenti li ha trovati la sorveglianza stessa alla prima esecuzione,
-        // il 01/09/2026. Sono segnati come noti solo DOPO averli letti e verificati:
-        //  - RFC 8553 sposta i nomi con underscore in un registro: non cambia nulla per noi.
-        //  - RFC 8314 e' la specifica della 465, che avevamo gia' letto.
-        //  - RFC 8997 deprecia TLS 1.0 e 1.1 per posta in invio e in lettura. Verificato:
-        //    Dovecot ha ssl_min_protocol = TLSv1.2 e Postfix esclude !TLSv1, !TLSv1.1.
-        //    Gia' conforme, niente da fare — ma lo sappiamo perche' l'abbiamo guardato.
+        // These three updates were found by the watch itself on its first run,
+        // on 2026-09-01. They are marked as known only AFTER they were read and verified:
+        //  - RFC 8553 moves the names with an underscore into a registry: nothing changes for us.
+        //  - RFC 8314 is the specification of 465, which we had already read.
+        //  - RFC 8997 deprecates TLS 1.0 and 1.1 for mail submission and access. Verified:
+        //    Dovecot has ssl_min_protocol = TLSv1.2 and Postfix excludes !TLSv1, !TLSv1.1.
+        //    Already compliant, nothing to do - but we know it because we looked.
         { "6186", "server.watch.std.6186", "",                  "8314,8553" },
         { "6409", "server.watch.std.6409", "",               "8314" },
         { "8314", "server.watch.std.8314",                        "",                  "8997" },
@@ -66,11 +66,13 @@ public class StandardsWatch {
 
     private StandardsWatch() {}
 
-    /* ===================================================================
-     * Parte pura: si prova senza rete
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Pure part: tested without the network
+     * ===================================================================
+     */
 
-    /** Cio' che c'e' adesso e che non sapevamo. Ordine conservato, nessun doppione. */
+    /** What is there now that we did not know. Order kept, no duplicates. */
     public static List<String> news(String knownCommaSeparated, List<String> current) {
         Set<String> known = new LinkedHashSet<>();
         if (knownCommaSeparated != null)
@@ -86,7 +88,7 @@ public class StandardsWatch {
         return outside;
     }
 
-    /** "RFC9989", "rfc 9989", " 9989 " diventano tutti "9989". */
+    /** "RFC9989", "rfc 9989", " 9989 " all become "9989". */
     public static String normalize(String rfc) {
         if (rfc == null) return "";
         String s = rfc.trim().toUpperCase(java.util.Locale.ROOT).replace(" ", "");
@@ -94,9 +96,11 @@ public class StandardsWatch {
         return s.trim();
     }
 
-    /* ===================================================================
-     * Parte che interroga il RFC Editor
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Part that queries the RFC Editor
+     * ===================================================================
+     */
 
     public static JSONObject check() {
         JSONObject r = new JSONObject().put("success", true);
@@ -142,7 +146,7 @@ public class StandardsWatch {
                     o.put("severity", 0).put("comment", I18n.tr("server.watch.nothingNew"));
                 }
             } catch (Exception e) {
-                // Un controllo che non e' riuscito non e' un "tutto a posto".
+                // A check that did not succeed is not an "all clear".
                 o.put("read", false).put("severity", 3)
                  .put("problem", I18n.tr("server.watch.editorFailed", java.util.Map.of("err", String.valueOf(e.getClass().getSimpleName()))));
                 unread++;
@@ -177,7 +181,7 @@ public class StandardsWatch {
         return String.join(", ", rfcList);
     }
 
-    /** Le voci da mettere nel rapporto periodico: solo cio' che merita di essere letto. */
+    /** The entries to put in the periodic report: only what deserves to be read. */
     public static List<String> forReport(JSONObject check) {
         List<String> outside = new ArrayList<>();
         if (check == null || !check.optBoolean("success", false)) return outside;
@@ -191,14 +195,16 @@ public class StandardsWatch {
         return outside;
     }
 
-    /* ===================================================================
-     * Cosa e' cambiato: estrazione dal testo del documento
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * What changed: extraction from the text of the document
+     * ===================================================================
+     */
 
     /**
-     * Ripulisce il testo di un RFC dagli orpelli dell'impaginazione: salti pagina,
-     * "[Page 42]" e le intestazioni ripetute in cima a ogni pagina. Senza, l'elenco dei
-     * cambiamenti esce spezzato da righe che non c'entrano.
+     * Cleans the text of an RFC of the pagination clutter: page breaks,
+     * "[Page 42]" and the headers repeated at the top of every page. Without this, the list of
+     * changes comes out broken up by lines that do not belong there.
      */
     public static String cleanUp(String text) {
         if (text == null) return "";
@@ -212,7 +218,7 @@ public class StandardsWatch {
         return sb.toString();
     }
 
-    /** Sembra l'inizio di una nuova sezione di primo livello. */
+    /** Looks like the start of a new top-level section. */
     private static boolean newSection(String line) {
         return line.matches("^(?:Appendix\\s+[A-Z]|[0-9]+)\\.\\s+\\S.*")
             || line.matches("^(?:Acknowledge?ments|Authors?'? Addresses?|Contributors|"
@@ -220,29 +226,29 @@ public class StandardsWatch {
     }
 
     /**
-     * L'appendice in cui gli autori elencano cosa e' cambiato rispetto al documento
-     * precedente. Non e' un'invenzione: molti RFC di revisione la contengono, scritta da chi
-     * ha fatto le modifiche. RFC 9989 ha "Appendix C. Changes from RFC 7489", RFC 6376 ha
+     * The appendix in which the authors list what changed compared with the previous
+     * document. It is not made up: many revision RFCs contain it, written by those who
+     * made the changes. RFC 9989 has "Appendix C. Changes from RFC 7489", RFC 6376 has
      * "Appendix E. Changes since RFC 4871".
      *
-     * Si prende l'ULTIMA occorrenza dell'intestazione: la prima e' quella dell'indice.
+     * The LAST occurrence of the heading is taken: the first one is in the table of contents.
      */
     public static String changeList(String rfcText) {
         String t = cleanUp(rfcText);
         String[] lines = t.split("\n");
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(
                 "^\\s*(?:Appendix\\s+)?[A-Z0-9]{1,4}(?:\\.[0-9]+)*\\.?\\s+"
-              // Fra "Changes" e "from/since" ci possono stare altre parole: RFC 7208 intitola
-              // "Changes in Implementation Requirements from RFC 4408". Ma "from" o "since"
-              // devono esserci: senza il vincolo, "Changes in Policy During a Reporting
-              // Period" (RFC 9990 §3.3) verrebbe scambiata per un elenco di cambiamenti.
+              // Between "Changes" and "from/since" there can be other words: RFC 7208 has the title
+              // "Changes in Implementation Requirements from RFC 4408". But "from" or "since"
+              // must be there: without the constraint, "Changes in Policy During a Reporting
+              // Period" (RFC 9990 Section 3.3) would be mistaken for a list of changes.
               + "(?:(?:Summary of\\s+)?Changes?\\b[^.]{0,60}?\\b(?:from|since)\\b.*|Change\\s+Log\\b.*)$",
                 java.util.regex.Pattern.CASE_INSENSITIVE);
         int start = -1;
         for (int i = 0; i < lines.length; i++) {
             String r = lines[i];
             if (!p.matcher(r).matches()) continue;
-            // Le righe dell'indice finiscono con puntini e un numero di pagina.
+            // The lines of the table of contents end with dots and a page number.
             if (r.matches("^.*\\.\\s*\\.\\s*\\..*\\d+\\s*$")) continue;
             start = i;
         }
@@ -257,7 +263,7 @@ public class StandardsWatch {
         return out.isEmpty() ? null : out;
     }
 
-    /** L'abstract: c'e' sempre, e serve da ripiego quando l'elenco dei cambiamenti manca. */
+    /** The abstract: it is always there, and serves as a fallback when the list of changes is missing. */
     public static String abstractOf(String rfcText) {
         String t = cleanUp(rfcText);
         String[] lines = t.split("\n");
@@ -280,19 +286,19 @@ public class StandardsWatch {
     }
 
     /**
-     * Scarica il documento nuovo e ne estrae cio' che dice di se stesso: prima l'elenco dei
-     * cambiamenti, e se non c'e' l'abstract.
+     * Downloads the new document and extracts what it says about itself: first the list of
+     * changes, and if there is none, the abstract.
      *
-     * Questo NON dice se il pannello va cambiato: dice cosa e' cambiato nel documento.
-     * Decidere se tocca il nostro codice resta un lavoro di lettura — ma partire dall'elenco
-     * scritto dagli autori e' un'altra cosa rispetto a partire da centottanta pagine.
+     * This does NOT say whether the panel must be changed: it says what changed in the document.
+     * Deciding whether it touches our code remains a reading job - but starting from the list
+     * written by the authors is quite another thing than starting from a hundred and eighty pages.
      */
     public static JSONObject whatChanged(String number) { return whatChanged(number, number); }
 
     /**
-     * @param numero     il documento nuovo, da scaricare
-     * @param rifermento la specifica del pannello a cui si riferisce, per sapere quali
-     *                   identificatori incrociare (per un aggiornamento sono diversi)
+     * @param number     the new document, to download
+     * @param reference the panel's specification it refers to, to know which
+     *                   identifiers to cross-check (for an update they are different)
      */
     public static JSONObject whatChanged(String number, String reference) {
         JSONObject r = new JSONObject().put("rfc", normalize(number));
@@ -315,7 +321,7 @@ public class StandardsWatch {
             if (changes != null) {
                 r.put("type", "list").put("text", changes)
                  .put("note", I18n.tr("server.watch.changeList"));
-                // Incrocio con cio' che il pannello usa davvero.
+                // Cross-check with what the panel really uses.
                 List<String> touches = linesTouching(changes, identifiersOf(reference));
                 r.put("concernsYou", new JSONArray(touches));
                 r.put("crossNote", touches.isEmpty()
@@ -339,24 +345,26 @@ public class StandardsWatch {
         }
     }
 
-    /* ===================================================================
-     * Quali righe dell'elenco toccano davvero questo pannello
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Which lines of the list really touch this panel
+     * ===================================================================
+     */
 
     /**
-     * Gli identificatori che il pannello scrive o riconosce davvero, per ciascuna specifica.
+     * The identifiers that the panel really writes or recognises, for each specification.
      *
-     * Servono a incrociare l'elenco dei cambiamenti con cio' che il pannello fa: se una riga
-     * dell'elenco nomina "pct" e il pannello scrive record DMARC, quella riga va letta prima
-     * delle altre. E' lo stesso ragionamento che il 01/09/2026 ho fatto a mano con un grep,
-     * scritto una volta sola.
+     * They serve to cross-check the list of changes with what the panel does: if a line of the
+     * list names "pct" and the panel writes DMARC records, that line should be read before
+     * the others. It is the same reasoning I did by hand with a grep on 2026-09-01,
+     * written down once and for all.
      *
-     * ATTENZIONE a come si legge il risultato: l'incrocio dice "queste righe ti riguardano di
-     * sicuro", NON "solo queste ti riguardano". Un cambiamento descritto a parole senza
-     * nominare il tag sfugge. Presentarlo come un filtro completo sarebbe il modo di far
-     * saltare proprio la riga che contava.
+     * WATCH OUT for how the result is read: the cross-check says "these lines concern you
+     * for sure", NOT "only these concern you". A change described in words without
+     * naming the tag slips through. Presenting it as a complete filter would be the way to
+     * skip exactly the line that mattered.
      *
-     * numero | identificatori separati da virgola
+     * number | comma-separated identifiers
      */
     private static final String[][] RELEVANT = {
         { "7208", "v=spf1,ip4,ip6,include,redirect,exists,all,mx,ptr,permerror,10" },
@@ -378,12 +386,12 @@ public class StandardsWatch {
     }
 
     /**
-     * Le righe dell'elenco che nominano qualcosa che il pannello usa.
+     * The lines of the list that name something the panel uses.
      *
-     * Il confronto e' a parola intera quando l'identificatore e' fatto di sole lettere e
-     * cifre: cercare "all" come sottostringa lo troverebbe dentro "finally", "小" dentro
-     * qualunque cosa, e la segnalazione diventerebbe rumore. E' lo stesso errore che sull'SPF
-     * faceva passare per buono un record che non autorizzava il server.
+     * The comparison is on whole words when the identifier is made of letters and
+     * digits only: searching for "all" as a substring would find it inside "finally", "小" inside
+     * anything, and the report would become noise. It is the same mistake that, on SPF,
+     * let a record that did not authorise the server pass as good.
      */
     public static List<String> linesTouching(String list, String identifiers) {
         List<String> outside = new ArrayList<>();
@@ -402,7 +410,7 @@ public class StandardsWatch {
         return outside;
     }
 
-    /** Parola intera per gli identificatori alfanumerici, sottostringa per gli altri. */
+    /** Whole word for alphanumeric identifiers, substring for the others. */
     public static boolean containsIdentifier(String line, String key) {
         if (line == null || key == null || key.isEmpty()) return false;
         boolean simple = key.chars().allMatch(c -> Character.isLetterOrDigit(c));

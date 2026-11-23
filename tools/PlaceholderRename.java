@@ -8,13 +8,13 @@ import java.util.*;
 import java.util.stream.Stream;
 
 /**
- * I nomi dei segnaposto nel Java: le chiavi dei Map.of passati a I18n.tr / I18n.trIn.
+ * The names of the placeholders in the Java: the keys of the Map.of passed to I18n.tr / I18n.trIn.
  *
- * Il compilatore dice quale stringa sta in posizione di CHIAVE (pari) dentro un Map.of che e'
- * argomento di I18n.tr: solo quelle si rinominano. Se due chiavi dello stesso Map.of finiscono
- * sullo stesso nome, si ferma: il testo perderebbe uno dei due valori.
+ * The compiler tells which string is in KEY position (even) inside a Map.of that is an
+ * argument of I18n.tr: only those are renamed. If two keys of the same Map.of end up
+ * with the same name, it stops: the text would lose one of the two values.
  *
- * Uso: java PlaceholderRename.java <classpath> <mappa.txt> [--dry]
+ * Usage: java PlaceholderRename.java <classpath> <map.txt> [--dry]
  */
 public class PlaceholderRename {
     record Edit(Path file, int pos, int end, String value) {}

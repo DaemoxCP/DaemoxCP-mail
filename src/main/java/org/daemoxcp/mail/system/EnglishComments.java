@@ -9,27 +9,29 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * I commenti che il pannello scriveva in italiano nei file del server, e il loro passaggio all'inglese (22/11/2026).
+ * The comments that the panel used to write in Italian in the server's files, and their move to English
+ * (2026-11-22).
  *
- * <p>Fino ad oggi i commenti delle configurazioni e degli script che il pannello scrive sul server (Dovecot, Postfix,
- * pf, rspamd, redis, clamd, nginx, php-fpm, fail2ban, gli script d'installazione) erano in italiano: chi amministra il
- * server e non lo legge non capiva perche' una riga c'e'. Il codice adesso li scrive in inglese. Quelli di prima stanno
- * in legacy-names.json, sezione "italianComments", riga per riga accanto alla traduzione, e non nel codice (la scelta
- * del 30/10/2026, LegacyNames).
+ * <p>Until today the comments of the configurations and scripts that the panel writes on the server (Dovecot,
+ * Postfix, pf, rspamd, redis, clamd, nginx, php-fpm, fail2ban, the installation scripts) were in Italian: whoever
+ * administers the server and does not read Italian could not understand why a line is there. The code now writes them
+ * in English. The previous ones are in legacy-names.json, section "italianComments", line by line next to the
+ * translation, and not in the code (the choice of 2026-10-30, LegacyNames).
  *
- * <p>All'avvio, nei file del pannello, le righe di commento in italiano diventano quelle in inglese: lo stesso
- * passaggio del nome del prodotto (PanelMarker.productCommentsAtBoot), con gli stessi controlli. Si cambiano SOLO le
- * righe di commento, e lo si verifica prima di scrivere; scrittura atomica con permessi, proprietario e flag di prima;
- * nessun reload, perche' un commento non cambia quello che il servizio fa. Prima della traduzione passano le sezioni
- * dei commenti di prima ancora (productComments: il nome di prima del prodotto; damagedComments: le parole rovinate
- * dalle rinomine fatte sul testo), cosi' anche una riga di quelle arriva all'inglese in un passaggio solo.
+ * <p>At startup, in the panel's files, the Italian comment lines become the English ones: the same pass as for the
+ * product name (PanelMarker.productCommentsAtBoot), with the same checks. ONLY the comment lines are changed, and
+ * this is verified before writing; atomic write with the previous permissions, owner and flags; no reload, because
+ * a comment does not change what the service does. Before the translation, the sections of even older comments are
+ * applied (productComments: the product's previous name; damagedComments: the words damaged by text-based renames),
+ * so that a line of those too reaches English in a single pass.
  *
- * <p>Il codice che riconosce un suo blocco dal commento (RedisSocket, ClamdSocket, RspamdController, LmtpSocket,
- * DovecotQuota, PfPolicy) legge il file attraverso {@link #english}: riconosce cosi' anche il blocco scritto in
- * italiano, se il passaggio all'avvio non e' riuscito, invece di aggiungerne un secondo o di crederlo di qualcun altro.
+ * <p>The code that recognises one of its blocks by the comment (RedisSocket, ClamdSocket, RspamdController,
+ * LmtpSocket, DovecotQuota, PfPolicy) reads the file through {@link #english}: in this way it also recognises the
+ * block written in Italian, if the pass at startup did not succeed, instead of adding a second one or believing it
+ * belongs to someone else.
  *
- * <p>Lo script Sieve dello spam non passa da qui: SpecialFolders lo riscrive e lo ricompila da se' quando non e' quello
- * di adesso, e un sorgente piu' nuovo del suo compilato farebbe ricompilare Dovecot a ogni consegna.
+ * <p>The spam Sieve script does not go through here: SpecialFolders rewrites and recompiles it by itself when it is
+ * not the current one, and a source newer than its compiled version would make Dovecot recompile at every delivery.
  */
 public final class EnglishComments {
 
@@ -37,21 +39,24 @@ public final class EnglishComments {
 
     static final String SECTION = "italianComments";
 
-    /** Le sezioni che si applicano, nell'ordine: le forme piu' vecchie prima, la traduzione per ultima. */
+    /** The sections that apply, in order: the oldest forms first, the translation last. */
     static final List<String> CHAIN = List.of("productComments", "damagedComments", SECTION);
 
-    /** I file con commenti del pannello oltre a quelli del passaggio del nome (PanelMarker.serviceFiles). */
+    /** The files with panel comments in addition to those of the name pass (PanelMarker.serviceFiles). */
     static final List<String> MORE_FILES = List.of(
             "/usr/local/etc/mysql/my.cnf", "/etc/sysctl.conf", "/etc/pf.conf",
             org.daemoxcp.mail.security.Fail2banManager.PERMABAN_FILE);
 
-    /** E le cartelle: quelle dei file di Postfix e di Dovecot, e il sito della webmail dell'installazione a pezzi. */
+    /**
+     * And the folders: those of the Postfix and Dovecot files, and the webmail site of the component-by-component
+     * installation.
+     */
     static final List<String> MORE_FOLDERS = List.of(
             "/usr/local/etc/postfix", "/usr/local/etc/dovecot", "/usr/local/etc/nginx/sites-enabled");
 
     private EnglishComments() {}
 
-    /** Il testo con le righe di commento di prima in inglese; le altre righe restano come sono. Pura. */
+    /** The text with the previous comment lines in English; the other lines stay as they are. Pure. */
     public static String english(String content) {
         if (content == null) return null;
         String s = content;
@@ -62,11 +67,11 @@ public final class EnglishComments {
     record Report(List<String> done, List<String> problems) {}
 
     /**
-     * Le copie di un file, del pannello o di chi amministra: ConfigBackups («file.bak.MILLISECONDI»), Fail2banManager
-     * («.bak.AAAAMMGG-HHMMSS»), BanActionRepair («.before-pf-»), quelle di prima ancora col prefisso vecchio di «before-»
-     * (sezione "bootEnvironmentPrefix" di legacy-names.json: i nomi vecchi non si scrivono nel codice), e .pre-2.4,
-     * .orig, .old, .sample. Una copia conserva il file com'era: non si traduce. Visto sul server vero il 22/11/2026, dove
-     * jail.d e pf.anchors ne hanno una ventina.
+     * The copies of a file, made by the panel or by whoever administers it: ConfigBackups ("file.bak.MILLISECONDS"),
+     * Fail2banManager (".bak.YYYYMMDD-HHMMSS"), BanActionRepair (".before-pf-"), the even older ones with the old
+     * prefix in place of "before-" (section "bootEnvironmentPrefix" of legacy-names.json: old names are not written in
+     * the code), and .pre-2.4, .orig, .old, .sample. A copy preserves the file as it was: it is not translated. Seen on
+     * the production server on 2026-11-22, where jail.d and pf.anchors have about twenty of them.
      */
     static final java.util.regex.Pattern COPY = copyPattern();
 
@@ -82,7 +87,10 @@ public final class EnglishComments {
         return name != null && COPY.matcher(name.toString()).matches();
     }
 
-    /** I file dati con le righe di commento in inglese; quelli senza niente da cambiare, e le copie, non si toccano. */
+    /**
+     * The given files with the comment lines in English; those with nothing to change, and the copies, are not
+     * touched.
+     */
     static Report migrate(Collection<Path> files) {
         List<String> done = new ArrayList<>(), problems = new ArrayList<>();
         for (Path p : files) {
@@ -92,7 +100,7 @@ public final class EnglishComments {
         return new Report(done, problems);
     }
 
-    /** All'avvio, da root (Main, dopo il passaggio del nome del prodotto). Un file che non riesce si riprova al prossimo. */
+    /** At startup, as root (Main, after the product-name pass). A file that fails is retried at the next one. */
     public static void atBoot() {
         try {
             Set<Path> files = new LinkedHashSet<>(PanelMarker.serviceFiles(MORE_FILES, MORE_FOLDERS));

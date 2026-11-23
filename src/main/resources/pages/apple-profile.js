@@ -1,8 +1,8 @@
-        // ---------- Profilo di configurazione per Apple Mail ----------
-        // Sta nella finestra «Configurazione dei client» della casella, scheda iPhone/Mac: e' li' che si va a
-        // configurare una casella (una scheda a parte in fondo alla pagina non la trovava nessuno, 22/11/2026).
-        // Le chiavi del profilo vengono dallo schema ufficiale Apple (com.apple.mail.managed);
-        // il file generato passa la validazione di plutil, non e' stato guardato a occhio.
+        // ---------- Configuration profile for Apple Mail ----------
+        // It lives in the mailbox's "Client configuration" window, iPhone/Mac tab: that is where one goes to
+        // set up a mailbox (a separate card at the bottom of the page was found by nobody, 2026-11-22).
+        // The profile's keys come from Apple's official schema (com.apple.mail.managed);
+        // the generated file passes plutil validation, it was not checked by eye.
         async function paApi(actionItem, extra) {
             const r = await fetch('/api/apple-profile', {
                 method: 'POST',
@@ -18,8 +18,8 @@
             return d.innerHTML;
         }
 
-        // All'apertura della finestra: i pulsanti si accendono solo se il profilo di questa casella si puo' fare
-        // (nome del server di posta impostato, casella esistente); altrimenti si dice perche'.
+        // When the window opens: the buttons light up only if this mailbox's profile can be made
+        // (mail server name set, mailbox existing); otherwise the reason is given.
         async function cfgAppleProfileState(email) {
             const btn = document.getElementById('cfgAppleProfileBtn');
             const look = document.getElementById('cfgAppleProfileLookBtn');
@@ -38,7 +38,7 @@
             } catch (e) {
                 r = { success: false, error: t('common.errorShort') };
             }
-            // La finestra nel frattempo puo' essere stata riaperta per un'altra casella.
+            // In the meantime the window may have been reopened for another mailbox.
             if (email !== __cfgCurrentEmail) return;
             if (!r.success) {
                 out.innerHTML = '<div class="alert alert-warning py-2 small mb-0">' + paEsc(r.error) + '</div>';
@@ -49,8 +49,9 @@
                 return;
             }
             sets.innerHTML = t('pa.sets.html', { imap: paEsc(r.mailHost + ':' + r.imapPort), smtp: paEsc(r.mailHost + ':' + r.smtpPort) });
-            // Firmato o no (23/11/2026): un profilo non firmato l'iPhone lo mostra «Non verificato», e chi lo vede
-            // deve sapere che e' previsto, e cosa manca perche' sia firmato. Con l'icona e la parola, non col colore.
+            // Signed or not (2026-11-23): the iPhone shows an unsigned profile as "Not Verified", and whoever
+            // sees it must know that this is expected, and what is missing for it to be signed. With the icon and
+            // the word, not with color.
             const s = r.signing || {};
             if (signedLine) {
                 signedLine.innerHTML = s.signed

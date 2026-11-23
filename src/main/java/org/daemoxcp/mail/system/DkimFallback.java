@@ -15,32 +15,33 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * Rspamd firma solo i domini che hanno la loro chiave DKIM: try_fallback = false in local.d/dkim_signing.conf.
+ * Rspamd signs only the domains that have their own DKIM key: try_fallback = false in local.d/dkim_signing.conf.
  *
- * <p>Misurato sul server vero il 21/11/2026: ogni notte alle 03:01 e alle 04:15 (i rapporti di periodic per root, da
- * sendmail, che passano da Rspamd con non_smtpd_milters) Rspamd scriveva «cannot load dkim key
- * /var/db/rspamd/dkim/...: cannot stat key file». Il dominio di quei messaggi, il nome della macchina, non e' un dominio
- * di posta e non ha chiave; con try_fallback a true, il valore predefinito, Rspamd la cerca nel percorso predefinito,
- * che non esiste. Sulla VM installata dal README il file non c'era proprio: lo stesso errore per ogni messaggio locale o
- * autenticato di un dominio senza chiave. Quello che si firma non cambia: senza chiave non si firmava comunque.
+ * <p>Measured on the production server on 2026-11-21: every night at 03:01 and at 04:15 (periodic's reports for
+ * root, from sendmail, which go through Rspamd with non_smtpd_milters) Rspamd wrote "cannot load dkim key
+ * /var/db/rspamd/dkim/...: cannot stat key file". The domain of those messages, the machine's name, is not a mail
+ * domain and has no key; with try_fallback set to true, the default, Rspamd looks for it in the default path, which
+ * does not exist. On the VM installed from the README the file was not there at all: the same error for every local
+ * or authenticated message of a domain without a key. What gets signed does not change: without a key nothing was
+ * signed anyway.
  *
- * <p>Il file lo scrive DkimManager, coi domini e le loro chiavi; qui solo la riga in piu':
+ * <p>The file is written by DkimManager, with the domains and their keys; here only the extra line:
  * <ul>
- *   <li>il file non c'e': lo scrive DkimManager dal database (su un server nuovo, nessun dominio con DKIM);</li>
- *   <li>il file e' del pannello (l'intestazione di DkimManager o quella dell'installatore RspamdScript) e non dice
- *       try_fallback: la riga dopo allow_username_mismatch, il resto byte per byte com'era;</li>
- *   <li>try_fallback c'e' gia', con qualunque valore, o il file l'ha scritto qualcun altro: com'e'.</li>
+ *   <li>the file is not there: DkimManager writes it from the database (on a new server, no domain with DKIM);</li>
+ *   <li>the file belongs to the panel (the DkimManager header or that of the RspamdScript installer) and does not
+ *       say try_fallback: the line after allow_username_mismatch, the rest byte for byte as it was;</li>
+ *   <li>try_fallback is already there, with any value, or the file was written by someone else: as it is.</li>
  * </ul>
- * Solo sul Rspamd del pannello, quello dietro Postfix come milter. Poi rspamadm configtest, reload e la prova: rspamadm
- * configdump dkim_signing dice try_fallback = false e Rspamd analizza. Se qualcosa non torna il file torna com'era (o
- * si toglie) e si ricarica. Al secondo avvio non fa niente.
+ * Only on the panel's Rspamd, the one behind Postfix as a milter. Then rspamadm configtest, reload and the test:
+ * rspamadm configdump dkim_signing says try_fallback = false and Rspamd scans. If something does not add up, the
+ * file goes back to how it was (or is removed) and Rspamd is reloaded. At the second startup it does nothing.
  */
 public final class DkimFallback {
 
     private static final Logger LOGGER = Logger.getLogger(DkimFallback.class.getName());
 
     static final Path FILE = Path.of(DkimManager.CONFIG_PATH);
-    /** L'intestazione che scrive l'installatore RspamdScript. */
+    /** The header that the RspamdScript installer writes. */
     static final String SCRIPT_HEADER = "# DKIM Signing\n# Keys are generated per-domain by the panel\n";
     static final Pattern ANY_FALLBACK = Pattern.compile("(?m)^\\s*try_fallback\\s*=");
     static final Pattern ALLOW_LINE = Pattern.compile("(?m)^allow_username_mismatch = true;\\n");
@@ -51,8 +52,8 @@ public final class DkimFallback {
     enum Action { NOTHING, WRITE, INSERT, LEFT_ALONE }
 
     /**
-     * Che cosa fare. installed: c'e' rspamadm; proxy: il worker-proxy.inc di local.d (null se non c'e'); current: il
-     * file di adesso (null se non c'e'). Funzione pura.
+     * What to do. installed: rspamadm is there; proxy: the worker-proxy.inc of local.d (null if it is not
+     * there); current: the current file (null if it is not there). A pure function.
      */
     static Action decide(boolean installed, String proxy, String current) {
         if (!installed || proxy == null || !HeaderFromCheck.MILTER.matcher(proxy).find()) return Action.NOTHING;
@@ -62,14 +63,14 @@ public final class DkimFallback {
         return ours && ALLOW_LINE.matcher(current).find() ? Action.INSERT : Action.LEFT_ALONE;
     }
 
-    /** Il file con la riga dopo allow_username_mismatch, tutto il resto com'era. Funzione pura. */
+    /** The file with the line after allow_username_mismatch, everything else as it was. A pure function. */
     static String inserted(String current) {
         var m = ALLOW_LINE.matcher(current);
         if (!m.find()) return null;
         return current.substring(0, m.end()) + DkimManager.NO_FALLBACK + "\n" + current.substring(m.end());
     }
 
-    /** configdump dice try_fallback = false. Funzione pura. */
+    /** configdump says try_fallback = false. Pure function. */
     static boolean dumpSaysNoFallback(String dump) {
         return dump != null && FALLBACK_FALSE.matcher(dump).find();
     }

@@ -7,7 +7,7 @@ import java.time.Duration;
 import org.daemoxcp.mail.util.Shell;
 
 /**
- * The LMTP move (reperto 234) on the VM's real Dovecot and Postfix, as root with -De2e.vm=yes. The VM must start with
+ * The LMTP move (finding 234) on the VM's real Dovecot and Postfix, as root with -De2e.vm=yes. The VM must start with
  * the block of before (conf.d/10-master.conf as the installer of main 09924051 wrote it, Postfix on
  * lmtp:inet:127.0.0.1:24) and the mailbox given with -De2e.mailbox (default alice@rehearsal.test).
  *  1. before: port 24 listening, /var/run/dovecot/lmtp open to everyone; `nobody` can talk LMTP (the fault);
@@ -63,9 +63,10 @@ public class LmtpSocketE2ETest {
         Path master = LmtpSocket.MASTER_CONF, main = LmtpSocket.DOVECOT_CONF;
         String masterBefore = Files.readString(master), mainBefore = Files.readString(main);
         String transportBefore = sh("postconf -h virtual_transport");
-        // Solo da un server di prima del reperto 234. Su uno gia' passato al socket (ogni installazione nuova) la parte 3
-        // rimetterebbe Postfix sulla porta 24 senza piu' nessuno in ascolto e la parte 4 lo lascerebbe li' (LEFT): posta
-        // ferma in coda. Allora ci si ferma prima di toccare qualcosa, come gli altri E2E quando il banco non e' giusto.
+        // Only from a server from before finding 234. On one that has already moved to the socket (every new
+        // installation) part 3 would put Postfix back on port 24 with nobody listening any more, and part 4
+        // would leave it there (LEFT): mail stuck in the queue. So it stops before touching anything, like the
+        // other E2E tests when the test bench is not right.
         if (!(masterBefore.contains(LmtpSocket.OLD23) || masterBefore.contains(LmtpSocket.OLD24))
                 || !LmtpSocket.OLD_TRANSPORT.equals(transportBefore)) {
             System.out.println("STOPPED: this server is not in the state of before (the lmtp block the installer of main"
@@ -98,8 +99,8 @@ public class LmtpSocketE2ETest {
         real.write(main, mainBefore);
         real.setTransport(LmtpSocket.OLD_TRANSPORT);
         real.dovecotReload(false);
-        // Il reload di Dovecot ritorna prima che il master rifaccia i listener (reperto 240): sulla 2.4.5 la porta 24
-        // si apre qualche secondo dopo. Si aspetta come fa LmtpSocket, invece di guardare una volta sola.
+        // Dovecot's reload returns before the master redoes the listeners (finding 240): on 2.4.5 port 24
+        // opens a few seconds later. It waits the way LmtpSocket does, instead of looking only once.
         boolean port24 = false;
         for (int i = 0; i < 15 && !(port24 = !sh("sockstat -46lq -p 24").isEmpty()); i++) Thread.sleep(1000);
         check("before again: port 24 listening", port24);

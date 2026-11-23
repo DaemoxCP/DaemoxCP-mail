@@ -20,17 +20,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Resetting the memory of the automatic replies, with real deliveries (reperto 219).
+ * Resetting the memory of the automatic replies, with real deliveries (finding 219).
  *
- * Until 10/11/2026 the panel's "reset tracking" deleted the compiled binary beside the panel's Sieve rules and restarted
- * Dovecot. The folder of the rules is root's (reperto 214), so Dovecot could not save the binary again, and every
+ * Until 2026-11-10 the panel's "reset tracking" deleted the compiled binary beside the panel's Sieve rules and restarted
+ * Dovecot. The folder of the rules is root's (finding 214), so Dovecot could not save the binary again, and every
  * following delivery compiled the rules and logged "Error: sieve: binary ...: save: failed to create temporary file ...
  * Permission denied (euid=5000(vmail))"; the restart stopped and started all of Dovecot for nothing. Here, through the
  * panel's own entry points (SieveGenerator.saveSieveScript, VacationTracking.reset and ensureAtBoot):
  *  1. the autoresponder answers a sender once: the second message from the same sender gets no reply;
  *  2. the reset: .dovecot.lda-dupes is gone; the binary is still there, untouched and newer than the script; Dovecot's
  *     master process is the same one (an IMAP session logged in before is no proof: on Dovecot 2.3.21 it outlived the
- *     old reset's restart, measured on 10/11/2026);
+ *     old reset's restart, measured on 2026-11-10);
  *  3. the autoresponder answers that sender again, once; no Sieve error, warning or compile in the maillog for any of
  *     these deliveries;
  *  4. the boot repair: with the binary taken away (what the old reset did) a delivery complains (so the check of 3 can

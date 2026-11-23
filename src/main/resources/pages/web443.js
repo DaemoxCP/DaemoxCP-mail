@@ -1,10 +1,10 @@
-        // ---------- Apertura protetta della porta 443 ----------
+        // ---------- Protected opening of port 443 ----------
         async function w443Load() {
             const el = document.getElementById('upd-443');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('w4.reading')) + '';
-            // UNA ALLA VOLTA: updApi ha un lucchetto (updBusy) che serve a impedire due
-            // operazioni contemporanee. Chiamandole in parallelo la seconda tornava subito
-            // con "Operazione gia' in corso", e il riquadro restava vuoto senza spiegazione.
+            // ONE AT A TIME: updApi has a lock (updBusy) that prevents two
+            // simultaneous operations. Calling them in parallel, the second came back at once
+            // with "An operation is already running", and the box stayed empty without explanation.
             const s = await updApi('web443_status');
             if (!s.success) {
                 el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + updEsc(s.error) + '</div>';
@@ -24,8 +24,8 @@
                           '<code>' + updEsc(s.policyFile) + '</code> &mdash; ' + escHtml(t('w4.policyStatic')))
                + '</tbody></table>';
 
-            // E se l'anteprima non arriva si DICE perche', invece di mostrare un riquadro
-            // vuoto che sembra un difetto grafico.
+            // And if the preview does not arrive, the reason is SAID, instead of showing an empty
+            // box that looks like a graphical glitch.
             h += '<div class="small text-muted mb-2">' + escHtml(t('w4.whatInstalled')) + '</div>';
             if (c && c.success && c.configuration)
                 h += '<pre class="small p-2 border rounded mb-2" data-style="max-height:22rem;overflow:auto">'
@@ -57,8 +57,8 @@
                  + '<div class="text-muted">' + noteText + '</div></td></tr>';
         }
 
-        // Su questo server nginx tiene tutto nel file principale e non include cartelle:
-        // senza questa riga, qualunque file aggiuntivo verrebbe ignorato.
+        // On this server nginx keeps everything in the main file and does not include directories:
+        // without this line, any additional file would be ignored.
         async function w443Include() {
             if (!await updConfirm(t('w4.confirmInclude'), t('w4.wAdd'))) return;
             const el = document.getElementById('w443Outcome');

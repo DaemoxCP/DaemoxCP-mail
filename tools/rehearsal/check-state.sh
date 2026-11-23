@@ -1,8 +1,8 @@
 #!/bin/sh
-# Lo stato di un server di posta col pannello, per confrontare prima e dopo un passaggio di versione.
-# Uso: check-state.sh DOMINIO
+# The state of a mail server with the panel, to compare before and after a version upgrade.
+# Usage: check-state.sh DOMAIN
 DOMAIN="$1"
-# I nomi del pannello: quelli di DaemoxCP Mail (17/11/2026) o quelli di prima, come li trova.
+# The names of the panel: those of DaemoxCP Mail (2026-11-17) or the ones from before, whichever it finds.
 D=/var/db/daemoxcp-mail; [ -d "$D" ] || D=/var/db/mailpanel
 SVC=daemoxcp_mail; [ -f /usr/local/etc/rc.d/$SVC ] || SVC=mailpanel
 SSO=daemoxcp_mail_sso; [ -d /usr/local/www/roundcube/plugins/$SSO ] || SSO=mailpanel_sso

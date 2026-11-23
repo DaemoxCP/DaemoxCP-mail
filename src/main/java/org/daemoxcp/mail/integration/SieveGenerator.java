@@ -20,43 +20,44 @@ public class SieveGenerator {
     private static final Logger LOGGER = Logger.getLogger(SieveGenerator.class.getName());
 
     private static final String SIEVE_DIR = "/var/mail/sieve";
-    /** Il file delle regole del pannello in ogni cartella dominio/nome: lo esegue Dovecot prima di quelli della casella. */
+    /** The panel's rules file in every domain/name folder: Dovecot runs it before those of the mailbox. */
     private static final String SCRIPT = ".dovecot.sieve";
     private static final String GLOBAL_SIEVE = "/usr/local/etc/dovecot/sieve/global.sieve";
 
     /**
-     * La prima riga di ogni script del pannello (date serve a currentdate, nella risposta automatica; mailbox a
-     * fileinto :create, reperto 229). Pigeonhole ha mailbox fra le estensioni attive per impostazione predefinita, sulla
-     * 2.3 (sieve_extensions aggiunge con +) come sulla 2.4.
+     * The first line of every panel script (date is needed by currentdate, in the auto-reply; mailbox by
+     * fileinto :create, finding 229). Pigeonhole has mailbox among the extensions enabled by default, on
+     * 2.3 (sieve_extensions adds with +) as on 2.4.
      */
     public static final String REQUIRE = "require [\"fileinto\", \"reject\", \"vacation\", \"copy\", \"imap4flags\", \"regex\", \"relational\", \"comparator-i;ascii-numeric\", \"date\", \"mailbox\"];\n\n";
 
     /**
-     * La riga require che il pannello scriveva prima di aggiungere mailbox (fino al reperto 229): la riconoscono
-     * SieveForcedKeep e SieveRulesRefresh, per sapere che uno script e' del pannello.
+     * The require line the panel wrote before adding mailbox (up to finding 229): SieveForcedKeep and
+     * SieveRulesRefresh recognise it, to know that a script belongs to the panel.
      */
     public static final String REQUIRE_BEFORE_MAILBOX = REQUIRE.replace(", \"mailbox\"];", "];");
 
     /**
-     * La coda che il pannello metteva in fondo a ogni script fino al 09/11/2026: un keep esplicito. SieveForcedKeep la
-     * toglie all'avvio dagli script gia' scritti.
+     * The tail the panel put at the end of every script until 2026-11-09: an explicit keep. SieveForcedKeep
+     * removes it at boot from the scripts already written.
      */
     public static final String OLD_FORCED_KEEP = "\n# Default action\nkeep;\n";
 
     /**
      * Generate Sieve script for a mailbox
      *
-     * Nessun keep in fondo. Il keep implicito (RFC 5228, 2.10.2) mette gia' il messaggio nella INBOX quando nessuna
-     * regola lo toglie; un keep esplicito in fondo lo metteva nella INBOX SEMPRE, quindi «Sposta» lasciava il messaggio
-     * nella cartella e nella INBOX, «Inoltra» senza copia ne teneva una e «Elimina» non eliminava niente (misurato sulla
-     * VM il 09/11/2026: dopo un fileinto "Junk", doveadm search dava INBOX 1, Junk 1). Le azioni che lasciano anche la
-     * INBOX lo dicono da sole: fileinto :copy, redirect :copy (RFC 3894).
+     * No keep at the end. The implicit keep (RFC 5228, 2.10.2) already puts the message in the INBOX when no
+     * rule removes it; an explicit keep at the end put it in the INBOX ALWAYS, so "Move" left the message in
+     * the folder and in the INBOX, "Forward" without a copy kept one and "Delete" deleted nothing (measured on the
+     * VM on 2026-11-09: after a fileinto "Junk", doveadm search gave INBOX 1, Junk 1). The actions that also leave
+     * the message in the INBOX say so themselves: fileinto :copy, redirect :copy (RFC 3894).
      *
-     * Lo script gira come script «before» (sieve_before nella 2.3, type = before nella 2.4, reperto 214). Nella
-     * documentazione di Pigeonhole (2.3, «Executing Multiple Scripts Sequentially»): lo script dopo, quello della casella,
-     * gira solo se e' in vigore un keep, implicito o esplicito; e la INBOX la scrive solo il keep dell'ultimo script.
-     * Quindi senza il keep forzato: se le regole del pannello tengono il messaggio, gira lo script della casella e decide
-     * lui; se lo spostano, inoltrano senza copia o eliminano, lo script della casella su quel messaggio non gira.
+     * The script runs as a "before" script (sieve_before in 2.3, type = before in 2.4, finding 214). In
+     * Pigeonhole's documentation (2.3, "Executing Multiple Scripts Sequentially"): the next script, the mailbox's
+     * one, runs only if a keep is in effect, implicit or explicit; and the INBOX is written only by the keep of the
+     * last script. So without the forced keep: if the panel's rules keep the message, the mailbox's script runs and
+     * decides for itself; if they move it, forward it without a copy or delete it, the mailbox's script does not
+     * run on that message.
      */
     public String generateSieveScript(int mailboxId, MailDatabase database) {
         StringBuilder script = new StringBuilder();
@@ -86,8 +87,8 @@ public class SieveGenerator {
             }
         }
 
-        // Niente keep in fondo: il keep implicito tiene il messaggio nella INBOX se nessuna regola qui sopra lo toglie
-        // (vedi sopra). Uno script senza regole e' solo il require, e Sieve lo accetta.
+        // No keep at the end: the implicit keep keeps the message in the INBOX if no rule above removes it
+        // (see above). A script without rules is just the require, and Sieve accepts it.
         return script.toString();
     }
 
@@ -264,10 +265,10 @@ public class SieveGenerator {
         String value = action.optString("value", "");
 
         return switch (type.toLowerCase()) {
-            // :create (RFC 5490, estensione mailbox): la cartella che non c'e' si crea. Senza, un filtro «Sposta» verso
-            // una cartella nuova non spostava niente: Dovecot rispondeva «Mailbox doesn't exist» e il messaggio restava
-            // nella INBOX (misurato sulla VM e visto sul server vero, reperto 229). Anche la cartella proposta dalla
-            // finestra dei filtri, INBOX.Filtered, all'inizio non c'e'.
+            // :create (RFC 5490, mailbox extension): the folder that does not exist is created. Without it, a "Move"
+            // filter to a new folder moved nothing: Dovecot answered "Mailbox doesn't exist" and the message stayed
+            // in the INBOX (measured on the VM and seen on the production server, finding 229). The folder proposed by
+            // the filters window, INBOX.Filtered, does not exist at first either.
             case "move", "fileinto" -> "fileinto :create \"" + escapeString(value) + "\";";
             case "copy" -> "fileinto :copy :create \"" + escapeString(value) + "\";";
             case "delete", "discard" -> "discard;";
@@ -298,17 +299,18 @@ public class SieveGenerator {
     /**
      * Save Sieve script for a mailbox
      *
-     * Da root, senza seguire collegamenti e solo in cartelle che nessun altro puo' cambiare (RootOnlyPath, reperto 221):
-     * prima Files.writeString seguiva un .dovecot.sieve che era un collegamento, e root riscriveva il file a cui puntava
-     * (misurato sulla VM con un file di nobody, 0600). Lo script e' di root, rw-r--r--: Dovecot, che consegna come vmail,
-     * lo legge e non lo puo' cambiare. Falso, col motivo nel registro, se una cartella da / alla casella non passa.
+     * As root, without following links and only in folders that nobody else can change (RootOnlyPath, finding 221):
+     * before, Files.writeString followed a .dovecot.sieve that was a link, and root rewrote the file it pointed to
+     * (measured on the VM with a file owned by nobody, 0600). The script belongs to root, rw-r--r--: Dovecot, which
+     * delivers as vmail, reads it and cannot change it. False, with the reason in the log, if a folder from / to the
+     * mailbox does not pass.
      */
     public boolean saveSieveScript(String email, String script) {
         try {
             // Create user sieve directory
-            // L'indirizzo viene da MySQL, che col pannello separato scrive anche la parte web, e root ne fa un
-            // percorso: deve avere la forma di un indirizzo, e il file restare sotto SIEVE_DIR. Prima una casella
-            // come ../x faceva scrivere a root un file fuori dalla sua cartella.
+            // The address comes from MySQL, which with the separated panel the web part also writes, and root turns
+            // it into a path: it must have the form of an address, and the file must stay under SIEVE_DIR. Before, a
+            // mailbox like ../x made root write a file outside its folder.
             if (!org.daemoxcp.mail.security.SafeNames.address(email)) return false;
             String[] parts = email.split("@");
 
@@ -324,8 +326,9 @@ public class SieveGenerator {
             // Compile the script
             compileScript(userDir.resolve(SCRIPT).toString());
 
-            // La home di Dovecot della casella, dove la risposta automatica e l'inoltro ricordano a chi hanno gia'
-            // risposto: c'e' prima della prima consegna, e Dovecot non scrive un errore nel registro (reperto 217).
+            // The mailbox's Dovecot home, where the auto-reply and the forward remember whom they have already
+            // answered: it exists before the first delivery, and Dovecot does not write an error in the log
+            // (finding 217).
             org.daemoxcp.mail.system.DovecotHome.ensureHome(domain, user);
 
             return true;
@@ -336,10 +339,11 @@ public class SieveGenerator {
     }
 
     /**
-     * Compila lo script e mette il compilato accanto, perche' Dovecot non ricompili a ogni consegna (la cartella e' di
-     * root, e Dovecot non ce lo puo' salvare). sievec gira con l'utente sievec, mai da root (SieveCompiler, reperto
-     * 218). Falso solo se sievec rifiuta lo script; se non si e' potuto compilare (sievec mancante, utente che non si
-     * puo' avere) e' vero, con un avviso: Dovecot compila a ogni consegna, come faceva senza.
+     * Compiles the script and puts the compiled one next to it, so that Dovecot does not recompile at every delivery
+     * (the folder belongs to root, and Dovecot cannot save it there). sievec runs as the sievec user, never as root
+     * (SieveCompiler, finding 218). False only if sievec refuses the script; if it could not be compiled (sievec
+     * missing, a user that cannot be obtained) it is true, with a warning: Dovecot compiles at every delivery, as it
+     * did without it.
      */
     public boolean compileScript(String scriptPath) {
         org.daemoxcp.mail.system.SieveCompiler.Outcome o = org.daemoxcp.mail.system.SieveCompiler.compile(Path.of(scriptPath));
@@ -367,16 +371,16 @@ public class SieveGenerator {
     }
 
     /**
-     * Controlla un testo Sieve con sievec, che gira con l'utente sievec e non da root (SieveCompiler, reperto 218): il
-     * testo viene da chi scrive i filtri. Oggi nessuno la chiama. Se sievec manca o non si puo' far girare, il testo
-     * passa: lo controllera' Dovecot alla consegna, come prima.
+     * Checks a Sieve text with sievec, which runs as the sievec user and not as root (SieveCompiler, finding 218):
+     * the text comes from whoever writes the filters. Nobody calls it today. If sievec is missing or cannot be run,
+     * the text passes: Dovecot will check it at delivery, as before.
      */
     public ValidationResult validateScript(String script) {
         org.daemoxcp.mail.system.SieveCompiler.Outcome o = org.daemoxcp.mail.system.SieveCompiler.validate(script);
         if (!o.refused()) return new ValidationResult(true, null);
         String output = o.message();
         ValidationResult result = new ValidationResult(false, output);
-        // La riga dell'errore: «script: line 2: error: ...»
+        // The error line: "script: line 2: error: ..."
         if (output.contains("line ")) {
             try {
                 int idx = output.indexOf("line ") + 5;
@@ -399,7 +403,7 @@ public class SieveGenerator {
 
             Path sieveFile = org.daemoxcp.mail.security.SafeNames.under(Path.of(SIEVE_DIR), parts[1], parts[0], SCRIPT);
             if (Files.exists(sieveFile, LinkOption.NOFOLLOW_LINKS)) {
-                // Root non segue un collegamento: mostrerebbe a chi chiama il file a cui punta (reperto 221).
+                // Root does not follow a link: it would show the caller the file it points to (finding 221).
                 return new String(org.daemoxcp.mail.security.RootOnlyPath.read(sieveFile, 1 << 20), StandardCharsets.UTF_8);
             }
         } catch (IOException e) {

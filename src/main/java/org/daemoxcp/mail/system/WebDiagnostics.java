@@ -10,46 +10,48 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Cosa espone davvero il web server, letto dal server e non dedotto dagli script.
+ * What the web server really exposes, read from the server and not inferred from the scripts.
  *
- * Perche' serve una diagnostica invece di guardare il codice: il pannello contiene DUE
- * script di installazione che scrivono configurazioni nginx diverse. Uno mette un blocco
- * "listen 80" con server_name _ che serve la webmail IN CHIARO; l'altro scrive un file in
- * sites-enabled con il solo "listen 443 ssl". Guardando il codice non si puo' sapere quale
- * dei due abbia costruito questa macchina — e su nginx in produzione dedurre non basta.
+ * Why a diagnostic is needed instead of looking at the code: the panel contains TWO
+ * installation scripts that write different nginx configurations. One adds a
+ * "listen 80" block with server_name _ that serves the webmail IN CLEARTEXT; the other writes a file in
+ * sites-enabled with only "listen 443 ssl". Looking at the code you cannot know which
+ * of the two built this machine -- and on nginx in production, inferring is not enough.
  *
- * Qui si legge "nginx -T", che stampa la configurazione COMPLETA come nginx la vede davvero,
- * inclusi tutti i file inclusi. E' la sola fonte che non mente: se un file e' rimasto in giro
- * ma non e' incluso, li' dentro non compare; se qualcuno ha modificato a mano, li' si vede.
+ * Here we read "nginx -T", which prints the COMPLETE configuration as nginx really sees it,
+ * including all the included files. It is the only source that does not lie: if a file was left
+ * lying around but is not included, it does not appear there; if someone edited by hand, it shows there.
  *
- * Questa classe non modifica nulla. Legge, e quando un comando fallisce lo dice invece di
- * concludere: "non ho potuto guardare" e "va tutto bene" sono due risposte opposte.
+ * This class changes nothing. It reads, and when a command fails it says so instead of
+ * drawing a conclusion: "I could not look" and "everything is fine" are two opposite answers.
  */
 public class WebDiagnostics {
 
     private WebDiagnostics() {}
 
-    /* ===================================================================
-     * Il parser, come funzione pura
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The parser, as a pure function
+     * ===================================================================
+     */
 
     public static class Block {
         public final List<String> listens = new ArrayList<>();
         public String names = "";
         public String root = "";
-        public boolean encrypted;          // ha "ssl" fra i parametri di listen
+        public boolean encrypted;          // has "ssl" among the listen parameters
         public boolean servePhp;
-        public boolean serveFile;        // ha una root e un location che consegna qualcosa
-        public boolean onlyRedirect;     // non fa altro che rimandare altrove
+        public boolean serveFile;        // has a root and a location that serves something
+        public boolean onlyRedirect;     // does nothing but redirect elsewhere
         public int line;
     }
 
     /**
-     * I blocchi "server" della configurazione, con cosa ascoltano e cosa servono.
+     * The "server" blocks of the configuration, with what they listen on and what they serve.
      *
-     * Il parser conta le graffe invece di cercare la fine con un'espressione regolare: dentro
-     * un server ci sono altri blocchi (location, if) e una regex si fermerebbe alla prima
-     * graffa chiusa, attribuendo al blocco sbagliato meta' delle direttive.
+     * The parser counts braces instead of looking for the end with a regular expression: inside
+     * a server there are other blocks (location, if) and a regex would stop at the first
+     * closing brace, assigning half of the directives to the wrong block.
      */
     public static List<Block> blocks(String dump) {
         List<Block> outside = new ArrayList<>();
@@ -117,7 +119,7 @@ public class WebDiagnostics {
         b.onlyRedirect = haReturn && !b.serveFile && !b.servePhp;
     }
 
-    /** Il blocco ascolta sulla porta indicata. */
+    /** The block listens on the given port. */
     public static boolean listensOn(Block b, int port) {
         for (String a : b.listens) {
             String p = a.split("\\s+")[0];
@@ -128,9 +130,11 @@ public class WebDiagnostics {
         return false;
     }
 
-    /* ===================================================================
-     * Le misure sul server
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Measurements on the server
+     * ===================================================================
+     */
 
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
@@ -172,12 +176,12 @@ public class WebDiagnostics {
             r.put("workerConnections", firstLineWith(dump.output, "worker_connections"));
         }
 
-        // Chi e' davvero in ascolto sulla macchina, indipendentemente da nginx.
+        // Who is really listening on the machine, regardless of nginx.
         RunResult sock = run("sh", "-c", "sockstat -4 -6 -l 2>/dev/null | awk 'NR==1 || $6 ~ /:(80|443)$/'");
         r.put("listening", sock.code == 0 ? sock.output.trim() : "")
          .put("listeningRead", sock.code == 0);
 
-        // Il firewall: le porte web sono filtrate?
+        // The firewall: are the web ports filtered?
         RunResult pf = run("sh", "-c", "pfctl -sr 2>/dev/null");
         if (pf.code == 0 && !pf.output.isBlank()) {
             r.put("pfRead", true).put("pfRules", pf.output.trim().split("\n").length);
@@ -187,16 +191,16 @@ public class WebDiagnostics {
             r.put("pfRead", false);
         }
 
-        // fail2ban: c'e' una jail che guarda un log di nginx?
+        // fail2ban: is there a jail that watches an nginx log?
         //
-        // Prima la domanda era posta al NOME: "l'elenco delle jail contiene la parola nginx?".
-        // Sbagliava in tutte e due le direzioni. Su questo server la jail che protegge la 443
-        // si chiama "daemoxcp-mail-public" e guarda /var/log/nginx/daemoxcp-mail-public-access.log:
-        // un log di nginx a tutti gli effetti, ma senza quella parola nel nome — e la diagnosi
-        // annunciava che nessuno viene bannato sulle porte web, mentre veniva bannato. Al
-        // contrario, una jail chiamata "nginx-qualcosa" ma puntata altrove sarebbe passata per
-        // buona. Il nome di una cosa non e' la cosa: adesso si chiede a fail2ban QUALI FILE
-        // ogni jail sorveglia.
+        // Before, the question was asked of the NAME: "does the jail list contain the word nginx?".
+        // It was wrong in both directions. On this server the jail that protects 443
+        // is called "daemoxcp-mail-public" and watches /var/log/nginx/daemoxcp-mail-public-access.log:
+        // an nginx log in every respect, but without that word in its name -- and the diagnosis
+        // announced that nobody is banned on the web ports, while they were being banned.
+        // Conversely, a jail called "nginx-something" but pointed elsewhere would have passed
+        // as good. The name of a thing is not the thing: now fail2ban is asked WHICH FILES
+        // each jail watches.
         RunResult f2b = run("sh", "-c", "fail2ban-client status 2>/dev/null");
         if (f2b.code == 0) {
             r.put("fail2banRead", true).put("jail", f2b.output.trim());
@@ -219,10 +223,10 @@ public class WebDiagnostics {
                 boolean onNginx = lp.output.contains("/nginx/") || lp.output.contains("nginx-");
                 if (onNginx) watchNginx = true;
 
-                // Quale porta protegge. Non e' una proprieta' della jail ma dell'AZIONE
-                // (fail2ban-client(1): "get <JAIL> actions", poi "get <JAIL> action <ACT>
-                // <proprieta'>"), quindi si passa di li'. Una jail puo' avere piu' azioni e
-                // ognuna la sua porta.
+                // Which port it protects. It is not a property of the jail but of the ACTION
+                // (fail2ban-client(1): "get <JAIL> actions", then "get <JAIL> action <ACT>
+                // <property>"), so we go through there. A jail can have several actions and
+                // each its own port.
                 String actions = "";
                 RunResult ac = run("sh", "-c", "fail2ban-client get " + safe(name) + " actions 2>/dev/null");
                 if (ac.code == 0) actions = ac.output.trim();
@@ -243,14 +247,14 @@ public class WebDiagnostics {
                         .put("log", lp.output.trim()).put("onNginx", onNginx)
                         .put("actions", actions)
                         .put("ports", String.join(", ", ports))
-                        // "Non dichiarata" non e' "nessuna": con l'azione predefinita di pf il
-                        // ban vale per l'indirizzo, non per una porta sola. Dirlo invece di
-                        // lasciare la casella vuota, che si legge come "non protegge niente".
+                        // "Not declared" is not "none": with pf's default action the
+                        // ban applies to the address, not to a single port. Say so instead of
+                        // leaving the cell empty, which reads as "protects nothing".
                         .put("declaredPort", readPorts));
             }
             r.put("jailWatch", watch);
             r.put("jailNginx", watchNginx);
-            // "Non sono riuscito a chiedere a tutte" non e' "nessuna guarda nginx".
+            // "I could not ask all of them" is not "none watches nginx".
             r.put("allJailsRead", allRead);
         } else {
             r.put("fail2banRead", false);
@@ -260,13 +264,15 @@ public class WebDiagnostics {
         return r;
     }
 
-    /** Un nome che finisce dentro una riga di shell: si accettano solo i caratteri di un
-     *  nome di jail o di azione. Non si costruisce un comando con quello che arriva da fuori. */
+    /**
+     * A name that ends up inside a shell line: only the characters of a jail
+     *  or action name are accepted. A command is never built from what comes from outside.
+     */
     private static String safe(String s) {
         return s == null ? "" : s.replaceAll("[^A-Za-z0-9._-]", "");
     }
 
-    /** Il riassunto, costruito solo su cio' che si e' potuto misurare. */
+    /** The summary, built only on what could be measured. */
     private static String verdict(JSONObject r) {
         List<String> p = new ArrayList<>();
         if (!r.optBoolean("nginxReadable", false))
@@ -287,7 +293,7 @@ public class WebDiagnostics {
         }
         if (r.optBoolean("fail2banRead", false)) {
             if (r.optBoolean("jailNginx", false)) {
-                // Si dice QUALE, cosi' l'affermazione e' verificabile da chi legge.
+                // We say WHICH one, so that whoever reads it can verify the statement.
                 StringBuilder which = new StringBuilder();
                 JSONArray sv = r.optJSONArray("jailWatch");
                 for (int i = 0; sv != null && i < sv.length(); i++) {

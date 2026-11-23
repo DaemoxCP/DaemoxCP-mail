@@ -6,18 +6,18 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Chi il pannello riconosce come Cloudflare: l'unico da cui accetta l'intestazione CF-Connecting-IP con
- * l'indirizzo vero di chi bussa (r18). Da qualunque altro indirizzo, loopback e reti private comprese,
- * le intestazioni di inoltro (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) sono testo che chiunque puo'
- * scrivere, e conta solo l'indirizzo TCP.
+ * Who the panel recognises as Cloudflare: the only one from which it accepts the CF-Connecting-IP header with
+ * the real address of whoever is knocking (r18). From any other address, loopback and private networks included,
+ * the forwarding headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) are text anyone can
+ * write, and only the TCP address counts.
  *
- * Prima ci si fidava anche del loopback e delle reti private (10/8, 172.16/12, 192.168/16, fc00::/7):
- * bastava un'altra macchina nella stessa rete privata del fornitore, o una richiesta alla superficie
- * sulla 443 (nginx passa al pannello le intestazioni del client), per scegliersi l'indirizzo nei registri e
- * nei limiti dei tentativi.
+ * The loopback and the private networks (10/8, 172.16/12, 192.168/16, fc00::/7) used to be trusted too:
+ * another machine in the same private network of the provider was enough, or a request to the public surface
+ * on 443 (nginx passes the client's headers to the panel), to pick one's own address in the logs and
+ * in the attempt limits.
  *
- * Le IP range Cloudflare possono cambiare nel tempo: la scheda "Chi il pannello riconosce come
- * Cloudflare" le confronta con quelle ufficiali.
+ * Cloudflare IP ranges can change over time: the "Who the panel recognises as
+ * Cloudflare" tab compares them with the official ones.
  *   https://www.cloudflare.com/ips-v4
  *   https://www.cloudflare.com/ips-v6
  */
@@ -55,24 +55,26 @@ public final class TrustedProxy {
     );
 
     /**
-     * Quando la lista qui sopra e' stata confrontata con quella ufficiale, da un essere umano.
+     * When the list above was compared with the official one, by a human being.
      *
-     * Il 02/09/2026 il confronto e' stato eseguito davvero contro cloudflare.com/ips-v4 e
-     * ips-v6: 15 intervalli IPv4 e 7 IPv6, nessuna divergenza in nessuna delle due direzioni.
-     * La lista non e' cambiata da dicembre — e' stata verificata, che e' un'altra cosa e vale
-     * la pena distinguerla: "scritta allora" non dice se sia ancora giusta.
+     * On 2026-09-02 the comparison was really run against cloudflare.com/ips-v4 and
+     * ips-v6: 15 IPv4 ranges and 7 IPv6 ones, no divergence in either direction.
+     * The list has not changed since December - it was verified, which is a different thing and worth
+     * distinguishing: "written back then" does not say whether it is still right.
      */
     public static final String UPDATED_ON = "2026-09-02";
 
-    /** Gli intervalli compilati dentro il pannello: quelli da cui si accettano le
-     *  intestazioni di inoltro. Si espongono per poterli MOSTRARE, non solo confrontare:
-     *  una lista che decide di chi fidarsi e che nessuno puo' leggere e' una regola segreta. */
+    /**
+     * The ranges compiled into the panel: those from which the forwarding
+     *  headers are accepted. They are exposed so they can be SHOWN, not only compared:
+     *  a list that decides whom to trust and that nobody can read is a secret rule.
+     */
     public static List<String> cloudflareV4() { return List.copyOf(CLOUDFLARE_V4); }
     public static List<String> cloudflareV6() { return List.copyOf(CLOUDFLARE_V6); }
 
     /**
-     * L'indirizzo appartiene a Cloudflare? Solo gli intervalli pubblicati, confrontati bit per bit.
-     * @param ipString l'IP da verificare in formato testuale (mai un nome: non si interroga il DNS)
+     * Does the address belong to Cloudflare? Only the published ranges, compared bit by bit.
+     * @param ipString the IP to check in text form (never a name: DNS is not queried)
      */
     public static boolean isCloudflare(String ipString) {
         if (ipString == null || ipString.isEmpty() || !InputValidator.isValidIp(ipString.trim())) return false;
@@ -89,9 +91,9 @@ public final class TrustedProxy {
     }
 
     /**
-     * L'indirizzo di chi bussa (r18): quello di CF-Connecting-IP se la connessione arriva da Cloudflare e
-     * l'intestazione e' un indirizzo valido, altrimenti quello TCP. Nient'altro: X-Forwarded-For e
-     * X-Real-IP non contano da nessuno, perche' Cloudflare manda sempre CF-Connecting-IP.
+     * The address of whoever is knocking (r18): the one in CF-Connecting-IP if the connection comes from Cloudflare and
+     * the header is a valid address, otherwise the TCP one. Nothing else: X-Forwarded-For and
+     * X-Real-IP count from nobody, because Cloudflare always sends CF-Connecting-IP.
      */
     public static String clientAddress(String tcpAddress, String cfConnectingIp) {
         if (isCloudflare(tcpAddress) && cfConnectingIp != null) {
@@ -102,7 +104,7 @@ public final class TrustedProxy {
     }
 
     /**
-     * Confronta i bit di addrBytes contro un CIDR (es. "173.245.48.0/20").
+     * Compares the bits of addrBytes against a CIDR (e.g. "173.245.48.0/20").
      */
     private static boolean isInRange(byte[] addrBytes, String cidr) {
         try {

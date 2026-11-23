@@ -8,24 +8,24 @@ import java.util.Set;
 import java.util.Objects;
 
 /**
- * Chi puo' usare una rotta. Ogni rotta lo dichiara quando la si registra (SSLMailServer.context):
- * pubblica, o con il permesso con nome che serve (AuthStore.may). Non c'e' un context senza
- * Access: una rotta senza dichiarazione non esiste.
+ * Who can use a route. Every route declares it when it is registered (SSLMailServer.context):
+ * public, or with the named permission it needs (AuthStore.may). There is no context without
+ * Access: a route without a declaration does not exist.
  *
- * Il controllo lo fa il filtro di ogni rotta, prima del gestore:
- *  - senza una sessione valida, una pagina rimanda all'accesso e una API risponde 401;
- *  - con una sessione ma senza il permesso, una pagina mostra "accesso negato" nella cornice del
- *    pannello e una API risponde 403 con forbidden: true.
+ * The check is done by the filter of every route, before the handler:
+ *  - without a valid session, a page redirects to the login and an API responds 401;
+ *  - with a session but without the permission, a page shows "access denied" in the panel
+ *    frame and an API responds 403 with forbidden: true.
  *
- * Il permesso dipende dal metodo (GET legge, il resto cambia) e, dove serve, dall'azione: quella
- * di ?action= per una GET, quella del corpo JSON per gli altri metodi. Un'azione che non e' nella
- * tabella vale come le altre richieste con lo stesso metodo.
+ * The permission depends on the method (GET reads, the rest changes) and, where needed, on the action: the
+ * one in ?action= for a GET, the one in the JSON body for the other methods. An action that is not in the
+ * table counts like the other requests with the same method.
  *
- * <p>Le operazioni pericolose chiedono anche una conferma recente:
- * una richiesta che cambia qualcosa con uno dei permessi di {@link #CONFIRMED}, o su una rotta che la chiede
- * sempre ({@link #confirmingAlways}), passa solo se chi la fa ha confermato di essere lui negli ultimi minuti. Con
- * la passkey o con un codice via email, a scelta, se ha una passkey; col codice, se non ne ha. Le azioni che
- * leggono soltanto ({@link #reading}) non la chiedono, e una GET mai.
+ * <p>Dangerous operations also require a recent confirmation:
+ * a request that changes something with one of the permissions in {@link #CONFIRMED}, or on a route that always
+ * requires it ({@link #confirmingAlways}), passes only if whoever makes it has confirmed their identity in the
+ * last few minutes. With the passkey or with a code via email, as they choose, if they have a passkey; with the
+ * code, if they have none. The actions that only read ({@link #reading}) do not require it, and a GET never does.
  */
 public final class Access {
 
@@ -35,14 +35,14 @@ public final class Access {
     private final String read;
     private final String write;
     private final Map<String, String> actions;
-    /** Le azioni che leggono soltanto, anche se arrivano con una POST: niente conferma. */
+    /** The actions that only read, even if they arrive with a POST: no confirmation. */
     private final Set<String> reads;
-    /** La rotta chiede la conferma a ogni richiesta che non e' una lettura, qualunque sia il permesso. */
+    /** The route requires confirmation on every request that is not a read, whatever the permission. */
     private final boolean confirmAlways;
 
     /**
-     * I permessi delle operazioni pericolose: pacchetti, aggiornamenti e servizi; sicurezza e firewall; amministratori;
-     * vault; impostazioni del server; chiavi SSH di root.
+     * The permissions of the dangerous operations: packages, updates and services; security and firewall;
+     * administrators; vault; server settings; root SSH keys.
      */
     public static final Set<String> CONFIRMED = Set.of("system.manage", "security.manage", "admins.manage", "vault.manage",
             "settings.manage", "ssh.manage");
@@ -61,49 +61,49 @@ public final class Access {
         this.confirmAlways = confirmAlways;
     }
 
-    /** La stessa rotta, con queste azioni che leggono soltanto: non chiedono la conferma. */
+    /** The same route, with these actions that only read: they do not require confirmation. */
     public Access reading(String... actions) {
         Set<String> r = new java.util.HashSet<>(reads);
         r.addAll(Set.of(actions));
         return new Access(kind, read, write, this.actions, r, confirmAlways);
     }
 
-    /** La stessa rotta, che chiede la conferma a ogni richiesta che cambia o rivela qualcosa («Rivela»). */
+    /** The same route, which requires confirmation on every request that changes or reveals something ("Reveal"). */
     public Access confirmingAlways() {
         return new Access(kind, read, write, actions, reads, true);
     }
 
-    /** Un permesso scritto male si scopre all'avvio, non quando nessuno riesce a usare la pagina. */
+    /** A misspelled permission is discovered at boot, not when nobody manages to use the page. */
     private static String known(String permission) {
         if (permission != null && !AuthStore.ALL_PERMISSIONS.contains(permission))
             throw new IllegalArgumentException("Unknown permission: " + permission);
         return permission;
     }
 
-    /** Senza accesso: la pagina di accesso, i suoi file, il dizionario, l'uscita, autoconfig e MTA-STS. */
+    /** Without login: the login page, its files, the dictionary, the logout, autoconfig and MTA-STS. */
     public static final Access PUBLIC = new Access(Kind.PUBLIC, null, null, null);
 
-    /** Una pagina: lo stesso permesso per ogni metodo. */
+    /** A page: the same permission for every method. */
     public static Access page(String permission) {
         return new Access(Kind.PAGE, Objects.requireNonNull(permission), permission, null);
     }
 
-    /** Una API: lo stesso permesso per ogni metodo. */
+    /** An API: the same permission for every method. */
     public static Access api(String permission) {
         return new Access(Kind.API, Objects.requireNonNull(permission), permission, null);
     }
 
-    /** Una API che con GET legge e con gli altri metodi cambia. */
+    /** An API that reads with GET and changes with the other methods. */
     public static Access api(String read, String write) {
         return new Access(Kind.API, Objects.requireNonNull(read), Objects.requireNonNull(write), null);
     }
 
-    /** Come api(read, write), con le azioni che chiedono un permesso diverso. */
+    /** Like api(read, write), with the actions that require a different permission. */
     public static Access api(String read, String write, Map<String, String> actions) {
         return new Access(Kind.API, Objects.requireNonNull(read), Objects.requireNonNull(write), Objects.requireNonNull(actions));
     }
 
-    /** Una tabella azione -> permesso: un permesso (ha un punto), poi le sue azioni, poi il permesso seguente. */
+    /** An action -> permission table: a permission (it has a dot), then its actions, then the next permission. */
     public static Map<String, String> actions(String... permissionsAndActions) {
         Map<String, String> m = new HashMap<>();
         String permission = null;
@@ -120,12 +120,15 @@ public final class Access {
 
     public String writePermission() { return write; }
 
-    /** Vero se il permesso o la conferma dipendono dall'azione: il filtro deve leggerla (dal corpo, per una POST). */
+    /**
+     * True if the permission or the confirmation depends on the action: the filter must read it (from the body,
+     * for a POST).
+     */
     boolean byAction() { return !actions.isEmpty() || !reads.isEmpty(); }
 
     /**
-     * Vero se questa richiesta chiede una conferma recente: non e' una GET, non e' un'azione che legge soltanto, e il
-     * suo permesso e' di un'operazione pericolosa (o la rotta la chiede sempre).
+     * True if this request requires a recent confirmation: it is not a GET, it is not an action that only reads, and
+     * its permission is that of a dangerous operation (or the route always requires it).
      */
     public boolean needsConfirmation(String method, String action) {
         if (kind != Kind.API || "GET".equals(method) || "HEAD".equals(method)) return false;
@@ -134,9 +137,9 @@ public final class Access {
     }
 
     /**
-     * Vero se questa richiesta puo' cambiare qualcosa: non e' una GET, non e' un'azione che legge soltanto, e il suo
-     * permesso non e' uno di quelli che vedono e basta ("x.view"). E' la regola del riavvio programmato
-     * (RestartLock): fino al riavvio passano solo le richieste per cui questo e' falso.
+     * True if this request can change something: it is not a GET, it is not an action that only reads, and its
+     * permission is not one of those that only view ("x.view"). It is the rule of the scheduled restart
+     * (RestartLock): until the restart only the requests for which this is false get through.
      */
     public boolean changes(String method, String action) {
         if (kind != Kind.API || "GET".equals(method) || "HEAD".equals(method)) return false;
@@ -145,7 +148,7 @@ public final class Access {
         return p == null || !p.endsWith(".view");
     }
 
-    /** Il permesso di una richiesta: il metodo e, se c'e', l'azione. */
+    /** The permission of a request: the method and, if present, the action. */
     public String permissionFor(String method, String action) {
         String p = action == null ? null : actions.get(action);
         if (p != null) return p;

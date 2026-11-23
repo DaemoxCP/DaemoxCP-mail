@@ -35,7 +35,7 @@ public class RoundcubeSsoManager {
     private static final String ROUNDCUBE_PATH = "/usr/local/www/roundcube";
     private static final String ROUNDCUBE_CONFIG = ROUNDCUBE_PATH + "/config/config.inc.php";
     private static final String ROUNDCUBE_PLUGINS = ROUNDCUBE_PATH + "/plugins";
-    /** Il nome del plugin, della sua cartella e della sua classe PHP: Roundcube vuole che coincidano. */
+    /** The name of the plugin, of its folder and of its PHP class: Roundcube wants them to match. */
     static final String PLUGIN = org.daemoxcp.mail.system.Product.ID + "_sso";
     private static final String SSO_PLUGIN_PATH = ROUNDCUBE_PLUGINS + "/" + PLUGIN;
     private static final String SSO_SECRET_FILE = "/var/db/daemoxcp-mail/roundcube_sso.key";
@@ -46,8 +46,8 @@ public class RoundcubeSsoManager {
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128;
 
-    // Master user settings. In Roundcube chi entra cosi' e' "casella*admin" (la riga di users e il
-    // registro degli accessi lo dicono): RoundcubeDbUser lo usa per scegliere la casella di prova.
+    // Master user settings. In Roundcube whoever logs in this way is "mailbox*admin" (the users row and the
+    // access log say so): RoundcubeDbUser uses it to choose the test mailbox.
     public static final String MASTER_USER = "admin";
     public static final String MASTER_PASSWORD_FILE = "/var/db/daemoxcp-mail/dovecot_master.key";
 
@@ -55,7 +55,7 @@ public class RoundcubeSsoManager {
     private SecretKey secretKey;
     private String roundcubeUrl = "https://mail.example.com";
     private String masterPassword = null;
-    /** La porta HTTPS del pannello: la webmail ci manda i cambi password e le password di chi entra. */
+    /** The panel's HTTPS port: the webmail sends it the password changes and the passwords of those who log in. */
     private int panelPort = 0;
 
     public RoundcubeSsoManager(MailDatabase database) {
@@ -369,8 +369,8 @@ public class RoundcubeSsoManager {
 
             System.out.println("[SSO] Installing Roundcube SSO plugin...");
 
-            // Il plugin col nome di prima (sezione "roundcubePlugin" di legacy-names.json): se l'ha scritto il pannello
-            // (la sua classe ha quel nome) se ne va, e nella configurazione di Roundcube prende il nome di adesso.
+            // The plugin with the previous name (section "roundcubePlugin" of legacy-names.json): if the panel wrote it
+            // (its class has that name) it goes away, and in Roundcube's configuration it takes the current name.
             for (String old : org.daemoxcp.mail.system.LegacyNames.oldNamesOf("roundcubePlugin", PLUGIN)) {
                 Path oldPhp = Paths.get(ROUNDCUBE_PLUGINS, old, old + ".php");
                 if (Files.isRegularFile(oldPhp) && Files.readString(oldPhp).contains("class " + old + " extends rcube_plugin"))
@@ -402,7 +402,7 @@ public class RoundcubeSsoManager {
             enablePluginInConfig();
             System.out.println("[SSO] Plugin enabled in Roundcube config");
 
-            // Lo svuotamento automatico nelle impostazioni della webmail: prima i file del plugin, poi il blocco che lo accende
+            // The automatic emptying in the webmail settings: first the plugin's files, then the block that turns it on
             boolean cleanupChanged = false;
             try {
                 cleanupChanged = WebmailCleanupPlugin.install(Paths.get(SSO_PLUGIN_PATH).getParent());
@@ -415,14 +415,14 @@ public class RoundcubeSsoManager {
                 boolean changed = WebmailPasswordConfig.ensure(Paths.get(ROUNDCUBE_CONFIG), panelPort,
                         org.daemoxcp.mail.security.PanelSecrets.webmailKey());
                 System.out.println("[SSO] Webmail password changes routed through the panel" + (changed ? " (config updated)" : ""));
-                // Con opcache.validate_timestamps=0 PHP-FPM terrebbe la configurazione di prima
+                // With opcache.validate_timestamps=0 PHP-FPM would keep the previous configuration
                 if (changed || cleanupChanged) executeCommand("service php_fpm reload >/dev/null 2>&1 || true");
             }
 
-            // Set permissions. Il codice e' di root: chi gira come la webmail non lo puo' cambiare.
-            // La configurazione ha il segreto dei gettoni (con dentro la password master di Dovecot)
-            // e la chiave del vault: la legge solo il gruppo con cui gira il PHP di Roundcube,
-            // roundcube dopo la migrazione (RoundcubeUser), www prima. Non piu' nginx.
+            // Set permissions. The code belongs to root: whoever runs as the webmail cannot change it.
+            // The configuration has the tokens' secret (with Dovecot's master password inside)
+            // and the vault key: only the group Roundcube's PHP runs with reads it,
+            // roundcube after the migration (RoundcubeUser), www before. No longer nginx.
             executeCommand("chown -R root:wheel " + SSO_PLUGIN_PATH);
             executeCommand("chmod 755 " + SSO_PLUGIN_PATH);
             executeCommand("chmod 644 " + SSO_PLUGIN_PATH + "/daemoxcp_mail_sso.php");
@@ -449,9 +449,9 @@ public class RoundcubeSsoManager {
      * Uses master user authentication for admin SSO access
      */
     public static String generatePluginPhp() {
-        // Il nome dell'intestazione con la chiave si mette dopo: dentro un blocco di testo un " + ... + " resta scritto
-        // cosi' com'e', ed e' successo col cambio di nome del 17/11/2026 (b287bcbd): Guzzle rifiutava l'intestazione e
-        // la copia nel vault dopo un accesso alla webmail non partiva piu'.
+        // The name of the header with the key goes in afterwards: inside a text block a " + ... + " stays written
+        // as it is, and that happened with the rename of 2026-11-17 (b287bcbd): Guzzle refused the header and
+        // the copy into the vault after a webmail login no longer started.
         return """
 <?php
 /**
@@ -686,7 +686,7 @@ $config['daemoxcp_mail_sso_token_expiry'] = %d;
         }
 
         String config = Files.readString(configPath);
-        // Il plugin col nome di prima nell'elenco dei plugin: diventa quello di adesso, nello stesso posto.
+        // The plugin with the previous name in the plugin list: it becomes the current one, in the same place.
         for (String old : org.daemoxcp.mail.system.LegacyNames.oldNamesOf("roundcubePlugin", PLUGIN)) {
             String renamed = config.replace("'" + old + "'", "'" + PLUGIN + "'");
             if (!renamed.equals(config)) {

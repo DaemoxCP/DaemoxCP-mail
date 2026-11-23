@@ -163,8 +163,8 @@ MILTERCONF
             # Enable and start
             echo "[5/5] Enabling service..."
             """
-            // Il risolutore ricorsivo locale, prima che rspamd parta: senza, le liste di Spamhaus
-            // non rispondono. Lo stesso pezzo e' in FullMailServerScript e FullMailStackScript.
+            // The local recursive resolver, before rspamd starts: without it, the Spamhaus lists
+            // do not answer. The same piece is in FullMailServerScript and FullMailStackScript.
             + LocalResolverScript.SHELL + """
             sysrc rspamd_enable="YES"
             service rspamd start
@@ -192,7 +192,7 @@ MILTERCONF
         return this.data;
     }
 
-    /** Sempre, tutto o niente, con l'impronta del jar (InstallScripts): mai uno script di una versione di prima. */
+    /** Always, all or nothing, with the jar's fingerprint (InstallScripts): never a script from an earlier version. */
     public void write_file() {
         this.writed = InstallScripts.write(SCRIPT_PATH, this.data);
     }

@@ -20,66 +20,69 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * All'avvio del servizio: il servizio del pannello prende il nome nuovo (DaemoxCP Mail, 17/11/2026).
+ * At service startup: the panel's service takes the new name (DaemoxCP Mail, 2026-11-17).
  *
- * <p>Fino a questa versione: lo script /usr/local/etc/rc.d/mailpanel, le variabili mailpanel_* in rc.conf, il pidfile
- * /var/run/mailpanel.pid e il jar freebsd-mail-panel-1.0.jar. Diventano daemoxcp_mail (script, variabili, pidfile) e
- * daemoxcp-mail-1.0.jar. Il pannello che fa questo passaggio e' quasi sempre partito proprio dallo script vecchio
- * (upgrade-panel.sh mette il jar nuovo al posto di quello vecchio e lo avvia col servizio di prima): continua a
- * girare, e il servizio nuovo lo deve riconoscere come suo, perche' il prossimo stop lo fermi davvero.
+ * <p>Up to this version: the script /usr/local/etc/rc.d/mailpanel, the mailpanel_* variables in rc.conf, the
+ * pidfile /var/run/mailpanel.pid and the jar freebsd-mail-panel-1.0.jar. They become daemoxcp_mail (script,
+ * variables, pidfile) and daemoxcp-mail-1.0.jar. The panel that makes this switch has almost always been started
+ * by the old script itself (upgrade-panel.sh puts the new jar in place of the old one and starts it with the
+ * previous service): it keeps running, and the new service must recognise it as its own, so that the next stop
+ * really stops it.
  *
- * <p>Quindi, in quest'ordine, tutto o niente:
+ * <p>So, in this order, all or nothing:
  * <ol>
- *   <li>dallo script vecchio (solo se l'ha scritto il pannello) i valori: cartella, java, jar, opzioni; da rc.conf le
- *       variabili mailpanel_* che l'amministratore ha impostato;</li>
- *   <li>il jar prende ANCHE il nome nuovo, con un collegamento allo stesso file nella stessa cartella. Non si sposta:
- *       misurato sulla VM il 17/11/2026, col jar spostato mentre girava la macchina virtuale non trovava piu' il
- *       driver di SQLite (ServiceLoader rilegge il jar per nome) e il pannello si fermava a meta' dell'avvio. Il
- *       nome di prima lo toglie l'avvio successivo, che gira gia' dal nome nuovo (oldJarNames);</li>
- *   <li>lo script nuovo (PanelRcScript, firmato dal pannello) si scrive accanto, si prova con sh -n e si mette al suo
- *       posto; le variabili passano in rc.conf col nome nuovo (le opzioni -Dmailpanel.* col prefisso nuovo);</li>
- *   <li>il pidfile prende il nome nuovo: e' il pid di questa java, e rc.subr lo confronta con procname (la java), quindi
- *       "service daemoxcp_mail status" e "stop" trovano questo processo;</li>
- *   <li>lo script vecchio esce da rc.d (una copia resta nella cartella dei dati) e le variabili vecchie da rc.conf;</li>
- *   <li>il controllo: "service daemoxcp_mail rcvar" carica lo script e dice la stessa abilitazione di prima.</li>
+ *   <li>from the old script (only if the panel wrote it) the values: folder, java, jar, options; from rc.conf
+ *       the mailpanel_* variables the administrator has set;</li>
+ *   <li>the jar ALSO takes the new name, with a link to the same file in the same folder. It is not moved:
+ *       measured on the VM on 2026-11-17, with the jar moved while it was running the virtual machine no longer
+ *       found the SQLite driver (ServiceLoader re-reads the jar by name) and the panel stopped halfway through
+ *       startup. The earlier name is removed by the next start, which already runs from the new name
+ *       (oldJarNames);</li>
+ *   <li>the new script (PanelRcScript, signed by the panel) is written alongside, tested with sh -n and put in
+ *       its place; the variables move into rc.conf with the new name (the -Dmailpanel.* options with the new
+ *       prefix);</li>
+ *   <li>the pidfile takes the new name: it is the pid of this java, and rc.subr compares it with procname (the
+ *       java), so "service daemoxcp_mail status" and "stop" find this process;</li>
+ *   <li>the old script leaves rc.d (a copy stays in the data folder) and the old variables leave rc.conf;</li>
+ *   <li>the check: "service daemoxcp_mail rcvar" loads the script and reports the same enablement as before.</li>
  * </ol>
- * Al primo passo che non torna si rimette tutto com'era. Lo script run.sh accanto al jar, se l'ha scritto il pannello,
- * cita il jar: il percorso cambia anche li'.
+ * At the first step that does not add up everything is put back as it was. The run.sh script next to the jar, if
+ * the panel wrote it, mentions the jar: the path changes there too.
  *
- * <p>I nomi di prima stanno in legacy-names.json (sezioni "rcNames", "jarNames").
+ * <p>The earlier names are in legacy-names.json (sections "rcNames", "jarNames").
  */
 public final class PanelServiceRename {
 
     private static final Logger LOGGER = Logger.getLogger(PanelServiceRename.class.getName());
     private static final Duration T = Duration.ofSeconds(30);
 
-    /** Le variabili del servizio, senza il prefisso. */
+    /** The service's variables, without the prefix. */
     static final List<String> VARIABLES = List.of("enable", "dir", "java", "jar", "opts", "log");
 
-    /** I jar spostati in questo processo: percorso di prima -> percorso di adesso (UpdateManager.jarPath). */
+    /** The jars moved in this process: earlier path -> current path (UpdateManager.jarPath). */
     private static final Map<String, String> MOVED_JARS = new ConcurrentHashMap<>();
 
     enum Outcome { NOTHING, DONE, LEFT, ROLLED_BACK }
 
     record Report(Outcome outcome, String detail) {}
 
-    /** Il sistema, separato per provarlo senza toccare il servizio vero. */
+    /** The system, kept separate so it can be tested without touching the real service. */
     interface Services {
-        /** Il valore di una variabile impostata in rc.conf (sysrc -n), o null se non e' impostata. */
+        /** The value of a variable set in rc.conf (sysrc -n), or null if it is not set. */
         String rcConf(String variable);
-        /** sysrc con questi argomenti: null se e' andato, altrimenti cosa dice. */
+        /** sysrc with these arguments: null if it worked, otherwise what it says. */
         String sysrc(String... args);
-        /** sh -n sul file: null se va bene, altrimenti cosa dice. */
+        /** sh -n on the file: null if it is fine, otherwise what it says. */
         String syntax(Path script);
-        /** L'uscita di "service NOME rcvar", o null se rc.subr non lo carica. */
+        /** The output of "service NAME rcvar", or null if rc.subr does not load it. */
         String rcvar(String name);
-        /** La cartella dei dati, dove resta la copia dello script di prima. */
+        /** The data folder, where the copy of the earlier script stays. */
         Path dataFolder();
     }
 
     private PanelServiceRename() {}
 
-    /** Il jar di adesso, se questo processo l'ha spostato; altrimenti quello dato. */
+    /** The current jar, if this process moved it; otherwise the given one. */
     public static String current(String jar) {
         return jar == null ? null : MOVED_JARS.getOrDefault(jar, jar);
     }
@@ -101,10 +104,10 @@ public final class PanelServiceRename {
     }
 
     /**
-     * Il pannello gira dal jar col nome di adesso: il nome di prima accanto, se e' lo stesso file (il collegamento
-     * lasciato dal passaggio), se ne va. Un file diverso col nome di prima non si tocca. La riga del registro non e' di
-     * una migrazione: il passaggio l'ha gia' detto all'avvio prima, e il secondo avvio di upgrade-panel.sh deve restare
-     * muto.
+     * The panel runs from the jar with the current name: the earlier name alongside, if it is the same file (the link
+     * left by the switch), goes away. A different file with the earlier name is not touched. The log line is not that
+     * of a migration: the switch already said so at the previous startup, and the second start of upgrade-panel.sh
+     * must stay silent.
      */
     static void oldJarNames() {
         try {
@@ -123,9 +126,9 @@ public final class PanelServiceRename {
         }
     }
 
-    // ===================== funzioni pure =====================
+    // ===================== pure functions =====================
 
-    /** I valori predefiniti di uno script rc.d, dalle righe ": ${NOME_x:="valore"}". */
+    /** The default values of an rc.d script, from the lines ": ${NAME_x:="value"}". */
     static Map<String, String> defaults(String script, String oldName) {
         Map<String, String> out = new LinkedHashMap<>();
         Matcher m = Pattern.compile("(?m)^: \\$\\{" + Pattern.quote(oldName) + "_([a-z]+):=\"(.*)\"\\}$").matcher(script);
@@ -133,7 +136,7 @@ public final class PanelServiceRename {
         return out;
     }
 
-    /** Il jar col nome nuovo, nella stessa cartella, se il suo nome e' uno di prima; altrimenti lo stesso. */
+    /** The jar with the new name, in the same folder, if its name is one of the earlier ones; otherwise the same one. */
     static String renamedJar(String jar) {
         if (jar == null || jar.isEmpty()) return jar;
         Path p = Path.of(jar);
@@ -147,7 +150,7 @@ public final class PanelServiceRename {
         return jar;
     }
 
-    /** Le opzioni della macchina virtuale con le proprieta' di prima (-Dmailpanel.*) col prefisso di adesso. */
+    /** The virtual machine's options with the earlier properties (-Dmailpanel.*) given the current prefix. */
     static String renamedOptions(String opts) {
         String out = opts == null ? "" : opts;
         for (String[] p : LegacyNames.pairs("propertyPrefixes"))
@@ -155,7 +158,7 @@ public final class PanelServiceRename {
         return out;
     }
 
-    // ===================== il passaggio =====================
+    // ===================== the switchover =====================
 
     static Report rename(Path oldScript, String oldName, Services sv) throws IOException {
         if (!Files.isRegularFile(oldScript, LinkOption.NOFOLLOW_LINKS)) return new Report(Outcome.NOTHING, "");
@@ -169,7 +172,7 @@ public final class PanelServiceRename {
         if (!def.containsKey("jar") || !def.containsKey("java") || !def.containsKey("dir"))
             return new Report(Outcome.LEFT, oldScript + " has no jar, java or folder: left as it is");
 
-        // Le variabili che l'amministratore ha impostato in rc.conf (almeno _enable, se il servizio e' acceso).
+        // The variables the administrator has set in rc.conf (at least _enable, if the service is on).
         Map<String, String> set = new LinkedHashMap<>();
         for (String v : VARIABLES) {
             String value = sv.rcConf(oldName + "_" + v);
@@ -186,13 +189,13 @@ public final class PanelServiceRename {
         boolean jarMoved = false, scriptWritten = false, pidMoved = false, oldRemoved = false;
         List<String> varsWritten = new ArrayList<>(), varsRemoved = new ArrayList<>();
         try {
-            // 1. il jar: anche col nome nuovo, lo stesso file (un collegamento); quello di prima resta fino al riavvio.
+            // 1. the jar: the same file under the new name too (a link); the earlier one stays until the restart.
             if (!newJar.equals(oldJar) && Files.isRegularFile(Path.of(oldJar)) && !Files.exists(Path.of(newJar))) {
                 Files.createLink(Path.of(newJar), Path.of(oldJar));
                 jarMoved = true;
                 MOVED_JARS.put(oldJar, newJar);
             }
-            // 2. lo script nuovo
+            // 2. the new script
             Files.writeString(temp, newText, StandardCharsets.UTF_8);
             String syntax = sv.syntax(temp);
             if (syntax != null) throw new IllegalStateException("sh -n refuses the new script: " + syntax);
@@ -210,12 +213,12 @@ public final class PanelServiceRename {
                 if (p != null) throw new IllegalStateException("sysrc " + PanelRcScript.NAME + "_" + e.getKey() + ": " + p);
                 varsWritten.add(e.getKey());
             }
-            // 4. il pidfile
+            // 4. the pidfile
             if (Files.isRegularFile(oldPid) && !Files.exists(newPid)) {
                 Files.move(oldPid, newPid, StandardCopyOption.ATOMIC_MOVE);
                 pidMoved = true;
             }
-            // 5. lo script vecchio esce da rc.d, le variabili vecchie da rc.conf
+            // 5. the old script leaves rc.d, the old variables leave rc.conf
             Files.createDirectories(copy.getParent());
             Files.move(oldScript, copy, StandardCopyOption.REPLACE_EXISTING);
             oldRemoved = true;
@@ -224,7 +227,7 @@ public final class PanelServiceRename {
                 if (p != null) throw new IllegalStateException("sysrc -x " + oldName + "_" + v + ": " + p);
                 varsRemoved.add(v);
             }
-            // 6. il controllo
+            // 6. the check
             String rcvar = sv.rcvar(PanelRcScript.NAME);
             String enabled = set.getOrDefault("enable", "NO");
             if (rcvar == null || !rcvar.contains(PanelRcScript.NAME + "_enable=\"" + enabled + "\"") && !rcvar.contains(PanelRcScript.NAME + "_enable=" + enabled))
@@ -249,7 +252,7 @@ public final class PanelServiceRename {
                     + (problems.isEmpty() ? "; everything put back as it was" : "; NOT put back: " + String.join(", ", problems)));
         }
 
-        // run.sh accanto al jar, se l'ha scritto il pannello: cita il jar e va con lui.
+        // run.sh next to the jar, if the panel wrote it: it mentions the jar and goes with it.
         String runSh = "";
         if (jarMoved) {
             Path run = Path.of(newJar).resolveSibling("run.sh");
@@ -271,7 +274,7 @@ public final class PanelServiceRename {
                 + (pidMoved ? ", pidfile " + newPid : "") + (jarMoved ? ", jar also " + newJar + " (the same file: the old name goes at the next start)" : "") + runSh);
     }
 
-    // ===================== il sistema vero =====================
+    // ===================== the real system =====================
 
     static final class RealServices implements Services {
         @Override public String rcConf(String variable) {

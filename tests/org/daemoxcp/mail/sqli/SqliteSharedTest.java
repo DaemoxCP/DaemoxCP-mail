@@ -15,7 +15,7 @@ import java.util.List;
 
 /**
  * The panel's SQLite database used by two processes together, like the --web service and the menu
- * (or a console command) started from the same folder. Reperto 156: the menu with the service on
+ * (or a console command) started from the same folder. Finding 156: the menu with the service on
  * ended in SQLITE_BUSY on the server name, the flags of the services and the MySQL configuration.
  *
  *  A. A "service" process makes the reads the service makes (at start and at every request) and

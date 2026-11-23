@@ -7,19 +7,19 @@ import org.daemoxcp.mail.util.Shell;
 import java.util.Map;
 
 /**
- * La dimensione massima di un messaggio, cioe' il parametro Postfix message_size_limit.
+ * The maximum size of a message, that is, the Postfix parameter message_size_limit.
  *
- * Il campo "dimensione massima" esisteva gia' nella pagina dei limiti di invio, ma non era
- * collegato a niente: il valore si scriveva e non succedeva nulla. Qui viene collegato al
- * parametro vero, con la stessa disciplina usata altrove: si legge il valore attuale, si
- * scrive, si valida con "postfix check", e se la validazione fallisce si rimette quello di
- * prima senza ricaricare.
+ * The "maximum size" field already existed on the sending limits page, but it was not
+ * connected to anything: the value was written and nothing happened. Here it is connected to
+ * the real parameter, with the same discipline used elsewhere: the current value is read, the
+ * new one is written, it is validated with "postfix check", and if the validation fails the
+ * previous one is put back without reloading.
  *
- * Il valore in Postfix e' in BYTE, nell'interfaccia in megabyte: la conversione sta qui, in
- * un posto solo, invece che sparsa fra pagina e server dove due arrotondamenti diversi
- * finirebbero per mostrare un numero e salvarne un altro.
+ * The value in Postfix is in BYTES, in the interface in megabytes: the conversion lives here, in
+ * one place only, instead of being scattered between page and server, where two different
+ * roundings would end up showing one number and saving another.
  *
- * Le note e gli errori sono per chi usa il pannello: nella lingua della richiesta (server.size.*).
+ * The notes and errors are for whoever uses the panel: in the language of the request (server.size.*).
  */
 public class MessageSizeLimit {
 
@@ -27,17 +27,17 @@ public class MessageSizeLimit {
 
     public static final int MEGA = 1024 * 1024;
 
-    /** Megabyte -> byte. */
+    /** Megabytes -> bytes. */
     public static long toBytes(int mb) { return (long) mb * MEGA; }
 
-    /** Byte -> megabyte, arrotondato per difetto ma mai a zero se c'e' un limite. */
+    /** Bytes -> megabytes, rounded down but never to zero if there is a limit. */
     public static int aMega(long totalBytes) {
         if (totalBytes <= 0) return 0;
         int mb = (int) (totalBytes / MEGA);
         return mb == 0 ? 1 : mb;
     }
 
-    /** Il valore attuale in megabyte, o -1 se non si riesce a leggerlo. */
+    /** The current value in megabytes, or -1 if it cannot be read. */
     public static int readMegabytes() {
         RunResult r = run("postconf", "-h", "message_size_limit");
         if (r.code != 0) return -1;
@@ -49,7 +49,7 @@ public class MessageSizeLimit {
     }
 
     /**
-     * Imposta il limite. Restituisce sempre un esito leggibile, mai un'eccezione muta.
+     * Sets the limit. Always returns a readable outcome, never a silent exception.
      */
     public static JSONObject set(int mb) {
         JSONObject r = new JSONObject().put("megabytes", mb);
@@ -86,7 +86,7 @@ public class MessageSizeLimit {
                     .put("error", I18n.tr("server.size.reloadFailed", Map.of("before", before, "output", reload.output.trim())));
         }
 
-        // Non basta che i comandi non abbiano protestato: si rilegge.
+        // It is not enough that the commands did not complain: the value is read again.
         int after = readMegabytes();
         r.put("after", after);
         if (after != mb)

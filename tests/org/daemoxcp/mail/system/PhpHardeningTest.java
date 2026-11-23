@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * php.ini written when it is missing, and security.limit_extensions = .php in the panel's Roundcube pool (reperto 238).
+ * php.ini written when it is missing, and security.limit_extensions = .php in the panel's Roundcube pool (finding 238).
  * Against a fake php-fpm that, after a reload, sends X-Powered-By unless a php.ini is there, and a fake webmail:
  *  1. the installer writes PhpHardening.INI, which turns off expose_php, display_errors and session upload progress;
  *     the pool the panel writes has the limit;

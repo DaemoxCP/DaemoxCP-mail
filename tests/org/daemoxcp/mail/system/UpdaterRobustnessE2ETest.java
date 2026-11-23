@@ -19,7 +19,7 @@ import java.util.TreeSet;
 /**
  * The edges of the package update, with real jobs on fake packages.
  *
- * On 06/11/2026 this test only measured (reperti 146-148): where the update breaks. The owner chose
+ * On 06/11/2026 this test only measured (findings 146-148): where the update breaks. The owner chose
  * to fix the first four points, and now every measurement checks the right behaviour, and keeps
  * printing what happens:
  *

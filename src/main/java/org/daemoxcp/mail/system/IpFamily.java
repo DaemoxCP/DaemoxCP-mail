@@ -22,39 +22,40 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * La famiglia di indirizzi con cui il server di posta parla con il mondo: IPv4 e IPv6 insieme, solo IPv4 o solo IPv6,
- * come sceglie l'amministratore nelle Impostazioni (chiesto dal committente il 17/11/2026: «se voglio solo l'ipv6,
- * devi lasciarmelo fare, idem per l'ipv4»).
+ * The address family the mail server uses to talk to the world: IPv4 and IPv6 together, IPv4 only or IPv6 only,
+ * as the administrator chooses in "Settings" (asked by the owner on 2026-11-17: "if I want only ipv6, you have to
+ * let me do it, same for ipv4").
  *
- * <p>Cosa segue la scelta: le porte su cui Postfix ({@code inet_protocols}), Dovecot ({@code listen}) e nginx (le righe
- * {@code listen} della webmail e della superficie pubblica sulla 443) ascoltano, e la regola di pf che fa entrare
- * posta e web. Il pannello (2096) e la sfida HTTP dei certificati sono socket Java, che non sanno rifiutare IPv4 su un
- * socket IPv6: per loro la famiglia la fa rispettare pf, con la stessa regola. Non la segue mai SSH: la sua regola di pf
- * resta senza famiglia, e sshd non si tocca. Non la seguono gli indirizzi interni (127.0.0.1, ::1): i servizi parlano
- * fra loro come sempre.
+ * <p>What follows the choice: the ports on which Postfix ({@code inet_protocols}), Dovecot ({@code listen}) and
+ * nginx (the {@code listen} lines of the webmail and of the public surface on 443) listen, and the pf rule that
+ * lets mail and web in. The panel (2096) and the HTTP challenge of the certificates are Java sockets, which cannot
+ * refuse IPv4 on an IPv6 socket: for them pf enforces the family, with the same rule. SSH never follows it: its pf
+ * rule stays without a family, and sshd is not touched. The internal addresses (127.0.0.1, ::1) do not follow it:
+ * the services talk to each other as always.
  *
- * <p>La quarta scelta, «IPv6 solo in uscita» (chiesta dal committente il 19/11/2026, «come fa Apple»): il server
- * riceve solo in IPv4 (posta, webmail, pannello), e in IPv6 la posta soltanto esce. Un nome solo, quello della posta,
- * con il suo AAAA e il suo DNS inverso come per tutte e due: chi prova a consegnare in IPv6 riceve subito un rifiuto da
- * pf e passa all'IPv4.
+ * <p>The fourth choice, "IPv6 outbound only" (asked by the owner on 2026-11-19, "the way Apple does it"): the
+ * server receives only over IPv4 (mail, webmail, panel), and over IPv6 mail only goes out. A single name, the mail
+ * one, with its AAAA and its reverse DNS as with both: whoever tries to deliver over IPv6 immediately gets a
+ * rejection from pf and falls back to IPv4.
  *
- * <p>Configurazioni universali (chiesto dal committente il 19/11/2026: «le configurazioni farle universali così che poi
- * è solo il pannello che si adatta»): Postfix, Dovecot e nginx ascoltano sempre in IPv4 e in IPv6, scritti una volta;
- * la famiglia la decide pf (la regola dei servizi con la sua famiglia, un rifiuto subito sull'altra, e la posta che non
- * esce in IPv6 con solo IPv4). Cambiare scelta non riscrive i servizi e non li riavvia: solo pf, e un reload di Postfix
- * se cambia la preferenza d'uscita (solo IPv6). Il primo passaggio di un server che aveva gia' scelto li porta una volta
- * alla forma universale.
+ * <p>Universal configurations (asked by the owner on 2026-11-19: "make the configurations universal, so that then
+ * it is only the panel that adapts"): Postfix, Dovecot and nginx always listen on IPv4 and on IPv6, written once;
+ * pf decides the family (the services rule with its family, an immediate rejection on the other one, and mail that
+ * does not go out over IPv6 with IPv4 only). Changing the choice does not rewrite the services and does not restart
+ * them: only pf, and a Postfix reload if the outbound preference changes (IPv6 only). The first pass on a server
+ * that had already chosen brings them to the universal form, once.
  *
- * <p>Finche' l'amministratore non sceglie, all'avvio non cambia niente: i servizi restano come sono, e la pagina
- * mostra la famiglia che usa Postfix. Una scelta si applica servizio per servizio, ognuno col suo controllo (postfix
- * check, doveconf, nginx -t, e poi le porte davvero in ascolto in quella famiglia); al primo che non torna si rimettono
- * tutti i file com'erano e si riavviano i servizi gia' toccati, e la scelta di prima resta.
+ * <p>Until the administrator chooses, nothing changes at startup: the services stay as they are, and the page shows
+ * the family Postfix uses. A choice is applied service by service, each with its own check (postfix check,
+ * doveconf, nginx -t, and then the ports really listening in that family); at the first one that does not match,
+ * all the files are put back as they were and the services already touched are restarted, and the previous choice
+ * stays.
  */
 public final class IpFamily {
 
     private static final Logger LOGGER = Logger.getLogger(IpFamily.class.getName());
 
-    /** La scelta, in panel_settings: "both", "ipv4", "ipv6" o "ipv6out". Senza riga, nessuna scelta. */
+    /** The choice, in panel_settings: "both", "ipv4", "ipv6" or "ipv6out". Without a row, no choice. */
     public static final String SETTING = "ip_family";
 
     static final String POSTCONF = "/usr/local/sbin/postconf";
@@ -64,29 +65,30 @@ public final class IpFamily {
     static final String NGINX_CONF = "/usr/local/etc/nginx/nginx.conf";
 
     /**
-     * Solo IPv6 non toglie l'IPv4 di 127.0.0.1: la webmail parla con Dovecot (127.0.0.1:993) e con Postfix
-     * (127.0.0.1:587), Postfix col filtro antispam (inet:127.0.0.1:11332) e coi limiti d'invio, tutti in IPv4 sul
-     * loopback. Con inet_protocols = ipv6 Postfix non apre ne' usa piu' nessun socket IPv4 (postconf(5): il parametro
-     * vale per le connessioni che Postfix apre e per quelle che accetta), e con listen = :: Dovecot non
-     * risponde su 127.0.0.1: la webmail non spediva piu' e la posta passava senza antispam (trovato il 18/11/2026
-     * costruendo la guida degli indirizzi). Quindi: Postfix resta su «all» e preferisce l'IPv6 per spedire
-     * (smtp_address_preference = ipv6), Dovecot ascolta su :: e su 127.0.0.1, e chi arriva da fuori in IPv4 lo ferma pf
-     * (la regola della posta con «inet6»). Su un server senza IPv4, 127.0.0.1 resta sul loopback (rc.d/routing).
+     * IPv6 only does not remove the IPv4 127.0.0.1: the webmail talks to Dovecot (127.0.0.1:993) and to Postfix
+     * (127.0.0.1:587), Postfix to the antispam filter (inet:127.0.0.1:11332) and to the sending limits, all over IPv4
+     * on the loopback. With inet_protocols = ipv6 Postfix no longer opens or uses any IPv4 socket (postconf(5): the
+     * parameter applies to the connections Postfix opens and to those it accepts), and with listen = :: Dovecot does
+     * not answer on 127.0.0.1: the webmail no longer sent mail and mail passed without antispam (found on 2026-11-18
+     * while building the addresses guide). Therefore: Postfix stays on "all" and prefers IPv6 for sending
+     * (smtp_address_preference = ipv6), Dovecot listens on :: and on 127.0.0.1, and whoever comes from outside over
+     * IPv4 is stopped by pf (the mail rule with "inet6"). On a server without IPv4, 127.0.0.1 stays on the loopback
+     * (rc.d/routing).
      */
     public enum Family {
         BOTH("both", "all", "*, ::", ""),
         IPV4("ipv4", "ipv4", "*", "inet "),
         IPV6("ipv6", "all", "::, 127.0.0.1", "inet6 "),
-        /** Entra solo IPv4; in IPv6 la posta soltanto esce (pf come solo IPv4, ma la posta esce anche in IPv6). */
+        /** Only IPv4 comes in; over IPv6 mail only goes out (pf as with IPv4 only, but mail also goes out over IPv6). */
         IPV6_OUT("ipv6out", "all", "*, ::", "inet ");
 
-        /** Il valore salvato. */
+        /** The saved value. */
         public final String key;
-        /** inet_protocols di Postfix. */
+        /** Postfix's inet_protocols. */
         public final String postfix;
-        /** listen di Dovecot. */
+        /** Dovecot's listen. */
         public final String dovecot;
-        /** La parola di pf davanti a "proto", con lo spazio; vuota per tutte e due. */
+        /** The pf word before "proto", with the space; empty for both. */
         public final String pf;
 
         Family(String key, String postfix, String dovecot, String pf) {
@@ -96,16 +98,16 @@ public final class IpFamily {
             this.pf = pf;
         }
 
-        /** Il server riceve in IPv4 (e la posta esce in IPv4). */
+        /** The server receives over IPv4 (and mail goes out over IPv4). */
         public boolean v4() { return this != IPV6; }
 
-        /** Il server riceve in IPv6: si ascolta in IPv6, il nome della posta ha l'AAAA. Non con IPV6_OUT. */
+        /** The server receives over IPv6: it listens on IPv6, the mail name has the AAAA. Not with IPV6_OUT. */
         public boolean v6() { return this == BOTH || this == IPV6; }
 
-        /** La posta esce in IPv6: serve il DNS inverso dell'IPv6 confermato all'andata. */
+        /** Mail goes out over IPv6: it needs the IPv6 reverse DNS, forward-confirmed. */
         public boolean sends6() { return this != IPV4; }
 
-        /** La famiglia di quel valore salvato, o null. */
+        /** The family of that saved value, or null. */
         public static Family of(String key) {
             if (key == null) return null;
             for (Family f : values()) if (f.key.equals(key.trim().toLowerCase(Locale.ROOT))) return f;
@@ -115,9 +117,9 @@ public final class IpFamily {
 
     private IpFamily() {}
 
-    // ===================== la scelta =====================
+    // ===================== the choice =====================
 
-    /** La scelta dell'amministratore, o null se non ha mai scelto (o il database non risponde). */
+    /** The administrator's choice, or null if they never chose (or the database does not answer). */
     public static Family chosen() {
         org.daemoxcp.mail.database.MailDatabase db = org.daemoxcp.mail.Main.mailDatabase;
         if (db == null) return null;
@@ -128,7 +130,7 @@ public final class IpFamily {
         }
     }
 
-    /** Quella in uso: la scelta; senza, quella di Postfix; senza Postfix, tutte e due. */
+    /** The one in use: the choice; without it, Postfix's; without Postfix, both. */
     public static Family effective() {
         Family c = chosen();
         if (c != null) return c;
@@ -136,27 +138,27 @@ public final class IpFamily {
         return p == null ? Family.BOTH : p;
     }
 
-    /** Il valore di listen di Dovecot: quello della scelta, o tutte e due se l'amministratore non ha scelto. */
+    /** Dovecot's listen value: the one of the choice, or both if the administrator has not chosen. */
     public static String dovecotListen() {
         Family c = chosen();
         return c == null ? Family.BOTH.dovecot : c.dovecot;
     }
 
-    /** La parola di pf per la regola dei servizi: vuota se l'amministratore non ha scelto (come prima). */
+    /** The pf word for the services rule: empty if the administrator has not chosen (as before). */
     public static String pfKeyword() {
         Family c = chosen();
         return c == null ? "" : c.pf;
     }
 
-    /** Se pf deve tenere la posta fuori dall'IPv6 in uscita: con solo IPv4 scelto (Postfix e' universale, su «all»). */
+    /** Whether pf must keep mail out of outbound IPv6: with IPv4 only chosen (Postfix is universal, on "all"). */
     public static boolean pfBlocksSmtpOut6() {
         Family c = chosen();
         return c != null && !c.sends6();
     }
 
-    // ===================== funzioni pure =====================
+    // ===================== pure functions =====================
 
-    /** La famiglia di un valore di inet_protocols, o null se non e' uno di quelli che si sanno leggere. Puro. */
+    /** The family of an inet_protocols value, or null if it is not one of those that can be read. Pure. */
     static Family fromPostfix(String value) {
         if (value == null) return null;
         String v = value.trim().toLowerCase(Locale.ROOT).replaceAll("[\\s,]+", " ");
@@ -171,9 +173,9 @@ public final class IpFamily {
     private static final Pattern DOVECOT_LISTEN = Pattern.compile("(?m)^(listen\\s*=\\s*)(.*)$");
 
     /**
-     * dovecot.conf con la riga listen di quella famiglia, o null se non c'e' niente da cambiare. Solo una riga listen
-     * in prima colonna, quella generale che scrive il pannello: le altre (dentro i listener, rientrate) non si toccano;
-     * con nessuna o piu' d'una non e' il file del pannello e non lo si cambia. Puro.
+     * dovecot.conf with the listen line of that family, or null if there is nothing to change. Only one listen line
+     * in the first column, the general one the panel writes: the others (inside the listeners, indented) are not
+     * touched; with none or more than one it is not the panel's file and it is not changed. Pure.
      */
     static String withDovecotListen(String conf, Family f) {
         if (conf == null || f == null) return null;
@@ -187,10 +189,10 @@ public final class IpFamily {
     }
 
     /**
-     * Il testo di nginx con le righe listen di quella porta per quella famiglia: ogni gruppo di righe listen consecutive
-     * per la porta (IPv4 "listen 8443 ..." e IPv6 "listen [::]:8443 ...") diventa la riga IPv4, quella IPv6 o tutte e
-     * due, con le opzioni della prima riga del gruppo (ssl, default_server...). Le righe di altre porte e il resto del
-     * testo restano come sono. Con f null il testo torna com'e'. Puro.
+     * The nginx text with the listen lines of that port for that family: each group of consecutive listen lines for
+     * the port (IPv4 "listen 8443 ..." and IPv6 "listen [::]:8443 ...") becomes the IPv4 line, the IPv6 one or both,
+     * with the options of the group's first line (ssl, default_server...). The lines of other ports and the rest of
+     * the text stay as they are. With f null the text comes back as it is. Pure.
      */
     public static String withNginxListen(String conf, int port, Family f) {
         if (conf == null || f == null) return conf;
@@ -221,8 +223,8 @@ public final class IpFamily {
     }
 
     /**
-     * Le famiglie in cui una porta TCP ascolta, dall'uscita di {@code sockstat -46l -P tcp}: {v4, v6}. tcp46 (un socket
-     * per tutte e due) conta per entrambe. Puro.
+     * The families in which a TCP port listens, from the output of {@code sockstat -46l -P tcp}: {v4, v6}. tcp46 (one
+     * socket for both) counts for both. Pure.
      */
     static boolean[] listening(String sockstat, int port) {
         boolean v4 = false, v6 = false;
@@ -237,8 +239,8 @@ public final class IpFamily {
     }
 
     /**
-     * Vero se la porta ascolta nelle famiglie di f: tutte e due, o solo IPv4 (nessun IPv6), o IPv6 (con solo IPv6 un
-     * IPv4 puo' esserci, quello del loopback di Dovecot e quello di Postfix su «all": da fuori lo ferma pf). Puro.
+     * True if the port listens in the families of f: both, or IPv4 only (no IPv6), or IPv6 (with IPv6 only an IPv4
+     * one may be there, the Dovecot loopback one and Postfix's on "all": pf stops it from outside). Pure.
      */
     static boolean listensAs(String sockstat, int port, Family f) {
         boolean[] l = listening(sockstat, port);
@@ -250,21 +252,21 @@ public final class IpFamily {
         };
     }
 
-    /** smtp_address_preference: con solo IPv6 si spedisce prima in IPv6; altrimenti il valore di Postfix («any»). Puro. */
+    /** smtp_address_preference: with IPv6 only, mail is sent over IPv6 first; otherwise Postfix's value ("any"). Pure. */
     static String postfixPreference(Family f) {
         return f == Family.IPV6 ? "ipv6" : "any";
     }
 
-    /** Vero se fra le rotte di netstat -rn ce n'e' una predefinita. Puro. */
+    /** True if among the routes of netstat -rn there is a default one. Pure. */
     static boolean hasDefaultRoute(String netstat) {
         if (netstat == null) return false;
         for (String line : netstat.split("\n")) if (line.trim().startsWith("default ")) return true;
         return false;
     }
 
-    // ===================== l'applicazione =====================
+    // ===================== applying it =====================
 
-    /** L'esito di una scelta: fatta, da confermare (con gli avvisi), o rifiutata (col motivo). */
+    /** The outcome of a choice: done, to be confirmed (with the warnings), or refused (with the reason). */
     public record Outcome(boolean done, boolean confirm, List<String> warnings, String error) {
         static Outcome ok(List<String> w) { return new Outcome(true, false, w, null); }
         static Outcome ask(List<String> w) { return new Outcome(false, true, w, null); }
@@ -272,12 +274,12 @@ public final class IpFamily {
     }
 
     /**
-     * La scelta dell'amministratore. Prima di cambiare qualcosa: il server deve avere un indirizzo e una rotta nella
-     * famiglia che resta (solo IPv4 o solo IPv6); poi gli avvisi, che chiedono una conferma. Confermata, la si applica
-     * servizio per servizio; se uno non torna, tutto com'era e la scelta di prima resta. via e' l'indirizzo di chi
-     * sceglie come lo vede il pannello (r18: dietro Cloudflare quello del browser, non del nodo di Cloudflare; il
-     * tratto Cloudflare-server lo dice warnCloudflare), null dalla console: se la scelta chiude proprio quella
-     * famiglia, un avviso lo dice prima.
+     * The administrator's choice. Before changing anything: the server must have an address and a route in the family
+     * that remains (IPv4 only or IPv6 only); then the warnings, which ask for a confirmation. Once confirmed, it is
+     * applied service by service; if one does not match, everything goes back as it was and the previous choice stays.
+     * via is the address of whoever chooses, as the panel sees it (r18: behind Cloudflare the browser's, not the
+     * Cloudflare node's; the Cloudflare-server leg is covered by warnCloudflare), null from the console: if the choice
+     * closes exactly that family, a warning says so first.
      */
     public static synchronized Outcome choose(Family f, boolean confirmed, String via) {
         org.daemoxcp.mail.database.MailDatabase db = org.daemoxcp.mail.Main.mailDatabase;
@@ -285,8 +287,8 @@ public final class IpFamily {
         if (f == null) return Outcome.no(org.daemoxcp.mail.i18n.I18n.tr("server.badRequest"));
         String missing = missingNetwork(f);
         if (missing != null) return Outcome.no(missing);
-        // Dal pannello la posta va in IPv6 solo col DNS inverso IPv6 a posto (Gmail e Microsoft rifiutano senza). Dalla
-        // console no: e' la via d'uscita, e deve funzionare sempre.
+        // From the panel, mail goes over IPv6 only with the IPv6 reverse DNS in place (Gmail and Microsoft refuse
+        // without it). Not from the console: it is the way out, and it must always work.
         if (via != null) {
             String ptr = missingPtr6(f);
             if (ptr != null) return Outcome.no(ptr);
@@ -294,8 +296,8 @@ public final class IpFamily {
         List<String> warnings = warnings(f, via);
         if (!confirmed && !warnings.isEmpty()) return Outcome.ask(warnings);
 
-        // Prima pf con la scelta nuova, poi i servizi nella forma universale (dalla seconda volta non cambiano): cosi'
-        // Postfix su «all» non spedisce mai in IPv6 prima che pf lo tenga fuori, se la scelta e' solo IPv4.
+        // First pf with the new choice, then the services in the universal form (from the second time on they do not
+        // change): so Postfix on "all" never sends over IPv6 before pf keeps it out, if the choice is IPv4 only.
         String before = db.getSetting(SETTING, "");
         db.setSetting(SETTING, f.key);
         org.daemoxcp.mail.security.PfPolicy.ensureAtBoot();
@@ -309,7 +311,10 @@ public final class IpFamily {
         return Outcome.ok(warnings);
     }
 
-    /** All'avvio della parte root: se l'amministratore ha scelto, i servizi come la scelta. Al secondo avvio niente. */
+    /**
+     * At the start of the root part: if the administrator has chosen, the services as the choice says. At the second
+     * start, nothing.
+     */
     public static void ensureAtBoot() {
         try {
             Family c = chosen();
@@ -321,7 +326,7 @@ public final class IpFamily {
         }
     }
 
-    /** Il motivo per cui la famiglia non si puo' scegliere su questo server, o null. */
+    /** The reason why the family cannot be chosen on this server, or null. */
     static String missingNetwork(Family f) {
         boolean v4 = false, v6 = false;
         try {
@@ -346,10 +351,10 @@ public final class IpFamily {
     }
 
     /**
-     * Se la famiglia porta la posta in IPv6 (anche solo in uscita) e il server ha un IPv6 globale, il DNS inverso di
-     * quell'indirizzo deve dare il nome della posta, e il nome tornare all'indirizzo: altrimenti il motivo. Senza un
-     * IPv6 globale non serve (la posta non esce in IPv6), senza nome della posta non lo si puo' controllare e non si
-     * blocca.
+     * If the family brings mail onto IPv6 (even outbound only) and the server has a global IPv6, the reverse DNS of
+     * that address must give the mail name, and the name must lead back to the address: otherwise the reason. Without a
+     * global IPv6 it is not needed (mail does not go out over IPv6); without a mail name it cannot be checked and it
+     * does not block.
      */
     static String missingPtr6(Family f) {
         if (!f.sends6()) return null;
@@ -364,14 +369,14 @@ public final class IpFamily {
     }
 
     /**
-     * Gli avvisi di una scelta senza farla: la guida degli indirizzi li mostra nella sua sola conferma e poi sceglie
-     * con «confermata», cosi' chi tocca la casella «La posta entra anche in IPv6» vede una finestra, non due.
+     * The warnings of a choice without making it: the addresses guide shows them in its single confirmation and then
+     * chooses with "confirmed", so whoever ticks the checkbox "Mail also comes in over IPv6" sees one window, not two.
      */
     public static List<String> preview(Family f, String via) {
         return f == null ? List.of() : warnings(f, via);
     }
 
-    /** Quello che chi sceglie deve sapere prima: cosa smette di funzionare con quella famiglia. */
+    /** What whoever chooses must know first: what stops working with that family. */
     static List<String> warnings(Family f, String via) {
         List<String> w = new ArrayList<>();
         Family reachedBy = connectionFamily(via);
@@ -393,14 +398,14 @@ public final class IpFamily {
     }
 
     /**
-     * La famiglia di una connessione, dal suo indirizzo: IPV4 o IPV6, null se e' il loopback (un tunnel SSH, che pf
-     * non filtra e che resta comunque) o se non si sa. Un indirizzo IPv4 visto da un socket IPv6 (::ffff:a.b.c.d) e'
-     * IPv4: e' quella la famiglia che la scelta chiude.
+     * The family of a connection, from its address: IPV4 or IPV6, null if it is the loopback (an SSH tunnel, which pf
+     * does not filter and which stays anyway) or if unknown. An IPv4 address seen from an IPv6 socket (::ffff:a.b.c.d)
+     * is IPv4: that is the family the choice closes.
      */
     public static Family connectionFamily(String address) {
         if (address == null || address.isBlank()) return null;
         try {
-            InetAddress a = InetAddress.ofLiteral(address.trim().replaceFirst("%.*$", ""));   // senza la zona (%vtnet0)
+            InetAddress a = InetAddress.ofLiteral(address.trim().replaceFirst("%.*$", ""));   // without the zone (%vtnet0)
             if (a.isLoopbackAddress() || a.isAnyLocalAddress()) return null;
             return a instanceof Inet4Address ? Family.IPV4 : Family.IPV6;
         } catch (Exception e) {
@@ -408,15 +413,15 @@ public final class IpFamily {
         }
     }
 
-    /** Il record com'e' adesso, chiesto a chi lo pubblica (FreshDns), non alla memoria del risolutore. */
+    /** The record as it is now, asked of the server that publishes it (FreshDns), not of the resolver's cache. */
     private static String dig(String type, String host) {
         return org.daemoxcp.mail.security.FreshDns.query(type, host);
     }
 
     /**
-     * Postfix, Dovecot e nginx nella forma universale: in ascolto in IPv4 e in IPv6, qualunque sia f (la famiglia la
-     * decide pf); di f conta solo la preferenza d'uscita di Postfix. Null se e' fatto (o se era gia' cosi'); altrimenti
-     * il motivo, con tutti i file rimessi com'erano e i servizi gia' toccati riavviati.
+     * Postfix, Dovecot and nginx in the universal form: listening on IPv4 and on IPv6, whatever f is (pf decides the
+     * family); of f only Postfix's outbound preference counts. Null if done (or if it was already so); otherwise the
+     * reason, with all the files put back as they were and the services already touched restarted.
      */
     static synchronized String align(Family f) {
         Map<Path, byte[]> before = new LinkedHashMap<>();
@@ -450,11 +455,11 @@ public final class IpFamily {
             return "Postfix: postfix check refuses inet_protocols = " + Family.BOTH.postfix;
         touched.add("postfix");
         if (!protocols) {
-            // Cambia solo la preferenza d'uscita: basta un reload, i socket restano.
+            // Only the outbound preference changes: a reload is enough, the sockets stay.
             Shell.run(Duration.ofSeconds(60), "service", "postfix", "reload");
             return null;
         }
-        // inet_protocols vuole un riavvio: un reload tiene i socket aperti. Succede una volta sola (forma universale).
+        // inet_protocols needs a restart: a reload keeps the sockets open. It happens only once (universal form).
         Shell.run(Duration.ofSeconds(90), "service", "postfix", "restart");
         if (!waitListening(25, Family.BOTH)) return "Postfix: after the restart port 25 does not listen on IPv4 and IPv6";
         return null;
@@ -501,7 +506,7 @@ public final class IpFamily {
         return null;
     }
 
-    /** La porta della webmail dalla configurazione del pannello, o null. */
+    /** The webmail port from the panel configuration, or null. */
     private static Integer webmailPort() {
         try {
             String p = org.daemoxcp.mail.Main.dbManager == null ? null : org.daemoxcp.mail.Main.dbManager.getRoundcubePort();
@@ -511,7 +516,7 @@ public final class IpFamily {
         }
     }
 
-    /** Il file della superficie pubblica sulla 443, dove nginx lo legge davvero (nginx -T), o null. */
+    /** The file of the public surface on 443, where nginx really reads it (nginx -T), or null. */
     private static Path publicSurfaceFile() {
         Shell.Result t = Shell.run(Duration.ofSeconds(20), "nginx", "-T");
         if (!t.success()) return null;
@@ -531,7 +536,7 @@ public final class IpFamily {
         return false;
     }
 
-    /** Scrive accanto e sostituisce con un rename, tenendo proprietario e permessi. */
+    /** Writes alongside and replaces with a rename, keeping owner and permissions. */
     private static void replace(Path p, String content) throws Exception {
         Path tmp = p.resolveSibling("." + p.getFileName() + ".ipfamily");
         Files.copy(p, tmp, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
@@ -539,7 +544,7 @@ public final class IpFamily {
         Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 
-    /** I file com'erano, e i servizi gia' toccati riavviati (nginx ricaricato). */
+    /** The files as they were, and the services already touched restarted (nginx reloaded). */
     private static void restore(Map<Path, byte[]> before, List<String> touched) {
         for (Map.Entry<Path, byte[]> e : before.entrySet()) {
             try {

@@ -1,4 +1,4 @@
-        // ---------- porta 465: sottomissione autenticata ----------
+        // ---------- port 465: authenticated submission ----------
         async function upd465() {
             const el = document.getElementById('upd-465');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('p465.reading')) + '';

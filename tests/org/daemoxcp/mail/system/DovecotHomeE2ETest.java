@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Every mailbox's Dovecot home in home/, with real deliveries and the real configuration of the VM (reperto 217).
+ * Every mailbox's Dovecot home in home/, with real deliveries and the real configuration of the VM (finding 217).
  *
  * The VM must start with the home of before (home = the mail root). Then:
  *  1. Before: an autoreply written by the panel's SieveGenerator and a script of the mailbox's own (ManageSieve on 4190);

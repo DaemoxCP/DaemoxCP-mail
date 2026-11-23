@@ -292,22 +292,22 @@
             return d.innerHTML;
         }
 
-        // ===== Refresh Jail Attive (spinner visivo + feedback) =====
+        // ===== Refresh Active Jails (visual spinner + feedback) =====
         function refreshJails(userTriggered) {
             const icon = document.getElementById('iconRefreshJails');
             const btn = document.getElementById('btnRefreshJails');
             if (icon) icon.classList.add('fa-spin');
             if (btn) btn.disabled = true;
-            // Mostra "Aggiornamento..." nel container
+            // Show "Updating..." in the container
             const container = document.getElementById('jailsContainer');
             if (container && userTriggered) {
                 container.innerHTML = '<p class="text-muted mb-0"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('shu.refreshing')) + '</p>';
             }
-            // Carica + delay artificiale per feedback visivo
+            // Load + artificial delay for visual feedback
             const promise = fetch('/api/fail2ban?action=status').then(r => r.json());
             const minDelay = new Promise(r => setTimeout(r, 400));
             Promise.all([promise, minDelay]).then(([data]) => {
-                // Riusa la logica di loadStatus chiamandola
+                // Reuses loadStatus's logic by calling it
                 loadStatus();
             }).catch(e => {
                 if (container) container.innerHTML = '<p class="text-danger mb-0">' + escHtml(t('common.error', { message: e.message })) + '</p>';
@@ -413,7 +413,7 @@
                 });
         }
 
-        // Helper per permaban (escapeHtml potrebbe non essere definita prima)
+        // Helper for permaban (escapeHtml might not be defined yet)
         function escapeHtmlPermaban(s) {
             const d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
@@ -422,7 +422,7 @@
 
         // Load on page load
         loadStatus();
-        // Popola prima il selettore con tutte le jail attive, poi carica la config
+        // First populates the selector with all the active jails, then loads the config
         populateJailSelect(() => loadJailConfig());
         loadFail2banHealth();
         loadJailLiveState();

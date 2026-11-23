@@ -14,25 +14,25 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Gli script d'installazione su disco sono sempre quelli del jar che gira: mai uno rimasto da una
- * versione di prima.
+ * The installation scripts on disk are always those of the running jar: never one left over from a
+ * previous version.
  *
- * <p>Perche' esiste: misurato leggendo il codice il 06/11/2026 (reperto 169). Sei classi su sette
- * scrivevano il loro script solo «se manca»: dopo un aggiornamento del pannello restava quello della
- * prima versione, per sempre, e il menu eseguiva setup_timezone_and_dns.sh com'era il primo giorno.
- * La reinstallazione staccata (Main --reinstall) usava install_mail_server.sh se c'era gia'. E cinque
- * script delle versioni di prima (Roundcube, Rspamd, ClamAV, Dovecot, Let's Encrypt) restavano nella
- * cartella senza che nessuno li scrivesse piu': chi li lanciava a mano lanciava roba vecchia.
+ * <p>Why it exists: measured by reading the code on 2026-11-06 (finding 169). Six classes out of seven
+ * wrote their script only "if missing": after a panel update the one from the first version
+ * stayed, forever, and the menu ran setup_timezone_and_dns.sh as it was on the first day.
+ * The detached reinstall (Main --reinstall) used install_mail_server.sh if it was already there. And five
+ * scripts from previous versions (Roundcube, Rspamd, ClamAV, Dovecot, Let's Encrypt) stayed in the
+ * folder without anyone writing them anymore: whoever launched them by hand launched old stuff.
  *
- * <p>Adesso:
+ * <p>Now:
  * <ul>
- *   <li>si scrivono SEMPRE, e tutto o niente: un file nuovo accanto e poi la rinomina. Chi sta
- *       eseguendo quello di prima continua a leggere il suo (il file vecchio resta aperto da lui), e
- *       non c'e' un istante in cui lo script manca;</li>
- *   <li>a ogni avvio del pannello (servizio, menu, comandi da console) e prima di ogni esecuzione;</li>
- *   <li>ognuno porta l'impronta del jar che l'ha scritto: lanciato A MANO, la confronta col jar che
- *       il servizio del pannello usa e, se sono diversi, si ferma prima di cambiare qualunque cosa;</li>
- *   <li>quelli che nessuno scrive piu' si mettono da parte all'avvio (nome.sh.retired).</li>
+ *   <li>they are ALWAYS written, and all or nothing: a new file next to it and then the rename. Whoever is
+ *       running the previous one keeps reading their own (the old file stays open for them), and
+ *       there is no instant in which the script is missing;</li>
+ *   <li>at every start of the panel (service, menu, console commands) and before every run;</li>
+ *   <li>each one carries the fingerprint of the jar that wrote it: launched BY HAND, it compares it with
+ *       the jar the panel's service uses and, if they differ, it stops before changing anything;</li>
+ *   <li>those nobody writes anymore are set aside at boot (name.sh.retired).</li>
  * </ul>
  */
 public final class InstallScripts {
@@ -41,21 +41,21 @@ public final class InstallScripts {
 
     private InstallScripts() {}
 
-    /** La cartella degli script, nella cartella del pannello. */
+    /** The scripts folder, in the panel's folder. */
     public static final String DIR = "./install_scripts";
 
-    /** Quelli che le versioni di prima scrivevano e che il pannello non scrive ne' esegue piu'. */
+    /** Those that previous versions wrote and that the panel no longer writes or runs. */
     static final List<String> RETIRED = List.of("install_roundcube.sh", "install_rspamd.sh",
             "install_clamav.sh", "install_dovecot.sh", "generate_letsencrypt.sh");
 
-    /** La variabile che il pannello mette nell'ambiente di ogni script che lancia lui. */
+    /** The variable the panel puts in the environment of every script it launches itself. */
     public static final String FROM_PANEL = "DAEMOXCP_MAIL_FROM_PANEL";
 
     private static volatile String jarSha;
 
     /**
-     * Scrive lo script, sempre, tutto o niente. Vero se e' scritto. Il file e' 700: lo lancia solo
-     * root, e solo root deve poterlo cambiare.
+     * Writes the script, always, all or nothing. True if it is written. The file is 700: only
+     * root launches it, and only root must be able to change it.
      */
     public static synchronized boolean write(String path, String content) {
         Path target = Path.of(path);
@@ -83,13 +83,13 @@ public final class InstallScripts {
     }
 
     /**
-     * Lo script con l'impronta del jar e il controllo per chi lo lancia a mano, subito dopo la riga
-     * #!. Il jar del servizio lo dice rc.conf (daemoxcp_mail_jar) o, se li' non c'e', il valore
-     * predefinito scritto nello script rc.d del pannello. Senza servizio del pannello, o lanciato dal
-     * pannello stesso (che l'ha appena scritto), il controllo non si fa.
+     * The script with the jar's fingerprint and the check for whoever launches it by hand, right after the
+     * #! line. The service's jar is given by rc.conf (daemoxcp_mail_jar) or, if it is not there, by the
+     * default value written in the panel's rc.d script. Without a panel service, or when launched by the
+     * panel itself (which has just written it), the check is not done.
      *
-     * <p>La riga di testa e' in inglese: la stessa frase in italiano e' uno dei marcatori di prima
-     * (legacy-names.json), e LegacyNamesTest non la vuole piu' in nessun file scritto dal pannello.
+     * <p>The header line is in English: the same sentence in Italian is one of the previous markers
+     * (legacy-names.json), and LegacyNamesTest no longer wants it in any file written by the panel.
      */
     static String stamped(String content) {
         String guard = """
@@ -110,8 +110,8 @@ public final class InstallScripts {
                 fi
                 # ------------------------------------------------------------------------------------------
                 """.formatted(jarSha256());
-        // Uno script con la riga #! rientrata (setup_timezone_and_dns.sh lo era, da sempre: lo si lancia
-        // con sh, quindi nessuno se n'era accorto) la ritrova a inizio file.
+        // A script with an indented #! line (setup_timezone_and_dns.sh had one, always: it is launched
+        // with sh, so nobody had noticed) gets it back at the start of the file.
         if (content.stripLeading().startsWith("#!")) content = content.stripLeading();
         if (content.startsWith("#!")) {
             int nl = content.indexOf('\n');
@@ -121,7 +121,7 @@ public final class InstallScripts {
         return guard + content;
     }
 
-    /** L'impronta sha256 del jar da cui gira il pannello; "" se non gira da un jar (le prove). */
+    /** The sha256 fingerprint of the jar the panel runs from; "" if it does not run from a jar (the tests). */
     public static String jarSha256() {
         String s = jarSha;
         if (s != null) return s;
@@ -146,8 +146,8 @@ public final class InstallScripts {
     }
 
     /**
-     * All'avvio di ogni processo del pannello: gli script di adesso riscritti dal jar che gira, e quelli
-     * che nessuno scrive piu' messi da parte. Idempotente.
+     * At the start of every panel process: the current scripts rewritten by the running jar, and those
+     * nobody writes anymore set aside. Idempotent.
      */
     public static void refreshAtStartup() {
         new FullMailServerScript().write_file();
@@ -156,9 +156,9 @@ public final class InstallScripts {
     }
 
     /**
-     * Gli script che il pannello non scrive piu' diventano nome.sh.retired: non si lanciano piu' per
-     * sbaglio, ma non si perdono. Se c'e' gia' un .retired accanto, non si sceglie: si lasciano tutti e
-     * due e lo si dice.
+     * The scripts the panel no longer writes become name.sh.retired: they are no longer launched by
+     * mistake, but they are not lost. If there is already a .retired next to one, no choice is made: both
+     * are left and this is reported.
      */
     static void retire() {
         for (String name : RETIRED) {

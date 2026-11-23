@@ -106,7 +106,7 @@ public class PackageQueueTest {
         real("list closed: the update starts", PackageQueue.take("upd", "update") == null);
         PackageQueue.release("upd");
 
-        // The update of the panel's Java (reperto 210): its list is there by design while its script works outside the
+        // The update of the panel's Java (finding 210): its list is there by design while its script works outside the
         // panel. On the real server a job asked meanwhile said "a job that did not finish ... restart the panel".
         real("the Java's list is written", PackageQueue.writeStateForRestart(List.of("openjdk25")) == null);
         String e3 = PackageQueue.take("all", "update of everything");

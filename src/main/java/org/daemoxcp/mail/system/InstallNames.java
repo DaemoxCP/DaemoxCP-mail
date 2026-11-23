@@ -7,25 +7,27 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * I tre nomi di un server prima dell'installazione dal menu (reperto 244).
+ * The three names of a server before the installation from the menu (finding 244).
  *
- * <p>Un server ha tre nomi, e servono diversi:
+ * <p>A server has three names, and they serve different purposes:
  * <ul>
- *   <li>il nome della posta (voce 4, per esempio mail.example.com): MX, PTR, certificato di Postfix e Dovecot. Il suo
- *       record A deve restare «DNS only» in Cloudflare: la posta (25, 465, 587, 993) non passa dal proxy;</li>
- *   <li>il nome della webmail (voce 3, per esempio webmail.example.com, porta 8443) e quello del pannello (voce 2, per
- *       esempio panel.example.com, porta 2096): passano dal proxy di Cloudflare, che inoltra l'HTTPS su 8443 e 2096.</li>
+ *   <li>the mail name (option 4, for example mail.example.com): MX, PTR, certificate of Postfix and Dovecot. Its
+ *       A record must stay "DNS only" in Cloudflare: mail (25, 465, 587, 993) does not go through the proxy;</li>
+ *   <li>the webmail name (option 3, for example webmail.example.com, port 8443) and the panel's name (option 2,
+ *       for example panel.example.com, port 2096): they go through the Cloudflare proxy, which forwards HTTPS on
+ *       8443 and 2096.</li>
  * </ul>
- * Fino a oggi l'installazione partiva anche col nome della webmail di esempio rimasto quello di fabbrica
- * (webmail.example.com, che passava il controllo dello script) e con un nome uguale a quello della posta, che in
- * Cloudflare non puo' essere insieme dietro il proxy e fuori. Qui i problemi che fermano l'installazione dal menu, e
- * gli avvisi che la lasciano partire (il pannello senza un nome suo si puo' sistemare dopo, con la voce 2).
+ * Until today the installation started even with the example webmail name left at the factory value
+ * (webmail.example.com, which passed the script's check) and with a name equal to the mail one, which in
+ * Cloudflare cannot be both behind the proxy and outside it. Here are the problems that stop the installation from
+ * the menu, and the warnings that let it start (the panel without a name of its own can be fixed later, with option
+ * 2).
  */
 public final class InstallNames {
 
     private InstallNames() {}
 
-    /** Il nome della webmail che il pannello scrive alla prima apertura del database. */
+    /** The webmail name that the panel writes when the database is first opened. */
     public static final String DEFAULT_WEBMAIL = "webmail.example.com";
 
     public record Result(List<String> problems, List<String> warnings) {}

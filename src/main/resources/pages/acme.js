@@ -1,8 +1,8 @@
 
-        // ---------- acme.sh (reperto 247) ----------
-        // Su un server installato da zero acme.sh non c'e': senza, nessun certificato Let's Encrypt (questa pagina e
-        // «Set up everything» si fermavano con «acme.sh not installed»). La scheda compare quando manca acme.sh o il suo
-        // account Let's Encrypt (un indirizzo rifiutato lascia il pacchetto senza account).
+        // ---------- acme.sh (finding 247) ----------
+        // On a clean install acme.sh is not there: without it, no Let's Encrypt certificate (this page and
+        // "Set up everything" stopped with "acme.sh not installed"). The card appears when acme.sh or its
+        // Let's Encrypt account is missing (a rejected address leaves the package without an account).
         function acmeShow(ready) {
             const card = document.getElementById('acmeCard');
             if (card) card.classList.toggle('d-none', !!ready);

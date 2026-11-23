@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * The panel's Sieve rules out of reach of the group mail (reperto 221).
+ * The panel's Sieve rules out of reach of the group mail (finding 221).
  *
  * Measured on the VM on 10/11/2026: /var/mail is root:mail 0775 (FreeBSD's mtree), so a process with the group mail
  * (postfix, clamav, dma which is setgid mail, and Dovecot's mail processes through mail_privileged_group) could rename

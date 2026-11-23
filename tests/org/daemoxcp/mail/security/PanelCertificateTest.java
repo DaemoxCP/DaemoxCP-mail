@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The panel's certificate checked before menu option 2 saves it (reperto 243), and the provider firewall's list
- * (reperto 245). Certificates and keys are made here with openssl (FreeBSD base):
+ * The panel's certificate checked before menu option 2 saves it (finding 243), and the provider firewall's list
+ * (finding 245). Certificates and keys are made here with openssl (FreeBSD base):
  *  1. a certificate and its key for the panel's name: saved, with what it covers, the issuer and the expiry (one
  *     made a second ago is valid: ten minutes of clock skew are tolerated on its start);
  *  2. a wildcard covers one label only; a certificate for another name, an expired one, one not valid yet, a key that

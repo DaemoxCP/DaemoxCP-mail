@@ -5,7 +5,7 @@ import org.json.JSONObject;
 import java.time.Instant;
 
 /**
- * The decisions behind installing FreeBSD patches from the panel (reperto 185), with no system
+ * The decisions behind installing FreeBSD patches from the panel (finding 185), with no system
  * underneath: the freebsd-update outputs are the ones seen on the test VM and on the real server.
  *
  *  1. target: the version from the tag file ("...|15.1-RELEASE|6|..." -> 15.1-RELEASE-p6).

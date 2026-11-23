@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * "Update everything" (reperto 207): what may start, and when a step's plan, worked out again when its turn comes, may
+ * "Update everything" (finding 207): what may start, and when a step's plan, worked out again when its turn comes, may
  * still run. Each step is the job of always (the patches, the other packages, a mail server package or family,
  * Roundcube, the panel's Java last), tested elsewhere; here only the two rules of the chain:
  *  - the steps the page sends: in the fixed order, each kind once (the packages one per family), valid names and

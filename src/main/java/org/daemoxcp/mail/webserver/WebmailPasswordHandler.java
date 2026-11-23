@@ -22,35 +22,35 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Le due rotte che usa solo la webmail (Roundcube, sullo stesso server), mai un browser:
+ * The two routes used only by the webmail (Roundcube, on the same server), never by a browser:
  *
- *  - POST /api/internal/mailbox-password (user, curpass, newpass): il cambio password dalla
- *    webmail. Il plugin password di Roundcube (driver httpapi, vedi WebmailPasswordConfig) la
- *    manda qui invece di scrivere da se' nel database: il pannello controlla la password attuale
- *    e scrive insieme l'hash bcrypt e la copia cifrata, cosi' la password si puo' sempre rivedere.
- *  - POST /api/internal/mailbox-cleanup (user, action get|set, junk, trash): lo svuotamento automatico della Junk e
- *    del Cestino della propria casella, dalle impostazioni della webmail (il plugin daemoxcp_mail_cleanup). L'utente
- *    e' quello della sessione di Roundcube: la chiave dice che chiama la webmail, che ha gia' l'utente master di
- *    Dovecot e quindi ogni casella; da qui non ottiene niente di piu'. Solo i giorni dell'elenco
- *    (MailDatabase.CLEANUP_DAYS, 0 = mai), e solo per una casella attiva. Il cambio va nel registro di controllo.
- *  - POST /api/internal/mailbox-vault (user, pass): dopo un accesso alla webmail con la password
- *    della casella, il plugin daemoxcp_mail_sso la manda qui. Se il pannello non ne ha la copia (casella
- *    di prima del vault) o la copia e' vecchia, e la password corrisponde all'hash, la copia si scrive.
+ *  - POST /api/internal/mailbox-password (user, curpass, newpass): the password change from the
+ *    webmail. Roundcube's password plugin (httpapi driver, see WebmailPasswordConfig) sends it
+ *    here instead of writing to the database itself: the panel checks the current password and
+ *    writes the bcrypt hash and the encrypted copy together, so the password can always be viewed again.
+ *  - POST /api/internal/mailbox-cleanup (user, action get|set, junk, trash): the automatic emptying of Junk
+ *    and Trash of one's own mailbox, from the webmail settings (the daemoxcp_mail_cleanup plugin). The user
+ *    is the one of the Roundcube session: the key says the webmail is calling, which already has Dovecot's
+ *    master user and therefore every mailbox; from here it gets nothing more. Only the days of the list
+ *    (MailDatabase.CLEANUP_DAYS, 0 = never), and only for an active mailbox. The change goes into the audit log.
+ *  - POST /api/internal/mailbox-vault (user, pass): after a login to the webmail with the mailbox's
+ *    password, the daemoxcp_mail_sso plugin sends it here. If the panel has no copy of it (a mailbox
+ *    from before the vault) or the copy is old, and the password matches the hash, the copy is written.
  *
- * Chi chiama deve arrivare da 127.0.0.1 (o ::1) direttamente, senza intestazioni di un proxy
- * davanti, e mandare la chiave della webmail (X-DaemoxCP-Key, nel file dei segreti del pannello).
- * Altrimenti la risposta e' 404, come per una rotta che non c'e'. Nessuna password nei log.
+ * The caller must come from 127.0.0.1 (or ::1) directly, without the headers of a proxy
+ * in front, and send the webmail key (X-DaemoxCP-Key, in the panel's secrets file).
+ * Otherwise the response is 404, as for a route that does not exist. No passwords in the logs.
  *
- * <p>Col pannello separato le serve la root: la web controlla chi chiama
- * ({@link #callerRefused}) e passa la richiesta; la root rifa' tutto il resto, password attuale con bcrypt e
- * limite dei tentativi compresi, senza il controllo del chiamante, che non vede.
+ * <p>With the separated panel the root serves them: the web part checks the
+ * caller ({@link #callerRefused}) and passes the request on; the root redoes all the rest, current password
+ * with bcrypt and attempt limit included, without the caller check, which it cannot see.
  */
 final class WebmailPasswordHandler {
 
     private static final Logger LOGGER = Logger.getLogger(WebmailPasswordHandler.class.getName());
     private static final int MAX_BODY = 8 * 1024;
     private static final int MAX_CURRENT_PASSWORD = 256;
-    /** Tentativi per casella in WINDOW_MS: password attuale sbagliata, o controlli bcrypt per la copia. */
+    /** Attempts per mailbox in WINDOW_MS: wrong current password, or bcrypt checks for the copy. */
     static int maxAttempts = 5;
     static long windowMs = 15 * 60 * 1000L;
 
@@ -59,13 +59,13 @@ final class WebmailPasswordHandler {
 
     WebmailPasswordHandler(SSLMailServer server) { this.server = server; }
 
-    // ===================== Rotte =====================
+    // ===================== Routes =====================
 
     void handlePasswordChange(HttpExchange ex) throws IOException {
         handlePasswordChange(ex, true);
     }
 
-    /** checkCaller false: la parte root, con la richiesta che la web ha gia' controllato (callerRefused). */
+    /** checkCaller false: the root part, with the request that the web part has already checked (callerRefused). */
     void handlePasswordChange(HttpExchange ex, boolean checkCaller) throws IOException {
         Map<String, String> form = authorizedForm(ex, checkCaller);
         if (form == null) return;
@@ -114,9 +114,9 @@ final class WebmailPasswordHandler {
     }
 
     /**
-     * checkCaller false: la parte root, con la richiesta che la web ha gia' controllato (callerRefused). Risponde
-     * «junk=N trash=N» (i giorni di adesso, anche dopo un cambio), 404 «not found» se la casella non c'e' o non e'
-     * attiva, 400 «invalid» per un utente o dei giorni che non vanno.
+     * checkCaller false: the root part, with the request that the web part has already checked (callerRefused).
+     * Answers "junk=N trash=N" (the current days, also after a change), 404 "not found" if the mailbox does not
+     * exist or is not active, 400 "invalid" for a user or days that are not acceptable.
      */
     void handleCleanup(HttpExchange ex, boolean checkCaller) throws IOException {
         Map<String, String> form = authorizedForm(ex, checkCaller);
@@ -157,12 +157,12 @@ final class WebmailPasswordHandler {
         }
     }
 
-    /** I giorni di un campo del modulo: solo cifre, al massimo tre; -1 altrimenti (e il controllo dell'elenco lo rifiuta). */
+    /** The days of a form field: digits only, at most three; -1 otherwise (and the list check rejects it). */
     static int days(String value) {
         return value != null && value.matches("[0-9]{1,3}") ? Integer.parseInt(value) : -1;
     }
 
-    /** checkCaller false: la parte root, con la richiesta che la web ha gia' controllato (callerRefused). */
+    /** checkCaller false: the root part, with the request that the web part has already checked (callerRefused). */
     void handleVaultCopy(HttpExchange ex, boolean checkCaller) throws IOException {
         Map<String, String> form = authorizedForm(ex, checkCaller);
         if (form == null) return;
@@ -178,7 +178,7 @@ final class WebmailPasswordHandler {
                 reply(ex, 200, "ok");
                 return;
             }
-            // La copia c'e' ed e' questa password: niente da fare, e nessun bcrypt a ogni accesso
+            // The copy exists and is this password: nothing to do, and no bcrypt on every login
             if (copyIs(box.id, pass)) {
                 reply(ex, 200, "ok");
                 return;
@@ -198,9 +198,9 @@ final class WebmailPasswordHandler {
         }
     }
 
-    // ===================== Controlli =====================
+    // ===================== Checks =====================
 
-    /** La copia nel vault decifra esattamente in questa password. */
+    /** The copy in the vault decrypts to exactly this password. */
     private static boolean copyIs(int mailboxId, String pass) throws java.sql.SQLException {
         String enc = Main.mailDatabase.getMailboxPasswordEncrypted(mailboxId);
         if (enc == null || enc.isEmpty()) return false;
@@ -213,8 +213,8 @@ final class WebmailPasswordHandler {
     }
 
     /**
-     * Il modulo della richiesta se chi chiama e' la webmail: POST, da loopback senza proxy, con la
-     * chiave giusta. Altrimenti risponde lui (404 o 405) e torna null.
+     * The request's form if the caller is the webmail: POST, from loopback without a proxy, with the
+     * right key. Otherwise it answers itself (404 or 405) and returns null.
      */
     private Map<String, String> authorizedForm(HttpExchange ex, boolean checkCaller) throws IOException {
         if (checkCaller ? callerRefused(ex) : methodRefused(ex)) return null;
@@ -232,8 +232,8 @@ final class WebmailPasswordHandler {
     }
 
     /**
-     * Chi chiama non e' la webmail sulla stessa macchina, o non manda un POST: risposto (404 o 405) e vero. La
-     * parte web lo chiede prima di passare la richiesta alla root.
+     * The caller is not the webmail on the same machine, or does not send a POST: answered (404 or 405) and
+     * true. The web part asks this before passing the request to the root.
      */
     static boolean callerRefused(HttpExchange ex) throws IOException {
         if (!fromLocalWebmail(ex)) {
@@ -253,7 +253,7 @@ final class WebmailPasswordHandler {
         return false;
     }
 
-    /** Quanto puo' essere grande il corpo (la parte web non passa alla root niente di piu'). */
+    /** How large the body can be (the web part passes nothing larger to the root). */
     static int maxBody() {
         return MAX_BODY;
     }
@@ -261,12 +261,12 @@ final class WebmailPasswordHandler {
     static boolean fromLocalWebmail(HttpExchange ex) {
         InetAddress addr = ex.getRemoteAddress() == null ? null : ex.getRemoteAddress().getAddress();
         if (addr == null || !addr.isLoopbackAddress()) return false;
-        // Passata da nginx (o da Cloudflare) non e' la webmail che chiama direttamente
+        // Passed through nginx (or Cloudflare), it is not the webmail calling directly
         var h = ex.getRequestHeaders();
         if (h.containsKey("X-Forwarded-For") || h.containsKey("X-Real-IP") || h.containsKey("CF-Connecting-IP")
                 || h.containsKey("Forwarded")) return false;
-        // L'intestazione di adesso, o una di prima (sezione "webmailKeyHeaders"): Roundcube la manda come dice il suo
-        // config.inc.php, che il pannello riscrive all'avvio, ma una richiesta puo' arrivare in mezzo.
+        // The current header, or an earlier one (section "webmailKeyHeaders"): Roundcube sends it as its
+        // config.inc.php says, which the panel rewrites at startup, but a request can arrive in between.
         String given = h.getFirst(org.daemoxcp.mail.integration.WebmailPasswordConfig.KEY_HEADER);
         for (String old : org.daemoxcp.mail.system.LegacyNames.oldNamesOf("webmailKeyHeaders",
                 org.daemoxcp.mail.integration.WebmailPasswordConfig.KEY_HEADER))
@@ -287,7 +287,7 @@ final class WebmailPasswordHandler {
     }
 
     private void count(String user) {
-        if (attempts.size() > 10_000) attempts.clear();     // un tetto alla memoria; si riparte da zero
+        if (attempts.size() > 10_000) attempts.clear();     // a cap on memory; start again from zero
         Deque<Long> q = attempts.computeIfAbsent(user, k -> new ArrayDeque<>());
         synchronized (q) { q.addLast(System.currentTimeMillis()); }
     }
@@ -300,7 +300,7 @@ final class WebmailPasswordHandler {
         return ex.getRemoteAddress().getAddress().getHostAddress();
     }
 
-    /** application/x-www-form-urlencoded; null se non si decodifica o un campo e' ripetuto. */
+    /** application/x-www-form-urlencoded; null if it does not decode or a field is repeated. */
     static Map<String, String> parseForm(String body) {
         Map<String, String> out = new HashMap<>();
         if (body.isEmpty()) return out;
@@ -331,12 +331,12 @@ final class WebmailPasswordHandler {
         }
     }
 
-    /** Il corpo non si legge: si chiude e basta (chi non e' la webmail non fa leggere niente al server). */
+    /** The body is not read: it is just closed (whoever is not the webmail gets the server to read nothing). */
     private static void drain(HttpExchange ex) {
         try {
             ex.getRequestBody().close();
         } catch (IOException ignored) {
-            // niente
+            // nothing
         }
     }
 

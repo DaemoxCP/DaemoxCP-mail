@@ -8,20 +8,20 @@ import java.util.stream.*;
 /**
  * Renames made on the text can hit strings that are not names of the code.
  *
- * On 25/10/2026 the rename of the JSON keys (so -> os, prova -> test, posta -> mail) had also
+ * On 2026-10-25 the rename of the JSON keys (so -> os, prova -> test, posta -> mail) had also
  * changed: the ten "extension=pdo_mysql.so" lines of Roundcube's php.ini (become ".os": PHP would not
  * have loaded the extensions), seven shell commands on libssl.so and libmysqlclient.so.24, the two
  * old names in PathMigration (the migration of those files no longer happened, and the old == new
  * guard kept it quiet) and the Apple profile's identifier. No test saw it: it needs FreeBSD,
  * Roundcube, an iPhone. This one looks at the sources.
  *
- * On 30/10/2026 (point 88 of the reperti) the damage in the comments was seen: the renames of 16/10
- * and 24/10 had changed "che" into whichLabel, "riga" into lineItem, "gia'" into already', "uno
- * script" into "one script", "gli intervalli" into "gli ranges" also in the Italian comments of the
- * files the scripts write on the server and of the pages. Point 5 looks for them; point 6, since
- * 31/10 (point 90 of the reperti), does the same in the comments of the code and of the tests, where
- * #21 had damaged 110 of them ("la correzione c'e'?" had become "la fix c'e'?"). The Italian words
- * and forms quoted in this class are the data it looks for.
+ * On 2026-10-30 (point 88 of the findings) the damage in the comments was seen: the renames of
+ * 16 October and 24 October had changed `che` into whichLabel, `riga` into lineItem, `gia'` into
+ * already', `uno script` into `one script`, `gli intervalli` into `gli ranges` also in the Italian
+ * comments of the files the scripts write on the server and of the pages. Point 5 looks for them;
+ * point 6, since 31 October (point 90 of the findings), does the same in the comments of the code
+ * and of the tests, where #21 had damaged 110 of them (`la correzione c'e'?` had become
+ * `la fix c'e'?`). The Italian words and forms quoted in this class are the data it looks for.
  */
 public class RenameDamageTest {
 
@@ -80,10 +80,10 @@ public class RenameDamageTest {
         //    (a word, not an identifier). Only what cannot stand in Italian is reported: a camelCase
         //    identifier (whichLabel), an English word with the accent's apostrophe (already'), an
         //    English function word in an Italian sentence (where, stays, one), an article not used
-        //    before that initial (l'fingerprint, gli ranges). A noun after a right article cannot be
-        //    seen ("il verdict", "la fix", "della mail"): it cannot be told from a loanword like "il
-        //    port" or "il log". And since 31/10 a camelCase that, comments removed, is nowhere in the
-        //    code: the Italian name a rename changed everywhere except in the comment
+        //    before that initial (`l'fingerprint`, `gli ranges`). A noun after a right article cannot
+        //    be seen (`il verdict`, `la fix`, `della mail`): it cannot be told from a loanword like
+        //    `il port` or `il log`. And since 31 October a camelCase that, comments removed, is
+        //    nowhere in the code: the Italian name a rename changed everywhere except in the comment
         //    (@param tieniInoltri above a parameter called keepForwards).
         Map<String, Set<String>> renamed = new TreeMap<>();
         try (Stream<Path> s = Files.list(root.resolve("tools/renames"))) {
@@ -167,18 +167,20 @@ public class RenameDamageTest {
     /** English function words: in an Italian sentence they never belong. */
     private static final Set<String> FUNCTION = Set.of("where", "when", "while", "still", "already",
             "stays", "one", "real", "only", "also");
-    /** An elided article (l', un', dell'...) is Italian only before a vowel (or an h). */
+    /** An elided article (`l'`, `un'`, `dell'`...) is Italian only before a vowel (or an h). */
     private static final Pattern ELISION = Pattern.compile("(?<![A-Za-z])(?:[lL]|[uU]n|[dDnNsS][aeu]ll|[aA]ll|[cC]oll|[qQ]uell|[qQ]uest)'$");
-    /** gli, lo and uno want a vowel, an impure s, a z, gn, ps: not "gli ranges". */
+    /** `gli`, `lo` and `uno` want a vowel, an impure s, a z, gn, ps: not `gli ranges`. */
     private static final Pattern GLI = Pattern.compile("(?<![A-Za-z])(?:[gG]li|[lL]o|[uU]no)\\s+$");
 
     /** The suspicious words of a comment line: kind, English name and the Italian word of before. */
     static List<String> damageIn(String comment, Map<String, Set<String>> renamed, Set<String> codeWords) {
         // Between quotes, double or single, there are commands and values ("which dig", '--restart'),
-        // and between backticks or in {@code} names of the code: not sentences.
+        // and between backticks, in {@code} or after @param names of the code: not sentences. The @param name is the
+        // parameter's own name (2026-11-23: "@param protectedNames" was flagged once the stale "@param protetti" was
+        // corrected to the method's real parameter).
         String c = comment.replaceAll("\"[^\"]*\"", "\"\"")
                 .replaceAll("(?<![A-Za-z])'[^'\\n]*'(?![A-Za-z])", "''")
-                .replaceAll("`[^`]*`|\\{@(?:code|link) [^}]*\\}", "");
+                .replaceAll("`[^`]*`|\\{@(?:code|link) [^}]*\\}|@param\\s+\\w+", "");
         boolean italian = ITALIAN.matcher(c.toLowerCase(Locale.ROOT)).results().count() >= 2;
         List<String> out = new ArrayList<>();
         Matcher m = WORD.matcher(c);
@@ -191,7 +193,7 @@ public class RenameDamageTest {
             boolean accent = m.end() < c.length() && c.charAt(m.end()) == '\''
                     && prev != '\'' && (m.end() + 1 >= c.length() || !Character.isLetter(c.charAt(m.end() + 1)));
             String why = null;
-            // The accent written as an apostrophe is Italian (gia'): in an English comment "folders'" is a plural
+            // The accent written as an apostrophe is Italian (`gia'`): in an English comment "folders'" is a plural
             // possessive, not a damage (SafeOwnershipTest and tests/README.md, 17/11/2026).
             if (accent && italian) why = "accent";
             else if (CAMEL.matcher(w).matches()) why = "identifier";

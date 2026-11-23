@@ -1,8 +1,8 @@
 
-        // ---------- Il firewall del provider (reperto 245) ----------
-        // Le regole da creare nel firewall del provider, dalle porte vere di questo server, e la lista ufficiale di
-        // Cloudflare per il pannello e la webmail, pronta da incollare. «L'ho messa» ricorda la sua impronta: quando
-        // Cloudflare cambia la lista, questa scheda e Diagnostica lo dicono finche' non si conferma di nuovo.
+        // ---------- The provider's firewall (finding 245) ----------
+        // The rules to create in the provider's firewall, from this server's real ports, and Cloudflare's official
+        // list for the panel and the webmail, ready to paste. "I've added it" remembers its fingerprint: when
+        // Cloudflare changes the list, this card and Diagnostics say so until it is confirmed again.
         let pfwFingerprint = '';
 
         function pfwPorts(list) { return (list || []).join(', '); }
@@ -17,9 +17,9 @@
             const body = document.getElementById('pfw-rules');
             const row = (what, ports, sources, plain) => '<tr><th scope="row" class="fw-normal">' + escHtml(what) + '</th><td>'
                 + (plain ? escHtml(ports) : '<code>' + escHtml(ports) + '</code>') + '</td><td>' + escHtml(sources) + '</td></tr>';
-            // ICMP: nessuna porta. Senza questa regola il firewall di Hetzner Cloud scarta ogni ping, in IPv4 e in IPv6
-            // (visto sul server vero): non si puo' controllare se il server e' raggiungibile, e all'IPv6 mancano i suoi
-            // messaggi di servizio. Non apre nessun servizio.
+            // ICMP: no port. Without this rule the Hetzner Cloud firewall drops every ping, over IPv4 and IPv6
+            // (seen on the production server): there is no way to check whether the server is reachable, and IPv6
+            // lacks its service messages. It opens no service.
             body.innerHTML = row(t('pfw.rowSsh'), pfwPorts(rules.ssh), t('pfw.srcYourIp'))
                 + row(t(rules.pop3 ? 'pfw.rowMailPop3' : 'pfw.rowMail'), pfwPorts(rules.open), t('pfw.srcAny'))
                 + row(t('pfw.rowWeb'), pfwPorts(rules.cloudflare), t('pfw.srcCloudflare'))

@@ -29,19 +29,19 @@ import java.util.regex.*;
 public class AcmeManager {
 
     /*
-     * Dove sta acme.sh e con quale utente gira lo dice AcmeUser.layout(): come acme da
-     * /var/db/acme (il pacchetto security/acme.sh), o da root in /root/.acme.sh finche' la
-     * migrazione all'avvio non l'ha spostato.
+     * Where acme.sh lives and which user it runs as is told by AcmeUser.layout(): as acme from
+     * /var/db/acme (the security/acme.sh package), or as root in /root/.acme.sh until the
+     * boot migration has moved it.
      *
-     * Ogni comando porta "--home": acme.sh sceglie la propria cartella di lavoro cosi' (sorgente
-     * ufficiale, riga 11 e 3145):
+     * Every command carries "--home": this is how acme.sh chooses its own working folder
+     * (official source, lines 11 and 3145):
      *     DEFAULT_INSTALL_HOME="$HOME/.$PROJECT_NAME"
      *     if [ -z "$LE_WORKING_DIR" ]; then LE_WORKING_DIR="$DEFAULT_INSTALL_HOME"; fi
-     * Il pannello viene avviato da rc.d, che NON passa HOME. Con HOME vuoto quella
-     * espressione diventa "/.acme.sh": acme.sh emetteva davvero il certificato, ma nella
-     * radice del disco, mentre noi copiavamo da /root/.acme.sh — cioe' il file vecchio.
-     * "--home" (riga 8436 del sorgente) e' il rimedio documentato, ed e' lo stesso flag
-     * che acme.sh scrive nel proprio cron: non si fida dell'ambiente nemmeno lui.
+     * The panel is started by rc.d, which does NOT pass HOME. With HOME empty that
+     * expression becomes "/.acme.sh": acme.sh really issued the certificate, but in the
+     * root of the disk, while we copied from /root/.acme.sh, that is, the old file.
+     * "--home" (line 8436 of the source) is the documented fix, and it is the same flag
+     * that acme.sh writes into its own cron: it does not trust the environment either.
      */
     private static final String SSL_DIR = "/usr/local/etc/ssl/mail";
     private static final String CERT_FILE = SSL_DIR + "/fullchain.pem";
@@ -49,7 +49,7 @@ public class AcmeManager {
     private static final String FULLCHAIN_FILE = SSL_DIR + "/fullchain.pem";
     private static final String CA_FILE = SSL_DIR + "/ca.pem";
 
-    // Renewal threshold (days before expiry to renew) — default; può essere overridden da DB setting
+    // Renewal threshold (days before expiry to renew): default; can be overridden by a DB setting
     private static final int RENEWAL_THRESHOLD_DAYS_DEFAULT = 30;
 
     // DB settings keys
@@ -58,8 +58,8 @@ public class AcmeManager {
     public static final String SETTING_AUTO_RENEW_LAST_CHECK    = "acme_auto_renewal_last_check";
     public static final String SETTING_AUTO_RENEW_LAST_RESULT   = "acme_auto_renewal_last_result";
     public static final String SETTING_AUTO_RENEW_LAST_RENEWAL  = "acme_auto_renewal_last_renewal";
-    // Account Cloudflare scelto per il certificato del SERVER MAIL (Mail Hostname),
-    // il cui dominio base può non essere tra i domini mail gestiti.
+    // Cloudflare account chosen for the certificate of the MAIL SERVER (Mail Hostname),
+    // whose base domain may not be among the managed mail domains.
     public static final String SETTING_CF_ACCOUNT_ID            = "acme_cf_account_id";
 
     public boolean isAutoRenewalEnabled() {
@@ -103,15 +103,15 @@ public class AcmeManager {
     public void startAutoRenewal() {
         // Run check immediately at startup
         scheduler.execute(() -> {
-            // Prima, sui server installati prima: acme.sh da /root, da root, a /var/db/acme come
-            // acme. Qui e non nel resto dell'avvio, perche' puo' installare il pacchetto (minuti,
-            // se la rete e' lenta), e prima del controllo, che altrimenti rinnoverebbe con quello vecchio.
+            // First, on servers installed earlier: acme.sh from /root, as root, to /var/db/acme as
+            // acme. Here and not in the rest of startup, because it may install the package (minutes,
+            // if the network is slow), and before the check, which would otherwise renew with the old one.
             AcmeUser.ensureAtBoot();
-            // La copia in chiaro del token di Cloudflare che acme.sh si era salvato: tolta (AcmeCloudflareCopy)
+            // The plaintext copy of the Cloudflare token that acme.sh had saved: removed (AcmeCloudflareCopy)
             AcmeCloudflareCopy.ensureAtBoot();
-            // Con quale utente gira ogni servizio, e gli avvisi nel log. Qui, dopo la migrazione
-            // di acme.sh: prima avviserebbe che acme.sh gira da root mentre lo si sta spostando
-            // (visto sulla VM il 31/10/2026, un avviso falso al primo avvio).
+            // Which user each service runs as, and the warnings in the log. Here, after the migration
+            // of acme.sh: before it, it would warn that acme.sh runs as root while it is being moved
+            // (seen on the VM on 2026-10-31, a false warning on the first start).
             org.daemoxcp.mail.system.ServiceUsers.logAtBoot();
             try {
                 System.out.println("[ACME] Checking certificate status at startup...");
@@ -155,12 +155,12 @@ public class AcmeManager {
         return AcmeUser.layout() != null;
     }
 
-    /** acme.sh con le cartelle e l'utente di questa macchina; null se non c'e'. */
+    /** acme.sh with the folders and the user of this machine; null if it is not there. */
     private AcmeUser.Layout layout() {
         return AcmeUser.layout();
     }
 
-    /** Esegue acme.sh (come acme, o da root prima della migrazione) con quegli argomenti. */
+    /** Runs acme.sh (as acme, or as root before the migration) with those arguments. */
     private String acme(String args) throws Exception {
         return acme(args, null);
     }
@@ -171,16 +171,16 @@ public class AcmeManager {
         try {
             return AcmeUser.run(l, args, env);
         } finally {
-            // Il token glielo passa il pannello ogni volta: la copia che acme.sh se ne salva non serve (AcmeCloudflareCopy)
+            // The panel passes it the token every time: the copy acme.sh saves of it is not needed (AcmeCloudflareCopy)
             if (env != null && env.containsKey("CF_Token")) AcmeCloudflareCopy.afterRun(l);
         }
     }
 
     /**
-     * La sfida HTTP. Come acme, acme.sh non puo' aprire la porta 80 (--standalone): scrive il file
-     * della sfida nella sua cartella, e la porta la apre il pannello per il tempo del comando. Con
-     * un webroot dato dall'amministratore (un sito che risponde gia' sulla 80) acme ci scrive solo
-     * la cartella della sfida. Da root, prima della migrazione, resta tutto come prima.
+     * The HTTP challenge. As acme, acme.sh cannot open port 80 (--standalone): it writes the challenge
+     * file into its folder, and the panel opens the port for the duration of the command. With
+     * a webroot given by the administrator (a site that already answers on 80) acme only writes
+     * the challenge folder there. As root, before the migration, everything stays as before.
      */
     private String acmeWithHttpChallenge(String args, String webroot) throws Exception {
         AcmeUser.Layout l = layout();
@@ -195,7 +195,7 @@ public class AcmeManager {
         return withPort80(l, args + " -w " + AcmeUser.WEBROOT);
     }
 
-    /** acme.sh come acme con la porta 80 aperta dal pannello sulla cartella delle sfide. */
+    /** acme.sh as acme with port 80 opened by the panel on the challenge folder. */
     private String withPort80(AcmeUser.Layout l, String args) throws Exception {
         AcmeUser.prepareWebroot();
         try (AcmeUser.Challenge c = AcmeUser.Challenge.open()) {
@@ -205,14 +205,14 @@ public class AcmeManager {
         }
     }
 
-    /** L'account Let's Encrypt di acme.sh c'e' (il file che acme.sh scrive quando la registrazione riesce). */
+    /** The Let's Encrypt account of acme.sh exists (the file that acme.sh writes when registration succeeds). */
     public boolean hasAccount() {
         AcmeUser.Layout l = layout();
         return l != null && java.nio.file.Files.isRegularFile(java.nio.file.Path.of(l.home(),
                 "ca/acme-v02.api.letsencrypt.org/directory/account.json"), java.nio.file.LinkOption.NOFOLLOW_LINKS);
     }
 
-    /** La riga d'errore di acme.sh, corta, per dirla a chi ha premuto il pulsante. */
+    /** The error line of acme.sh, short, to tell whoever pressed the button. */
     static String acmeError(String output) {
         String best = "";
         for (String line : String.valueOf(output).split("\n")) {
@@ -226,8 +226,8 @@ public class AcmeManager {
     }
 
     /**
-     * Install acme.sh: il pacchetto security/acme.sh, che crea l'utente acme e installa il
-     * programma in /usr/local/sbin. Prima: "curl https://get.acme.sh | sh" da root.
+     * Install acme.sh: the security/acme.sh package, which creates the acme user and installs the
+     * program in /usr/local/sbin. Before: "curl https://get.acme.sh | sh" as root.
      */
     public InstallResult installAcme(String email) {
         if (!InputValidator.isValidEmail(email))
@@ -238,15 +238,15 @@ public class AcmeManager {
             String output = r.outputTrim();
             if (isAcmeInstalled() && layout().asAcme()) {
                 AcmeUser.prepareWebroot();
-                // L'account con la CA, con l'email per gli avvisi di scadenza. --server su ogni comando.
+                // The account with the CA, with the email for expiry warnings. --server on every command.
                 output += "\n" + acme("--register-account -m " + email + " --server letsencrypt");
             }
 
             if (isAcmeInstalled()) {
                 // Save email to database
                 database.setSetting("acme_email", email);
-                // L'account si guarda, non si deduce (reperto 247): con un indirizzo che Let's Encrypt rifiuta il
-                // pacchetto c'e' ma l'account no, e senza account nessun certificato.
+                // The account is checked, not inferred (finding 247): with an address that Let's Encrypt rejects the
+                // package is there but the account is not, and without an account there is no certificate.
                 if (hasAccount()) return new InstallResult(true, I18n.tr("server.acme.installed"), output);
                 return new InstallResult(false, I18n.tr("server.acme.noAccount", java.util.Map.of("why", acmeError(output))), output);
             } else {
@@ -271,7 +271,7 @@ public class AcmeManager {
             return new CertificateResult(false, I18n.tr("server.acme.notInstalled"), null);
         }
 
-        // SECURITY: validate hostname/domain prima di metterli in shell command
+        // SECURITY: validate hostname/domain before putting them in a shell command
         if (!InputValidator.isValidHostname(mailHostname) || !InputValidator.isValidDomain(domain)) {
             return new CertificateResult(false, I18n.tr("server.acme.badHostOrDomain"), null);
         }
@@ -280,24 +280,24 @@ public class AcmeManager {
         }
 
         try {
-            // I nomi da mettere nel certificato: l'hostname del server e autoconfig.
+            // The names to put in the certificate: the server's hostname and autoconfig.
             //
-            // "autodiscover" e' stato tolto insieme al resto: serviva solo a Outlook. Non e'
-            // pulizia estetica — acme.sh VALIDA ogni nome che gli si chiede, quindi lasciarlo
-            // qui dopo aver smesso di proporne il record significherebbe, su un dominio nuovo,
-            // far fallire l'emissione dell'INTERO certificato per un nome che non esiste e
-            // che nessuno usa. Un certificato che non si emette ferma la posta.
+            // "autodiscover" was removed together with the rest: it was only for Outlook. It is not
+            // cosmetic cleanup: acme.sh VALIDATES every name it is asked for, so leaving it
+            // here after we stopped proposing its record would mean, on a new domain,
+            // making the issuance of the WHOLE certificate fail for a name that does not exist
+            // and that nobody uses. A certificate that is not issued stops the mail.
             List<String> domains = new ArrayList<>();
             domains.add(mailHostname);
             domains.add("autoconfig." + domain);
-            // MTA-STS: e' proprio questo certificato a dimostrare che la politica viene dal
-            // proprietario del dominio, perche' il protocollo non usa DNSSEC. Senza il nome
-            // qui dentro, i server mittenti ignorano la politica.
+            // MTA-STS: it is this very certificate that proves the policy comes from the
+            // owner of the domain, because the protocol does not use DNSSEC. Without the name
+            // in here, sending servers ignore the policy.
             domains.add("mta-sts." + domain);
 
             // Build acme.sh command
             StringBuilder cmd = new StringBuilder();
-            // Vedi la nota in emitWithNames: la CA si dichiara a ogni comando.
+            // See the note in emitWithNames: the CA is declared on every command.
             cmd.append("--issue --server letsencrypt");
 
             // Add all domains
@@ -308,7 +308,7 @@ public class AcmeManager {
             // Force issue even if cert exists
             cmd.append(" --force");
 
-            // Challenge type. HTTP: la porta 80 la apre il pannello (acmeWithHttpChallenge).
+            // Challenge type. HTTP: port 80 is opened by the panel (acmeWithHttpChallenge).
             String output = "dns".equals(challengeType)
                     ? acme(cmd + " --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please")
                     : acmeWithHttpChallenge(cmd.toString(), webroot);
@@ -344,13 +344,13 @@ public class AcmeManager {
      * Deploy certificate to mail services
      */
     /**
-     * Certificato e chiave installati sono la stessa coppia.
+     * The installed certificate and key are the same pair.
      *
-     * Si confrontano le chiavi PUBBLICHE, non i moduli: "openssl rsa" non funziona su una
-     * chiave ellittica, e acme.sh emette certificati ECC per impostazione predefinita.
-     * Con "openssl pkey -pubout" il confronto vale per entrambi i tipi.
+     * The PUBLIC keys are compared, not the moduli: "openssl rsa" does not work on an
+     * elliptic-curve key, and acme.sh issues ECC certificates by default.
+     * With "openssl pkey -pubout" the comparison works for both types.
      */
-    /** Il certificato che i servizi stanno usando contiene quel nome fra i suoi SAN. */
+    /** The certificate the services are using contains that name among its SANs. */
     private boolean installedCertificateCovers(String name) {
         for (String n : installedCertificateNames())
             if (n.equalsIgnoreCase(name)) return true;
@@ -362,7 +362,7 @@ public class AcmeManager {
             || (c >= '0' && c <= '9') || c == '.' || c == '-';
     }
 
-    /** Solo lettere, cifre, punti e trattini: quello che un nome DNS puo' contenere. */
+    /** Only letters, digits, dots and hyphens: what a DNS name can contain. */
     static boolean allowedName(String n) {
         if (n == null || n.isBlank() || n.length() > 253) return false;
         for (int i = 0; i < n.length(); i++) {
@@ -377,13 +377,13 @@ public class AcmeManager {
     public static java.util.List<String> namesFromSubjectAltName(String opensslOutput) {
         java.util.List<String> names = new java.util.ArrayList<>();
         if (opensslOutput == null) return names;
-        // Dividere il testo per virgole non funziona: con "openssl -text" l'ULTIMO nome non
-        // e' seguito da una virgola, quindi il suo pezzo si allunga fino alla virgola
-        // successiva — molto piu' avanti, dentro un'altra estensione — e il nome sparisce.
-        // Con "-ext" invece l'intestazione sta attaccata al PRIMO nome. Quindi non divido:
-        // cerco ogni "DNS:", leggo i caratteri ammessi che seguono e pretendo che finiscano
-        // su virgola o fine riga. Cosi' i due formati danno lo stesso risultato, e nessun
-        // carattere diverso da quelli di un nome DNS puo' finire nella riga di comando.
+        // Splitting the text on commas does not work: with "openssl -text" the LAST name is
+        // not followed by a comma, so its piece stretches up to the next comma, much
+        // further on, inside another extension, and the name disappears.
+        // With "-ext", instead, the header is attached to the FIRST name. So I do not split:
+        // I look for every "DNS:", read the allowed characters that follow and require them
+        // to end at a comma or at the end of the line. This way the two formats give the same
+        // result, and no character other than those of a DNS name can end up in the command line.
         final int end = opensslOutput.length();
         int i = 0;
         while ((i = opensslOutput.indexOf("DNS:", i)) >= 0) {
@@ -400,10 +400,10 @@ public class AcmeManager {
     }
 
     /**
-     * I nomi che il certificato ATTUALMENTE in uso copre.
-     * Serve al rinnovo: "--issue --force" con un solo "-d" ridefinisce l'insieme dei nomi,
-     * quindi rinnovare senza rileggerli farebbe sparire i mta-sts.* e autoconfig.* —
-     * con i record MTA-STS gia' pubblicati, la posta verrebbe rifiutata.
+     * The names covered by the certificate CURRENTLY in use.
+     * They are needed for renewal: "--issue --force" with a single "-d" redefines the set of names,
+     * so renewing without rereading them would make the mta-sts.* and autoconfig.* disappear:
+     * with the MTA-STS records already published, mail would be rejected.
      */
     public java.util.List<String> installedCertificateNames() {
         try {
@@ -426,7 +426,7 @@ public class AcmeManager {
             String a = fromCert.replaceAll("\\s+", ""), b = fromKey.replaceAll("\\s+", "");
             return !a.isEmpty() && a.equals(b);
         } catch (Exception e) {
-            // Non essere riusciti a verificare non e' una promozione: si torna indietro.
+            // Failing to verify is not a promotion: we go back.
             return false;
         }
     }
@@ -436,14 +436,16 @@ public class AcmeManager {
     }
 
     /**
-     * I servizi che presentano il certificato della posta, dopo che i file sono cambiati: ognuno controllato e
-     * ricaricato da solo, poi guardato dal vivo. Torna i problemi (vuoto se e' tutto a posto); in out cosa e' successo.
+     * The services that present the mail certificate, after the files have changed: each one checked and
+     * reloaded on its own, then looked at live. Returns the problems (empty if everything is fine); in out, what
+     * happened.
      *
-     * Prima il deploy riscriveva conf.d/10-ssl.conf con la sintassi di Dovecot 2.3 e ricaricava tutto con
-     * "service X reload 2>/dev/null || echo". Il 17/11/2026, al primo rinnovo vero sul server con Dovecot 2.4, la
-     * configurazione di Dovecot e' diventata invalida (ssl_cert: Unknown setting), il reload e' stato rifiutato senza
-     * che nessuno lo sapesse, la 993 ha continuato a presentare il certificato vecchio e al primo riavvio Dovecot non
-     * sarebbe ripartito. Le configurazioni le scrive l'installazione, e puntano gia' a questi file: qui non si toccano.
+     * Before, the deploy rewrote conf.d/10-ssl.conf with Dovecot 2.3 syntax and reloaded everything with
+     * "service X reload 2>/dev/null || echo". On 2026-11-17, at the first real renewal on the server with Dovecot
+     * 2.4, the Dovecot configuration became invalid (ssl_cert: Unknown setting), the reload was refused without
+     * anyone knowing, 993 kept presenting the old certificate, and at the first restart Dovecot would not have come
+     * back up. The configurations are written by the installation, and already point to these files: they are not
+     * touched here.
      */
     java.util.List<String> reloadAndVerify(StringBuilder out) {
         java.util.List<String> problems = new java.util.ArrayList<>();
@@ -451,8 +453,9 @@ public class AcmeManager {
         java.util.List<int[]> ports = new java.util.ArrayList<>();
         java.util.List<String> portNames = new java.util.ArrayList<>();
 
-        // Prima il controllo della configurazione e il reload; solo con una configurazione buona ha senso chiedere quale
-        // file usa (rotta, doveconf non risponde e sembrerebbe "non usa il certificato").
+        // First the configuration check and the reload; only with a good configuration does it make sense to ask which
+        // file it uses (when it is broken, doveconf does not answer and it would look like "does not use the
+        // certificate").
         if (org.daemoxcp.mail.util.Shell.run(t, "service", "dovecot", "status").success()) {
             if (reloadChecked("Dovecot", "doveconf -n", "service dovecot reload", problems, out)) {
                 String file = org.daemoxcp.mail.util.Shell.runShell(t,
@@ -484,8 +487,8 @@ public class AcmeManager {
         }
         if (!problems.isEmpty()) return problems;
 
-        // Lo sguardo che conta: che cosa presenta davvero chi si collega. Dovecot ricarica in un momento suo, quindi
-        // si riprova per qualche secondo prima di dire che ha ancora il certificato di prima.
+        // The look that counts: what whoever connects is really presented with. Dovecot reloads at a moment of its own,
+        // so it retries for a few seconds before saying that it still has the previous certificate.
         String expected = serialOf(Paths.get(CERT_FILE));
         if (expected == null) {
             problems.add(I18n.tr("server.acme.unreadable", java.util.Map.of("f", CERT_FILE)));
@@ -509,9 +512,9 @@ public class AcmeManager {
     }
 
     /**
-     * Il controllo della configurazione, poi il reload; un rifiuto diventa un problema detto, mai un "ricaricato".
-     * Vero se il servizio e' stato ricaricato. Del controllo si tiene l'errore (stderr), non quello che stampa quando
-     * va bene (doveconf -n stampa tutta la configurazione).
+     * The configuration check, then the reload; a refusal becomes a stated problem, never a "reloaded".
+     * True if the service was reloaded. Of the check, the error (stderr) is kept, not what it prints when it goes
+     * well (doveconf -n prints the whole configuration).
      */
     private static boolean reloadChecked(String name, String check, String reload, java.util.List<String> problems, StringBuilder out) {
         java.time.Duration t = java.time.Duration.ofSeconds(60);
@@ -536,14 +539,14 @@ public class AcmeManager {
         return l.length() > 300 ? l.substring(0, 300) : l;
     }
 
-    /** Il nome con cui chiedere a nginx sulla 443 il certificato della posta: un mta-sts.* che il certificato copre. */
+    /** The name with which to ask nginx on 443 for the mail certificate: an mta-sts.* that the certificate covers. */
     static String sniFor443(java.util.List<String> names) {
         if (names == null) return null;
         for (String n : names) if (n != null && n.toLowerCase(java.util.Locale.ROOT).startsWith("mta-sts.")) return n;
         return null;
     }
 
-    /** Il numero di serie (esadecimale, maiuscolo) del primo certificato del file, o null. */
+    /** The serial number (hexadecimal, uppercase) of the first certificate in the file, or null. */
     static String serialOf(Path pem) {
         try (java.io.InputStream in = Files.newInputStream(pem)) {
             java.security.cert.X509Certificate c = (java.security.cert.X509Certificate)
@@ -555,8 +558,8 @@ public class AcmeManager {
     }
 
     /**
-     * Il numero di serie del certificato che presenta chi ascolta su host:porta (TLS subito, come 993, 465 e 443), o
-     * null. Si legge e basta: nessuna fiducia serve per guardare un certificato, e non si manda niente.
+     * The serial number of the certificate presented by whoever listens on host:port (TLS straight away, like 993,
+     * 465 and 443), or null. It is only read: no trust is needed to look at a certificate, and nothing is sent.
      */
     static String servedSerial(String host, int port, String sni, int timeoutMs) {
         try {
@@ -586,11 +589,11 @@ public class AcmeManager {
     }
 
     /**
-     * Estrae dall'uscita di acme.sh la cartella in cui ha DAVVERO scritto.
-     * acme.sh la dichiara sempre: "Your cert is in: /percorso/host.cer".
-     * Leggerla invece di ricostruirla e' l'unico modo per non ricopiare un file
-     * vecchio quando acme.sh ha lavorato altrove: era esattamente il caso in cui
-     * HOME mancava e la cartella diventava "/.acme.sh".
+     * Extracts from the output of acme.sh the folder where it REALLY wrote.
+     * acme.sh always declares it: "Your cert is in: /path/host.cer".
+     * Reading it instead of rebuilding it is the only way not to copy an old file
+     * again when acme.sh worked elsewhere: that was exactly the case in which
+     * HOME was missing and the folder became "/.acme.sh".
      */
     static Path declaredFolder(String acmeOutput) {
         if (acmeOutput == null) return null;
@@ -599,7 +602,7 @@ public class AcmeManager {
             if (i < 0) continue;
             String path = line.substring(i + "Your cert is in:".length()).trim();
             if (path.isEmpty()) continue;
-            // acme.sh puo' stampare "//.acme.sh/..." quando HOME e' vuoto: normalizzo
+            // acme.sh can print "//.acme.sh/..." when HOME is empty: I normalize
             while (path.contains("//")) path = path.replace("//", "/");
             Path f = Paths.get(path);
             Path dir = f.getParent();
@@ -617,7 +620,7 @@ public class AcmeManager {
             // Create SSL directory
             Files.createDirectories(Paths.get(SSL_DIR));
 
-            // La cartella che acme.sh ha DICHIARATO batte qualunque ricostruzione nostra.
+            // The folder that acme.sh DECLARED beats any reconstruction of ours.
             Path source = declaredFolder(acmeOutput);
             if (source != null && !Files.exists(source.resolve(mailHostname + ".cer"))) source = null;
 
@@ -640,12 +643,12 @@ public class AcmeManager {
                 return new DeployResult(false, I18n.tr("server.acme.filesNotFound", java.util.Map.of("d", String.valueOf(source))), null);
             }
 
-            // COPIA DI SICUREZZA prima di sovrascrivere.
+            // BACKUP COPY before overwriting.
             //
-            // Qui si sostituisce il certificato con cui rispondono dovecot, postfix e nginx:
-            // se il nuovo fosse difettoso, il vecchio — che funzionava — non esisterebbe piu',
-            // e i tre servizi verrebbero ricaricati con un certificato rotto. Un'operazione
-            // irreversibile su qualcosa che funziona non si fa senza una via di ritorno.
+            // Here the certificate that dovecot, postfix and nginx answer with is replaced:
+            // if the new one were faulty, the old one, which worked, would no longer exist,
+            // and the three services would be reloaded with a broken certificate. An
+            // irreversible operation on something that works is not done without a way back.
             java.util.Map<String, String> saved = new java.util.HashMap<>();
             try {
                 Path copyDir = Paths.get("/var/db/daemoxcp-mail/ssl-previous");
@@ -671,12 +674,12 @@ public class AcmeManager {
                 Files.copy(acmeCa, Paths.get(CA_FILE), StandardCopyOption.REPLACE_EXISTING);
             }
 
-            // La chiave corrisponde al certificato?
+            // Does the key match the certificate?
             //
-            // Si confrontano le due chiavi PUBBLICHE: quella dentro il certificato e quella
-            // ricavata dalla chiave privata. Se non coincidono, i servizi ripartono con una
-            // coppia incoerente e ogni connessione TLS fallisce: la posta si ferma del tutto.
-            // Meglio accorgersene qui, con la copia ancora a portata di mano.
+            // The two PUBLIC keys are compared: the one inside the certificate and the one
+            // derived from the private key. If they do not match, the services restart with an
+            // inconsistent pair and every TLS connection fails: mail stops completely.
+            // Better to notice it here, with the copy still at hand.
             if (!consistentPair()) {
                 for (java.util.Map.Entry<String, String> e : saved.entrySet()) {
                     try {
@@ -698,8 +701,8 @@ public class AcmeManager {
 
             executeScript(permScript);
 
-            // Le configurazioni dei servizi non si riscrivono: puntano gia' a questi file. I servizi si ricaricano uno
-            // per uno dopo il loro controllo, e poi si guarda dal vivo che cosa presentano (reloadAndVerify).
+            // The configurations of the services are not rewritten: they already point to these files. The services are
+            // reloaded one by one after their check, and then what they present is looked at live (reloadAndVerify).
             StringBuilder reloadOutput = new StringBuilder();
             java.util.List<String> problems = reloadAndVerify(reloadOutput);
             if (!problems.isEmpty())
@@ -725,10 +728,10 @@ public class AcmeManager {
             return new CertificateResult(false, I18n.tr("server.acme.badHostname"), null);
         }
 
-        // Se il dominio ha un account Cloudflare collegato, rinnova in modo
-        // completamente automatico via API Cloudflare (acme.sh dns_cf).
-        // Questo è l'unico modo per auto-rinnovare i certificati emessi in
-        // modalità DNS manuale, che acme.sh NON può rinnovare da solo.
+        // If the domain has a linked Cloudflare account, it renews in a
+        // fully automatic way via the Cloudflare API (acme.sh dns_cf).
+        // This is the only way to auto-renew certificates issued in
+        // manual DNS mode, which acme.sh CANNOT renew on its own.
         MailDatabase.CloudflareAccount cf = cloudflareAccountForHostname(mailHostname);
         if (cf != null && cf.apiToken != null && !cf.apiToken.isBlank()) {
             return renewViaCloudflare(mailHostname, cf);
@@ -738,14 +741,14 @@ public class AcmeManager {
     }
 
     /**
-     * Rinnovo "standard": funziona per i certificati HTTP-01 e per quelli già
-     * configurati con un provider DNS API. I certificati in modalità DNS manuale
-     * NON sono rinnovabili automaticamente da acme.sh: in quel caso restituiamo
-     * un messaggio esplicito invece del generico "Rinnovo fallito".
+     * "Standard" renewal: it works for HTTP-01 certificates and for those already
+     * configured with a DNS API provider. Certificates in manual DNS mode
+     * CANNOT be renewed automatically by acme.sh: in that case we return
+     * an explicit message instead of the generic "Renewal failed".
      */
     private CertificateResult renewStandard(String mailHostname) {
         try {
-            // Un certificato chiesto con la sfida HTTP si rinnova con la stessa: la porta 80 di nuovo.
+            // A certificate requested with the HTTP challenge is renewed with the same one: port 80 again.
             String cmd = "--renew -d " + mailHostname + " --force";
             AcmeUser.Layout l = layout();
             Path dir = l == null ? null : l.certDir(mailHostname);
@@ -762,7 +765,7 @@ public class AcmeManager {
                     output + "\n" + (deployResult.output != null ? deployResult.output : ""));
             }
 
-            // acme.sh non può rinnovare automaticamente i certificati DNS-manuali
+            // acme.sh cannot automatically renew manual-DNS certificates
             if (output.contains("manual mode") || output.contains("can not be renewed")
                     || output.contains("cannot be renewed")) {
                 return new CertificateResult(false,
@@ -778,21 +781,21 @@ public class AcmeManager {
     }
 
     /**
-     * Rinnovo via API Cloudflare (acme.sh --dns dns_cf). Ri-emette il certificato
-     * usando il token CF dell'account collegato al dominio; questo migra anche un
-     * certificato DNS-manuale a rinnovo automatico per le volte successive.
-     * Il token viene passato come variabile d'ambiente, mai sulla command line.
+     * Renewal via the Cloudflare API (acme.sh --dns dns_cf). Re-issues the certificate
+     * using the CF token of the account linked to the domain; this also migrates a
+     * manual-DNS certificate to automatic renewal for the following times.
+     * The token is passed as an environment variable, never on the command line.
      */
     /**
-     * Emette il certificato per l'hostname PIU' i nomi indicati, via API Cloudflare.
+     * Issues the certificate for the hostname PLUS the given names, via the Cloudflare API.
      *
-     * Serve perche' MTA-STS e la configurazione automatica dei client vivono su nomi
-     * dedicati — mta-sts.<dominio> e autoconfig.<dominio> — e il certificato deve coprirli:
-     * senza, il client o il server mittente si ferma all'errore TLS e non legge niente.
+     * It is needed because MTA-STS and the automatic configuration of clients live on dedicated
+     * names (mta-sts.<domain> and autoconfig.<domain>) and the certificate must cover them:
+     * without that, the client or the sending server stops at the TLS error and reads nothing.
      *
-     * Un limite da conoscere: acme.sh valida tutti i nomi con UN SOLO token Cloudflare.
-     * I domini che stanno su un altro account non si possono includere qui, e chi chiama
-     * deve escluderli prima invece di far fallire l'intera emissione per colpa di uno.
+     * A limit to be aware of: acme.sh validates all the names with ONE SINGLE Cloudflare token.
+     * Domains that are on another account cannot be included here, and the caller must
+     * exclude them first instead of making the whole issuance fail because of one of them.
      */
     public CertificateResult emitWithNames(String mailHostname, java.util.List<String> extraNames) {
         MailDatabase.CloudflareAccount cf = cloudflareAccountForHostname(mailHostname);
@@ -802,20 +805,20 @@ public class AcmeManager {
         if (!InputValidator.isValidHostname(mailHostname))
             return new CertificateResult(false, I18n.tr("server.acme.badHostnameNamed", java.util.Map.of("h", String.valueOf(mailHostname))), null);
 
-        // --server letsencrypt su OGNI comando, non una volta sola in fase di installazione.
-        // La documentazione di acme.sh dice: "For now, the default CA is zerossl. If you want
-        // to use another CA, you need to specify --server for each command." Il default lo
-        // impostava lo script di installazione, ma un aggiornamento di acme.sh lo riporta a
-        // ZeroSSL — che pretende una registrazione con email e fa fallire l'emissione con un
-        // messaggio che non c'entra niente con il certificato. Un default impostato altrove
-        // e' una dipendenza nascosta: meglio dirlo ogni volta.
+        // --server letsencrypt on EVERY command, not just once at installation time.
+        // The acme.sh documentation says: "For now, the default CA is zerossl. If you want
+        // to use another CA, you need to specify --server for each command." The default was
+        // set by the installation script, but an update of acme.sh puts it back to
+        // ZeroSSL, which demands a registration with an email and makes the issuance fail with a
+        // message that has nothing to do with the certificate. A default set elsewhere
+        // is a hidden dependency: better to say it every time.
         StringBuilder cmd = new StringBuilder("--issue --server letsencrypt --dns dns_cf -d " + mailHostname);
         java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
         seen.add(mailHostname.toLowerCase(java.util.Locale.ROOT));
         if (extraNames != null) for (String n : extraNames) {
             if (n == null) continue;
             String x = n.trim().toLowerCase(java.util.Locale.ROOT);
-            // Ogni nome finisce in una riga di comando: si controlla, non si spera.
+            // Every name ends up in a command line: it is checked, not hoped for.
             if (x.isEmpty() || !InputValidator.isValidHostname(x) || !seen.add(x)) continue;
             cmd.append(" -d ").append(x);
         }
@@ -825,10 +828,10 @@ public class AcmeManager {
             Map<String, String> env = new HashMap<>();
             env.put("CF_Token", cf.apiToken);
             String output = sanitize(acme(cmd.toString(), env), cf.apiToken);
-            // "Skipping. Next renewal time" NON e' un successo quando si chiedono nomi nuovi:
-            // vuol dire che acme.sh ha lasciato il certificato com'era. Contarlo come riuscito
-            // faceva installare quello vecchio e dichiarare "emesso con 11 nomi" una cosa che
-            // di nomi ne aveva gli stessi di prima.
+            // "Skipping. Next renewal time" is NOT a success when new names are requested:
+            // it means that acme.sh left the certificate as it was. Counting it as successful
+            // got the old one installed and declared "issued with 11 names" something that
+            // had the same names as before.
             boolean issued = output.contains("Cert success") || output.contains("Cert renewed");
             if (!issued) {
                 String why = output.contains("Skipping. Next renewal time")
@@ -841,10 +844,10 @@ public class AcmeManager {
             if (!dep.success)
                 return new CertificateResult(false, I18n.tr("server.acme.issueOkDeployFailed", java.util.Map.of("m", String.valueOf(dep.message))), output + "\n" + (dep.output != null ? dep.output : ""));
 
-            // LA verifica che conta: il certificato INSTALLATO contiene davvero i nomi chiesti?
-            // Che acme.sh non abbia protestato non basta — puo' aver scritto in una cartella
-            // diversa da quella da cui il deploy copia, e l'esito sarebbe "riuscito" con il
-            // vecchio certificato ancora al suo posto.
+            // THE check that counts: does the INSTALLED certificate really contain the requested names?
+            // That acme.sh did not complain is not enough: it may have written into a folder
+            // other than the one the deploy copies from, and the outcome would be "successful" with the
+            // old certificate still in its place.
             java.util.List<String> missing = new java.util.ArrayList<>();
             for (String n : seen) if (!installedCertificateCovers(n)) missing.add(n);
             if (!missing.isEmpty())
@@ -859,7 +862,7 @@ public class AcmeManager {
         }
     }
 
-    /** L'account Cloudflare collegato a un dominio, per sapere se condivide quello del certificato. */
+    /** The Cloudflare account linked to a domain, to know whether it shares the one of the certificate. */
     public MailDatabase.CloudflareAccount accountOf(int domainId) {
         try {
             return database.getCloudflareAccountForDomain(domainId);
@@ -868,7 +871,7 @@ public class AcmeManager {
         }
     }
 
-    /** L'account usato per il certificato dell'hostname. */
+    /** The account used for the hostname's certificate. */
     public MailDatabase.CloudflareAccount certificateAccount(String mailHostname) {
         return cloudflareAccountForHostname(mailHostname);
     }
@@ -876,13 +879,13 @@ public class AcmeManager {
     private CertificateResult renewViaCloudflare(String mailHostname, MailDatabase.CloudflareAccount cf) {
         try {
             Map<String, String> env = new HashMap<>();
-            // Token "scoped" Cloudflare: richiede permessi Zone:DNS:Edit + Zone:Read
+            // Cloudflare "scoped" token: requires the Zone:DNS:Edit + Zone:Read permissions
             env.put("CF_Token", cf.apiToken);
 
-            // "--issue --force" RIDEFINISCE l'insieme dei nomi. Se rinnovassimo con il solo
-            // hostname, il certificato tornerebbe a coprirlo da solo e i mta-sts.* sparirebbero:
-            // con i record MTA-STS gia' pubblicati vuol dire posta RIFIUTATA, settimane dopo,
-            // senza che nessuno abbia toccato niente. Quindi rileggo i nomi da quello in uso.
+            // "--issue --force" REDEFINES the set of names. If we renewed with the hostname
+            // alone, the certificate would go back to covering only it and the mta-sts.* would disappear:
+            // with the MTA-STS records already published that means mail REJECTED, weeks later,
+            // without anyone having touched anything. So I reread the names from the one in use.
             StringBuilder cmd = new StringBuilder(
                     "--issue --server letsencrypt --dns dns_cf -d " + mailHostname);
             java.util.List<String> keep = new java.util.ArrayList<>();
@@ -910,17 +913,17 @@ public class AcmeManager {
     }
 
     /**
-     * Risale all'account Cloudflare da usare per il certificato del server mail.
+     * Works out the Cloudflare account to use for the mail server's certificate.
      *
-     * Il certificato è emesso per il <b>Mail Hostname</b> (es. mail.azienda.com), il cui
-     * dominio base (azienda.com) NON è necessariamente tra i domini mail gestiti.
-     * Per questo l'account si sceglie esplicitamente dalla pagina Cloudflare e viene
-     * salvato in {@link #SETTING_CF_ACCOUNT_ID}. Solo come fallback proviamo a dedurlo
-     * dai domini mail (nel caso l'hostname stia sotto un dominio mail già collegato).
+     * The certificate is issued for the <b>Mail Hostname</b> (e.g. mail.company.com), whose
+     * base domain (company.com) is NOT necessarily among the managed mail domains.
+     * That is why the account is chosen explicitly from the Cloudflare page and is
+     * saved in {@link #SETTING_CF_ACCOUNT_ID}. Only as a fallback do we try to infer it
+     * from the mail domains (in case the hostname is under a mail domain already linked).
      */
     private MailDatabase.CloudflareAccount cloudflareAccountForHostname(String hostname) {
         try {
-            // 1) Scelta esplicita per il certificato del server mail
+            // 1) Explicit choice for the mail server's certificate
             String idStr = database.getSetting(SETTING_CF_ACCOUNT_ID, "");
             if (idStr != null && !idStr.isBlank()) {
                 int id = Integer.parseInt(idStr.trim());
@@ -929,8 +932,8 @@ public class AcmeManager {
                     if (a != null) return a;
                 }
             }
-            // 2) Fallback: hostname che ricade sotto un dominio mail già assegnato
-            // mail.example.com -> example.com (ma prova anche l'hostname intero)
+            // 2) Fallback: a hostname that falls under a mail domain already assigned
+            // mail.example.com -> example.com (but also try the whole hostname)
             String domain = hostname.replaceFirst("^[^.]+\\.", "");
             MailDatabase.Domain d = database.getDomainByName(domain);
             if (d == null) {
@@ -944,7 +947,7 @@ public class AcmeManager {
         }
     }
 
-    /** Id dell'account Cloudflare scelto per il certificato del server mail (0 = nessuno). */
+    /** Id of the Cloudflare account chosen for the mail server's certificate (0 = none). */
     public int getMailCertCloudflareAccountId() {
         try {
             String v = database.getSetting(SETTING_CF_ACCOUNT_ID, "");
@@ -952,12 +955,12 @@ public class AcmeManager {
         } catch (Exception e) { return 0; }
     }
 
-    /** Imposta (o azzera con 0) l'account Cloudflare usato per il certificato del server mail. */
+    /** Sets (or clears with 0) the Cloudflare account used for the mail server's certificate. */
     public void setMailCertCloudflareAccountId(int accountId) {
         database.setSetting(SETTING_CF_ACCOUNT_ID, accountId > 0 ? String.valueOf(accountId) : "");
     }
 
-    /** Rimuove il token dall'output prima di restituirlo/loggarlo. */
+    /** Removes the token from the output before returning/logging it. */
     private String sanitize(String output, String token) {
         if (output == null || token == null || token.isBlank()) return output;
         return output.replace(token, "***");
@@ -965,8 +968,8 @@ public class AcmeManager {
 
     /**
      * Check and renew certificates that are about to expire.
-     * Salva sempre last_check, last_result e (se rinnovato) last_renewal.
-     * Se forceRun = false, viene saltato quando auto-renewal è disabilitato.
+     * Always saves last_check, last_result and (if renewed) last_renewal.
+     * If forceRun = false, it is skipped when auto-renewal is disabled.
      */
     public CertificateResult checkAndRenewCertificates(boolean forceRun) {
         String now = LocalDateTime.now().toString();
@@ -1024,10 +1027,10 @@ public class AcmeManager {
     }
 
     /**
-     * Compone il messaggio d'esito del rinnovo.
-     * Su SUCCESSO mostra la NUOVA scadenza (rileggendo il certificato appena installato),
-     * non i giorni che mancavano prima — così non sembra che "rinnovi e scada subito".
-     * Su FALLIMENTO mantiene il contesto (quanti giorni mancavano).
+     * Builds the message with the outcome of the renewal.
+     * On SUCCESS it shows the NEW expiry (rereading the certificate just installed),
+     * not the days that were left before, so it does not look as if it "renews and expires at once".
+     * On FAILURE it keeps the context (how many days were left).
      */
     private String renewalSummary(CertificateResult result, long daysBefore, boolean wasExpired) {
         if (result.success) {
@@ -1043,7 +1046,7 @@ public class AcmeManager {
         return (wasExpired ? I18n.tr("server.acme.expiredRenew") : I18n.tr("server.acme.renewDaysLeft", java.util.Map.of("n", String.valueOf(daysBefore)))) + " " + result.message;
     }
 
-    /** Backward-compatible — chiama checkAndRenewCertificates(false) */
+    /** Backward-compatible -- calls checkAndRenewCertificates(false) */
     public void checkAndRenewCertificates() {
         checkAndRenewCertificates(false);
     }
@@ -1073,8 +1076,8 @@ public class AcmeManager {
                 info.commonName = cnMatcher.group(1).trim();
             }
 
-            // Parse issuer: estrai sia l'Organizzazione (O=, il nome reale della CA)
-            // sia il CN (il codice breve dell'intermedio). Mostra entrambi: "O (CN)".
+            // Parse issuer: extract both the Organization (O=, the real name of the CA)
+            // and the CN (the short code of the intermediate). Show both: "O (CN)".
             String issuerLine = "";
             Pattern issuerLinePattern = Pattern.compile("issuer\\s*=\\s*(.+)");
             java.util.regex.Matcher issuerLineMatcher = issuerLinePattern.matcher(output);
@@ -1098,7 +1101,7 @@ public class AcmeManager {
             } else if (issuerCn != null) {
                 info.issuer = issuerCn;
             }
-            // "Let's Encrypt" si riconosce dall'Organizzazione, non dal codice dell'intermedio
+            // "Let's Encrypt" is recognized by the Organization, not by the code of the intermediate
             String issuerLc = (issuerOrg != null ? issuerOrg : "").toLowerCase();
             info.letsEncrypt = issuerLc.contains("let's encrypt") || issuerLc.contains("lets encrypt");
 
@@ -1285,10 +1288,10 @@ public class AcmeManager {
                     I18n.tr("server.acme.noChallenge"), null);
             }
 
-            // Verify TXT record exists using dig. Il nome del record non si prende da MySQL (dns_challenge_domain):
-            // col pannello separato MySQL lo scrive anche la parte web, e il nome finiva in un comando di shell
-            // eseguito da root. E' sempre _acme-challenge.<nome> (RFC 8555, 8.4), e il nome e' gia' controllato
-            // qui sopra; dig parte senza shell.
+            // Verify TXT record exists using dig. The record name is not taken from MySQL (dns_challenge_domain):
+            // with the separated panel, MySQL is also written by the web part, and the name ended up in a shell command
+            // run by root. It is always _acme-challenge.<name> (RFC 8555, 8.4), and the name has already been checked
+            // above; dig starts without a shell.
             String challengeName = "_acme-challenge." + hostname;
             if (txtDomain != null && !txtDomain.equalsIgnoreCase(challengeName))
                 java.util.logging.Logger.getLogger(AcmeManager.class.getName()).warning("[ACME] the saved challenge record " + (SafeNames.domain(txtDomain.replace("_", "x")) ? txtDomain : "(invalid name)")
@@ -1348,7 +1351,7 @@ public class AcmeManager {
             if (keyContent == null || keyContent.trim().isEmpty()) {
                 return new CertificateResult(false, I18n.tr("server.acme.emptyKey"), null);
             }
-            // SECURITY: validate hostname (usato per scrivere su disco e per nginx config)
+            // SECURITY: validate hostname (used to write to disk and for the nginx config)
             if (hostname != null && !hostname.isEmpty() && !InputValidator.isValidHostname(hostname)) {
                 return new CertificateResult(false, I18n.tr("server.acme.badHostname"), null);
             }
@@ -1392,7 +1395,7 @@ public class AcmeManager {
                 """.formatted(CERT_FILE, KEY_FILE, FULLCHAIN_FILE, SSL_DIR);
             executeScript(permScript);
 
-            // Come nel deploy di Let's Encrypt: niente configurazioni riscritte, ricarica controllata e sguardo dal vivo.
+            // As in the Let's Encrypt deploy: no rewritten configurations, a checked reload and a live look.
             StringBuilder reloadLog = new StringBuilder();
             java.util.List<String> problems = reloadAndVerify(reloadLog);
             String reloadOutput = reloadLog.toString();
@@ -1486,15 +1489,15 @@ public class AcmeManager {
     }
 
     /**
-     * Esegue un comando shell, opzionalmente con variabili d'ambiente extra.
-     * Le env vengono passate via ProcessBuilder.environment() (NON sulla command line),
-     * così segreti come CF_Token non finiscono in argv né nei log di processo.
+     * Runs a shell command, optionally with extra environment variables.
+     * The env vars are passed via ProcessBuilder.environment() (NOT on the command line),
+     * so secrets such as CF_Token do not end up in argv or in the process logs.
      */
     private String executeCommand(String command, Map<String, String> extraEnv) throws Exception {
         // TODO: migrate to Shell.run when touched
         ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", command);
         org.daemoxcp.mail.util.Shell.applyPath(pb);
-        // rc.d non passa HOME. Senza, acme.sh calcola "$HOME/.acme.sh" = "/.acme.sh".
+        // rc.d does not pass HOME. Without it, acme.sh computes "$HOME/.acme.sh" = "/.acme.sh".
         pb.environment().putIfAbsent("HOME", "/root");
         pb.redirectErrorStream(true);
         if (extraEnv != null) {

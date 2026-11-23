@@ -13,21 +13,21 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * I nomi che le versioni vecchie del pannello hanno lasciato sui server, e quelli di adesso.
+ * The names that old versions of the panel left on the servers, and the current ones.
  *
- * <p>Fino a fine ottobre 2026 il pannello scriveva sul disco e nei servizi nomi italiani: file e
- * cartelle, la jail della 443, i boot environment, le chiavi dello stato del salto di versione,
- * la frequenza del rapporto. Il codice adesso e' tutto in inglese (r26), ma i server gia' avviati
- * hanno ancora quei nomi, e il pannello nuovo li deve riconoscere per portarli ai nomi di adesso
- * senza rompere niente.
+ * <p>Until the end of October 2026 the panel wrote Italian names on disk and in the services: files and
+ * folders, the jail of 443, the boot environments, the keys of the version-jump state, the report
+ * frequency. The code is now all in English (r26), but servers already running still have those
+ * names, and the new panel must recognise them to bring them to the current names without breaking
+ * anything.
  *
- * <p>Quei nomi vecchi stanno in un posto solo, il file di dati legacy-names.json dentro il jar,
- * e non nel codice: e' una scelta del committente (30/10/2026). Ogni sezione e' un elenco di
- * coppie [vecchio, nuovo], nell'ordine in cui vanno applicate (dove conta: una cartella prima dei
- * file che contiene). Il codice chiede la sezione e non scrive mai un nome vecchio.
+ * <p>Those old names live in one place only, the data file legacy-names.json inside the jar,
+ * and not in the code: it is the owner's choice (2026-10-30). Each section is a list of
+ * [old, new] pairs, in the order in which they must be applied (where it matters: a folder before
+ * the files it contains). The code asks for the section and never writes an old name.
  *
- * <p>Quando nessun server avra' piu' una versione di prima, il file si svuota e il codice che lo
- * legge non trova piu' niente da fare.
+ * <p>When no server has a version from before any more, the file is emptied and the code that
+ * reads it no longer finds anything to do.
  */
 public final class LegacyNames {
 
@@ -45,8 +45,8 @@ public final class LegacyNames {
             if (in == null) throw new IllegalStateException(RESOURCE + " is not in the jar");
             d = new JSONObject(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (Exception e) {
-            // Senza il file le migrazioni non trovano niente da fare: il pannello parte lo stesso,
-            // ma lo deve dire, perche' un server vecchio resterebbe a meta'.
+            // Without the file the migrations find nothing to do: the panel starts anyway,
+            // but it must say so, because an old server would be left halfway.
             LOGGER.severe("[LegacyNames] cannot read " + RESOURCE + ": " + e);
             d = new JSONObject();
         }
@@ -54,7 +54,7 @@ public final class LegacyNames {
         return d;
     }
 
-    /** Le coppie [vecchio, nuovo] di una sezione, nell'ordine del file. */
+    /** The [old, new] pairs of a section, in the file's order. */
     public static List<String[]> pairs(String section) {
         JSONArray a = data().optJSONArray(section);
         if (a == null) return List.of();
@@ -66,28 +66,28 @@ public final class LegacyNames {
         return Collections.unmodifiableList(out);
     }
 
-    /** La stessa sezione come mappa vecchio -> nuovo, nell'ordine del file. */
+    /** The same section as an old -> new map, in the file's order. */
     public static Map<String, String> map(String section) {
         Map<String, String> m = new LinkedHashMap<>();
         for (String[] p : pairs(section)) m.put(p[0], p[1]);
         return m;
     }
 
-    /** I nomi vecchi che oggi si chiamano {@code current}. */
+    /** The old names that are now called {@code current}. */
     public static List<String> oldNamesOf(String section, String current) {
         List<String> out = new ArrayList<>();
         for (String[] p : pairs(section)) if (p[1].equals(current)) out.add(p[0]);
         return out;
     }
 
-    /** Il nome di adesso: quello nuovo se {@code value} e' un nome vecchio, altrimenti com'e'. */
+    /** The current name: the new one if {@code value} is an old name, otherwise as it is. */
     public static String current(String section, String value) {
         if (value == null) return null;
         for (String[] p : pairs(section)) if (p[0].equals(value)) return p[1];
         return value;
     }
 
-    /** Il nome vecchio della sezione che ne ha uno solo, o "" se non c'e'. */
+    /** The old name of the section that has only one, or "" if there is none. */
     public static String single(String section) {
         List<String[]> p = pairs(section);
         return p.isEmpty() ? "" : p.get(0)[0];

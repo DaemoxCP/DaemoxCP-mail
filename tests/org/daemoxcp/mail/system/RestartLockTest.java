@@ -6,7 +6,7 @@ import java.nio.file.Path;
 import org.daemoxcp.mail.webserver.Access;
 
 /**
- * The rules behind "no change while a restart is scheduled" (RestartLock, reperto 200), with no system underneath:
+ * The rules behind "no change while a restart is scheduled" (RestartLock, finding 200), with no system underneath:
  *
  *  1. which requests change something (Access.changes): GET never; a POST does, unless its action only reads or its
  *     permission only views;

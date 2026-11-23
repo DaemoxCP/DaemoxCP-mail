@@ -23,44 +23,45 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Una versione nuova del pannello: la si cerca fra le release di GitHub una volta al giorno, e la si dice, con il
- * link alla pagina della release. Niente si scarica e niente si installa: l'aggiornamento resta quello di
- * tools/upgrade/upgrade-panel.sh, con le sue verifiche.
+ * A new version of the panel: it is looked for among the GitHub releases once a day, and reported, with the
+ * link to the release page. Nothing is downloaded and nothing is installed: the upgrade remains the one of
+ * tools/upgrade/upgrade-panel.sh, with its checks.
  *
- * <p>Cosa esce dal server, e nient'altro: una richiesta HTTPS a api.github.com per l'elenco delle release di
- * {@link #REPOSITORY}, con User-Agent {@link Product#SLUG} (GitHub lo vuole) e senza la versione. GitHub vede
- * l'indirizzo del server, come per ogni richiesta; chi non lo vuole spegne il controllo dalla pagina Aggiornamenti.
+ * <p>What leaves the server, and nothing else: one HTTPS request to api.github.com for the list of releases of
+ * {@link #REPOSITORY}, with User-Agent {@link Product#SLUG} (GitHub requires one) and without the version. GitHub
+ * sees the server's address, as for every request; whoever does not want that turns the check off from the
+ * Updates page.
  *
- * <p>Della risposta si usano solo il tag (che deve essere una versione, {@link #TAG}), la data, e i segni di bozza
- * e di pre-release. Il nome e il testo della release non arrivano mai nella pagina, e il link si costruisce qui dal
- * tag gia' controllato: nessun indirizzo preso dalla risposta.
+ * <p>Of the response only the tag (which must be a version, {@link #TAG}), the date, and the draft and
+ * pre-release flags are used. The name and the text of the release never reach the page, and the link is built
+ * here from the tag already checked: no address taken from the response.
  *
- * <p>Le pre-release le vede solo un pannello che e' a sua volta una pre-release: una versione 0.x o con un suffisso
- * (0.9.0, 1.1.0-beta.1). Chi gira su una 1.0.0 non viene invitato a una beta.
+ * <p>Pre-releases are seen only by a panel that is itself a pre-release: a 0.x version or one with a suffix
+ * (0.9.0, 1.1.0-beta.1). Whoever runs a 1.0.0 is not invited to a beta.
  *
- * <p>L'ultimo esito sta in panel_settings ({@link #STATE}): un riavvio non rifa' la richiesta, e la pagina lo legge
- * senza toccare la rete. Gli istanti sono UTC, ISO 8601 (r13).
+ * <p>The last result is kept in panel_settings ({@link #STATE}): a restart does not repeat the request, and the
+ * page reads it without touching the network. Instants are UTC, ISO 8601 (r13).
  */
 public final class ReleaseCheck {
 
     private static final Logger LOGGER = Logger.getLogger(ReleaseCheck.class.getName());
 
-    /** Il repository pubblico del pannello. */
+    /** The panel's public repository. */
     public static final String REPOSITORY = "DaemoxCP/DaemoxCP-mail";
     static final URI API = URI.create("https://api.github.com/repos/" + REPOSITORY + "/releases?per_page=30");
     static final String RELEASE_PAGE = "https://github.com/" + REPOSITORY + "/releases/tag/";
 
-    /** Acceso ("1", come senza scelta) o spento ("0"). */
+    /** On ("1", as with no choice) or off ("0"). */
     static final String ENABLED = "release_check_enabled";
-    /** L'ultimo controllo, in JSON: checkedAt, ok, error, newest. */
+    /** The last check, in JSON: checkedAt, ok, error, newest. */
     static final String STATE = "release_check_state";
 
     static final Duration EVERY = Duration.ofHours(24);
-    /** Fra due «Controlla adesso»: GitHub concede 60 richieste l'ora per indirizzo senza credenziali. */
+    /** Between two "Check now": GitHub allows 60 requests an hour per address without credentials. */
     static final Duration MANUAL_GAP = Duration.ofSeconds(60);
     static final int MAX_BODY = 2 * 1024 * 1024;
 
-    /** Una versione: tre numeri, con o senza v davanti, e un eventuale suffisso di pre-release. */
+    /** A version: three numbers, with or without a leading v, and an optional pre-release suffix. */
     static final Pattern TAG = Pattern.compile("v?(\\d{1,5})\\.(\\d{1,5})\\.(\\d{1,5})(?:-([0-9A-Za-z]{1,18}(?:\\.[0-9A-Za-z]{1,18}){0,4}))?");
 
     private static volatile ScheduledExecutorService scheduler;
@@ -68,11 +69,13 @@ public final class ReleaseCheck {
 
     private ReleaseCheck() {}
 
-    /* ===================================================================
-     * Le versioni: si provano senza rete
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * Versions: tested without the network
+     * ===================================================================
+     */
 
-    /** Una versione semantica. {@code pre} e' null per una versione stabile. */
+    /** A semantic version. {@code pre} is null for a stable version. */
     record Version(int major, int minor, int patch, String pre) implements Comparable<Version> {
 
         static Version parse(String s) {
@@ -86,12 +89,12 @@ public final class ReleaseCheck {
             }
         }
 
-        /** Una pre-release: un suffisso, o una 0.x (che e' una beta per definizione). */
+        /** A pre-release: a suffix, or a 0.x (which is a beta by definition). */
         boolean isPreRelease() {
             return pre != null || major == 0;
         }
 
-        /** Come la regola 11 di semver.org: una pre-release viene prima della stessa versione stabile. */
+        /** Like rule 11 of semver.org: a pre-release comes before the same stable version. */
         @Override
         public int compareTo(Version o) {
             int c = Integer.compare(major, o.major);
@@ -117,10 +120,10 @@ public final class ReleaseCheck {
     }
 
     /**
-     * La release piu' nuova di quella che gira, fra quelle che GitHub ha dato, o null se non ce n'e'. Le bozze no; le
-     * pre-release solo se gira una pre-release; un tag che non e' una versione si salta.
+     * The release newer than the running one, among those GitHub returned, or null if there is none. No drafts;
+     * pre-releases only if a pre-release is running; a tag that is not a version is skipped.
      *
-     * @return version, tag, url, publishedAt (ISO 8601 UTC o vuoto), preRelease
+     * @return version, tag, url, publishedAt (ISO 8601 UTC or empty), preRelease
      */
     static JSONObject newest(JSONArray releases, Version current) {
         if (releases == null || current == null) return null;
@@ -154,17 +157,19 @@ public final class ReleaseCheck {
         }
     }
 
-    /* ===================================================================
-     * La richiesta
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The request
+     * ===================================================================
+     */
 
     /**
-     * Un controllo: la richiesta a GitHub e la scelta della release. Non salva niente.
+     * One check: the request to GitHub and the choice of the release. It saves nothing.
      *
-     * @param api     l'indirizzo dell'elenco ({@link #API}; un altro solo nelle prove)
-     * @param current la versione che gira
-     * @return checkedAt, ok, error (un codice: network, no_ipv4, not_found, rate_limited, http_NNN, invalid, too_large) e
-     *         newest (la release piu' nuova, o assente)
+     * @param api     the address of the list ({@link #API}; another one only in tests)
+     * @param current the running version
+     * @return checkedAt, ok, error (a code: network, no_ipv4, not_found, rate_limited, http_NNN, invalid, too_large)
+     *         and newest (the newest release, or absent)
      */
     static JSONObject check(URI api, Version current, Instant now) {
         JSONObject r = new JSONObject().put("checkedAt", now.toString()).put("ok", false);
@@ -197,7 +202,7 @@ public final class ReleaseCheck {
         } catch (JSONException e) {
             return r.put("error", "invalid");
         } catch (IOException e) {
-            // GitHub non ha l'IPv6 (api.github.com senza AAAA, 18/11/2026): su un server senza IPv4 non si raggiunge.
+            // GitHub has no IPv6 (api.github.com has no AAAA, 2026-11-18): a server without IPv4 cannot reach it.
             return r.put("error", ServerAddresses.read().v4().present() ? "network" : "no_ipv4");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -205,11 +210,13 @@ public final class ReleaseCheck {
         }
     }
 
-    /* ===================================================================
-     * Il pannello: l'ultimo esito, il controllo di ogni giorno, «Controlla adesso»
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The panel: the last result, the daily check, "Check now"
+     * ===================================================================
+     */
 
-    /** La versione che gira, o null se il jar non la dice (costruito senza Maven). */
+    /** The running version, or null if the jar does not say it (built without Maven). */
     static Version running() {
         return Version.parse(PanelInfo.build().version());
     }
@@ -219,15 +226,15 @@ public final class ReleaseCheck {
     }
 
     /**
-     * Quello che sa la pagina, senza toccare la rete: la versione che gira, se il controllo e' acceso, l'ultimo
-     * controllo e la release nuova, se c'e' ed e' ancora piu' nuova di quella che gira (dopo un aggiornamento
-     * l'esito salvato parla di una versione che ormai gira).
+     * What the page knows, without touching the network: the running version, whether the check is on, the last
+     * check and the new release, if there is one and it is still newer than the running one (after an upgrade
+     * the saved result talks about a version that is now running).
      */
     public static JSONObject status() {
         return status(running(), PanelInfo.build().version(), enabled(), savedState());
     }
 
-    /** {@link #status()} senza database: si prova da sola. */
+    /** {@link #status()} without a database: it can be tested on its own. */
     static JSONObject status(Version current, String rawVersion, boolean enabled, JSONObject state) {
         JSONObject r = new JSONObject().put("success", true)
                 .put("current", current == null ? (rawVersion == null ? "" : rawVersion) : current.toString())
@@ -242,7 +249,10 @@ public final class ReleaseCheck {
         return r;
     }
 
-    /** La release nuova da dire, con la versione che gira (current), o null: per la dashboard e il rapporto periodico. */
+    /**
+     * The new release to report, with the running version (current), or null: for the dashboard and the
+     * periodic report.
+     */
     public static JSONObject available() {
         JSONObject s = status();
         JSONObject n = s.optJSONObject("newest");
@@ -250,8 +260,8 @@ public final class ReleaseCheck {
     }
 
     /**
-     * «Controlla adesso». Un minuto almeno fra due controlli, chiunque li abbia chiesti: piu' spesso non cambia
-     * niente, e GitHub conta le richieste.
+     * "Check now". At least one minute between two checks, whoever asked for them: more often changes
+     * nothing, and GitHub counts the requests.
      */
     public static JSONObject checkNow() {
         Version current = running();
@@ -265,13 +275,16 @@ public final class ReleaseCheck {
         return status();
     }
 
-    /** Acceso o spento dalla pagina Aggiornamenti. */
+    /** Turned on or off from the "Updates" page. */
     public static JSONObject setEnabled(boolean on) {
         storeSetting(ENABLED, on ? "1" : "0");
         return status();
     }
 
-    /** Il controllo di ogni giorno: si guarda ogni ora se sono passate 24 ore dall'ultimo. Dieci minuti dopo l'avvio. */
+    /**
+     * The daily check: every hour it looks whether 24 hours have passed since the last one. Ten minutes after
+     * startup.
+     */
     public static void start() {
         synchronized (LOCK) {
             if (scheduler != null) return;
@@ -303,8 +316,8 @@ public final class ReleaseCheck {
     }
 
     /**
-     * Se e' ora di un controllo: nessun controllo prima, o l'ultimo e' di almeno {@code gap} fa. Un istante nel futuro
-     * (un orologio tornato indietro) vale come nessun controllo: non ferma i controlli per giorni.
+     * Whether a check is due: no check before, or the last one is at least {@code gap} old. An instant in the
+     * future (a clock that went backwards) counts as no check: it does not stop the checks for days.
      */
     static boolean due(JSONObject state, Instant now, Duration gap) {
         Instant last = state == null ? null : parseInstant(state.optString("checkedAt", ""));

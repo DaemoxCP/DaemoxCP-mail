@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * The job in progress, and the logs of the jobs that never started (reperto 206).
+ * The job in progress, and the logs of the jobs that never started (finding 206).
  *
  * On the real server two "Update the packages" pressed during a search were refused, rightly, and the page did not say
  * what was running. Each refused job also left a log with its start and no end, which Diagnostics counted among the

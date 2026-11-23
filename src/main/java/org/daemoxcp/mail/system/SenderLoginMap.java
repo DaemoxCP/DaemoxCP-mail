@@ -13,35 +13,37 @@ import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Chi si autentica spedisce solo dai suoi indirizzi.
+ * Whoever authenticates sends only from their own addresses.
  *
- * <p>Misurato sulla VM il 20/11/2026, installata da zero dal README: Postfix non aveva smtpd_sender_login_maps, quindi
- * una casella autenticata sulla 587 (o dalla webmail) poteva mettere come mittente qualunque indirizzo: un'altra casella
- * dello stesso server, che Rspamd poi firmava con la chiave DKIM del dominio, o un indirizzo di chiunque altro. La
- * documentazione di Postfix (SASL_README, «Envelope sender address authorization»; postconf(5),
- * reject_authenticated_sender_login_mismatch) lo chiude con una tabella dei proprietari degli indirizzi: un client
- * autenticato il cui nome non possiede l'indirizzo del MAIL FROM viene rifiutato (553 5.7.1). Un indirizzo che non ha
- * proprietari, per esempio di un altro dominio, non lo possiede nessuno: rifiutato anche quello.
+ * <p>Measured on the VM on 2026-11-20, a clean install from the README: Postfix had no smtpd_sender_login_maps,
+ * so a mailbox authenticated on 587 (or from the webmail) could set any address as sender: another mailbox of
+ * the same server, which Rspamd then signed with the domain's DKIM key, or anybody else's address. The Postfix
+ * documentation (SASL_README, "Envelope sender address authorization"; postconf(5),
+ * reject_authenticated_sender_login_mismatch) closes it with a table of the owners of the addresses: an
+ * authenticated client whose name does not own the MAIL FROM address is rejected (553 5.7.1). An address that
+ * has no owners, for example one of another domain, is owned by nobody: rejected as well.
  *
- * <p>La tabella (scripts.PostfixMaps): una casella possiede il suo indirizzo, e un alias appartiene alla sua
- * destinazione; Postfix cerca nome@dominio e poi @dominio, quindi un catch-all da' alla sua casella gli indirizzi del
- * dominio che non sono ne' caselle ne' alias, gli stessi di cui riceve la posta. Usa la stessa connessione della mappa
- * degli alias (utente di Postfix, MailDbUsers: le colonne che legge le ha gia').
+ * <p>The table (scripts.PostfixMaps): a mailbox owns its address, and an alias belongs to its destination;
+ * Postfix looks up name@domain and then @domain, so a catch-all gives its mailbox the addresses of the domain
+ * that are neither mailboxes nor aliases, the same ones whose mail it receives. It uses the same connection as
+ * the aliases map (Postfix's user, MailDbUsers: it already has the columns it reads).
  *
- * <p>Il controllo vale solo per chi si autentica (reject_authenticated_..., non reject_sender_login_mismatch): la posta
- * che arriva dagli altri server sulla 25, quella di sistema (sendmail, senza smtpd) e le risposte automatiche e gli
- * inoltri di Sieve non cambiano. Sta sulle porte di invio, 587 e 465 (-o smtpd_sender_restrictions in master.cf), in
- * testa, prima di permit_mynetworks: la webmail spedisce da 127.0.0.1, autenticata, sulla 587, e deve valere anche per
- * lei. Non in main.cf: dal 20/11/2026 la 25 non offre piu' l'autenticazione (PostfixSubmissionAuth) e li' Postfix, per
- * ogni messaggio in arrivo, scriveva «restriction `reject_authenticated_sender_login_mismatch' ignored: no SASL
- * support» (server vero, 20/11 dopo la build 816).
+ * <p>The check applies only to whoever authenticates (reject_authenticated_..., not
+ * reject_sender_login_mismatch): the mail arriving from other servers on 25, the system mail (sendmail, without
+ * smtpd) and Sieve's automatic replies and forwards do not change. It sits on the submission ports, 587 and 465
+ * (-o smtpd_sender_restrictions in master.cf), at the top, before permit_mynetworks: the webmail sends from
+ * 127.0.0.1, authenticated, on 587, and it must apply to it too. Not in main.cf: since 2026-11-20 port 25 no
+ * longer offers authentication (PostfixSubmissionAuth) and there Postfix, for every incoming message, wrote
+ * "restriction `reject_authenticated_sender_login_mismatch' ignored: no SASL support" (production server,
+ * 20 November after build 816).
  *
- * <p>Gli installatori lo scrivono da soli; sui server installati prima lo scrive {@link #ensureAtBoot()}, dopo
- * MailDbUsers e MailboxAddressMap: il file con proprietario, gruppo e permessi della mappa degli alias, postmap -q (una
- * chiave che non c'e' risponde vuoto, una casella risponde se stessa), le impostazioni solo se dicono quello che scrive
- * o scriveva il pannello (una configurazione scritta a mano resta com'e'), postfix check e reload. Chi aveva il
- * controllo in main.cf (la build 795-818) lo vede spostato sulle porte di invio. Se una prova non torna main.cf,
- * master.cf e il file tornano com'erano byte per byte e Postfix si ricarica. Al secondo avvio non fa niente.
+ * <p>The installers write it themselves; on servers installed earlier {@link #ensureAtBoot()} writes it, after
+ * MailDbUsers and MailboxAddressMap: the file with the owner, group and permissions of the aliases map,
+ * postmap -q (a key that does not exist answers empty, a mailbox answers itself), the settings only if they say
+ * what the panel writes or used to write (a hand-written configuration stays as it is), postfix check and
+ * reload. Whoever had the check in main.cf (builds 795-818) sees it moved to the submission ports. If a test
+ * does not add up, main.cf, master.cf and the file go back to how they were byte for byte and Postfix reloads.
+ * At the second startup it does nothing.
  */
 public final class SenderLoginMap {
 
@@ -50,12 +52,15 @@ public final class SenderLoginMap {
     public static final String FILE = org.daemoxcp.mail.scripts.PostfixMaps.SENDER_LOGIN_FILE;
     public static final String QUERY = org.daemoxcp.mail.scripts.PostfixMaps.SENDER_LOGIN_QUERY;
     public static final String CHECK = "reject_authenticated_sender_login_mismatch";
-    /** smtpd_sender_restrictions in main.cf, come la scrivono gli installatori (e la scrivevano prima del controllo). */
+    /** smtpd_sender_restrictions in main.cf, as the installers write it (and wrote it before the check). */
     static final List<String> PANEL_SENDER = List.of("permit_mynetworks", "permit_sasl_authenticated",
             "reject_non_fqdn_sender", "reject_unknown_sender_domain");
-    /** Sulle porte di invio, in master.cf: lo stesso, col controllo davanti (in main.cf dalla build 795 alla 818). */
+    /**
+     * On the submission ports, in master.cf: the same, with the check in front (in main.cf from build 795 to
+     * 818).
+     */
     static final List<String> WANTED_SENDER = MailboxAddressMap.tables(org.daemoxcp.mail.scripts.PostfixMaps.SUBMISSION_SENDER_RESTRICTIONS);
-    /** I servizi di master.cf su cui si autentica: submission (587) e smtps (465). */
+    /** The master.cf services on which clients authenticate: submission (587) and smtps (465). */
     static final List<String> SUBMISSION_SERVICES = List.of("submission/inet", "smtps/inet");
 
     private SenderLoginMap() {}
@@ -65,11 +70,11 @@ public final class SenderLoginMap {
     record Decision(Action action, String reason) {}
 
     /**
-     * Funzione pura: che cosa fare, da smtpd_sender_login_maps e smtpd_sender_restrictions di main.cf ({@code postconf
-     * -h}) e di submission e smtps in master.cf ({@code postconf -Ph}; vuoto se master.cf non la imposta).
+     * Pure function: what to do, from smtpd_sender_login_maps and smtpd_sender_restrictions of main.cf ({@code postconf
+     * -h}) and of submission and smtps in master.cf ({@code postconf -Ph}; empty if master.cf does not set it).
      *
-     * @param aliasesFile se la mappa degli alias del pannello esiste: senza, Postfix non e' quello del pannello
-     * @param fileCurrent se il file della tabella dice gia' il testo atteso
+     * @param aliasesFile whether the panel's aliases map exists: without it, Postfix is not the panel's
+     * @param fileCurrent whether the table file already says the expected text
      */
     static Decision decide(boolean installed, String configDirectory, boolean aliasesFile, boolean fileCurrent,
                            String loginMaps, String senderRestrictions, String submission, String smtps) {
@@ -95,16 +100,16 @@ public final class SenderLoginMap {
                 + " can still send from any address");
     }
 
-    /** smtpd_sender_restrictions di un servizio di master.cf; vuoto se master.cf non la imposta. */
+    /** smtpd_sender_restrictions of a master.cf service; empty if master.cf does not set it. */
     static String masterSetting(String service) {
         Shell.Result r = Shell.run(Duration.ofSeconds(15), MailboxAddressMap.POSTCONF, "-Ph", service + "/smtpd_sender_restrictions");
         return masterValue(r.success() ? r.outputTrim() : "");
     }
 
     /**
-     * L'uscita di postconf -Ph: «postconf: warning: unmatched request» (su stderr, qui unito) vuol dire non impostata.
-     * Il nome davanti e' quello con cui postconf e' stato lanciato: dal pannello «/usr/local/sbin/postconf:» (misurato
-     * sulla VM il 21/11/2026: con il solo «postconf: » la riparazione prendeva l'avviso per un valore scritto a mano).
+     * The output of postconf -Ph: "postconf: warning: unmatched request" (on stderr, merged here) means not set.
+     * The name in front is the one postconf was launched with: from the panel "/usr/local/sbin/postconf:" (measured
+     * on the VM on 2026-11-21: with only "postconf: " the repair took the warning for a hand-written value).
      */
     static String masterValue(String out) {
         StringBuilder b = new StringBuilder();
@@ -172,7 +177,7 @@ public final class SenderLoginMap {
             MailboxAddressMap.writeLike(file, text, Files.readAttributes(aliases, PosixFileAttributes.class));
             problem = probe(file);
             if (problem == null) problem = set("smtpd_sender_login_maps", own);
-            // Prima le porte di invio, poi main.cf: in nessun momento chi si autentica resta senza controllo.
+            // First the submission ports, then main.cf: at no moment is whoever authenticates left unchecked.
             for (String service : SUBMISSION_SERVICES) if (problem == null) problem = setMaster(service);
             if (problem == null) problem = set("smtpd_sender_restrictions", String.join(", ", PANEL_SENDER));
             if (problem == null) {
@@ -206,7 +211,7 @@ public final class SenderLoginMap {
                 + " submission ports 587 and 465, not on port 25 (" + d.reason() + ")");
     }
 
-    /** postconf -P per un servizio di master.cf e la rilettura: deve dire la lista col controllo davanti. */
+    /** postconf -P for a master.cf service and the re-read: it must say the list with the check in front. */
     private static String setMaster(String service) {
         String name = service + "/smtpd_sender_restrictions";
         String value = String.join(",", WANTED_SENDER);
@@ -216,7 +221,7 @@ public final class SenderLoginMap {
         return now.equals(WANTED_SENDER) ? null : name + " is now '" + String.join(", ", now) + "' instead of '" + value + "'";
     }
 
-    /** postconf -e e la rilettura: il valore deve essere quello scritto. Null se e' cosi'. */
+    /** postconf -e and the re-read: the value must be the one written. Null if so. */
     private static String set(String name, String value) {
         Shell.Result r = Shell.run(Duration.ofSeconds(30), MailboxAddressMap.POSTCONF, "-e", name + " = " + value);
         if (!r.success()) return "postconf -e " + name + " failed (exit " + r.exitCode() + "): " + r.outputTrim();
@@ -225,7 +230,7 @@ public final class SenderLoginMap {
         return now.equals(want) ? null : name + " is now '" + now + "' instead of '" + want + "'";
     }
 
-    /** Una chiave che non c'e' risponde vuoto; una casella risponde se stessa (fra i suoi proprietari). */
+    /** A key that does not exist answers empty; a mailbox answers itself (among its owners). */
     private static String probe(Path file) {
         Shell.Result r = Shell.run(Duration.ofSeconds(30), MailboxAddressMap.POSTMAP, "-q", MailDbUsers.PROBE, "mysql:" + file);
         if (!MailDbUsers.postmapAnswered(r)) return "postmap -q fails on " + FILE + " (exit " + r.exitCode() + "): " + r.outputTrim();

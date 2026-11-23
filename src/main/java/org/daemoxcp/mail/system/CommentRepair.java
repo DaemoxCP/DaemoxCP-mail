@@ -13,25 +13,27 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * I commenti che una rinomina fatta sul testo ha rovinato nei file che il pannello scrive sul
- * server, rimessi a posto anche sui server gia' installati (30/10/2026).
+ * The comments that a text-based rename damaged in the files the panel writes on the
+ * server, put right on servers already installed too (2026-10-30).
  *
- * <p>La rinomina dei nomi JavaScript del 24/10/2026 e quella delle chiavi JSON del 16/10/2026
- * hanno cambiato parole italiane anche dentro i commenti degli script d'installazione: "che" e'
- * diventato "whichLabel", "riga" "lineItem", "gia'" "already'", "bloccati" "lockedPackages".
- * Non rompono niente, ma chi apre php.ini, nginx.conf o la lista permaban sul server trova frasi
- * senza senso. Qui si sistemano i file scritti prima, con l'italiano giusto di allora; dal 22/11/2026 il codice
- * scrive quei commenti in inglese, e EnglishComments, che all'avvio passa prima di qui e conosce anche le righe
- * rovinate, li porta direttamente all'inglese: questa riparazione resta per un file che quel passaggio non ha potuto
- * riscrivere.
+ * <p>The rename of the JavaScript names of 2026-10-24 and that of the JSON keys of 2026-10-16
+ * also changed Italian words inside the comments of the installation scripts: `che` (which)
+ * became `whichLabel`, `riga` (line) `lineItem`, `gia'` (already) `already'`, `bloccati`
+ * (locked) `lockedPackages`. They break nothing, but whoever opens php.ini, nginx.conf or the
+ * permaban list on the server finds sentences that make no sense. Here the files written
+ * earlier are fixed, with the correct Italian of the time; since 2026-11-22 the code writes
+ * those comments in English, and EnglishComments, which at startup runs before this and also
+ * knows the damaged lines, takes them straight to English: this repair remains for a file
+ * that that pass could not rewrite.
  *
- * <p>Le righe rovinate e quelle giuste stanno nella sezione "damagedComments" di
- * legacy-names.json, non nel codice: sono testo di prima, e una rinomina futura fatta sul testo
- * le cambierebbe di nuovo. Si sostituisce una riga solo se e' un commento (# o ;) uguale, a meno
- * dei rientri, a una riga rovinata: il rientro resta, le altre righe non si toccano, e un file
- * che l'amministratore ha cambiato altrove tiene le sue modifiche. Un commento non cambia quello
- * che il servizio fa, quindi niente nginx -t ne' reload. La scrittura e' quella di PanelMarker:
- * file temporaneo accanto, stessi permessi e proprietario, rename. Ripeterla non trova niente.
+ * <p>The damaged lines and the correct ones are in the "damagedComments" section of
+ * legacy-names.json, not in the code: they are old text, and a future text-based rename
+ * would change them again. A line is replaced only if it is a comment (# or ;) equal, apart
+ * from indentation, to a damaged line: the indentation stays, the other lines are not
+ * touched, and a file that the administrator changed elsewhere keeps its changes. A comment
+ * does not change what the service does, so no nginx -t nor reload. The write is the one of
+ * PanelMarker: a temporary file next to it, same permissions and owner, rename. Repeating it
+ * finds nothing.
  */
 public final class CommentRepair {
 
@@ -42,10 +44,10 @@ public final class CommentRepair {
     private CommentRepair() {}
 
     /**
-     * I file scritti con quei commenti: php.ini, la rotazione del suo registro e nginx.conf
-     * dall'installazione completa, il file di nginx di Roundcube dall'installazione del solo
-     * componente, la lista permaban, e gli script d'installazione che restano nella cartella del
-     * pannello.
+     * The files written with those comments: php.ini, the rotation of its log and nginx.conf
+     * from the full installation, Roundcube's nginx file from the installation of the
+     * component alone, the permaban list, and the installation scripts that stay in the
+     * panel's folder.
      */
     static List<Path> files() {
         return List.of(
@@ -69,7 +71,7 @@ public final class CommentRepair {
         }
     }
 
-    /** Le coppie riga rovinata -> riga giusta, senza rientri; solo quelle fra due commenti. */
+    /** The damaged line -> correct line pairs, without indentation; only those between two comments. */
     static Map<String, String> pairs() {
         Map<String, String> out = new LinkedHashMap<>();
         for (String[] p : LegacyNames.pairs(SECTION))
@@ -83,9 +85,9 @@ public final class CommentRepair {
     }
 
     /**
-     * Lo stesso testo con le righe rovinate rimesse a posto, ognuna col suo rientro. Si confronta
-     * la riga intera: una riga rovinata comincia con # o ;, quindi cambia solo un commento, e la
-     * stessa frase dentro un'altra riga (un echo che la stampa) resta com'e'.
+     * The same text with the damaged lines put right, each with its own indentation. The whole
+     * line is compared: a damaged line starts with # or ;, so only a comment changes, and the
+     * same sentence inside another line (an echo that prints it) stays as it is.
      */
     static String repaired(String content, Map<String, String> pairs) {
         String[] lines = content.split("\n", -1);
@@ -98,7 +100,7 @@ public final class CommentRepair {
         return String.join("\n", lines);
     }
 
-    /** I file sistemati; un file che non c'e' si salta, un errore va in problems. */
+    /** The files fixed; a file that is not there is skipped, an error goes into problems. */
     static List<String> repair(List<Path> files, List<String> problems) {
         Map<String, String> pairs = pairs();
         List<String> done = new ArrayList<>();
@@ -106,7 +108,7 @@ public final class CommentRepair {
         for (Path p : files) {
             try {
                 if (!Files.isRegularFile(p)) continue;
-                // Un collegamento si segue: il file da sistemare e' quello a cui punta.
+                // A link is followed: the file to fix is the one it points to.
                 Path real = p.toRealPath();
                 String before = Files.readString(real, StandardCharsets.UTF_8);
                 String after = repaired(before, pairs);

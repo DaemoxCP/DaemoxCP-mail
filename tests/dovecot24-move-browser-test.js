@@ -1,4 +1,4 @@
-// The move to Dovecot 2.4 (reperto 213), on the real panel of the TEST VM, from the page, as the owner would do it:
+// The move to Dovecot 2.4 (finding 213), on the real panel of the TEST VM, from the page, as the owner would do it:
 //
 //  1. Diagnostics before: Dovecot's configuration not ready for 2.4, to look at (not a problem), pointing to Updates.
 //  2. Updates: the row "Dovecot 2.4" with Prepare; the checks (nothing stops), the exact plan with 2.3 removed first

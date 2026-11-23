@@ -3,56 +3,56 @@ package org.daemoxcp.mail.security;
 import java.util.regex.Pattern;
 
 /**
- * Validatori centralizzati per input utente che finiscono in:
+ * Centralized validators for user input that ends up in:
  *  - shell commands (Fail2banManager, AcmeManager, scripts)
- *  - file paths (Paths.get con hostname concatenato)
- *  - SQL identifier (DROP TABLE table_name)
+ *  - file paths (Paths.get with a concatenated hostname)
+ *  - SQL identifiers (DROP TABLE table_name)
  *
- * Tutti i metodi sono difensivi: ritornano true SOLO se l'input rispetta
- * un pattern conservativo che è certo non possa contenere caratteri pericolosi
- * per shell, path o SQL identifier (`;`, `|`, `&`, backtick, `$`, `..`, ` `, etc.).
+ * All methods are defensive: they return true ONLY if the input follows
+ * a conservative pattern that certainly cannot contain characters dangerous
+ * for shell, path or SQL identifier (`;`, `|`, `&`, backtick, `$`, `..`, ` `, etc.).
  *
- * Se un input legittimo viene rifiutato, allarga il pattern in modo conservativo,
- * NON rimuovere la validazione.
+ * If a legitimate input is rejected, widen the pattern conservatively,
+ * do NOT remove the validation.
  */
 public final class InputValidator {
     private InputValidator() {}
 
-    // Hostname: lettere, numeri, dot, hyphen. RFC 1035 + tolleranza per IDN già normalizzati.
-    // Massimo 253 char totali (limite DNS). Niente caratteri speciali shell.
+    // Hostname: letters, digits, dot, hyphen. RFC 1035 + tolerance for already normalized IDNs.
+    // At most 253 chars in total (DNS limit). No shell special characters.
     private static final Pattern HOSTNAME = Pattern.compile(
         "^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
         Pattern.CASE_INSENSITIVE
     );
 
-    // Domain: simile a hostname ma deve avere almeno 1 dot (TLD richiesto).
+    // Domain: similar to hostname but must have at least 1 dot (TLD required).
     private static final Pattern DOMAIN = Pattern.compile(
         "^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
         Pattern.CASE_INSENSITIVE
     );
 
-    // IPv4 stretto.
+    // Strict IPv4.
     private static final Pattern IPV4 = Pattern.compile(
         "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
     );
 
-    // IPv6 — pattern semplificato ma sicuro (solo cifre hex, : e ::).
+    // IPv6 -- simplified but safe pattern (only hex digits, : and ::).
     private static final Pattern IPV6 = Pattern.compile(
         "^[0-9a-fA-F:]+$"
     );
 
-    // Jail name (Fail2ban): solo lettere, numeri, underscore, dash. Max 64 char.
+    // Jail name (Fail2ban): only letters, digits, underscore, dash. Max 64 chars.
     private static final Pattern JAIL_NAME = Pattern.compile("^[a-zA-Z0-9_-]{1,64}$");
 
-    // Email: pattern conservativo, non RFC-completo ma sicuro per shell e path.
+    // Email: conservative pattern, not RFC-complete but safe for shell and path.
     private static final Pattern EMAIL = Pattern.compile(
         "^[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
     );
 
-    // Identificatore SQL (table/column): solo lettere, numeri, underscore.
+    // SQL identifier (table/column): only letters, digits, underscore.
     private static final Pattern SQL_IDENT = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$");
 
-    // Selector DKIM: lettere, numeri, dash, underscore. Max 63.
+    // DKIM selector: letters, digits, dash, underscore. Max 63.
     private static final Pattern DKIM_SELECTOR = Pattern.compile("^[a-zA-Z0-9_-]{1,63}$");
 
     public static boolean isValidHostname(String s) {
@@ -85,9 +85,9 @@ public final class InputValidator {
     }
 
     /**
-     * Sanitizza per shell: lascia passare SOLO se è un hostname/dominio valido,
-     * altrimenti lancia IllegalArgumentException.
-     * Da usare come gate prima di mettere una stringa in un comando shell.
+     * Sanitizes for shell: lets it through ONLY if it is a valid hostname/domain,
+     * otherwise throws IllegalArgumentException.
+     * To be used as a gate before putting a string in a shell command.
      */
     public static String requireHostname(String s) {
         if (!isValidHostname(s)) throw new IllegalArgumentException("Invalid hostname: " + s);

@@ -20,81 +20,87 @@ import org.daemoxcp.mail.util.Shell;
 import org.json.JSONObject;
 
 /**
- * Gli indirizzi del server, IPv4 e IPv6: cosa ha (indirizzo, strada, uscita su internet) e i passi per aggiungerne o
- * toglierne uno, ognuno sicuro e con la sua strada di ritorno (chiesto dal committente il 18/11/2026: «voglio l'ipv6,
- * non lo voglio piu', voglio solo l'ipv4 ... SOLO se i software lo permettono»).
+ * The server's addresses, IPv4 and IPv6: what it has (address, route, way out to the internet) and the steps to
+ * add or remove one, each safe and with its own way back (requested by the owner on 2026-11-18: "I want IPv6,
+ * I don't want it any more, I want only IPv4 ... ONLY if the software allows it").
  *
- * Questo e' il piano «cosa ha il server». Quale famiglia usa la posta e' l'altro piano, IpFamily.
+ * This is the "what the server has" plane. Which family the mail uses is the other plane, IpFamily.
  *
- * Le regole, lette nella documentazione di FreeBSD 15 (rc.conf(5), ifconfig(8), route(8), rc.d/netif e routing,
- * network.subr) e di Hetzner Cloud prima di scrivere:
- *  - MAI «service netif restart» ne' «service routing restart»: il primo toglie TUTTI gli indirizzi dell'interfaccia e
- *    la spegne, il secondo cancella le strade di tutte e due le famiglie (anche quella da cui arriva SSH). Si usano solo
- *    comandi che toccano la famiglia in questione: ifconfig ... alias/-alias, route -6/-4 add/delete default, dhclient.
- *  - Un IPv6 statico: ifconfig_IF_ipv6="inet6 INDIRIZZO prefixlen N" e ipv6_defaultrouter (fe80::1%IF su Hetzner, col
- *    nome dell'interfaccia: senza, una strada link-local non vale). Dal vivo prima «inet6 -ifdisabled»: l'interfaccia
- *    nasce con l'IPv6 spento se rc.conf non lo accende.
- *  - Un indirizzo nuovo e' «tentative» finche' la verifica dei doppioni (DAD) non finisce: si aspetta, e se risulta
- *    «duplicated» si torna indietro.
- *  - Prima di tenere un cambiamento, una prova vera: uscire su internet in quella famiglia (fetch -4/-6 verso due
- *    servizi che hanno sia A sia AAAA, controllati il 18/11/2026). Se non esce, tutto com'era, rc.conf compreso.
- *  - rc.conf si scrive solo dopo la prova, con una copia accanto prima (ConfigBackups), e quello che c'era prima si
- *    tiene in un file del pannello: togliere l'IPv6 rimette le righe di prima, non le cancella e basta.
- *  - L'IPv4 il pannello non lo toglie mai da un server dove funziona: lo toglie il provider (Hetzner: server spento,
- *    console). Dopo, il pannello pulisce la configurazione rimasta. Rimetterlo e' DHCP, come lo da' Hetzner.
- * SSH non si tocca mai: ne' la sua configurazione ne' la sua regola in pf.
+ * The rules, read in the documentation of FreeBSD 15 (rc.conf(5), ifconfig(8), route(8), rc.d/netif and routing,
+ * network.subr) and of Hetzner Cloud before writing:
+ *  - NEVER "service netif restart" nor "service routing restart": the first removes ALL the addresses of the
+ *    interface and turns it off, the second deletes the routes of both families (including the one SSH arrives
+ *    from). Only commands that touch the family in question are used: ifconfig ... alias/-alias, route -6/-4
+ *    add/delete default, dhclient.
+ *  - A static IPv6: ifconfig_IF_ipv6="inet6 ADDRESS prefixlen N" and ipv6_defaultrouter (fe80::1%IF on Hetzner,
+ *    with the interface name: without it, a link-local route is not valid). Live, first "inet6 -ifdisabled": the
+ *    interface comes up with IPv6 off if rc.conf does not turn it on.
+ *  - A new address is "tentative" until duplicate address detection (DAD) finishes: we wait, and if it turns out
+ *    "duplicated" we go back.
+ *  - Before keeping a change, a real test: going out to the internet in that family (fetch -4/-6 towards two
+ *    services that have both A and AAAA, checked on 2026-11-18). If it does not get out, everything as it was,
+ *    rc.conf included.
+ *  - rc.conf is written only after the test, with a copy beside it first (ConfigBackups), and what was there
+ *    before is kept in a panel file: removing IPv6 puts the previous lines back, it does not just delete them.
+ *  - The panel never removes IPv4 from a server where it works: the provider removes it (Hetzner: server off,
+ *    console). Afterwards, the panel cleans up the leftover configuration. Putting it back is DHCP, as Hetzner
+ *    gives it.
+ * SSH is never touched: neither its configuration nor its rule in pf.
  */
 public final class ServerAddresses {
 
     private static final Logger LOGGER = Logger.getLogger(ServerAddresses.class.getName());
 
-    /** rc.conf: quello vero, oppure una copia nelle prove. */
+    /** rc.conf: the real one, or a copy in the tests. */
     static Path rcConf = Path.of("/etc/rc.conf");
-    /** Quello che c'era in rc.conf prima che il pannello aggiungesse un indirizzo, per rimetterlo togliendolo. */
+    /** What was in rc.conf before the panel added an address, to put it back when removing it. */
     static Path stateFile = Path.of(DataFolderRename.NEW, "server-addresses.json");
-    /** Due servizi con A e AAAA (pkg di FreeBSD su Fastly, Cloudflare): basta che uno risponda. */
+    /** Two services with A and AAAA (FreeBSD pkg on Fastly, Cloudflare): it is enough that one answers. */
     static final List<String> PROBE_URLS = List.of("https://pkg.freebsd.org/", "https://www.cloudflare.com/ips-v6");
-    /** Il servizio interno di Hetzner Cloud: la sua configurazione di rete (non documentata) porta il blocco IPv6. */
+    /** The internal service of Hetzner Cloud: its network configuration (undocumented) carries the IPv6 block. */
     static final String HETZNER_METADATA = "http://169.254.169.254/hetzner/v1/metadata";
 
     static final Pattern IFACE = Pattern.compile("[a-z][a-z0-9]{0,14}");
-    /** I caratteri di un indirizzo come lo si scrive: cifre esadecimali, i due punti, il punto. Nient'altro. */
+    /** The characters of an address as it is written: hexadecimal digits, the colon, the dot. Nothing else. */
     static final Pattern ADDRESS_CHARS = Pattern.compile("[0-9A-Fa-f:.]{2,45}");
 
-    /** Esegue un comando: Shell.run, oppure un finto nelle prove. */
+    /** Runs a command: Shell.run, or a fake one in the tests. */
     interface Runner { Shell.Result run(Duration timeout, String... cmd); }
     static Runner runner = Shell::run;
-    /** La prova di uscita in una famiglia ("ipv4" o "ipv6"): quella vera, oppure una finta nelle prove. */
+    /** The exit test in a family ("ipv4" or "ipv6"): the real one, or a fake one in the tests. */
     static Predicate<String> probe = ServerAddresses::realProbe;
-    /** Solo nelle prove sulla VM: accetta anche gli indirizzi di documentazione (2001:db8::/32) come «globali». */
+    /** Only in the tests on the VM: also accepts documentation addresses (2001:db8::/32) as "global". */
     static boolean acceptTestAddresses = false;
-    /** Quanto si aspetta la fine della verifica dei doppioni, al massimo. */
+    /** How long to wait, at most, for duplicate address detection to finish. */
     static Duration dadWait = Duration.ofSeconds(8);
 
     private ServerAddresses() {}
 
-    // ===================== lo stato =====================
+    // ===================== the status =====================
 
-    /** Una famiglia: gli indirizzi (senza i link-local), se ha la strada di default e verso dove, la riga di rc.conf. */
+    /**
+     * A family: the addresses (without link-local ones), whether it has the default route and where to, the
+     * rc.conf line.
+     */
     public record Side(List<String> addresses, boolean route, String gateway, String rcLine) {
         public boolean present() { return !addresses.isEmpty() && route; }
     }
 
-    /** Il server: l'interfaccia verso fuori, IPv4 e IPv6, e un IPv6 suggerito dal provider (o null). */
+    /** The server: the outward interface, IPv4 and IPv6, and an IPv6 suggested by the provider (or null). */
     public record State(String iface, Side v4, Side v6, Suggestion suggestion, boolean v6Managed, boolean sshOnV6) {}
 
-    /** Un IPv6 che il provider ha assegnato al server: indirizzo, prefisso, strada e da dove lo si e' letto. */
+    /** An IPv6 the provider assigned to the server: address, prefix, route and where it was read from. */
     public record Suggestion(String address, int prefix, String gateway, String source) {}
 
-    /** L'esito di un passo: fatto o no, il motivo, il nome del registro su disco. */
+    /** The result of a step: done or not, the reason, the name of the log on disk. */
     public record Result(boolean ok, String message, String journal) {}
 
-    /** Lo stato, senza chiedere al provider un IPv6 da suggerire (che puo' voler dire qualche secondo di attesa). */
+    /** The status, without asking the provider for an IPv6 to suggest (which can mean a few seconds of waiting). */
     public static State read() {
         return read(false);
     }
 
-    /** Lo stato per la guida: con l'IPv6 che il provider suggerisce, se il server non ne ha uno. */
+    /** The status for the guide: with the IPv6 the provider suggests, if the server has none. */
     public static State readForGuide() {
         return read(true);
     }
@@ -113,7 +119,7 @@ public final class ServerAddresses {
                 listensOn(run(10, "sockstat", "-6", "-l", "-P", "tcp", "-p", "22").output()));
     }
 
-    /** L'interfaccia verso fuori: quella della strada di default (IPv4, poi IPv6), altrimenti la prima accesa. */
+    /** The outward interface: the one of the default route (IPv4, then IPv6), otherwise the first one that is up. */
     static String outsideInterface() {
         for (String f : List.of("inet", "inet6")) {
             String i = defaultRouteInterface(run(10, "netstat", "-rn", "-f", f).output());
@@ -125,9 +131,9 @@ public final class ServerAddresses {
     }
 
     /**
-     * Gli indirizzi di una famiglia in un'uscita di ifconfig, senza link-local, loopback e quelli non ancora pronti. Per
-     * l'IPv6 solo quelli globali: un indirizzo locale (fd00::/8, come quello che la rete di prova da' da sola) non porta
-     * su internet e non conta come «IPv6 presente».
+     * The addresses of a family in an ifconfig output, without link-local, loopback and those not ready yet. For
+     * IPv6 only the global ones: a local address (fd00::/8, like the one the test network hands out by itself) does
+     * not lead to the internet and does not count as "IPv6 present".
      */
     static List<String> addresses(String ifconfig, boolean v6) {
         List<String> out = new ArrayList<>();
@@ -146,7 +152,7 @@ public final class ServerAddresses {
         return out;
     }
 
-    /** La strada di default in un'uscita di netstat -rn: dove porta, o null. */
+    /** The default route in a netstat -rn output: where it leads, or null. */
     static String defaultRoute(String netstat) {
         String[] f = defaultLine(netstat);
         return f == null ? null : f[1];
@@ -168,7 +174,10 @@ public final class ServerAddresses {
         return null;
     }
 
-    /** Se sshd ascolta in IPv6 sulla 22 (sockstat -6 -l -p 22): senza, un server solo IPv6 non lo si raggiunge piu'. */
+    /**
+     * Whether sshd listens on IPv6 on port 22 (sockstat -6 -l -p 22): without it, an IPv6-only server can no
+     * longer be reached.
+     */
     static boolean listensOn(String sockstat) {
         if (sockstat == null) return false;
         for (String line : sockstat.split("\n"))
@@ -177,10 +186,10 @@ public final class ServerAddresses {
     }
 
     /**
-     * Un valore scritto in rc.conf, vuoto se il file non lo ha. Letto dal file e non con «sysrc -n -f»: sysrc da' anche
-     * il valore di /etc/defaults/rc.conf quando il file non lo ha (ipv6_defaultrouter="NO"), e tornando indietro il
-     * pannello avrebbe scritto una riga che prima non c'era (visto sulla VM il 18/11/2026). L'ultima assegnazione vale,
-     * come per la shell.
+     * A value written in rc.conf, empty if the file does not have it. Read from the file and not with "sysrc -n -f":
+     * sysrc also gives the value of /etc/defaults/rc.conf when the file does not have it (ipv6_defaultrouter="NO"),
+     * and when going back the panel would have written a line that was not there before (seen on the VM on
+     * 2026-11-18). The last assignment wins, as in the shell.
      */
     static String rc(String variable) {
         try {
@@ -194,7 +203,7 @@ public final class ServerAddresses {
         }
     }
 
-    /** Il valore di un'assegnazione di rc.conf: fra virgolette doppie o semplici, o fino al primo spazio o «#». */
+    /** The value of an rc.conf assignment: between double or single quotes, or up to the first space or "#". */
     static String unquote(String raw) {
         String t = raw.trim();
         if (t.startsWith("\"") || t.startsWith("'")) {
@@ -207,13 +216,13 @@ public final class ServerAddresses {
         return w.length == 0 ? "" : w[0];
     }
 
-    // ===================== il suggerimento del provider =====================
+    // ===================== the provider's suggestion =====================
 
     /**
-     * Il blocco IPv6 che Hetzner Cloud ha assegnato, dalla configurazione di rete del suo servizio interno: Hetzner
-     * documenta solo i campi IPv4 di quel servizio, ma la configurazione di rete (quella che legge cloud-init) porta
-     * anche l'indirizzo IPv6 e la strada (misurato sul server vero il 18/11/2026). Se non c'e' o non si capisce: null,
-     * e la guida chiede l'indirizzo all'amministratore.
+     * The IPv6 block that Hetzner Cloud assigned, from the network configuration of its internal service: Hetzner
+     * documents only the IPv4 fields of that service, but the network configuration (the one cloud-init reads) also
+     * carries the IPv6 address and the route (measured on the production server on 2026-11-18). If it is not there
+     * or cannot be understood: null, and the guide asks the administrator for the address.
      */
     static Suggestion suggestIpv6(String iface) {
         Shell.Result r = run(8, "fetch", "-q", "-T", "4", "-o", "-", HETZNER_METADATA);
@@ -247,7 +256,7 @@ public final class ServerAddresses {
         return new Suggestion(address, prefix, gatewayFor(gateway, iface), "hetzner");
     }
 
-    // ===================== indirizzi =====================
+    // ===================== addresses =====================
 
     static InetAddress literal(String s) {
         if (s == null || !ADDRESS_CHARS.matcher(s).matches()) return null;
@@ -258,7 +267,7 @@ public final class ServerAddresses {
         }
     }
 
-    /** Un IPv6 raggiungibile da internet: 2000::/3, tranne la documentazione (2001:db8::/32). */
+    /** An IPv6 reachable from the internet: 2000::/3, except documentation (2001:db8::/32). */
     static boolean isGlobal(Inet6Address a) {
         byte[] b = a.getAddress();
         boolean doc = (b[0] & 0xff) == 0x20 && (b[1] & 0xff) == 0x01 && (b[2] & 0xff) == 0x0d && (b[3] & 0xff) == 0xb8;
@@ -266,7 +275,7 @@ public final class ServerAddresses {
         return (b[0] & 0xe0) == 0x20 && !doc;
     }
 
-    /** La forma corta di RFC 5952: minuscole, zeri iniziali tolti, la serie di zeri piu' lunga (almeno due) come "::". */
+    /** The RFC 5952 short form: lowercase, leading zeros removed, the longest run of zeros (at least two) as "::". */
     static String compress(Inet6Address a) {
         byte[] b = a.getAddress();
         int[] g = new int[8];
@@ -293,9 +302,9 @@ public final class ServerAddresses {
     }
 
     /**
-     * La parte dell'indirizzo dopo il blocco del provider: «::1» per 2a01:4f8:c012:abcd::1 in un /64. E' quella che la
-     * console di Hetzner chiede per il DNS inverso di un IPv6 (docs.hetzner.com/cloud/servers/cloud-server-rdns/: si scrive
-     * solo la parte dell'interfaccia). Null se l'indirizzo o il prefisso non vanno. Puro.
+     * The part of the address after the provider's block: "::1" for 2a01:4f8:c012:abcd::1 in a /64. It is the part
+     * the Hetzner console asks for the reverse DNS of an IPv6 (docs.hetzner.com/cloud/servers/cloud-server-rdns/:
+     * only the interface part is written). Null if the address or the prefix is not valid. Pure.
      */
     static String hostPart(String address, int prefix) {
         InetAddress a = literal(address);
@@ -313,13 +322,19 @@ public final class ServerAddresses {
         }
     }
 
-    /** Il provider della macchina, dal suo firmware (kenv smbios.system.maker): «hetzner», o vuoto se un altro o non si sa. */
+    /**
+     * The machine's provider, from its firmware (kenv smbios.system.maker): "hetzner", or empty if another one
+     * or unknown.
+     */
     public static String provider() {
         String maker = run(5, "kenv", "-q", "smbios.system.maker").outputTrim().toLowerCase(java.util.Locale.ROOT);
         return maker.contains("hetzner") ? "hetzner" : "";
     }
 
-    /** Il prefisso dell'IPv6 del server: quello che il pannello ha scritto, o quello di rc.conf, o 64 (il blocco dei provider). */
+    /**
+     * The prefix of the server's IPv6: the one the panel wrote, or the one in rc.conf, or 64 (the providers'
+     * block).
+     */
     static int prefixOf(String iface) {
         JSONObject saved = readState();
         if (saved != null && saved.optInt("prefix", 0) > 0) return saved.optInt("prefix");
@@ -328,13 +343,16 @@ public final class ServerAddresses {
         return 64;
     }
 
-    /** La parte dell'IPv6 del server dopo il blocco, per il DNS inverso nella console del provider; null se non ha IPv6. */
+    /**
+     * The part of the server's IPv6 after the block, for the reverse DNS in the provider's console; null if it
+     * has no IPv6.
+     */
     public static String hostPartNow(State s) {
         if (s == null || s.v6().addresses().isEmpty()) return null;
         return hostPart(s.v6().addresses().get(0), prefixOf(s.iface()));
     }
 
-    /** La strada IPv6 come la vuole route(8): un indirizzo link-local porta il nome dell'interfaccia (fe80::1%vtnet0). */
+    /** The IPv6 route as route(8) wants it: a link-local address carries the interface name (fe80::1%vtnet0). */
     static String gatewayFor(String gateway, String iface) {
         InetAddress ia = literal(gateway.replaceFirst("%.*$", ""));
         if (!(ia instanceof Inet6Address i6)) return null;
@@ -342,9 +360,9 @@ public final class ServerAddresses {
     }
 
     /**
-     * Controlla quello che l'amministratore ha scritto (o che il provider ha suggerito): null se va bene, altrimenti il
-     * motivo, come chiave della lingua. L'indirizzo dev'essere un IPv6 globale, il prefisso fra 1 e 128, la strada un
-     * IPv6 (link-local o globale).
+     * Checks what the administrator wrote (or what the provider suggested): null if it is fine, otherwise the
+     * reason, as a language key. The address must be a global IPv6, the prefix between 1 and 128, the route an
+     * IPv6 (link-local or global).
      */
     static String checkIpv6(String address, int prefix, String gateway) {
         InetAddress a = literal(address);
@@ -355,9 +373,9 @@ public final class ServerAddresses {
         return null;
     }
 
-    // ===================== la prova di uscita =====================
+    // ===================== the exit test =====================
 
-    /** Se il server esce su internet in quella famiglia ("ipv4" o "ipv6"), adesso. */
+    /** Whether the server gets out to the internet in that family ("ipv4" or "ipv6"), now. */
     public static boolean goesOut(String family) {
         return probe.test(family);
     }
@@ -370,11 +388,11 @@ public final class ServerAddresses {
         return false;
     }
 
-    // ===================== aggiungere e togliere l'IPv6 =====================
+    // ===================== adding and removing IPv6 =====================
 
     /**
-     * Aggiunge l'IPv6: dal vivo senza toccare l'IPv4, aspetta che l'indirizzo sia pronto, la strada, la prova di uscita;
-     * solo se la prova passa lo scrive in rc.conf. Se un passo non va, tutto come prima.
+     * Adds the IPv6: live without touching IPv4, waits for the address to be ready, the route, the exit test;
+     * only if the test passes does it write it in rc.conf. If a step fails, everything as before.
      */
     public static synchronized Result addIpv6(String address, int prefix, String gateway) {
         Job job = new Job("add-ipv6");
@@ -414,7 +432,7 @@ public final class ServerAddresses {
             }
             job.line("probe: OK");
 
-            // Solo adesso rc.conf, con quello che c'era prima messo da parte.
+            // Only now rc.conf, with what was there before set aside.
             JSONObject saved = new JSONObject()
                     .put("iface", iface).put("address", addr).put("prefix", prefix).put("gateway", gw)
                     .put("previousIpv6", rc("ifconfig_" + iface + "_ipv6"))
@@ -436,9 +454,10 @@ public final class ServerAddresses {
     }
 
     /**
-     * Toglie l'IPv6 che il pannello aveva aggiunto (o quello scritto in rc.conf): la strada, l'indirizzo, e in rc.conf le
-     * righe di prima. La guida ci arriva dopo aver portato la posta in solo IPv4 e tolto il record AAAA; da console si
-     * puo' anche subito (e' la via d'uscita). Solo se la posta e' in SOLO IPv6 si rifiuta: si fermerebbe del tutto.
+     * Removes the IPv6 the panel had added (or the one written in rc.conf): the route, the address, and in
+     * rc.conf the previous lines. The guide gets here after moving the mail to IPv4 only and removing the AAAA
+     * record; from the console it can also be done right away (it is the way out). It refuses only if the mail
+     * is on IPv6 ONLY: it would stop completely.
      */
     public static synchronized Result removeIpv6() {
         Job job = new Job("remove-ipv6");
@@ -468,7 +487,7 @@ public final class ServerAddresses {
         }
     }
 
-    /** L'indirizzo di una riga «inet6 INDIRIZZO prefixlen N» (o «inet6 INDIRIZZO/N»), o null. */
+    /** The address of an "inet6 ADDRESS prefixlen N" line (or "inet6 ADDRESS/N"), or null. */
     static String fromRcLine(String line) {
         if (line == null) return null;
         Matcher m = Pattern.compile("inet6\\s+([0-9A-Fa-f:]+)(?:/\\d+)?").matcher(line);
@@ -479,7 +498,7 @@ public final class ServerAddresses {
         return null;
     }
 
-    /** Aspetta che l'indirizzo non sia piu' «tentative»: null se e' pronto, «duplicated» o «timeout». */
+    /** Waits until the address is no longer "tentative": null if it is ready, "duplicated" or "timeout". */
     static String waitReady(String iface, String addr) throws InterruptedException {
         long until = System.nanoTime() + dadWait.toNanos();
         while (true) {
@@ -501,7 +520,10 @@ public final class ServerAddresses {
         if (wasDisabled) job.step(run(10, "ifconfig", iface, "inet6", "ifdisabled"));
     }
 
-    /** Rimette in rc.conf le due righe IPv6 di prima: col loro valore, o tolte se prima non c'erano. */
+    /**
+     * Puts the two previous IPv6 lines back in rc.conf: with their value, or removed if they were not there
+     * before.
+     */
     private static void restoreRc(Job job, String iface, JSONObject saved) {
         String prevIf = saved.optString("previousIpv6", "");
         String prevRouter = saved.optString("previousRouter", "");
@@ -511,11 +533,11 @@ public final class ServerAddresses {
                 : run(10, "sysrc", "-f", rcConf.toString(), "ipv6_defaultrouter=" + prevRouter));
     }
 
-    // ===================== IPv4: rimetterlo, pulirne la configurazione =====================
+    // ===================== IPv4: putting it back, cleaning up its configuration =====================
 
     /**
-     * Rimette l'IPv4 con DHCP, come lo da' Hetzner, dopo che il provider l'ha riassegnato: dhclient sull'interfaccia
-     * (l'IPv6 non si tocca), la prova di uscita, e solo allora ifconfig_IF="DHCP" in rc.conf.
+     * Puts IPv4 back with DHCP, as Hetzner gives it, after the provider has reassigned it: dhclient on the
+     * interface (IPv6 is not touched), the exit test, and only then ifconfig_IF="DHCP" in rc.conf.
      */
     public static synchronized Result addIpv4() {
         Job job = new Job("add-ipv4");
@@ -546,9 +568,9 @@ public final class ServerAddresses {
     }
 
     /**
-     * Dopo che il provider ha tolto l'IPv4: toglie la configurazione rimasta (indirizzo fermo, strada, dhclient,
-     * ifconfig_IF e defaultrouter in rc.conf). Si rifiuta se l'IPv4 esce ancora su internet: in quel caso il provider
-     * non l'ha tolto, e toglierlo dal server chiuderebbe una strada che funziona.
+     * After the provider has removed IPv4: removes the leftover configuration (static address, route, dhclient,
+     * ifconfig_IF and defaultrouter in rc.conf). It refuses if IPv4 still gets out to the internet: in that case
+     * the provider has not removed it, and removing it from the server would close a route that works.
      */
     public static synchronized Result cleanIpv4() {
         Job job = new Job("clean-ipv4");
@@ -572,7 +594,7 @@ public final class ServerAddresses {
         }
     }
 
-    /** Ferma il dhclient di quell'interfaccia per PID esatto, dal suo file: mai per nome. */
+    /** Stops the dhclient of that interface by exact PID, from its file: never by name. */
     private static void stopDhclient(Job job, String iface) {
         Path pid = Path.of("/var/run/dhclient/dhclient." + iface + ".pid");
         try {
@@ -584,7 +606,7 @@ public final class ServerAddresses {
         }
     }
 
-    // ===================== rc.conf, il file di stato, il registro =====================
+    // ===================== rc.conf, the state file, the log =====================
 
     private static void backupRcConf(Job job) {
         try {
@@ -618,7 +640,7 @@ public final class ServerAddresses {
         return runner.run(Duration.ofSeconds(seconds), cmd);
     }
 
-    /** Un lavoro: il suo registro su disco (JobJournal) e l'esito. Ogni comando ci finisce con l'esito. */
+    /** A job: its log on disk (JobJournal) and the result. Every command ends up in it with its result. */
     static final class Job {
         final Path journal;
         final long started = System.currentTimeMillis();

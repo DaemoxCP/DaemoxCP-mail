@@ -4,33 +4,33 @@ import java.nio.file.Path;
 import java.util.regex.Pattern;
 
 /**
- * I nomi che la parte root legge da MySQL prima di metterli in un comando, in un percorso o in un file di
- * configurazione.
+ * The names the root part reads from MySQL before putting them into a command, a path or a configuration
+ * file.
  *
- * <p>Col pannello separato MySQL lo scrive anche la parte web, che ha l'utente MySQL del pannello. Quello
- * che vi legge la root non e' quindi piu' un dato suo: chi bucasse la parte web potrebbe scrivere un dominio
- * come {@code x; comando} e aspettare che la root lo metta in uno script di shell (lo faceva
- * ConfigRegeneratorScript), o una casella come {@code ..} e farle scrivere un file fuori dalla sua cartella
- * (lo faceva SieveGenerator). Il pannello controlla questi nomi quando li riceve da una pagina, ma la root
- * non deve contare su chi li ha scritti: li ricontrolla qui, nel punto in cui li usa, e un nome che non
- * passa non si usa.
+ * <p>With the separated panel MySQL is also written by the web part, which has the panel's MySQL user. What
+ * the root part reads from it is therefore no longer its own data: whoever broke into the web part could write a domain
+ * like {@code x; command} and wait for root to put it into a shell script (ConfigRegeneratorScript
+ * did that), or a mailbox like {@code ..} and make it write a file outside its folder
+ * (SieveGenerator did that). The panel checks these names when it receives them from a page, but the root part
+ * must not rely on whoever wrote them: it checks them again here, at the point where it uses them, and a name that does not
+ * pass is not used.
  *
- * <p>Le forme sono strette apposta: lettere, cifre e pochi segni, mai una barra, mai un carattere che la
- * shell o un file di configurazione legge in modo speciale.
+ * <p>The forms are strict on purpose: letters, digits and a few signs, never a slash, never a character that the
+ * shell or a configuration file reads in a special way.
  */
 public final class SafeNames {
 
     private SafeNames() {}
 
-    /** Un dominio: etichette di lettere, cifre e trattini, separate da punti (RFC 1035 e RFC 5890 per xn--). */
+    /** A domain: labels of letters, digits and hyphens, separated by dots (RFC 1035 and RFC 5890 for xn--). */
     private static final Pattern DOMAIN = Pattern.compile(
             "(?=.{3,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?");
     /**
-     * La parte prima della @ di una casella: i caratteri che SecurityUtils accetta per un indirizzo, senza il
-     * punto all'inizio e senza due punti di fila, cosi' non e' mai {@code .} o {@code ..} in un percorso.
+     * The part before the @ of a mailbox: the characters SecurityUtils accepts for an address, without a
+     * leading dot and without two dots in a row, so it is never {@code .} or {@code ..} in a path.
      */
     private static final Pattern LOCAL_PART = Pattern.compile("[A-Za-z0-9_%+-](?:[A-Za-z0-9._%+-]{0,63})");
-    /** Un selettore DKIM come quelli che genera il pannello (mail, r20261107, r20261107-2). */
+    /** A DKIM selector like those the panel generates (mail, r20261107, r20261107-2). */
     private static final Pattern SELECTOR = Pattern.compile("[A-Za-z0-9](?:[A-Za-z0-9_-]{0,62})");
 
     public static boolean domain(String s) {
@@ -41,7 +41,7 @@ public final class SafeNames {
         return s != null && LOCAL_PART.matcher(s).matches() && !s.contains("..") && !s.endsWith(".");
     }
 
-    /** Un indirizzo completo: una parte locale valida, una sola @, un dominio valido. */
+    /** A complete address: a valid local part, a single @, a valid domain. */
     public static boolean address(String s) {
         if (s == null) return false;
         int at = s.indexOf('@');
@@ -53,10 +53,10 @@ public final class SafeNames {
     }
 
     /**
-     * Un percorso dentro una cartella: i pezzi si aggiungono alla base e il risultato, normalizzato, deve
-     * restare sotto la base. Un pezzo con una barra, {@code ..} o vuoto non passa nemmeno da qui.
+     * A path inside a folder: the pieces are appended to the base and the result, normalised, must
+     * stay under the base. A piece with a slash, {@code ..} or empty does not even get this far.
      *
-     * @throws IllegalArgumentException se il percorso uscirebbe dalla base
+     * @throws IllegalArgumentException if the path would leave the base
      */
     public static Path under(Path base, String... parts) {
         Path b = base.normalize();

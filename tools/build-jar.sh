@@ -1,12 +1,12 @@
 #!/bin/sh
-# Costruisce il jar del pannello col numero di build e il commit dentro, e ne stampa l'impronta.
+# Builds the jar of the panel with the build number and the commit inside, and prints its fingerprint.
 #
-# Maven da solo non sa leggere git: senza questo script il jar dice "build non registrata" nella
-# dashboard (reperto 183). Il numero di build e' il numero di commit del ramo (git rev-list
-# --count), quindi cresce a ogni commit; il commit e' quello intero. Se nei sorgenti ci sono
-# modifiche non salvate in un commit, il jar lo dice: quel commit non basta a rifarlo.
+# Maven alone cannot read git: without this script the jar says `build non registrata` ("build not
+# recorded") in the dashboard (finding 183). The build number is the number of commits of the branch
+# (git rev-list --count), so it grows with every commit; the commit is the full one. If the sources
+# have changes not saved in a commit, the jar says so: that commit is not enough to rebuild it.
 #
-# Uso, dalla radice del progetto (le opzioni in piu' vanno a Maven, per esempio -o):
+# Usage, from the project root (the extra options go to Maven, for example -o):
 #   tools/build-jar.sh -o
 set -eu
 cd "$(dirname "$0")/.."
@@ -18,8 +18,8 @@ if [ -n "$(git status --porcelain -- src pom.xml)" ]; then
     modified=true
 fi
 
-# Il plugin shade riscrive dependency-reduced-pom.xml, che e' nel repository: lo si rimette
-# com'era, qualunque cosa ci fosse.
+# The shade plugin rewrites dependency-reduced-pom.xml, which is in the repository: it is put back
+# as it was, whatever was there.
 saved=$(mktemp)
 cp dependency-reduced-pom.xml "$saved"
 status=0

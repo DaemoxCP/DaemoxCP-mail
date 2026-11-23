@@ -25,61 +25,62 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Il ramo dei pacchetti ufficiali, quarterly o latest: quale e', e cambiarlo.
+ * The official package branch, quarterly or latest: which one it is, and changing it.
  *
- * Fonti, lette nel sorgente il 03/10/2026:
- *  - FreeBSD 15.0, usr.sbin/pkg/FreeBSD.conf.quarterly-release (il /etc/pkg/FreeBSD.conf di una
+ * Sources, read in the source code on 2026-10-03:
+ *  - FreeBSD 15.0, usr.sbin/pkg/FreeBSD.conf.quarterly-release (the /etc/pkg/FreeBSD.conf of a
  *    RELEASE): FreeBSD-ports ".../${ABI}/quarterly", FreeBSD-ports-kmods
- *    ".../${ABI}/kmods_quarterly_${VERSION_MINOR}", FreeBSD-base spento. Su -STABLE i moduli
- *    sono ".../kmods_quarterly", senza la versione minore.
- *  - pkg, libpkg/pkg_config.c: i file *.conf di ogni cartella di REPOS_DIR si leggono in ordine
- *    alfabetico; un repository gia' definito si sovrascrive campo per campo e l'ultimo vince;
- *    ${ABI} e ${VERSION_MINOR} sono variabili del parser. Un blocco che sovrascrive rimette
- *    "priority" al suo valore (0 se non c'e') e "ip_version" a quello generale: se pkg -vv ne
- *    mostra altri, il file del pannello li riscrive uguali.
- *  - pkg, src/update.c: "pkg update" e' rigido, se un repository non si aggiorna esce con errore;
- *    libpkg/repo/binary/update.c rimette il catalogo di prima.
+ *    ".../${ABI}/kmods_quarterly_${VERSION_MINOR}", FreeBSD-base disabled. On -STABLE the modules
+ *    are ".../kmods_quarterly", without the minor version.
+ *  - pkg, libpkg/pkg_config.c: the *.conf files of every REPOS_DIR folder are read in alphabetical
+ *    order; a repository already defined is overridden field by field and the last one wins;
+ *    ${ABI} and ${VERSION_MINOR} are parser variables. A block that overrides resets
+ *    "priority" to its own value (0 if absent) and "ip_version" to the general one: if pkg -vv
+ *    shows other values, the panel's file writes them again unchanged.
+ *  - pkg, src/update.c: "pkg update" is strict, if a repository does not update it exits with an
+ *    error; libpkg/repo/binary/update.c puts the previous catalog back.
  *
- * Cambiare ramo qui vuol dire: scrivere un file del pannello, l'ultimo della cartella
- * /usr/local/etc/pkg/repos, che cambia solo l'indirizzo dei repository ufficiali; controllare
- * con pkg -vv che valga davvero; scaricare il catalogo del ramo nuovo. Se un passo non riesce,
- * tutto torna com'era. Nessun pacchetto viene aggiornato: gli aggiornamenti si decidono dopo, dal
- * loro piano. I file degli altri non si toccano mai, e il sistema base (FreeBSD-base) nemmeno.
+ * Changing branch here means: writing a panel file, the last one in the folder
+ * /usr/local/etc/pkg/repos, which changes only the address of the official repositories; checking
+ * with pkg -vv that it really applies; downloading the catalog of the new branch. If a step fails,
+ * everything goes back to how it was. No package is upgraded: the upgrades are decided later, from
+ * their own plan. Other people's files are never touched, and neither is the base system
+ * (FreeBSD-base).
  */
 public final class PkgBranch {
 
     private PkgBranch() {}
 
     public static final Path FOLDER = Path.of("/usr/local/etc/pkg/repos");
-    /** "zz": pkg legge i file in ordine alfabetico e l'ultimo vince. */
+    /** "zz": pkg reads the files in alphabetical order and the last one wins. */
     public static final Path FILE = FOLDER.resolve("zz-panel-branch.conf");
     static final String MARK = "# " + PanelMarker.WRITTEN;
     static final String PKG = "/usr/local/sbin/pkg";
     public static final List<String> BRANCHES = List.of("quarterly", "latest");
 
-    /** Il sistema da toccare: quello vero, o uno finto nelle prove. */
+    /** The system to act on: the real one, or a fake one in tests. */
     public interface SystemAccess {
-        /** L'uscita di "pkg -vv", o null se pkg non risponde. */
+        /** The output of "pkg -vv", or null if pkg does not answer. */
         String pkgVv();
-        /** Il contenuto di un file piccolo, o null se non c'e'. */
+        /** The content of a small file, or null if it is not there. */
         String read(Path p);
-        /** I file *.conf della cartella, nell'ordine in cui li legge pkg. */
+        /** The *.conf files of the folder, in the order in which pkg reads them. */
         List<String> fileConf(Path folder);
         void write(Path p, String content) throws IOException;
         void delete(Path p) throws IOException;
-        /** "pkg update -f", riga per riga nel registro. */
+        /** "pkg update -f", line by line into the log. */
         Outcome pkgUpdate(LineSink log);
-        /** "pkg version -U -vRL=": i pacchetti diversi dal catalogo, senza scaricare niente. */
+        /** "pkg version -U -vRL=": the packages that differ from the catalog, without downloading anything. */
         String pkgVersions();
         Instant now();
     }
 
     public record Outcome(int code, String output) {}
 
-    /** Dove va il racconto di un cambio di ramo (il registro del lavoro). */
+    /** Where the account of a branch change goes (the job log). */
     public interface LineSink { void line(String text); }
 
-    /** Un repository come lo mostra pkg -vv, con quello che se ne capisce. */
+    /** A repository as pkg -vv shows it, with what can be understood from it. */
     record Repo(String name, String url, boolean enabled, int priority, String ipVersion,
                 String type, String branch, boolean withMinor) {}
 
@@ -89,7 +90,7 @@ public final class PkgBranch {
     private static final Pattern BASE = Pattern.compile("^base_(release|latest|weekly)(_\\d+)?$");
     private static final Pattern NAME_PATTERN = Pattern.compile("[A-Za-z0-9._-]{1,64}");
 
-    /** I repository dall'uscita di pkg -vv (print_repository in src/utils.c). */
+    /** The repositories from the output of pkg -vv (print_repository in src/utils.c). */
     static List<Repo> repository(String pkgVv) {
         List<Repo> list = new ArrayList<>();
         if (pkgVv == null) return list;
@@ -130,7 +131,7 @@ public final class PkgBranch {
         return new Repo(name, url, enabled, priority, ip, "other", piece, false);
     }
 
-    /** L'unico repository acceso di quel tipo, o null (anche se ce n'e' piu' d'uno). */
+    /** The only enabled repository of that type, or null (also if there is more than one). */
     private static Repo enabled(List<Repo> repos, String type) {
         Repo found = null;
         for (Repo r : repos) {
@@ -145,7 +146,7 @@ public final class PkgBranch {
         return repos.stream().filter(r -> r.enabled() && r.type().equals(type)).count();
     }
 
-    /** Il ramo che vale: quello dei pacchetti, "misti" se i moduli del kernel vanno per conto loro. */
+    /** The branch that applies: the packages' one, "mixed" if the kernel modules go their own way. */
     static String branch(List<Repo> repos) {
         Repo p = enabled(repos, "packages"), k = enabled(repos, "modules");
         if (p == null) return "none";
@@ -162,7 +163,7 @@ public final class PkgBranch {
         };
     }
 
-    /** Lo stato: i repository, il ramo, il file del pannello e se si puo' cambiare. */
+    /** The state: the repositories, the branch, the panel's file and whether it can be changed. */
     public static JSONObject state(SystemAccess s) {
         String vv = s.pkgVv();
         if (vv == null)
@@ -192,7 +193,7 @@ public final class PkgBranch {
         return r;
     }
 
-    /** Perche' non si puo' cambiare ramo da qui, o null se si puo'. */
+    /** Why the branch cannot be changed from here, or null if it can. */
     static String reasonNo(List<Repo> repos) {
         long p = enabledOnes(repos, "packages"), k = enabledOnes(repos, "modules");
         if (p == 0) return I18n.tr("server.branch.officialOff");
@@ -216,7 +217,7 @@ public final class PkgBranch {
         return a;
     }
 
-    /** I .conf della cartella letti DOPO quello del pannello: se cambiano l'indirizzo, vincono loro. */
+    /** The .conf files of the folder read AFTER the panel's one: if they change the address, they win. */
     static List<String> fileAfter(SystemAccess s) {
         List<String> after = new ArrayList<>();
         String ours = FILE.getFileName().toString();
@@ -224,7 +225,7 @@ public final class PkgBranch {
         return after;
     }
 
-    /** Impronta di cio' che l'anteprima ha letto: se cambia prima della conferma, non si procede. */
+    /** Fingerprint of what the preview read: if it changes before the confirmation, nothing proceeds. */
     static String fingerprint(List<Repo> repos, String ourFile) {
         StringBuilder b = new StringBuilder();
         for (Repo r : repos) b.append(r.name()).append('|').append(r.url()).append('|').append(r.enabled()).append('\n');
@@ -237,14 +238,14 @@ public final class PkgBranch {
         }
     }
 
-    /** L'indirizzo di un repository ufficiale sul ramo voluto, con le variabili di pkg come nel file di serie. */
+    /** The address of an official repository on the wanted branch, with pkg's variables as in the stock file. */
     static String address(Repo r, String target) {
         if (r.type().equals("modules"))
             return "pkg+https://pkg.FreeBSD.org/${ABI}/kmods_" + target + (r.withMinor() ? "_${VERSION_MINOR}" : "");
         return "pkg+https://pkg.FreeBSD.org/${ABI}/" + target;
     }
 
-    /** Il file del pannello per un ramo: solo l'indirizzo, piu' cio' che un blocco riscriverebbe di serie. */
+    /** The panel's file for a branch: only the address, plus what a block would rewrite by default. */
     static String content(List<Repo> repos, String target, Instant when) {
         StringBuilder b = new StringBuilder();
         b.append(MARK).append(" on ").append(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(when.atZone(ZoneOffset.UTC)))
@@ -266,7 +267,7 @@ public final class PkgBranch {
         return b.toString();
     }
 
-    /** Cosa farebbe il cambio di ramo, senza farlo. */
+    /** What the branch change would do, without doing it. */
     public static JSONObject preview(SystemAccess s, String target) {
         JSONObject st = state(s);
         if (!st.optBoolean("success")) return st;
@@ -296,9 +297,9 @@ public final class PkgBranch {
     }
 
     /**
-     * Come si torna indietro, detto prima di cambiare. Prima era vuoto proprio al primo cambio
-     * (il file non era ancora del pannello), mentre i commenti del file scritto lo spiegavano:
-     * l'informazione c'era e non arrivava a chi doveva decidere.
+     * How to go back, said before changing. It used to be empty precisely on the first change
+     * (the file did not belong to the panel yet), while the comments of the written file explained
+     * it: the information was there and did not reach whoever had to decide.
      */
     static String howToReturn(String from, String target, boolean panelOwnedFile) {
         String back = I18n.tr("server.branch.howToReturn", java.util.Map.of("from", from, "file", FILE.toString()));
@@ -313,15 +314,15 @@ public final class PkgBranch {
         return l;
     }
 
-    /** Il ramo che pkg vede adesso, rileggendo pkg -vv. */
+    /** The branch pkg sees now, reading pkg -vv again. */
     private static String effective(SystemAccess s) {
         List<Repo> repos = repository(s.pkgVv());
         return repos.isEmpty() ? "unreadable" : branch(repos);
     }
 
     /**
-     * Cambia ramo. Va chiamato sul turno dei lavori sui pacchetti (PackageQueue). Ogni passo
-     * finisce nel registro; se un passo non riesce, il file del pannello torna com'era.
+     * Changes branch. Must be called on the package jobs turn (PackageQueue). Every step
+     * ends up in the log; if a step fails, the panel's file goes back to how it was.
      */
     public static JSONObject change(SystemAccess s, LineSink log, String target, String fingerprint) {
         JSONObject st = state(s);
@@ -369,10 +370,10 @@ public final class PkgBranch {
                 return error(log, I18n.tr("server.branch.catalogFails", java.util.Map.of("r", String.valueOf(target), "c", String.valueOf(u.code()), "returns", String.valueOf(matches))));
             }
         } catch (IOException e) {
-            try { restore(s, before); } catch (IOException ignored) { /* detto sotto */ }
+            try { restore(s, before); } catch (IOException ignored) { /* explained below */ }
             return error(log, I18n.tr("server.branch.cannotWrite", java.util.Map.of("dir", String.valueOf(FOLDER), "m", org.daemoxcp.mail.util.ErrorText.detail("PkgBranch", e))));
         }
-        // Cosa cambia per i pacchetti installati, dal catalogo appena scaricato.
+        // What changes for the installed packages, from the catalog just downloaded.
         int updatable = 0;
         List<String> mostRecent = new ArrayList<>();
         String v = s.pkgVersions();
@@ -414,7 +415,7 @@ public final class PkgBranch {
         return new JSONObject().put("success", false).put("error", text);
     }
 
-    // ===== Il sistema vero =====
+    // ===== The real system =====
 
     public static SystemAccess real() {
         return new SystemAccess() {
@@ -438,17 +439,17 @@ public final class PkgBranch {
                      .filter(n -> !n.startsWith(".") && n.length() > 5 && n.endsWith(".conf"))
                      .sorted().forEach(l::add);
                 } catch (IOException e) {
-                    // una cartella illeggibile si comporta come vuota: lo dira' pkg -vv
+                    // an unreadable folder behaves as an empty one: pkg -vv will say so
                 }
                 return l;
             }
             public void write(Path p, String content) throws IOException {
                 Files.createDirectories(p.getParent());
-                // Il file temporaneo comincia con un punto: se restasse li', pkg non lo leggerebbe.
+                // The temporary file starts with a dot: if it were left there, pkg would not read it.
                 Path tmp = p.getParent().resolve("." + p.getFileName() + ".tmp");
                 Files.writeString(tmp, content, StandardCharsets.UTF_8);
                 try { Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString("rw-r--r--")); }
-                catch (UnsupportedOperationException ignored) { /* non POSIX: solo nelle prove */ }
+                catch (UnsupportedOperationException ignored) { /* not POSIX: only in tests */ }
                 Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
             }
             public void delete(Path p) throws IOException { Files.deleteIfExists(p); }
@@ -462,8 +463,8 @@ public final class PkgBranch {
     }
 
     /**
-     * Un comando con argomenti separati (niente shell), con un tempo massimo sorvegliato da
-     * fuori: un pkg fermo su una rete che non risponde non deve tenere il turno per sempre.
+     * A command with separate arguments (no shell), with a maximum time watched from
+     * outside: a pkg stuck on a network that does not answer must not hold the turn forever.
      */
     static Outcome run(LineSink log, int seconds, String... argv) {
         try {

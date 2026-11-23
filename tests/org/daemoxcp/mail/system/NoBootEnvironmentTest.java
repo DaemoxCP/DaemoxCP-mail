@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * A system WITHOUT boot environments (UFS, or ZFS without bectl): reinstalling and going back do not
- * break and say so (reperto 172). It is simulated with a fake bectl first in the PATH that always
+ * break and say so (finding 172). It is simulated with a fake bectl first in the PATH that always
  * fails (Shell puts the inherited PATH before the system folders), in a child process.
  *  - the reinstall's way back is not created and that is said, without stopping anything;
  *  - the space check is not done (there is nothing to keep occupied);
@@ -58,7 +58,7 @@ public class NoBootEnvironmentTest {
         try {
             p = PackageWayBack.beforeInstallation(log::add);
         } catch (IllegalStateException e) {
-            // The NB1 fault (reperto 172) ended up here: an exception instead of the check.
+            // The NB1 fault (finding 172) ended up here: an exception instead of the check.
             check("the way back is not created, without exceptions: " + e.getMessage(), false);
             p = new PackageWayBack.Prepared("", "");
         }

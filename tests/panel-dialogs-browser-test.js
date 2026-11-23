@@ -1,4 +1,4 @@
-// No browser dialog on the real panel of the TEST VM (reperto 198): every page of the menu loads without errors and
+// No browser dialog on the real panel of the TEST VM (finding 198): every page of the menu loads without errors and
 // without alert/confirm/prompt; on Domains and Mailboxes "Delete" opens the panel's window with the red button, and
 // cancelling it changes nothing (the same domains and mailboxes as before). Read only: nothing is confirmed.
 //

@@ -1,4 +1,4 @@
-// A restart scheduled, on the real panel of the TEST VM (reperto 200): until it happens the panel changes nothing.
+// A restart scheduled, on the real panel of the TEST VM (finding 200): until it happens the panel changes nothing.
 //
 // The restart is a stand-in: a program called "shutdown" that only sleeps (compiled here with cc), started as root with
 // the arguments the panel uses ("-r +7 ..."). The panel sees it as the real one (pgrep -x shutdown, its command line in

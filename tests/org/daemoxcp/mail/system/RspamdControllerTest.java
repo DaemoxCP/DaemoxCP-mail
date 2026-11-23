@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * rspamd's controller only with the panel's password (reperto 236). Against a fake rspamd that, after a reload, lets
+ * rspamd's controller only with the panel's password (finding 236). Against a fake rspamd that, after a reload, lets
  * 127.0.0.1 and ::1 in without a password unless override.d sets secure_ip = [], and checks the password against the
  * hash in the file:
  *  1. the file: the hash in password and enable_password, secure_ip empty, the mark first; the hash only if it looks

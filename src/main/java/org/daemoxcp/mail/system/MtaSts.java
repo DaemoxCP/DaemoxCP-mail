@@ -11,45 +11,47 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * MTA-STS: la dichiarazione che i server di questo dominio parlano sempre TLS.
+ * MTA-STS: the declaration that this domain's servers always speak TLS.
  *
- * A cosa serve. Fra due server di posta il TLS e' opportunistico: il mittente chiede
- * STARTTLS e se il destinatario non lo offre, consegna IN CHIARO. Un attaccante in mezzo puo'
- * cancellare quell'offerta mentre passa, e il mittente non ha modo di accorgersene: vede solo
- * un server che dice di non parlare TLS. MTA-STS chiude quella porta dicendo in anticipo
- * "i miei server il TLS ce l'hanno sempre: se non ci riesci, NON consegnare".
+ * What it is for. Between two mail servers TLS is opportunistic: the sender asks for
+ * STARTTLS and, if the recipient does not offer it, delivers IN CLEAR TEXT. An attacker in the
+ * middle can delete that offer as it passes, and the sender has no way to notice: it only sees
+ * a server that says it does not speak TLS. MTA-STS closes that door by saying in advance
+ * "my servers always have TLS: if you cannot get it, do NOT deliver".
  *
- * Perche' non basta un record DNS, che e' il punto su cui questo lavoro si e' arenato a lungo.
- * RFC 8461 divide la cosa in due:
+ * Why a DNS record is not enough, which is the point this work was stuck on for a long time.
+ * RFC 8461 splits the thing in two:
  *
- *   §3.1  il TXT su _mta-sts.<dominio> contiene solo "v=STSv1; id=..." — l'id serve ai
- *         mittenti per accorgersi che la politica e' cambiata. NON contiene la politica.
- *   §3.2  la politica vera sta su https://mta-sts.<dominio>/.well-known/mta-sts.txt, servita
- *         con un certificato valido PER QUEL NOME. E' quel certificato a dimostrare che la
- *         politica viene dal proprietario del dominio: MTA-STS non usa DNSSEC.
+ *   Section 3.1  the TXT on _mta-sts.<domain> contains only "v=STSv1; id=...": the id lets
+ *                senders notice that the policy has changed. It does NOT contain the policy.
+ *   Section 3.2  the real policy is at https://mta-sts.<domain>/.well-known/mta-sts.txt,
+ *                served with a certificate valid FOR THAT NAME. It is that certificate that
+ *                proves the policy comes from the domain owner: MTA-STS does not use DNSSEC.
  *
- * Da qui la regola che governa questa classe: **il record TXT non si pubblica finche' la
- * politica non risponde davvero.** Pubblicarlo prima significa dichiarare pubblicamente una
- * protezione che non c'e', e i mittenti che vanno a leggerla trovano un 404. Il pannello
- * quindi va a CHIEDERE il file prima di permettere la pubblicazione, invece di fidarsi di
- * aver scritto la configurazione giusta.
+ * Hence the rule that governs this class: **the TXT record is not published until the
+ * policy really answers.** Publishing it before means publicly declaring a protection that
+ * is not there, and the senders who go and read it find a 404. The panel therefore goes and
+ * ASKS for the file before allowing publication, instead of trusting that it has written the
+ * right configuration.
  */
 public class MtaSts {
 
-    /** Il percorso fisso previsto da RFC 8461 §3.2. */
+    /** The fixed path required by RFC 8461 Section 3.2. */
     public static final String PATH = "/.well-known/mta-sts.txt";
 
     private MtaSts() {}
 
-    /* ===================================================================
-     * Il file, come funzione pura
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The file, as a pure function
+     * ===================================================================
+     */
 
     /**
-     * La politica. Campi e valori ammessi da §3.2: version, mode, mx (ripetibile), max_age.
+     * The policy. Fields and values allowed by Section 3.2: version, mode, mx (repeatable), max_age.
      *
-     * L'ABNF ammette sia LF sia CRLF come terminatore di riga (sts-policy-term = LF / CRLF):
-     * si usa LF, che e' quello che il resto del pannello scrive.
+     * The ABNF allows both LF and CRLF as line terminator (sts-policy-term = LF / CRLF):
+     * LF is used, which is what the rest of the panel writes.
      */
     public static String policy(String mailHost, String mode, int maxAge) {
         return "version: STSv1\n"
@@ -58,29 +60,29 @@ public class MtaSts {
              + "max_age: " + maxAge + "\n";
     }
 
-    /** I modi previsti dalla specifica. */
+    /** The modes defined by the specification. */
     public static boolean validMode(String m) {
         return m != null && List.of("testing", "enforce", "none").contains(m.trim().toLowerCase(Locale.ROOT));
     }
 
     /**
-     * Quanto a lungo i mittenti tengono in memoria la politica.
+     * How long senders keep the policy in memory.
      *
-     * In "testing" si sta bassi: se qualcosa e' sbagliato, l'errore scade in un giorno invece
-     * che in una settimana. In "enforce" si sta alti, perche' una politica che scade e non
-     * viene riscaricata fa perdere la protezione proprio quando serve.
+     * In "testing" it stays low: if something is wrong, the error expires in a day instead of
+     * a week. In "enforce" it stays high, because a policy that expires and is not downloaded
+     * again loses the protection exactly when it is needed.
      */
     public static int recommendedMaxAge(String mode) {
         return "enforce".equalsIgnoreCase(mode) ? 604800 : 86400;
     }
 
     /**
-     * L'id da mettere nel record TXT. §3.1 lo vuole di 1..32 caratteri alfanumerici.
+     * The id to put in the TXT record. Section 3.1 wants it 1..32 alphanumeric characters.
      *
-     * Si ricava dal CONTENUTO della politica, non dall'orologio: cosi' cambia se e solo se la
-     * politica e' cambiata davvero. Un id che cambia a ogni lettura farebbe riscaricare la
-     * politica di continuo a tutti i mittenti del mondo; uno che non cambia mai impedirebbe
-     * loro di accorgersi di una modifica.
+     * It is derived from the CONTENT of the policy, not from the clock: so it changes if and only if
+     * the policy has really changed. An id that changes at every read would make every sender in
+     * the world download the policy again all the time; one that never changes would prevent them
+     * from noticing a modification.
      */
     public static String id(String policy) {
         try {
@@ -94,12 +96,12 @@ public class MtaSts {
         }
     }
 
-    /** Il contenuto del record TXT su _mta-sts.<dominio>. §3.1 */
+    /** The content of the TXT record on _mta-sts.<domain>. Section 3.1 */
     public static String recordTxt(String policy) {
         return "v=STSv1; id=" + id(policy);
     }
 
-    /** Il dominio e' ospitato da questo pannello? Whitelist, come per autoconfig. */
+    /** Is the domain hosted by this panel? Whitelist, as for autoconfig. */
     public static String managedDomain(String required) {
         if (required == null) return null;
         String r = required.trim().toLowerCase(Locale.ROOT);
@@ -107,7 +109,7 @@ public class MtaSts {
         int p = r.indexOf(':');
         if (p > 0) r = r.substring(0, p);
         if (r.isEmpty()) return null;
-        // Stessa ragione dell'autoconfig: rotta pubblica, nessuna query per richiesta.
+        // Same reason as for autoconfig: public route, no query per request.
         return DomainCache.managed(r);
     }
 
@@ -119,7 +121,7 @@ public class MtaSts {
         }
     }
 
-    /** Il modo scelto, conservato fra i settaggi. Si parte da "testing". */
+    /** The chosen mode, kept among the settings. It starts from "testing". */
     public static String currentMode() {
         try {
             String m = Main.mailDatabase.getSetting("mta_sts_mode", "testing");
@@ -146,9 +148,11 @@ public class MtaSts {
         }
     }
 
-    /* ===================================================================
-     * Lo stato reale, dominio per dominio
-     * =================================================================== */
+    /*
+     * ===================================================================
+     * The real state, domain by domain
+     * ===================================================================
+     */
 
     public static JSONObject state() {
         JSONObject r = new JSONObject().put("success", true);
@@ -177,30 +181,30 @@ public class MtaSts {
     }
 
     /**
-     * Chiede la politica come farebbe un server mittente, e guarda cosa torna.
+     * Asks for the policy as a sending server would, and looks at what comes back.
      *
-     * E' l'unico controllo che conta: leggere la configurazione di nginx dice cosa DOVREBBE
-     * succedere, questo dice cosa succede. Gli esiti restano distinti perche' "il certificato
-     * non copre quel nome" e "il file non c'e'" hanno due rimedi opposti.
+     * It is the only check that counts: reading the nginx configuration says what SHOULD
+     * happen, this says what happens. The outcomes stay distinct because "the certificate
+     * does not cover that name" and "the file is not there" have two opposite remedies.
      */
-    /** Come testPolicy, ma per un dominio qualsiasi: la usa la verifica DNS. */
+    /** Like testPolicy, but for any domain: the DNS check uses it. */
     /**
-     * Il record TXT che corrisponde alla politica servita ADESSO.
+     * The TXT record that matches the policy served NOW.
      *
-     * Unico posto in cui quel valore si calcola. Ce n'erano due: qui la politica, e in
-     * DnsRecordsGenerator un "v=STSv1; id=" + System.currentTimeMillis() che proponeva a chi
-     * legge le istruzioni un id preso dall'orologio — diverso a ogni caricamento della pagina,
-     * e per sempre scollegato dal contenuto della politica. L'id non e' decorativo: e' il
-     * segnale con cui i mittenti si accorgono che la politica e' cambiata, e uno fermo li
-     * lascia sulla copia vecchia finche' non scade.
+     * The only place where that value is computed. There were two: here the policy, and in
+     * DnsRecordsGenerator a "v=STSv1; id=" + System.currentTimeMillis() that offered whoever
+     * reads the instructions an id taken from the clock: different at every page load, and
+     * forever disconnected from the content of the policy. The id is not decorative: it is the
+     * signal by which senders notice that the policy has changed, and a stuck one leaves them
+     * on the old copy until it expires.
      */
     public static String currentTxtRecord() {
         try {
             String mode = currentMode();
             return recordTxt(policy(mailHost(), mode, recommendedMaxAge(mode))).trim();
         } catch (Exception e) {
-            // Meglio niente che un valore inventato: una stringa vuota non fa passare per
-            // giusto nessun record, e non suggerisce a nessuno di pubblicare una sciocchezza.
+            // Better nothing than an invented value: an empty string makes no record pass
+            // as correct, and suggests to nobody that they publish nonsense.
             return "";
         }
     }
@@ -210,10 +214,10 @@ public class MtaSts {
     }
 
     /**
-     * I codici 520-527 non esistono nell'HTTP: li restituisce Cloudflare, e nginx non li
-     * emette mai. Se ne arriva uno, la richiesta e' passata dal proxy invece di andare
-     * dritta al server — cioe' il nome ha ancora la nuvola arancione.
-     * Significati dalla documentazione Cloudflare (Troubleshooting Cloudflare 5xx errors).
+     * Codes 520-527 do not exist in HTTP: Cloudflare returns them, and nginx never
+     * emits them. If one arrives, the request went through the proxy instead of going
+     * straight to the server: that is, the name still has the orange cloud.
+     * Meanings from the Cloudflare documentation (Troubleshooting Cloudflare 5xx errors).
      */
     static String explainCode(int code) {
         String what;
@@ -269,10 +273,10 @@ public class MtaSts {
     }
 
     /**
-     * Si puo' pubblicare il record TXT per questo dominio?
+     * Can the TXT record be published for this domain?
      *
-     * Solo se la politica risponde gia'. E' la regola che tiene onesto tutto il meccanismo:
-     * il TXT e' una promessa pubblica, e non si fa una promessa prima di poterla mantenere.
+     * Only if the policy already answers. It is the rule that keeps the whole mechanism honest:
+     * the TXT is a public promise, and one does not make a promise before being able to keep it.
      */
     public static JSONObject publishable(String domain) {
         String host = mailHost();
@@ -286,7 +290,7 @@ public class MtaSts {
                 .put("reason", I18n.tr("server.mtasts.notYet", java.util.Map.of("url", String.valueOf("https://mta-sts." + domain + PATH), "err", String.valueOf(test.optString("error", I18n.tr("server.mtasts.unknownReason"))))));
     }
 
-    /** I domini gestiti, per l'interfaccia. */
+    /** The managed domains, for the interface. */
     public static List<String> domains() {
         List<String> l = new ArrayList<>();
         try { for (var d : Main.mailDatabase.getDomains()) l.add(d.domain); } catch (Exception ignore) {}

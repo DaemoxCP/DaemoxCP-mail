@@ -39,27 +39,28 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * I limiti d'invio delle caselle, applicati: prima si salvavano (rate_limits) e nessuno li leggeva.
+ * The sending limits of the mailboxes, enforced: before, they were saved (rate_limits) and nobody read them.
  *
- * <p>Il pannello fa da servizio di policy per Postfix (smtpd_data_restrictions, {@value #POLICY}). A ogni messaggio che
- * una casella manda dopo essersi autenticata (sasl_username: porta 587, 465, la webmail) Postfix chiede, al comando
- * DATA, con il numero di destinatari:
+ * <p>The panel acts as a policy service for Postfix (smtpd_data_restrictions, {@value #POLICY}). For every message
+ * that a mailbox sends after authenticating (sasl_username: port 587, 465, the webmail) Postfix asks, at the DATA
+ * command, with the number of recipients:
  * <ul>
- *   <li>piu' destinatari del massimo per messaggio: 550 5.5.3;</li>
- *   <li>oltre il massimo dell'ultima ora o delle ultime 24 ore: 450 4.7.1, temporaneo (chi scrive vede il perche' e
- *       riprova piu' tardi; il messaggio non si perde);</li>
- *   <li>altrimenti DUNNO, e i destinatari si contano: ognuno vale un messaggio.</li>
+ *   <li>more recipients than the per-message maximum: 550 5.5.3;</li>
+ *   <li>over the maximum of the last hour or of the last 24 hours: 450 4.7.1, temporary (the sender sees why and
+ *       tries again later; the message is not lost);</li>
+ *   <li>otherwise DUNNO, and the recipients are counted: each one counts as one message.</li>
  * </ul>
- * La posta in arrivo (senza autenticazione) non si conta e passa. Il limite di una casella e' il suo, se c'e' ed e'
- * attivo; altrimenti quello globale, se e' stato salvato; altrimenti nessuno. Col pannello fermo Postfix non ha
- * risposta e lascia passare (default_action=DUNNO): i limiti tornano col pannello.
+ * Incoming mail (without authentication) is not counted and passes. A mailbox's limit is its own, if it exists and
+ * is active; otherwise the global one, if it has been saved; otherwise none. With the panel stopped Postfix gets no
+ * answer and lets the mail through (default_action=DUNNO): the limits come back with the panel.
  *
- * <p>Il socket sta nella coda di Postfix, 0600 di postfix, come quelli di LMTP e di quota-status. Le richieste si
- * leggono con limiti stretti (righe, attributi): chi parla e' Postfix, ma il processo e' la parte root del pannello.
- * I conteggi stanno in memoria e su disco ({@link #STATE}, ogni minuto e all'uscita): un riavvio non li azzera.
+ * <p>The socket is in the Postfix queue, 0600 owned by postfix, like the LMTP and quota-status ones. Requests are
+ * read with tight limits (lines, attributes): the one talking is Postfix, but the process is the panel's root part.
+ * The counts are kept in memory and on disk ({@link #STATE}, every minute and at exit): a restart does not reset
+ * them.
  *
- * <p>All'avvio della root: il servizio, poi Postfix (smtpd_data_restrictions con la domanda in testa) se il servizio
- * risponde, con postfix check e reload, e main.cf rimesso com'era se non vanno.
+ * <p>At the start of the root part: the service, then Postfix (smtpd_data_restrictions with the query at the top) if
+ * the service answers, with postfix check and reload, and main.cf put back as it was if they fail.
  */
 public final class SendingLimits {
 
@@ -78,12 +79,15 @@ public final class SendingLimits {
 
     private SendingLimits() {}
 
-    // ===================== la decisione: si prova senza Postfix =====================
+    // ===================== the decision: tested without Postfix =====================
 
-    /** Il limite di una casella. maxRecipients 0 = nessun massimo per messaggio. */
+    /** The limit of a mailbox. maxRecipients 0 = no per-message maximum. */
     public record Limit(int perHour, int perDay, int maxRecipients) {}
 
-    /** Quanti messaggi ha mandato ogni casella, con l'istante: l'ultima ora e le ultime 24 ore si contano da qui. */
+    /**
+     * How many messages each mailbox has sent, with the instant: the last hour and the last 24 hours are
+     * counted from here.
+     */
     static final class Counter {
         private final Map<String, ArrayDeque<long[]>> sent = new HashMap<>();
         private boolean dirty;
@@ -102,7 +106,7 @@ public final class SendingLimits {
             dirty = true;
         }
 
-        /** Via quello che ha piu' di 24 ore. */
+        /** Drop whatever is older than 24 hours. */
         synchronized void prune(long now) {
             sent.values().forEach(q -> q.removeIf(e -> e[0] <= now - 86_400));
             sent.values().removeIf(ArrayDeque::isEmpty);
@@ -126,7 +130,7 @@ public final class SendingLimits {
             return dirty;
         }
 
-        /** Le righe di {@link #dump}: «casella istante numero». Una riga che non e' cosi' si salta. */
+        /** The lines of {@link #dump}: "mailbox instant count". A line that is not like that is skipped. */
         synchronized void load(String text, long now) {
             if (text == null) return;
             for (String line : text.split("\n")) {
@@ -143,8 +147,8 @@ public final class SendingLimits {
     }
 
     /**
-     * La risposta a una richiesta di Postfix (gli attributi gia' letti): la parte dopo «action=». Conta i destinatari
-     * solo quando risponde DUNNO a un messaggio che ha un limite.
+     * The answer to a Postfix request (the attributes already read): the part after "action=". It counts the
+     * recipients only when it answers DUNNO to a message that has a limit.
      */
     static String decide(Map<String, String> a, Function<String, Limit> limits, Counter counter, long now) {
         if (!"smtpd_access_policy".equals(a.get("request"))) return "DUNNO";
@@ -172,8 +176,8 @@ public final class SendingLimits {
     }
 
     /**
-     * Il limite che vale per ogni casella, dalle righe di rate_limits: quello della casella se attivo, altrimenti il
-     * globale (se c'e'), altrimenti nessuno.
+     * The limit that applies to each mailbox, from the rate_limits rows: the mailbox's own if active, otherwise
+     * the global one (if there is one), otherwise none.
      */
     static Function<String, Limit> limitsOf(List<MailDatabase.RateLimit> rows) {
         Map<String, Limit> own = new HashMap<>();
@@ -188,7 +192,10 @@ public final class SendingLimits {
         return user -> own.getOrDefault(user, g);
     }
 
-    /** Una richiesta: righe nome=valore fino a una riga vuota. null se la connessione finisce o la richiesta non e' accettabile. */
+    /**
+     * A request: name=value lines up to an empty line. null if the connection ends or the request is not
+     * acceptable.
+     */
     static Map<String, String> read(BufferedReader in) throws IOException {
         Map<String, String> a = new HashMap<>();
         while (true) {
@@ -203,7 +210,7 @@ public final class SendingLimits {
         }
     }
 
-    /** Una riga, al massimo {@value #MAX_LINE} caratteri: una piu' lunga chiude la connessione (null). */
+    /** A line, at most {@value #MAX_LINE} characters: a longer one closes the connection (null). */
     private static String readLine(BufferedReader in) throws IOException {
         StringBuilder sb = new StringBuilder();
         int c;
@@ -216,14 +223,14 @@ public final class SendingLimits {
         return null;
     }
 
-    // ===================== il servizio =====================
+    // ===================== the service =====================
 
     private static final Counter COUNTER = new Counter();
     private static volatile Function<String, Limit> limits = u -> null;
     private static volatile long limitsAt;
     private static volatile ServerSocketChannel server;
 
-    /** I limiti si rileggono dal database ogni 30 secondi, e subito dopo un salvataggio (invalidate). */
+    /** The limits are read again from the database every 30 seconds, and right after a save (invalidate). */
     static Function<String, Limit> currentLimits() {
         long now = System.nanoTime();
         if (now - limitsAt > 30_000_000_000L) {
@@ -237,12 +244,12 @@ public final class SendingLimits {
         return limits;
     }
 
-    /** Dopo un cambio dalla pagina: la prossima richiesta rilegge. */
+    /** After a change from the page: the next request reads them again. */
     public static void invalidate() {
         limitsAt = 0;
     }
 
-    /** Il servizio, una volta per processo. Vero se ascolta. */
+    /** The service, once per process. True if it is listening. */
     public static synchronized boolean start() {
         if (server != null) return true;
         try {
@@ -252,7 +259,8 @@ public final class SendingLimits {
             } catch (IOException e) {
                 LOGGER.warning("[SendingLimits] cannot read " + STATE + ": counting starts again");
             }
-            // Un socket rimasto da un avvio di prima: il blocco del pannello (PanelInstanceLock) dice che non e' di un altro.
+            // A socket left over from an earlier startup: the panel's lock (PanelInstanceLock) says it is not
+            // another instance's.
             if (Files.exists(SOCKET, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(SOCKET, LinkOption.NOFOLLOW_LINKS)) Files.delete(SOCKET);
             ServerSocketChannel ch = ServerSocketChannel.open(StandardProtocolFamily.UNIX);
             ch.bind(UnixDomainSocketAddress.of(SOCKET));
@@ -288,7 +296,7 @@ public final class SendingLimits {
         }
     }
 
-    /** Una connessione di Postfix: piu' richieste una dopo l'altra, finche' Postfix la tiene. */
+    /** A Postfix connection: several requests one after the other, as long as Postfix keeps it open. */
     static void serve(SocketChannel c) {
         try (c; BufferedReader in = new BufferedReader(new InputStreamReader(Channels.newInputStream(c), StandardCharsets.US_ASCII), 4096);
              OutputStream out = Channels.newOutputStream(c)) {
@@ -301,7 +309,7 @@ public final class SendingLimits {
                 out.flush();
             }
         } catch (IOException ignored) {
-            // Postfix ha chiuso: si chiude anche qui
+            // Postfix closed: close here too
         }
     }
 
@@ -319,7 +327,7 @@ public final class SendingLimits {
         }
     }
 
-    /** Una domanda di prova, come Postfix: senza autenticazione la risposta dev'essere DUNNO. */
+    /** A test query, like Postfix: without authentication the answer must be DUNNO. */
     static String ask(Map<String, String> attributes) {
         try (SocketChannel ch = SocketChannel.open(StandardProtocolFamily.UNIX)) {
             ch.connect(UnixDomainSocketAddress.of(SOCKET));
@@ -337,14 +345,14 @@ public final class SendingLimits {
 
     // ===================== Postfix =====================
 
-    /** smtpd_data_restrictions con la domanda in testa; lo stesso testo se c'e' gia'. */
+    /** smtpd_data_restrictions with the query at the top; the same text if it is already there. */
     static String withPolicy(String restrictions) {
         String r = restrictions == null ? "" : restrictions.trim();
         if (r.contains("private/daemoxcp-sending-limits")) return r;
         return r.isEmpty() ? POLICY : POLICY + ", " + r;
     }
 
-    /** La domanda in smtpd_data_restrictions, se il servizio risponde. */
+    /** The query in smtpd_data_restrictions, if the service answers. */
     public static void ensurePostfix() {
         try {
             if (!Files.isExecutable(Path.of(POSTCONF)) || server == null) return;
@@ -391,9 +399,12 @@ public final class SendingLimits {
         }
     }
 
-    // ===================== la pagina =====================
+    // ===================== the page =====================
 
-    /** Se i limiti si applicano (il servizio ascolta, Postfix lo chiede), il perche' se no, e quanto ha mandato ogni casella. */
+    /**
+     * Whether the limits are enforced (the service listens, Postfix asks), the reason if not, and how much each
+     * mailbox has sent.
+     */
     public static JSONObject status() {
         JSONObject r = new JSONObject();
         String why = null;

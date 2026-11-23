@@ -1,9 +1,9 @@
-// Rinomina identificatori JavaScript con il parser di TypeScript.
-//   NODE_PATH=$(npm root -g) node tools/js-rename.js <radice> <mappa.txt> [--dry]
-// File: src/main/resources/pages/*.js|*.html, tests/*.js, e le stringhe Java che contengono
-// JavaScript (decodificate dagli escape, analizzate, rimappate sulle posizioni del sorgente).
-// Si cambiano: i nodi Identifier col nome nella mappa, e dentro le stringhe JavaScript i nomi di
-// funzione negli attributi on*="..." (lo stesso nome chiamato dall'HTML generato).
+// Renames JavaScript identifiers with the TypeScript parser.
+//   NODE_PATH=$(npm root -g) node tools/js-rename.js <root> <map.txt> [--dry]
+// Files: src/main/resources/pages/*.js|*.html, tests/*.js, and the Java strings that contain
+// JavaScript (decoded from the escapes, parsed, mapped back onto the positions of the source).
+// What is changed: the Identifier nodes with the name in the map, and inside the JavaScript strings
+// the function names in the on*="..." attributes (the same name called by the generated HTML).
 const ts = require('typescript');
 const fs = require('fs'), path = require('path');
 const [root, mapFile] = process.argv.slice(2, 4), dry = process.argv.includes('--dry');
@@ -13,22 +13,22 @@ const wordRe = new RegExp('(?<![\\w$.])(' + names.map(n => n.replace(/[$]/g, '\\
 const counts = {};
 function inc(k) { counts[k] = (counts[k] || 0) + 1; }
 
-/** Le modifiche (posizione nel testo JS, lunghezza, nuovo) per un pezzo di JavaScript. */
+/** The changes (position in the JS text, length, new) for a piece of JavaScript. */
 function jsEdits(code, where) {
   const sf = ts.createSourceFile('x.js', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const out = [];
   const visit = node => {
     if (ts.isIdentifier(node) && map.has(node.text)) {
-      // non una chiave di proprieta' (obj.nome / { nome: ... }): quelle sono dati, fase 55
+      // not a property key (obj.nome / { nome: ... }): those are data, phase 55
       const p = node.parent;
       const isPropName = (ts.isPropertyAccessExpression(p) && p.name === node)
         || (ts.isPropertyAssignment(p) && p.name === node)
         || (ts.isMethodDeclaration(p) && p.name === node);
       if (!isPropName) { out.push([node.getStart(sf), node.text.length, map.get(node.text)]); inc('identificatori ' + where); }
-      else if (ts.isShorthandPropertyAssignment(p)) { /* gestito sotto */ }
+      else if (ts.isShorthandPropertyAssignment(p)) { /* handled below */ }
     }
     if (ts.isShorthandPropertyAssignment(node) && map.has(node.name.text)) {
-      // { nome } = { nome: nome }: la chiave resta, il valore cambia
+      // { nome } = { nome: nome }: the key stays, the value changes
       out.push([node.name.getStart(sf), node.name.text.length, node.name.text + ': ' + map.get(node.name.text)]);
       inc('abbreviate ' + where);
       return;
@@ -55,7 +55,7 @@ function apply(text, edits) {
   return t;
 }
 
-/** Le stringhe Java (normali e text block) con il loro contenuto decodificato e la mappa delle posizioni. */
+/** The Java strings (normal ones and text blocks) with their decoded content and the map of the positions. */
 function javaStrings(src) {
   const out = []; let i = 0, n = src.length;
   while (i < n) {
@@ -84,10 +84,10 @@ function decode(src, a, b) {
   return { text, pos };
 }
 /**
- * Un frammento che mescola HTML e script (i text block della pagina): JavaScript solo fra
- * <script> e </script>, e altrove solo i nomi dentro gli attributi on*="...". Analizzato tutto
- * come JavaScript, TypeScript leggerebbe l'HTML come JSX e il codice che segue come testo.
- * Il frammento comincia in JavaScript, a meno che cominci con '<'.
+ * A fragment that mixes HTML and script (the text blocks of the page): JavaScript only between
+ * <script> and </script>, and elsewhere only the names inside the on*="..." attributes. Parsed entirely
+ * as JavaScript, TypeScript would read the HTML as JSX and the code that follows as text.
+ * The fragment starts in JavaScript, unless it starts with '<'.
  */
 function mixedEdits(text, where) {
   const out = [];
@@ -112,7 +112,7 @@ function mixedEdits(text, where) {
   }
   return out;
 }
-// anche il pezzo che chiude uno <script> aperto in un altro pezzo: "loadMailboxes();\n</script>"
+// also the piece that closes a <script> opened in another piece: "loadMailboxes();\n</script>"
 function looksJs(t) { return /\bfunction\b|=>|\bconst\b|\blet\b|document\.|\bon[a-z]+=|<\/script/.test(t); }
 
 let files = 0;

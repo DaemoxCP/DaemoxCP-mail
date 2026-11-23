@@ -15,28 +15,27 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Il rapporto periodico che il pannello si manda da solo.
+ * The periodic report that the panel sends to itself.
  *
- * Perche' esiste: le schede del pannello dicono tutto, ma solo a chi le apre. Un server che
- * funziona non si apre quasi mai, e le cose da fare — una vulnerabilita' che finalmente ha una
- * correzione, un certificato in scadenza, una release che esce dal supporto — arrivano senza
- * che nessuno le stia guardando.
+ * Why it exists: the panel's tabs say everything, but only to whoever opens them. A server that
+ * works is almost never opened, and the things to do - a vulnerability that finally has a
+ * fix, a certificate about to expire, a release that goes out of support - arrive without
+ * anyone watching.
  *
- * Tre principi:
+ * Three principles:
  *
- *  1. IN CIMA CI VA COSA C'E' DA FARE, non lo stato. Se non c'e' niente da fare, l'email lo
- *     dice in una riga: un rapporto che sembra sempre uguale smette di essere letto, e il
- *     giorno in cui contiene qualcosa nessuno se ne accorge.
- *  2. L'INVIO PASSA DA POSTFIX, con il SUO sendmail(1): non con il primo sendmail del PATH,
- *     che su FreeBSD e' mailwrapper e passa a dma (vedi postfixSendmail). Il pannello
- *     gira SUL server di posta: nessuna credenziale SMTP da custodire, nessuna
- *     configurazione che possa divergere, e il messaggio esce firmato DKIM come qualunque
- *     altro.
- *  3. L'ESITO SI VERIFICA. sendmail accetta il messaggio e restituisce 0 anche quando la
- *     consegna fallira' piu' tardi, e restituiva 0 anche quando il messaggio non passava
- *     affatto da Postfix. Quindi il pannello segue il messaggio nel log della posta, per il
- *     suo Message-ID, e registra cosa ha risposto il server del destinatario: non "sendmail
- *     ha detto 0", che non vuol dire niente.
+ *  1. WHAT THERE IS TO DO GOES AT THE TOP, not the status. If there is nothing to do, the email
+ *     says so in one line: a report that always looks the same stops being read, and the
+ *     day it contains something nobody notices.
+ *  2. SENDING GOES THROUGH POSTFIX, with ITS sendmail(1): not with the first sendmail in the
+ *     PATH, which on FreeBSD is mailwrapper and hands over to dma (see postfixSendmail). The
+ *     panel runs ON the mail server: no SMTP credentials to guard, no configuration that
+ *     could diverge, and the message goes out DKIM-signed like any other.
+ *  3. THE OUTCOME IS VERIFIED. sendmail accepts the message and returns 0 even when the
+ *     delivery will fail later, and it also returned 0 when the message did not go through
+ *     Postfix at all. So the panel follows the message in the mail log, by its Message-ID,
+ *     and records what the recipient's server answered: not "sendmail said 0", which means
+ *     nothing.
  */
 public final class PeriodicReport {
 
@@ -52,7 +51,7 @@ public final class PeriodicReport {
         });
     }
 
-    /** Si guarda ogni quarto d'ora se sia il momento. Il lavoro vero avviene di rado. */
+    /** Every quarter of an hour it checks whether it is time. The real work happens rarely. */
     public void start() {
         scheduler.scheduleAtFixedRate(this::tick, 120, 900, TimeUnit.SECONDS);
         System.out.println("[Report] Scheduler started (checks every 15 minutes whether it is time to send)");
@@ -64,21 +63,21 @@ public final class PeriodicReport {
         catch (InterruptedException e) { Thread.currentThread().interrupt(); }
     }
 
-    // ===================== impostazioni =====================
+    // ===================== settings =====================
 
     /**
-     * La frequenza salvata, con i nomi di adesso. Fino al 24/10/2026 si salvava coi nomi di prima
-     * (file di dati, reportFrequencies): una pianificazione gia' fatta deve continuare a valere.
+     * The saved frequency, with the current names. Until 2026-10-24 it was saved with the previous
+     * names (data file, reportFrequencies): a schedule already set up must keep applying.
      */
     static String normalizedFrequency(String f) {
         return LegacyNames.current("reportFrequencies", f);
     }
 
-    /** L'esito di un invio fallito comincia cosi', e lo scheduler lo riconosce da qui. */
+    /** The outcome of a failed send starts like this, and the scheduler recognizes it by this. */
     static final String FAILED_PREFIX = "failed: ";
     /**
-     * L'esito col prefisso di adesso. Fino al 24/10/2026 se ne scriveva un altro (file di dati,
-     * reportFailedPrefix): un esito gia' salvato va riconosciuto.
+     * The outcome with the current prefix. Until 2026-10-24 a different one was written (data file,
+     * reportFailedPrefix): an outcome already saved must be recognized.
      */
     static String currentOutcome(String outcome) {
         for (String old : LegacyNames.oldNamesOf("reportFailedPrefix", FAILED_PREFIX))
@@ -90,7 +89,7 @@ public final class PeriodicReport {
         return currentOutcome(outcome).startsWith(FAILED_PREFIX);
     }
 
-    /** L'esito come lo legge chi apre la pagina: il prefisso e' un codice, non un testo. */
+    /** The outcome as whoever opens the page reads it: the prefix is a code, not a text. */
     static String shownOutcome(String outcome) {
         String o = currentOutcome(outcome);
         if (o.startsWith(FAILED_PREFIX))
@@ -108,12 +107,12 @@ public final class PeriodicReport {
     }
 
     /**
-     * Il dominio con cui il pannello si identifica.
+     * The domain the panel identifies itself with.
      *
-     * NON e' "il primo dominio dell'elenco": quello e' l'ordine di una lista, e prendendolo
-     * si finisce a proporre un'identita' sul dominio di un sito che non c'entra niente — e'
-     * successo, con domain-a.test. Il pannello ha un hostname suo, mail.domain-b.test: il
-     * dominio e' quello che sta dopo il primo punto.
+     * It is NOT "the first domain in the list": that is the order of a list, and taking it
+     * ends up proposing an identity on the domain of a site that has nothing to do with it - it
+     * happened, with domain-a.test. The panel has a hostname of its own, mail.domain-b.test: the
+     * domain is what comes after the first dot.
      */
     private static String panelDomain() {
         String host = "";
@@ -158,10 +157,10 @@ public final class PeriodicReport {
     }
 
     /**
-     * Salva le impostazioni, validando OGNI campo con una whitelist. Gli indirizzi finiscono
-     * in un'intestazione del messaggio: un a capo dentro un indirizzo permetterebbe di
-     * aggiungere intestazioni arbitrarie, che e' il modo classico di trasformare un modulo
-     * di posta in un inoltro per chiunque.
+     * Saves the settings, validating EVERY field with a whitelist. The addresses end up
+     * in a header of the message: a line break inside an address would allow arbitrary
+     * headers to be added, which is the classic way of turning a mail form into a relay
+     * for anyone.
      */
     public static JSONObject saveSettings(String recipient, String sender,
                                                String frequency, String now, boolean active) {
@@ -176,9 +175,9 @@ public final class PeriodicReport {
         if (!sender.isEmpty()) {
             if (!org.daemoxcp.mail.webserver.SecurityUtils.isValidEmail(sender))
                 return r.put("success", false).put("error", I18n.tr("server.rp.badSender"));
-            // Whitelist vera: non "e' un indirizzo ben formato", ma "e' UNA DELLE caselle
-            // che esistono sul dominio di questo pannello". L'elenco lo conosce il pannello,
-            // quindi il controllo puo' essere esatto invece che approssimato.
+            // A real whitelist: not "it is a well-formed address", but "it is ONE OF the mailboxes
+            // that exist on this panel's domain". The panel knows the list, so the check
+            // can be exact instead of approximate.
             JSONObject id = identityState();
             JSONArray choices = id.optJSONArray("availableMailboxes");
             boolean allowed = false;
@@ -192,7 +191,7 @@ public final class PeriodicReport {
                                    ? I18n.tr("server.rp.noMailboxYet")
                                    : I18n.tr("server.rp.pickOne")));
         }
-        // Nessun a capo puo' entrare in un'intestazione, in nessuna forma.
+        // No line break may enter a header, in any form.
         for (String v : new String[]{recipient, sender})
             if (v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0 || v.indexOf('\0') >= 0)
                 return r.put("success", false).put("error", I18n.tr("server.rp.badAddress"));
@@ -208,18 +207,18 @@ public final class PeriodicReport {
         storeSetting("report_freq", frequency);
         storeSetting("report_hour", String.valueOf(h));
         storeSetting("report_enabled", active ? "1" : "0");
-        // Il rapporto automatico parte da solo, fuori da ogni richiesta: esce nella lingua di chi
-        // ha salvato le impostazioni
+        // The automatic report starts by itself, outside any request: it goes out in the language
+        // of whoever saved the settings
         storeSetting("report_lang", I18n.current());
         return state().put("success", true).put("note", active
                 ? I18n.tr("server.rp.savedOn", java.util.Map.of("recipient", String.valueOf(recipient)))
                 : I18n.tr("server.rp.savedOff"));
     }
 
-    /** Il messaggio che verrebbe inviato, senza inviarlo: mittente, oggetto e testo. */
+    /** The message that would be sent, without sending it: sender, subject and text. */
     public static JSONObject preview() {
         try {
-            // L'anteprima non tocca la rete: la scheda promette una lettura, e deve restarlo.
+            // The preview does not touch the network: the tab promises a read, and must stay one.
             JSONObject data = UpdateManager.reportData(false);
             JSONArray toDo = data.optJSONArray("toDo");
             if (toDo == null) toDo = new JSONArray();
@@ -245,7 +244,7 @@ public final class PeriodicReport {
         }
     }
 
-    /** Le cose da fare, dalla piu' urgente. A parita', resta l'ordine in cui sono arrivate. */
+    /** The things to do, most urgent first. When they are equal, the order in which they arrived stays. */
     static JSONArray sortedByUrgency(JSONArray a) {
         java.util.List<JSONObject> l = new java.util.ArrayList<>();
         for (int i = 0; i < a.length(); i++) l.add(a.getJSONObject(i));
@@ -255,29 +254,29 @@ public final class PeriodicReport {
         return sorted;
     }
 
-    // ===================== l'identita' del pannello =====================
+    // ===================== the panel's identity =====================
 
     /**
-     * Il pannello non ha un'identita' finche' non gliela si crea.
+     * The panel has no identity until one is created for it.
      *
-     * Un rapporto puo' anche partire con un mittente che non esiste come casella — sendmail
-     * lo accetta — ma sarebbe una scelta che si paga dopo: chi risponde riceve un rifiuto,
-     * i controlli antispam dei destinatari guardano se il mittente esiste, e un'eventuale
-     * notifica di mancata consegna non tornerebbe da nessuna parte.
+     * A report can also go out with a sender that does not exist as a mailbox - sendmail
+     * accepts it - but it would be a choice paid for later: whoever replies gets a rejection,
+     * the recipients' anti-spam checks look at whether the sender exists, and any
+     * non-delivery notification would go back nowhere.
      *
-     * Quindi il pannello si crea una casella vera sul dominio che gestisce. La password e'
-     * casuale e non serve a nessuno: il rapporto non fa login, esce da sendmail in locale.
-     * Resta nel vault del pannello come per ogni altra casella, quindi e' recuperabile se un
-     * giorno servisse davvero leggere quelle risposte.
+     * So the panel creates a real mailbox for itself on the domain it manages. The password is
+     * random and of no use to anyone: the report does not log in, it goes out through local
+     * sendmail. It stays in the panel's vault like every other mailbox, so it can be recovered
+     * if one day those replies really needed to be read.
      */
     /**
-     * Cosa occupa gia' un indirizzo: una casella, un alias, o niente.
+     * What already occupies an address: a mailbox, an alias, or nothing.
      *
-     * La prima versione guardava SOLO le caselle. Su domain-a.test l'indirizzo no-reply
-     * esisteva come ALIAS del sito: il pannello ha detto "non esiste", ha offerto di crearlo,
-     * e creandolo ha messo una casella davanti a un alias funzionante — cambiando dove
-     * finisce la posta per quell'indirizzo. Un controllo che guarda meta' delle cose non
-     * dice "non lo so": dice "libero", ed e' molto peggio.
+     * The first version looked ONLY at the mailboxes. On domain-a.test the no-reply address
+     * existed as an ALIAS of the site: the panel said "it does not exist", offered to create it,
+     * and by creating it put a mailbox in front of a working alias - changing where the mail
+     * for that address ends up. A check that looks at half of the things does not say
+     * "I don't know": it says "free", and that is much worse.
      */
     private static JSONObject busy(org.daemoxcp.mail.database.MailDatabase.Domain dom, String address)
             throws Exception {
@@ -301,20 +300,20 @@ public final class PeriodicReport {
             for (var d : domains) names.put(d.domain);
             r.put("managedDomains", names).put("sender", sender);
 
-            // NON si propone piu' un indirizzo da soli. Prima si sceglieva "no-reply@" sul
-            // PRIMO dominio dell'elenco: un indirizzo che il pannello non ha mai visto, su un
-            // dominio scelto dall'ordine di una lista. Ora l'indirizzo lo scrive chi sa a
-            // cosa serve, e il pannello si limita a dire cosa c'e' gia' li'.
+            // An address is NO LONGER proposed on our own. Before, "no-reply@" was chosen on the
+            // FIRST domain in the list: an address the panel had never seen, on a domain
+            // chosen by the order of a list. Now the address is written by whoever knows what
+            // it is for, and the panel only says what is already there.
             String mine = panelDomain();
             org.daemoxcp.mail.database.MailDatabase.Domain myDomain = null;
             for (var d : domains) if (d.domain.equalsIgnoreCase(mine)) myDomain = d;
             r.put("panelDomain", mine).put("panelDomainManaged", myDomain != null);
             boolean myManaged = myDomain != null;
 
-            // Le caselle che esistono sul dominio del pannello: sono le UNICHE scelte valide
-            // per il mittente. Un campo di testo libero permetterebbe di scriverci dentro
-            // qualunque cosa — compreso un dominio di un sito, che e' esattamente l'errore
-            // gia' fatto con domain-a.test.
+            // The mailboxes that exist on the panel's domain: they are the ONLY valid choices
+            // for the sender. A free text field would let anyone write anything in it -
+            // including the domain of a site, which is exactly the mistake already made
+            // with domain-a.test.
             JSONArray choices = new JSONArray();
             if (myDomain != null)
                 for (var m : Main.mailDatabase.getMailboxes(myDomain.id))
@@ -363,7 +362,7 @@ public final class PeriodicReport {
         }
     }
 
-    /** Crea la casella del pannello. Non tocca niente se esiste gia'. */
+    /** Creates the panel's mailbox. Touches nothing if it already exists. */
     public static JSONObject createIdentity(String address) {
         JSONObject r = new JSONObject().put("address", address);
         if (address == null || !org.daemoxcp.mail.webserver.SecurityUtils.isValidEmail(address))
@@ -392,7 +391,7 @@ public final class PeriodicReport {
                                 : I18n.tr("server.rp.existedAlready"));
             }
 
-            // Password casuale robusta: nessuno deve digitarla, il rapporto non fa login.
+            // Strong random password: nobody has to type it, the report does not log in.
             java.security.SecureRandom random = new java.security.SecureRandom();
             String alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
             StringBuilder pw = new StringBuilder();
@@ -409,7 +408,7 @@ public final class PeriodicReport {
         }
     }
 
-    // ===================== quando inviare =====================
+    // ===================== when to send =====================
 
     private void tick() {
         try {
@@ -417,7 +416,7 @@ public final class PeriodicReport {
             String a = setting("report_to", "");
             if (a.isEmpty()) return;
             if (!isTheMoment()) return;
-            // Fuori da ogni richiesta: il rapporto esce nella lingua di chi l'ha configurato
+            // Outside any request: the report goes out in the language of whoever configured it
             I18n.setCurrent(setting("report_lang", "it"));
             JSONObject outcome;
             try { outcome = sendNow(a, true); }
@@ -430,9 +429,9 @@ public final class PeriodicReport {
     }
 
     /**
-     * Vero se e' ora di inviare. Il confronto e' sull'INTERVALLO TRASCORSO, non su un
-     * calendario: cosi' un pannello spento per due giorni manda il rapporto quando torna su,
-     * invece di saltarlo perche' "il giorno giusto e' passato".
+     * True if it is time to send. The comparison is on the ELAPSED INTERVAL, not on a
+     * calendar: this way a panel switched off for two days sends the report when it comes back
+     * up, instead of skipping it because "the right day has passed".
      */
     static boolean isTheMoment(String frequency, String nowText, String lastIso,
                               String lastAttemptIso, String lastOutcome, LocalDateTime now) {
@@ -441,18 +440,18 @@ public final class PeriodicReport {
         if (hour < 0 || hour > 23) hour = 8;
         if (now.getHour() < hour) return false;
 
-        // Un invio fallito non deve essere ritentato ogni quarto d'ora per sempre.
+        // A failed send must not be retried every quarter of an hour forever.
         //
-        // "report_last" viene scritto solo quando l'invio RIESCE, ed e' l'unica data che questo
-        // metodo guardava: dopo un fallimento restava vecchia, la condizione "sono passati sei
-        // giorni" restava vera, e lo scheduler riprovava al tick successivo. Con credenziali
-        // sbagliate fanno 96 tentativi al giorno verso il server SMTP di qualcun altro, che e' il
-        // modo di farsi bloccare l'indirizzo. Il difetto non si vedeva perche' ciascun tentativo,
-        // preso da solo, era legittimo.
+        // "report_last" is written only when the send SUCCEEDS, and it was the only date this
+        // method looked at: after a failure it stayed old, the condition "six days have
+        // passed" stayed true, and the scheduler tried again at the next tick. With wrong
+        // credentials that makes 96 attempts a day against someone else's SMTP server, which is
+        // the way to get the address blocked. The defect did not show because each attempt,
+        // taken on its own, was legitimate.
         //
-        // Quindi si guarda anche l'ULTIMO TENTATIVO, riuscito o no. La data del tentativo viene
-        // scritta PRIMA di provare, non dopo: se il processo muore a meta' invio, al riavvio non
-        // deve ricominciare subito.
+        // So the LAST ATTEMPT is looked at too, successful or not. The date of the attempt is
+        // written BEFORE trying, not after: if the process dies halfway through sending, on
+        // restart it must not start again right away.
         if (lastOutcome != null && isFailedOutcome(lastOutcome)
                 && lastAttemptIso != null && !lastAttemptIso.isBlank()) {
             try {
@@ -460,16 +459,16 @@ public final class PeriodicReport {
                         LocalDateTime.parse(lastAttemptIso, ISO), now);
                 if (fromAttempt >= 0 && fromAttempt < HOURS_AFTER_FAILURE) return false;
             } catch (Exception ignore) {
-                // Data illeggibile: non si blocca l'invio per un dato che non si sa leggere.
+                // Unreadable date: sending is not blocked over a value that cannot be read.
             }
         }
 
-        if (lastIso == null || lastIso.isBlank()) return true;      // mai inviato
+        if (lastIso == null || lastIso.isBlank()) return true;      // never sent
         LocalDateTime last;
         try { last = LocalDateTime.parse(lastIso, ISO); }
-        catch (Exception e) { return true; }                            // data illeggibile: si invia
+        catch (Exception e) { return true; }                            // unreadable date: send
         long hours = java.time.temporal.ChronoUnit.HOURS.between(last, now);
-        if (hours < 0) return false;                                      // orologio andato indietro
+        if (hours < 0) return false;                                      // clock went backwards
         switch (frequency == null ? "" : frequency) {
             case "daily": return hours >= 20;
             case "monthly":     return hours >= 24 * 29;
@@ -477,7 +476,7 @@ public final class PeriodicReport {
         }
     }
 
-    /** Ore da aspettare prima di riprovare dopo un invio fallito. */
+    /** Hours to wait before retrying after a failed send. */
     static final int HOURS_AFTER_FAILURE = 6;
 
     private boolean isTheMoment() {
@@ -486,15 +485,15 @@ public final class PeriodicReport {
                 LocalDateTime.now());
     }
 
-    // ===================== invio =====================
+    // ===================== sending =====================
 
-    /** L'invio chiesto dal pannello ("Invia una prova adesso"). */
+    /** The send requested from the panel ("Send a test now"). */
     public static JSONObject sendNow(String recipient) { return sendNow(recipient, false); }
 
     /**
-     * Raccoglie i dati, compone il rapporto e lo consegna. "automatic" dice solo come si
-     * presenta il messaggio (rapporto settimanale o inviato su richiesta): i dati e l'invio
-     * sono gli stessi.
+     * Collects the data, composes the report and delivers it. "automatic" only says how the
+     * message presents itself (weekly report or sent on request): the data and the sending
+     * are the same.
      */
     public static JSONObject sendNow(String recipient, boolean automatic) {
         JSONObject r = new JSONObject().put("recipient", recipient);
@@ -507,19 +506,19 @@ public final class PeriodicReport {
         JSONObject data;
         try { data = UpdateManager.reportData(); }
         catch (Exception e) { return r.put("success", false).put("error", I18n.tr("server.rp.collectFailed", java.util.Map.of("m", org.daemoxcp.mail.util.ErrorText.detail("PeriodicReport", e)))); }
-        // Il certificato lo conosce solo questa classe: si aggiunge qui alle cose da fare,
-        // e si riordina, altrimenti "scade fra 3 giorni" finirebbe in fondo all'elenco.
+        // Only this class knows the certificate: it is added to the things to do here,
+        // and the list is sorted again, otherwise "expires in 3 days" would end up at the bottom.
         JSONArray df = data.optJSONArray("toDo");
         if (df == null) df = new JSONArray();
 
         JSONObject certWarning = certificateWarning();
         if (certWarning != null) df.put(certWarning);
 
-        // Le novita' sulle specifiche e sulle scadenze finiscono nel rapporto invece di
-        // essere scoperte per caso mentre si sta facendo altro. E' il motivo per cui la
-        // sorveglianza esiste: un avviso che nessuno va a cercare non e' un avviso.
+        // News about the specifications and the deadlines ends up in the report instead of
+        // being discovered by chance while doing something else. It is the reason the
+        // monitoring exists: a warning nobody goes looking for is not a warning.
         for (JSONObject x : watchWarnings()) df.put(x);
-        // Una versione nuova del pannello su GitHub: dall'ultimo controllo salvato, senza rete.
+        // A new version of the panel on GitHub: from the last saved check, without the network.
         JSONObject release = releaseWarning();
         if (release != null) df.put(release);
         data.put("toDo", sortedByUrgency(df)).put("certificate", certificateState());
@@ -529,8 +528,8 @@ public final class PeriodicReport {
         PanelMail.Message message = ReportMail.message(new ReportMail.Context(I18n.current(), server, recipient,
                 automatic, normalizedFrequency(setting("report_freq", "weekly")), java.time.ZonedDateTime.now()), data);
 
-        // Prima di provare, non dopo: se il pannello muore durante l'invio, al riavvio questa
-        // data c'e' gia' e la pausa dopo un fallimento vale lo stesso.
+        // Before trying, not after: if the panel dies during the send, on restart this
+        // date is already there and the pause after a failure applies all the same.
         storeSetting("report_last_try", LocalDateTime.now().format(ISO));
 
         JSONObject outcome = delivery(sender, recipient, message, server, "report");
@@ -549,10 +548,10 @@ public final class PeriodicReport {
     }
 
     /**
-     * Un messaggio del pannello a un amministratore (i codici), con lo stesso mittente e lo
-     * stesso sendmail di Postfix del rapporto. Restituisce solo se e' partito: il corpo contiene
-     * un codice monouso e non deve finire in nessun log, quindi l'uscita di sendmail e le righe
-     * del log della posta qui non si restituiscono.
+     * A message from the panel to an administrator (the codes), with the same sender and the
+     * same Postfix sendmail as the report. It returns only whether it went out: the body contains
+     * a one-time code and must not end up in any log, so sendmail's output and the lines of
+     * the mail log are not returned here.
      */
     public static boolean sendPanelMessage(String recipient, PanelMail.Message message) {
         String sender = setting("report_from", "no-reply@" + panelDomain());
@@ -562,9 +561,10 @@ public final class PeriodicReport {
     }
 
     /**
-     * Consegna a Postfix con il suo sendmail(1), poi segue il messaggio nel log della posta.
-     * La busta (intestazioni, testo e HTML, codifiche) la fa PanelMail. Il Message-ID lo
-     * sceglie il pannello: e' il filo che lega il messaggio alle righe che Postfix scrive nel log.
+     * Hands the message to Postfix with its sendmail(1), then follows it in the mail log.
+     * The envelope (headers, text and HTML, encodings) is built by PanelMail. The Message-ID is
+     * chosen by the panel: it is the thread that ties the message to the lines Postfix writes
+     * in the log.
      */
     private static JSONObject delivery(String from, String to, PanelMail.Message m, String server, String kind) {
         JSONObject r = new JSONObject();
@@ -579,7 +579,7 @@ public final class PeriodicReport {
                 .append("* ").append(I18n.tr("server.rp.postfixSendmail", java.util.Map.of("p", String.valueOf(sendmail)))).append('\n')
                 .append("* Message-ID: <").append(messageId).append(">\n");
 
-        // Dove finisce il log adesso: le righe di questo messaggio stanno tutte dopo.
+        // Where the log ends now: the lines of this message all come after this point.
         long logStart = logSize();
         try {
             ProcessBuilder pb = new ProcessBuilder(sendmail, "-t", "-i", "-f", from);
@@ -604,8 +604,8 @@ public final class PeriodicReport {
                     .put("error", I18n.tr("server.rp.cannotRun", java.util.Map.of("p", String.valueOf(sendmail), "m", org.daemoxcp.mail.util.ErrorText.detail("PeriodicReport", e))));
         }
 
-        // Il codice 0 dice soltanto che il messaggio e' nella coda di ingresso di Postfix.
-        // Dove e' andato a finire lo dice il log.
+        // Exit code 0 only says that the message is in Postfix's incoming queue.
+        // Where it ended up is what the log says.
         JSONObject log = followInLog(logStart, messageId, to);
         JSONArray lines = log.optJSONArray("lines");
         if (lines != null && lines.length() > 0) {
@@ -617,34 +617,34 @@ public final class PeriodicReport {
         return verdict(log).put("output", output.toString());
     }
 
-    // ===================== quale sendmail =====================
+    // ===================== which sendmail =====================
 
-    /** Il sendmail installato dal port di Postfix: si prova quando postconf non risponde. */
+    /** The sendmail installed by the Postfix port: tried when postconf does not answer. */
     static final String PORTS_SENDMAIL = "/usr/local/sbin/sendmail";
 
-    /** mailwrapper(8). Su FreeBSD /usr/sbin/sendmail e' lui, non Postfix. */
+    /** mailwrapper(8). On FreeBSD /usr/sbin/sendmail is this one, not Postfix. */
     static final String MAILWRAPPER = "/usr/sbin/mailwrapper";
 
     /**
-     * Il sendmail DI POSTFIX, non "il primo sendmail che si trova nel PATH".
+     * Postfix's OWN sendmail, not "the first sendmail found in the PATH".
      *
-     * Fino al 25/09/2026 lo si cercava nel PATH, dove /usr/sbin viene prima di /usr/local/sbin.
-     * Si trovava /usr/sbin/sendmail, che su FreeBSD e' mailwrapper(8): passa il messaggio a chi
-     * dice mailer.conf, e se nessuno l'ha cambiato — il pacchetto di Postfix non lo cambia da
-     * solo — da FreeBSD 14 e' dma(8). dma accettava, restituiva 0, e consegnava da solo
-     * all'MX del destinatario: senza passare dal milter, quindi senza firma DKIM, e senza
-     * STARTTLS. Il pannello scriveva "riuscito"; Gmail riceveva un messaggio in chiaro e non
-     * firmato, altri destinatari non lo mostravano affatto.
+     * Until 2026-09-25 it was looked up in the PATH, where /usr/sbin comes before /usr/local/sbin.
+     * That found /usr/sbin/sendmail, which on FreeBSD is mailwrapper(8): it hands the message to
+     * whatever mailer.conf says, and if nobody has changed it - the Postfix package does not change
+     * it by itself - since FreeBSD 14 that is dma(8). dma accepted, returned 0, and delivered by
+     * itself to the recipient's MX: without going through the milter, so without a DKIM signature,
+     * and without STARTTLS. The panel wrote "succeeded"; Gmail received an unencrypted, unsigned
+     * message, other recipients did not show it at all.
      *
-     * Dov'e' il suo sendmail lo sa Postfix: e' sendmail_path. Se postconf non risponde si prova
-     * il percorso del port. Un candidato che sia mailwrapper viene scartato, e se non resta
-     * niente NON si ripiega su un altro sendmail: un errore che dice cosa manca e' meglio di
-     * un invio che esce dalla porta sbagliata e si dichiara riuscito.
+     * Postfix knows where its sendmail is: it is sendmail_path. If postconf does not answer, the
+     * port's path is tried. A candidate that is mailwrapper is discarded, and if nothing is left
+     * there is NO fallback to another sendmail: an error that says what is missing is better than
+     * a send that goes out of the wrong door and declares itself successful.
      *
-     * Dal 24/10/2026 l'installatore scrive mailer.conf per Postfix (scripts/LocalMtaScript), e su
-     * un server installato da allora anche mailwrapper arriverebbe a Postfix. Questa scelta resta
-     * com'e' lo stesso: i server installati prima passano ancora a dma, e il rapporto non deve
-     * dipendere da come qualcuno ha lasciato mailer.conf.
+     * Since 2026-10-24 the installer writes mailer.conf for Postfix (scripts/LocalMtaScript), and
+     * on a server installed since then mailwrapper too would reach Postfix. This choice stays as it
+     * is all the same: the servers installed earlier still hand over to dma, and the report must
+     * not depend on how someone has left mailer.conf.
      */
     static JSONObject postfixSendmail() {
         String declared = Shell.runShell(java.time.Duration.ofSeconds(10),
@@ -652,7 +652,7 @@ public final class PeriodicReport {
         return sendmailChoice(declared, PORTS_SENDMAIL, MAILWRAPPER);
     }
 
-    /** La scelta vera e propria, separata da postconf e dai percorsi reali per poterla provare. */
+    /** The actual choice, kept apart from postconf and from the real paths so that it can be tested. */
     static JSONObject sendmailChoice(String declared, String fromPort, String mailwrapper) {
         java.util.LinkedHashSet<String> candidates = new java.util.LinkedHashSet<>();
         if (declared != null && declared.startsWith("/") && declared.indexOf('\n') < 0)
@@ -668,13 +668,13 @@ public final class PeriodicReport {
                 .put("error", I18n.tr("server.rp.noPostfixSendmail", java.util.Map.of("reasons", String.valueOf(String.join("; ", discarded)))));
     }
 
-    /** null se il percorso puo' essere il sendmail di Postfix, altrimenti il motivo per cui non lo e'. */
+    /** null if the path can be Postfix's sendmail, otherwise the reason why it is not. */
     static String notPostfix(String path, String mailwrapper) {
         java.nio.file.Path p = java.nio.file.Path.of(path);
         if (!java.nio.file.Files.isRegularFile(p) || !java.nio.file.Files.isExecutable(p))
             return I18n.tr("server.rp.notExecutable", java.util.Map.of("p", String.valueOf(path)));
         try {
-            // Stesso file, che sia un collegamento simbolico o un hard link: e' mailwrapper.
+            // Same file, whether through a symbolic link or a hard link: it is mailwrapper.
             java.nio.file.Path mw = java.nio.file.Path.of(mailwrapper);
             if (java.nio.file.Files.exists(mw) && java.nio.file.Files.isSameFile(p, mw))
                 return I18n.tr("server.rp.isMailwrapper", java.util.Map.of("p", String.valueOf(path)));
@@ -684,7 +684,7 @@ public final class PeriodicReport {
         return null;
     }
 
-    /** Un Message-ID che nessun altro messaggio ha: tipo, ora UTC, 12 byte casuali, dominio del mittente. */
+    /** A Message-ID that no other message has: type, UTC time, 12 random bytes, sender's domain. */
     static String newMessageId(String kind, String sender) {
         byte[] randomBytes = new byte[12];
         new java.security.SecureRandom().nextBytes(randomBytes);
@@ -693,12 +693,12 @@ public final class PeriodicReport {
                 + "@" + sender.substring(sender.indexOf('@') + 1);
     }
 
-    // ===================== com'e' andata =====================
+    // ===================== how it went =====================
 
-    /** Per quanto si segue il messaggio nel log, prima di smettere di guardare. */
+    /** How long the message is followed in the log, before giving up watching. */
     static final int SECONDS_IN_LOG = 30;
 
-    /** Di log nuovo se ne leggono al massimo 4 MB: un server sotto carico ne scrive tanto. */
+    /** At most 4 MB of new log is read: a server under load writes a lot of it. */
     private static final int MAX_LOG = 4 << 20;
 
     private static long logSize() {
@@ -706,7 +706,7 @@ public final class PeriodicReport {
         catch (Exception e) { return -1; }
     }
 
-    /** Le righe scritte nel log della posta da 'da' in poi. Se nel frattempo e' stato ruotato, dall'inizio. */
+    /** The lines written to the mail log from 'from' onwards. If it was rotated in the meantime, from the start. */
     private static java.util.List<String> logLines(long from) {
         try (java.io.RandomAccessFile f = new java.io.RandomAccessFile(org.daemoxcp.mail.monitoring.LogManager.MAILLOG, "r")) {
             long end = f.length();
@@ -722,9 +722,9 @@ public final class PeriodicReport {
     }
 
     /**
-     * Guarda il log finche' Postfix non dice com'e' andata, per al massimo SECONDS_IN_LOG.
-     * Una consegna normale si conclude in un paio di secondi; se il server del destinatario non
-     * risponde, Postfix aspetta i suoi tempi e l'esito resta "queued".
+     * Watches the log until Postfix says how it went, for at most SECONDS_IN_LOG.
+     * A normal delivery completes in a couple of seconds; if the recipient's server does not
+     * answer, Postfix takes its own time and the outcome stays "queued".
      */
     private static JSONObject followInLog(long from, String messageId, String recipient) {
         long expiry = System.nanoTime() + TimeUnit.SECONDS.toNanos(SECONDS_IN_LOG);
@@ -738,17 +738,17 @@ public final class PeriodicReport {
     }
 
     /**
-     * Cosa dice il log di Postfix del messaggio con questo Message-ID. Riceve le righe invece di
-     * leggere il file, cosi' si prova con righe vere.
+     * What Postfix's log says about the message with this Message-ID. It receives the lines instead
+     * of reading the file, so that it can be tested with real lines.
      *
-     * cleanup scrive il Message-ID accanto al numero di coda ("4hB2Kq3Xz9: message-id=<...>"),
-     * e ogni riga successiva sullo stesso messaggio porta quel numero. dma e gli altri MTA quella
-     * riga non la scrivono: se manca, Postfix il messaggio non l'ha visto, e lo "stato" resta
-     * vuoto invece di diventare "riuscito".
+     * cleanup writes the Message-ID next to the queue number ("4hB2Kq3Xz9: message-id=<...>"),
+     * and every later line about the same message carries that number. dma and the other MTAs do not
+     * write that line: if it is missing, Postfix has not seen the message, and the "state" stays
+     * empty instead of becoming "successful".
      *
-     * Stati: "" (Postfix non l'ha visto), "queued" (visto, esito non ancora scritto),
-     * "consegnato", "rimandato" (Postfix riprovera' da solo), "respinto" (dal server del
-     * destinatario), "rifiutato" (da Postfix stesso, prima di partire: milter o controlli).
+     * States: "" (Postfix has not seen it), "queued" (seen, outcome not written yet),
+     * "delivered", "deferred" (Postfix will retry by itself), "rejected" (by the recipient's
+     * server), "refused" (by Postfix itself, before leaving: milter or checks).
      */
     static JSONObject outcomeInLog(java.util.List<String> lines, String messageId, String recipient) {
         JSONObject r = new JSONObject().put("state", "").put("lines", new JSONArray());
@@ -762,12 +762,12 @@ public final class PeriodicReport {
         if (queue == null) return r;
         r.put("queue", queue).put("state", "queued");
 
-        // Le righe di QUESTO messaggio: il numero di coda come parola intera, seguito da ": ".
+        // The lines of THIS message: the queue number as a whole word, followed by ": ".
         java.util.regex.Pattern ownPattern = java.util.regex.Pattern.compile(
                 "(?:^|\\s)" + java.util.regex.Pattern.quote(queue) + ": (.*)$");
         java.util.regex.Pattern state = java.util.regex.Pattern.compile(", status=([a-z]+) \\((.*)\\)\\s*$");
         java.util.List<Integer> indexes = new java.util.ArrayList<>();
-        int delivery = -1;              // la riga "to=<...> ... status=" che decide
+        int delivery = -1;              // the "to=<...> ... status=" line that decides
         boolean forRecipient = false;
         String refusal = null;
         for (int i = 0; i < lines.size(); i++) {
@@ -778,9 +778,9 @@ public final class PeriodicReport {
             for (String type : new String[]{"milter-reject: ", "reject: ", "milter-discard: ", "discard: "})
                 if (rest.startsWith(type)) refusal = rest.substring(type.length());
             if (!rest.startsWith("to=<") || !state.matcher(rest).find()) continue;
-            // Con piu' destinatari (un alias, una copia nascosta) conta la riga del destinatario
-            // del rapporto; fra quelle, l'ultima, perche' un "rimandato" puo' essere seguito da
-            // un "consegnato".
+            // With several recipients (an alias, a blind copy) what counts is the line of the
+            // report's recipient; among those, the last one, because a "deferred" can be followed
+            // by a "delivered".
             boolean its = recipient.equalsIgnoreCase(between(rest, "to=<", ">"))
                        || recipient.equalsIgnoreCase(between(rest, "orig_to=<", ">"));
             if (its || !forRecipient) { delivery = i; forRecipient = its; }
@@ -799,9 +799,9 @@ public final class PeriodicReport {
                 case "bounced", "expired" -> "rejected";
                 default -> "queued";
             });
-            // Se la connessione era cifrata, il processo smtp che ha consegnato lo scrive quando la
-            // apre (con smtp_tls_loglevel >= 1). E' quello che Gmail chiama "crittografia standard".
-            // Se la prova non c'e' non si afferma niente: la sua assenza non prova il contrario.
+            // If the connection was encrypted, the smtp process that delivered writes so when it
+            // opens it (with smtp_tls_loglevel >= 1). It is what Gmail calls "standard encryption".
+            // If the evidence is not there nothing is claimed: its absence does not prove the opposite.
             int opening = tlsOpening(lines, delivery, queue, relay);
             if (opening >= 0) {
                 String line = lines.get(opening);
@@ -812,7 +812,7 @@ public final class PeriodicReport {
                 indexes.add(opening);
             }
         } else if (refusal != null) {
-            // Un rifiuto temporaneo (4.x.x) non e' la fine: Postfix riprova.
+            // A temporary rejection (4.x.x) is not the end: Postfix tries again.
             boolean temporary = java.util.regex.Pattern.compile("(?:^|\\s)4\\.\\d{1,3}\\.\\d{1,3}(?:\\s|$)")
                     .matcher(refusal).find();
             r.put("state", temporary ? "deferred" : "refused").put("answer", refusal);
@@ -824,7 +824,7 @@ public final class PeriodicReport {
         return r.put("lines", text);
     }
 
-    /** Chi ha scritto una riga del log (programma e pid: "postfix/smtp[81242]") e che cosa. */
+    /** Who wrote a log line (program and pid: "postfix/smtp[81242]") and what. */
     record Row(String process, String text) {}
 
     private static final java.util.regex.Pattern LINE_5424 = java.util.regex.Pattern.compile(
@@ -832,7 +832,7 @@ public final class PeriodicReport {
     private static final java.util.regex.Pattern LINE_CLASSIC = java.util.regex.Pattern.compile(
             "(?:^|\\s)([^\\s\\[\\]]+)\\[([0-9]+)\\]: (.*)$");
 
-    /** La riga scomposta, nel formato classico di syslog o in RFC 5424; null se non e' nessuno dei due. */
+    /** The line split into its parts, in classic syslog format or in RFC 5424; null if it is neither. */
     static Row line(String r) {
         java.util.regex.Matcher m = LINE_5424.matcher(r);
         if (!m.find()) {
@@ -843,21 +843,21 @@ public final class PeriodicReport {
     }
 
     /**
-     * La riga in cui il processo smtp che ha consegnato ha aperto la connessione cifrata su cui
-     * e' partito il messaggio, o -1 se non la si puo' indicare con certezza.
+     * The line in which the smtp process that delivered opened the encrypted connection the
+     * message left on, or -1 if it cannot be pointed out with certainty.
      *
-     * Il relay da solo non basta: un altro processo smtp puo' aprire nello stesso momento una
-     * sua connessione verso lo stesso server, cifrata mentre questa no. Contano quindi solo le
-     * righe del processo che ha scritto la consegna (stesso programma, stesso pid), risalendo
-     * il log. Si saltano le consegne dello stesso messaggio agli altri destinatari (stessa
-     * connessione) e le righe della sessione TLS che smtp scrive dopo l'apertura con
-     * smtp_tls_loglevel 2 o piu'. La prima riga diversa decide: se e' l'apertura TLS verso lo
-     * stesso relay, e' questa connessione. Qualunque altra cosa (un altro messaggio, una
-     * connessione caduta, il ripiego in chiaro dopo un TLS fallito) vuol dire che un'apertura
-     * scritta piu' su era di un'altra connessione.
+     * The relay alone is not enough: another smtp process can open, at the same moment, a
+     * connection of its own to the same server, encrypted while this one is not. So only the
+     * lines of the process that wrote the delivery count (same program, same pid), going back up
+     * the log. The deliveries of the same message to the other recipients (same connection) are
+     * skipped, and so are the TLS session lines that smtp writes after the opening with
+     * smtp_tls_loglevel 2 or higher. The first different line decides: if it is the TLS opening
+     * towards the same relay, it is this connection. Anything else (another message, a dropped
+     * connection, the fallback to plaintext after a failed TLS) means that an opening written
+     * further up belonged to another connection.
      *
-     * Una connessione riusata (conn_use= nella consegna) e' stata aperta prima, per un altro
-     * messaggio e magari da un altro processo: la sua apertura non si lega a questa consegna.
+     * A reused connection (conn_use= in the delivery) was opened earlier, for another message
+     * and possibly by another process: its opening is not tied to this delivery.
      */
     static int tlsOpening(java.util.List<String> lines, int delivery, String queue, String relay) {
         Row who = line(lines.get(delivery));
@@ -878,7 +878,7 @@ public final class PeriodicReport {
         return -1;
     }
 
-    /** Il testo fra 'dopo' e il primo 'fino' che lo segue; "" se 'dopo' non c'e'. */
+    /** The text between 'after' and the first 'until' that follows it; "" if 'after' is not there. */
     private static String between(String s, String after, String until) {
         int i = s.indexOf(after);
         if (i < 0) return "";
@@ -888,13 +888,13 @@ public final class PeriodicReport {
     }
 
     /**
-     * Dal log al verdetto: cosa si registra come esito e cosa si dice a chi ha premuto il
-     * pulsante.
+     * From the log to the verdict: what is recorded as the outcome and what is told to whoever
+     * pressed the button.
      *
-     * "success" vuol dire che il pannello non deve rimandarlo. Vale anche per un messaggio che
-     * Postfix tiene in coda e riprovera' da solo: rimandarlo farebbe arrivare due rapporti. E'
-     * false solo quando il messaggio di sicuro non arrivera'. "avviso" vuol dire che non e'
-     * ancora arrivato, o che non si sa.
+     * "success" means that the panel must not send it again. It also applies to a message that
+     * Postfix keeps in the queue and will retry by itself: sending it again would deliver two
+     * reports. It is false only when the message will certainly not arrive. "warning" means
+     * that it has not arrived yet, or that it is not known.
      */
     static JSONObject verdict(JSONObject log) {
         String queue = log.optString("queue", "");
@@ -935,21 +935,21 @@ public final class PeriodicReport {
         }
     }
 
-    /** L'esito finisce in una riga della scheda: una risposta lunga del server si accorcia. */
+    /** The outcome ends up in one line of the tab: a long answer from the server is shortened. */
     private static String brief(String s) {
         return s.length() <= 300 ? s : s.substring(0, 297) + "...";
     }
 
-    // ===================== le voci che aggiunge il rapporto =====================
+    // ===================== the items the report adds =====================
 
     /**
-     * Le voci che arrivano dalla sorveglianza: specifiche sostituite o aggiornate, e versioni
-     * di OpenSSL che escono dal supporto.
+     * The items that come from the monitoring: specifications replaced or updated, and versions
+     * of OpenSSL going out of support.
      *
-     * Se il controllo non riesce (rete assente, fonte irraggiungibile) NON si tace: si mette
-     * una voce che dice che non si e' potuto controllare. Un rapporto silenzioso perche' il
-     * controllo e' fallito e' indistinguibile da un rapporto silenzioso perche' va tutto bene,
-     * e sono due cose opposte.
+     * If the check fails (no network, source unreachable) it does NOT stay silent: an item is added
+     * that says the check could not be done. A report that is silent because the check failed
+     * is indistinguishable from a report that is silent because everything is fine, and they
+     * are two opposite things.
      */
     static java.util.List<JSONObject> watchWarnings() {
         java.util.List<JSONObject> outside = new java.util.ArrayList<>();
@@ -1002,19 +1002,19 @@ public final class PeriodicReport {
     }
 
     /**
-     * Il gestore dei certificati viene COLLEGATO da chi avvia il pannello, non cercato per
-     * riflessione: cosi' il compilatore verifica i nomi. La prima versione cercava un campo
-     * "Main.acmeManager" che non esiste — e' privato dentro SSLMailServer — quindi il
-     * rapporto avrebbe scritto "non riesco a leggere il certificato" per sempre, senza che
-     * niente lo segnalasse.
+     * The certificate manager is WIRED IN by whoever starts the panel, not looked up through
+     * reflection: this way the compiler checks the names. The first version looked up a field
+     * "Main.acmeManager" that does not exist - it is private inside SSLMailServer - so the
+     * report would have written "I cannot read the certificate" forever, without anything
+     * flagging it.
      */
     private static org.daemoxcp.mail.security.AcmeManager acme;
 
     public static void link(org.daemoxcp.mail.security.AcmeManager a) { acme = a; }
 
     /**
-     * Lo stato del certificato per la sezione del rapporto: nome, emittente, scadenza; oppure,
-     * in "problem", la frase che dice perche' non si sa.
+     * The state of the certificate for the report's section: name, issuer, expiry; or,
+     * in "problem", the sentence that says why it is not known.
      */
     static JSONObject certificateState() {
         JSONObject r = new JSONObject();
@@ -1034,10 +1034,10 @@ public final class PeriodicReport {
         }
     }
 
-    /** Il certificato entra anche fra le cose da fare, se sta per scadere o e' scaduto. */
+    /** The certificate also goes among the things to do, if it is about to expire or has expired. */
     /**
-     * Una versione nuova del pannello fra le release di GitHub (ReleaseCheck), dall'ultimo esito salvato: chi non apre
-     * mai il pannello la legge qui. Urgenza bassa: il pannello che gira non ha niente che non va.
+     * A new version of the panel among the GitHub releases (ReleaseCheck), from the last saved outcome:
+     * whoever never opens the panel reads it here. Low urgency: there is nothing wrong with the running panel.
      */
     static JSONObject releaseWarning() {
         try {

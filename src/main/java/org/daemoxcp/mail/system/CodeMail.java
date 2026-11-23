@@ -6,21 +6,21 @@ import java.time.ZonedDateTime;
 import java.util.Map;
 
 /**
- * Le email con un codice monouso: accesso al pannello, conferma di un'operazione delicata,
- * conferma della nuova email di accesso.
+ * The emails with a one-time code: panel login, confirmation of a sensitive operation,
+ * confirmation of the new login email.
  *
- * Ognuna dice, nell'ordine in cui serve a chi la apre: quale pannello e quale server, il codice,
- * per quanto vale, da dove e quando e' stato chiesto, e cosa fare se non l'ha chiesto lui.
+ * Each one says, in the order in which the person opening it needs it: which panel and which
+ * server, the code, how long it is valid, from where and when it was requested, and what to do
+ * if they did not request it.
  *
- * Tre scelte:
- *  - il codice NON sta nell'oggetto ne' nella riga di anteprima: le notifiche del telefono le
- *    mostrano a schermo bloccato;
- *  - l'indirizzo IP di chi l'ha chiesto c'e' nell'accesso e nella conferma, che vanno alla
- *    casella dell'amministratore; NON c'e' nel cambio dell'email, che va al NUOVO indirizzo, cioe'
- *    a chiunque sia stato scritto nel modulo: mandargli l'IP di chi l'ha scritto sarebbe
- *    consegnarlo a uno sconosciuto;
- *  - nessun collegamento: un'email che chiede di cliccare per entrare e' esattamente quello che
- *    un falso imita.
+ * Three choices:
+ *  - the code is NOT in the subject nor in the preview line: phone notifications show them
+ *    on the lock screen;
+ *  - the IP address of whoever requested it is in the login and in the confirmation, which go
+ *    to the administrator's mailbox; it is NOT in the email change, which goes to the NEW
+ *    address, that is to whoever was written in the form: sending them the IP of whoever wrote
+ *    it would be handing it to a stranger;
+ *  - no link: an email that asks you to click to log in is exactly what a fake imitates.
  */
 public final class CodeMail {
 

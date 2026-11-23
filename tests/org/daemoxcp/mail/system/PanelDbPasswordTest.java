@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * The password of the panel's MySQL user changed once (reperto 232), against a fake MySQL that keeps a primary and a
+ * The password of the panel's MySQL user changed once (finding 232), against a fake MySQL that keeps a primary and a
  * secondary password per account as MySQL 8 does (RETAIN CURRENT PASSWORD, DISCARD OLD PASSWORD; a client on
  * 127.0.0.1 lands on the localhost account), and the real PendingDbPassword.settle for the start after a crash.
  *

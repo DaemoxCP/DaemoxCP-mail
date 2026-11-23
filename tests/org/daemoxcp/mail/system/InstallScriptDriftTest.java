@@ -14,7 +14,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * Reperto 42: a package's install script changes the live configuration, and the update declares
+ * Finding 42: a package's install script changes the live configuration, and the update declares
  * itself successful.
  *
  * Measured on the FreeBSD 15.1 VM on 24/10/2026: updating postfix-mysql 3.11.7_1,1 -> 3.11.7_3,1
@@ -315,7 +315,7 @@ public class InstallScriptDriftTest {
         String id = start.optString("jobId");
         if (id.isEmpty()) { check(flow + " " + version + ": the job starts (" + start + ")", false); return; }
         // The end is the free turn, not the status: the maintenance says "completed" before its
-        // final checks (reperto 43), and whoever stopped there would look at a job half done.
+        // final checks (finding 43), and whoever stopped there would look at a job half done.
         long deadline = System.currentTimeMillis() + 600_000;
         while (PackageQueue.holder() != null && System.currentTimeMillis() < deadline) Thread.sleep(1000);
         JSONObject job = UpdateManager.jobStatus(id).getJSONObject("job");

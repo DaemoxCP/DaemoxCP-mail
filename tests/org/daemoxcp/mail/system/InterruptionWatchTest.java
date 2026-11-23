@@ -11,7 +11,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * The running service's guardian (UpdateManager.watchOnce, reperto 166): when it must NOT touch the
+ * The running service's guardian (UpdateManager.watchOnce, finding 166): when it must NOT touch the
  * list of unlocked packages, and the text of the notice of an interrupted reinstallation. No pkg:
  * every case stops before locking again (the case that really locks again is ReinstallJobTest J4,
  * on the clone). List, job record, turn and notice in a temporary folder.

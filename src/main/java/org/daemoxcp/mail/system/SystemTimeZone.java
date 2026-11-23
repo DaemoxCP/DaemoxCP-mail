@@ -9,16 +9,16 @@ import java.time.ZoneId;
 import java.util.regex.Pattern;
 
 /**
- * Il fuso orario del sistema, scelto da chi installa (reperto 242).
+ * The system time zone, chosen by whoever installs (finding 242).
  *
- * <p>La voce 1 del menu copiava sempre Europe/Rome in /etc/localtime: andava bene per il server di chi ha scritto il
- * pannello, non per chiunque altro. Adesso il menu chiede il fuso, proponendo quello che il sistema ha gia'
- * (/var/db/zoneinfo, scritto da tzsetup), e lo script lo riceve come argomento. Il nome si controlla due volte, qui e
- * nello script: identificatore IANA (lettere, cifre, _ + -, segmenti separati da /, quindi niente «..»), conosciuto da
- * Java e presente in /usr/share/zoneinfo come file normale.
+ * <p>Menu option 1 always copied Europe/Rome into /etc/localtime: that was fine for the server of the person who
+ * wrote the panel, not for anyone else. Now the menu asks for the time zone, proposing the one the system already
+ * has (/var/db/zoneinfo, written by tzsetup), and the script receives it as an argument. The name is checked twice,
+ * here and in the script: an IANA identifier (letters, digits, _ + -, segments separated by /, hence no ".."),
+ * known to Java and present in /usr/share/zoneinfo as a regular file.
  *
- * <p>Per le date dei dati il pannello usa UTC comunque (r13): il fuso del sistema e' quello che si legge nei registri
- * e nell'ora del server.
+ * <p>For the dates in the data the panel uses UTC anyway (r13): the system time zone is the one you read in the
+ * logs and in the server's clock.
  */
 public final class SystemTimeZone {
 
@@ -28,7 +28,7 @@ public final class SystemTimeZone {
     static final Path CURRENT = Path.of("/var/db/zoneinfo");
     static final Pattern NAME = Pattern.compile("^[A-Za-z0-9_+-]{1,32}(/[A-Za-z0-9_+-]{1,32}){0,3}$");
 
-    /** Il fuso che il sistema ha adesso, o UTC se non si sa. */
+    /** The time zone the system has now, or UTC if it is not known. */
     public static String current() {
         return current(CURRENT);
     }
@@ -40,12 +40,12 @@ public final class SystemTimeZone {
                 if (NAME.matcher(s).matches()) return s;
             }
         } catch (IOException ignored) {
-            // si propone UTC
+            // UTC is proposed
         }
         return "UTC";
     }
 
-    /** Null se il fuso si puo' usare; altrimenti perche' no, da mostrare a chi lo ha scritto. */
+    /** Null if the time zone can be used; otherwise why not, to be shown to whoever entered it. */
     public static String problem(String name) {
         return problem(name, ZONEINFO);
     }

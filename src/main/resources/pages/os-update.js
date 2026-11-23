@@ -1,17 +1,18 @@
 
-        // ---------- FreeBSD guidato: le patch e il passaggio a una release nuova (reperto 196) ----------
-        // Una frase sullo stato e UN pulsante per il passo che viene dopo. Le patch: installa, poi (se serve) riavvia.
-        // Una release nuova compare solo quando c'e', ed e' una lista di quattro passi: si vede dove si e', e solo il
-        // passo di adesso ha il suo pulsante. Il registro di quello che il server fa resta chiuso finche' non lo si apre.
+        // ---------- Guided FreeBSD: the patches and the move to a new release (finding 196) ----------
+        // One sentence about the state and ONE button for the step that comes next. The patches: install, then
+        // (if needed) restart. A new release appears only when there is one, and it is a list of four steps: one
+        // sees where one is, and only the current step has its button. The log of what the server does stays
+        // collapsed until it is opened.
 
-        // Quale dei due pannelli della riga: le patch o la release nuova. Mai tutti e due insieme.
+        // Which of the row's two panels: the patches or the new release. Never both together.
         function osShow(which) {
             const patch = document.getElementById('os-patch'), release = document.getElementById('os-release');
             if (patch) patch.hidden = which !== 'patch';
             if (release) release.hidden = which !== 'release';
         }
 
-        // Il registro sotto un pannello: c'e' solo quando c'e' qualcosa da leggere, e resta chiuso.
+        // The log under a panel: it exists only when there is something to read, and it stays collapsed.
         function osLogBox(id, show) {
             const box = document.getElementById(id);
             if (box) box.hidden = !show;
@@ -23,7 +24,8 @@
                 + '<i class="fas fa-rotate-right me-1" aria-hidden="true"></i>' + escHtml(t('osu.restartGo')) + '</button>';
         }
 
-        // L'esito delle patch, letto dal sistema e non dal registro: cosa e' installato e cosa resta da fare.
+        // The outcome of the patches, read from the system and not from the log: what is installed and what is
+        // left to do.
         async function osPatchOutcome() {
             const el = document.getElementById('os-body');
             const r = await updApi('os_status');
@@ -39,9 +41,10 @@
             if (typeof panelRebootRefresh === 'function') panelRebootRefresh();
         }
 
-        // ---------- la release nuova ----------
+        // ---------- the new release ----------
 
-        // La release verso cui si va: quella del passaggio cominciato, altrimenti la piu' recente fra le supportate.
+        // The release being moved to: the one of the move already started, otherwise the most recent among
+        // the supported ones.
         function osRelTarget() {
             const jp = uc.jump || {};
             if (jp.inProgress && jp.target) return jp.target;
@@ -49,7 +52,8 @@
             return v.length ? v[v.length - 1].version : '';
         }
 
-        // A che passo si e', dallo stato che il server tiene su disco e da quello che freebsd-update ha scaricato.
+        // Which step we are at, from the state the server keeps on disk and from what freebsd-update has
+        // downloaded.
         function osRelStep() {
             const jp = uc.jump || {};
             if (jp.phase === 'finished') return 4;
@@ -58,7 +62,7 @@
             return 1;
         }
 
-        // Il passaggio e' in corso (preparato o cominciato) e non ancora finito.
+        // The move is in progress (prepared or started) and not yet finished.
         function osMoving() {
             const jp = uc.jump || {};
             return !!(jp.success && jp.inProgress && jp.phase !== 'finished');
@@ -92,11 +96,11 @@
                 h += '</div></li>';
             });
             list.innerHTML = h;
-            // L'ultimo passo non ha pulsanti: il controllo parte da solo, una volta.
+            // The last step has no buttons: the check starts by itself, once.
             if (now === 4 && !osReleaseRender.checked) { osReleaseRender.checked = true; upCheck(); }
         }
 
-        // Il pulsante (o i pulsanti) del passo di adesso.
+        // The button (or buttons) of the current step.
         function osRelAction(n, target, jp, os) {
             if (n === 1) {
                 return '<button type="button" class="btn btn-primary touch-target" data-on-click="osRelPrepare()">'
@@ -122,8 +126,8 @@
             return '';
         }
 
-        // Passo 1: i controlli e, se sono a posto, la preparazione con una sola conferma. Se qualcosa non va si
-        // vedono solo le righe che fermano, con cosa fare.
+        // Step 1: the checks and, if they are fine, the preparation with a single confirmation. If something is
+        // wrong only the blocking lines are shown, with what to do.
         async function osRelPrepare() {
             const el = document.getElementById('up-body'), pre = document.getElementById('up-log'), target = osRelTarget();
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('osu.checking'));
@@ -154,7 +158,8 @@
             catch (e) { if (said) said.textContent = t('osu.copyFailed'); }
         }
 
-        // Passo 2 fatto? Lo dice freebsd-update, non la persona: si rilegge e si guarda se la release e' scaricata.
+        // Step 2 done? freebsd-update says so, not the person: it is reread to see whether the release is
+        // downloaded.
         async function osRelFetched() {
             await ucLoad(true);
             if (!(uc.jump || {}).upgradeFetched)
@@ -171,7 +176,8 @@
             ucLoad(true);
         }
 
-        // Passo 3: freebsd-update install a giri; si ferma quando serve un riavvio, e dopo il riavvio si riprende da qui.
+        // Step 3: freebsd-update install in rounds; it stops when a restart is needed, and after the restart
+        // it resumes from here.
         async function osRelInstall() {
             const target = osRelTarget();
             const yes = await panelAsk({ title: t('osu.installAskTitle', { target: target }), text: t('osu.installAskText'),
@@ -185,9 +191,10 @@
             planPoll(r.jobId, el, pre, () => { el.innerHTML = ''; ucLoad(true); if (typeof panelRebootRefresh === 'function') panelRebootRefresh(); });
         }
 
-        // ---------- i registri delle operazioni (Diagnostica) ----------
-        // Ogni lavoro guidato scrive il suo registro anche su disco (JobJournal): qui l'elenco, dal piu' recente, e il
-        // testo di quello scelto. Restano dopo un riavvio del pannello o del server, quando il registro della pagina non c'e' piu'.
+        // ---------- the operation logs (Diagnostics) ----------
+        // Every guided job also writes its log on disk (JobJournal): here the list, most recent first, and the
+        // text of the chosen one. They remain after a restart of the panel or of the server, when the page's
+        // log is gone.
         async function jrList() {
             const box = document.getElementById('jr-list');
             box.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.reading'));
@@ -208,7 +215,8 @@
                 const when = new Date(j.startedUtc);
                 h += '<tr class="upd-cell"><td class="small">' + escHtml(isNaN(when) ? j.startedUtc : when.toLocaleString(window.I18N_LANG)) + '</td>'
                    + '<td>' + escHtml(kind[j.type] || j.type) + '</td>'
-                   // Finita male ma rifatta bene da una dopo dello stesso tipo (reperto 212): lo si dice, senza il colore d'allarme.
+                   // Failed but redone successfully by a later one of the same type (finding 212): this is said,
+                   // without the alarm color.
                    + '<td><span class="badge ' + (j.settled ? 'upd-badge-info' : (badge[j.status] || 'upd-badge-info')) + '">' + escHtml(outcome[j.status] || j.status) + '</span>'
                    + (j.settled ? '<div class="small text-muted mt-1">' + escHtml(t('jr.settled')) + '</div>' : '') + '</td>'
                    + '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-secondary touch-target" data-name="' + escHtml(j.name) + '" data-on-click="jrShow(this.dataset.name)">'

@@ -7,23 +7,26 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 
 /**
- * Dare a un utente una cartella e tutto quello che contiene, da root, senza dargli anche file di altri.
+ * Giving a user a folder and everything it contains, as root, without also giving them other people's files.
  *
- * Un collegamento simbolico lo si sapeva gia' (non si segue). Ma anche un collegamento fisso: su FreeBSD chiunque
- * puo' fare un hard link a un file di un altro utente sullo stesso file system (security.bsd.hardlink_check_uid e' 0
- * per impostazione predefinita), e il link E' quel file. /var/vmail sta nello stesso file system di /etc (nel boot
- * environment, sul server vero come sulla VM): vmail faceva un hard link a un file di root dentro /var/vmail, e il
- * «chown -R vmail:vmail /var/vmail» che root esegue a ogni rigenerazione delle cartelle della posta gli dava quel
- * file. Con /etc/master.passwd, root. Misurato sulla VM il 17/11/2026 con un file di prova (reperto 252).
+ * A symbolic link was already known about (it is not followed). But a hard link too: on FreeBSD anyone
+ * can make a hard link to another user's file on the same file system (security.bsd.hardlink_check_uid is 0
+ * by default), and the link IS that file. /var/vmail is on the same file system as /etc (in the boot
+ * environment, on the production server as on the VM): vmail made a hard link to a root file inside /var/vmail, and the
+ * "chown -R vmail:vmail /var/vmail" that root runs at every regeneration of the mail folders gave it that
+ * file. With /etc/master.passwd, root. Measured on the VM on 2026-11-17 with a test file (finding 252).
  *
- * Quindi si cambia il proprietario solo di cartelle e di file regolari con un solo nome; un file con piu' nomi non e'
- * solo di quella cartella e resta com'e', detto nel registro. Le cartelle non possono avere hard link.
+ * So the owner is changed only on folders and on regular files with a single name; a file with several names does not
+ * belong only to that folder and stays as it is, reported in the log. Folders cannot have hard links.
  */
 public final class SafeOwnership {
 
     private SafeOwnership() {}
 
-    /** Vero se root puo' cambiare proprietario e permessi di p senza toccare altro: cartella, o file con un solo nome. */
+    /**
+     * True if root can change the owner and permissions of p without touching anything else: a folder, or a file with a
+     * single name.
+     */
     public static boolean safeToChange(Path p) throws IOException {
         BasicFileAttributes a = Files.readAttributes(p, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         if (a.isSymbolicLink()) return false;
@@ -34,9 +37,9 @@ public final class SafeOwnership {
     }
 
     /**
-     * Il pezzo di script che da' dir e il suo contenuto a owner:group: solo cartelle e file con un solo nome, sullo
-     * stesso file system, mai attraverso un collegamento (find non li segue). I file con piu' nomi non suoi si
-     * contano e si dicono. dir, owner e group sono nomi del pannello, mai valori arrivati da fuori.
+     * The script fragment that gives dir and its content to owner:group: only folders and files with a single name, on the
+     * same file system, never through a link (find does not follow them). Files with several names that are not its own are
+     * counted and reported. dir, owner and group are panel names, never values that came from outside.
      */
     public static String shell(String dir, String owner, String group) {
         check(dir, owner, group);

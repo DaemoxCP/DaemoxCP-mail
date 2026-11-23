@@ -16,23 +16,24 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * La copia in chiaro del token di Cloudflare che acme.sh si tiene: tolta.
+ * The plaintext copy of the Cloudflare token that acme.sh keeps for itself: removed.
  *
- * Quando la sfida passa da Cloudflare (dns_cf), acme.sh salva il token che riceve (SAVED_CF_Token, e
- * SAVED_CF_Account_ID) nel suo account.conf, per i rinnovi che farebbe da se'. Ma acme.sh da se' non rinnova niente:
- * il suo cron lo toglie AcmeUser, e ogni emissione e rinnovo li lancia il pannello, che il token glielo passa ogni
- * volta (CF_Token, decifrato da MySQL: CloudflareTokens). Quella copia serviva solo a chi la trovava: un token che
- * scrive i DNS di tutte le zone dell'account, in chiaro su disco. Vista sul server vero il 17/11/2026, in
- * /var/db/acme/.acme.sh/account.conf, dopo aver cifrato quella nel database.
+ * When the challenge goes through Cloudflare (dns_cf), acme.sh saves the token it receives (SAVED_CF_Token, and
+ * SAVED_CF_Account_ID) in its account.conf, for the renewals it would do on its own. But acme.sh renews nothing on
+ * its own: its cron is removed by AcmeUser, and every issuance and renewal is launched by the panel, which passes it
+ * the token every time (CF_Token, decrypted from MySQL: CloudflareTokens). That copy was only useful to whoever found
+ * it: a token that writes the DNS of all the zones of the account, in plaintext on disk. Seen on the production
+ * server on 2026-11-17, in /var/db/acme/.acme.sh/account.conf, after the one in the database had been encrypted.
  *
- * Si tolgono solo le righe SAVED_CF_; il resto del file resta com'era, con proprietario e permessi, scritto accanto e
- * rinominato al suo posto. Un account.conf che e' un collegamento, o un file con piu' nomi, si lascia e si dice.
+ * Only the SAVED_CF_ lines are removed; the rest of the file stays as it was, with owner and permissions, written
+ * alongside and renamed into place. An account.conf that is a link, or a file with several names, is left alone
+ * and reported.
  */
 public final class AcmeCloudflareCopy {
 
     private static final Logger LOGGER = Logger.getLogger(AcmeCloudflareCopy.class.getName());
 
-    /** Una riga di account.conf con una copia salvata dal modulo di Cloudflare. */
+    /** A line of account.conf with a copy saved by the Cloudflare module. */
     static final Pattern SAVED = Pattern.compile("(?m)^SAVED_CF_([A-Za-z_]+)=.*(?:\\r?\\n|$)");
 
     enum Outcome { NOTHING, DONE, LEFT }
@@ -67,12 +68,12 @@ public final class AcmeCloudflareCopy {
         return new Report(Outcome.DONE, accountConf + ": removed " + keys);
     }
 
-    /** Dopo ogni acme.sh a cui il pannello ha passato il token. */
+    /** After every acme.sh run to which the panel passed the token. */
     static void afterRun(AcmeUser.Layout l) {
         if (l != null) report(Path.of(l.home(), "account.conf"));
     }
 
-    /** All'avvio: le copie scritte prima di questa versione. */
+    /** At startup: the copies written before this version. */
     public static void ensureAtBoot() {
         AcmeUser.Layout l = AcmeUser.layout();
         if (l != null) report(Path.of(l.home(), "account.conf"));

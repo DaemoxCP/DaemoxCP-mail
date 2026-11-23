@@ -4,22 +4,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * I livelli di compatibilita' di Postfix esaminati dal pannello, e cosa cambia a ognuno.
+ * The Postfix compatibility levels the panel has examined, and what changes at each one.
  *
- * Dalla 3.0, quando cambia un valore predefinito in modo incompatibile, Postfix non lo applica finche'
- * compatibility_level resta sotto il livello che lo introduce: e' la sua rete di sicurezza. Salire di livello
- * significa accettare i valori nuovi dei parametri lasciati al predefinito. Per questo il pannello sale solo a un
- * livello che sta qui, dove per ognuno c'e' l'elenco di quello che cambia: lo legge la Diagnostica
- * (UpdateManager.postfixCompatibility) per dire cosa cambierebbe, e l'installazione (PostfixLevelScript) per salire al
- * livello che il Postfix installato chiede. Un livello nuovo, non ancora qui, non si prende alla cieca.
+ * Since 3.0, when a default value changes in an incompatible way, Postfix does not apply it as long as
+ * compatibility_level stays below the level that introduces it: it is its safety net. Moving up a level means
+ * accepting the new values of the parameters left at their default. That is why the panel moves up only to a
+ * level listed here, where each one comes with the list of what changes: Diagnostics reads it
+ * (UpdateManager.postfixCompatibility) to say what would change, and the installation (PostfixLevelScript) to
+ * move up to the level the installed Postfix asks for. A new level, not yet here, is not taken blindly.
  *
- * Ogni voce: livello, chiave del testo che lo descrive, parametri che cambiano. "nome@gate=valore": il parametro conta
- * solo se il gate ha quel valore (il resoconto TLS-RPT vale solo con smtp_tlsrpt_enable = yes).
+ * Each entry: level, key of the text that describes it, parameters that change. "name@gate=value": the parameter
+ * counts only if the gate has that value (the TLS-RPT report applies only with smtp_tlsrpt_enable = yes).
  *
- * Fonte: COMPATIBILITY_README di Postfix, letto il 01/09/2026 su postfix.org e il 16/11/2026 nel pacchetto 3.11.7
- * sulla VM, insieme a `postconf -d`, dove i predefiniti che dipendono dal livello si leggono come
- * "${{$compatibility_level} <level {N} ? {vecchio} : {nuovo}}" (PostfixLevelTest li confronta con questo elenco).
- * smtpd_relay_before_recipient_restrictions (3.6) mancava: la descrizione lo diceva, l'elenco no.
+ * Source: Postfix's COMPATIBILITY_README, read on 2026-09-01 on postfix.org and on 2026-11-16 in the 3.11.7
+ * package on the VM, together with `postconf -d`, where the defaults that depend on the level read as
+ * "${{$compatibility_level} <level {N} ? {old} : {new}}" (PostfixLevelTest compares them with this list).
+ * smtpd_relay_before_recipient_restrictions (3.6) was missing: the description mentioned it, the list did not.
  */
 public final class PostfixLevels {
 
@@ -37,14 +37,14 @@ public final class PostfixLevels {
          "smtp_tlsrpt_skip_reused_handshakes@smtp_tlsrpt_enable=yes smtp_tls_security_level"},
     };
 
-    /** I livelli esaminati, dal piu' basso. */
+    /** The levels examined, from the lowest. */
     public static List<String> reviewed() {
         List<String> out = new ArrayList<>();
         for (String[] l : ALL) out.add(l[0]);
         return out;
     }
 
-    /** I parametri che cambiano a quel livello (con l'eventuale "@gate=valore"), o un elenco vuoto. */
+    /** The parameters that change at that level (with the "@gate=value", if any), or an empty list. */
     public static List<String> parameters(String level) {
         for (String[] l : ALL)
             if (l[0].equals(level)) return List.of(l[2].trim().split("\\s+"));

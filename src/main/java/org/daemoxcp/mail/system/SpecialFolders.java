@@ -12,70 +12,72 @@ import java.time.Duration;
 import java.util.logging.Logger;
 
 /**
- * Le cartelle speciali di ogni casella (Bozze, Inviata, Cestino, Junk) e lo spam nella Junk.
+ * The special folders of every mailbox (Drafts, Sent, Trash, Junk) and spam into Junk.
  *
- * Misurato sulla VM il 20/11/2026, installata da zero dal README:
+ * Measured on the VM on 2026-11-20, after a clean install from the README:
  * <ul>
- *   <li>la posta che Rspamd segna (azione «add header», punteggio fra 6 e 15) arrivava nella INBOX con la sola riga
- *       «X-Spam: Yes»: nessuna regola la spostava nella Junk;</li>
- *   <li>peggio, le regole del pannello giravano anche su quella: con la risposta automatica accesa, un messaggio con
- *       «X-Spam: Yes» consegnato via LMTP ha avuto la sua risposta («vacation action: sent vacation response»), cioe'
- *       una lettera verso un mittente che nello spam e' quasi sempre falso (backscatter: rovina la reputazione del
- *       server). La documentazione di Pigeonhole sulla risposta automatica elenca i messaggi a cui non risponde (liste,
- *       Auto-Submitted, Precedence bulk/junk/list, mittente vuoto o di sistema): nessuna intestazione di spam. Lo stesso
- *       per l'inoltro: lo spam usciva verso l'indirizzo di inoltro, a nome di questo server;</li>
- *   <li>Dovecot non diceva ai programmi di posta quali sono le cartelle speciali (IMAP SPECIAL-USE, RFC 6154): nessun
- *       blocco namespace, quindi nessuna \Drafts, \Sent, \Trash, \Junk. Ogni programma se le crea col suo nome (Apple
- *       «Sent Messages» e «Deleted Messages», Outlook «Sent Items»), e la posta inviata finisce divisa. Sul server vero,
- *       contate il 20/11/2026: 8 caselle su 12 con Drafts, Sent, Trash e Junk (le crea la webmail al primo accesso,
- *       create_default_folders = true), una «Sent Messages» e due «Deleted Messages».</li>
+ *   <li>mail that Rspamd marks (action "add header", score between 6 and 15) arrived in the INBOX with only the line
+ *       "X-Spam: Yes": no rule moved it into Junk;</li>
+ *   <li>worse, the panel's rules ran on it too: with the auto-reply on, a message with "X-Spam: Yes" delivered via
+ *       LMTP got its reply ("vacation action: sent vacation response"), that is a letter to a sender that in spam is
+ *       almost always forged (backscatter: it ruins the server's reputation). The Pigeonhole documentation on the
+ *       auto-reply lists the messages it does not reply to (lists, Auto-Submitted, Precedence bulk/junk/list, empty
+ *       or system sender): no spam header. The same for forwarding: spam went out to the forwarding address, in the
+ *       name of this server;</li>
+ *   <li>Dovecot did not tell mail programs which folders are the special ones (IMAP SPECIAL-USE, RFC 6154): no
+ *       namespace block, hence no \Drafts, \Sent, \Trash, \Junk. Every program creates them with its own name (Apple
+ *       "Sent Messages" and "Deleted Messages", Outlook "Sent Items"), and sent mail ends up split. On the
+ *       production server, counted on 2026-11-20: 8 mailboxes out of 12 with Drafts, Sent, Trash and Junk (the
+ *       webmail creates them at the first login, create_default_folders = true), one "Sent Messages" and two
+ *       "Deleted Messages".</li>
  * </ul>
  *
- * Il rimedio, dalla documentazione di Dovecot e di Pigeonhole (2.3 e 2.4):
+ * The remedy, from the Dovecot and Pigeonhole documentation (2.3 and 2.4):
  * <ul>
- *   <li>il namespace della INBOX con le quattro cartelle e il loro special_use, con auto = subscribe: Dovecot le crea e
- *       le sottoscrive per ogni casella, con gli stessi nomi che la webmail gia' crea; cosi' un programma che le cerca le
- *       trova invece di inventarne altre. Il separatore resta quello di prima (il punto di Maildir, misurato: LIST
- *       risponde "." prima e dopo) e nessuna cartella cambia nome;</li>
- *   <li>uno script Sieve fisso, di root, che gira per primo, prima delle regole del pannello e di quelle della casella:
- *       «X-Spam: Yes» (l'intestazione che il proxy di Rspamd aggiunge con l'azione add header, la spam_header
- *       predefinita) va nella Junk e la sequenza si ferma. Nella documentazione di Pigeonhole lo script dopo gira solo se
- *       e' in vigore un keep: dopo fileinto e stop non c'e', quindi niente risposta automatica, niente inoltro e niente
- *       regole della casella sullo spam. Nella 2.4 l'ordine lo da' precedence (piu' bassa prima; le altre hanno quella
- *       predefinita, infinita); nella 2.3 sieve_before e sieve_before2, e le regole del pannello passano alla seconda.</li>
+ *   <li>the INBOX namespace with the four folders and their special_use, with auto = subscribe: Dovecot creates and
+ *       subscribes them for every mailbox, with the same names that the webmail already creates; so a program that
+ *       looks for them finds them instead of inventing others. The separator stays the previous one (the Maildir
+ *       dot, measured: LIST answers "." before and after) and no folder changes name;</li>
+ *   <li>a fixed Sieve script, owned by root, that runs first, before the panel's rules and those of the mailbox:
+ *       "X-Spam: Yes" (the header that the Rspamd proxy adds with the add header action, the default spam_header)
+ *       goes into Junk and the sequence stops. In the Pigeonhole documentation the next script runs only if a keep
+ *       is in effect: after fileinto and stop there is none, so no auto-reply, no forwarding and no mailbox rules on
+ *       spam. In 2.4 the order is given by precedence (lower first; the others have the default one, infinite); in
+ *       2.3 by sieve_before and sieve_before2, and the panel's rules move to the second.</li>
  * </ul>
  *
- * Chi manda posta puo' scriversi da solo «X-Spam: Yes»: ottiene solo che il suo messaggio vada nella Junk. Rspamd non
- * scrive «X-Spam: No», quindi non c'e' niente da falsificare nell'altro verso.
+ * Whoever sends mail can write "X-Spam: Yes" themselves: all they get is that their message goes into Junk. Rspamd
+ * does not write "X-Spam: No", so there is nothing to forge in the other direction.
  *
- * L'installatore scrive gli stessi due file (DovecotConfig); sui server installati prima li scrive questa riparazione
- * all'avvio. Lo script lo compila sievec come utente sievec (SieveCompiler), mai root, a ogni avvio se e' cambiato
- * Pigeonhole. Prima di toccare la configurazione controlla che l'autenticazione funzioni e che nessun altro abbia
- * scritto un suo namespace; dopo, che Dovecot giri, che l'autenticazione passi ancora e che una casella veda la Junk
- * come \Junk. Se qualcosa non torna toglie il file e ricarica: Dovecot torna com'era. Al secondo avvio non fa niente.
+ * The installer writes the same two files (DovecotConfig); on servers installed earlier this boot repair writes
+ * them. The script is compiled by sievec as the sievec user (SieveCompiler), never as root, on every start if
+ * Pigeonhole has changed. Before touching the configuration it checks that authentication works and that nobody
+ * else has written a namespace of their own; afterwards, that Dovecot runs, that authentication still passes and
+ * that a mailbox sees Junk as \Junk. If something does not add up it removes the file and reloads: Dovecot goes back
+ * to how it was. On the second start it does nothing.
  */
 public final class SpecialFolders {
 
     private static final Logger LOGGER = Logger.getLogger(SpecialFolders.class.getName());
 
     public static final String FILE_NAME = "15-special-folders.conf";
-    /** Lo script, relativo alla cartella di Dovecot: lo stesso per l'installatore e per la riparazione. */
+    /** The script, relative to the Dovecot folder: the same for the installer and for the repair. */
     public static final String SCRIPT_IN_ETC = "sieve/spam-to-junk.sieve";
     public static final Path SCRIPT = Path.of("/usr/local/etc/dovecot").resolve(SCRIPT_IN_ETC);
-    /** Le regole del pannello nella 2.3: le stesse di DovecotConfig.SIEVE23, che qui passano a sieve_before2. */
+    /** The panel's rules on 2.3: the same as DovecotConfig.SIEVE23, which here move to sieve_before2. */
     static final String PANEL_RULES_23 = "/var/mail/sieve/%d/%n/.dovecot.sieve";
-    /** L'intestazione dello spam: quella che il proxy di Rspamd scrive con l'azione add header (spam_header). */
+    /** The spam header: the one that the Rspamd proxy writes with the add header action (spam_header). */
     public static final String SPAM_HEADER = "X-Spam";
     public static final String JUNK = "Junk";
-    /** Il nome del blocco sieve_script nella 2.4. */
+    /** The name of the sieve_script block in 2.4. */
     static final String SCRIPT_BLOCK = "spam_to_junk";
 
-    /** Le cartelle e il loro uso speciale (RFC 6154), coi nomi che la webmail usa gia'. */
+    /** The folders and their special use (RFC 6154), with the names that the webmail already uses. */
     static final String[][] FOLDERS = {{"Drafts", "\\Drafts"}, {"Sent", "\\Sent"}, {"Trash", "\\Trash"}, {JUNK, "\\Junk"}};
 
     private SpecialFolders() {}
 
-    /** Lo script Sieve: lo stesso per l'installatore e per la riparazione. */
+    /** The Sieve script: the same for the installer and for the repair. */
     public static String scriptContent() {
         return "# " + PanelMarker.WRITTEN + ".\n"
              + "# Spam that Rspamd marks (" + SPAM_HEADER + ": Yes) into " + JUNK + ", before any other rule: no\n"
@@ -88,7 +90,7 @@ public final class SpecialFolders {
              + "}\n";
     }
 
-    /** Il file di conf.d: lo stesso per l'installatore (DovecotConfig) e per la riparazione. */
+    /** The conf.d file: the same for the installer (DovecotConfig) and for the repair. */
     public static String fileContent(boolean dovecot24) {
         StringBuilder s = new StringBuilder();
         s.append("# ").append(PanelMarker.WRITTEN).append(".\n")
@@ -123,18 +125,18 @@ public final class SpecialFolders {
         return s.toString();
     }
 
-    /** In `doveconf -n` c'e' gia' un namespace scritto da altri (il nostro file non c'e'). Pura. */
+    /** In `doveconf -n` there is already a namespace written by others (our file is not there). Pure. */
     static boolean otherNamespace(String doveconf, boolean ourFileThere) {
         return !ourFileThere && doveconf != null && doveconf.matches("(?s)(.*\\n)?namespace [^\\n]*\\{.*");
     }
 
-    /** Le regole del pannello sono gia' configurate: Pigeonhole c'e' e il pannello l'ha impostato. Pura. */
+    /** The panel's rules are already configured: Pigeonhole is there and the panel has set it up. Pure. */
     static boolean panelSieve(String doveconf, boolean dovecot24) {
         if (doveconf == null) return false;
         return dovecot24 ? doveconf.contains("sieve_script panel {") : doveconf.contains("sieve_before");
     }
 
-    /** La risposta di LIST con RETURN (SPECIAL-USE) segna la Junk come \Junk. Pura. */
+    /** The LIST answer with RETURN (SPECIAL-USE) marks Junk as \Junk. Pure. */
     static boolean junkMarked(String imap) {
         return imap != null && imap.matches("(?s).*\\* LIST \\([^)]*\\\\Junk[^)]*\\) \"[^\"]*\" \"?" + JUNK + "\"?\\r?\\n.*");
     }
@@ -155,7 +157,7 @@ public final class SpecialFolders {
                     LOGGER.warning("[SpecialFolders] " + SCRIPT + " not precompiled (" + o.status() + ": " + o.message()
                             + "): Dovecot compiles it at each delivery");
             } else {
-                // Pigeonhole aggiornato: il compilato si rifa' se sievec oggi ne fa uno diverso.
+                // Pigeonhole updated: the compiled script is redone if sievec now produces a different one.
                 SieveCompiler.Outcome o = SieveCompiler.refresh(SCRIPT);
                 if (o.status() == SieveCompiler.Status.COMPILED)
                     LOGGER.info("[SpecialFolders] DONE: " + SCRIPT + " compiled again for the Sieve now installed");
@@ -176,7 +178,7 @@ public final class SpecialFolders {
         }
     }
 
-    /** Lo script al suo posto, di root e leggibile (Dovecot lo legge come vmail): vero se e' stato scritto adesso. */
+    /** The script in its place, owned by root and readable (Dovecot reads it as vmail): true if it was written now. */
     static boolean writeScript() throws Exception {
         String wanted = scriptContent();
         if (Files.isRegularFile(SCRIPT, LinkOption.NOFOLLOW_LINKS)
@@ -227,7 +229,7 @@ public final class SpecialFolders {
         }
     }
 
-    /** Dopo il reload: Dovecot gira, l'autenticazione passa, la configurazione ha lo script, una casella vede \Junk. */
+    /** After the reload: Dovecot runs, authentication passes, the configuration has the script, a mailbox sees \Junk. */
     static String verify(boolean v24) throws InterruptedException {
         String last = "Dovecot did not come back";
         for (int i = 0; i < 20; i++) {
@@ -249,7 +251,7 @@ public final class SpecialFolders {
         return last;
     }
 
-    /** Una casella qualunque, per la prova di LIST; null se non ce n'e' ancora nessuna. */
+    /** Any mailbox, for the LIST test; null if there is none yet. */
     static String firstUser() {
         Shell.Result r = Shell.run(Duration.ofSeconds(30), "doveadm", "user", "*");
         if (!r.success()) return null;
@@ -260,7 +262,7 @@ public final class SpecialFolders {
         return null;
     }
 
-    /** LIST della Junk con RETURN (SPECIAL-USE), da un IMAP lanciato per la casella (doveadm exec, come root). */
+    /** LIST of Junk with RETURN (SPECIAL-USE), from an IMAP launched for the mailbox (doveadm exec, as root). */
     static String list(String user) {
         Shell.Result r = Shell.run(Duration.ofSeconds(30), "sh", "-c",
                 "printf 'a LIST \"\" \"" + JUNK + "\" RETURN (SPECIAL-USE)\\r\\nb LOGOUT\\r\\n' | timeout -f 20 doveadm exec imap -u \"$1\" 2>/dev/null",

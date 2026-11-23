@@ -12,21 +12,22 @@ import java.util.logging.Logger;
 import org.daemoxcp.mail.util.Shell;
 
 /**
- * Il riavvio programmato: fino a quando la macchina non riparte il pannello non cambia niente.
+ * The scheduled restart: until the machine comes back up the panel changes nothing.
  *
- * <p>Il committente, il 09/11/2026, programmando il riavvio del server vero: «quando metto lo schedule per il
- * riavvio, non devi farmi fare niente nel pannello finche' non si riavvia, sennò potrebbero succedere cose
- * spiacevoli». Un lavoro avviato un minuto prima dello spegnimento resta a meta' (un pkg che sostituisce le
- * librerie, un file di configurazione riscritto senza il reload), e nessuno lo vede fino al riavvio dopo.
+ * <p>The owner, on 2026-11-09, while scheduling the restart of the production server: "when I set the schedule
+ * for the restart, you must not let me do anything in the panel until it restarts, otherwise unpleasant things
+ * could happen". A job started one minute before the shutdown stays half done (a pkg replacing the libraries, a
+ * configuration file rewritten without the reload), and nobody sees it until the next restart.
  *
- * <p>Come: ogni richiesta che puo' cambiare qualcosa ({@code Access.changes}) viene rifiutata finche' esiste il
- * processo {@code shutdown} (programmato dal pannello o da SSH: lo stesso processo). Restano le letture, annullare il
- * riavvio, riavviare subito e lo stato del riavvio ({@link #exempt}). Lo sa solo la root: la parte web non vede i
- * processi degli altri utenti ({@code security.bsd.see_other_uids=0}) e lo chiede alla root.
+ * <p>How: every request that can change something ({@code Access.changes}) is refused as long as the
+ * {@code shutdown} process exists (scheduled from the panel or from SSH: the same process). What remains: reads,
+ * cancelling the restart, restarting right away and the restart status ({@link #exempt}). Only the root part knows
+ * it: the web part does not see other users' processes ({@code security.bsd.see_other_uids=0}) and asks the root
+ * part.
  *
- * <p>L'ora: quella scritta dal pannello quando lo programma ({@link #AT}, valida solo se il processo e' lo stesso), o
- * ricavata dal comando ({@code shutdown -r +N}: avviato da tanti secondi, piu' N minuti). Per gli altri formati si
- * sa che c'e', non quando.
+ * <p>The time: the one written by the panel when it schedules it ({@link #AT}, valid only if the process is the
+ * same), or derived from the command ({@code shutdown -r +N}: started so many seconds ago, plus N minutes). For the
+ * other formats we know there is one, not when.
  */
 public final class RestartLock {
 
@@ -34,21 +35,21 @@ public final class RestartLock {
 
     private static final Logger LOGGER = Logger.getLogger(RestartLock.class.getName());
 
-    /** Dove il pannello scrive il processo e l'ora del riavvio che programma: "pid millisecondi". */
+    /** Where the panel writes the process and the time of the restart it schedules: "pid milliseconds". */
     static Path AT = Path.of("/var/db/daemoxcp-mail/reboot-at");
 
-    /** Lo stato. known falso: non si e' potuto leggere (pgrep non ha risposto). at 0: l'ora non si sa. */
+    /** The status. known false: it could not be read (pgrep did not answer). at 0: the time is unknown. */
     public record State(boolean scheduled, long at, boolean known) {
         public static final State NONE = new State(false, 0, true);
         public static final State UNKNOWN = new State(false, 0, false);
     }
 
-    /** Quello che resta possibile col riavvio programmato, per rotta: annullarlo, riavviare subito, il suo stato. */
+    /** What remains possible with the scheduled restart, by route: cancelling it, restarting right away, its status. */
     private static final Map<String, Set<String>> EXEMPT = Map.of(
             "/api/updates", Set.of("reboot_cancel", "reboot_now", "reboot_state"));
 
     public static boolean exempt(String route, String action) {
-        // Map.of non accetta null nemmeno in lettura: senza rotta o senza azione non c'e' eccezione che tenga.
+        // Map.of does not accept null even on lookup: without a route or without an action, no exemption applies.
         if (route == null || action == null) return false;
         Set<String> s = EXEMPT.get(route);
         return s != null && s.contains(action);
@@ -56,10 +57,10 @@ public final class RestartLock {
 
     private static volatile State cached;
     private static volatile long cachedAt;
-    /** Pochi secondi: una pagina che salva tre cose di fila non lancia tre pgrep. */
+    /** A few seconds: a page that saves three things in a row does not launch three pgrep. */
     private static final long TTL_MS = 3000;
 
-    /** Lo stato adesso (solo la root). */
+    /** The status now (root only). */
     public static State current() {
         long now = System.currentTimeMillis();
         State c = cached;
@@ -70,7 +71,7 @@ public final class RestartLock {
         return s;
     }
 
-    /** Dopo averlo programmato o annullato: la prossima richiesta rilegge. */
+    /** After scheduling or cancelling it: the next request reads it again. */
     public static void forget() {
         cachedAt = 0;
     }
@@ -78,7 +79,7 @@ public final class RestartLock {
     private static State read(long now) {
         Shell.Result r = Shell.run(Duration.ofSeconds(10), "/bin/pgrep", "-x", "shutdown");
         String out = r.output() == null ? "" : r.output().trim();
-        // pgrep: 0 trovato, 1 nessuno; il resto e' un errore, e "non so" non vale "nessun riavvio".
+        // pgrep: 0 found, 1 none; anything else is an error, and "I don't know" does not count as "no restart".
         if (r.exitCode() == 1 && out.isEmpty()) return State.NONE;
         if (!r.success()) return State.UNKNOWN;
         String pid = out.split("\\s+")[0];
@@ -91,7 +92,7 @@ public final class RestartLock {
         return new State(true, at, true);
     }
 
-    /** L'ora scritta dal pannello, se e' di questo processo. */
+    /** The time written by the panel, if it belongs to this process. */
     private static long recordedAt(String pid) {
         try {
             if (!Files.isRegularFile(AT)) return 0;
@@ -104,8 +105,8 @@ public final class RestartLock {
     }
 
     /**
-     * Da una riga di ps ("secondi comando"): l'ora per "shutdown -r +N" e "shutdown -r now", 0 per gli altri
-     * formati (un'ora assoluta: si sa che c'e' un riavvio, non quando).
+     * From a ps line ("seconds command"): the time for "shutdown -r +N" and "shutdown -r now", 0 for the other
+     * formats (an absolute time: we know there is a restart, not when).
      */
     static long atFromPs(String line, long now) {
         String[] f = line.trim().split("\\s+");
@@ -121,7 +122,7 @@ public final class RestartLock {
         return 0;
     }
 
-    /** Il pannello l'ha appena programmato: processo e ora, per dirla giusta in ogni pagina. */
+    /** The panel has just scheduled it: process and time, to state it correctly on every page. */
     public static void record(String pid, long at) {
         try {
             if (pid == null || !pid.matches("[0-9]{1,7}")) return;
@@ -132,7 +133,7 @@ public final class RestartLock {
         forget();
     }
 
-    /** Annullato: l'ora non vale piu'. */
+    /** Cancelled: the time no longer counts. */
     public static void cleared() {
         try {
             Files.deleteIfExists(AT);

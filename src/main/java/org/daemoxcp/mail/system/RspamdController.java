@@ -20,25 +20,26 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 /**
- * Il controller di rspamd (porta 11334 su 127.0.0.1 e ::1) solo con una password, che il pannello genera e tiene nei
- * segreti di root (reperto 236).
+ * The rspamd controller (port 11334 on 127.0.0.1 and ::1) only with a password, which the panel generates and
+ * keeps in root's secrets (finding 236).
  *
- * <p>Il worker-controller.inc del pacchetto ha password = "q1", in chiaro, e secure_ip = 127.0.0.1 e ::1: qualunque
- * processo della macchina entrava senza password e poteva tutto, addestrare Bayes, cambiare pesi e mappe, svuotare lo
- * storico. rspamd stesso lo scrive nel registro a ogni avvio («enable password is not set, so you should filter
- * controller availability by using of firewall or `secure_ip` option»). La guida del controller di rspamd: password e
- * enable_password con l'hash di «rspamadm pw», e secure_ip solo per chi deve entrare senza.
+ * <p>The package's worker-controller.inc has password = "q1", in clear text, and secure_ip = 127.0.0.1 and ::1:
+ * any process on the machine got in without a password and could do everything: train Bayes, change weights and
+ * maps, empty the history. rspamd itself writes it in the log at every startup ("enable password is not set, so
+ * you should filter controller availability by using of firewall or `secure_ip` option"). The rspamd controller
+ * guide: password and enable_password with the hash from "rspamadm pw", and secure_ip only for whoever must get
+ * in without one.
  *
- * <p>Il file e' override.d/worker-controller.inc (priority=10 in rspamd.conf), cosi' vince su tutto il resto. Misurato
- * sulla VM il 16/11/2026: rspamadm configdump da' secure_ip [] e le due password con l'hash; e anche da local.d
- * (priority=1) secure_ip = [] avrebbe preso il posto di quello del pacchetto (la prova che lo dava per unito e' stata
- * smentita dal rspamd vero). Proprio perche' override.d vince, un local.d/worker-controller.inc dell'amministratore con
- * una sua password o un suo secure_ip verrebbe scavalcato in silenzio: in quel caso non si tocca niente. L'hash lo
- * calcola rspamd_cryptobox.pbkdf, quello di
- * rspamadm pw, con la password sullo standard input (negli argomenti la vedrebbe chiunque con ps; rspamadm pw da
- * un terminale finto si e' bloccato due volte). Il file e' root:rspamd 0640: rspamd gira tutto come rspamd
- * (RspamdUser). La prova, dopo il reload: senza password 401 su 127.0.0.1 e ::1, con la password 200. Un errore
- * rimette tutto com'era. Un override.d/worker-controller.inc scritto a mano resta.
+ * <p>The file is override.d/worker-controller.inc (priority=10 in rspamd.conf), so it wins over everything else.
+ * Measured on the VM on 2026-11-16: rspamadm configdump gives secure_ip [] and the two passwords with the hash;
+ * and even from local.d (priority=1) secure_ip = [] would have replaced the package's one (the test that assumed
+ * it was merged was proved wrong by the real rspamd). Precisely because override.d wins, an administrator's
+ * local.d/worker-controller.inc with their own password or secure_ip would be silently overridden: in that case
+ * nothing is touched. The hash is computed by rspamd_cryptobox.pbkdf, the one of
+ * rspamadm pw, with the password on standard input (in the arguments anyone with ps would see it; rspamadm pw
+ * from a fake terminal hung twice). The file is root:rspamd 0640: all of rspamd runs as rspamd
+ * (RspamdUser). The test, after the reload: without the password 401 on 127.0.0.1 and ::1, with the password
+ * 200. An error puts everything back as it was. An override.d/worker-controller.inc written by hand stays.
  */
 public final class RspamdController {
 
@@ -48,7 +49,7 @@ public final class RspamdController {
 
     static final Path OVERRIDE = Path.of("/usr/local/etc/rspamd/override.d/worker-controller.inc");
     static final Path LOCAL = Path.of("/usr/local/etc/rspamd/local.d/worker-controller.inc");
-    /** Le chiavi del controller che il pannello decide: se l'amministratore le ha messe in local.d, sono sue. */
+    /** The controller keys the panel decides: if the administrator has put them in local.d, they are theirs. */
     static final Pattern ADMIN_KEYS = Pattern.compile("(?m)^\\s*(password|enable_password|secure_ip)\\b");
     static final String MARK = "# daemoxcp-mail (finding 236): rspamd's controller only with the panel's password.\n";
     static final Pattern HASH = Pattern.compile("\\$2\\$[a-z0-9]{8,64}\\$[a-z0-9]{16,128}");
@@ -62,21 +63,24 @@ public final class RspamdController {
                 + "secure_ip = [];\n";
     }
 
-    /** Quello che serve, per provarlo senza rspamd. */
+    /** What is needed, to test it without rspamd. */
     interface Services {
-        /** Il file, o null se non c'e'. */
+        /** The file, or null if it is not there. */
         String read(Path file) throws IOException;
-        /** Scrive il file, root:rspamd 0640. */
+        /** Writes the file, root:rspamd 0640. */
         void write(Path file, String text) throws IOException;
         void delete(Path file) throws IOException;
         String secret();
         void setSecret(String value);
-        /** L'hash di rspamadm pw, o null. */
+        /** The hash from rspamadm pw, or null. */
         String hash(String password);
-        /** rspamadm configtest senza errori. */
+        /** rspamadm configtest without errors. */
         boolean configOk();
         void reload();
-        /** Il codice HTTP di GET /stat su quell'indirizzo con quella password (null: senza), o -1 se non risponde. */
+        /**
+         * The HTTP code of GET /stat on that address with that password (null: without), or -1 if it does not
+         * answer.
+         */
         int status(String host, String password);
     }
 
@@ -84,7 +88,7 @@ public final class RspamdController {
 
     public record Result(Outcome outcome, String detail) {}
 
-    /** Chiuso: la password entra, senza no (::1 puo' non ascoltare, se IPv6 e' spento). */
+    /** Closed: with the password it gets in, without it does not (::1 may not be listening, if IPv6 is off). */
     static boolean locked(Services sv, String password) {
         int v4 = sv.status("127.0.0.1", null), v6 = sv.status("[::1]", null);
         return sv.status("127.0.0.1", password) == 200 && (v4 == 401 || v4 == 403) && (v6 == 401 || v6 == 403 || v6 == -1);
@@ -111,11 +115,14 @@ public final class RspamdController {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
     }
 
-    /** Il passaggio, puro rispetto a {@link Services}; waitSeconds quanto aspettare rspamd dopo il reload. */
+    /**
+     * The switch, pure with respect to {@link Services}; waitSeconds how long to wait for rspamd after the
+     * reload.
+     */
     static Result run(Services sv, Path override, Path local, int waitSeconds) {
         String cur, admin;
         try {
-        // Il blocco scritto in italiano dalle versioni di prima vale come quello di adesso (EnglishComments).
+        // The block written in Italian by earlier versions counts as the current one (EnglishComments).
             cur = EnglishComments.english(sv.read(override));
             admin = sv.read(local);
         } catch (IOException e) {
@@ -133,7 +140,7 @@ public final class RspamdController {
         String hash = sv.hash(password);
         if (hash == null || !HASH.matcher(hash).matches())
             return new Result(Outcome.LEFT, "rspamadm did not give a password hash: nothing changed");
-        // Prima il segreto: se il pannello si ferma qui, sa gia' la password che rspamd sta per chiedere.
+        // The secret first: if the panel stops here, it already knows the password rspamd is about to ask for.
         sv.setSecret(password);
         try {
             sv.write(override, text(hash));
@@ -163,7 +170,7 @@ public final class RspamdController {
                 why + (ok ? ": everything as it was" : "; and putting the file back failed"));
     }
 
-    // ===================== Il server vero =====================
+    // ===================== The production server =====================
 
     static final String RSPAMADM = "/usr/local/bin/rspamadm";
 
@@ -213,7 +220,7 @@ public final class RspamdController {
         };
     }
 
-    /** All'avvio della parte root, dopo RspamdUser. */
+    /** At the start of the root part, after RspamdUser. */
     public static void ensureAtBoot() {
         try {
             if (!Files.isExecutable(Path.of(RSPAMADM))) return;

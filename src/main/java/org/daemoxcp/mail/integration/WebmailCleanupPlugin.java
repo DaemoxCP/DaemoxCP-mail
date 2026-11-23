@@ -11,16 +11,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Il plugin di Roundcube daemoxcp_mail_cleanup: nelle impostazioni della webmail (Preferenze, «Svuotamento
- * automatico») l'utente sceglie dopo quanti giorni il server svuota da solo la Junk e il Cestino della sua casella, o
- * mai (il predefinito). Gli stessi valori del pannello (MailDatabase.CLEANUP_DAYS): li legge e li scrive il pannello,
- * dalla rotta interna {@link WebmailPasswordConfig#CLEANUP_PATH} (solo da 127.0.0.1 e con la chiave della webmail).
+ * The Roundcube plugin daemoxcp_mail_cleanup: in the webmail settings (Preferences, "Automatic emptying") the
+ * user chooses after how many days the server empties the Junk and Trash of their mailbox by itself, or never
+ * (the default). The same values as the panel (MailDatabase.CLEANUP_DAYS): the panel reads and writes them,
+ * from the internal route {@link WebmailPasswordConfig#CLEANUP_PATH} (only from 127.0.0.1 and with the webmail's
+ * key).
  *
- * <p>L'utente e' quello della sessione di Roundcube. Con l'accesso dal pannello (SSO) Roundcube entra come
- * «casella*utente-master» di Dovecot: si manda solo la parte prima dell'asterisco, la casella della sessione. I testi
- * sono nei file di lingua del plugin (localization/en_US.inc, it_IT.inc). I file li scrive il pannello all'avvio,
- * di root e leggibili da tutti (codice, nessun segreto: l'indirizzo e la chiave stanno nel blocco del pannello in
- * config.inc.php, WebmailPasswordConfig), e solo se sono diversi.
+ * <p>The user is the one of the Roundcube session. With the login from the panel (SSO) Roundcube logs in as
+ * Dovecot's "mailbox*master-user": only the part before the asterisk is sent, the session's mailbox. The texts
+ * are in the plugin's language files (localization/en_US.inc, it_IT.inc). The panel writes the files at boot,
+ * owned by root and readable by everyone (code, no secret: the address and the key are in the panel's block in
+ * config.inc.php, WebmailPasswordConfig), and only if they are different.
  */
 public final class WebmailCleanupPlugin {
 
@@ -28,7 +29,7 @@ public final class WebmailCleanupPlugin {
 
     public static final String NAME = "daemoxcp_mail_cleanup";
 
-    /** Il codice del plugin. Puro. */
+    /** The plugin's code. Pure. */
     public static String php() {
         return """
                 <?php
@@ -133,7 +134,7 @@ public final class WebmailCleanupPlugin {
                 """;
     }
 
-    /** I testi del plugin, per lingua di Roundcube. Puri. */
+    /** The plugin's texts, per Roundcube language. Pure. */
     public static Map<String, String> localization() {
         Map<String, String> m = new LinkedHashMap<>();
         m.put("en_US", labels("Automatic emptying", "Empty Junk and Trash by themselves", "Empty Junk", "Empty Trash", "Never",
@@ -157,15 +158,15 @@ public final class WebmailCleanupPlugin {
              + label("savefailed", savefailed);
     }
 
-    /** Una riga di PHP fra apici singoli: niente apici ne' barre nei testi, controllato qui. */
+    /** A line of PHP between single quotes: no quotes or backslashes in the texts, checked here. */
     private static String label(String key, String text) {
         if (text.contains("'") || text.contains("\\")) throw new IllegalArgumentException("quote in " + key);
         return "$labels['" + key + "'] = '" + text + "';\n";
     }
 
     /**
-     * Scrive il plugin nella cartella dei plugin di Roundcube (cartelle 0755, file 0644, di chi gira: root), solo i file
-     * diversi. Vero se ha cambiato qualcosa. Una cartella del plugin che e' un collegamento non si tocca.
+     * Writes the plugin into Roundcube's plugins folder (folders 0755, files 0644, owned by whoever runs: root),
+     * only the files that differ. True if it changed something. A plugin folder that is a link is not touched.
      */
     public static boolean install(Path pluginsDir) throws IOException {
         Path dir = pluginsDir.resolve(NAME);

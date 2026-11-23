@@ -9,14 +9,14 @@ public class database {
     Connection connection;
 
     /**
-     * Quanto aspetta una scrittura se il database e' occupato da un altro processo, prima di
-     * arrendersi con SQLITE_BUSY. Il database lo usano insieme il servizio --web e il menu (o un
-     * comando da console) avviati dalla stessa cartella. sqlite-jdbc aspetta gia' 3 secondi di suo:
-     * misurato sulla VM il 06/11/2026 (reperto 160), il jar di prima falliva dopo 3 secondi a
-     * scrittura. Il difetto del reperto 156 non era l'attesa ma il lock tenuto per sempre dalle
-     * letture lasciate aperte (sotto). Quindici secondi sono il margine per una scrittura lunga
-     * dell'altro processo: una tenuta di 6 secondi passa con 15, con 3 no (misurato).
-     * L'istruzione e' SqlCatalog.CONFIG_DB_BUSY_TIMEOUT, con lo stesso numero (lo controlla SqlCatalogTest).
+     * How long a write waits if the database is busy with another process, before
+     * giving up with SQLITE_BUSY. The database is used together by the --web service and the menu (or a
+     * console command) started from the same folder. sqlite-jdbc already waits 3 seconds on its own:
+     * measured on the VM on 2026-11-06 (finding 160), the previous jar failed after 3 seconds per
+     * write. The defect of finding 156 was not the wait but the lock held forever by the
+     * reads left open (below). Fifteen seconds are the margin for a long write
+     * by the other process: a 6-second hold passes with 15, not with 3 (measured).
+     * The statement is SqlCatalog.CONFIG_DB_BUSY_TIMEOUT, with the same number (SqlCatalogTest checks it).
      */
     static final int BUSY_TIMEOUT_MS = 15_000;
 
@@ -25,9 +25,9 @@ public class database {
     }
 
     /**
-     * @param readOnly la parte web del pannello separato (utente daemoxcp_mail): legge la configurazione e non
-     *                 la scrive mai. La cartella e il file sono di root (0750/0640 root:daemoxcp_mail): con
-     *                 SQLITE_OPEN_READONLY SQLite non prova nemmeno a creare un journal.
+     * @param readOnly the web part of the separated panel (user daemoxcp_mail): it reads the configuration and never
+     *                 writes it. The folder and the file belong to root (0750/0640 root:daemoxcp_mail): with
+     *                 SQLITE_OPEN_READONLY SQLite does not even try to create a journal.
      */
     public database(boolean readOnly) {
         Connection conn = null;
@@ -65,17 +65,17 @@ public class database {
     }
 
     /*
-     * Ogni statement si chiude, sempre, anche quelli di sola lettura. In SQLite uno statement
-     * lasciato a meta' (un executeQuery senza chiusura, un ResultSet letto fino alla prima riga e
-     * abbandonato) tiene aperta la lettura, e con lei il lock SHARED sul file: nessun altro
-     * processo puo' piu' scrivere finche' la JVM non lo raccoglie. Il servizio --web chiama questi
-     * metodi a ogni avvio e a ogni richiesta, e il menu avviato dalla stessa cartella finiva in
-     * SQLITE_BUSY su nome del server, flag dei servizi e configurazione MySQL (reperto 156).
+     * Every statement is closed, always, even the read-only ones. In SQLite a statement
+     * left halfway (an executeQuery without closing, a ResultSet read up to the first row and
+     * abandoned) keeps the read open, and with it the SHARED lock on the file: no other
+     * process can write any more until the JVM collects it. The --web service calls these
+     * methods at every startup and at every request, and the menu started from the same folder ended up in
+     * SQLITE_BUSY on the server name, the service flags and the MySQL configuration (finding 156).
      */
 
     /**
-     * Vero se la colonna esiste: dall'elenco delle colonne di config (un'istruzione fissa, invece di
-     * leggere la colonna per nome), e lo statement si chiude prima di tornare.
+     * True if the column exists: from the list of config's columns (a fixed statement, instead of
+     * reading the column by name), and the statement is closed before returning.
      */
     boolean columnExists(String column) {
         try (PreparedStatement check = connection.prepareStatement(SqlCatalog.CONFIG_DB_COLUMNS);
@@ -89,7 +89,7 @@ public class database {
         }
     }
 
-    /** Un comando del catalogo che non legge niente, chiuso subito. */
+    /** A catalog command that reads nothing, closed immediately. */
     void execute(String sql) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.executeUpdate();
@@ -107,12 +107,12 @@ public class database {
     }
 
     /**
-     * Le colonne della configurazione col nome di prima del prodotto (mail_panel_*, fino al 17/11/2026) prendono
-     * quello di adesso (panel_*): una colonna alla volta, solo se c'e' la vecchia e non la nuova. Prima di aggiungere le
-     * colonne che mancano, che altrimenti nascerebbero vuote accanto a quelle coi valori.
+     * The configuration columns with the product's previous name (mail_panel_*, until 2026-11-17) take the current one
+     * (panel_*): one column at a time, only if the old one is there and the new one is not. Before adding the missing
+     * columns, which would otherwise be born empty next to those holding the values.
      */
     public void renameProductColumns() {
-        // Nome di prima, di adesso, e l'istruzione fissa: un ALTER non prende parametri.
+        // Previous name, current name, and the fixed statement: an ALTER takes no parameters.
         String[][] columns = {
             {"mail_panel_ssl_cert_key", "panel_ssl_cert_key", SqlCatalog.CONFIG_DB_RENAME_MAIL_PANEL_SSL_CERT_KEY},
             {"mail_panel_ssl_chain", "panel_ssl_chain", SqlCatalog.CONFIG_DB_RENAME_MAIL_PANEL_SSL_CHAIN},
@@ -151,7 +151,7 @@ public class database {
     }
 
     public void ensureRoundcubeColumns() {
-        // Nome della colonna e la sua istruzione fissa: un ALTER non prende parametri.
+        // Column name and its fixed statement: an ALTER takes no parameters.
         String[][] columns = {
             {"roundcube_domain", SqlCatalog.CONFIG_DB_ADD_ROUNDCUBE_DOMAIN},
             {"roundcube_port", SqlCatalog.CONFIG_DB_ADD_ROUNDCUBE_PORT},

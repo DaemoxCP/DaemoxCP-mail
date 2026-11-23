@@ -1,11 +1,12 @@
-// La conferma per le operazioni pericolose, uguale in tutte le pagine.
-// Il server la chiede con un 403 e l'intestazione X-Panel-Confirmation: needed; l'involucro di fetch nella testa di
-// ogni pagina chiama window.panelConfirmIdentity(), che apre questa finestra e risponde true quando la root ha
-// verificato la passkey o il codice; allora la richiesta si ripete una volta. Chi ha una passkey sceglie fra la
-// passkey e un codice via email; chi non ne ha, solo il codice. Sempre, anche un codice della console del server
-// (--access-code), per chi non ha passkey e non riceve l'email. La conferma vale 5 minuti.
-// Le funzioni WebAuthn (webauthnGetOptions, webauthnCredentialJson) arrivano da PanelContent.getWebAuthnScript,
-// nello stesso file e nella stessa funzione (Layout.CONFIRM_SCRIPT): niente di globale, salvo panelConfirmIdentity.
+// The confirmation for dangerous operations, the same on every page.
+// The server asks for it with a 403 and the X-Panel-Confirmation: needed header; the fetch wrapper in the head
+// of every page calls window.panelConfirmIdentity(), which opens this window and answers true when the root has
+// verified the passkey or the code; then the request is repeated once. Whoever has a passkey chooses between
+// the passkey and a code by email; whoever has none, only the code. Always, also a code from the server
+// console (--access-code), for whoever has no passkey and does not receive the email. The confirmation lasts
+// 5 minutes. The WebAuthn functions (webauthnGetOptions, webauthnCredentialJson) come from
+// PanelContent.getWebAuthnScript, in the same file and in the same function (Layout.CONFIRM_SCRIPT): nothing
+// global, except panelConfirmIdentity.
 
 var pending = null;
 var finish = null;
@@ -27,7 +28,7 @@ function tr(key, params) {
     return typeof window.t === 'function' ? window.t(key, params) : key;
 }
 
-/** La finestra, presa una volta dal suo modello (Layout) e tenuta nella pagina; i pulsanti hanno i loro ascoltatori. */
+/** The window, taken once from its template (Layout) and kept in the page; the buttons have their listeners. */
 function dialog() {
     var modal = document.getElementById('panelConfirmModal');
     if (modal) return modal;
@@ -76,8 +77,8 @@ function dialog() {
     };
     part('verify').addEventListener('click', verify);
     code.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); verify(); } });
-    // Il codice della console (--access-code): sempre possibile, anche senza passkey e senza email. Chi lo legge ha la
-    // shell di root sul server.
+    // The console's access code (--access-code): always possible, even without a passkey and without email.
+    // Whoever reads it has a root shell on the server.
     var consoleCode = document.getElementById('panelConfirmConsoleCode');
     part('console').addEventListener('click', function () {
         say(msg, '', '');
@@ -102,7 +103,7 @@ function dialog() {
     return modal;
 }
 
-/** Apre la finestra con le strade che l'account ha, e risponde true quando la conferma e' riuscita. */
+/** Opens the window with the ways the account has, and answers true when the confirmation succeeded. */
 function ask() {
     return fetch('/api/account').then(function (r) { return r.json(); }).catch(function () { return {}; }).then(function (state) {
         var modal = dialog();
@@ -121,14 +122,14 @@ function ask() {
         part('console').setAttribute('aria-expanded', 'false');
         document.getElementById('panelConfirmCode').value = '';
         document.getElementById('panelConfirmConsoleCode').value = '';
-        // Il comando col nome di chi conferma: il codice vale solo per lui.
+        // The command with the name of whoever is confirming: the code is valid only for them.
         document.getElementById('panelConfirmConsoleCommand').textContent =
             'java -jar daemoxcp-mail.jar --access-code' + (state.username ? ' ' + state.username : '');
         say(document.getElementById('panelConfirmMsg'), '', '');
         var before = document.activeElement;
         return new Promise(function (resolve) {
             finish = function (ok) {
-                // Il fuoco torna dove era prima della finestra.
+                // Focus goes back to where it was before the window.
                 if (before && typeof before.focus === 'function') before.focus();
                 resolve(ok);
             };
@@ -138,7 +139,7 @@ function ask() {
 }
 
 window.panelConfirmIdentity = function () {
-    // Piu' richieste insieme che la chiedono aspettano la stessa finestra, e poi si ripetono tutte.
+    // Several requests that ask for it at the same time wait for the same window, and then are all repeated.
     if (!pending) pending = ask().finally(function () { pending = null; });
     return pending;
 };

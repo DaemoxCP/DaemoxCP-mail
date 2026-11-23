@@ -1,23 +1,23 @@
 package org.daemoxcp.mail.webserver;
 
 /**
- * La Content-Security-Policy del pannello, in un punto solo: la manda il server con ogni risposta
- * (SSLMailServer.addSecurityHeaders) e la usano le prove nel browser, che servono le pagine generate
- * con la stessa intestazione.
+ * The panel's Content-Security-Policy, in a single place: the server sends it with every response
+ * (SSLMailServer.addSecurityHeaders) and the browser tests use it, serving the generated pages
+ * with the same header.
  *
- * <p>Senza 'unsafe-inline' e senza 'unsafe-eval' (reperto 178). Prima script-src e style-src avevano
- * 'unsafe-inline', perche' le pagine portavano 458 gestori onclick="...", una trentina di script e
- * stili in linea e 208 attributi style: una stringa iniettata in una pagina poteva eseguire codice.
- * Adesso gli script e gli stili sono file (PageAssets), i gestori sono data-on-* e gli stili
- * data-style (panel-actions.js), e la politica puo' dire solo 'self'.
+ * <p>Without 'unsafe-inline' and without 'unsafe-eval' (finding 178). Before, script-src and style-src had
+ * 'unsafe-inline', because the pages carried 458 onclick="..." handlers, some thirty inline scripts and
+ * styles and 208 style attributes: a string injected into a page could run code.
+ * Now scripts and styles are files (PageAssets), the handlers are data-on-* and the styles
+ * data-style (panel-actions.js), and the policy can say just 'self'.
  *
  * <ul>
- *   <li>img-src tiene data: perche' Bootstrap disegna alcune icone dei moduli (la freccia delle
- *   select, la X di chiusura) con SVG in data: URI dentro il suo CSS; non tiene piu' https:, che
- *   permetteva immagini da qualunque sito (tutto deve venire dal pannello);</li>
- *   <li>object-src 'none', base-uri 'self' e form-action 'self' chiudono i plugin, un &lt;base&gt;
- *   iniettato che sposterebbe gli indirizzi relativi, e un modulo che spedirebbe altrove;</li>
- *   <li>frame-ancestors 'none': nessuno puo' mettere il pannello in un riquadro.</li>
+ *   <li>img-src keeps data: because Bootstrap draws some form icons (the arrow of a
+ *   select, the closing X) with SVG in data: URIs inside its CSS; it no longer keeps https:, which
+ *   allowed images from any site (everything must come from the panel);</li>
+ *   <li>object-src 'none', base-uri 'self' and form-action 'self' shut out plugins, an injected &lt;base&gt;
+ *   that would move relative addresses, and a form that would submit elsewhere;</li>
+ *   <li>frame-ancestors 'none': nobody can put the panel in a frame.</li>
  * </ul>
  */
 public final class SecurityHeaders {
@@ -25,9 +25,9 @@ public final class SecurityHeaders {
     private SecurityHeaders() {}
 
     /**
-     * Costruita con String.join e non scritta come costante: una costante il compilatore la copia
-     * dentro ogni classe che la usa, e allora il server e le prove potrebbero mandare e controllare
-     * due politiche diverse senza accorgersene (e un guasto piantato qui non si vedrebbe).
+     * Built with String.join and not written as a constant: the compiler copies a constant
+     * into every class that uses it, and then the server and the tests could send and check
+     * two different policies without noticing (and a fault planted here would not show).
      */
     public static final String CONTENT_SECURITY_POLICY = String.join("; ", java.util.List.of(
             "default-src 'self'",

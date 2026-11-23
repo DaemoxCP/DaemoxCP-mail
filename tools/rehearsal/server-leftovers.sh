@@ -1,20 +1,20 @@
 #!/bin/sh
-# Quello che il server di posta vero ha in piu' del banco, visto in sola lettura il 05/11/2026
-# (reperti, punto 135), rifatto sul banco dopo RehearsalOldSetup e acme.sh da root:
-#   - due certificati in /root/.acme.sh, chiesti con la sfida DNS (dns_cf per Cloudflare, dns a mano),
-#     non con --standalone;
-#   - i file coi nomi italiani che PathMigration rinomina: riavvio.log, ssl-precedente/,
-#     sistema/salto.json (un salto di release FINITO, come sul server) con la sua cartella
-#     d'inventario; e installazione-completata, che nessuno rinomina.
-# I contenuti sono finti ma della stessa forma: chiavi e campi come sul server, nessun dato vero.
-# Uso, da root sulla VM, col pannello vecchio acceso: server-leftovers.sh
+# What the production mail server has in addition to the test bench, seen read-only on 2026-11-05
+# (findings, point 135), redone on the test bench after RehearsalOldSetup and acme.sh as root:
+#   - two certificates in /root/.acme.sh, requested with the DNS challenge (dns_cf for Cloudflare, dns by
+#     hand), not with --standalone;
+#   - the files with the Italian names that PathMigration renames: riavvio.log, ssl-precedente/,
+#     sistema/salto.json (a FINISHED release jump, as on the server) with its inventory folder;
+#     and installazione-completata, which nobody renames.
+# The contents are fake but of the same shape: keys and fields as on the server, no real data.
+# Usage, as root on the VM, with the old panel running: server-leftovers.sh
 set -eu
 PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 H=/root/.acme.sh
 D=/var/db/mailpanel
 [ -d "$H/mail.rehearsal.test_ecc" ] || { echo "manca $H/mail.rehearsal.test_ecc: prima acme.sh da root (README)"; exit 1; }
 
-# Il primo certificato con la sfida DNS di Cloudflare, il secondo con quella a mano.
+# The first certificate with the Cloudflare DNS challenge, the second with the manual one.
 sed -i '' "s/^Le_Webroot=.*/Le_Webroot='dns_cf'/" "$H/mail.rehearsal.test_ecc/mail.rehearsal.test.conf"
 N=mail.second.test
 C=$H/${N}_ecc
@@ -30,7 +30,7 @@ sed -e "s/mail\.rehearsal\.test/$N/g" -e "s/^Le_Webroot=.*/Le_Webroot='dns'/" \
     "$H/mail.rehearsal.test_ecc/mail.rehearsal.test.conf" > "$C/$N.conf"
 "$H/acme.sh" --home "$H" --list
 
-# I nomi italiani di /var/db/mailpanel, con proprietari e permessi come sul server.
+# The Italian names of /var/db/mailpanel, with owners and permissions as on the server.
 printf '2026-10-12T02:41:57Z riavvio chiesto dal pannello\n2026-10-12T02:42:30Z il pannello e'"'"' ripartito\n' > "$D/riavvio.log"
 chmod 600 "$D/riavvio.log"
 printf 'installazione completata il 2026-09-01T14:18:00Z\n' > "$D/installazione-completata"

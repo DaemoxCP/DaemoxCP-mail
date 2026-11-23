@@ -1,9 +1,10 @@
 
-        // ---------- Aggiorna il server (reperti 186, 193) ----------
-        // Un posto solo per sapere cosa c'e' da aggiornare e farlo. Ogni riga ha la sua testata (lo stato a parole e i
-        // pulsanti), che si ridisegna quando arrivano i dati, e il suo pannello sotto, che resta dov'e': il pulsante lo
-        // apre sul posto, senza mandare a un'altra scheda. Le righe di Java, Roundcube, MySQL e Python compaiono solo
-        // quando il server dice che servono (packages_overview, «procedures»). I lavori sono quelli di sempre.
+        // ---------- Update the server (findings 186, 193) ----------
+        // A single place to know what there is to update and to do it. Each row has its header (the state in
+        // words and the buttons), which is redrawn when the data arrive, and its panel below, which stays where it
+        // is: the button opens it in place, without sending to another card. The rows for Java, Roundcube, MySQL
+        // and Python appear only when the server says they are needed (packages_overview, "procedures"). The jobs
+        // are the usual ones.
         const uc = { os: null, pk: null, reboot: null, targets: null, jump: null, plainBlocked: false, turn: null };
 
         function ucEl(tag, cls, text) {
@@ -23,7 +24,7 @@
             return b;
         }
 
-        // La testata di una riga: lo stato a parole (mai solo col colore), un'icona, i pulsanti.
+        // A row's header: the state in words (never only with color), an icon, the buttons.
         function ucHead(key, kind, title, text, buttons, extra) {
             const li = document.getElementById('uc-' + key);
             if (!li) return;
@@ -35,7 +36,7 @@
             icon.setAttribute('aria-hidden', 'true');
             const body = ucEl('div', 'flex-grow-1');
             const name = ucEl('div', 'fw-semibold', title);
-            // Le chiavi scritte per intero: I18nTest controlla che ogni testo usato esista nelle due lingue.
+            // The keys written in full: I18nTest checks that every text used exists in both languages.
             const word = { ok: t('uc.kind.ok'), todo: t('uc.kind.todo'), info: t('uc.kind.info'), error: t('uc.kind.error') }[kind] || '';
             name.append(ucEl('span', 'visually-hidden', ' (' + word + ')'));
             body.append(name, ucEl('div', 'small', text));
@@ -54,8 +55,8 @@
             if (li) li.hidden = true;
         }
 
-        // Apre il pannello di una riga, sotto la riga. 'panel' e' un pezzo che si sposta (il piano dei pacchetti, uno
-        // solo per due righe). Il fuoco va al pannello, che si vede senza scorrere altrove.
+        // Opens a row's panel, under the row. 'panel' is a piece that moves (the package plan, only one for
+        // two rows). Focus goes to the panel, which can be seen without scrolling elsewhere.
         function ucOpen(key, panel) {
             const detail = document.getElementById('uc-' + key + '-detail');
             if (!detail) return;
@@ -69,8 +70,8 @@
             detail.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
 
-        // Le azioni delle righe: aprono il pannello sotto la riga e partono da li'.
-        // Aperto il pannello di una riga, il suo pulsante sta li' dentro: la testata si ridisegna senza (reperto 197).
+        // The rows' actions: they open the panel under the row and start from there.
+        // Once a row's panel is open, its button is in there: the header is redrawn without it (finding 197).
         function ucOpened(key) {
             const d = document.getElementById('uc-' + key + '-detail');
             return !!(d && !d.hidden);
@@ -80,21 +81,21 @@
         function ucDovecot() { ucOpen('dovecot'); ucRender(); dc24Pre(); }
         function ucPythonLeftovers() { ucOpen('python'); pyLeftovers(); }
 
-        // Legge lo stato di FreeBSD; i pacchetti, il ramo e il riavvio arrivano dalle loro letture (eventi qui sotto):
-        // rileggerli qui raddoppiava la lettura piu' pesante della pagina. «Rileggi» le rifa' tutte.
+        // Reads the FreeBSD state; packages, branch and restart arrive from their own reads (events below):
+        // rereading them here doubled the page's heaviest read. "Reread" redoes them all.
         async function ucLoad(all) {
             const state = document.getElementById('ucState');
             if (!state || !document.getElementById('ucList')) return;
             state.textContent = t('uc.reading');
             if (all) {
-                // Rileggendo, il piano dei pacchetti si rifa': se prima non si poteva eseguire, adesso si vedra'.
+                // On rereading, the package plan is redone: if before it could not be run, now it will show.
                 uc.plainBlocked = false;
                 pkOverview();
                 branchStatus();
                 if (typeof panelRebootRefresh === 'function') panelRebootRefresh();
             }
             uc.os = await updApi('os_status');
-            // Le release piu' nuove e lo stato di un passaggio cominciato: decidono cosa dice la riga di FreeBSD.
+            // The newest releases and the state of a move already started: they decide what the FreeBSD row says.
             uc.targets = await updApi('os_upgrade_targets');
             uc.jump = await updApi('jump_state');
             ucRender();
@@ -104,10 +105,11 @@
         document.addEventListener('upd:packages', e => { uc.pk = e.detail; ucRender(); });
         document.addEventListener('panel:reboot', e => { uc.reboot = e.detail; ucRender(); });
 
-        // I passi dei pacchetti del server di posta. Quelli della stessa famiglia (php84 e le sue estensioni, server e
-        // client di MySQL, Dovecot e i suoi componenti) si aggiornano INSIEME: il server li sblocca e li aggiorna insieme
-        // comunque (UpdateManager, FAMILIES). Sono quindi UN passo, col nome del pacchetto principale. Sul server vero la
-        // riga diceva «1 di 30», e 27 erano PHP (reperto 203). Un passo e' pronto solo se lo sono tutti i suoi pacchetti.
+        // The mail server's package steps. Those of the same family (php84 and its extensions, MySQL server
+        // and client, Dovecot and its components) are updated TOGETHER: the server unlocks them and updates
+        // them together anyway (UpdateManager, FAMILIES). So they are ONE step, with the name of the main
+        // package. On the production server the row said "1 of 30", and 27 were PHP (finding 203). A step is
+        // ready only if all its packages are.
         function ucSteps(stack) {
             const steps = [];
             stack.forEach(p => {
@@ -131,8 +133,9 @@
             const rows = pk.packages || [];
             const reading = (key, title) => ucHead(key, 'info', title, t('uc.reading'));
 
-            // 0. «Aggiorna tutto», in cima (reperto 207): l'elenco di cio' che fara', nell'ordine, e un pulsante solo. Se un
-            //    pacchetto del server di posta non e' protetto, prima si protegge: il piano degli altri lo cambierebbe.
+            // 0. "Update everything", at the top (finding 207): the list of what it will do, in order, and a single
+            //    button. If a mail server package is not locked, it is locked first: the plan of the others would
+            //    change it.
             if (uc.turn && uc.turn.java) ucHead('all', 'todo', t('uc.everythingTitle'), t('uc.everythingJavaRunning'));
             else if (!uc.os || !uc.pk) reading('all', t('uc.everythingTitle'));
             else {
@@ -144,19 +147,22 @@
                 } else if (planned.length) {
                     const list = ucEl('ol', 'small mb-0 mt-1 ps-3');
                     planned.forEach(p => list.append(ucEl('li', '', p.label)));
-                    // Il pulsante resta sempre: anche con l'esito di un lavoro aperto sotto (lo nascondeva, e restava una riga
-                    // senza pulsante: «sparisce proprio la possibilita' di aggiornare»). Mentre un lavoro gira, aspetta.
+                    // The button always stays: even with a job's outcome open below (it used to hide it, leaving a
+                    // row without a button: "the possibility to update disappears altogether"). While a job runs,
+                    // it waits.
                     ucHead('all', 'todo', t('uc.everythingTitle'), tn('uc.everythingSummary', planned.length),
                         [ucButton('btn-primary', 'fa-arrow-up', tn('uc.everything', planned.length), 'ucEverything()')], list);
                 } else if (uc.plainBlocked) {
-                    // Il piano degli altri pacchetti toglierebbe o retrocederebbe qualcosa: non e' «niente da aggiornare».
+                    // The plan of the other packages would remove or downgrade something: it is not "nothing to
+                    // update".
                     ucHead('all', 'todo', t('uc.everythingTitle'), t('uc.everythingPlainBlocked'));
                 } else ucHead('all', 'ok', t('uc.everythingTitle'), gdDone.all || t('uc.everythingNone'));
             }
 
-            // 1. Il sistema di base, guidato (reperto 196): una frase e il pulsante del passo dopo. Prima un passaggio di
-            //    release cominciato, poi un riavvio che manca, poi le patch pronte. Una release nuova solo se c'e'.
-            // Col pannello della riga aperto, il pulsante del passo dopo sta li' dentro: in testata sarebbe un doppione.
+            // 1. The base system, guided (finding 196): a sentence and the button of the next step. First a release
+            //    move already started, then a missing restart, then the ready patches. A new release only if there
+            //    is one.
+            // With the row's panel open, the next step's button is in there: in the header it would be a duplicate.
             const osDetail = document.getElementById('uc-os-detail');
             const osOpen = !!(osDetail && !osDetail.hidden);
             const restart = () => document.getElementById('panelRebootModal') && !osOpen
@@ -174,7 +180,7 @@
                 ucHead('os', 'todo', t('uc.os'), t('uc.osReady', { now: os.userland, target: os.readyTarget || '?' })
                     + (os.readyKernel ? ' ' + t('osp.readyKernel') : ''));
             } else ucHead('os', 'ok', t('uc.os'), t('uc.osOk', { now: os.userland }));
-            // Una release nuova: una riga in piu' con il suo pulsante, solo quando c'e' e niente altro e' in corso.
+            // A new release: one more row with its button, only when there is one and nothing else is in progress.
             const tv = (uc.targets && uc.targets.success && uc.targets.versions) || [];
             if (uc.os && os.success && !moving && !os.restartNeeded && tv.length) {
                 const v = tv[tv.length - 1];
@@ -186,24 +192,26 @@
             const releaseView = document.getElementById('os-release');
             if (releaseView && !releaseView.hidden) osReleaseRender();
 
-            // Le procedure dedicate hanno la loro riga: qui sotto non si contano due volte.
+            // The dedicated procedures have their own row: here below they are not counted twice.
             const own = p => p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);
 
-            // 2. I pacchetti, in una riga sola (reperto 202). Due modi di aggiornarli, perche' due rischi diversi:
-            //    quelli fuori dal server di posta tutti insieme in un piano; quelli del server di posta, protetti, uno
-            //    alla volta, ognuno col suo controllo e il riavvio dei servizi che lo usano (reperti 42, 197). La frase
-            //    dice quanti per tipo; il pulsante e' UNO, il passo dopo: prima il piano, poi il prossimo della posta. Se
-            //    il piano non si puo' eseguire (toglierebbe pacchetti), il passo dopo passa a quelli della posta.
+            // 2. The packages, in a single row (finding 202). Two ways of updating them, because two different
+            //    risks: those outside the mail server all together in one plan; those of the mail server, locked,
+            //    one at a time, each with its check and the restart of the services that use it (findings 42,
+            //    197). The sentence says how many of each kind; the button is ONE, the next step: first the plan,
+            //    then the next mail one. If the plan cannot be run (it would remove packages), the next step moves
+            //    on to the mail ones.
             const sum = pk.summary || {};
             const stack = rows.filter(p => p.update && p.locked && !own(p));
             const plain = (sum.updates || 0) - rows.filter(p => p.update && p.locked).length;
             const steps = ucSteps(stack);
             const ready = steps.filter(s => !s.held.length);
-            // Quello che l'elenco di «Aggiorna tutto» mostra gia' qui non si ripete (reperto 207: due volte gli stessi conti).
+            // What the "Update everything" list already shows is not repeated here (finding 207: the same counts
+            // twice).
             const listed = uc.os && uc.pk && !(sum.stackUnlocked > 0) ? ucPlanned() : [];
             const plainListed = listed.some(p => p.kind === 'plain'), stackListed = listed.some(p => p.kind === 'package');
-            // La Java e Roundcube sono pacchetti anche loro: con un loro passo in elenco (o la Java che si sta aggiornando) la
-            // riga non dice «tutto aggiornato».
+            // Java and Roundcube are packages too: with a step of theirs in the list (or Java being updated) the
+            // row does not say "all up to date".
             const anyListed = listed.some(p => p.kind !== 'os') || !!(uc.turn && uc.turn.java);
             if (!uc.pk) reading('packages', t('uc.packages'));
             else if (!pk.success) ucHead('packages', 'error', t('uc.packages'), pk.error || t('common.errorShort'));
@@ -212,14 +220,14 @@
                 const words = [];
                 if (anyListed) words.push(t('uc.pkInAll'));
                 if (plain > 0 && !plainListed) words.push(tn('uc.pkPlain', plain));
-                // Piu' pacchetti in un passo solo (una famiglia) non sono «in 1 passi»: hanno la loro frase.
+                // Several packages in a single step (a family) are not "in 1 steps": they have their own sentence.
                 if (stack.length && !stackListed) words.push((steps.length === 1 && stack.length > 1 ? t('uc.pkStackFamily', { n: stack.length })
                     : tn('uc.pkStack', stack.length, { steps: steps.length })) + (ready.length ? '' : ' ' + t('uc.stackHeld')));
                 if (sum.fixable) words.push(tn('uc.packagesFix', sum.fixable));
                 const open = (sum.vulnerable || 0) - (sum.fixable || 0);
                 if (open > 0) words.push(tn('uc.pkVulnOpen', open));
-                // I passi da fare sono nell'elenco di «Aggiorna tutto», in cima (reperto 207): qui solo quelli trattenuti, col
-                // motivo, e la protezione che manca.
+                // The steps to take are in the "Update everything" list, at the top (finding 207): here only the
+                // held-back ones, with the reason, and the missing lock.
                 const extra = ucEl('div');
                 const held = steps.filter(x => x.held.length);
                 if (held.length) {
@@ -234,16 +242,17 @@
                 else ucHead('packages', 'ok', t('uc.packages'), t('uc.pkOk'), [], extra);
             }
 
-            // 3. Le procedure dedicate, solo quando servono
+            // 3. The dedicated procedures, only when they are needed
             const doneRow = (key, title) => gdDone[key] ? ucHead(key, 'ok', title, gdDone[key]) : ucHide(key);
-            // La Java del pannello e Roundcube sono passi di «Aggiorna tutto» (reperto 207): niente righe loro.
+            // The panel's Java and Roundcube are steps of "Update everything" (finding 207): no rows of their own.
             ucHide('java');
             ucHide('roundcube');
             if (proc.mysql84) {
                 ucHead('mysql', 'todo', t('uc.mysql'), t('uc.mysqlTodo'),
                     ucOpened('mysql') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucMysql()')]);
             } else doneRow('mysql', t('uc.mysql'));
-            // Dovecot 2.4 (reperto 213): pacchetto a parte, niente ci passa da solo; la riga dice che c'e' e guida il passaggio.
+            // Dovecot 2.4 (finding 213): a separate package, nothing moves to it by itself; the row says it is
+            // there and guides the move.
             if (proc.dovecot24) {
                 ucHead('dovecot', 'todo', t('uc.dovecot'), t('uc.dovecotTodo'),
                     ucOpened('dovecot') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucDovecot()')]);
@@ -252,14 +261,14 @@
                 ucHead('python', 'todo', t('uc.python'), t('uc.pythonTodo'),
                     ucOpened('python') ? [] : [ucButton('btn-primary', 'fa-clipboard-check', t('uc.prepare'), 'ucPython()')]);
             } else if (gdDone.python) {
-                // Il passaggio fatto: il passo dopo e' togliere i resti della famiglia vecchia, con il suo pulsante.
+                // The move done: the next step is removing the remains of the old family, with its button.
                 ucHead('python', 'ok', t('uc.python'), gdDone.python + ' ' + t('gd.pyNext'),
                     [ucButton('btn-outline-primary', 'fa-broom', t('up.leftovers'), 'ucPythonLeftovers()')]);
             } else ucHide('python');
 
-            // Il ramo dei pacchetti ha la sua scheda, qui sotto (reperto 205).
+            // The package branch has its own card, below (finding 205).
 
-            // 4. Il riavvio: la finestra del pannello, la stessa di ogni pagina
+            // 4. The restart: the panel's window, the same as on every page
             if (!uc.reboot) reading('reboot', t('uc.reboot'));
             else if (rb.success && rb.state === 'needed' && os.restartNeeded) ucHide('reboot');
             else if (rb.success) {
@@ -272,11 +281,12 @@
             ucWaitForTurn();
         }
 
-        // Il lavoro sui pacchetti in corso (reperto 206). Il committente, rifiutato due volte mentre girava una ricerca degli
-        // aggiornamenti: «non fa vedere cosa sta facendo né niente». Adesso la scheda chiede
-        // al server chi tiene il turno, all'apertura e ogni 15 secondi (ogni 3 mentre gira): lo dice in cima, con quello
-        // che sta facendo, e intanto i pulsanti dei passi e «Cerca aggiornamenti» aspettano. Quando finisce, la scheda si
-        // rilegge e dice il passo dopo. Vale per ogni lavoro del pannello, avviato da qui, da un'altra pagina o scheda.
+        // The package job in progress (finding 206). The owner, refused twice while a search for updates was
+        // running: "it doesn't show what it is doing or anything". Now the card asks the server who holds
+        // the turn, on opening and every 15 seconds (every 3 while it runs): it says so at the top, with what
+        // it is doing, and meanwhile the step buttons and "Check for updates" wait. When it finishes, the
+        // card reads itself again and says the next step. This applies to every panel job, started from
+        // here, from another page or from another card.
         let ucTurnTimer = null;
         async function ucTurn() {
             clearTimeout(ucTurnTimer);
@@ -286,8 +296,8 @@
             uc.turn = r && r.success ? r : null;
             const now = !!(uc.turn && uc.turn.running), nowJava = !!(uc.turn && uc.turn.java);
             await ucRunningShow();
-            // La Java del pannello che si aggiorna (reperto 210): la riga di «Aggiorna tutto» lo dice, e la pagina aspetta
-            // che il pannello torni per ricaricarsi, anche se e' stata ricaricata a meta'.
+            // The panel's Java being updated (finding 210): the "Update everything" row says so, and the page
+            // waits for the panel to come back before reloading, even if it was reloaded halfway.
             if (wasJava !== nowJava) ucRender();
             if (nowJava) ucAwaitPanel();
             ucWaitForTurn();
@@ -303,7 +313,7 @@
             document.getElementById('ucRunningText').textContent = turn.java ? t('uc.runningJava') : t('uc.running', { who: turn.who || '' });
             box.hidden = false;
             const logBox = document.getElementById('ucRunningLogBox');
-            // Lo script della Java non e' un lavoro del pannello: il suo registro arriva col turno.
+            // The Java script is not a panel job: its log arrives with the turn.
             if (turn.java) {
                 ucRunningLogShow(turn.log || '');
                 logBox.hidden = false;
@@ -316,7 +326,8 @@
             logBox.hidden = false;
         }
 
-        // Il registro sotto la riga «In corso», e sopra il passo di adesso (reperto 210: «non capisco a che punto sia»).
+        // The log under the "In progress" row, and above it the current step (finding 210: "I don't
+        // understand how far along it is").
         function ucRunningLogShow(text) {
             const pre = document.getElementById('ucRunningLog');
             pre.textContent = text;
@@ -324,8 +335,9 @@
             ucRunningNow(text);
         }
 
-        // Il passo di adesso, dal registro: il passo della catena di «Aggiorna tutto» («=== Step 2 of 3: ... ===») e dentro
-        // il suo l'ultimo «[n/m] ...». Senza l'ora davanti, che il registro del pannello mette a ogni riga.
+        // The current step, from the log: the step of the "Update everything" chain ("=== Step 2 of 3: ... ===")
+        // and, inside it, its last "[n/m] ...". Without the time in front, which the panel's log puts on every
+        // line.
         function ucRunningNow(text) {
             const el = document.getElementById('ucRunningNow');
             if (!el) return;
@@ -341,7 +353,7 @@
             el.hidden = !now;
         }
 
-        // I pulsanti dei passi e «Cerca aggiornamenti» aspettano il lavoro in corso, e lo dicono.
+        // The step buttons and "Check for updates" wait for the job in progress, and say so.
         function ucWaitForTurn() {
             const busy = !!(uc.turn && uc.turn.running);
             const buttons = [...document.querySelectorAll('#ucList .uc-head button')];
@@ -354,7 +366,7 @@
             });
         }
 
-        // Cerca: scarica cataloghi, vulnerabilita' e patch (non installa niente), poi rilegge tutto.
+        // Check: downloads catalogs, vulnerabilities and patches (installs nothing), then rereads everything.
         async function ucSearch() {
             const pre = document.getElementById('uc-log');
             const state = document.getElementById('ucState');
@@ -368,13 +380,13 @@
             ucFollow(r.jobId, () => { ucLoad(true); });
         }
 
-        // L'esito di un lavoro: in un posto suo, che la rilettura della scheda non copre.
+        // A job's outcome: in a place of its own, which the card's reread does not cover.
         function ucOutcome(ok, text) {
             const box = document.getElementById('ucOutcome');
             box.replaceChildren(text ? ucEl('div', 'alert py-2 small mb-2 ' + (ok ? 'alert-success' : 'alert-danger'), text) : '');
         }
 
-        // Segue un lavoro nel registro della scheda, poi fa 'after'.
+        // Follows a job in the card's log, then does 'after'.
         async function ucFollow(id, after) {
             const pre = document.getElementById('uc-log');
             const state = document.getElementById('ucState');
@@ -397,9 +409,9 @@
             setTimeout(() => ucFollow(id, after), 3000);
         }
 
-        // Quello che «Aggiorna tutto» farebbe adesso, nell'ordine (reperto 207): le patch di FreeBSD, gli altri pacchetti in un
-        // piano, i passi del server di posta (un pacchetto, o una famiglia col suo principale), Roundcube con la sua
-        // procedura, e per ultima la Java del pannello, che lo ferma e lo riaccende.
+        // What "Update everything" would do now, in order (finding 207): the FreeBSD patches, the other packages
+        // in one plan, the mail server steps (a package, or a family with its main one), Roundcube with its
+        // procedure, and last the panel's Java, which stops and restarts it.
         function ucPlanned() {
             const os = uc.os || {}, pk = uc.pk || {}, proc = pk.procedures || {}, rows = pk.packages || [], sum = pk.summary || {};
             const own = p => p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);
@@ -419,10 +431,12 @@
             return out;
         }
 
-        // «Aggiorna tutto» (reperto 207). Il committente: «c'è ancora disorganizzazione, poi se clicco annulla all'aggiornamento,
-        // sparisce proprio la possibilità di aggiornare, devi sensibilmente rivedere tutto in maniera logica e semplice».
-        // Prima i controlli di ogni passo, gli stessi della sua procedura; poi UNA conferma che li elenca; poi UN lavoro che li
-        // fa uno dopo l'altro e si ferma al primo che non va. Annullare non cambia niente: il pulsante resta dov'e'.
+        // "Update everything" (finding 207). The owner: "there is still disorganization, then if I click cancel
+        // on the update, the possibility to update disappears altogether, you must substantially rethink
+        // everything in a logical and simple way".
+        // First the checks of each step, the same as its procedure; then ONE confirmation that lists them; then
+        // ONE job that runs them one after the other and stops at the first one that fails. Cancelling changes
+        // nothing: the button stays where it is.
         async function ucEverything() {
             ucOpen('all');
             ucRender();
@@ -432,8 +446,9 @@
             const planned = ucPlanned();
             const go = [], out = [], approved = {}, waiting = [];
             const add = plan => ((plan && plan.changes) || []).forEach(c => { if (c.name && c.to) approved[c.name] = c.to; });
-            // I pacchetti nuovi che un passo installa (una libreria che la versione nuova vuole): si dicono nella conferma,
-            // perche' la conferma mostra quello che si fara' (reperto 208: lmdb0 per postfix-mysql, sul server vero).
+            // The new packages a step installs (a library the new version wants): they are stated in the
+            // confirmation, because the confirmation shows what will be done (finding 208: lmdb0 for
+            // postfix-mysql, on the production server).
             const installs = plan => {
                 const list = ((plan && plan.changes) || []).filter(c => c.type === 'install' && c.name && c.to).map(c => c.name + ' ' + c.to);
                 return list.length ? ' — ' + t('uc.allInstalls', { list: list.join(', ') }) : '';
@@ -449,8 +464,9 @@
                     const changes = plan.changes || [];
                     if (!r.success || !plan.measured || !changes.length) { out.push(p.label + ': ' + (r.error || plan.error || t('up.planNoChange'))); continue; }
                     if (changes.some(c => c.type === 'remove' || c.type === 'downgrade')) { uc.plainBlocked = true; out.push(p.label + ': ' + t('uc.allPlanRemoves')); continue; }
-                    // Un pacchetto reinstallato (e' cambiato uno che usa) non e' un aggiornamento: si dice a parte, cosi' i
-                    // conti tornano con l'elenco (sulla VM: 9 aggiornamenti e cyrus-sasl reinstallato, non «10 pacchetti»).
+                    // A reinstalled package (one it uses has changed) is not an update: it is stated separately,
+                    // so the counts match the list (on the VM: 9 updates and cyrus-sasl reinstalled, not
+                    // "10 packages").
                     const again = changes.filter(c => c.type === 'reinstall').length;
                     const label = again && again < changes.length ? tn('uc.allPlain', changes.length - again) + ' ' + tn('uc.allPlainReinstall', again)
                         : tn('uc.allPlain', changes.length);
@@ -461,8 +477,8 @@
                 const action = { package: 'package_preflight', roundcube: 'roundcube_preflight', java: 'java_preflight' }[p.kind];
                 const r = await updApi(action, p.kind === 'package' ? { package: p.step.head.name } : {});
                 if (!(r.success && r.canProceed && r.signature)) {
-                    // Fermato da pacchetti protetti che hanno un aggiornamento loro: se e' un passo di prima a farlo, questo
-                    // si controlla quando tocca a lui (sotto). Sulla VM: postfix-mysql dietro mysql84-client.
+                    // Held by locked packages that have an update of their own: if an earlier step does it, this
+                    // one is checked when its turn comes (below). On the VM: postfix-mysql behind mysql84-client.
                     const blockers = ((r.plan && r.plan.blockers) || []).map(b => b.name).filter(Boolean);
                     if (p.kind === 'package' && blockers.length) { waiting.push({ p: p, r: r, blockers: blockers }); continue; }
                     out.push(p.label + ': ' + stopOf(r));
@@ -473,14 +489,14 @@
                     label: p.label + (services.length ? ' — ' + t('uc.allRestarts', { list: services.join(', ') }) : '') + installs(r.plan) });
                 add(r.plan);
             }
-            // I passi fermati solo da un pacchetto che un passo di prima aggiorna: dopo gli altri pacchetti, prima di Roundcube
-            // e della Java, senza impronta. Il server li controlla quando tocca a loro, e li esegue solo se il loro piano
-            // resta fra i cambiamenti mostrati qui (reperto 207).
+            // The steps held only by a package that an earlier step updates: after the other packages, before
+            // Roundcube and Java, without a fingerprint. The server checks them when their turn comes, and runs
+            // them only if their plan stays within the changes shown here (finding 207).
             const deferred = [];
             waiting.forEach(w => {
                 if (!w.blockers.every(b => Object.prototype.hasOwnProperty.call(approved, b))) { out.push(w.p.label + ': ' + stopOf(w.r)); return; }
-                // Quello che il suo piano, fermato, sapeva gia' (una dipendenza nuova, per esempio) si mostra e vale come
-                // mostrato; i membri del passo alla versione del catalogo. Il resto, se al suo turno c'e', lo ferma.
+                // What its plan, held, already knew (a new dependency, for example) is shown and counts as
+                // shown; the step's members at the catalog version. The rest, if present at its turn, stops it.
                 add(w.r.plan);
                 w.p.step.members.forEach(m => { approved[m.name] = m.available; });
                 deferred.push({ kind: 'package', package: w.p.step.head.name, signature: '',
@@ -499,7 +515,7 @@
                     + (go.some(g => g.kind === 'java') ? '\n' + t('uc.everythingJavaNote') : ''),
                 confirm: tn('uc.everythingGo', go.length) });
             if (!yes) {
-                // Annullato: tutto com'era, col pulsante al suo posto.
+                // Cancelled: everything as it was, with the button in its place.
                 document.getElementById('uc-all-detail').hidden = true;
                 ucRender();
                 return;
@@ -513,8 +529,8 @@
             if (go.some(g => g.kind === 'java')) ucAwaitPanel();
         }
 
-        // Con la Java del pannello per ultima, il pannello si ferma e si riaccende: si aspetta che risponda di nuovo e si
-        // ricarica la pagina. Solo se e' davvero sparito per un po' (lo script parte alla fine del lavoro).
+        // With the panel's Java last, the panel stops and restarts: it waits for it to answer again and
+        // reloads the page. Only if it has really been gone for a while (the script starts at the end of the job).
         function ucAwaitPanel() {
             if (uc.awaitingPanel) return;
             uc.awaitingPanel = true;
@@ -530,7 +546,7 @@
             setTimeout(tick, 5000);
         }
 
-        // Dopo il cambio di ramo: si torna in cima a questa scheda, a vedere cosa c'e' da aggiornare adesso.
+        // After the branch change: back to the top of this card, to see what there is to update now.
         function ucShow() {
             const title = document.getElementById('ucTitle');
             if (title) { title.focus({ preventScroll: true }); title.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }

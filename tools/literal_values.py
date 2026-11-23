@@ -1,20 +1,19 @@
-"""Cambia valori esatti scritti come stringhe: "vecchio", 'vecchio', \\"vecchio\\", \\'vecchio\\'.
+"""Changes exact values written as strings: "old", 'old', \\"old\\", \\'old\\'.
 
-Per i valori che non sono nomi di niente e che il compilatore non puo' seguire: codici e verdetti
-mandati alla pagina, azioni, gettoni di conferma, rotte. Solo la stringa INTERA: un valore dentro
-un testo piu' lungo resta. Solo src/main (Java e pagine), mai i file di lingua: li' le stesse parole
-sono il testo che l'utente legge. Nelle prove un codice italiano e il suo testo italiano sono
-spesso la stessa stringa, quindi le prove si elencano (--tests) e si decidono a mano.
+For the values that are not names of anything and that the compiler cannot follow: codes and
+verdicts sent to the page, actions, confirmation tokens, routes. Only the WHOLE string: a value
+inside a longer text stays. Only src/main (Java and pages), never the language files: there the
+same words are the text the user reads. In the tests an Italian code and its Italian text are
+often the same string, so the tests are listed (--tests) and decided by hand.
 
-Mappa: una riga per valore, vecchio<TAB>nuovo (ci sono spazi e apostrofi).
-Uso: python3 tools/literal_values.py <radice> <mappa.txt> [--dry] [--tests]
-"""
+Map: one line per value, old<TAB>new (there are spaces and apostrophes).
+Usage: python3 tools/literal_values.py <root> <map.txt> [--dry] [--tests]"""
 import re, sys, glob, collections
 root, mapfile = sys.argv[1], sys.argv[2]
 dry, tests = "--dry" in sys.argv, "--tests" in sys.argv
 mp = dict(l.rstrip("\n").split("\t") for l in open(mapfile, encoding="utf-8") if "\t" in l and not l.startswith("#"))
 alt = "|".join(sorted(map(re.escape, mp), key=len, reverse=True))
-# la stessa virgoletta (con o senza barra) prima e dopo, e nient'altro in mezzo
+# the same quote (with or without a backslash) before and after, and nothing else in between
 rx = re.compile(r"""(\\?)(["'])(""" + alt + r""")\1\2""")
 counts = collections.Counter()
 if tests:

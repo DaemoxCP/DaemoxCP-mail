@@ -7,20 +7,20 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * L'elenco dei domini gestiti, tenuto in memoria per qualche secondo.
+ * The list of managed domains, kept in memory for a few seconds.
  *
- * Perche' esiste. Le due rotte pubbliche del pannello — la configurazione per Thunderbird e
- * la politica MTA-STS — non sono autenticate, e non possono esserlo: le chiamano client di
- * posta e server mittenti che non hanno credenziali. Ma ogni richiesta faceva una query al
- * database per sapere se il dominio fosse nostro.
+ * Why it exists. The panel's two public routes -- the configuration for Thunderbird and
+ * the MTA-STS policy -- are not authenticated, and cannot be: they are called by mail clients
+ * and sending servers that have no credentials. But every request made a query to the
+ * database to know whether the domain was ours.
  *
- * Chiunque puo' chiamare quelle rotte quante volte vuole. Senza questa cache, mille richieste
- * al secondo diventano mille query al secondo, e a cadere non e' la pagina web: e' MySQL, cioe'
- * la POSTA. Un endpoint pubblico che tocca il database a ogni colpo e' una leva per spegnere
- * il servizio, non una comodita'.
+ * Anyone can call those routes as many times as they like. Without this cache, a thousand
+ * requests per second become a thousand queries per second, and what goes down is not the web
+ * page: it is MySQL, that is the MAIL. A public endpoint that touches the database on every hit
+ * is a lever to shut down the service, not a convenience.
  *
- * L'elenco dei domini cambia raramente — quando se ne aggiunge uno — quindi trenta secondi di
- * ritardo non danno alcun fastidio: un dominio appena creato risponde mezzo minuto dopo.
+ * The list of domains changes rarely -- when one is added -- so thirty seconds of delay
+ * bother nobody: a newly created domain answers half a minute later.
  */
 public class DomainCache {
 
@@ -31,7 +31,7 @@ public class DomainCache {
 
     private DomainCache() {}
 
-    /** I domini gestiti, in minuscolo. Rilegge dal database solo quando la copia e' scaduta. */
+    /** The managed domains, in lower case. Re-reads from the database only when the copy has expired. */
     public static Set<String> domains() {
         long now = System.currentTimeMillis();
         Set<String> copy = list;
@@ -39,14 +39,14 @@ public class DomainCache {
 
         Set<String> fresh = new LinkedHashSet<>();
         try {
-            // Solo i nomi: queste rotte sono pubbliche, e nella parte web la loro procedura non chiede una sessione.
+            // Only the names: these routes are public, and in the web part their procedure does not ask for a session.
             for (String d : Main.mailDatabase.getDomainNames())
                 if (d != null && !d.isBlank())
                     fresh.add(d.trim().toLowerCase(Locale.ROOT));
         } catch (Exception e) {
-            // Se il database non risponde si tiene la copia vecchia invece di svuotare
-            // l'elenco: rispondere con dati di trenta secondi fa e' meglio che rispondere
-            // "questo dominio non esiste" a un server mittente per un problema nostro.
+            // If the database does not answer, the old copy is kept instead of emptying
+            // the list: answering with data from thirty seconds ago is better than answering
+            // "this domain does not exist" to a sending server because of a problem of ours.
             if (copy != null) {
                 expiry = now + VALIDITY_MS;
                 return copy;
@@ -58,7 +58,7 @@ public class DomainCache {
         return fresh;
     }
 
-    /** Il nome come sta nel database, se il dominio e' gestito. Altrimenti null. */
+    /** The name as it is in the database, if the domain is managed. Otherwise null. */
     public static String managed(String required) {
         if (required == null) return null;
         String r = required.trim().toLowerCase(Locale.ROOT);
@@ -68,7 +68,7 @@ public class DomainCache {
         return domains().contains(r) ? r : null;
     }
 
-    /** Da chiamare quando i domini cambiano, per non aspettare la scadenza. */
+    /** To be called when the domains change, so as not to wait for the expiry. */
     public static void invalidate() {
         expiry = 0;
     }

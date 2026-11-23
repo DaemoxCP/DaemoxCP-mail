@@ -30,7 +30,7 @@ import org.daemoxcp.mail.i18n.I18n;
 import org.daemoxcp.mail.scripts.DovecotConfig;
 
 /**
- * The guided move to Dovecot 2.4 (reperto 213): what can be proven without a Dovecot.
+ * The guided move to Dovecot 2.4 (finding 213): what can be proven without a Dovecot.
  *
  *  1. The 2.4 configuration has the two lines a real 2.4.5 refused (ssl_server_prefer_ciphers = yes, a listener with
  *     address) written the way it accepts them, and the script asks pkg for the 2.4 port and its Pigeonhole too.
@@ -72,7 +72,7 @@ public class DovecotMoveTest {
         String c = all.toString();
         check("ssl_server_prefer_ciphers = server (2.4.5 refuses \"yes\")", c.contains("ssl_server_prefer_ciphers = server")
                 && !c.matches("(?s).*\\n\\s*ssl_server_prefer_ciphers\\s*=\\s*yes.*"));
-        // Since reperto 234 Postfix delivers through a socket in its own queue: no TCP listener for LMTP at all.
+        // Since finding 234 Postfix delivers through a socket in its own queue: no TCP listener for LMTP at all.
         check("LMTP only on Postfix's socket (0600 postfix), no TCP listener, no address line (2.4.5 refuses it)",
                 c.contains(LmtpSocket.NEW) && !c.contains("inet_listener lmtp") && !c.matches("(?s).*\\n\\s*address\\s*=.*"));
         String fragment = DovecotConfig.fromPanelConfig().scriptFragment();

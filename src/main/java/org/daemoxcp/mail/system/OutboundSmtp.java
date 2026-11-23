@@ -14,38 +14,38 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * La porta 25 in uscita: il server puo' consegnare la posta agli altri server? (reperto 246)
+ * Outbound port 25: can the server deliver mail to the other servers? (finding 246)
  *
- * <p>Molti provider la chiudono sugli account nuovi: Hetzner Cloud chiude 25 e 465 in uscita e le apre su richiesta,
- * dopo la prima fattura pagata. Con la 25 chiusa la posta in arrivo funziona e quella in uscita resta in coda senza
- * che niente lo dica chiaramente. Qui ci si collega alla 25 di tre server di posta grandi, si legge solo il saluto
- * (220), si scrive QUIT e si chiude: nessun messaggio, nessun indirizzo. Basta una connessione riuscita per dire che la
- * porta e' aperta; se nessuno risponde e i nomi si risolvono, e' chiusa.
+ * <p>Many providers close it on new accounts: Hetzner Cloud closes 25 and 465 outbound and opens them on
+ * request, after the first paid invoice. With 25 closed, incoming mail works and outgoing mail stays in the
+ * queue without anything saying so clearly. Here we connect to port 25 of three large mail servers, read only
+ * the greeting (220), write QUIT and close: no message, no address. One successful connection is enough to say
+ * that the port is open; if nobody answers and the names resolve, it is closed.
  */
 public final class OutboundSmtp {
 
     private OutboundSmtp() {}
 
-    /** Server che rispondono sempre sulla 25: Gmail, iCloud, Outlook.com (i loro MX). */
+    /** Servers that always answer on 25: Gmail, iCloud, Outlook.com (their MX). */
     static final List<String> HOSTS = List.of("gmail-smtp-in.l.google.com", "mx01.mail.icloud.com",
             "outlook-com.olc.protection.outlook.com");
     static final int TIMEOUT_MS = 8000;
 
-    /** Il saluto di un server sulla porta 25, o un'eccezione. */
+    /** A server's greeting on port 25, or an exception. */
     interface Dialer {
         String banner(String host) throws IOException;
     }
 
     /**
-     * Ci si collega con gli indirizzi della famiglia che usa Postfix (IpFamily): con solo IPv6 un collegamento in IPv4
-     * riuscirebbe lo stesso (il sistema esce in IPv4), e direbbe aperta una porta che Postfix non usa.
+     * We connect with the addresses of the family Postfix uses (IpFamily): with IPv6 only, a connection over IPv4
+     * would succeed anyway (the system goes out over IPv4), and would call open a port that Postfix does not use.
      */
     static Dialer dialer = host -> {
         IpFamily.Family f = IpFamily.effective();
         IOException last = null;
         for (java.net.InetAddress a : java.net.InetAddress.getAllByName(host)) {
             boolean six = a instanceof java.net.Inet6Address;
-            // In uscita conta se Postfix spedisce in quella famiglia (anche con la posta in IPv6 solo in uscita).
+            // Outbound, what matters is whether Postfix sends in that family (even with IPv6 mail outbound only).
             if (six ? !f.sends6() : !f.v4()) continue;
             try {
                 return bannerAt(a);
@@ -65,7 +65,7 @@ public final class OutboundSmtp {
             try {
                 line = in.readLine();
             } catch (java.net.SocketTimeoutException e) {
-                line = "";   // collegati, ma nessun saluto in tempo: la porta e' comunque aperta
+                line = "";   // connected, but no greeting in time: the port is open anyway
             }
             OutputStream out = s.getOutputStream();
             out.write("QUIT\r\n".getBytes(StandardCharsets.US_ASCII));
@@ -74,7 +74,7 @@ public final class OutboundSmtp {
         }
     }
 
-    /** open (almeno una connessione riuscita), blocked (nomi risolti, nessuna connessione), unknown (nessun nome risolto). */
+    /** open (at least one successful connection), blocked (names resolved, no connection), unknown (no name resolved). */
     public static JSONObject check() {
         JSONArray tried = new JSONArray();
         int resolved = 0;
@@ -84,7 +84,7 @@ public final class OutboundSmtp {
             try {
                 String b = dialer.banner(host);
                 resolved++;
-                // Collegati: la porta e' aperta, anche se il saluto non e' 220 (un rifiuto e' pur sempre una risposta).
+                // Connected: the port is open, even if the greeting is not 220 (a refusal is still an answer).
                 t.put("result", b.startsWith("220") ? "greeted" : "answered");
                 if (openOn == null) openOn = host;
             } catch (UnknownHostException e) {

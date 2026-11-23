@@ -12,7 +12,7 @@ import org.daemoxcp.mail.i18n.I18n;
 import org.daemoxcp.mail.util.Shell;
 
 /**
- * The move to Dovecot 2.4 going back by itself (reperto 213), end to end on the VM.
+ * The move to Dovecot 2.4 going back by itself (finding 213), end to end on the VM.
  *
  * The move itself is proven from the page (dovecot24-move-browser-test.js). Here the way back: the job runs for real,
  * replaces the packages and writes the 2.4 configuration, and then a problem the test adds after the tests on 2.4
@@ -24,9 +24,9 @@ import org.daemoxcp.mail.util.Shell;
  *   3. the configuration is the one of before, file by file; the refused 2.4 configuration is in the copy;
  *   4. Dovecot runs and listens where it did; the log has the tests again on 2.3, all passing;
  *   5. no list of unlocked packages left;
- *   6. the panel's Sieve rules compiled by Pigeonhole on each side: once on 2.4, once more on 2.3 (reperto 241).
+ *   6. the panel's Sieve rules compiled by Pigeonhole on each side: once on 2.4, once more on 2.3 (finding 241).
  * The job runs connected to MySQL, as in the panel's root part: without it MailDbUsers leaves Dovecot on the panel's
- * MySQL user and that is a second problem the test did not add (seen on 16/11/2026): the error must name only the
+ * MySQL user and that is a second problem the test did not add (seen on 2026-11-16): the error must name only the
  * test's problem.
  *
  * It touches the system. Only on the test VM with Dovecot 2.3, as root, with -De2e.vm=yes, from the panel's folder:

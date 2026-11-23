@@ -1,30 +1,30 @@
 #!/bin/sh
-# Il ritorno indietro completo dopo upgrade-panel.sh: il boot environment di prima, la cartella del
-# pannello com'era e le poche cose che le migrazioni cambiano FUORI dal boot environment. Non
-# riavvia: alla fine dice di farlo (shutdown -r now), cosi' chi lo lancia sceglie il momento.
+# The complete way back after upgrade-panel.sh: the boot environment from before, the folder of the
+# panel as it was and the few things that the migrations change OUTSIDE the boot environment. It does
+# not restart: at the end it says to do it (shutdown -r now), so whoever runs it chooses the moment.
 #
-# Uso, da root:
+# Usage, as root:
 #   rollback-panel.sh UPGRADE_FOLDER
-# dove UPGRADE_FOLDER e' quella che upgrade-panel.sh ha stampato all'inizio
-# (per esempio /home/panel-upgrade-2026-11-05-180000).
+# where UPGRADE_FOLDER is the one that upgrade-panel.sh printed at the start
+# (for example /home/panel-upgrade-2026-11-05-180000).
 #
-# Cosa rimette:
-#   - il boot environment creato prima del passaggio (bectl activate): sistema, pacchetti,
-#     configurazioni, /var/db (MySQL compreso) tornano a quel momento;
-#   - la cartella del pannello, che sta fuori dai boot environment, dalla sua copia; quella di dopo
-#     resta accanto, rinominata;
-#   - i log di nginx della superficie pubblica col nome di prima, se il primo avvio li aveva
-#     rinominati: /var/log sta fuori dai boot environment, e due nomi insieme fermerebbero il
-#     prossimo passaggio (BOTH_NAMES);
-#   - il proprietario di /var/log/php_errors.log, che RoundcubeUser da' all'utente della webmail;
-#   - il proprietario del registro degli accessi al pannello, che col pannello separato e' dell'utente
-#     della parte web (PanelSeparation): nel boot environment di prima quell'utente non c'e';
-#   - i nomi di prima in /var/log, se il primo avvio li aveva cambiati col nome del prodotto (DaemoxCP Mail,
-#     17/11/2026): il registro degli accessi con le sue copie e la cartella delle reinstallazioni.
-# La posta NON torna indietro: /var/vmail sta DENTRO il boot environment (sul server vero come sulla
-# VM), quindi prima di attivarlo ci si copia la posta di adesso, e quella di prima resta li' accanto
-# (/var/vmail.before-rollback-...). MySQL invece torna al momento del passaggio: caselle, domini e
-# alias creati dopo vanno rifatti.
+# What it puts back:
+#   - the boot environment created before the upgrade (bectl activate): system, packages,
+#     configurations, /var/db (MySQL included) go back to that moment;
+#   - the folder of the panel, which is outside the boot environments, from its copy; the one from
+#     after stays beside it, renamed;
+#   - the nginx logs of the public surface with the name from before, if the first start had
+#     renamed them: /var/log is outside the boot environments, and two names together would stop the
+#     next upgrade (BOTH_NAMES);
+#   - the owner of /var/log/php_errors.log, which RoundcubeUser gives to the webmail user;
+#   - the owner of the access log of the panel, which with the separated panel belongs to the user
+#     of the web part (PanelSeparation): in the boot environment from before that user does not exist;
+#   - the names from before in /var/log, if the first start had changed them with the product name
+#     (DaemoxCP Mail, 2026-11-17): the access log with its copies and the folder of the reinstallations.
+# The mail does NOT go back: /var/vmail is INSIDE the boot environment (on the production server as on
+# the VM), so before activating it the current mail is copied into it, and the mail from before stays
+# there beside it (/var/vmail.before-rollback-...). MySQL instead goes back to the moment of the
+# upgrade: mailboxes, domains and aliases created afterwards must be made again.
 
 set -u
 PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
@@ -40,14 +40,14 @@ WORK=${1%/}
 value() { sed -n "s/^$1: //p" "$WORK/summary.txt" | head -1; }
 BE=$(value "boot environment")
 PANEL_DIR=$(value "panel folder")
-# Le cartelle scritte dalle versioni di prima, coi nomi in italiano
+# The folders written by the earlier versions, with the names in Italian
 [ -n "$PANEL_DIR" ] || PANEL_DIR=$(value "cartella del pannello")
 STAMP=${WORK##*/panel-upgrade-}
 [ -n "$BE" ] && [ -n "$PANEL_DIR" ] || fail "summary.txt does not give the boot environment and the panel folder"
 bectl list -H | awk '{print $1}' | grep -qxF "$BE" || fail "the boot environment $BE is no longer there"
 
 echo "Going back to before the upgrade $STAMP"
-# Il servizio col nome di adesso o con quello di prima: il primo avvio del pannello nuovo lo rinomina.
+# The service with the current name or with the one from before: the first start of the new panel renames it.
 for svc in daemoxcp_mail mailpanel; do
     [ -f "/usr/local/etc/rc.d/$svc" ] || continue
     if service "$svc" status >/dev/null 2>&1; then
@@ -55,8 +55,9 @@ for svc in daemoxcp_mail mailpanel; do
     fi
 done
 
-# La posta di adesso nel boot environment di prima, coi servizi di posta fermi perche' non cambi
-# mentre si copia. Si riaccendono subito se qualcosa non va: fino a bectl activate niente e' cambiato.
+# The current mail into the boot environment from before, with the mail services stopped so that it does not
+# change while it is copied. They are started again right away if something goes wrong: until bectl activate
+# nothing has changed.
 VMAIL=/var/vmail
 queued=$(postqueue -j 2>/dev/null | wc -l | tr -d ' ')
 [ "$queued" = 0 ] || echo "WARNING: $queued messages in Postfix's queue: the queue is inside the boot environment and goes back to the previous one"
@@ -73,14 +74,14 @@ if [ -d "$VMAIL" ]; then
         || { bectl umount "$BE"; restart_mail; fail "copying the mail into the boot environment failed: nothing was activated"; }
     echo "Current mail copied into the previous boot environment (the previous mail: $VMAIL.before-rollback-$STAMP)"
 fi
-# La casella di sistema della parte web: PanelUserRename l'ha portata col nome nuovo, e nel boot environment
-# di prima l'utente ha ancora quello vecchio. Stesso uid: torna col suo nome di prima.
+# The system mailbox of the web part: PanelUserRename moved it to the new name, and in the boot environment
+# from before the user still has the old one. Same uid: it goes back to its name from before.
 if [ -f /var/mail/daemoxcp_mail ] && [ ! -e /var/mail/mailpanel ] && grep -q "^mailpanel:" "$MNT/etc/passwd" \
         && ! grep -q "^daemoxcp_mail:" "$MNT/etc/passwd"; then
     mv /var/mail/daemoxcp_mail /var/mail/mailpanel && echo "the system mailbox of the web part has its previous name again: /var/mail/mailpanel"
 fi
-# Le caselle di sistema vuote che pw useradd crea in /var/mail (fuori dai boot environment) per gli
-# utenti nati col passaggio (roundcube, acme): nel boot environment di prima quegli utenti non ci sono.
+# The empty system mailboxes that pw useradd creates in /var/mail (outside the boot environments) for the
+# users born with the upgrade (roundcube, acme): in the boot environment from before those users do not exist.
 for f in /var/mail/*; do
     u=${f##*/}
     [ -f "$f" ] && [ ! -s "$f" ] && ! grep -q "^$u:" "$MNT/etc/passwd" && rm -f "$f" && echo "removed the empty mailbox $f (the user $u does not exist before the upgrade)"
@@ -97,11 +98,11 @@ fi
 tar -xpf "$WORK/panel-dir.tar" -C "${PANEL_DIR%/*}" || fail "the copy of $PANEL_DIR does not extract (the one from after is in $PANEL_DIR.after-upgrade-$STAMP)"
 echo "Panel folder as it was: $PANEL_DIR (the one from after: $PANEL_DIR.after-upgrade-$STAMP)"
 
-# I log di nginx: quelli che c'erano prima e adesso mancano, se c'e' il loro nome nuovo.
+# The nginx logs: those that were there before and are now missing, if their new name is there.
 if [ -f "$WORK/nginx-logs-before.txt" ]; then
     while read -r old; do
         [ -e "/var/log/nginx/$old" ] && continue
-        # Dall'italiano all'inglese (30/10/2026), poi al nome del prodotto (17/11/2026).
+        # From Italian to English (2026-10-30), then to the product name (2026-11-17).
         for new in $(printf '%s' "$old" | sed 's/mailpanel-pubblico/mailpanel-public/') \
                    $(printf '%s' "$old" | sed 's/mailpanel-pubblico/daemoxcp-mail-public/; s/mailpanel-public/daemoxcp-mail-public/'); do
             [ "$new" != "$old" ] && [ -e "/var/log/nginx/$new" ] || continue
@@ -116,7 +117,7 @@ if [ -s "$WORK/php-errors-owner-before.txt" ] && [ -f /var/log/php_errors.log ];
     chown "$owner" /var/log/php_errors.log && echo "owner of /var/log/php_errors.log: $owner"
 fi
 
-# /var/log col nome di prima del prodotto: quello che c'era prima e adesso manca, se c'e' il suo nome nuovo.
+# /var/log with the name from before the product: what was there before and is now missing, if its new name is there.
 if [ -f "$WORK/var-log-before.txt" ]; then
     while read -r old; do
         [ -e "/var/log/$old" ] && continue

@@ -3,23 +3,23 @@ package org.daemoxcp.mail.scripts;
 import org.daemoxcp.mail.system.RoundcubeDbUser;
 
 /**
- * Le istruzioni SQL con cui gli script d'installazione creano l'utente MySQL della webmail
- * ({@value RoundcubeDbUser#USER}) e tolgono il suo database all'utente del pannello.
+ * The SQL statements with which the installation scripts create the webmail's MySQL user
+ * ({@value RoundcubeDbUser#USER}) and take its database away from the panel's user.
  *
- * <p>Stavano in RoundcubeDbUser, che pero' all'avvio parla con MySQL solo con le istruzioni del catalogo.
- * Queste sono testo di shell per il client mysql, come il resto degli script
- * d'installazione: vanno in un here-document NON quotato eseguito da root, dove la variabile della password si espande
- * una volta sola (l'alfabeto del generatore non ha apici). Niente accenti gravi intorno ai nomi: nel here-document
- * aprirebbero una sostituzione di comando.
+ * <p>They used to be in RoundcubeDbUser, which however at startup talks to MySQL only with the statements of the
+ * catalog. These are shell text for the mysql client, like the rest of the
+ * installation scripts: they go into an UNQUOTED here-document run by root, where the password variable is expanded
+ * only once (the generator's alphabet has no quotes). No backticks around the names: in the here-document they
+ * would open a command substitution.
  */
 public final class RoundcubeDbAccountScript {
 
     private RoundcubeDbAccountScript() {}
 
     /**
-     * L'account della webmail con la password che il pannello passa nell'ambiente, i privilegi sul solo database della
-     * webmail, e quelli dell'utente del pannello su quel database tolti, perche' una reinstallazione li trova dalla
-     * versione di prima.
+     * The webmail account with the password that the panel passes in the environment, privileges on the webmail's
+     * database only, and those of the panel's user on that database removed, because a reinstallation finds them
+     * from the previous version.
      */
     public static String sql(String passwordVariable, String panelUser) {
         String account = "'" + RoundcubeDbUser.USER + "'@'" + RoundcubeDbUser.HOST + "'";

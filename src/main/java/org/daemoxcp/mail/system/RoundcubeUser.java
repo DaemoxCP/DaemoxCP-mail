@@ -28,36 +28,36 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Roundcube col suo utente: l'utente e il gruppo "roundcube", un pool di php-fpm suo con un
- * socket suo, e i file della webmail che appartengono a lui e a nessun altro.
+ * Roundcube with its own user: the "roundcube" user and group, a php-fpm pool of its own with a
+ * socket of its own, and the webmail files belonging to it and to nobody else.
  *
- * <p>Prima Roundcube girava nel pool "www" di php-fpm, cioe' con lo stesso utente dei processi
- * di nginx. Un difetto in uno dei due consegnava all'altro tutto quello che poteva toccare: la
- * configurazione di Roundcube (la password del database, la des_key), quella del plugin SSO (la
- * chiave che apre i gettoni con la password master di Dovecot), le sessioni della webmail. Adesso
- * nginx puo' solo aprire il socket (listen.group = www), e quei file li legge solo roundcube.
+ * <p>Before, Roundcube ran in the "www" php-fpm pool, that is with the same user as the nginx
+ * processes. A flaw in either of the two handed the other everything it could touch: the
+ * Roundcube configuration (the database password, the des_key), the one of the SSO plugin (the
+ * key that opens the tokens with the Dovecot master password), the webmail sessions. Now
+ * nginx can only open the socket (listen.group = www), and only roundcube reads those files.
  *
- * <p>Tre cose misurate sulla VM FreeBSD 15.1 il 31/10/2026 decidono come e' fatto:
+ * <p>Three things measured on the FreeBSD 15.1 VM on 2026-10-31 decide how it is made:
  * <ul>
- *   <li>il post-install di php84 ricopia www.conf.default in www.conf se www.conf manca: togliere
- *       il file farebbe ripartire, al primo aggiornamento di PHP, un pool che gira come www. Quindi
- *       www.conf resta, con soli commenti: php-fpm lo accetta (php-fpm -t), purche' i commenti
- *       comincino con ";" -- con "#" lo rifiuta e non parte;</li>
- *   <li>il post-install di roundcube-php84 fa "chown www:www" di logs e temp a ogni installazione
- *       e aggiornamento: la proprieta' si riafferma a ogni avvio e dopo l'aggiornamento della
- *       webmail fatto dal pannello ({@link #repairOwnership()});</li>
- *   <li>la rotazione che il pacchetto installa (newsyslog.conf.d/roundcube.conf) ricrea i log come
- *       www:www: dopo la prima rotazione Roundcube non potrebbe piu' scriverli.</li>
+ *   <li>the php84 post-install copies www.conf.default to www.conf if www.conf is missing: removing
+ *       the file would bring back, at the first PHP upgrade, a pool running as www. So
+ *       www.conf stays, with only comments: php-fpm accepts it (php-fpm -t), as long as the comments
+ *       start with ";" -- with "#" it rejects it and does not start;</li>
+ *   <li>the roundcube-php84 post-install runs "chown www:www" on logs and temp at every installation
+ *       and upgrade: the ownership is reasserted at every startup and after the webmail upgrade
+ *       done by the panel ({@link #repairOwnership()});</li>
+ *   <li>the rotation the package installs (newsyslog.conf.d/roundcube.conf) recreates the logs as
+ *       www:www: after the first rotation Roundcube could no longer write them.</li>
  * </ul>
  *
- * <p>All'avvio ({@link #ensureAtBoot()}), sui server installati prima: crea utente e gruppo,
- * scrive il pool roundcube portandosi dietro i valori pm.* di quello www, lascia www.conf senza
- * pool, sistema la proprieta' dei file, sposta fastcgi_pass di nginx sul socket nuovo. Controlla con
- * php-fpm -t e nginx -t, ricarica, guarda che i processi del pool girino come roundcube e che la
- * webmail risponda con la sua pagina di accesso. Al primo passo che fallisce rimette tutto com'era
- * e ricarica: al prossimo avvio ci riprova. Non sceglie per nessuno: un www.conf che non e' quello
- * del pannello, un pool www che serve anche un altro sito, una webmail che gia' non risponde,
- * lasciano tutto com'e' e lo scrivono nel log.
+ * <p>At startup ({@link #ensureAtBoot()}), on servers installed earlier: it creates user and group,
+ * writes the roundcube pool carrying over the pm.* values of the www one, leaves www.conf without a
+ * pool, fixes the ownership of the files, moves nginx's fastcgi_pass to the new socket. It checks with
+ * php-fpm -t and nginx -t, reloads, checks that the pool processes run as roundcube and that the
+ * webmail responds with its login page. At the first step that fails it puts everything back as it
+ * was and reloads: at the next startup it tries again. It does not choose for anyone: a www.conf that
+ * is not the panel's, a www pool that also serves another site, a webmail that already does not
+ * respond, all leave everything as it is and write it in the log.
  */
 public final class RoundcubeUser {
 
@@ -65,11 +65,11 @@ public final class RoundcubeUser {
 
     public static final String USER = "roundcube";
     public static final String GROUP = "roundcube";
-    /** Il gruppo dei processi di nginx: puo' aprire il socket del pool, e nient'altro. */
+    /** The group of the nginx processes: it can open the pool's socket, and nothing else. */
     public static final String WEB_GROUP = "www";
     public static final String POOL = "roundcube";
     public static final String SOCKET = "/var/run/php-fpm-roundcube.sock";
-    /** Il socket del pool www, come lo scrivevano gli script d'installazione di prima. */
+    /** The www pool's socket, as the earlier installation scripts wrote it. */
     public static final String OLD_SOCKET = "/var/run/php-fpm.sock";
 
     public static final String FPM_DIR = "/usr/local/etc/php-fpm.d";
@@ -78,12 +78,12 @@ public final class RoundcubeUser {
     public static final String PHP_ERRORS_LOG = "/var/log/php_errors.log";
     public static final String NEWSYSLOG_DIR = "/usr/local/etc/newsyslog.conf.d";
     public static final String SSO_KEY = "/var/db/daemoxcp-mail/roundcube_sso.key";
-    /** La rotazione che installa il pacchetto di Roundcube, e il campione da cui la copia. */
+    /** The rotation the Roundcube package installs, and the sample it copies it from. */
     static final String ROUNDCUBE_ROTATION_SAMPLE = "/usr/local/share/examples/roundcube/newsyslog.conf";
-    /** Le copie dei file prima della migrazione, per chi vuole guardarle: fuori da php-fpm.d. */
+    /** The copies of the files before the migration, for whoever wants to look at them: outside php-fpm.d. */
     static final String BACKUP_DIR = "/var/db/daemoxcp-mail/service-users-backup";
 
-    /** Le righe del pool che il pannello sceglie; le altre (pm.*) si portano da quello di prima. */
+    /** The pool lines the panel chooses; the others (pm.*) are carried over from the previous one. */
     private static final Set<String> OWN_KEYS = Set.of("user", "group", "listen",
             "listen.owner", "listen.group", "listen.mode");
 
@@ -97,9 +97,9 @@ public final class RoundcubeUser {
 
     private RoundcubeUser() {}
 
-    // ===================== i file che scrive il pannello =====================
+    // ===================== the files the panel writes =====================
 
-    /** Il pool di Roundcube: utente suo, socket suo, nginx nel gruppo che lo apre. */
+    /** The Roundcube pool: its own user, its own socket, nginx in the group that opens it. */
     public static String poolConf(String otherLines) {
         String rest = otherLines == null || otherLines.isBlank() ? DEFAULT_PM : otherLines;
         if (!rest.endsWith("\n")) rest += "\n";
@@ -118,7 +118,7 @@ public final class RoundcubeUser {
              + rest;
     }
 
-    /** www.conf senza pool: c'e' solo perche' il pacchetto di PHP non lo ricrei. */
+    /** www.conf without a pool: it exists only so that the PHP package does not recreate it. */
     public static String wwwPlaceholder() {
         return "; " + PanelMarker.WRITTEN + "\n"
              + "; Here was the \"www\" pool, with which Roundcube ran as nginx's user.\n"
@@ -128,7 +128,7 @@ public final class RoundcubeUser {
              + "; a pool running as www again. Comments start with ';': php-fpm refuses '#'.\n";
     }
 
-    /** La rotazione dei log di Roundcube, come quella del pacchetto ma col proprietario giusto. */
+    /** The rotation of the Roundcube logs, like the package's one but with the right owner. */
     static String roundcubeRotation() {
         return "# " + PanelMarker.WRITTEN + "\n"
              + "# The rotation of Roundcube's logs: the package's one recreated them as www:www,\n"
@@ -139,9 +139,9 @@ public final class RoundcubeUser {
     }
 
     /**
-     * Il pezzo degli script d'installazione che da' a Roundcube il suo utente e il suo pool. Va
-     * messo dove prima si scriveva www.conf; la proprieta' dei file la fa {@link #shellOwnership()},
-     * dopo che i file ci sono.
+     * The piece of the installation scripts that gives Roundcube its user and its pool. It goes
+     * where www.conf used to be written; the ownership of the files is done by {@link #shellOwnership()},
+     * after the files are there.
      */
     public static String shellPool() {
         return "\n# Roundcube with its own user and its own php-fpm pool, not nginx's (www).\n"
@@ -153,13 +153,13 @@ public final class RoundcubeUser {
              + "cat > " + FPM_DIR + "/www.conf << 'WWW_PLACEHOLDER'\n" + wwwPlaceholder() + "WWW_PLACEHOLDER\n";
     }
 
-    /** Il pezzo degli script d'installazione che da' a roundcube i suoi file. */
+    /** The piece of the installation scripts that gives roundcube its files. */
     public static String shellOwnership() {
         StringBuilder b = new StringBuilder("\n# Roundcube's files: its own, and nobody else's.\n");
         for (Ownership o : ownershipPlan(Places.real())) {
             String p = o.path().toString();
-            // Il contenuto senza i file con piu' nomi: logs, temp e le sessioni li scrive roundcube, e «chown -R» gli dava
-            // anche un file di root collegato li' dentro con un hard link (reperto 252).
+            // The contents without the files with more than one name: logs, temp and the sessions are written by
+            // roundcube, and "chown -R" also gave it a root file linked in there with a hard link (finding 252).
             if (o.contents()) {
                 b.append("if [ -d ").append(p).append(" ] && [ ! -L ").append(p).append(" ]; then\n")
                  .append(org.daemoxcp.mail.security.SafeOwnership.shell(p, o.user(), o.group()))
@@ -171,7 +171,7 @@ public final class RoundcubeUser {
             b.append(o.user()).append(':').append(o.group()).append(' ').append(p)
              .append("; chmod ").append(octal(o.mode())).append(' ').append(p).append("; fi\n");
         }
-        // La rotazione del pacchetto, se e' ancora quella del pacchetto.
+        // The package's rotation, if it is still the package's one.
         b.append("if [ -f ").append(ROUNDCUBE_ROTATION_SAMPLE).append(" ] && cmp -s ")
          .append(ROUNDCUBE_ROTATION_SAMPLE).append(' ').append(NEWSYSLOG_DIR).append("/roundcube.conf; then\n")
          .append("cat > ").append(NEWSYSLOG_DIR).append("/roundcube.conf << 'ROUNDCUBE_ROTATION'\n")
@@ -179,26 +179,26 @@ public final class RoundcubeUser {
         return b.toString();
     }
 
-    /** La riga di newsyslog del registro degli errori di PHP: lo scrivono i processi di roundcube. */
+    /** The newsyslog line of the PHP error log: it is written by the roundcube processes. */
     public static String phpErrorsRotationLine() {
         return PHP_ERRORS_LOG + "    " + USER + ":" + GROUP + "    640    7    1024    *    JC";
     }
 
     /**
-     * Dove nginx deve passare le richieste PHP di Roundcube: il socket nuovo se il pool roundcube
-     * c'e', quello di prima se la migrazione non e' ancora riuscita (rigenerare nginx.conf col
-     * socket nuovo, senza il pool, spegnerebbe la webmail).
+     * Where nginx must pass Roundcube's PHP requests: the new socket if the roundcube pool
+     * exists, the previous one if the migration has not succeeded yet (regenerating nginx.conf with
+     * the new socket, without the pool, would turn the webmail off).
      */
     public static String fastcgiPass() {
         return "unix:" + (migrated(Places.real()) ? SOCKET : OLD_SOCKET);
     }
 
-    /** L'utente con cui gira il PHP di Roundcube: roundcube dopo la migrazione, www prima. */
+    /** The user Roundcube's PHP runs as: roundcube after the migration, www before. */
     public static String runtimeUser() {
         return migrated(Places.real()) ? USER : WEB_GROUP;
     }
 
-    /** Il gruppo che legge le configurazioni della webmail: roundcube dopo la migrazione, www prima. */
+    /** The group that reads the webmail configurations: roundcube after the migration, www before. */
     public static String runtimeGroup() {
         return migrated(Places.real()) ? GROUP : WEB_GROUP;
     }
@@ -213,15 +213,15 @@ public final class RoundcubeUser {
         }
     }
 
-    // ===================== la proprieta' dei file =====================
+    // ===================== file ownership =====================
 
     /**
-     * Un file o una cartella con proprietario, gruppo e permessi. contents: anche quello che c'e'
-     * dentro (senza seguire i link), coi permessi degli altri tolti.
+     * A file or a folder with owner, group and permissions. contents: also what is inside
+     * (without following links), with the permissions for others removed.
      */
     record Ownership(Path path, String user, String group, String mode, boolean contents) {}
 
-    /** Dove stanno i file: fissi sul server, cartelle temporanee nella prova. */
+    /** Where the files are: fixed on the server, temporary folders in the test. */
     record Places(Path fpmDir, Path roundcubeDir, Path sessionsDir, Path phpErrorsLog,
                   Path newsyslogDir, Path rotationSample, Path ssoKey, Path backupDir) {
         static Places real() {
@@ -232,9 +232,9 @@ public final class RoundcubeUser {
     }
 
     /**
-     * Di chi devono essere i file della webmail. Le configurazioni le scrive root (il pannello) e
-     * roundcube le legge col gruppo: non le puo' cambiare. Il codice del plugin SSO e' di root. La
-     * chiave SSO la legge solo il pannello: il plugin ha il segreto nella sua configurazione.
+     * Who the webmail files must belong to. The configurations are written by root (the panel) and
+     * roundcube reads them through the group: it cannot change them. The SSO plugin's code belongs to
+     * root. The SSO key is read only by the panel: the plugin has the secret in its configuration.
      */
     static List<Ownership> ownershipPlan(Places at) {
         Path rc = at.roundcubeDir();
@@ -258,14 +258,14 @@ public final class RoundcubeUser {
         return String.format("%o", v);
     }
 
-    /** Quello che c'era prima su un file: per rimetterlo. */
+    /** What a file had before: to put it back. */
     private record Snapshot(Path path, String user, String group, Set<PosixFilePermission> perms) {}
 
     /**
-     * Mette proprietario, gruppo e permessi giusti, e ricorda quelli di prima in {@code undo}.
-     * Non segue mai i link: logs, temp e le sessioni erano scrivibili da www, e un link messo li'
-     * dentro da chi aveva preso www, seguito da root, avrebbe dato a roundcube un file qualunque.
-     * Ritorna i percorsi cambiati.
+     * Sets the right owner, group and permissions, and remembers the previous ones in {@code undo}.
+     * It never follows links: logs, temp and the sessions were writable by www, and a link placed in
+     * there by whoever had taken over www, followed by root, would have given roundcube any file.
+     * Returns the changed paths.
      */
     static List<String> apply(List<Ownership> plan, Deque<Snapshot> undo) throws IOException {
         List<String> changed = new ArrayList<>();
@@ -279,7 +279,7 @@ public final class RoundcubeUser {
                 inside = s.filter(p -> !p.equals(o.path())).toList();
             }
             for (Path p : inside) {
-                // Ne' collegamenti ne' file con piu' nomi: un hard link a un file di root e' quel file (reperto 252)
+                // No links and no files with several names: a hard link to a root file is that file (finding 252)
                 if (!org.daemoxcp.mail.security.SafeOwnership.safeToChange(p)) continue;
                 Set<PosixFilePermission> perms = Files.readAttributes(p, PosixFileAttributes.class,
                         LinkOption.NOFOLLOW_LINKS).permissions();
@@ -315,7 +315,7 @@ public final class RoundcubeUser {
             try {
                 PosixFileAttributeView v = Files.getFileAttributeView(s.path(), PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
                 UserPrincipalLookupService names = s.path().getFileSystem().getUserPrincipalLookupService();
-                // Solo quello che e' cambiato: un file che non si e' potuto cambiare non si tocca di nuovo.
+                // Only what changed: a file that could not be changed is not touched again.
                 PosixFileAttributes a = v.readAttributes();
                 if (!a.owner().getName().equals(s.user())) v.setOwner(names.lookupPrincipalByName(s.user()));
                 if (!a.group().getName().equals(s.group())) v.setGroup(names.lookupPrincipalByGroupName(s.group()));
@@ -328,9 +328,10 @@ public final class RoundcubeUser {
     }
 
     /**
-     * La proprieta' riaffermata, senza toccare i servizi: dopo un aggiornamento di Roundcube (il
-     * post-install del pacchetto rimette logs e temp a www:www) e a ogni avvio. Solo se la
-     * migrazione c'e' gia': prima, i file sono ancora di www perche' li legge il pool www.
+     * The ownership reasserted, without touching the services: after a Roundcube upgrade (the
+     * package post-install sets logs and temp back to www:www) and at every startup. Only if the
+     * migration has already happened: before it, the files still belong to www because the www pool
+     * reads them.
      */
     public static List<String> repairOwnership() {
         Places at = Places.real();
@@ -346,9 +347,9 @@ public final class RoundcubeUser {
         return changed;
     }
 
-    // ===================== le rotazioni dei log =====================
+    // ===================== the log rotations =====================
 
-    /** Un file riscritto, con il testo di prima per rimetterlo. */
+    /** A rewritten file, with the previous text to put it back. */
     record FileEdit(Path path, String before, String after) {
         void apply() throws IOException { write(path, after); }
         void undo() throws IOException {
@@ -357,10 +358,10 @@ public final class RoundcubeUser {
     }
 
     /**
-     * Le due rotazioni che ricreano i log col proprietario: quella degli errori di PHP (la scrive
-     * l'installazione del pannello) e quella di Roundcube (la copia il pacchetto dal suo campione).
-     * Quella del pacchetto si riscrive solo se e' ancora uguale al campione: se qualcuno l'ha
-     * cambiata, e' sua, e lo dice il controllo degli utenti dei servizi.
+     * The two rotations that recreate the logs with the owner: the PHP errors one (written by the
+     * panel installation) and the Roundcube one (the package copies it from its sample).
+     * The package's one is rewritten only if it is still equal to the sample: if someone has
+     * changed it, it is theirs, and the service users check says so.
      */
     static List<FileEdit> rotationEdits(Places at) throws IOException {
         List<FileEdit> l = new ArrayList<>();
@@ -380,14 +381,14 @@ public final class RoundcubeUser {
         return l;
     }
 
-    // ===================== il pool di prima =====================
+    // ===================== the previous pool =====================
 
-    /** Un pool letto da un file di php-fpm.d: il nome e le sue righe chiave = valore, in ordine. */
+    /** A pool read from a php-fpm.d file: the name and its key = value lines, in order. */
     record Pool(String name, Map<String, String> values, List<String> lines) {
         String get(String k) { return values.get(k); }
     }
 
-    /** I pool di un file di php-fpm (righe ";" di commento, sezioni [nome]). */
+    /** The pools of a php-fpm file (";" comment lines, [name] sections). */
     static List<Pool> pools(String content) {
         List<Pool> out = new ArrayList<>();
         Pool cur = null;
@@ -409,17 +410,17 @@ public final class RoundcubeUser {
         return out;
     }
 
-    /** Il valore di listen come lo scrive nginx in fastcgi_pass: un percorso diventa unix:percorso. */
+    /** The value of listen as nginx writes it in fastcgi_pass: a path becomes unix:path. */
     static String nginxForm(String listen) {
         return listen.startsWith("/") ? "unix:" + listen : listen;
     }
 
     // ===================== nginx =====================
 
-    /** Un blocco server di nginx che passa a php-fpm: il file, il nome e la porta su cui risponde. */
+    /** An nginx server block that passes to php-fpm: the file, the name and the port it answers on. */
     record Site(Path file, String name, String port, boolean roundcube) {}
 
-    /** I file della configurazione di nginx com'e' davvero, dall'uscita di nginx -T. */
+    /** The nginx configuration files as they really are, from the output of nginx -T. */
     static Map<Path, String> configFiles(String dump) {
         Map<Path, String> out = new LinkedHashMap<>();
         Matcher m = Pattern.compile("(?m)^# configuration file (.+):$").matcher(dump == null ? "" : dump);
@@ -434,7 +435,7 @@ public final class RoundcubeUser {
         return out;
     }
 
-    /** Il testo senza i commenti di nginx (da # a fine riga, fuori dalle virgolette). */
+    /** The text without the nginx comments (from # to the end of the line, outside quotes). */
     static String withoutComments(String c) {
         StringBuilder b = new StringBuilder();
         boolean inQuote = false;
@@ -456,7 +457,7 @@ public final class RoundcubeUser {
 
     private static final Pattern SERVER_OPEN = Pattern.compile("(?:^|[;{}\\s])server\\s*\\{");
 
-    /** I blocchi server { ... } di un file, gia' senza commenti. */
+    /** The server { ... } blocks of a file, already without comments. */
     static List<String> serverBlocks(String c) {
         List<String> out = new ArrayList<>();
         Matcher m = SERVER_OPEN.matcher(c);
@@ -474,7 +475,7 @@ public final class RoundcubeUser {
         return out;
     }
 
-    /** I siti che passano le richieste a {@code pass}, e se sono la webmail. */
+    /** The sites that pass requests to {@code pass}, and whether they are the webmail. */
     static List<Site> sitesPassingTo(Map<Path, String> files, String pass, Path roundcubeDir) {
         Pattern passes = Pattern.compile("fastcgi_pass\\s+" + Pattern.quote(pass) + "\\s*;");
         Pattern root = Pattern.compile("(?m)\\broot\\s+" + Pattern.quote(roundcubeDir.toString()) + "(/public_html)?/?\\s*;");
@@ -492,34 +493,34 @@ public final class RoundcubeUser {
         return out;
     }
 
-    /** Lo stesso file con fastcgi_pass spostato da {@code from} al socket del pool roundcube. */
+    /** The same file with fastcgi_pass moved from {@code from} to the socket of the roundcube pool. */
     static String repointed(String content, String from) {
         return content.replaceAll("fastcgi_pass(\\s+)" + Pattern.quote(from) + "(\\s*);",
                 Matcher.quoteReplacement("fastcgi_pass") + "$1" + Matcher.quoteReplacement("unix:" + SOCKET) + "$2;");
     }
 
-    // ===================== la migrazione all'avvio =====================
+    // ===================== the boot migration =====================
 
     enum Outcome { NOTHING, REPAIRED, NOT_INSTALLED, NOT_OURS, OTHER_SITES, NOT_SERVED, NGINX_UNREADABLE,
                    NOT_ANSWERING, DONE, ROLLED_BACK }
 
     record Report(Outcome outcome, String detail) {}
 
-    /** Quello che serve da php-fpm, nginx e dal sistema, separato per provarlo senza i servizi veri. */
+    /** What is needed from php-fpm, nginx and the system, kept separate to test it without the real services. */
     interface Services {
-        /** L'uscita di nginx -T, o null se nginx non risponde. */
+        /** The output of nginx -T, or null if nginx does not answer. */
         String nginxDump();
         Shell.Result nginxTest();
         Shell.Result nginxReload();
         Shell.Result phpFpmTest();
         Shell.Result phpFpmReload();
-        /** Crea gruppo e utente se mancano; falso se non ci riesce. */
+        /** Creates group and user if they are missing; false if it does not succeed. */
         boolean ensureUser();
-        /** Gli utenti dei processi di ogni pool di php-fpm in esecuzione: pool -> utenti. */
+        /** The process users of each running php-fpm pool: pool -> users. */
         Map<String, Set<String>> poolUsers();
-        /** La webmail risponde con la sua pagina di accesso, su quel nome e quella porta. */
+        /** The webmail responds with its login page, on that name and that port. */
         boolean webmailAnswers(String name, String port);
-        /** Una pausa fra un controllo e l'altro (nella prova non aspetta). */
+        /** A pause between one check and the next (in the test it does not wait). */
         void pause();
     }
 
@@ -541,7 +542,7 @@ public final class RoundcubeUser {
         Path poolFile = at.fpmDir().resolve(POOL + ".conf");
         Path wwwFile = at.fpmDir().resolve("www.conf");
 
-        // Gia' migrato: solo la proprieta' dei file, che un aggiornamento di Roundcube rimette a www.
+        // Already migrated: only the ownership of the files, which a Roundcube upgrade sets back to www.
         if (Files.exists(poolFile, LinkOption.NOFOLLOW_LINKS)) {
             if (!migrated(at))
                 return new Report(Outcome.NOT_OURS, poolFile + " exists and was not written by the panel: nothing changed");
@@ -576,8 +577,8 @@ public final class RoundcubeUser {
         if (webmail.isEmpty())
             return new Report(Outcome.NOT_SERVED, "no nginx server passes the webmail to " + oldPass + ": nothing changed");
 
-        // Prima della migrazione la webmail deve rispondere: altrimenti dopo non si saprebbe dire
-        // se l'ha rotta lei.
+        // Before the migration the webmail must respond: otherwise afterwards nobody could tell
+        // whether the migration broke it.
         for (Site s : webmail)
             if (!sv.webmailAnswers(s.name(), s.port()))
                 return new Report(Outcome.NOT_ANSWERING, "the webmail does not answer now on " + s.name() + ":" + s.port()
@@ -586,7 +587,7 @@ public final class RoundcubeUser {
         if (!sv.ensureUser())
             return new Report(Outcome.ROLLED_BACK, "cannot create the user " + USER + ": nothing changed");
 
-        // Il pool nuovo si porta dietro le righe di quello di prima che non riguardano chi e dove.
+        // The new pool carries over the lines of the previous one that are not about who and where.
         StringBuilder rest = new StringBuilder();
         for (String l : www.lines()) {
             String k = l.substring(0, l.indexOf('=')).trim();
@@ -645,10 +646,10 @@ public final class RoundcubeUser {
     }
 
     /**
-     * Dopo la migrazione www.conf deve restare senza pool. Se ne ha uno di nuovo e il file e'
-     * identico a www.conf.default, l'ha ricopiato il pacchetto di PHP (manca il segnaposto: l'ha
-     * tolto qualcuno, e un aggiornamento l'ha rimesso): torna il segnaposto, con php-fpm -t e reload.
-     * Se e' diverso l'ha scritto qualcuno, e non si tocca. null: niente da dire.
+     * After the migration www.conf must stay without a pool. If it has one again and the file is
+     * identical to www.conf.default, the PHP package copied it back (the placeholder is missing: someone
+     * removed it, and an upgrade put it back): the placeholder returns, with php-fpm -t and reload.
+     * If it is different someone wrote it, and it is not touched. null: nothing to report.
      */
     private static String wwwPoolBack(Places at, Path wwwFile, Services sv) throws IOException {
         if (!Files.isRegularFile(wwwFile, LinkOption.NOFOLLOW_LINKS)) {
@@ -676,7 +677,7 @@ public final class RoundcubeUser {
         return "replaced: the PHP package had copied www.conf.default back, with a pool that runs as www";
     }
 
-    /** Aspetta che il pool roundcube giri come roundcube e che nessun pool www sia rimasto. null se va. */
+    /** Waits for the roundcube pool to run as roundcube and for no www pool to be left. null if it works. */
     private static String waitForPool(Services sv) {
         Map<String, Set<String>> users = Map.of();
         for (int i = 0; i < 20; i++) {
@@ -706,7 +707,10 @@ public final class RoundcubeUser {
                 + (problems.isEmpty() ? "" : " EXCEPT: " + String.join("; ", problems)));
     }
 
-    /** Le copie di www.conf e dei file di nginx, per chi vuole vedere com'erano: non servono a rimettere. */
+    /**
+     * The copies of www.conf and of the nginx files, for whoever wants to see how they were: they are not
+     * used to put things back.
+     */
     private static void backup(Places at, Path www, Iterable<Path> nginx) {
         try {
             Path dir = at.backupDir().resolve("roundcube-" + java.time.LocalDate.now(java.time.ZoneOffset.UTC));
@@ -722,12 +726,12 @@ public final class RoundcubeUser {
         }
     }
 
-    /** Scrive un file nuovo come root, leggibile da tutti (pool, rotazioni, nginx), o lo riscrive al suo posto. */
+    /** Writes a new file as root, readable by everyone (pool, rotations, nginx), or rewrites it in its place. */
     private static void write(Path p, String content) throws IOException {
         Files.writeString(p, content, StandardCharsets.UTF_8);
     }
 
-    // ===================== i servizi veri =====================
+    // ===================== the real services =====================
 
     private static final class RealServices implements Services {
         private static final Duration SHORT = Duration.ofSeconds(20);
@@ -738,7 +742,7 @@ public final class RoundcubeUser {
             return r.success() ? r.output() : null;
         }
         @Override public Shell.Result nginxTest() { return Shell.run(SHORT, "nginx", "-t"); }
-        // "one": funzionano anche se nginx_enable non e' YES in rc.conf.
+        // "one": they work even if nginx_enable is not YES in rc.conf.
         @Override public Shell.Result nginxReload() { return Shell.run(SHORT, "service", "nginx", "onereload"); }
         @Override public Shell.Result phpFpmTest() { return Shell.run(SHORT, "php-fpm", "-t"); }
         @Override public Shell.Result phpFpmReload() { return Shell.run(SHORT, "service", "php_fpm", "onereload"); }
@@ -753,7 +757,7 @@ public final class RoundcubeUser {
         }
 
         @Override public Map<String, Set<String>> poolUsers() {
-            // Un -o per colonna: su FreeBSD "-o user=,pid=" fa di ",pid=" l'intestazione di user.
+            // One -o per column: on FreeBSD "-o user=,pid=" makes ",pid=" the header of user.
             return ServiceUsers.poolUsers(Shell.run(SHORT, "ps", "-axww", "-o", "user=", "-o", "pid=", "-o", "ppid=",
                     "-o", "command=").output());
         }

@@ -22,22 +22,22 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * L'unico punto da cui il pannello apre una connessione JDBC, MySQL o SQLite:
- * la connessione che restituisce accetta solo le istruzioni di {@link SqlCatalog}, cioe' esattamente uno
- * dei suoi testi, e rifiuta qualunque altro testo SQL prima che arrivi al driver.
+ * The only point from which the panel opens a JDBC connection, MySQL or SQLite:
+ * the connection it returns accepts only the statements of {@link SqlCatalog}, that is, exactly one
+ * of its texts, and refuses any other SQL text before it reaches the driver.
  *
- * <p>SqlCatalogTest controlla gia' sul codice che l'SQL stia solo nel catalogo; questa guardia lo fa
- * mentre il pannello gira, per ogni istruzione: un testo composto per errore, o un valore finito nel
- * testo invece che in un parametro, non passa. Si guardano i punti da cui un testo SQL raggiunge il
- * driver: prepareStatement, prepareCall e nativeSQL della connessione, e execute, executeQuery,
- * executeUpdate, executeLargeUpdate e addBatch di ogni statement (anche di un PreparedStatement, che li
- * eredita). Uno statement e i metadati restituiscono la connessione guardata, e unwrap non consegna
- * quella vera. Resta ResultSet.getStatement, che il pannello non usa (lo controlla SqlCatalogTest).
+ * <p>SqlCatalogTest already checks on the code that SQL is only in the catalog; this guard does it
+ * while the panel runs, for every statement: a text composed by mistake, or a value that ended up in the
+ * text instead of in a parameter, does not pass. The points watched are those from which an SQL text reaches the
+ * driver: prepareStatement, prepareCall and nativeSQL of the connection, and execute, executeQuery,
+ * executeUpdate, executeLargeUpdate and addBatch of every statement (also of a PreparedStatement, which
+ * inherits them). A statement and the metadata return the guarded connection, and unwrap does not hand over
+ * the real one. ResultSet.getStatement remains, which the panel does not use (SqlCatalogTest checks it).
  *
- * <p>Non e' una difesa contro chi esegue codice suo nel processo: quello aprirebbe una connessione
- * sua. Contro quello servono l'utente MySQL della parte web e le procedure: {@link #openRoutines} e' la
- * connessione della web con quell'utente, che manda al posto di ogni istruzione la sua procedura
- * (WebPartStatements.ROUTINES) con l'impronta della sessione della richiesta ({@link #useSession}).
+ * <p>It is not a defence against whoever runs their own code in the process: that would open a connection
+ * of its own. Against that, the web part's MySQL user and the procedures are needed: {@link #openRoutines} is the
+ * web part's connection with that user, which sends in place of every statement its procedure
+ * (WebPartStatements.ROUTINES) with the fingerprint of the request's session ({@link #useSession}).
  */
 public final class CatalogGuard {
 
@@ -45,7 +45,7 @@ public final class CatalogGuard {
 
     private CatalogGuard() {}
 
-    /** I testi del catalogo: le costanti pubbliche di SqlCatalog (i pezzi privati non sono istruzioni). */
+    /** The catalog's texts: the public constants of SqlCatalog (the private pieces are not statements). */
     private static final Set<String> STATEMENTS = load();
 
     private static Set<String> load() {
@@ -63,17 +63,17 @@ public final class CatalogGuard {
         return Set.copyOf(s);
     }
 
-    /** Le istruzioni accettate: tutto il catalogo, o nella parte web solo il suo elenco (webPartOnly). */
+    /** The accepted statements: the whole catalog, or in the web part only its list (webPartOnly). */
     private static volatile Set<String> accepted = STATEMENTS;
 
-    /** Vero se il testo e' una delle istruzioni accettate, carattere per carattere. */
+    /** True if the text is one of the accepted statements, character by character. */
     public static boolean allowed(String sql) {
         return sql != null && accepted.contains(sql);
     }
 
     /**
-     * La parte web del pannello separato, all'avvio: da qui solo le istruzioni di WebPartStatements.
-     * Non si torna indietro. Un nome che non e' nel catalogo ferma l'avvio.
+     * The web part of the separated panel, at startup: from here only the statements of WebPartStatements.
+     * There is no going back. A name that is not in the catalog stops the startup.
      */
     public static synchronized void webPartOnly() {
         Set<String> web = new HashSet<>();
@@ -88,7 +88,7 @@ public final class CatalogGuard {
         accepted = Set.copyOf(web);
     }
 
-    /** Quante istruzioni ha il catalogo. */
+    /** How many statements the catalog has. */
     public static int size() {
         return STATEMENTS.size();
     }
@@ -105,32 +105,32 @@ public final class CatalogGuard {
         return guard(DriverManager.getConnection(url, properties));
     }
 
-    // ===================== La parte web con il suo utente MySQL: solo procedure =====================
+    // ===================== The web part with its own MySQL user: procedures only =====================
 
-    /** L'impronta del token della sessione della richiesta in corso (WebSessions.tokenHash), o nessuna. */
+    /** The fingerprint of the session token of the current request (WebSessions.tokenHash), or none. */
     private static final ThreadLocal<String> SESSION = new ThreadLocal<>();
     private static final java.util.regex.Pattern SESSION_HASH = java.util.regex.Pattern.compile("[0-9a-f]{64}");
 
     /**
-     * La parte web, mentre controlla il cookie di una richiesta: da qui le procedure ricevono l'impronta di quel
-     * token, e il database decide se la sessione c'e' e che cosa puo' fare il suo ruolo. Vale per il thread, finche'
-     * la richiesta non finisce ({@link #forgetSession}).
+     * The web part, while it checks the cookie of a request: from here the procedures receive the fingerprint of that
+     * token, and the database decides whether the session exists and what its role can do. It holds for the
+     * thread, until the request ends ({@link #forgetSession}).
      */
     public static void useSession(String tokenHash) {
         if (tokenHash != null && SESSION_HASH.matcher(tokenHash).matches()) SESSION.set(tokenHash);
         else SESSION.remove();
     }
 
-    /** La richiesta e' finita, o la sessione non c'e': le procedure ricevono NULL. */
+    /** The request has ended, or there is no session: the procedures receive NULL. */
     public static void forgetSession() {
         SESSION.remove();
     }
 
     /**
-     * La connessione della parte web con il suo utente MySQL, che puo' solo chiamare le procedure. Accetta solo le
-     * istruzioni dell'elenco della web che hanno una procedura, e manda la procedura: l'impronta della sessione
-     * come primo parametro, poi gli stessi parametri. Per chi la usa non cambia niente: una lettura restituisce le
-     * stesse colonne, una scrittura le righe toccate e, se e' un inserimento, la chiave nuova (getGeneratedKeys).
+     * The web part's connection with its own MySQL user, which can only call the procedures. It accepts only the
+     * statements of the web part's list that have a procedure, and sends the procedure: the session fingerprint
+     * as first parameter, then the same parameters. For whoever uses it nothing changes: a read returns the
+     * same columns, a write the rows touched and, if it is an insert, the new key (getGeneratedKeys).
      */
     public static Connection openRoutines(String url, String user, String password) throws SQLException {
         Connection raw = DriverManager.getConnection(url, user, password);
@@ -139,7 +139,7 @@ public final class CatalogGuard {
                 new Class<?>[]{Connection.class}, new RoutineConnectionHandler(raw));
     }
 
-    /** La procedura del testo, se e' un'istruzione accettata che ne ha una; altrimenti lo rifiuta. */
+    /** The procedure of the text, if it is an accepted statement that has one; otherwise it refuses it. */
     private static WebPartStatements.Routine routine(Object sql) throws SQLException {
         check(sql);
         WebPartStatements.Routine r = WebPartStatements.routineOf((String) sql);
@@ -168,7 +168,7 @@ public final class CatalogGuard {
                 case "unwrap", "isWrapperFor":
                     return wrapper(proxy, method, args);
                 case "prepareStatement": {
-                    // Le varianti con le chiavi generate o il tipo di cursore: la procedura e' la stessa.
+                    // The variants with generated keys or the cursor type: the procedure is the same.
                     WebPartStatements.Routine r = routine(args[0]);
                     PreparedStatement call = raw.prepareStatement(r.call());
                     return Proxy.newProxyInstance(CatalogGuard.class.getClassLoader(), new Class<?>[]{PreparedStatement.class},
@@ -192,16 +192,16 @@ public final class CatalogGuard {
     }
 
     /**
-     * Uno statement della connessione a procedure. Preparato (routine non null): base e' la CALL preparata, i
-     * parametri si spostano di uno. Semplice (createStatement): ogni execute col testo prepara la CALL della sua
-     * procedura, che non deve avere altri parametri; base serve solo alle impostazioni (timeout e simili).
+     * A statement of the procedure connection. Prepared (routine not null): base is the prepared CALL, the
+     * parameters shift by one. Plain (createStatement): every execute with the text prepares the CALL of its
+     * procedure, which must have no other parameters; base serves only for the settings (timeout and the like).
      */
     private static final class RoutineStatementHandler implements InvocationHandler {
         private final Statement base;
         private final WebPartStatements.Routine routine;
         private final Connection connection;
         private final Connection raw;
-        /** La CALL dell'ultimo execute col testo di uno statement semplice. */
+        /** The CALL of the last execute with the text of a plain statement. */
         private PreparedStatement current;
         private long updateCount = -1;
         private Long generatedKey;
@@ -243,9 +243,9 @@ public final class CatalogGuard {
                     break;
             }
             if (withText) {
-                // Statement semplice: execute(testo), executeQuery(testo), executeUpdate(testo[, ...]).
+                // Plain Statement: execute(text), executeQuery(text), executeUpdate(text[, ...]).
                 if (routine != null) {
-                    check(args[0]);      // un PreparedStatement non esegue un altro testo
+                    check(args[0]);      // a PreparedStatement does not run a different text
                     throw notThroughRoutines(name + " with a text on a prepared statement");
                 }
                 WebPartStatements.Routine r = routine(args[0]);
@@ -256,12 +256,12 @@ public final class CatalogGuard {
                 return run(current, r, name);
             }
             if (routine != null && args == null && name.startsWith("execute")) return run((PreparedStatement) base, routine, name);
-            // Le risposte di uno statement semplice sono quelle della sua ultima CALL.
+            // The results of a plain statement are those of its last CALL.
             if (routine == null && current != null && (name.equals("getResultSet") || name.equals("getMoreResults")
                     || name.equals("getWarnings") || name.equals("clearWarnings"))) return call(current, method, args);
             if (routine != null && method.getDeclaringClass() == PreparedStatement.class && name.startsWith("set")
                     && args != null && args.length > 0 && args[0] instanceof Integer index) {
-                // I parametri dell'istruzione sono quelli della procedura dal secondo in poi.
+                // The statement's parameters are the procedure's from the second onwards.
                 Object[] shifted = args.clone();
                 shifted[0] = index + 1;
                 return call(base, method, shifted);
@@ -269,7 +269,7 @@ public final class CatalogGuard {
             return call(base, method, args);
         }
 
-        /** Esegue la CALL con l'impronta della sessione: le righe di una lettura, le righe toccate di una scrittura. */
+        /** Runs the CALL with the session fingerprint: the rows of a read, the rows touched by a write. */
         private Object run(PreparedStatement call, WebPartStatements.Routine r, String how) throws SQLException {
             String session = SESSION.get();
             if (session == null) call.setNull(1, Types.CHAR);
@@ -295,9 +295,9 @@ public final class CatalogGuard {
                     }
                 }
             }
-            // Il resto delle risposte della CALL (il suo stato finale), perche' la connessione resti pulita.
+            // The rest of the CALL's results (its final status), so that the connection stays clean.
             while (call.getMoreResults() || call.getUpdateCount() != -1) {
-                // niente: si scartano
+                // nothing: they are discarded
             }
             updateCount = affected;
             return switch (how) {
@@ -309,7 +309,7 @@ public final class CatalogGuard {
         }
     }
 
-    /** Le chiavi generate dall'ultimo inserimento, come le darebbe il driver: una riga con la chiave, o nessuna. */
+    /** The keys generated by the last insert, as the driver would give them: a row with the key, or none. */
     private static ResultSet generatedKeys(Long key) {
         return (ResultSet) Proxy.newProxyInstance(CatalogGuard.class.getClassLoader(), new Class<?>[]{ResultSet.class},
                 new InvocationHandler() {
@@ -360,8 +360,8 @@ public final class CatalogGuard {
     private static void check(Object sql) throws SQLException {
         if (sql instanceof String s && allowed(s)) return;
         String text = String.valueOf(sql);
-        // Nel registro l'inizio del testo, senza a capo e caratteri di controllo: i valori stanno nei
-        // parametri, non nel testo, e un testo rifiutato e' un errore del codice o un tentativo.
+        // In the log the start of the text, without newlines and control characters: the values are in the
+        // parameters, not in the text, and a refused text is a code error or an attempt.
         String head = text.substring(0, Math.min(60, text.length())).replaceAll("\\p{Cntrl}", " ");
         LOGGER.warning("SQL outside the panel's catalog refused (" + text.length() + " characters"
                 + (STATEMENTS.contains(text) ? ", in the catalog but not in this part's list" : "") + "): " + head);
@@ -376,7 +376,7 @@ public final class CatalogGuard {
         }
     }
 
-    /** unwrap e isWrapperFor: solo verso le interfacce della guardia, mai verso l'oggetto del driver. */
+    /** unwrap and isWrapperFor: only towards the guard's interfaces, never towards the driver's object. */
     private static Object wrapper(Object proxy, Method method, Object[] args) throws SQLException {
         Class<?> iface = (Class<?>) args[0];
         boolean ok = iface.isInstance(proxy);
@@ -454,8 +454,8 @@ public final class CatalogGuard {
                 case "getConnection":
                     return connection;
                 case "execute", "executeQuery", "executeUpdate", "executeLargeUpdate", "addBatch":
-                    // Con un testo come primo argomento: quello di un Statement, o quello ereditato da un
-                    // PreparedStatement. Senza argomenti e' l'istruzione gia' preparata, controllata allora.
+                    // With a text as first argument: that of a Statement, or the one inherited by a
+                    // PreparedStatement. Without arguments it is the already prepared statement, checked back then.
                     if (args != null && args.length > 0) check(args[0]);
                     break;
                 default:
@@ -465,7 +465,7 @@ public final class CatalogGuard {
         }
     }
 
-    /** I metadati: tutto come il driver, ma getConnection e' la connessione guardata. */
+    /** The metadata: everything as the driver, but getConnection is the guarded connection. */
     private static final class MetaDataHandler implements InvocationHandler {
         private final Object raw;
         private final Connection connection;

@@ -1,5 +1,5 @@
-// I nomi dichiarati nel JavaScript che il browser esegue: le pagine generate (script in linea)
-// e le prove da browser. Uscita: nome<TAB>tipo<TAB>quante
+// The names declared in the JavaScript that the browser runs: the generated pages (inline scripts)
+// and the browser tests. Output: name<TAB>kind<TAB>count
 const ts = require('typescript');
 const fs = require('fs'), path = require('path');
 const dir = process.argv[2], extra = process.argv.slice(3);
