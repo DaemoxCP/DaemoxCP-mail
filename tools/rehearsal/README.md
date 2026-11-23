@@ -1,91 +1,88 @@
-# La prova del passaggio da una versione vecchia
+# Rehearsing the upgrade from an old version
 
-> Dal 17/11/2026 il pannello si chiama DaemoxCP Mail: servizio `daemoxcp_mail`, cartella `/var/db/daemoxcp-mail`, jar
-> `daemoxcp-mail.jar`. Questi strumenti provano il passaggio dalle versioni di prima, che hanno ancora i nomi
-> `mailpanel`: `check-state.sh`, `photo.sh` e gli script di Roundcube trovano l'uno o l'altro; `upgrade-phase.sh` resta
-> quello del 31/10, per il pannello dell'11/10. Il passaggio di adesso si prova con `tools/upgrade/upgrade-panel.sh`.
+> Since 2026-11-17 the panel is called DaemoxCP Mail: service `daemoxcp_mail`, folder `/var/db/daemoxcp-mail`, jar
+> `daemoxcp-mail.jar`. These tools rehearse the upgrade from the earlier versions, which still have the `mailpanel`
+> names: `check-state.sh`, `photo.sh` and the Roundcube scripts find either one; `upgrade-phase.sh` stays the one of
+> 2026-10-31, for the panel of 2026-10-11. Today's upgrade is rehearsed with `tools/upgrade/upgrade-panel.sh`.
 
-Strumenti per rifare sulla VM quello che succede su un server gia' avviato quando gli si mette
-sopra il pannello nuovo. Usati la prima volta il 31/10/2026, col jar del server di posta vero
-(commit 419b0a2, 11/10/2026): reperti, punto 112.
+Tools to redo on the test VM what happens on a server already running when the new panel is put on it. First used on
+2026-10-31, with the jar of the production mail server (commit 419b0a2, 2026-10-11): findings, item 112.
 
-Non stanno in `tests/` perche' i due conduttori si compilano contro il jar VECCHIO: chiamano le sue
-classi coi loro nomi di allora (`ProtezioneWeb`, `MtaSts.impostaModo`, ...), e la serie completa
-compila tutto quello che trova in `tests/` contro il jar di adesso.
+They are not in `tests/` because the two drivers are compiled against the OLD jar: they call its classes by the names
+they had then (`ProtezioneWeb`, `MtaSts.impostaModo`, ...), while the full suite compiles everything it finds in
+`tests/` against today's jar.
 
-## I pezzi
+## The pieces
 
-- `src/org/mail_panel/RehearsalOldInstall.java`: l'installazione come la faceva il menu di
-  quella versione. Argomenti: nome della posta, dominio di Roundcube.
-- `src/org/mail_panel/RehearsalOldSetup.java`: quello che un server vero ha in piu':
-  - il certificato del pannello e il primo amministratore;
-  - un dominio con due caselle, con le loro credenziali di prova in `/root/rehearsal/mailboxes`,
-    leggibile solo da root;
-  - la superficie sulla 443 con MTA-STS in enforce, e la sua jail;
-  - lo script di avvio.
-- `check-state.sh DOMINIO`: lo stato da confrontare prima e dopo:
-  - i nomi dei file;
-  - lo script di avvio;
-  - nginx e MTA-STS sulla 443;
-  - fail2ban e pf;
-  - Postfix come MTA locale;
-  - i servizi;
-  - l'accesso a una casella e una consegna.
-- `upgrade-phase.sh JAR ETICHETTA DOMINIO`: il passaggio come lo fa una persona. Ferma il servizio,
-  cambia il jar, riavvia con lo script che c'e', poi riavvia una seconda volta. Lo stato dei due
-  avvii va in `/root/rehearsal/ETICHETTA`. Dal 05/11/2026 il passaggio si prova invece con lo
-  script della produzione, `tools/upgrade/upgrade-panel.sh`, che fa lo stesso e si ferma da solo.
-- `server-leftovers.sh`: quello che il server vero ha in piu' del banco: due certificati con la
-  sfida DNS e i nomi italiani rimasti in `/var/db/mailpanel` (reperti, punto 135).
-- `photo.sh take|restore`: la fotografia del banco, cioe' un boot environment con dentro le copie
-  di `/home/panel` e `/var/log`, che stanno fuori dai boot environment.
+- `src/org/mail_panel/RehearsalOldInstall.java`: the installation as that version's menu did it. Arguments: the mail
+  name, the Roundcube domain.
+- `src/org/mail_panel/RehearsalOldSetup.java`: what a real server has on top of that:
+  - the panel's certificate and the first administrator;
+  - a domain with two mailboxes, with their test credentials in `/root/rehearsal/mailboxes`, readable by root only;
+  - the surface on port 443 with MTA-STS in enforce mode, and its jail;
+  - the startup script.
+- `check-state.sh DOMAIN`: the state to compare before and after:
+  - the file names;
+  - the startup script;
+  - nginx and MTA-STS on 443;
+  - fail2ban and pf;
+  - Postfix as the local MTA;
+  - the services;
+  - a mailbox login and a delivery.
+- `upgrade-phase.sh JAR LABEL DOMAIN`: the upgrade as a person does it. It stops the service, swaps the jar, restarts
+  with the existing script, then restarts a second time. The state of the two starts goes to `/root/rehearsal/LABEL`.
+  Since 2026-11-05 the upgrade is rehearsed instead with the production script, `tools/upgrade/upgrade-panel.sh`,
+  which does the same and stops by itself.
+- `server-leftovers.sh`: what the production server has that the test bench does not: two certificates with the DNS
+  challenge and the Italian names left in `/var/db/mailpanel` (findings, item 135).
+- `photo.sh take|restore`: the snapshot of the bench, that is a boot environment holding copies of `/home/panel` and
+  `/var/log`, which are outside the boot environments.
 
-## Come si fa (rifatto il 05/11/2026, reperti punto 135)
+## How it is done (redone on 2026-11-05, findings item 135)
 
-Dalla VM vergine che ripristina il committente si lavora su `default` (le copie vergini le tiene
-lui). Tutto da root sulla VM, salvo la costruzione dei jar.
+On the clean VM the owner restores, work happens on `default` (the owner keeps the clean copies). Everything as root on
+the VM, except building the jars.
 
-1. **Il jar vecchio.** Sul Mac, `git archive 419b0a2 | tar -x -C <cartella>` e
-   `mvn -B -o -q package -DskipTests` (sha256 `957886b5...`; quello del server, `6303a647...`, ha
-   in piu' solo le modifiche all'updater). Va in `/home/panel/freebsd-mail-panel-1.0.jar`.
-2. **I conduttori e il certificato.** Solo i due `RehearsalOld*`: `RehearsalCurrentSetup` si compila
-   contro il jar di `main` e non contro questo.
+1. **The old jar.** On the Mac, `git archive 419b0a2 | tar -x -C <folder>` and `mvn -B -o -q package -DskipTests`
+   (sha256 `957886b5...`; the server's, `6303a647...`, only adds the changes to the updater). It goes to
+   `/home/panel/freebsd-mail-panel-1.0.jar`.
+2. **The drivers and the certificate.** Only the two `RehearsalOld*`: `RehearsalCurrentSetup` is compiled against
+   `main`'s jar, not this one.
 
    ```sh
    javac --release 25 -cp /home/panel/freebsd-mail-panel-1.0.jar -d classes src/org/mail_panel/RehearsalOld*.java
    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /usr/local/etc/ssl/mail/privkey.pem \
        -out /usr/local/etc/ssl/mail/fullchain.pem -subj "/CN=mail.rehearsal.test"
    ```
-3. **L'installazione dell'11/10**, da `/home/panel`:
+3. **The installation of 2026-10-11**, from `/home/panel`:
    `java -cp freebsd-mail-panel-1.0.jar:classes org.mail_panel.RehearsalOldInstall mail.rehearsal.test webmail.rehearsal.test`.
 
-   Il conduttore cambia nello script due nomi di pacchetto, perche' sul catalogo di oggi:
-   - `postfix-mysql` porta `mysql84-client`, che toglie `mysql80-server` gia' nella fase dei
-     pacchetti, prima che MySQL sia mai partito. Lo script dice lo stesso «riuscita», ma il
-     database non c'e'. Il 31/10 il server veniva tolto piu' tardi;
-   - `dovecot-pigeonhole` lascia lmtp senza sieve.
+   The driver changes two package names in the script, because with today's catalogue:
+   - `postfix-mysql` brings `mysql84-client`, which removes `mysql80-server` already in the packages phase, before
+     MySQL ever started. The script still says "success", but there is no database. On 2026-10-31 the server was
+     removed later;
+   - `dovecot-pigeonhole` leaves lmtp without sieve.
 
-   Il server vero ha `mysql84-server` e `dovecot-pigeonhole-mysql`, e sono le due righe cambiate.
-4. **fail2ban e pf**, come li ha il server (la versione vecchia installava fail2ban dalla sua
-   pagina). `/etc/pf.conf` e' quello che scrive l'installatore di oggi (tabella `<permaban>`,
-   ancora `f2b/*`, `pass`), con `/var/db/mail-panel/permaban.list` vuota:
+   The production server has `mysql84-server` and `dovecot-pigeonhole-mysql`, and those are the two lines changed.
+4. **fail2ban and pf**, as the server has them (the old version installed fail2ban from its page). `/etc/pf.conf` is
+   the one today's installer writes (table `<permaban>`, anchor `f2b/*`, `pass`), with `/var/db/mail-panel/permaban.list`
+   empty:
 
    ```sh
    pkg install -y py312-fail2ban && sysrc fail2ban_enable=YES pf_enable=YES
    service fail2ban start && service pf start
    ```
-5. **`RehearsalOldSetup mail.rehearsal.test rehearsal.test`**, da `/home/panel` con lo stesso
-   classpath.
-6. **Come il server**, visto in sola lettura il 05/11/2026:
-   - **i pacchetti protetti.** Gli stessi 40 del server, `pkg lock -y` su quelli installati:
+5. **`RehearsalOldSetup mail.rehearsal.test rehearsal.test`**, from `/home/panel` with the same classpath.
+6. **Like the server**, looked at read-only on 2026-11-05:
+   - **the locked packages.** The same 40 as the server, `pkg lock -y` on the installed ones:
      `clamav dovecot-mysql dovecot-pigeonhole-mysql mysql84-client mysql84-server nginx openjdk25
      php84 php84-ctype php84-curl php84-dom php84-exif php84-extensions php84-fileinfo
      php84-filter php84-gd php84-iconv php84-intl php84-ldap php84-mbstring php84-mysqli
      php84-opcache php84-pdo php84-pdo_mysql php84-pdo_sqlite php84-phar php84-posix php84-session
      php84-simplexml php84-sqlite3 php84-tokenizer php84-xml php84-xmlreader php84-xmlwriter
-     php84-zip postfix-mysql py312-fail2ban redis roundcube-php84 rspamd`. Sul banco sono 39:
-     `php84-ldap` non c'e';
-   - **l'hash dell'utente master di Dovecot.** Sul server c'e', sulle installazioni di oggi no:
+     php84-zip postfix-mysql py312-fail2ban redis roundcube-php84 rspamd`. On the bench they are 39: `php84-ldap` is
+     not there;
+   - **the hash of Dovecot's master user.** The server has it, today's installations do not:
 
      ```sh
      K=$(head -1 /var/db/mailpanel/dovecot_master.key)
@@ -93,66 +90,63 @@ lui). Tutto da root sulla VM, salvo la costruzione dei jar.
      chown root:dovecot /usr/local/etc/dovecot/master-users.new && chmod 640 /usr/local/etc/dovecot/master-users.new
      mv /usr/local/etc/dovecot/master-users.new /usr/local/etc/dovecot/master-users
      ```
-   - **acme.sh da root**, come lo installava `get.acme.sh`. Il programma, con `dnsapi`,
-     `deploy` e `notify`, si prende dal pacchetto senza installarlo
-     (`pkg fetch -o DIR acme.sh`, poi `tar -xf` del `.pkg`). Poi:
+   - **acme.sh as root**, as `get.acme.sh` installed it. The program, with `dnsapi`, `deploy` and `notify`, is taken
+     from the package without installing it (`pkg fetch -o DIR acme.sh`, then `tar -xf` of the `.pkg`). Then:
 
      ```sh
      HOME=/root ./acme.sh --install --home /root/.acme.sh --accountemail admin@rehearsal.test
      /root/.acme.sh/acme.sh --home /root/.acme.sh --set-default-ca --server letsencrypt
      ```
 
-     `--install` scrive anche la riga nel cron di root. Account e certificato si fanno in locale,
-     perche' `mail.rehearsal.test` non si puo' validare:
-     - `ca/acme-v02.api.letsencrypt.org/directory/` con `account.key` (EC), `account.json` e
-       `ca.conf`;
-     - `mail.rehearsal.test_ecc/` con chiave EC, `.csr`, `.cer` autofirmato, `ca.cer`,
-       `fullchain.cer`, `.csr.conf` e la `.conf` coi campi `Le_*` che scrive acme.sh.
+     `--install` also writes the line in root's cron. The account and the certificate are made locally, because
+     `mail.rehearsal.test` cannot be validated:
+     - `ca/acme-v02.api.letsencrypt.org/directory/` with `account.key` (EC), `account.json` and `ca.conf`;
+     - `mail.rehearsal.test_ecc/` with an EC key, `.csr`, a self-signed `.cer`, `ca.cer`, `fullchain.cer`,
+       `.csr.conf` and the `.conf` with the `Le_*` fields acme.sh writes.
 
-     Alla fine `acme.sh --list` deve elencare il certificato;
-   - **`server-leftovers.sh`**: il secondo certificato, le sfide DNS e i nomi italiani rimasti.
-7. **Lo stato di prima.** `service mailpanel start`, poi `check-state.sh rehearsal.test` e
-   `roundcube-db-state.sh` (dalla #91).
-8. **La fotografia:** `photo.sh take rehearsal-october-11`.
-9. **Una fase per versione**, ognuna dalla fotografia:
-   - `photo.sh restore rehearsal-october-11 <clone>`, poi `shutdown -r now`;
-   - si aspetta di vedere il clone col flag `N` in `bectl list`: subito dopo il riavvio puo'
-     rispondere ancora la macchina vecchia;
+     In the end `acme.sh --list` must list the certificate;
+   - **`server-leftovers.sh`**: the second certificate, the DNS challenges and the Italian names left behind.
+7. **The state before.** `service mailpanel start`, then `check-state.sh rehearsal.test` and `roundcube-db-state.sh`
+   (since PR 91).
+8. **The snapshot:** `photo.sh take rehearsal-october-11`.
+9. **One phase per version**, each one from the snapshot:
+   - `photo.sh restore rehearsal-october-11 <clone>`, then `shutdown -r now`;
+   - wait until the clone shows the `N` flag in `bectl list`: right after the restart the old machine may still
+     answer;
    - `tools/upgrade/upgrade-panel.sh -m alice@rehearsal.test -p <file> <jar> <sha256>`.
 
-   Attenzione: `/root` sta dentro il boot environment. Gli strumenti e i jar copiati dopo la
-   fotografia vanno tenuti fuori (`/var/tmp`) e rimessi in ogni clone.
+   Careful: `/root` is inside the boot environment. The tools and jars copied after the snapshot must be kept outside
+   (`/var/tmp`) and put back in every clone.
 
-## Attenzione: il banco non e' piu' «prima» (31/10/2026, superato dal banco del 05/11)
+## Careful: the bench is no longer "before" (2026-10-31, superseded by the bench of 2026-11-05)
 
-Dal 31/10/2026 sera `rehearsal-before-healthy` contiene gia' il passaggio della #89: c'e'
-`/root/rehearsal/after-branch` (21:56), lo script di avvio scrive `panel.log`, nginx include
-`mailpanel-public.conf`. Lo stato «11/10» sta solo nelle due cartelle condivise di `before2/`, e
-messe sopra questo boot environment non tornano d'accordo (il jar vecchio su file gia' rinominati,
-i log di nginx col nome vecchio accanto a quello nuovo: `BOTH_NAMES`).
+Since the evening of 2026-10-31 `rehearsal-before-healthy` already contains the upgrade of PR 89: there is
+`/root/rehearsal/after-branch` (21:56), the startup script writes `panel.log`, nginx includes
+`mailpanel-public.conf`. The "2026-10-11" state is only in the two shared folders of `before2/`, and put on top of
+this boot environment they do not agree (the old jar on files already renamed, nginx's logs with the old name next to
+the new one: `BOTH_NAMES`).
 
-Per una prova che riguarda altro va bene cosi', con il jar di `main` (73bfbcd) in `/home/panel`
-come «prima» e senza rimettere i log di nginx: e' come la #84-#89 lascia il server vero. Cosi' e'
-stata fatta la prova degli utenti dei servizi (reperti, punto 116). Per rifare il passaggio
-dall'11/10 serve rifare il banco.
+For a test about something else it is fine as it is, with `main`'s jar (73bfbcd) in `/home/panel` as "before" and
+without putting nginx's logs back: it is how PR 84 to PR 89 leave the production server. The test of the services'
+users was done that way (findings, item 116). To redo the upgrade from 2026-10-11 the bench has to be rebuilt.
 
-## Il banco col jar di adesso (05/11/2026)
+## The bench with today's jar (2026-11-05)
 
-Per le prove che non riguardano il passaggio dall'11/10, il «prima» si fa col jar di `main` su una
-VM vergine (reperti, punto 124):
-1. `InstallFromScratch` del commit di `main`, compilato contro il suo jar, in `/root/panel`;
-2. `src/org/daemoxcp/mail/RehearsalCurrentSetup.java`, compilato contro lo stesso jar e lanciato da
-   `/root/panel`: certificato, amministratore, `rehearsal.test` con alice e bob, lo script di avvio
-   (punta a `/root/panel`, dentro il boot environment: niente da rimettere in `/home`);
-3. `sysrc mailpanel_enable=YES` e `service mailpanel start`.
+For the tests that are not about the upgrade from 2026-10-11, "before" is made with `main`'s jar on a clean VM
+(findings, item 124):
+1. `InstallFromScratch` of `main`'s commit, compiled against its jar, in `/root/panel`;
+2. `src/org/daemoxcp/mail/RehearsalCurrentSetup.java`, compiled against the same jar and run from `/root/panel`:
+   certificate, administrator, `rehearsal.test` with alice and bob, the startup script (it points to `/root/panel`,
+   inside the boot environment: nothing to put back in `/home`);
+3. `sysrc mailpanel_enable=YES` and `service mailpanel start`.
 
-Due strumenti in piu':
-- `roundcube-db-state.sh`: chi entra in MySQL per la webmail, gli account coi privilegi, chi legge
-  cosa, la pagina d'accesso, un accesso vero di alice dal modulo e l'hash dell'utente master di
-  Dovecot. Non stampa password: per ognuna dice di chi e';
-- `roundcube-db-faults.sh plant|clear NOME`: i guasti piantati per RoundcubeDbUser. Due
-  (`users-trigger`, `session-update`) non rompono la webmail, e la migrazione lo dice: sono
-  rimasti come esempio di guasto che non lo era.
+Two more tools:
+- `roundcube-db-state.sh`: who logs in to MySQL for the webmail, the accounts with privileges, who reads what, the
+  login page, a real login of alice from the form, and the hash of Dovecot's master user. It prints no password: for
+  each one it says whose it is;
+- `roundcube-db-faults.sh plant|clear NAME`: the faults planted for RoundcubeDbUser. Two of them (`users-trigger`,
+  `session-update`) do not break the webmail, and the migration says so: they stayed as an example of a fault that
+  was not one.
 
-Attenzione: avviare il pannello protegge i pacchetti, e dopo l'installatore non li puo'
-reinstallare. Per rifare un'installazione sopra il banco: `pkg unlock -a -y` prima.
+Careful: starting the panel locks the packages, and afterwards the installer cannot reinstall them. To redo an
+installation on top of the bench: `pkg unlock -a -y` first.

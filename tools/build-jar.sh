@@ -28,7 +28,7 @@ cp "$saved" dependency-reduced-pom.xml
 rm -f "$saved"
 [ "$status" -eq 0 ] || exit "$status"
 
-echo "build $build, commit $commit$([ "$modified" = true ] && echo ' (con modifiche non salvate in un commit)')"
+echo "build $build, commit $commit$([ "$modified" = true ] && echo ' (with changes not saved in a commit)')"
 if command -v sha256 >/dev/null 2>&1; then
     sha256 -q target/daemoxcp-mail.jar
 else
