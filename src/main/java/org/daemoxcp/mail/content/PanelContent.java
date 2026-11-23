@@ -204,8 +204,10 @@ public class PanelContent {
         [data-theme="dark"] .alert-warning { background-color: rgba(255, 193, 7, 0.15); border-color: rgba(255, 193, 7, 0.3); color: #ffda6a; }
         [data-theme="dark"] .alert-success { background-color: rgba(25, 135, 84, 0.15); border-color: rgba(25, 135, 84, 0.3); color: #75d9a3; }
         [data-theme="dark"] .alert-danger { background-color: rgba(220, 53, 69, 0.15); border-color: rgba(220, 53, 69, 0.3); color: #f1aeb5; }
-        /* Il link dentro un avviso (alert-link) col colore del suo testo: Bootstrap gli lascia quello scuro del tema chiaro,
-           1,09:1 su un avviso azzurro del tema scuro (misurato). Resta in grassetto e sottolineato. */
+        /*
+         * The link inside a notice (alert-link) uses the color of its text: Bootstrap leaves it the dark one of the
+         * light theme, 1.09:1 on a light-blue notice in the dark theme (measured). It stays bold and underlined.
+         */
         [data-theme="dark"] .alert .alert-link { color: inherit; }
         [data-theme="dark"] .list-group-item { background-color: var(--bg-card); border-color: var(--border-color); color: var(--text-primary); }
         [data-theme="dark"] .nav-tabs .nav-link { color: var(--text-secondary); }
@@ -236,11 +238,13 @@ public class PanelContent {
         [data-theme="dark"] .bg-white { background-color: var(--bg-input) !important; color: var(--text-primary) !important; }
         [data-theme="dark"] .border { border-color: var(--border-color) !important; }
         [data-theme="dark"] .form-control.bg-light, [data-theme="dark"] .bg-light { background-color: var(--table-stripe) !important; color: var(--text-primary) !important; }
-        /* ===== LA CORNICE: barra laterale a sezioni e barra in alto (Layout) =====
-           Da 992px la barra laterale e' fissa a sinistra e la pagina le lascia il posto; sotto e'
-           un pannello che si apre dal pulsante in alto (offcanvas-lg di Bootstrap). Le pagine di
-           accesso e di installazione non hanno la cornice, e niente spazio a sinistra (body:has).
-           Gli stessi colori e le stesse misure del pannello web. */
+        /*
+         * ===== THE FRAME: sectioned sidebar and top bar (Layout) =====
+         * From 992px the sidebar is fixed on the left and the page makes room for it; below that it is
+         * a panel that opens from the button at the top (Bootstrap's offcanvas-lg). The login and
+         * installation pages have no frame, and no space on the left (body:has).
+         * The same colors and the same sizes as the web panel.
+         */
         :root { --sidebar-width: 16.5rem; }
         .sidebar { --bs-offcanvas-width: 17.5rem; background: linear-gradient(180deg, #16213e 0%, #0f3460 100%); color: #fff; }
         .sidebar .offcanvas-header { border-bottom: 1px solid rgba(255, 255, 255, .15); }
@@ -275,37 +279,43 @@ public class PanelContent {
         .table-responsive { overflow: visible; }
         .dropdown-menu { z-index: 1050; }
         #nav-placeholder, #footer-placeholder { display: contents; }
-        /* Celle con "parole" lunghissime: indirizzi, domini, host, errori di consegna (classe text-long).
-           Vanno a capo anche a meta' parola, quando serve, invece di allargare la tabella e con lei la
-           pagina: su computer le tabelle non scorrono nel loro riquadro, perche' i menu a tendina delle
-           righe devono poter uscire. Solo su queste celle: una regola su tutte spezzava anche le parole
-           corte nelle colonne strette ("deferre-d", le date a meta' numero). */
+        /*
+         * Cells with very long "words": addresses, domains, hosts, delivery errors (class text-long).
+         * They wrap even in the middle of a word, when needed, instead of widening the table and with it
+         * the page: on a computer the tables do not scroll inside their box, because the dropdown menus of
+         * the rows must be able to stick out. Only on these cells: a rule on all of them also broke the
+         * short words in narrow columns ("deferre-d", dates split in the middle of a number).
+         */
         .table td.text-long { overflow-wrap: anywhere; }
-        /* Fuori dalle tabelle (finestre, messaggi): un indirizzo lungo va a capo invece di allargare. */
+        /* Outside tables (dialogs, messages): a long address wraps instead of widening. */
         .modal .text-long, .alert.text-long, code.text-long { overflow-wrap: anywhere; }
-        /* Testo che dice com'e' andata: verde, giallo, rosso leggibili in tutti e due i temi.
-           text-success, text-warning e text-danger di Bootstrap sul fondo scuro stanno sotto
-           il contrasto minimo di 4.5:1 (gli stessi colori del pannello web). */
+        /*
+         * Text that says how it went: green, yellow, red readable in both themes.
+         * Bootstrap's text-success, text-warning and text-danger on the dark background fall below
+         * the minimum contrast of 4.5:1 (the same colors as the web panel).
+         */
         .text-ok { color: #146c43; }
         .text-caution { color: #7a4e00; }
         .text-risk { color: #b02a37; }
         [data-theme="dark"] .text-ok { color: #75d9a3; }
         [data-theme="dark"] .text-caution { color: #ffcf5c; }
         [data-theme="dark"] .text-risk { color: #f1aeb5; }
-        /* ===== Telefono e tablet: sotto i 992px niente deve allargare la pagina =====
-           Una pagina piu' larga della finestra scorre tutta in orizzontale. Regole per i casi che si
-           ripetono, invece di una pezza per pagina (agiscono solo quando il contenuto non ci sta):
-           - una tabella scorre dentro il suo riquadro (.table-responsive qui sopra la lascia uscire,
-             per i menu a tendina nelle righe: sul telefono restano solo nelle tabelle a schede), e in
-             una tabella senza riquadro i testi lunghi vanno a capo nella cella;
-           - le righe "titolo a sinistra, comandi a destra" (intestazioni di pagina e di riquadro)
-             vanno a capo, compresi i gruppi di pulsanti marcati text-nowrap;
-           - i testi lunghi senza spazi (chiavi, record DNS, percorsi, nomi di parametri come
-             innodb_flush_log_at_trx_commit nelle etichette) vanno a capo. */
+        /*
+         * ===== Phone and tablet: below 992px nothing must widen the page =====
+         * A page wider than the window scrolls entirely sideways. Rules for the recurring cases,
+         * instead of a patch per page (they act only when the content does not fit):
+         * - a table scrolls inside its box (.table-responsive above lets it stick out,
+         * for the dropdown menus in the rows: on the phone they remain only in the card tables), and in
+         * a table without a box the long texts wrap inside the cell;
+         * - the "title on the left, controls on the right" rows (page and box headers)
+         * wrap, including the button groups marked text-nowrap;
+         * - long texts without spaces (keys, DNS records, paths, parameter names such as
+         * innodb_flush_log_at_trx_commit in the labels) wrap.
+         */
         @media (max-width: 991.98px) {
             .table-responsive { overflow-x: auto; }
             .table-responsive:has(> .table-cards) { overflow-x: visible; }
-            /* Tabelle senza riquadro che scorre: un indirizzo o un dominio lungo va a capo nella cella. */
+            /* Tables without a scrolling box: a long address or domain wraps inside the cell. */
             table.table:not(.table-responsive table) td { overflow-wrap: anywhere; }
             .d-flex.justify-content-between { flex-wrap: wrap; gap: .5rem; }
             .d-flex.justify-content-between > .d-flex { flex-wrap: wrap; }
@@ -313,10 +323,12 @@ public class PanelContent {
             pre { white-space: pre-wrap; overflow-wrap: anywhere; }
             code, .form-label { overflow-wrap: anywhere; }
         }
-        /* Tabelle che su telefono e tablet (sotto i 992px, come la barra laterale che si chiude) diventano schede:
-           classe table-cards sulla <table> e data-label su ogni cella. Cinque colonne in 375px non
-           ci stanno, e una tabella piu' larga della pagina la faceva scorrere tutta in orizzontale; il
-           suo riquadro non scorre, perche' i menu a tendina nelle righe non vengano tagliati. */
+        /*
+         * Tables that on phone and tablet (below 992px, like the sidebar that closes) become cards:
+         * class table-cards on the <table> and data-label on every cell. Five columns do not fit
+         * in 375px, and a table wider than the page made the whole page scroll sideways; its
+         * box does not scroll, so that the dropdown menus in the rows are not cut off.
+         */
         @media (max-width: 991.98px) {
             .table-cards thead { display: none; }
             .table-cards, .table-cards tbody, .table-cards tr, .table-cards td { display: block; width: 100%; }
@@ -325,32 +337,38 @@ public class PanelContent {
             .table-cards td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--text-secondary); }
             .table-cards td:empty { display: none; }
         }
-        /* Campo password (passwordField): su un telefono, accanto ai tre pulsanti, una password di
-           20 caratteri deve vedersi tutta. */
+        /*
+         * Password field (passwordField): on a phone, next to the three buttons, a password of
+         * 20 characters must be fully visible.
+         */
         @media (max-width: 575.98px) { .password-field { font-size: .875rem; padding-left: .5rem; padding-right: .5rem; } }
-        /* I ruoli, con lo stesso colore ovunque: barra in alto, pagina Amministratori. */
+        /* The roles, with the same color everywhere: top bar, Administrators page. */
         .role-badge { color: #fff; font-weight: 500; }
         .role-badge.superadmin { background-color: #dc3545; }
         .role-badge.admin { background-color: #0d6efd; }
         .role-badge.operator { background-color: #198754; }
         .role-badge.viewer { background-color: #6c757d; }
-        /* Un pulsante piccolo (btn-sm, un'icona sola) che col dito resta grande almeno 44 px (r9):
-           sullo schermo col mouse non cambia niente. Lo usa la scheda del pannello in Home. */
+        /*
+         * A small button (btn-sm, a single icon) that stays at least 44 px large under a finger (r9):
+         * with a mouse on the screen nothing changes. The panel card in Home uses it.
+         */
         @media (pointer: coarse) {
             .touch-target { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
         }
-        /* Gli avvisi del pannello al posto di panelSay('info', ) (reperto 198): in alto, sopra la pagina, chiudibili. */
+        /* The panel notices in place of panelSay('info', ) (finding 198): at the top, above the page, dismissible. */
         .panel-notices { position: fixed; top: 4.5rem; left: 1rem; right: 1rem; z-index: 2000; max-width: 34rem; margin-left: auto; }
         .panel-notices .alert p:last-of-type { margin-bottom: 0; }
-        /* Gli avvisi stanno SOPRA la pagina: nel tema scuro le tinte trasparenti degli alert lasciavano vedere quello
-           che c'e' sotto (testo chiaro su una barra azzurra, illeggibile; 17/11/2026, pagina SSL). Sotto la tinta, il
-           fondo pieno della scheda: lo stesso colore di un alert dentro una scheda, ma opaco. */
+        /*
+         * The notices sit ABOVE the page: in the dark theme the transparent tints of the alerts let what is
+         * underneath show through (light text on a light-blue bar, unreadable; 2026-11-17, SSL page). Under the
+         * tint, the solid background of the card: the same color as an alert inside a card, but opaque.
+         */
         [data-theme="dark"] .panel-notices .alert { background: linear-gradient(var(--alert-bg), var(--alert-bg)), var(--bg-card); }
         [data-theme="dark"] .panel-notices .alert-info { background: linear-gradient(rgba(13, 202, 240, 0.15), rgba(13, 202, 240, 0.15)), var(--bg-card); }
         [data-theme="dark"] .panel-notices .alert-warning { background: linear-gradient(rgba(255, 193, 7, 0.15), rgba(255, 193, 7, 0.15)), var(--bg-card); }
         [data-theme="dark"] .panel-notices .alert-success { background: linear-gradient(rgba(25, 135, 84, 0.15), rgba(25, 135, 84, 0.15)), var(--bg-card); }
         [data-theme="dark"] .panel-notices .alert-danger { background: linear-gradient(rgba(220, 53, 69, 0.15), rgba(220, 53, 69, 0.15)), var(--bg-card); }
-        /* Riavvio programmato: la pagina in sola lettura (panel-reboot.js). Lo dicono anche la striscia e l'avviso. */
+        /* Scheduled restart: the page in read-only mode (panel-reboot.js). The strip and the notice say so too. */
         body.panel-restart-locked #main .btn:not(.btn-close):not([data-bs-toggle]):not([data-bs-dismiss]) { opacity: .55; cursor: not-allowed; }
         body.panel-restart-locked #panelRebootBanner .btn { opacity: 1; cursor: pointer; }
         """;
@@ -387,13 +405,13 @@ public class PanelContent {
             if (pref !== 'light' && pref !== 'dark') pref = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
             d.setAttribute('data-theme', pref);
         })();
-        // Ogni richiesta che cambia qualcosa porta il token CSRF della pagina nell'intestazione
-        // X-CSRF-Token, e il server lo controlla per tutte le rotte in un punto solo
-        // (SSLMailServer.context). Prima erano le singole pagine a doverlo mettere nel corpo, e
-        // venticinque rotte non lo chiedevano affatto.
+        // Every request that changes something carries the page's CSRF token in the
+        // X-CSRF-Token header, and the server checks it for all routes in a single place
+        // (SSLMailServer.context). Before, the individual pages had to put it in the body, and
+        // twenty-five routes did not ask for it at all.
         (function () {
             var send = window.fetch;
-            // La striscia «il database si sta riavviando», fra gli avvisi del pannello: c'e' finche' una richiesta aspetta.
+            // The "the database is restarting" strip, among the panel notices: it is there while a request waits.
             function panelDatabaseWait(on) {
                 var n = document.getElementById('panelDbWait');
                 if (!on) { if (n) n.remove(); return; }
@@ -422,16 +440,16 @@ public class PanelContent {
                     if (!headers.has('X-CSRF-Token')) headers.set('X-CSRF-Token', field.value);
                     init = Object.assign({}, init, { headers: headers });
                 }
-                // Il 401 con X-Panel-Session: ended vuol dire che la sessione non c'e' piu': il jar e'
-                // ripartito (le sessioni valgono per un avvio solo, reperto 184) o e' scaduta. La
-                // pagina va all'accesso, che dice perche', invece di riempirsi di errori. Gli altri
-                // 401 (un codice di conferma sbagliato) restano alla pagina.
+                // The 401 with X-Panel-Session: ended means the session no longer exists: the jar
+                // restarted (sessions last for a single start, finding 184) or it expired. The
+                // page goes to the login, which says why, instead of filling up with errors. The other
+                // 401s (a wrong confirmation code) stay with the page.
                 var own = new URL(url, location.href).origin === location.origin;
                 var self = this;
-                // Il database che si riavvia (503 con X-Panel-Database, reperto 209): la richiesta e' stata fermata prima
-                // di fare qualunque cosa, quindi si ripete ogni 2 secondi, per 5 minuti al massimo, con la striscia che lo
-                // dice. Intanto chi aspetta la risposta aspetta: un lavoro seguito resta «in corso», niente errori finti.
-                // Solo per un indirizzo: una Request gia' mandata non si rimanda (il suo corpo e' letto).
+                // The database restarting (503 with X-Panel-Database, finding 209): the request was stopped before
+                // doing anything, so it is repeated every 2 seconds, for 5 minutes at most, with the strip saying so.
+                // Meanwhile whoever waits for the response keeps waiting: a tracked job stays "in progress", no
+                // fake errors. Only for a URL: a Request already sent is not sent again (its body has been read).
                 var again = typeof input === 'string' || input instanceof URL;
                 var tries = 0;
                 function waitDatabase(res) {
@@ -445,22 +463,22 @@ public class PanelContent {
                     return res;
                 }
                 return send.call(this, input, init).then(waitDatabase).then(function (res) {
-                    // Un'operazione pericolosa senza una conferma recente: la
-                    // finestra comune (panel-confirm.js) chiede la passkey o un codice via email, e la richiesta si
-                    // ripete una volta. Se la si chiude, la pagina riceve la risposta com'era (needs_reauth).
+                    // A dangerous operation without a recent confirmation: the
+                    // shared dialog (panel-confirm.js) asks for the passkey or a code by email, and the request is
+                    // repeated once. If it is closed, the page receives the response as it was (needs_reauth).
                     if (own && res.status === 403 && res.headers.get('X-Panel-Confirmation') === 'needed'
                             && typeof window.panelConfirmIdentity === 'function') {
                         return window.panelConfirmIdentity().then(function (ok) { return ok ? send.call(self, input, init) : res; });
                     }
-                    // Un cambiamento rifiutato perche' e' programmato un riavvio (RestartLock): la striscia in alto si
-                    // rilegge e la pagina diventa di sola lettura; il messaggio lo mostra la pagina come ogni errore.
+                    // A change refused because a restart is scheduled (RestartLock): the strip at the top is
+                    // re-read and the page becomes read-only; the page shows the message like any error.
                     if (own && res.status === 409 && res.headers.get('X-Panel-Restart') === 'scheduled'
                             && typeof window.panelRebootRefresh === 'function') {
                         window.panelRebootRefresh();
                     }
-                    // Durante un riavvio chiesto dal pannello la pagina aspetta che il server torni davvero
-                    // (panel-reboot.js): un 401 mentre si spegne porterebbe a una pagina d'accesso che sta
-                    // per sparire.
+                    // During a restart requested from the panel the page waits for the server to really come back
+                    // (panel-reboot.js): a 401 while it shuts down would lead to a login page that is about
+                    // to disappear.
                     if (own && res.status === 401 && res.headers.get('X-Panel-Session') === 'ended' && !window.panelSessionEnded
                             && !window.panelRebootPending) {
                         window.panelSessionEnded = true;
@@ -497,8 +515,8 @@ public class PanelContent {
     <script src="/vendor/bootstrap.bundle.min.js"></script>
     <script>
         // ===== THEME MANAGEMENT =====
-        // Il tema e' gia' applicato dalla <head>, con la preferenza che il server ha scritto nella
-        // pagina (data-theme-pref). Qui resta il contorno: icona, pulsante, e "auto" che segue il sistema.
+        // The theme is already applied from the <head>, with the preference the server wrote into the
+        // page (data-theme-pref). What remains here is the rest: icon, button, and "auto" following the system.
         (function() {
             let savedTheme = document.documentElement.getAttribute('data-theme-pref');
             const writtenByServer = savedTheme === 'auto' || savedTheme === 'light' || savedTheme === 'dark';
@@ -516,8 +534,8 @@ public class PanelContent {
                 updateIcon(theme);
             }
 
-            // L'icona del pulsante mostra la scelta, come nel pannello web: mezzo cerchio per
-            // automatico (segue il sistema), sole per chiaro, luna per scuro.
+            // The button's icon shows the choice, as in the web panel: a half circle for
+            // automatic (follows the system), a sun for light, a moon for dark.
             function updateIcon(theme) {
                 const icon = document.getElementById('themeIcon');
                 if (icon) {
@@ -525,8 +543,8 @@ public class PanelContent {
                 }
             }
 
-            // Chiede la preferenza al server. Serve solo se la pagina non l'aveva scritta, o se il
-            // browser la ripresenta dalla cache di indietro/avanti con il tema di allora.
+            // Asks the server for the preference. Needed only if the page had not written it, or if the
+            // browser shows it again from the back/forward cache with the theme of that time.
             function loadTheme() {
                 fetch('/api/theme').then(r => r.json()).then(data => {
                     if (data.success) {
@@ -569,9 +587,9 @@ public class PanelContent {
             });
             window.addEventListener('pageshow', function(e) { if (e.persisted) loadTheme(); });
 
-            // Lo stesso tema della <head>: qui serve solo a mettere l'icona giusta. Prima c'era
-            // applyTheme(getBrowserTheme()), che rimetteva il tema del SISTEMA sopra quello scelto
-            // fino alla risposta di /api/theme: sistema chiaro e pannello scuro davano il lampo bianco.
+            // The same theme as the <head>: here it only serves to set the right icon. Before there was
+            // applyTheme(getBrowserTheme()), which put the SYSTEM theme back over the chosen one
+            // until the /api/theme response: light system and dark panel gave the white flash.
             applyTheme(savedTheme);
         })();
 
@@ -705,8 +723,10 @@ public class PanelContent {
         .input-invalid { border-color: #dc3545 !important; }
         .btn-mail { background-color: #e94560; border-color: #e94560; }
         .btn-mail:hover { background-color: #d63850; border-color: #d63850; }
-        /* La passkey usa il colore del pannello, non un colore suo: e' un'azione come le
-           altre, e un accento estraneo la faceva sembrare un pezzo di un'altra applicazione. */
+        /*
+         * The passkey uses the panel's color, not a color of its own: it is an action like the
+         * others, and a foreign accent made it look like a piece of another application.
+         */
         .btn-passkey {
             background-color: #e94560; border-color: #e94560; color: #fff;
             font-weight: 600; letter-spacing: .2px;
@@ -717,8 +737,10 @@ public class PanelContent {
         .btn-passkey:hover, .btn-passkey:focus { background-color: #d63850; border-color: #d63850; color: #fff; }
         .btn-passkey:active { transform: translateY(1px); }
         .btn-passkey:focus-visible { outline: 3px solid rgba(233, 69, 96, .45); outline-offset: 2px; }
-        /* L'icona dentro il pulsante non deve gareggiare con la parola: nella versione
-           precedente la chiave era grande quanto il testo e tirava l'occhio da sola. */
+        /*
+         * The icon inside the button must not compete with the word: in the previous
+         * version the key was as large as the text and drew the eye on its own.
+         */
         .btn-passkey i { font-size: .95em; opacity: .9; }
         .step { display: none; }
         .step.active { display: block; }
@@ -726,8 +748,10 @@ public class PanelContent {
         .login-links { display: flex; justify-content: space-between; gap: 1rem; margin-top: 1rem; font-size: .9rem; }
         .login-links a, .login-link { color: #e94560; }
         .passkey-prompt { text-align: center; padding: 26px 20px 22px; }
-        /* L'impronta stava sospesa nel vuoto. Dentro un cerchio diventa un oggetto, e si
-           legge come "il dispositivo sta chiedendo" invece che come una decorazione. */
+        /*
+         * The fingerprint was floating in the void. Inside a circle it becomes an object, and it
+         * reads as "the device is asking" rather than as a decoration.
+         */
         .passkey-prompt .passkey-badge {
             width: 76px; height: 76px; margin: 0 auto 18px;
             display: flex; align-items: center; justify-content: center;
@@ -736,7 +760,7 @@ public class PanelContent {
             border: 1px solid rgba(233, 69, 96, .28);
         }
         .passkey-prompt .passkey-badge i { font-size: 34px; color: #e94560; margin: 0; }
-        /* Sul fondo scuro un velo al 12% si perde: serve piu' contrasto, non lo stesso valore. */
+        /* On the dark background a 12% veil gets lost: it needs more contrast, not the same value. */
         [data-theme="dark"] .passkey-prompt .passkey-badge {
             background-color: rgba(233, 69, 96, .18);
             border-color: rgba(233, 69, 96, .42);
@@ -758,7 +782,7 @@ public class PanelContent {
         [data-theme="dark"] h2 { color: var(--text-primary); }
         [data-theme="dark"] .footer { background-color: var(--bg-card) !important; }
         /* Theme toggle */
-        /* In alto a destra: la lingua e il tema, anche prima di entrare. */
+        /* Top right: the language and the theme, even before logging in. */
         .login-actions { position: fixed; top: 15px; right: 15px; display: flex; align-items: center; gap: .5rem; z-index: 1000; }
         .login-actions .btn-group { background: var(--bg-card); border-radius: .25rem; }
         .theme-toggle-login { cursor: pointer; padding: 10px 14px; border-radius: 50%; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); font-size: 1.2rem; box-shadow: 0 2px 10px var(--shadow-color); z-index: 1000; }
@@ -815,7 +839,7 @@ public class PanelContent {
                 </div>
                 <input type="hidden" id="csrf_token" value="{{CSRF_TOKEN}}">
 
-                <!-- Accesso con passkey, oppure codice via email -->
+                <!-- Login with a passkey, or a code by email -->
                 <div id="step-start" class="step active">
                     <div class="passkey-prompt">
                         <div class="passkey-badge"><i class="fas fa-fingerprint" aria-hidden="true"></i></div>
@@ -843,7 +867,7 @@ public class PanelContent {
                     <p class="text-center mt-3 mb-0"><a href="#" class="login-link small" id="linkConsole">{{t:login.consoleLink}}</a></p>
                 </div>
 
-                <!-- Il codice arrivato per email -->
+                <!-- The code that arrived by email -->
                 <div id="step-code" class="step">
                     <p class="text-muted">{{t:login.codeSentText}}</p>
                     <form id="codeForm" novalidate>
@@ -857,7 +881,7 @@ public class PanelContent {
                     <div class="login-links"><a href="#" data-back>{{t:login.back}}</a><a href="#" id="linkResend">{{t:login.resend}}</a></div>
                 </div>
 
-                <!-- Il codice generato sulla console del server -->
+                <!-- The code generated on the server console -->
                 <div id="step-console" class="step">
                     <p class="text-muted">{{t:login.consoleText.html}}</p>
                     <form id="consoleForm" novalidate>
@@ -880,7 +904,7 @@ public class PanelContent {
     <script>
 """ + getWebAuthnScript() + """
         const el = id => document.getElementById(id);
-        // Solo ASCII stampabile, come lo controlla il server
+        // Printable ASCII only, as the server checks it
         const EMAIL = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\\.[A-Za-z]{2,}$/;
 
         function showError(msg) { el('successAlert').classList.add('d-none'); el('errorMessage').textContent = msg; el('errorAlert').classList.remove('d-none'); }
@@ -895,15 +919,15 @@ public class PanelContent {
         }
         document.querySelectorAll('[data-back]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go('start'); }));
         el('linkConsole').addEventListener('click', e => { e.preventDefault(); go('console'); });
-        // Arrivati qui da una sessione finita (il jar ripartito o la sessione scaduta, reperto 184):
-        // lo si dice, e l'indirizzo torna quello della pagina d'accesso.
+        // Arrived here from an ended session (the jar restarted or the session expired, finding 184):
+        // we say so, and the URL becomes the login page's one again.
         const sessionParam = new URLSearchParams(location.search).get('session');
         if (sessionParam === 'ended' || sessionParam === 'rebooted') {
             showInfo(t(sessionParam === 'rebooted' ? 'login.serverRebooted' : 'login.sessionEnded'));
             history.replaceState(null, '', '/index');
         }
 
-        // Tutto passa da /api/login con il token della pagina
+        // Everything goes through /api/login with the page's token
         async function login(action, body) {
             const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(Object.assign({ action: action, csrf_token: el('csrf_token').value }, body)) });
@@ -919,7 +943,7 @@ public class PanelContent {
             window.location.href = d.redirect || '/home';
         }
 
-        // Passkey: nessun nome da scrivere, il dispositivo sa per quale account e' la passkey
+        // Passkey: no name to type, the device knows which account the passkey is for
         el('btnPasskey').addEventListener('click', function() {
             const btn = this;
             hideAlerts();
@@ -935,7 +959,7 @@ public class PanelContent {
             });
         });
 
-        // Codice via email: la risposta e' la stessa per ogni indirizzo, quindi la pagina non sa se esiste
+        // Code by email: the response is the same for every address, so the page does not know whether it exists
         let lastEmail = '';
         async function requestCode(btn) {
             const email = el('email').value.trim();
@@ -961,7 +985,7 @@ public class PanelContent {
             });
         });
 
-        // Codice dalla console del server: otto cifre, lo spazio in mezzo non conta
+        // Code from the server console: eight digits, the space in the middle does not count
         el('consoleCode').addEventListener('input', function() { this.value = this.value.replace(/[^0-9 ]/g, ''); });
         el('consoleForm').addEventListener('submit', e => {
             e.preventDefault();
@@ -1006,7 +1030,7 @@ public class PanelContent {
             justify-content: center;
             padding: 72px 16px 24px;
         }
-        /* La lingua, in alto a destra sul fondo scuro: su un riquadro chiaro, per leggerla. */
+        /* The language, top right on the dark background: on a light box, so it can be read. */
         .setup-lang { position: fixed; top: 15px; right: 15px; background: #fff; border-radius: .375rem; padding: 2px; z-index: 1000; }
         .setup-card {
             background: #fff;
@@ -1019,7 +1043,7 @@ public class PanelContent {
         }
         .setup-header { text-align: center; margin-bottom: 24px; }
         .setup-header i { font-size: 3rem; color: #e94560; margin-bottom: 15px; }
-        /* Il comando si legge e si copia per intero, anche sul telefono: va a capo invece di uscire. */
+        /* The command can be read and copied in full, even on the phone: it wraps instead of overflowing. */
         .setup-cmd {
             background: #1a1a2e; color: #e6e6e6; border-radius: 8px; padding: 12px 14px;
             font-size: .95rem; white-space: pre-wrap; word-break: break-word; margin: 0 0 1rem;
@@ -1068,10 +1092,10 @@ public class PanelContent {
             </div>
 
             <!-- CRITICAL DNS SETUP WARNING -->
-            <!-- Parte NASCOSTO: si apre solo se la verifica dice che il record A non va.
-                 Senza display:none inline lampeggerebbe in rosso a ogni caricamento, prima
-                 che il JS lo chiuda: un allarme che compare e sparisce e' comunque un allarme
-                 che hai letto. -->
+            <!-- Starts HIDDEN: it opens only if the check says the A record is not right.
+                 Without an inline display:none it would flash red on every load, before
+                 the JS closes it: an alarm that appears and disappears is still an alarm
+                 you have read. -->
             <div class="alert alert-danger mt-4" id="dnsSetupWarning" data-style="display:none;">
                 <h5><i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>{{t:home.dnsEssential}}</h5>
                 <p class="mb-2">{{t:home.dnsFirst.html}}</p>
@@ -1172,7 +1196,7 @@ public class PanelContent {
         </div>
     </main>
 """ + getFooterSection() + getScriptStart() + """
-        // Fermare un servizio (e riavviare MySQL) tocca tutta la posta: prima si chiede, dicendo cosa succede.
+        // Stopping a service (and restarting MySQL) affects all the mail: first we ask, saying what happens.
         const serviceQuestions = {
             'postfix:stop': t('home.confirm.postfix.stop'),
             'dovecot:stop': t('home.confirm.dovecot.stop'),
@@ -1235,11 +1259,11 @@ public class PanelContent {
                     document.getElementById('mailServerSubdomain').textContent = subdomain;
                     document.getElementById('serverIpDisplay').textContent = serverIp;
                     document.getElementById('mailHostnameDisplay').textContent = mailHostname;
-                    // I campi si riempiono, ma il riquadro NON si mostra ancora: prima si guarda
-                    // com'e' il DNS davvero. Mostrarlo sempre voleva dire gridare "se non
-                    // configuri questo, tutto il resto e' INUTILE" anche a chi lo aveva gia'
-                    // configurato, contraddicendo la card verde due centimetri piu' sotto.
-                    // Chi legge non sa piu' a quale dei due messaggi credere.
+                    // The fields are filled, but the box is NOT shown yet: first we look at
+                    // what the DNS really is. Always showing it meant shouting "if you do not
+                    // configure this, everything else is USELESS" even at those who had already
+                    // configured it, contradicting the green card two centimetres further down.
+                    // The reader no longer knows which of the two messages to believe.
                     dnsWarning.style.display = 'none';
                 } else {
                     dnsWarning.style.display = 'none';
@@ -1283,8 +1307,8 @@ public class PanelContent {
                 results.style.display = 'block';
 
                 if (!data.success) {
-                    // Non si e' potuto guardare: si dice questo, non "il DNS e' sbagliato".
-                    // Un controllo che non ha funzionato non e' una diagnosi.
+                    // It could not be checked: we say this, not "the DNS is wrong".
+                    // A check that did not work is not a diagnosis.
                     document.getElementById('dnsVerificationBody').innerHTML =
                         '<tr><td colspan="5" class="text-danger">'
                         + escHtml(t('home.dnsNotChecked', { error: data.error || t('common.unknownError') }))
@@ -1327,8 +1351,8 @@ public class PanelContent {
                     header.className = 'card-header bg-danger text-white';
                     header.innerHTML = '<i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>' + escHtml(t('home.dnsToFix'));
                     const failed = data.checks.filter(c => !c.passed);
-                    // Le istruzioni per il record A si mostrano quando e' il record A a
-                    // mancare, non ogni volta che un qualsiasi record opzionale non c'e'.
+                    // The instructions for the A record are shown when it is the A record that is
+                    // missing, not every time any optional record is absent.
                     if (noticeText) noticeText.style.display = failed.some(c => c.type === 'A') ? 'block' : 'none';
                     let advice = '';
 
@@ -1480,7 +1504,7 @@ public class PanelContent {
      */
     private static String getVersionsJs() {
         return """
-        // ===== Versioni del software (SoftwareVersions sul server) =====
+        // ===== Software versions (SoftwareVersions on the server) =====
         function verCell(cell, v) {
             cell.textContent = '';
             if (!v || !v.installed) {
@@ -1555,7 +1579,7 @@ public class PanelContent {
                 stateValue.textContent = t('ver.readAt', { time: d.readAt.substring(11, 19) })
                     + (toRestart > 0 ? ' ' + tn('ver.toRestart', toRestart) : '');
                 if (d.branch) {
-                    // Da quale ramo arrivano i pacchetti: lo si cambia in Aggiornamenti.
+                    // Which branch the packages come from: it is changed in "Updates".
                     stateValue.appendChild(document.createTextNode(' ' + t('ver.branch') + ' '));
                     const a = document.createElement('a');
                     a.href = '/updates#branch';
@@ -1655,8 +1679,8 @@ public class PanelContent {
                     tbody.innerHTML = '<tr><td colspan="6" class="text-center">' + escDom(t('dom.none')) + '</td></tr>';
                     return;
                 }
-                // L'elenco si conserva: cosi' i pulsanti passano un id e vanno a prendersi il
-                // record, invece di ricevere il testo infilato dentro un attributo HTML.
+                // The list is kept: this way the buttons pass an id and go fetch the
+                // record, instead of receiving the text stuffed inside an HTML attribute.
                 currentDomains = data.domains;
                 tbody.innerHTML = data.domains.map(d => `
                     <tr>
@@ -1702,10 +1726,10 @@ public class PanelContent {
             window.location.href = '/dns?domain=' + domain;
         }
 
-        // La descrizione finiva dentro un attributo onclick racchiuso fra virgolette doppie,
-        // protetta soltanto dall'apice: bastava una virgoletta doppia nella descrizione per
-        // uscire dall'attributo e far eseguire codice nella sessione di un altro
-        // amministratore. Ora il pulsante passa un id e il testo non attraversa piu' l'HTML.
+        // The description ended up inside an onclick attribute enclosed in double quotes,
+        // protected only against the single quote: a double quote in the description was enough
+        // to escape the attribute and run code in the session of another
+        // administrator. Now the button passes an id and the text no longer goes through the HTML.
         let currentDomains = [];
 
         function escDom(v) {
@@ -1774,7 +1798,7 @@ public class PanelContent {
                 </div>
                 <div class="modal-body">
 
-                    <!-- Box credenziali con copia-incolla ovunque -->
+                    <!-- Credentials box with copy-paste everywhere -->
                     <div class="card mb-3 border-primary">
                         <div class="card-header bg-primary text-white"><i class="fas fa-key me-2" aria-hidden="true"></i>{{t:cfg.credentials}}</div>
                         <div class="card-body">
@@ -1814,7 +1838,7 @@ public class PanelContent {
                     </ul>
 
                     <div class="tab-content">
-                        <!-- ===== Tab GENERALE ===== -->
+                        <!-- ===== GENERAL tab ===== -->
                         <div class="tab-pane fade show active" id="configGeneral">
                             <h6 class="mb-2 text-success"><i class="fas fa-inbox me-1" aria-hidden="true"></i>{{t:cfg.inImap}}</h6>
                             <div class="row g-2 mb-3">
@@ -1881,8 +1905,8 @@ public class PanelContent {
                         <!-- ===== Tab APPLE ===== -->
                         <div class="tab-pane fade" id="configApple">
                             <h6><i class="fab fa-apple me-2" aria-hidden="true"></i>iPhone / iPad / Mac</h6>
-                            <!-- Il profilo di configurazione della casella: il modo piu' semplice, quindi per primo, qui
-                                 dove si configura la casella e non in una scheda a parte in fondo alla pagina. -->
+                            <!-- The mailbox's configuration profile: the simplest way, hence first, here
+                                 where the mailbox is configured and not in a separate tab at the bottom of the page. -->
                             <div class="card mt-3 mb-3 border-success">
                                 <div class="card-body">
                                     <p class="fw-bold mb-1">{{t:cfg.apProfile}}</p>
@@ -1958,7 +1982,7 @@ public class PanelContent {
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t:common.close}}"></button>
                 </div>
                 <div class="modal-body">
-                    <!-- Tipo -->
+                    <!-- Type -->
                     <div class="mb-3">
                         <label class="form-label small fw-bold">{{t:pw.type}}</label>
                         <div class="border rounded p-2">
@@ -1983,7 +2007,7 @@ public class PanelContent {
                         </div>
                     </div>
 
-                    <!-- Lunghezza -->
+                    <!-- Length -->
                     <div class="row g-3 mb-3 align-items-center">
                         <div class="col-md-6">
                             <label class="form-label small fw-bold mb-1">{{t:pw.length}}</label>
@@ -2079,7 +2103,7 @@ public class PanelContent {
                 + "        const PW_SYMBOLS = '" + org.daemoxcp.mail.webserver.SecurityUtils.PASSWORD_SYMBOLS
                         .replace("\\", "\\\\").replace("'", "\\'") + "';\n";
         return """
-        // ===== Campo password (componente condiviso, vedi passwordField) =====
+        // ===== Password field (shared component, see passwordField) =====
 """ + rule + """
 
         function pwShow(id, showIt) {
@@ -2091,7 +2115,7 @@ public class PanelContent {
             btn.setAttribute('aria-label', isVisible ? t('pw.hide') : t('pw.show'));
         }
 
-        // Vuoto va bene (in Modifica vuol dire "non cambiare"): l'obbligo lo controlla chi salva.
+        // Empty is fine (in "Edit" it means "do not change"): whoever saves checks whether it is required.
         function pwCheck(id) {
             const input = document.getElementById(id);
             const v = input.value;
@@ -2119,7 +2143,7 @@ public class PanelContent {
             pwCheck(id);
         }
 
-        // Il generatore completo, con le sue opzioni: la scelta torna nel campo da cui e' partito.
+        // The full generator, with its options: the choice goes back into the field it started from.
         function pwGenerate(id) {
             window.__pwGenCallback = function (pw) {
                 pwPutPassword(id, pw);
@@ -2130,8 +2154,8 @@ public class PanelContent {
             openPasswordGeneratorModal();
         }
 
-        // Una password proposta subito, con le impostazioni di default del generatore (sul server).
-        // Se nel frattempo nel campo e' stato scritto o incollato qualcosa, la proposta si scarta.
+        // A password proposed right away, with the generator's default settings (on the server).
+        // If meanwhile something has been typed or pasted into the field, the proposal is discarded.
         function pwPropose(id) {
             fetch('/api/mailboxes', {
                 method: 'POST',
@@ -2158,7 +2182,7 @@ public class PanelContent {
             }
         }
 
-        // execCommand('copy') non copia da un campo password: lo si rende leggibile per l'istante della copia.
+        // execCommand('copy') does not copy from a password field: it is made readable for the instant of the copy.
         function pwCopyOldWay(input) {
             const kindValue = input.type;
             input.type = 'text';
@@ -2237,7 +2261,7 @@ public class PanelContent {
     /** The script of "Transform into mailbox": preview from the server, then the request with its fingerprint. */
     private static String getAliasToMailboxJs() {
         return """
-        // ===== Trasforma in casella (decide il server: AddressTransform) =====
+        // ===== Turn into a mailbox (the server decides: AddressTransform) =====
         let acInfo = null;
         function acShow(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
         function acData(iso) { return iso ? iso.substring(8, 10) + '/' + iso.substring(5, 7) + '/' + iso.substring(0, 4) : ''; }
@@ -2335,7 +2359,7 @@ public class PanelContent {
                 })
             }).then(r => r.json()).then(d => {
                 btn.disabled = false;
-                // saved: la casella c'e', ma i filtri di quando era una casella valgono ancora (reperto 223).
+                // saved: the mailbox exists, but the filters from when it was a mailbox still apply (finding 223).
                 if (d.success || d.saved) {
                     bootstrap.Modal.getInstance(document.getElementById('aMailboxModal')).hide();
                     aliasMsg(d.success ? d.message : d.error, d.success ? 'success' : 'danger');
@@ -2348,7 +2372,7 @@ public class PanelContent {
                 err.textContent = t('conv.noAnswer');
             });
         }
-        // Fatta la scelta sulla posta di prima, l'avviso che la chiedeva non serve piu'.
+        // Once the choice about the earlier mail is made, the notice that asked for it is no longer needed.
         document.querySelectorAll('input[name="acMail"]').forEach(x => x.addEventListener('change', () => {
             document.getElementById('acErr').textContent = '';
         }));
@@ -2400,7 +2424,7 @@ public class PanelContent {
     /** The script of "Transform into alias": preview of what is lost and what remains, written confirmation. */
     private static String getMailboxToAliasJs() {
         return """
-        // ===== Trasforma in alias (decide il server: AddressTransform) =====
+        // ===== Turn into an alias (the server decides: AddressTransform) =====
         let aaInfo = null;
         function aaShow(id, si) { document.getElementById(id).classList.toggle('d-none', !si); }
         function aaEntry(itemList, textValue) {
@@ -2521,15 +2545,15 @@ public class PanelContent {
             document.getElementById('pwgenStrengthBadge').className = 'badge bg-secondary';
             document.getElementById('pwgenEntropyText').textContent = t('pw.entropyNone');
             document.getElementById('pwgenUseBtn').disabled = true;
-            // Aggiorna nota Include in base al type selezionato
+            // Update the Include note based on the selected type
             pwgenUpdateIncludeNote();
             new bootstrap.Modal(document.getElementById('passwordGeneratorModal')).show();
-            // Genera subito una password con i default così l'utente vede un esempio
+            // Generate a password right away with the defaults so the user sees an example
             setTimeout(pwgenGenerate, 100);
         }
 
-        // Il cursore della lunghezza scrive il numero nel campo accanto. Era un'assegnazione nel
-        // gestore in linea; i gestori adesso chiamano solo funzioni (panel-actions.js, reperto 178).
+        // The length slider writes the number into the field next to it. It was an assignment in the
+        // inline handler; the handlers now only call functions (panel-actions.js, finding 178).
         function pwgenSetLength(value) {
             document.getElementById('pwgenLength').value = value;
         }
@@ -2567,7 +2591,7 @@ public class PanelContent {
         });
 
         function pwgenGenerate() {
-            // Dentro i limiti delle caselle anche se nel campo si scrive altro (il server li applica comunque).
+            // Within the inputs' limits even if something else is typed into the field (the server applies them anyway).
             const length = Math.min(PW_MAX, Math.max(PW_MIN, parseInt(document.getElementById('pwgenLength').value) || 20));
             document.getElementById('pwgenLength').value = length;
             const type = document.querySelector('input.pwgen-type:checked').value;
@@ -2625,7 +2649,7 @@ public class PanelContent {
             const v = document.getElementById('pwgenPreview').value;
             if (!v) return;
             const cb = window.__pwGenCallback;
-            // Chiudi il modal e invoca la callback
+            // Close the modal and invoke the callback
             const modalEl = document.getElementById('passwordGeneratorModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
@@ -2862,7 +2886,7 @@ public class PanelContent {
                     </div>
 
                     <div id="bulkRotateStep1" class="">
-                        <!-- Opzioni generatore -->
+                        <!-- Generator options -->
                         <div class="border rounded p-2 mb-3" data-style="background:rgba(13,110,253,0.04)">
                             <div class="row g-2">
                                 <div class="col-md-6">
@@ -2933,8 +2957,8 @@ public class PanelContent {
                             <button class="btn btn-sm btn-outline-primary" data-on-click="bulkRotateCopyAll()"><i class="fas fa-copy me-1" aria-hidden="true"></i>{{t:bulk.copyAll}}</button>
                             <button class="btn btn-sm btn-outline-secondary" data-on-click="bulkRotateShowHide()" id="bulkRotateToggleVis"><i class="fas fa-eye me-1" aria-hidden="true"></i>{{t:bulk.showHide}}</button>
                         </div>
-                        <!-- Se il browser non copia: il CSV qui, gia' selezionato, da copiare a mano (reperto 198; prima
-                             era il prompt del browser, con le password dentro). -->
+                        <!-- If the browser does not copy: the CSV here, already selected, to copy by hand
+                             (finding 198; before it was the browser's prompt, with the passwords inside). -->
                         <div class="mb-2" id="bulkRotateCsvBox" hidden>
                             <label class="form-label small" for="bulkRotateCsv">{{t:bulk.copyCsvPrompt}}</label>
                             <textarea class="form-control form-control-sm font-monospace" id="bulkRotateCsv" rows="4" readonly></textarea>
@@ -2968,8 +2992,8 @@ public class PanelContent {
     private static String getBulkRotateMailboxesJs() {
         return """
         // ===== Bulk rotate passwords =====
-        // Helper locale di escaping HTML (non possiamo dipendere da escapeHtmlBl
-        // che è definito solo nella pagina /dns).
+        // Local HTML escaping helper (we cannot depend on escapeHtmlBl
+        // which is defined only in the /dns page).
         if (typeof escapeHtmlBl === 'undefined') {
             window.escapeHtmlBl = function(s) {
                 const d = document.createElement('div');
@@ -2988,7 +3012,7 @@ public class PanelContent {
             document.getElementById('bulkRotateRunBtn').classList.remove('d-none');
             document.getElementById('bulkRotateChkAll').checked = false;
             updateBulkRotateCount();
-            // Carica lista caselle
+            // Load the mailbox list
             const tbody = document.getElementById('bulkRotateMboxList');
             tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escapeHtmlBl(t('common.loading')) + '</td></tr>';
             fetch('/api/mailboxes').then(r => r.json()).then(data => {
@@ -3003,7 +3027,7 @@ public class PanelContent {
                     html += '<td><input type="checkbox" class="form-check-input bulk-rotate-chk" value="' + m.id + '" data-on-change="updateBulkRotateCount()" aria-label="' + escapeHtmlBl(m.email) + '"></td>';
                     html += '<td><code>' + escapeHtmlBl(m.email) + '</code></td>';
                     html += '<td>' + escapeHtmlBl(m.name || '') + '</td>';
-                    // Stato vault: NON disponibile su /api/mailboxes lista, mostriamo placeholder
+                    // Vault status: NOT available on the /api/mailboxes list, we show a placeholder
                     html += '<td><small class="text-muted">—</small></td>';
                     html += '</tr>';
                 });
@@ -3046,7 +3070,7 @@ public class PanelContent {
         }
 
         function bulkRotateOnTypeChange() {
-            // Easy to say → disabilita numeri/simboli (per definizione)
+            // Easy to say -> disable numbers/symbols (by definition)
             const type = document.getElementById('bulkRotateType').value;
             const nums = document.getElementById('bulkRotateInclNumbers');
             const syms = document.getElementById('bulkRotateInclSymbols');
@@ -3127,7 +3151,7 @@ public class PanelContent {
                 bulkRotateResults = data.results || [];
                 bulkRotatePasswordsVisible = true;
 
-                // Vista risultati
+                // Results view
                 document.getElementById('bulkRotateStep1').classList.add('d-none');
                 document.getElementById('bulkRotateStep2').classList.remove('d-none');
                 document.getElementById('bulkRotateRunBtn').classList.add('d-none');
@@ -3180,7 +3204,7 @@ public class PanelContent {
         }
 
         function bulkRotateCopyAll() {
-            // Output CSV semplice: email,password
+            // Plain CSV output: email,password
             const lines = ['email,password'];
             bulkRotateResults.forEach(r => {
                 if (r.success && r.password) {
@@ -3194,7 +3218,7 @@ public class PanelContent {
             navigator.clipboard.writeText(csv).then(() => {
                 panelSay('success', tn('bulk.copiedCsv', lines.length - 1));
             }).catch(() => {
-                // Il browser non ha copiato: il testo nella casella sotto, gia' selezionato, da copiare a mano.
+                // The browser did not copy: the text in the box below, already selected, to copy by hand.
                 const box = document.getElementById('bulkRotateCsvBox'), area = document.getElementById('bulkRotateCsv');
                 area.value = csv;
                 box.hidden = false;
@@ -3230,7 +3254,7 @@ public class PanelContent {
             </div>
 
             <div id="mbMsg" role="status" aria-live="polite"></div>
-            <!-- Le quote non applicate (DovecotQuota): lo si dice qui, invece di lasciar credere che il limite valga. -->
+            <!-- Quotas not enforced (DovecotQuota): we say so here, instead of letting people believe the limit applies. -->
             <p class="small text-muted mb-2" id="mbQuotaNote" role="status" hidden></p>
             <div class="table-responsive">
                 <table class="table table-hover table-cards">
@@ -3319,7 +3343,7 @@ public class PanelContent {
 """ + passwordField("editMbPass", "{{t:mbx.newPassPh}}") + """
                         <small class="text-muted">{{t:mbx.vaultHint}}</small>
 
-                        <!-- Riquadro per password archiviata: rivelabile con click -->
+                        <!-- Box for an archived password: revealed with a click -->
                         <div class="mt-2" id="editMbVaultBox" data-style="display:none">
                             <div class="border rounded p-2 small" data-style="background:rgba(13,110,253,0.05)">
                                 <i class="fas fa-shield-alt text-primary me-1" aria-hidden="true"></i>
@@ -3391,9 +3415,9 @@ public class PanelContent {
         let domains = [];
         let currentMailboxes = [];
 
-        // Il nome della casella e' testo libero e NON e' validato in ingresso: una whitelist
-        // stretta boccerebbe nomi veri come "D'Amico Real Estate". La difesa giusta e'
-        // all'uscita, neutralizzando il testo quando entra nella pagina.
+        // The mailbox name is free text and is NOT validated on input: a strict whitelist
+        // would reject real names such as "D'Amico Real Estate". The right defence is
+        // on output, neutralising the text when it enters the page.
         function escMbx(v) {
             const d = document.createElement('div');
             d.textContent = v === null || v === undefined ? '' : String(v);
@@ -3408,8 +3432,8 @@ public class PanelContent {
             });
         }
 
-        // Quanto usa ogni casella del suo limite (DovecotQuota, dalla root con doveadm): sotto la quota, con una barra
-        // per chi ha un limite. Se Dovecot non applica le quote, una riga sopra la tabella lo dice.
+        // How much of its limit each mailbox uses (DovecotQuota, from root with doveadm): under the quota, with a bar
+        // for those that have a limit. If Dovecot does not enforce quotas, a line above the table says so.
         function quotaSize(kb) {
             const k = Math.max(0, Number(kb) || 0), mb = k / 1024;
             const unit = k < 1024 ? 'kilobyte' : mb >= 1024 ? 'gigabyte' : 'megabyte';
@@ -3564,7 +3588,8 @@ public class PanelContent {
 
         async function deleteMailbox(id) {
             const m = currentMailboxes.find(x => x.id === id);
-            // La posta non e' nel database: eliminare la casella la lascia sul disco del server (prima diceva "e tutte le email").
+            // The mail is not in the database: deleting the mailbox leaves it on the server's disk
+            // (before it said "and all the emails").
             if (!await panelConfirmDanger(t('mbx.confirmDelete', { email: m ? m.email : '' }))) return;
             fetch('/api/mailboxes?id=' + id, {
                 method: 'DELETE',
@@ -3589,15 +3614,15 @@ public class PanelContent {
                     document.getElementById('editMbReceive').checked = m.receive_enabled;
                     document.getElementById('editMbJunkDays').value = String(m.junk_expunge_days || 0);
                     document.getElementById('editMbTrashDays').value = String(m.trash_expunge_days || 0);
-                    // Reset stato del campo password (sempre nascosto all'apertura)
+                    // Reset the state of the password field (always hidden on opening)
                     pwShow('editMbPass', false);
                     pwCheck('editMbPass');
-                    // Reset stato del riquadro vault
+                    // Reset the state of the vault box
                     const vaultBox = document.getElementById('editMbVaultBox');
                     const revealedBox = document.getElementById('editMbRevealedBox');
                     revealedBox.classList.add('d-none');
                     document.getElementById('editMbRevealedValue').value = '';
-                    // Mostra il riquadro "Password archiviata" SOLO se ce n'è una nel vault
+                    // Show the "Archived password" box ONLY if there is one in the vault
                     vaultBox.style.display = m.has_encrypted_password ? '' : 'none';
                     document.getElementById('editMbNoCopyBox').style.display = m.has_encrypted_password ? 'none' : '';
                     new bootstrap.Modal(document.getElementById('editMailboxModal')).show();
@@ -3608,7 +3633,7 @@ public class PanelContent {
         }
 
 """ + getPasswordFieldJs() + """
-        // Una casella nuova parte con una password gia' proposta, in chiaro (vedi pwPropose).
+        // A new mailbox starts with a password already proposed, in clear text (see pwPropose).
         document.getElementById('addMailboxModal').addEventListener('show.bs.modal', function () {
             if (!document.getElementById('mbPass').value) pwPropose('mbPass');
         });
@@ -3683,7 +3708,7 @@ public class PanelContent {
             });
         }
 
-        // Stato corrente del modal mailConfig (email + id casella selezionata)
+        // Current state of the mailConfig modal (email + id of the selected mailbox)
         let __cfgCurrentEmail = '';
         let __cfgCurrentMailboxId = 0;
 
@@ -3691,13 +3716,13 @@ public class PanelContent {
             __cfgCurrentEmail = email || '';
             __cfgCurrentMailboxId = mailboxId || 0;
 
-            // Email completa nel campo Credenziali principale
+            // Full email in the main Credentials field
             const emailField = document.getElementById('cfgEmailField');
             if (emailField) emailField.value = email;
-            // Email replicata in tutti i tab (Outlook/Apple/Android)
+            // Email replicated in all the tabs (Outlook/Apple/Android)
             document.querySelectorAll('.cfg-shared-email').forEach(el => { el.value = email; });
 
-            // Reset campo password
+            // Reset the password field
             const pwField = document.getElementById('cfgPasswordField');
             const pwToggle = document.getElementById('cfgPasswordToggleBtn');
             const pwCopy = document.getElementById('cfgPasswordCopyBtn');
@@ -3715,16 +3740,16 @@ public class PanelContent {
             }
             if (pwHint) pwHint.textContent = t('mbx.revealHint');
 
-            // Il profilo Apple di questa casella (scheda iPhone/Mac)
+            // This mailbox's Apple profile (iPhone/Mac tab)
             cfgAppleProfileState(__cfgCurrentEmail);
 
-            // Carica server config
+            // Load server config
             fetch('/api/mailconfig').then(r => r.json()).then(data => {
                 if (data.success) {
                     const server = data.server;
-                    // Generale
+                    // General
                     setValIfExists('cfgImapServer', server);
-                    // POP3 solo se l'amministratore l'ha acceso (Impostazioni)
+                    // POP3 only if the administrator turned it on ("Settings")
                     const pop3Section = document.getElementById('cfgPop3Section');
                     if (pop3Section) pop3Section.classList.toggle('d-none', !data.pop3);
                     if (data.pop3) setValIfExists('cfgPop3Server', server);
@@ -3748,12 +3773,12 @@ public class PanelContent {
             if (el) el.value = val;
         }
 
-        // Helper generico: copia il value di un input negli appunti
+        // Generic helper: copy the value of an input to the clipboard
         function copyInputValue(id) {
             const el = document.getElementById(id);
             if (!el || !el.value) return;
             const wasPassword = (el.type === 'password');
-            // Se è password (mascherato), abbiamo bisogno di rivelarlo brevemente per copiare
+            // If it is a password (masked), we need to reveal it briefly to copy it
             if (wasPassword) el.type = 'text';
             navigator.clipboard.writeText(el.value).catch(() => {
                 try { el.select(); document.execCommand('copy'); } catch (e) {}
@@ -3761,7 +3786,7 @@ public class PanelContent {
             if (wasPassword) el.type = 'password';
         }
 
-        // Helper per i campi "cfg-shared-email" replicati nei tab (Outlook/Apple/Android)
+        // Helper for the "cfg-shared-email" fields replicated in the tabs (Outlook/Apple/Android)
         function copySharedField(btn) {
             const input = btn.parentElement.querySelector('input');
             if (!input || !input.value) return;
@@ -3880,8 +3905,8 @@ public class PanelContent {
                     bootstrap.Modal.getInstance(document.getElementById('autoResponderModal')).hide();
                     loadMailboxes();
                 } else {
-                    // Salvata nel pannello ma non scritta sul server di posta (reperto 223): l'elenco mostra il
-                    // pannello, la finestra resta aperta per riprovare.
+                    // Saved in the panel but not written to the mail server (finding 223): the list shows the
+                    // panel's version, the dialog stays open to try again.
                     if (data.saved) loadMailboxes();
                     panelSay('danger', data.error || t('common.errorShort'));
                 }
@@ -3959,8 +3984,8 @@ public class PanelContent {
                     keep_copy: document.getElementById('fwKeepCopy').checked
                 })
             }).then(r => r.json()).then(data => {
-                // saved: la regola e' nel pannello anche se il server di posta non l'ha ricevuta (reperto 223).
-                // Si mostra, se no chi riprova la crea due volte.
+                // saved: the rule is in the panel even if the mail server did not receive it (finding 223).
+                // It is shown, otherwise whoever tries again creates it twice.
                 if (data.success || data.saved) {
                     document.getElementById('fwDestination').value = '';
                     loadForwardingRules(document.getElementById('fwMailboxId').value);
@@ -3989,8 +4014,8 @@ public class PanelContent {
         let sieveConditions = [];
         let sieveActions = [];
 
-        // Il nome del filtro lo sceglie chi lo crea: testo libero, quindi neutralizzato
-        // quando entra nella pagina.
+        // The filter name is chosen by whoever creates it: free text, hence neutralised
+        // when it enters the page.
         function escSieve(v) {
             const d = document.createElement('div');
             d.textContent = v === null || v === undefined ? '' : String(v);
@@ -4042,8 +4067,8 @@ public class PanelContent {
             document.getElementById('sieveHelp').style.display = 'none';
         }
 
-        // Il filtro da modificare, chiesto per il suo numero (/api/sieve?id=). Condizioni e azioni arrivano come
-        // array (reperto 224): prima la pagina le rileggeva come testo JSON, e la GET non conosceva id.
+        // The filter to edit, requested by its number (/api/sieve?id=). Conditions and actions arrive as
+        // arrays (finding 224): before, the page re-read them as JSON text, and the GET did not know id.
         function editSieveFilter(id) {
             fetch('/api/sieve?id=' + encodeURIComponent(id))
                 .then(r => r.json())
@@ -4076,8 +4101,8 @@ public class PanelContent {
             renderSieveActions();
         }
 
-        // Le righe delle condizioni e delle azioni cambiano il filtro da qui: i gestori chiamano solo
-        // funzioni (panel-actions.js, reperto 178), non assegnano.
+        // The rows of conditions and actions change the filter from here: the handlers only call
+        // functions (panel-actions.js, finding 178), they do not assign.
         function sieveSetCondition(i, field, value) {
             if (sieveConditions[i] && ['field', 'operator', 'value'].includes(field)) sieveConditions[i][field] = value;
         }
@@ -4147,9 +4172,10 @@ public class PanelContent {
             if (sieveConditions.length === 0) { panelSay('warning', t('mbx.svNeedCond')); return; }
             if (sieveActions.length === 0) { panelSay('warning', t('mbx.svNeedAct')); return; }
 
-            // Condizioni e azioni come array, i nomi che il server legge (reperto 224): prima erano testo JSON,
-            // che il server legge come niente, e nessun filtro si creava; la modifica mandava id e non filter_id.
-            // Una richiesta per azione, scritta per intero: check_api.py confronta i suoi nomi con quelli del server.
+            // Conditions and actions as arrays, the names the server reads (finding 224): before they were
+            // JSON text, which the server reads as nothing, and no filter was created; editing sent id and
+            // not filter_id. One request per action, written in full: check_api.py compares its names with
+            // the server's.
             const filterId = document.getElementById('svFilterId').value;
             const enabled = document.getElementById('svEnabled').checked;
             const request = filterId
@@ -4168,8 +4194,8 @@ public class PanelContent {
             request.then(r => r.json()).then(sieveSaved).catch(() => panelSay('danger', t('common.errorShort')));
         }
 
-        // La risposta di un salvataggio o di un'eliminazione. saved: il filtro e' cambiato nel pannello anche se il
-        // server di posta non ha ricevuto le regole (reperto 223): l'elenco lo mostra, il messaggio lo dice.
+        // The response of a save or a deletion. saved: the filter changed in the panel even if the
+        // mail server did not receive the rules (finding 223): the list shows it, the message says so.
         function sieveSaved(data) {
             if (data.success || data.saved) {
                 loadSieveFilters(document.getElementById('svMailboxId').value);
@@ -4236,7 +4262,8 @@ public class PanelContent {
                             <select class="form-select" id="alDomain" aria-label="{{t:al.sourceDomain}}" required></select>
                         </div>
                         <small class="d-block text-muted mb-2">{{t:al.sourceHint}}</small>
-                        <!-- Il catch-all: l'alias con sorgente @dominio, per ogni indirizzo che non e' ne' alias ne' casella. -->
+                        <!-- The catch-all: the alias with source @domain, for every address that is neither
+                             an alias nor a mailbox. -->
                         <div class="form-check mb-1">
                             <input class="form-check-input" type="checkbox" id="alCatchAll" aria-describedby="alCatchAllHint" data-on-change="aliasCatchAllToggle(this)">
                             <label class="form-check-label" for="alCatchAll">{{t:al.catchAll}}</label>
@@ -4393,7 +4420,7 @@ public class PanelContent {
             }).catch(() => aliasMsg(t('common.noAnswer'), 'danger'));
         }
 
-        // Il catch-all non ha un nome prima della @: il campo si svuota e si spegne finche' la casella e' spuntata.
+        // The catch-all has no name before the @: the field is emptied and disabled while the checkbox is ticked.
         function aliasCatchAllToggle(box) {
             const local = document.getElementById('alLocal');
             local.disabled = box.checked;
@@ -4409,8 +4436,8 @@ public class PanelContent {
             const domain = document.getElementById('alDomain').value;
             const dest = document.getElementById('alDest').value.trim().toLowerCase();
             if ((!catchAll && !local) || !domain || !dest) { err.textContent = t('al.fillBoth'); return; }
-            // Sorgente = destinazione e' ammessa solo su una casella (serve a tenerne una copia):
-            // lo decide il server, che sa quali indirizzi sono caselle. Il catch-all e' @dominio.
+            // Source = destination is allowed only on a mailbox (it serves to keep a copy of it):
+            // the server decides, since it knows which addresses are mailboxes. The catch-all is @domain.
             const source = catchAll ? '@' + domain : local + '@' + domain;
             fetch('/api/aliases', {
                 method: 'POST',
@@ -4476,7 +4503,7 @@ public class PanelContent {
                 const cfInfo = document.getElementById('dkimDomainCfInfo');
                 const state = data.rotation_state || '';
 
-                // Aggiorna il flag e l'info CF visibile sopra ai bottoni
+                // Update the flag and the CF info shown above the buttons
                 cloudflareConfigured = !!data.cloudflare_configured;
                 if (cfInfo) {
                     if (data.cloudflare_configured) {
@@ -4497,7 +4524,7 @@ public class PanelContent {
                     return;
                 }
 
-                // Rotazione in corso: nascondi il bottone "Avvia rotazione"
+                // Rotation in progress: hide the "Start rotation" button
                 if (rotateBtn) rotateBtn.disabled = true;
                 panel.classList.remove('d-none');
 
@@ -4527,15 +4554,15 @@ public class PanelContent {
                 stepperHtml += '</div>';
                 stepper.innerHTML = stepperHtml;
 
-                // Body per ogni stato
+                // Body for each state
                 let html = '';
 
                 if (state === 'pending_dns' || state === 'propagated') {
-                    // Con un account Cloudflare il record lo pubblica il pannello: chiedere di
-                    // aggiungerlo a mano, per giunta in un riquadro giallo, e' un compito
-                    // inventato — e due righe piu' sotto la stessa scheda scriveva "il record
-                    // DNS e' stato pubblicato correttamente". I valori restano a schermo, ma
-                    // come riferimento, non come istruzione.
+                    // With a Cloudflare account the panel publishes the record: asking to
+                    // add it by hand, in a yellow box on top of that, is an invented
+                    // task -- and two lines further down the same card wrote "the DNS
+                    // record was published correctly". The values stay on screen, but
+                    // as a reference, not as an instruction.
                     html += '<div class="alert alert-' + (cloudflareConfigured ? 'info' : 'warning') + '">';
                     html += cloudflareConfigured
                         ? '<strong><i class="fas fa-cloud me-1" aria-hidden="true"></i>' + escHtml(t('dns.recPublishedByPanel')) + '</strong>'
@@ -4544,11 +4571,11 @@ public class PanelContent {
                     html += '<div class="mt-1"><strong>' + escHtml(t('dns.recType')) + '</strong> <code>TXT</code></div>';
                     html += '<div class="mt-1"><strong>' + escHtml(t('dns.recValueShort')) + '</strong> <code data-style="word-break:break-all">' + escapeHtmlBl(data.pending_dns_value || '') + '</code> ';
                     html += '<button class="btn btn-sm btn-outline-secondary ms-2" data-on-click="copyDkimRotateValue(this)" data-val="' + escapeHtmlBl(data.pending_dns_value || '') + '" aria-label="' + escHtml(t('common.copy')) + '" title="' + escHtml(t('common.copy')) + '"><i class="fas fa-copy" aria-hidden="true"></i></button></div>';
-                    // "Finché non attivi" da' per scontato che l'attivazione la faccia tu.
-                    // Con un account Cloudflare non e' cosi': lo scheduler chiama activatePending
-                    // da solo trascorse le ore di propagazione, e piu' avanti completeRotation
-                    // da solo a grazia finita. Dire a qualcuno che deve fare una cosa che
-                    // avviene da se' lo tiene in attesa di un compito inesistente.
+                    // "Until you activate" takes for granted that you are the one activating.
+                    // With a Cloudflare account that is not so: the scheduler calls activatePending
+                    // by itself once the propagation hours have passed, and later completeRotation
+                    // by itself when the grace period is over. Telling someone they must do a thing
+                    // that happens on its own keeps them waiting for a task that does not exist.
                     const autoHours = data.auto_activate_after_hours || 24;
                     html += '<div class="mt-2 small text-muted">' + escHtml(t('dns.newSelectorIs')) + ' <code>' + escapeHtmlBl(data.pending_selector || '') + '</code>. '
                         + escHtml(t('dns.oldKeyIs')) + ' <code>' + escapeHtmlBl(data.current_selector || '') + '</code> '
@@ -4581,10 +4608,10 @@ public class PanelContent {
                     html += '<strong><i class="fas fa-check-circle me-1" aria-hidden="true"></i>' + escHtml(t('dns.newKeyActive')) + '</strong> ' + escHtml(t('dns.nowSignedWith')) + ' <code>' + escapeHtmlBl(data.current_selector || '') + '</code>.';
                     if (data.previous_selector) {
                         if (data.previous_in_dns === false) {
-                            // Il periodo di grazia serve a proteggere un record che esiste. Se
-                            // quel record non c'e', non c'e' niente da proteggere — e la cosa
-                            // da dire e' un'altra: quella chiave non era pubblicata, quindi le
-                            // firme fatte con lei non erano verificabili da nessuno.
+                            // The grace period serves to protect a record that exists. If
+                            // that record is not there, there is nothing to protect -- and the
+                            // thing to say is a different one: that key was not published, so
+                            // the signatures made with it could not be verified by anyone.
                             html += '<div class="mt-2 small">' + escHtml(t('dns.oldKey')) + ' <code>' + escapeHtmlBl(data.previous_selector) + '</code> ' + escHtml(t('dns.oldNotInDns')) + '</div>';
                         } else {
                             html += '<div class="mt-2 small">' + escHtml(t('dns.oldKey')) + ' <code>' + escapeHtmlBl(data.previous_selector) + '</code> ' + escHtml(tn('dns.oldStays', graceDays)) + (data.previous_in_dns === true ? ' <span class="text-muted">' + escHtml(t('dns.oldVerified')) + '</span>' : '') + '</div>';
@@ -4595,7 +4622,7 @@ public class PanelContent {
                     }
                     html += '</div>';
 
-                    // Calcola la data prevista di completamento (activated_at + grace_days)
+                    // Compute the expected completion date (activated_at + grace_days)
                     let expectedCompletionStr = '';
                     const actMs = (typeof pickTs === 'function')
                         ? (pickTs(data, 'activated_at') ? pickTs(data, 'activated_at').getTime() : null)
@@ -4615,9 +4642,9 @@ public class PanelContent {
                         }
                         html += '<button class="btn btn-success" data-on-click="rotateDkimComplete()"><i class="fas fa-flag-checkered me-1" aria-hidden="true"></i>' + escHtml(t('dns.completeRotation')) + '</button>';
                     } else {
-                        // PRIMA del grace period: il bottone "Completa" è SEMPRE disabilitato.
-                        // Nessuna possibilità di forzare: il server side rifiuterebbe comunque la chiamata
-                        // (vedi DkimManager.completeRotation), quindi non offriamo nemmeno il bottone.
+                        // BEFORE the grace period: the "Complete" button is ALWAYS disabled.
+                        // No way to force it: the server side would refuse the call anyway
+                        // (see DkimManager.completeRotation), so we do not even offer the button.
                         if (data.cloudflare_configured) {
                             html += '<div class="alert alert-info"><i class="fas fa-robot me-1" aria-hidden="true"></i><strong>' + escHtml(t('dns.autoCompleteAt')) + '</strong> ' + escHtml(expectedCompletionStr || tn('dns.daysAfterActivation', graceDays)) + '.<br>' + escHtml(t('dns.autoCompleteHow')) + '</div>';
                         } else {
@@ -4644,7 +4671,7 @@ public class PanelContent {
             });
         }
 
-        // Esegue la POST /api/dkim rotate_start con il flag auto scelto dall'utente.
+        // Performs the POST /api/dkim rotate_start with the auto flag chosen by the user.
         function rotateDkimStartExec(useAuto) {
             fetch('/api/dkim', {
                 method: 'POST',
@@ -4663,7 +4690,7 @@ public class PanelContent {
 
         async function rotateDkimStart() {
             if (!currentDomainId) { panelSay('warning', t('dns.chooseDomainFirst')); return; }
-            // Identifica l'account CF collegato (se c'è)
+            // Identify the linked CF account (if there is one)
             const domInfo = cfDomainsCf.find(d => d.id === parseInt(currentDomainId));
             const linkedAccount = domInfo && domInfo.cloudflare_account_id
                 ? cfAccounts.find(a => a.id === domInfo.cloudflare_account_id)
@@ -4672,14 +4699,14 @@ public class PanelContent {
                 ? linkedAccount.label + (linkedAccount.email ? ' (' + linkedAccount.email + ')' : '')
                 : '';
 
-            // Se NON c'è CF assegnato → solo manuale
+            // If NO CF is assigned -> manual only
             if (!cloudflareConfigured) {
                 if (!await panelConfirm(t('dns.confirmManualStart'))) return;
                 rotateDkimStartExec(false);
                 return;
             }
 
-            // CF disponibile → mostra modal di scelta tra Cloudflare e DNS manuale
+            // CF available -> show the modal to choose between Cloudflare and manual DNS
             const modalEl = document.getElementById('rotateModeChooserModal');
             document.getElementById('rotateModeAccountLabel').textContent = acctLabel || t('dns.noneParen');
             // Bootstrap modal (Bootstrap 5)
@@ -4687,7 +4714,7 @@ public class PanelContent {
             modal.show();
         }
 
-        // Callback invocato dai bottoni dentro al modal di scelta
+        // Callback invoked by the buttons inside the choice modal
         function rotateDkimStartChooseCloudflare() {
             const modalEl = document.getElementById('rotateModeChooserModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
@@ -4941,7 +4968,7 @@ public class PanelContent {
      */
     private static String getDnsJsPart3() {
         return """
-        // ===== Verifica chiave attiva in DNS =====
+        // ===== Check the active key in DNS =====
         function verifyActiveDkim() {
             if (!currentDomainId) return;
             const out = document.getElementById('dkimVerifyResult');
@@ -4986,16 +5013,16 @@ public class PanelContent {
                     html += '<details class="mt-2"><summary class="small text-muted">' + escHtml(t('dns.digOutput')) + '</summary><pre class="small mt-2" data-style="white-space:pre-wrap;word-break:break-all">' + escapeHtmlBl(data.raw_output) + '</pre></details>';
                 }
                 out.innerHTML = html;
-                // Lo storico ora include un evento "key_verified": ricaricalo
+                // The history now includes a "key_verified" event: reload it
                 loadDkimHistory(currentDomainId);
             }).catch(e => {
                 out.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + escHtml(t('common.networkError', { message: e.message })) + '</div>';
             });
         }
 
-        // ===== Cleanup record DKIM orfani =====
-        // Le due sezioni a scomparsa caricano quando si aprono, se c'e' un dominio scelto. Era un if
-        // nel gestore in linea; i gestori adesso chiamano solo funzioni (panel-actions.js, reperto 178).
+        // ===== Cleanup of orphan DKIM records =====
+        // The two collapsible sections load when they open, if a domain is chosen. It was an if
+        // in the inline handler; the handlers now only call functions (panel-actions.js, finding 178).
         function dkimOrphansToggled(details) {
             if (details.open && currentDomainId) scanDkimOrphans();
         }
@@ -5032,15 +5059,15 @@ public class PanelContent {
                 const graceProtCount   = records.filter(r => r.is_orphan && r.in_grace_period).length;
                 const activeCount = records.length - orphanCount;
                 const graceDays = data.grace_period_days || 7;
-                // La scansione guarda UNA zona, quella del dominio selezionato: scanDkimRecords
-                // riceve un domainId, ne trova la zona e tiene solo i record che finiscono con
-                // quel dominio esatto. Le altre zone dello stesso account non le apre mai.
+                // The scan looks at ONE zone, the one of the selected domain: scanDkimRecords
+                // receives a domainId, finds its zone and keeps only the records that end with
+                // that exact domain. It never opens the other zones of the same account.
                 //
-                // Diceva pero' "record DKIM totali nell'account". Con cinque domini sullo stesso
-                // account, leggere "trovati 1 record DKIM totali nell'account Pietro" porta a
-                // concludere che gli altri quattro non hanno DKIM — mentre ce l'hanno. Un
-                // conteggio giusto sotto un'etichetta che promette un perimetro piu' largo di
-                // quello misurato e' un numero falso.
+                // But it said "total DKIM records in the account". With five domains on the same
+                // account, reading "found 1 total DKIM records in the account `<name>`" leads to
+                // concluding that the other four have no DKIM -- while they do. A
+                // correct count under a label that promises a wider scope than
+                // the one measured is a false number.
                 let html = '<div class="alert ' + (removableCount > 0 ? 'alert-warning' : 'alert-success') + ' py-2 mb-2"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>'
                     + escHtml(t('dns.orphSummary', { zone: data.domain || '?', total: records.length, active: activeCount, grace: graceProtCount, removable: removableCount, account: data.cloudflare_account_label || '?' }))
                     + ' <span class="text-muted">' + escHtml(t('dns.orphOneZone')) + '</span></div>';
@@ -5056,7 +5083,7 @@ public class PanelContent {
                     else if (r.is_previous) badge = '<span class="badge bg-info text-dark">' + escHtml(t('dns.grace')) + '</span>';
                     else if (r.in_grace_period) {
                         badge = '<span class="badge bg-info text-dark">' + escHtml(tn('dns.graceDays', graceDays)) + '</span>';
-                        // Mostra data fine grace period
+                        // Show the end date of the grace period
                         const endsTs = (typeof pickTs === 'function') ? pickTs(r, 'grace_period_ends_at') : null;
                         if (endsTs) {
                             const endsStr = (typeof formatPanelDate === 'function') ? formatPanelDate(endsTs) : endsTs.toLocaleString(window.I18N_LANG);
@@ -5068,13 +5095,13 @@ public class PanelContent {
                     html += '<td>' + badge + stateExtra + '</td>';
                     html += '<td><code class="small" data-style="word-break:break-all">' + escapeHtmlBl(r.content_preview || '') + '</code></td>';
                     if (r.is_orphan && !r.in_grace_period) {
-                        // ORFANO rimovibile (grace period scaduto o mai stato attivo)
+                        // Removable ORPHAN (grace period expired or never active)
                         html += '<td class="text-end"><button class="btn btn-sm btn-outline-danger" data-on-click="deleteDkimOrphan(\\'' + escapeHtmlBl(r.record_id).replace(/'/g, "\\\\'") + '\\', \\'' + escapeHtmlBl(r.selector).replace(/'/g, "\\\\'") + '\\')"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('common.delete')) + '</button></td>';
                     } else if (r.is_orphan && r.in_grace_period) {
-                        // ORFANO ma in grace period esteso: NON rimovibile
+                        // ORPHAN but in an extended grace period: NOT removable
                         html += '<td class="text-end"><span class="text-muted small" title="' + escHtml(t('dns.graceProtectedHint')) + '"><i class="fas fa-shield-alt me-1" aria-hidden="true"></i>' + escHtml(t('dns.graceProtected')) + '</span></td>';
                     } else {
-                        // Attivo / Pending / Previous: protetto
+                        // Active / Pending / Previous: protected
                         html += '<td class="text-end"><span class="text-muted small"><i class="fas fa-lock me-1" aria-hidden="true"></i>' + escHtml(t('dns.protected')) + '</span></td>';
                     }
                     html += '</tr>';
@@ -5098,15 +5125,15 @@ public class PanelContent {
             }).then(r => r.json()).then(data => {
                 panelSay('danger', (data.success ? '✓ ' : '✗ ') + (data.message || data.error || ''));
                 if (data.success) {
-                    // Re-scansiona per aggiornare la lista
+                    // Re-scan to update the list
                     scanDkimOrphans();
-                    // Aggiorna anche lo storico (è stato loggato un evento orphan_record_deleted)
+                    // Also update the history (an orphan_record_deleted event was logged)
                     if (typeof loadDkimHistory === 'function') loadDkimHistory(currentDomainId);
                 }
             }).catch(e => panelSay('danger', t('common.networkError', { message: e.message })));
         }
 
-        // ===== Storico rotazioni DKIM =====
+        // ===== DKIM rotation history =====
         function loadDkimHistory(domainId) {
             const body = document.getElementById('dkimHistoryBody');
             body.innerHTML = '<p class="text-muted small mb-0"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('common.loading')) + '</p>';
@@ -5124,7 +5151,7 @@ public class PanelContent {
                     body.innerHTML = '<div class="text-muted small">' + escHtml(t('dns.noRotation')) + '</div>';
                     return;
                 }
-                // Label leggibili e colori per evento
+                // Readable labels and colors per event
                 const labels = {
                     rotation_started:   { txt: t('dns.evStarted'),     badge: 'bg-primary' },
                     dns_published:      { txt: t('dns.evPublished'),   badge: 'bg-info text-dark' },
@@ -5136,13 +5163,13 @@ public class PanelContent {
                     orphan_record_deleted: { txt: t('dns.evOrphan'),   badge: 'bg-warning text-dark' },
                     schedule_changed:   { txt: t('dns.evSchedule'),    badge: 'bg-secondary' }
                 };
-                // Etichette + colori per la "Modalità DNS" (come viene gestito il record in DNS)
+                // Labels + colors for the "DNS mode" (how the record is managed in DNS)
                 const modeLabels = {
                     automatic: { txt: 'Cloudflare',             badge: 'bg-info text-dark',         title: t('dns.modeCfHint') },
                     manual:    { txt: t('dns.modeManual'),      badge: 'bg-light text-dark border', title: t('dns.modeManualHint') },
                     forced:    { txt: t('dns.modeForced'),      badge: 'bg-warning text-dark',      title: t('dns.modeForcedHint') }
                 };
-                // Etichette per "Origine" (chi ha avviato l'operazione)
+                // Labels for "Origin" (who started the operation)
                 const triggerLabels = {
                     user:      { txt: t('dns.trigUser'),      icon: 'user',  badge: 'bg-primary', title: t('dns.trigUserHint') },
                     scheduler: { txt: t('dns.trigScheduler'), icon: 'robot', badge: 'bg-dark',    title: t('dns.trigSchedulerHint') }
@@ -5163,7 +5190,7 @@ public class PanelContent {
                     const mode = ev.mode ? modeLabels[ev.mode] : null;
                     const trig = ev.triggered_by ? triggerLabels[ev.triggered_by] : null;
                     html += '<tr>';
-                    // Timestamp formattato in locale (preferisce occurred_at_ms se presente)
+                    // Timestamp formatted in local time (prefers occurred_at_ms if present)
                     const tsDate = (typeof pickTs === 'function') ? pickTs(ev, 'occurred_at')
                         : (typeof parseTs === 'function' ? parseTs(ev.occurred_at) : null);
                     const tsDisplay = tsDate
@@ -5172,7 +5199,7 @@ public class PanelContent {
                     html += '<td><small class="text-nowrap">' + escapeHtmlBl(tsDisplay) + '</small></td>';
                     html += '<td><span class="badge ' + lbl.badge + '">' + escapeHtmlBl(lbl.txt) + '</span></td>';
                     html += '<td>' + (ev.selector ? '<code>' + escapeHtmlBl(ev.selector) + '</code>' : '<span class="text-muted">—</span>') + '</td>';
-                    // Colonna Origine
+                    // Origin column
                     if (trig) {
                         html += '<td><span class="badge ' + trig.badge + '" title="' + escapeHtmlBl(trig.title) + '" data-style="cursor:help"><i class="fas fa-' + trig.icon + ' me-1" aria-hidden="true"></i>' + escapeHtmlBl(trig.txt) + '</span></td>';
                     } else if (ev.triggered_by) {
@@ -5180,7 +5207,7 @@ public class PanelContent {
                     } else {
                         html += '<td><span class="text-muted" title="' + escHtml(t('dns.noOriginHint')) + '" data-style="cursor:help">—</span></td>';
                     }
-                    // Colonna Modalità DNS
+                    // DNS mode column
                     if (mode) {
                         html += '<td><span class="badge ' + mode.badge + '" title="' + escapeHtmlBl(mode.title) + '" data-style="cursor:help">' + escapeHtmlBl(mode.txt) + '</span></td>';
                     } else if (ev.mode) {
@@ -5197,7 +5224,7 @@ public class PanelContent {
                 });
                 html += '</tbody></table></div>';
 
-                // Legenda compatta sotto la tabella
+                // Compact legend under the table
                 html += '<div class="small text-muted mt-2">';
                 html += '<div class="mb-1"><i class="fas fa-info-circle me-1" aria-hidden="true"></i><strong>' + escHtml(t('dns.colOrigin')) + ':</strong> ';
                 html += '<span class="badge bg-primary"><i class="fas fa-user me-1" aria-hidden="true"></i>' + escHtml(t('dns.trigUser')) + '</span> = ' + escHtml(t('dns.legUser')) + ' · ';
@@ -5226,7 +5253,7 @@ public class PanelContent {
      */
     private static String getDnsJsTzDiag() {
         return """
-        // ===== Diagnostica timezone =====
+        // ===== Timezone diagnostics =====
         function toggleTzDiag() {
             const body = document.getElementById('tzDiagBody');
             const isOpen = !body.classList.contains('d-none');
@@ -5297,7 +5324,7 @@ public class PanelContent {
             html += '<td>session: <code>' + escapeHtmlCf(data.mysql_session_tz || '?') + '</code><br>global: <code>' + escapeHtmlCf(data.mysql_global_tz || '?') + '</code><br>system: <code>' + escapeHtmlCf(data.mysql_system_tz || '?') + '</code></td>';
             html += '</tr>';
 
-            // Browser (cliente)
+            // Browser (client)
             const browserNow = new Date();
             html += '<tr><td><strong>' + escHtml(t('dns.tzBrowser')) + '</strong><br><small class="text-muted">Date.now()</small></td>';
             html += '<td><code>' + browserNow.toISOString() + '</code><br><small>' + escHtml(t('dns.tzLocal', { time: browserNow.toLocaleString(window.I18N_LANG) })) + '</small></td>';
@@ -5306,7 +5333,7 @@ public class PanelContent {
 
             html += '</tbody></table>';
 
-            // Verdetto
+            // Verdict
             if (alignment === 'MISMATCH') {
                 const skewMs = data.skew_mysql_vs_jvm_ms || 0;
                 const skewMin = Math.round(skewMs / 60000);
@@ -5348,15 +5375,15 @@ public class PanelContent {
                     html = '<div class="alert alert-danger py-2 mb-2"><i class="fas fa-times-circle me-1" aria-hidden="true"></i>' + escHtml(t('common.error', { message: data.error || t('common.unknownError') })) + '</div>' + html;
                 }
                 logEl.innerHTML = html;
-                // Aggiorna i dati visualizzati
+                // Update the displayed data
                 renderTzDiag(data);
             }).catch(e => {
                 logEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + escHtml(t('common.networkError', { message: e.message })) + '</div>';
             });
         }
 
-        // Carica subito lo stato della diagnostica (anche se il body è collassato,
-        // il badge nell'header deve mostrare OK/Disallineato)
+        // Load the diagnostics state right away (even if the body is collapsed,
+        // the badge in the header must show OK/"Misaligned")
         loadTzDiag();
 
 """;
@@ -5368,7 +5395,7 @@ public class PanelContent {
      */
     private static String getDnsRotateModeChooserModal() {
         return """
-            <!-- Modal di scelta modalità rotazione (Cloudflare API vs DNS manuale) -->
+            <!-- Modal for choosing the rotation mode (Cloudflare API vs manual DNS) -->
             <div class="modal fade" id="rotateModeChooserModal" tabindex="-1" aria-labelledby="rotateModeChooserModalLabel" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content">
@@ -5431,7 +5458,7 @@ public class PanelContent {
                         <i class="fas fa-fingerprint me-2" aria-hidden="true"></i>{{t:acc.setupNotice}}
                     </div>
 
-                    <!-- Email di accesso -->
+                    <!-- Login email -->
                     <div class="card mb-4" id="accountCard">
                         <div class="card-header"><i class="fas fa-envelope me-2" aria-hidden="true"></i>{{t:acc.emailTitle}}</div>
                         <div class="card-body">
@@ -5471,7 +5498,7 @@ public class PanelContent {
                         </div>
                     </div>
 
-                    <!-- Sessioni -->
+                    <!-- Sessions -->
                     <div class="card mb-4">
                         <div class="card-header"><i class="fas fa-laptop me-2" aria-hidden="true"></i>{{t:acc.sessionsTitle}}</div>
                         <div class="card-body">
@@ -5489,7 +5516,7 @@ public class PanelContent {
     /** The access windows: passkey name, new name, confirmation of a sensitive operation. */
     private static String getAccountModals() {
         return """
-    <!-- Nome della passkey nuova -->
+    <!-- Name of the new passkey -->
     <div class="modal fade" id="passkeyNameModal" tabindex="-1" aria-labelledby="passkeyNameTitle" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -5510,7 +5537,7 @@ public class PanelContent {
         </div>
     </div>
 
-    <!-- Nuovo nome di una passkey -->
+    <!-- New name of a passkey -->
     <div class="modal fade" id="renamePasskeyModal" tabindex="-1" aria-labelledby="renamePasskeyTitle" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -5597,13 +5624,13 @@ public class PanelContent {
     private static String getJailConfigurationJs() {
         return """
         // ===== Jail Configuration =====
-        // Helper per i pulsanti preset: setta il valore dell'input
+        // Helper for the preset buttons: sets the value of the input
         function setCfg(id, value) {
             const el = document.getElementById(id);
             if (el) { el.value = value; el.dispatchEvent(new Event('input')); }
         }
 
-        // Popola la select con tutte le jail attualmente attive (chiamato all'avvio)
+        // Fills the select with all the currently active jails (called at startup)
         function populateJailSelect(onDone) {
             const sel = document.getElementById('cfgJailSelect');
             const prev = sel.value;
@@ -5611,16 +5638,16 @@ public class PanelContent {
                 if (!data || !Array.isArray(data.jails)) { if (onDone) onDone(); return; }
                 const names = data.jails.map(j => j.name).filter(Boolean);
                 if (names.length === 0) { if (onDone) onDone(); return; }
-                // Conserva la selezione precedente se ancora valida
+                // Keeps the previous selection if still valid
                 sel.innerHTML = names.map(n => '<option value="' + escHtml(n) + '">' + escHtml(n) + '</option>').join('');
                 if (names.indexOf(prev) >= 0) sel.value = prev;
                 if (onDone) onDone();
             }).catch(() => { if (onDone) onDone(); });
         }
 
-        // Opzioni filtro disponibili, raggruppate per "famiglia" di jail.
-        // Per ogni jail mostriamo SOLO le opzioni della sua famiglia (es. dovecot
-        // non vede i preset postfix). Una opzione "custom" e' sempre disponibile.
+        // Available filter options, grouped by jail "family".
+        // For each jail we show ONLY the options of its family (e.g. dovecot
+        // does not see the postfix presets). A "custom" option is always available.
         const FILTER_PRESETS = {
             postfix: [
                 { value: 'postfix-sasl', label: t('jc.fSafe'), badge: t('jc.bNoScanner'), catches: t('jc.pfSaslCatches'), misses: t('jc.pfSaslMisses') },
@@ -5640,7 +5667,7 @@ public class PanelContent {
             ]
         };
 
-        // Determina la famiglia di una jail dal suo nome.
+        // Determines the family of a jail from its name.
         function jailFamily(jailName) {
             const n = (jailName || '').toLowerCase();
             if (n.includes('postfix')) return 'postfix';
@@ -5660,8 +5687,8 @@ public class PanelContent {
             const esc = (s) => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
             currentEl.textContent = currentFilter || t('jc.notSet');
 
-            // Jail senza preset (daemoxcp-mail-auth, roundcube-auth, ...):
-            // niente card, solo un input semplice prefillato col valore corrente.
+            // Jails without presets (daemoxcp-mail-auth, roundcube-auth, ...):
+            // no card, only a simple input prefilled with the current value.
             if (family === 'other') {
                 container.innerHTML =
                     '<div class="alert alert-info py-2 px-3 mb-0 small">'
@@ -5677,7 +5704,7 @@ public class PanelContent {
             // Per famiglie note (postfix/dovecot/rspamd): card cliccabili + "Personalizzato"
             const presets = (FILTER_PRESETS[family] || []).concat(FILTER_PRESETS.other);
 
-            // Capisci quale preset corrisponde al filtro corrente; se nessuno, e' custom
+            // Work out which preset matches the current filter; if none, it is custom
             let activeValue = currentFilter;
             const knownValues = presets.map(p => p.value);
             if (currentFilter && !knownValues.includes(currentFilter)) {
@@ -5697,10 +5724,10 @@ public class PanelContent {
                 const inUseBadge = isActive
                     ? '<span class="badge bg-primary ms-2" data-style="font-size:.65rem"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('jc.inUse')) + '</span>'
                     : '';
-                // Colori che funzionano su tema chiaro E scuro:
-                //  - bordo: blu solido se attivo, grigio semi-trasparente se inattivo
-                //  - sfondo: tinta blu trasparente se attivo, niente sfondo se inattivo
-                //    (cosi' il colore del container parent rimane visibile)
+                // Colors that work on the light AND the dark theme:
+                //  - border: solid blue if active, semi-transparent grey if inactive
+                //  - background: transparent blue tint if active, no background if inactive
+                //    (so the color of the parent container stays visible)
                 const borderColor = isActive ? '#0d6efd' : 'rgba(128,128,128,0.35)';
                 const bg = isActive ? 'rgba(13,110,253,0.15)' : 'transparent';
                 return '<div class="filter-option" data-value="' + esc(p.value) + '" '
@@ -5715,7 +5742,7 @@ public class PanelContent {
             }).join('');
         }
 
-        // Click su una card → seleziona quel filtro
+        // Click on a card -> select that filter
         function selectFilterOption(value) {
             const customWrap = document.getElementById('cfgFilterCustom');
             const customInput = document.getElementById('cfgFilter');
@@ -5726,14 +5753,14 @@ public class PanelContent {
                 customWrap.classList.add('d-none');
                 if (customInput) customInput.value = value;
             }
-            // Riapplica gli stili attivi senza ricaricare dal server
+            // Re-apply the active styles without reloading from the server
             const cards = document.querySelectorAll('.filter-option');
             cards.forEach(c => {
                 const active = c.getAttribute('data-value') === value;
                 c.style.borderColor = active ? '#0d6efd' : 'rgba(128,128,128,0.35)';
                 c.style.background = active ? 'rgba(13,110,253,0.15)' : 'transparent';
             });
-            // Memorizza la selezione (per il save successivo)
+            // Store the selection (for the next save)
             window.__cfgSelectedFilter = value;
         }
 
@@ -5788,8 +5815,8 @@ public class PanelContent {
         async function saveJailFilter() {
             const jail = document.getElementById('cfgJailSelect').value;
             const status = document.getElementById('cfgJailStatus');
-            // Il filtro selezionato e' sia il preset cliccato che il testo custom.
-            // Se l'utente ha cliccato "Personalizzato", prende il valore dell'input.
+            // The selected filter is both the clicked preset and the custom text.
+            // If the user clicked "Custom", it takes the value of the input.
             let filter = window.__cfgSelectedFilter || '';
             const customInput = document.getElementById('cfgFilter');
             if (filter === '__custom__') {
@@ -6043,7 +6070,7 @@ public class PanelContent {
                             </div>
 
                             <div id="cfgFilterOptions" class="d-grid gap-2 mb-2">
-                                <!-- Le opzioni vengono renderizzate da JS in base alla jail selezionata -->
+                                <!-- The options are rendered by JS based on the selected jail -->
                             </div>
 
                             <div id="cfgFilterCustom" class="d-none mb-2 mt-2">
@@ -6152,7 +6179,7 @@ public class PanelContent {
         const ACC_PASSKEY_NAME = /^[A-Za-z0-9 ._()-]{1,40}$/;
         let pendingPasskey = null;
 
-        // Le date arrivano in UTC (ISO con la Z): si mostrano nel fuso del browser.
+        // Dates arrive in UTC (ISO with the Z): they are shown in the browser's time zone.
         function accDate(iso) {
             if (!iso) return '-';
             const d = new Date(iso);
@@ -6237,7 +6264,7 @@ public class PanelContent {
                  accButton('btn-outline-danger', 'fa-trash', t('adm.deleteOne', { name: pk.name }), () => deletePasskey(pk.id, pk.name))])));
         }
 
-        // Il browser e il sistema, non tutta la stringa User-Agent
+        // The browser and the system, not the whole User-Agent string
         function accBrowser(ua) {
             if (!ua) return t('acc.unknownBrowser');
             const b = /Edg\\//.test(ua) ? 'Edge' : /Firefox\\//.test(ua) ? 'Firefox' : /Chrome\\//.test(ua) ? 'Chrome' : /Safari\\//.test(ua) ? 'Safari' : '';
@@ -6267,7 +6294,7 @@ public class PanelContent {
             loadAccount();
         }
 
-        // ----- email di accesso: cambia solo quando torna il codice mandato al nuovo indirizzo -----
+        // ----- login email: it changes only when the code sent to the new address comes back -----
         async function accEmailRequest() {
             const email = document.getElementById('accEmailNew').value.trim();
             if (!ACC_EMAIL.test(email) || email.length > 254) { accMsg('accEmailMsg', 'danger', t('login.emailInvalid')); return; }
@@ -6345,7 +6372,7 @@ public class PanelContent {
             loadAccount();
         }
 
-        // ----- nome utente (con il nome non si entra: serve a riconoscersi nell'elenco) -----
+        // ----- user name (you cannot log in with the name: it serves to recognise yourself in the list) -----
         async function changeUsername() {
             const newUsername = document.getElementById('newUsername').value.trim();
             if (!/^[A-Za-z0-9_-]{3,50}$/.test(newUsername)) { panelSay('danger', t('set.usernameInvalid')); return; }
@@ -6356,8 +6383,8 @@ public class PanelContent {
             document.getElementById('newUsername').value = '';
         }
 
-        // Una richiesta che puo' chiedere la conferma (vault, chiavi SSH): la finestra comune la chiede e ripete la
-        // richiesta da se' (l'involucro di fetch e panel-confirm.js); null se chi era davanti l'ha chiusa.
+        // A request that may ask for confirmation (vault, SSH keys): the shared dialog asks for it and repeats the
+        // request by itself (the fetch wrapper and panel-confirm.js); null if whoever was in front closed it.
         async function withIdentity(body, url) {
             const r = await fetch(url || '/api/admins', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body) });
@@ -6436,7 +6463,7 @@ public class PanelContent {
             html += '</div>';
             html += '<div class="small text-muted">' + escHtml(t('set.fileOnServer')) + ' <code>' + escHtml(data.key_file_path || '') + '</code></div>';
             out.innerHTML = html;
-            // Il valore entra come proprieta', non dentro l'HTML
+            // The value goes in as a property, not inside the HTML
             document.getElementById('vaultBackupKeyValue').value = data.key_base64 || '';
         }
         function vaultCopyBackupKey() {
@@ -6508,7 +6535,7 @@ public class PanelContent {
         [data-theme="dark"] details .table-sm td, [data-theme="dark"] details .table-sm th { color: var(--text-primary) !important; }
         [data-theme="dark"] details code { background-color: var(--table-stripe) !important; color: #f8f9fa !important; padding: 1px 4px; border-radius: 3px; }
         [data-theme="dark"] details summary { color: var(--text-primary); }
-        /* Globale: tabelle dentro alert/info che non riceverebbero override */
+        /* Global: tables inside alert/info that would not receive overrides */
         [data-theme="dark"] .alert .table, [data-theme="dark"] .alert .table > :not(caption) > * > * { background-color: transparent !important; color: var(--text-primary) !important; }
         """;
         return getHead("nav.dns", "dns", extraStyles) + """
@@ -6516,7 +6543,7 @@ public class PanelContent {
         <div class="content-container">
             <h2 class="mb-3"><i class="fas fa-server me-2" aria-hidden="true"></i>{{t:dns.title}}</h2>
 
-            <!-- BANNER: dominio corrente sempre visibile, con switcher -->
+            <!-- BANNER: current domain always visible, with a switcher -->
             <div class="card text-white mb-3" data-style="background:linear-gradient(135deg,#e94560 0%,#a52a45 100%)">
                 <div class="card-body py-3">
                     <div class="row align-items-center g-3">
@@ -6537,7 +6564,7 @@ public class PanelContent {
                 </div>
             </div>
 
-            <!-- Azioni globali (visibili sempre, ma operano solo se un dominio è selezionato) -->
+            <!-- Global actions (always visible, but they act only if a domain is selected) -->
             <div class="mb-3 d-flex gap-2 flex-wrap">
                 <button class="btn btn-outline-primary" id="reloadDnsBtn" data-on-click="loadDnsRecords()" disabled>
                     <i class="fas fa-sync me-1" aria-hidden="true"></i>{{t:dns.reload}}
@@ -6563,15 +6590,15 @@ public class PanelContent {
                 </div>
             </div>
 
-            <!-- Le schede del dominio scelto ("Set up everything", autoconfig, MTA-STS) si vedono appena si sceglie il
-                 dominio: stavano dentro i risultati della verifica, e senza "Verifica DNS" il passo della guida non
-                 c'era (reperto 249) -->
+            <!-- The cards of the chosen domain ("Set up everything", autoconfig, MTA-STS) are visible as soon as the
+                 domain is chosen: they were inside the check results, and without "Check DNS" the step of the guide
+                 was not there (finding 249) -->
             <div id="domainCards" class="d-none">
 """ + resource("pages/autodns-card.html") + resource("pages/autoconfig-card.html") + resource("pages/mtasts-card.html") + """
             </div>
 
-            <!-- Attivare MTA-STS per tutto il server: era nella pagina degli aggiornamenti (reperto 193). Fuori dai
-                 risultati del dominio scelto, che restano nascosti finche' non se ne sceglie uno. -->
+            <!-- Turning on MTA-STS for the whole server: it was in the updates page (finding 193). Outside the
+                 results of the chosen domain, which stay hidden until one is chosen. -->
             <div class="card mb-4 border-success">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-wand-magic-sparkles me-2" aria-hidden="true"></i><strong>{{t:up.ams}}</strong>
@@ -6613,13 +6640,13 @@ public class PanelContent {
                         </div>
                     </details>
 
-                    <!-- LISTA ACCOUNT -->
+                    <!-- ACCOUNT LIST -->
                     <h6 class="mt-3 mb-2"><i class="fas fa-users me-1" aria-hidden="true"></i>{{t:dns.cfConfigured}}</h6>
                     <div id="cfAccountsList" class="mb-3">
                         <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>{{t:common.loading}}</div>
                     </div>
 
-                    <!-- AGGIUNGI ACCOUNT -->
+                    <!-- ADD ACCOUNT -->
                     <h6 class="mt-4 mb-2"><i class="fas fa-plus-circle me-1" aria-hidden="true"></i>{{t:dns.cfAdd}}</h6>
                     <div class="row g-2 mb-2">
                         <div class="col-md-4">
@@ -6640,7 +6667,7 @@ public class PanelContent {
                         <button class="btn btn-primary btn-sm" type="button" data-on-click="cfAddAccount()"><i class="fas fa-save me-1" aria-hidden="true"></i>{{t:dns.cfSave}}</button>
                     </div>
 
-                    <!-- ASSEGNAZIONE PER-DOMINIO -->
+                    <!-- PER-DOMAIN ASSIGNMENT -->
                     <h6 class="mt-4 mb-2"><i class="fas fa-link me-1" aria-hidden="true"></i>{{t:dns.cfAssign}}</h6>
                     <div id="cfDomainAssignments" class="mb-2">
                         <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>{{t:common.loading}}</div>
@@ -6659,10 +6686,10 @@ public class PanelContent {
                     <p>{{t:dns.dkimIntro}}</p>
                     <div id="dkimStatus">{{t:dns.dkimPick}}</div>
 
-                    <!-- Info account CF per dominio selezionato -->
+                    <!-- CF account info for the selected domain -->
                     <div id="dkimDomainCfInfo" class="mt-2"></div>
 
-                    <!-- Last/Next rotation: sempre visibile quando DKIM è configurato -->
+                    <!-- Last/Next rotation: always visible when DKIM is configured -->
                     <div id="dkimRotationTimeline" class="mt-2 d-none">
                         <div class="row g-2">
                             <div class="col-md-6">
@@ -6680,7 +6707,7 @@ public class PanelContent {
                         </div>
                     </div>
 
-                    <!-- Rotazione programmata -->
+                    <!-- Scheduled rotation -->
                     <div id="dkimSchedulePanel" class="mt-3 d-none">
                         <div class="border rounded p-3" data-style="background:rgba(13,110,253,0.05)">
                             <h6 class="mb-2"><i class="fas fa-calendar-alt me-1" aria-hidden="true"></i>{{t:dns.scheduled}}</h6>
@@ -6688,7 +6715,7 @@ public class PanelContent {
                                 <div class="col-md-5">
                                     <label class="form-label small mb-1" for="dkimSchedulePreset">{{t:dns.frequency}}</label>
                                     <select class="form-select form-select-sm" id="dkimSchedulePreset" data-on-change="onSchedulePresetChange()">
-                                        <!-- popolato dinamicamente dai preset del server -->
+                                        <!-- filled dynamically from the server's presets -->
                                     </select>
                                 </div>
                                 <div class="col-md-3" id="dkimScheduleCustomWrap" data-style="display:none">
@@ -6715,10 +6742,10 @@ public class PanelContent {
                         </button>
                     </div>
 
-                    <!-- Risultato verifica chiave attiva -->
+                    <!-- Result of the active key check -->
                     <div id="dkimVerifyResult" class="mt-3"></div>
 
-                    <!-- Pannello rotazione: visibile solo se in corso -->
+                    <!-- Rotation panel: visible only if in progress -->
                     <div id="dkimRotationPanel" class="mt-4 d-none">
                         <hr>
                         <h5><i class="fas fa-route me-2" aria-hidden="true"></i>{{t:dns.rotationRunning}}</h5>
@@ -6726,15 +6753,15 @@ public class PanelContent {
                         <div id="dkimRotationBody"></div>
                     </div>
 
-                    <!-- Vecchi record DKIM (orphan cleanup)
+                    <!-- Old DKIM records (orphan cleanup)
 
-                         Si rilegge a ogni apertura. Un pannello a scomparsa carica una volta
-                         sola e poi mostra la fotografia di quel momento: riaperto piu' tardi
-                         racconta un passato che sembra il presente. E' successo due volte in
-                         due giorni — la cassetta dei rapporti dichiarata mancante venti secondi
-                         dopo che il pannello l'aveva creata, e lo storico DKIM senza la
-                         rotazione appena avviata. Chi apre un elenco si aspetta di vedere
-                         adesso, non l'ultima volta che ci ha guardato. -->
+                         Re-read at every opening. A collapsible panel loads only once
+                         and then shows the snapshot of that moment: reopened later it
+                         tells a past that looks like the present. It happened twice in
+                         two days -- the reports mailbox declared missing twenty seconds
+                         after the panel had created it, and the DKIM history without the
+                         rotation just started. Whoever opens a list expects to see
+                         now, not the last time they looked at it. -->
                     <details class="mt-4"
                              data-on-toggle="dkimOrphansToggled(this)">
                         <summary class="text-primary" data-style="cursor:pointer"><i class="fas fa-broom me-1" aria-hidden="true"></i>{{t:dns.orphansSummary}}</summary>
@@ -6745,7 +6772,7 @@ public class PanelContent {
                         </div>
                     </details>
 
-                    <!-- Storico rotazioni: riletto a ogni apertura, stessa ragione. -->
+                    <!-- Rotation history: re-read at every opening, same reason. -->
                     <details class="mt-4" id="dkimHistoryDetails"
                              data-on-toggle="dkimHistoryToggled(this)">
                         <summary class="text-primary" data-style="cursor:pointer"><i class="fas fa-history me-1" aria-hidden="true"></i>{{t:dns.historySummary}}</summary>
@@ -6774,7 +6801,7 @@ public class PanelContent {
                     <p class="text-muted small mb-0">{{t:dns.blHint}}</p>
                 </div>
             </div>
-            <!-- Diagnostica orario server (timezone) -->
+            <!-- Server time diagnostics (timezone) -->
             <div class="card mt-4">
                 <div class="card-header d-flex justify-content-between align-items-center" data-style="cursor:pointer" data-on-click="toggleTzDiag()">
                     <span><i class="fas fa-clock me-2" aria-hidden="true"></i>{{t:dns.tzTitle}}</span>
@@ -6813,16 +6840,16 @@ public class PanelContent {
                 opt.textContent = d.domain;
                 select.appendChild(opt);
             });
-            // Pre-seleziona se presente ?domain=... nel querystring (es. link da /domains)
+            // Pre-select if ?domain=... is present in the query string (e.g. a link from /domains)
             try {
                 const params = new URLSearchParams(window.location.search);
                 const preselect = params.get('domain');
                 if (preselect) {
-                    // Trova l'option con quel value (case-insensitive)
+                    // Find the option with that value (case-insensitive)
                     const target = Array.from(select.options).find(o => o.value.toLowerCase() === preselect.toLowerCase());
                     if (target) {
                         select.value = target.value;
-                        // Triggera l'evento change come se l'utente avesse cliccato
+                        // Trigger the change event as if the user had clicked
                         select.dispatchEvent(new Event('change', { bubbles: true }));
                     }
                 }
@@ -6831,7 +6858,7 @@ public class PanelContent {
             }
         });
 
-        // Helper: aggiorna il banner del dominio corrente
+        // Helper: update the current domain banner
         function setCurrentDomainBanner(name) {
             const el = document.getElementById('currentDomainBanner');
             if (!el) return;
@@ -6844,15 +6871,15 @@ public class PanelContent {
             }
         }
 
-        // Cambio dominio: carica TUTTO automaticamente (DNS records + DKIM + storico + schedule),
-        // così non serve cliccare "Ricarica" per cambiare contesto.
+        // Domain change: load EVERYTHING automatically (DNS records + DKIM + history + schedule),
+        // so there is no need to click "Reload" to change context.
         document.getElementById('domainSelect').addEventListener('change', function() {
             const opt = this.selectedOptions[0];
             const reloadBtn = document.getElementById('reloadDnsBtn');
             const verifyBtn = document.getElementById('verifyDnsBtn');
 
             if (!opt || !opt.dataset || !opt.dataset.id) {
-                // Deselezionato: pulisci tutto
+                // Deselected: clear everything
                 currentDomainId = null;
                 setCurrentDomainBanner(null);
                 if (reloadBtn) reloadBtn.disabled = true;
@@ -6878,8 +6905,9 @@ public class PanelContent {
             if (verifyBtn) verifyBtn.disabled = false;
             document.getElementById('generateDkimBtn').disabled = false;
 
-            // Le schede del dominio si vedono subito, e quello che mostravano era del dominio di prima: la verifica
-            // si nasconde, autoconfig e MTA-STS tornano a "Aggiorna", "Set up everything" si legge da sola (reperto 249)
+            // The cards of the domain are visible right away, and what they showed was the previous domain's: the
+            // check is hidden, autoconfig and MTA-STS go back to "Update", "Set up everything" reloads by itself
+            // (finding 249)
             const vr = document.getElementById('verificationResults'); if (vr) vr.classList.add('d-none');
             const dc = document.getElementById('domainCards');         if (dc) dc.classList.remove('d-none');
             ['acBody', 'stsBody'].forEach(id => {
@@ -6888,7 +6916,7 @@ public class PanelContent {
             });
             autoDnsLoad();
 
-            // Carica AUTOMATICAMENTE tutto: record DNS + stato DKIM (status, timeline, history, schedule)
+            // AUTOMATICALLY load everything: DNS records + DKIM state (status, timeline, history, schedule)
             loadDnsRecords();
         });
 
@@ -6934,7 +6962,7 @@ public class PanelContent {
             <p class="text-muted">{{t:ssl.subtitle}} (<strong>{{MAIL_HOSTNAME}}</strong>)</p>
             <input type="hidden" id="pageMailHostname" value="{{MAIL_HOSTNAME}}">
 
-            <!-- Guida Let's Encrypt -->
+            <!-- Let's Encrypt guide -->
             <div class="card mb-4">
                 <div class="card-header bg-secondary text-white" data-style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#leGuide" aria-expanded="false">
                     <i class="fas fa-book me-2" aria-hidden="true"></i><strong>{{t:ssl.guide}}</strong>
@@ -7268,7 +7296,7 @@ public class PanelContent {
                 </div>
                 <div class="card-body">
 
-                    <!-- Guida certificato manuale -->
+                    <!-- Manual certificate guide -->
                     <div class="card mb-4 border-info">
                         <div class="card-header bg-info text-white" data-style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#manualGuide" aria-expanded="true">
                             <i class="fas fa-book me-2" aria-hidden="true"></i><strong>{{t:ssl.mgTitle}}</strong>
@@ -7472,7 +7500,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 }
                 // Check hostname mismatch
                 const mismatchDiv = document.getElementById('sslHostnameMismatch');
-                // Dalla pagina, non scritto dal server dentro lo script: gli script sono file (reperto 178).
+                // From the page, not written by the server inside the script: the scripts are files (finding 178).
                 const currentMailHostname = document.getElementById('pageMailHostname').value;
                 const certCn = data.common_name || '';
                 if (currentMailHostname && certCn && currentMailHostname !== t('server.notConfigured')) {
@@ -7697,7 +7725,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         loadAutoRenewSettings();
         loadCfMailServerAccount();
 
-        // ===== Cloudflare account per il certificato del server mail =====
+        // ===== Cloudflare account for the mail server certificate =====
         function escSslCf(s) {
             return String(s == null ? '' : s)
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -7813,8 +7841,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
         }
 
-        // Il rinnovo dura minuti (Let's Encrypt controlla i record DNS di ogni nome): lo si dice subito, e l'esito resta
-        // scritto sotto il pulsante, non solo nell'avviso in alto che dopo dieci secondi se ne va.
+        // The renewal takes minutes (Let's Encrypt checks the DNS records of every name): we say so right away,
+        // and the outcome stays written under the button, not only in the notice at the top that goes away
+        // after ten seconds.
         function autoRenewSay(kind, text) {
             const el = document.getElementById('autoRenewProgress');
             if (!el) return;
@@ -7823,8 +7852,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         function triggerManualCheck() {
-            // Il pulsante per id: le azioni data-on-click passano da un solo ascoltatore su document, quindi
-            // event.currentTarget era il documento, non il pulsante, e lo spinner non compariva mai (17/11/2026).
+            // The button by id: the data-on-click actions go through a single listener on document, so
+            // event.currentTarget was the document, not the button, and the spinner never appeared (2026-11-17).
             const btn = document.getElementById('autoRenewCheckNow');
             const originalHtml = btn.innerHTML;
             btn.disabled = true;
@@ -7872,13 +7901,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         .log-warning { color: #cca700; }
         .log-info { color: #3794ff; }
         .log-viewer { background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 0.85rem; padding: 15px; border-radius: 8px; max-height: 500px; overflow-y: auto; }
-        /* Force-reset di line-through ovunque venga (Bootstrap, html del log, etc) */
+        /* Force-reset line-through wherever it comes from (Bootstrap, log html, etc) */
         .log-entry, .log-entry *, .log-viewer, .log-viewer * {
             text-decoration: none !important;
             text-decoration-line: none !important;
             text-decoration-style: none !important;
         }
-        /* Padding verticale + separatore tenue per evitare overlap visivo con il testo */
+        /* Vertical padding + faint separator to avoid visual overlap with the text */
         .log-entry {
             padding: 6px 4px;
             border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -7902,7 +7931,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         """;
         return getHead("nav.logs", "logs", extraStyles) + """
     <main id="main" tabindex="-1" class="content container mt-4">
-        <!-- Statistiche -->
+        <!-- Statistics -->
         <div class="row mb-4">
             <div class="col-md-6">
                 <div class="card stat-card"><div class="card-body text-center">
@@ -7930,7 +7959,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- Filtri rapidi -->
+            <!-- Quick filters -->
             <div class="card mb-3 border-info">
                 <div class="card-header bg-info text-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <span><i class="fas fa-filter me-2" aria-hidden="true"></i><strong>{{t:lg.quickFilters}}</strong> <small class="text-white-50 ms-2">{{t:lg.quickFiltersHint}}</small></span>
@@ -7996,7 +8025,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 <div class="text-muted">{{t:lg.pickLog}}</div>
             </div>
 
-            <!-- Ricerca -->
+            <!-- Search -->
             <div class="card mt-4">
                 <div class="card-header"><i class="fas fa-search me-2" aria-hidden="true"></i>{{t:lg.searchTitle}}</div>
                 <div class="card-body">
@@ -8019,7 +8048,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
         });
 
-        // Load available logs — mostra SOLO quelli effettivamente presenti
+        // Load available logs -- shows ONLY those actually present
         fetch('/api/logs').then(r => r.json()).then(data => {
             const select = document.getElementById('logSelect');
             select.innerHTML = '';
@@ -8040,8 +8069,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
         });
 
-        // ===== Filtri preset =====
-        // catches: il suggerimento sul pulsante; desc: la spiegazione sotto i filtri.
+        // ===== Preset filters =====
+        // catches: the hint on the button; desc: the explanation under the filters.
         const LOG_PRESETS = {
             'all':           { regex: '', catches: t('lg.allDesc'), desc: '' },
             'brute-smtp':    { regex: 'SASL.*authentication failed', catches: t('lg.bruteSmtpCatch'), desc: t('lg.bruteSmtpDesc.html') },
@@ -8059,7 +8088,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             'tls':           { regex: 'TLS|SSL|STARTTLS|cipher', catches: t('lg.tlsCatch'), desc: t('lg.tlsDesc.html') }
         };
 
-        // Il suggerimento di ogni pulsante: l'espressione e cosa trova.
+        // The hint of each button: the expression and what it finds.
         document.querySelectorAll('.log-preset-btn').forEach(b => {
             const preset = LOG_PRESETS[b.dataset.preset];
             if (preset) b.title = 'REGEX: ' + preset.regex + '\\n' + preset.catches;
@@ -8069,10 +8098,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const preset = LOG_PRESETS[presetId];
             if (!preset) return;
             document.getElementById('logFilter').value = preset.regex;
-            // Evidenzia il pulsante attivo
+            // Highlight the active button
             document.querySelectorAll('.log-preset-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
             if (btn && presetId !== 'all') { btn.classList.add('active'); btn.setAttribute('aria-pressed', 'true'); }
-            // Mostra descrizione del filtro
+            // Show the filter description
             const descEl = document.getElementById('filterActiveDesc');
             if (presetId === 'all') {
                 descEl.classList.add('d-none');
@@ -8085,8 +8114,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             loadLogs();
         }
 
-        // Invio nei due campi di ricerca. Era un if nel gestore in linea; i gestori adesso chiamano solo
-        // funzioni (panel-actions.js, reperto 178).
+        // Enter in the two search fields. It was an if in the inline handler; the handlers now only call
+        // functions (panel-actions.js, finding 178).
         function loadLogsOnEnter(event) {
             if (event.key === 'Enter') loadLogs();
         }
@@ -8109,9 +8138,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     return;
                 }
 
-                // ESCAPE HTML — i log mail contengono spesso "<user@example.com>" che il
-                // browser interpreta come tag HTML sconosciuto. Senza escape, tag come <s>
-                // o <del> nei log produrrebbero text-decoration line-through indesiderato.
+                // HTML ESCAPE -- mail logs often contain "<user@example.com>" which the
+                // browser interprets as an unknown HTML tag. Without escaping, tags like `<s>`
+                // or `<del>` in the logs would produce an unwanted text-decoration line-through.
                 const escLog = (s) => {
                     if (s == null) return '';
                     const d = document.createElement('div');
@@ -8144,7 +8173,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     return;
                 }
 
-                // Escape HTML anche qui (i log contengono spesso "<user@example.com>")
+                // HTML escape here too (the logs often contain "<user@example.com>")
                 const escSearch = (s) => {
                     if (s == null) return '';
                     const d = document.createElement('div');
@@ -8185,7 +8214,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <h2><i class="fas fa-cog me-2" aria-hidden="true"></i>{{t:nav.settings}}</h2>
             <p class="text-muted">{{t:set.intro}}</p>
 
-            <!-- La porta 465: era nella pagina degli aggiornamenti, sta con le impostazioni della posta (reperto 193). -->
+            <!-- Port 465: it was in the updates page, it belongs with the mail settings (finding 193). -->
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-lock me-2" aria-hidden="true"></i><strong>{{t:up.p465}}</strong>
@@ -8259,7 +8288,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         </div>
                     </div>
 
-                    <!-- Indirizzi del server: IPv4 e IPv6, con la guida in tutte e due le direzioni (ServerAddresses) -->
+                    <!-- Server addresses: IPv4 and IPv6, with the guide in both directions (ServerAddresses) -->
                     <div class="card mb-4" id="addrCard">
                         <div class="card-header"><i class="fas fa-route me-2" aria-hidden="true"></i>{{t:addr.title}}</div>
                         <div class="card-body">
@@ -8674,7 +8703,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 .catch(() => {});
         }
 
-        // Un'icona di stato con il suo significato per chi non la vede.
+        // A status icon with its meaning for those who cannot see it.
         function setMark(icon, text) {
             return '<i class="fas fa-' + icon + '" aria-hidden="true"></i><span class="visually-hidden">' + escHtml(text) + '</span>';
         }
@@ -9221,16 +9250,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 """ + getFooterSection() + """
     <script>
         const csrfToken = document.getElementById('csrf_token').value;
-        // I nomi degli stati di Postfix (QueueState sul server)
+        // The names of the Postfix states (QueueState on the server)
         const QUEUE_STATES = {
             ACTIVE: t('que.state.active'), DEFERRED: t('que.state.deferred'), HOLD: t('que.state.hold'),
             INCOMING: t('que.state.incoming'), CORRUPT: t('que.state.corrupt'), UNKNOWN: t('que.state.unknown')
         };
-        // L'elenco dell'ultima lettura, per i dettagli della busta senza un'altra richiesta
+        // The list from the last read, for the envelope details without another request
         let queueMessages = {};
 
-        // Tutto quello che arriva dalla coda (mittente, oggetto, motivo del rinvio, testo) lo
-        // scrive chi manda la posta: entra nella pagina solo passando per escHtml.
+        // Everything that comes from the queue (sender, subject, deferral reason, text) is
+        // written by whoever sends the mail: it enters the page only by passing through escHtml.
         function queueMsg(text, kind) {
             document.getElementById('queueMsg').innerHTML = text
                 ? '<div class="alert alert-' + kind + ' py-2 small">' + escHtml(text) + '</div>' : '';
@@ -9260,7 +9289,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     document.getElementById('statHold').textContent = data.hold || 0;
                     document.getElementById('statPermanent').textContent =
                         data.permanent ? tn('que.permanentOf', data.permanent) : '';
-                    // Si trattiene solo quello che non e' gia' trattenuto, si rilascia solo se c'e' qualcosa
+                    // Hold only what is not already held, release only if there is something
                     document.getElementById('holdBtn').disabled = (data.total || 0) - (data.hold || 0) === 0;
                     document.getElementById('releaseBtn').disabled = !data.hold;
                     document.getElementById('flushBtn').disabled = !data.total;
@@ -9322,7 +9351,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             loadQueue();
         }
 
-        // I pulsanti delle righe: l'identificativo sta in un attributo, non in un onclick scritto a mano
+        // The row buttons: the identifier is in an attribute, not in a hand-written onclick
         document.getElementById('queueBody').addEventListener('click', async e => {
             const b = e.target.closest('button');
             if (!b) return;
@@ -9402,8 +9431,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         function purgePermfails() {
-            // Prima si guarda, poi si cancella: la conferma porta gli identificativi visti e il
-            // loro numero, scritto a mano. Un messaggio arrivato nel frattempo non si tocca.
+            // First look, then delete: the confirmation carries the identifiers seen and
+            // their number, typed by hand. A message that arrived in the meantime is not touched.
             queueMsg('', '');
             queuePost({ action: 'purge_permfails' }).then(async data => {
                 if (!data.success) { queueMsg(data.error || data.message || t('common.unknownErrorCap'), 'danger'); return; }
@@ -9412,8 +9441,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 const lines = list.slice(0, 15)
                     .map(m => '• ' + (m.recipients || []).map(r => r.address).join(', ') + '  —  ' + (m.error || '')).join('\\n');
                 const extra = list.length > 15 ? '\\n' + tn('que.andMore', list.length - 15) : '';
-                // La finestra del pannello con i messaggi che se ne vanno (reperto 198); al server va il loro numero,
-                // che la prova contro quelli che ha davvero.
+                // The panel dialog with the messages that go away (finding 198); the server receives their number,
+                // which it checks against the ones it really has.
                 if (!await panelAsk({ title: tn('que.purgeTitle', list.length), text: data.message + '\\n' + lines + extra,
                         confirm: tn('que.purgeGo', list.length), danger: true })) return;
                 queueAction({ action: 'purge_permfails', ids: list.map(m => m.id), confirm: String(list.length) });
@@ -9421,7 +9450,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         refreshQueue();
-        // La coda cambia da sola: si rilegge ogni 30 secondi
+        // The queue changes by itself: it is re-read every 30 seconds
         setInterval(refreshQueue, 30000);
     </script>
 </body>
@@ -9441,7 +9470,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         [data-theme="dark"] .ban-event.unban { background: rgba(25, 135, 84, .14); }
         .ip-badge { font-family: monospace; background: #f8f9fa; color: #212529; padding: 2px 6px; border-radius: 3px; }
         [data-theme="dark"] .ip-badge { background: var(--table-stripe); color: var(--text-primary); border: 1px solid var(--border-color); }
-        /* Form helper text — leggibile sia in light che dark */
+        /* Form helper text -- readable in both light and dark */
         .form-text, .form-text.small { color: #6c757d; }
         [data-theme="dark"] .form-text, [data-theme="dark"] .form-text.small { color: #adb5bd !important; }
         [data-theme="dark"] small.text-muted, [data-theme="dark"] .text-muted small, [data-theme="dark"] .small.text-muted { color: #adb5bd !important; }
@@ -9491,7 +9520,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- Stato Live Jail Fail2ban (output di fail2ban-client get/status) -->
+            <!-- Fail2ban Live Jail status (output of fail2ban-client get/status) -->
             <div class="card mb-4 border-secondary">
                 <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-microscope me-2" aria-hidden="true"></i><strong>{{t:sec.liveTitle}}</strong> <small class="ms-2 text-white-50">{{t:sec.liveHint}}</small></span>
@@ -9765,7 +9794,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     document.getElementById('totalJails').textContent = jailCount;
                     document.getElementById('totalBannedAll').textContent = data.total_banned_total || 0;
 
-                    // Counter sulla card "Jail Attive"
+                    // Counter on the "Active Jails" card
                     const cnt = document.getElementById('jailsCount');
                     if (cnt) {
                         cnt.textContent = jailCount;
@@ -9896,7 +9925,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     let html = '<table class="table table-sm mb-2"><tbody>';
                     html += `<tr><td data-style="width:35%"><strong>IP</strong></td><td><code>${escapeHtml(data.ip || ip)}</code></td></tr>`;
 
-                    // Posizione geografica (GeoIP)
+                    // Geographic location (GeoIP)
                     let country = '';
                     if (data.country_name && data.country) country = `${escapeHtml(data.country_name)} (${escapeHtml(data.country)})`;
                     else if (data.country) country = escapeHtml(data.country);
@@ -9904,7 +9933,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     if (data.region) html += `<tr><td><strong>${escHtml(t('sec.region'))}</strong></td><td>${escapeHtml(data.region)}</td></tr>`;
                     if (data.city) html += `<tr><td><strong>${escHtml(t('sec.city'))}</strong></td><td>${escapeHtml(data.city)}</td></tr>`;
 
-                    // Rete / Provider
+                    // Network / Provider
                     if (data.isp) html += `<tr><td><strong>ISP</strong></td><td>${escapeHtml(data.isp)}</td></tr>`;
                     if (data.asn) html += `<tr><td><strong>ASN</strong></td><td><code>${escapeHtml(data.asn)}</code></td></tr>`;
                     if (data.organization) html += `<tr><td><strong>${escHtml(t('sec.org'))}</strong></td><td>${escapeHtml(data.organization)}</td></tr>`;
@@ -9912,7 +9941,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
                     html += '</tbody></table>';
 
-                    // Mappa (se abbiamo coordinate)
+                    // Map (if we have coordinates)
                     if (data.latitude != null && data.longitude != null) {
                         const lat = data.latitude;
                         const lon = data.longitude;
@@ -10007,8 +10036,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- Che cosa contano i numeri qui sotto: MailLogStats li legge dal registro di Postfix ogni minuto e li scrive
-                 in email_statistics. Si dice, invece di lasciar indovinare che cosa sia un «mandato». -->
+            <!-- What the numbers below count: MailLogStats reads them from the Postfix log every minute and writes them
+                 to email_statistics. We say so, instead of leaving people to guess what a "sent" is. -->
             <div class="alert alert-info small" role="note">
                 <i class="fas fa-circle-info me-1" aria-hidden="true"></i>{{t:st.collectedHow}}
             </div>
@@ -10182,7 +10211,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 })
                 .catch(() => statsMsg(t('common.noAnswer'), 'danger'));
 
-            // Rspamd: i numeri vengono da Rspamd stesso (dal suo ultimo avvio), non dal periodo scelto
+            // Rspamd: the numbers come from Rspamd itself (since its last start), not from the chosen period
             fetch('/api/rspamd?action=stats')
                 .then(r => r.json())
                 .then(data => {
@@ -10523,13 +10552,13 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     <script>
         let csrfToken = document.getElementById('csrf_token').value;
 
-        // Il nome del ruolo nella lingua della pagina; il codice resta quello del server.
+        // The role name in the language of the page; the code stays the one from the server.
         function admRoleLabel(role) {
             return ({ superadmin: t('adm.rSuperadmin'), admin: t('adm.rAdmin'), operator: t('adm.rOperator'), viewer: t('adm.rViewer') })[role] || role;
         }
 
         const ADM_EMAIL = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\\.[A-Za-z]{2,}$/;
-        // Le date arrivano in UTC (ISO con la Z): si mostrano nel fuso del browser.
+        // Dates arrive in UTC (ISO with the Z): they are shown in the browser's time zone.
         function admDate(iso) {
             if (!iso) return '';
             const d = new Date(iso);
@@ -10550,8 +10579,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">' + escHtml(t('adm.none')) + '</td></tr>';
                         return;
                     }
-                    // Nomi ed email arrivano dal database, ma ci sono arrivati da una richiesta: tutto
-                    // passa da escHtml, e i pulsanti portano solo l'id (data-id), mai il testo.
+                    // Names and emails come from the database, but they got there from a request: everything
+                    // goes through escHtml, and the buttons carry only the id (data-id), never the text.
                     tbody.innerHTML = admList.map(admin => `
                         <tr>
                             <td data-label="${escHtml(t('adm.username'))}" class="text-long">
@@ -10656,9 +10685,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- Se i limiti orari e giornalieri si applicano (SendingLimits: Postfix chiede al pannello prima di ogni
-                 messaggio di una casella), o perche' no: lo dice il server, invece di lasciar credere che ci sia una
-                 protezione. La dimensione massima e' un parametro di Postfix. -->
+            <!-- Whether the hourly and daily limits apply (SendingLimits: Postfix asks the panel before every
+                 message of a mailbox), or why not: the server says so, instead of letting people believe there is a
+                 protection. The maximum size is a Postfix parameter. -->
             <div class="alert small" id="rlEnforcement" role="status" hidden></div>
             <div id="rlMsg" role="status" aria-live="polite"></div>
 
@@ -10723,12 +10752,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- La sezione "Mittenti bloccati" e' stata TOLTA.
-                 Non esisteva nessun meccanismo di blocco: ne' una tabella nel database, ne'
-                 una regola in Postfix. Era una tabella che scriveva "Nessun blocco attivo"
-                 qualunque cosa succedesse, con un pulsante "Sblocca" che rispondeva "azione
-                 sconosciuta". Una schermata che dichiara di sorvegliare qualcosa che non
-                 sorveglia e' peggio della sua assenza: fa credere di avere una protezione. -->
+            <!-- The "Blocked senders" section was REMOVED.
+                 No blocking mechanism existed: neither a table in the database, nor
+                 a rule in Postfix. It was a table that wrote "No active block"
+                 whatever happened, with an "Unblock" button that answered "unknown
+                 action". A screen that claims to watch over something it does not
+                 watch over is worse than its absence: it makes you believe you have a protection. -->
         </div>
     </main>
 
@@ -10787,7 +10816,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         function loadRateLimits() {
-            // Una sola richiesta: i limiti globali stanno in "globale", le caselle in "limits".
+            // A single request: the global limits are in `globale`, the mailboxes in `limits`.
             fetch('/api/ratelimits')
                 .then(r => r.json())
                 .then(data => {
@@ -10796,7 +10825,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">' + escHtml(data.error || t('common.unknownErrorCap')) + '</td></tr>';
                         return;
                     }
-                    // Se si applicano, o perche' no; e chi ha mandato di piu' nelle ultime 24 ore.
+                    // Whether they apply, or why not; and who sent the most in the last 24 hours.
                     const enf = data.enforcement || {};
                     const usage = enf.usage || {};
                     const box = document.getElementById('rlEnforcement');
@@ -10817,9 +10846,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                         tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">' + escHtml(t('rl.none')) + '</td></tr>';
                         return;
                     }
-                    // La colonna "Uso Oggi" mostrava un conteggio che nessuno calcola: il pannello
-                    // non tiene traccia degli invii per casella. Al suo posto c'e' un dato che
-                    // esiste davvero, il numero massimo di destinatari.
+                    // The "Usage Today" column showed a count that nobody computes: the panel
+                    // does not keep track of the sends per mailbox. In its place there is a figure
+                    // that really exists, the maximum number of recipients.
                     tbody.innerHTML = currentLimits.map(limit => {
                         const who = escHtml(limit.email);
                         return `<tr class="${limit.enabled ? '' : 'limit-disabled'}">
@@ -10875,7 +10904,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         function openLimitModal(limit) {
             const select = document.getElementById('limitMailbox');
             select.value = limit ? String(limit.target_id) : '';
-            // Il limite e' legato alla casella: per un'altra casella se ne crea uno nuovo
+            // The limit is tied to the mailbox: for another mailbox a new one is created
             select.disabled = !!limit;
             document.getElementById('limitHourly').value = limit ? limit.hourly_limit : 50;
             document.getElementById('limitDaily').value = limit ? limit.daily_limit : 500;
@@ -10974,7 +11003,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             margin-left: auto; font-size: .7rem;
             color: var(--bs-secondary-color, #6c757d);
         }
-        /* Divider tra "comuni" e "alfabetico" dentro l'unico grid */
+        /* Divider between "common" and "alphabetical" inside the single grid */
         .fw-country-separator {
             grid-column: 1 / -1;
             padding: 4px 0 2px 0;
@@ -11031,7 +11060,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
         </div>
 
-        <!-- Modalita' -->
+        <!-- Mode -->
         <div class="card mb-3">
             <div class="card-header py-2"><i class="fas fa-cog me-2" aria-hidden="true"></i>{{t:fw.mode}}</div>
             <div class="card-body">
@@ -11056,7 +11085,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
         </div>
 
-        <!-- Aggiornamento automatico GeoIP -->
+        <!-- Automatic GeoIP update -->
         <div class="card mb-3 border-info">
             <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2 bg-info bg-opacity-10">
                 <span><i class="fas fa-cloud-download-alt me-2" aria-hidden="true"></i>{{t:fw.autoSyncTitle}} <span id="fwAutoSyncStatus"></span></span>
@@ -11100,7 +11129,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
         </div>
 
-        <!-- Paesi -->
+        <!-- Countries -->
         <div class="card mb-3" id="fwCountriesCard">
             <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span><i class="fas fa-globe me-2" aria-hidden="true"></i>{{t:fw.countries}} <span class="badge bg-secondary ms-1" id="fwCountriesCount">0</span></span>
@@ -11111,7 +11140,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <div class="card-body">
                 <p class="small text-muted mb-2">{{t:fw.countriesIntro.html}}</p>
 
-                <!-- Preset (UE, G7, NATO...) -->
+                <!-- Presets (EU, G7, `NATO`...) -->
                 <div class="mb-2">
                     <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
                         <strong class="small" id="fwPresetsLabel">{{t:fw.presets}}</strong>
@@ -11129,7 +11158,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <div class="d-flex flex-wrap gap-1" id="fwPresetGroups" role="group" aria-labelledby="fwPresetsLabel"></div>
                 </div>
 
-                <!-- Selezione in blocco -->
+                <!-- Bulk selection -->
                 <div class="d-flex flex-wrap gap-1 mb-2">
                     <button id="fwToggleOnlySelected" class="btn btn-outline-info btn-sm" data-on-click="fwToggleOnlySelected()" title="{{t:fw.onlySelectedHint}}" aria-pressed="false">
                         <i class="fas fa-filter me-1" aria-hidden="true"></i>{{t:fw.onlySelected}}
@@ -11153,7 +11182,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     <i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{t:fw.blueHint}}
                 </div>
 
-                <!-- Editor dei codici, nei due sensi -->
+                <!-- Code editor, in both directions -->
                 <div class="mt-3 pt-3" data-style="border-top: 1px solid rgba(128,128,128,0.25)">
                     <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                         <strong class="small" id="fwCodeEditorLabel"><i class="fas fa-code me-1" aria-hidden="true"></i>{{t:fw.codeEditor}}</strong>
@@ -11220,8 +11249,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
         </div>
 
-        <!-- Avvertenze prima di applicare -->
-        <!-- La porta 443: era nella pagina degli aggiornamenti, sta con le porte (reperto 193). -->
+        <!-- Warnings before applying -->
+        <!-- Port 443: it was in the updates page, it belongs with the ports (finding 193). -->
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-shield-halved me-2" aria-hidden="true"></i><strong>{{t:up.w443}}</strong>
@@ -11259,16 +11288,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     private static String getFirewallJs() {
         return """
         let __fwCsrf = '';
-        let __fwState = null;     // ultimo stato ricevuto dal server
-        let __fwCatalog = [];     // lista paesi del catalogo
+        let __fwState = null;     // last state received from the server
+        let __fwCatalog = [];     // country list from the catalogue
 
-        // CSRF token: riusa quello globale dell'app se presente
+        // CSRF token: reuse the app's global one if present
         try {
             const el = document.getElementById('csrf_token');
             if (el && el.value) __fwCsrf = el.value;
         } catch (e) {}
 
-        // Modalita' disponibili (nome + descrizione, nella lingua della pagina)
+        // Available modes (name + description, in the language of the page)
         const FW_MODES = [
             { value: 'CIDR_ONLY',     label: t('fw.mCidr'),  desc: t('fw.mCidrDesc') },
             { value: 'GEO_WHITELIST', label: t('fw.mGeoWl'), desc: t('fw.mGeoWlDesc'), recommended: true },
@@ -11276,7 +11305,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             { value: 'DISABLED',      label: t('fw.mOff'),   desc: t('fw.mOffDesc') }
         ];
 
-        // I preset arrivano dal server con nome e descrizione in italiano: qui quelli della pagina.
+        // The presets arrive from the server with name and description in Italian: here the page's ones.
         const FW_GROUP_TEXT = {
             italy:    { label: t('fw.gItaly'),   desc: t('fw.gItalyDesc') },
             eu27:     { label: t('fw.gEu27'),    desc: t('fw.gEu27Desc') },
@@ -11289,7 +11318,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         function fwGroupLabel(g) { return (FW_GROUP_TEXT[g.id] && FW_GROUP_TEXT[g.id].label) || g.label || g.id; }
         function fwGroupDesc(g) { return (FW_GROUP_TEXT[g.id] && FW_GROUP_TEXT[g.id].desc) || g.description || ''; }
 
-        // Il nome del paese nella lingua della pagina (Intl), con quello del catalogo come riserva.
+        // The country name in the language of the page (Intl), with the catalogue's one as a fallback.
         let __fwRegionNames = null;
         try { __fwRegionNames = new Intl.DisplayNames([window.I18N_LANG], { type: 'region' }); } catch (e) {}
         function fwCountryName(c) {
@@ -11378,21 +11407,21 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         // ============================================================
-        // EDITOR CODICI PAESI — sincronizzazione bidirezionale con la
-        // selezione visiva. L'utente scrive/cancella codici nel textarea
-        // → dopo 800ms di pausa parsiamo i codici, calcoliamo diff con
-        // la selezione corrente, e applichiamo via bulk_add / bulk_remove.
-        // Viceversa, quando l'utente clicca un paese nella griglia, lo
-        // state si aggiorna e renderFwCodeEditor() rigenera il testo.
+        // COUNTRY CODE EDITOR -- two-way synchronisation with the
+        // visual selection. The user writes/deletes codes in the textarea
+        // -> after an 800ms pause we parse the codes, compute the diff with
+        // the current selection, and apply via bulk_add / bulk_remove.
+        // Conversely, when the user clicks a country in the grid, the
+        // state is updated and renderFwCodeEditor() regenerates the text.
         // ============================================================
         let __fwCodeApplyTimer = null;
-        let __fwCodeEditorSelfUpdate = false; // flag per evitare loop
+        let __fwCodeEditorSelfUpdate = false; // flag to avoid loops
 
         function fwExtractCodesFromText(text) {
             if (!text) return [];
-            // Pattern: 2 lettere consecutive isolate (con word-boundary).
-            // Matcha codici paese da qualsiasi formato (CSV, JSON array, Cloudflare expression, una per riga).
-            // NB: \\b nel regex deve essere scritto \\\\b nel text block Java per arrivare come \\b al JS.
+            // Pattern: 2 consecutive isolated letters (with word-boundary).
+            // Matches country codes from any format (CSV, JSON array, Cloudflare expression, one per line).
+            // NB: \\b in the regex must be written \\\\b in the Java text block to reach the JS as \\b.
             const re = /\\b([A-Za-z]{2})\\b/g;
             const seen = new Set();
             const out = [];
@@ -11408,7 +11437,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const ta = document.getElementById('fwCodeEditor');
             if (!ta) return;
             const selected = (__fwState && __fwState.geo_countries) ? __fwState.geo_countries.slice() : [];
-            // Ordina alfabeticamente per output stabile
+            // Sort alphabetically for a stable output
             selected.sort();
             const upper = selected.map(c => c.toUpperCase());
             const fmtEl = document.getElementById('fwCodeFormat');
@@ -11427,11 +11456,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             } else { // csv
                 text = upper.join(', ');
             }
-            // Aggiorna il textarea SENZA triggerare l'apply (siamo noi a scrivere, non l'utente)
+            // Update the textarea WITHOUT triggering the apply (we are the ones writing, not the user)
             __fwCodeEditorSelfUpdate = true;
             ta.value = text;
             __fwCodeEditorSelfUpdate = false;
-            // Status: mostra quanti codici sono nel testo
+            // Status: show how many codes are in the text
             const statusEl = document.getElementById('fwCodeEditorStatus');
             if (statusEl) {
                 statusEl.textContent = upper.length === 0
@@ -11442,7 +11471,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         function fwScheduleCodeApply() {
-            if (__fwCodeEditorSelfUpdate) return; // siamo noi a scrivere, ignora
+            if (__fwCodeEditorSelfUpdate) return; // we are the ones writing, ignore
             const statusEl = document.getElementById('fwCodeEditorStatus');
             if (statusEl) {
                 statusEl.textContent = t('fw.waitingPause');
@@ -11452,7 +11481,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             __fwCodeApplyTimer = setTimeout(fwApplyCodeEditor, 800);
         }
 
-        /** Bypass del debounce: applica IMMEDIATAMENTE quello che c'e' nel textarea. */
+        /** Bypass the debounce: apply IMMEDIATELY what is in the textarea. */
         function fwApplyCodeEditorNow() {
             if (__fwCodeApplyTimer) { clearTimeout(__fwCodeApplyTimer); __fwCodeApplyTimer = null; }
             fwApplyCodeEditor();
@@ -11497,7 +11526,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
                 setStatus(t('fw.applying', { add: toAdd.length, remove: toRemove.length }), 'text-info');
 
-                // POST helper con error handling esplicito
+                // POST helper with explicit error handling
                 const post = (action, countries) => {
                     if (!countries || countries.length === 0) return Promise.resolve({ success: true, skipped: true });
                     return fetch('/api/firewall', {
@@ -11515,7 +11544,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     });
                 };
 
-                // Sequenziale: prima add, poi remove
+                // Sequential: first add, then remove
                 post('bulk_add_countries', toAdd)
                     .then(() => post('bulk_remove_countries', toRemove))
                     .then(() => {
@@ -11626,7 +11655,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
         }
 
-        // ===== Preset groups (UE, G7, NATO...) =====
+        // ===== Preset groups (EU, G7, `NATO`...) =====
         function renderFwPresetGroups() {
             const container = document.getElementById('fwPresetGroups');
             if (!container) return;
@@ -11634,30 +11663,30 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const selected = new Set(__fwState.geo_countries || []);
             container.innerHTML = groups.map(g => {
                 const codes = g.codes || [];
-                // Quanti paesi del gruppo sono attualmente selezionati
+                // How many countries of the group are currently selected
                 let matchCount = 0;
                 for (const c of codes) if (selected.has(c)) matchCount++;
-                // "fully contained" = tutti i paesi del preset sono presenti nella selezione
-                // (anche se ce ne sono altri extra)
+                // "fully contained" = all the countries of the preset are present in the selection
+                // (even if there are other extra ones)
                 const isFullyContained = (matchCount === codes.length && codes.length > 0);
-                // "exact match" = la selezione COINCIDE col preset (modalita' replace giusta)
+                // "exact match" = the selection MATCHES the preset (replace mode is the right one)
                 const isExactMatch = isFullyContained && selected.size === codes.length;
 
                 let cls = 'btn-outline-primary';
                 let badge;
                 if (isExactMatch) {
-                    // Selezione = esattamente il preset
+                    // Selection = exactly the preset
                     cls = 'btn-primary';
                     badge = '<i class="fas fa-check ms-1" aria-hidden="true"></i><span class="visually-hidden"> ' + escHtml(t('fw.exactMatch')) + '</span>';
                 } else if (isFullyContained) {
-                    // Tutto il preset e' nella selezione + altri extra
+                    // The whole preset is in the selection + other extras
                     cls = 'btn-success';
                     badge = '<i class="fas fa-check-double ms-1" aria-hidden="true"></i><span class="visually-hidden"> ' + escHtml(t('fw.contained')) + '</span>';
                 } else if (matchCount > 0) {
-                    // Solo alcuni paesi del preset selezionati
+                    // Only some countries of the preset selected
                     badge = '<span class="badge bg-light text-dark ms-1" data-style="font-size:.65rem" title="' + escHtml(t('fw.partial', { n: matchCount, total: codes.length })) + '">' + matchCount + '/' + codes.length + '</span>';
                 } else {
-                    // Nessun paese del preset selezionato
+                    // No country of the preset selected
                     badge = '<span class="badge bg-light text-dark ms-1" data-style="font-size:.65rem">' + codes.length + '</span>';
                 }
                 return '<button type="button" class="btn btn-sm ' + cls + '" '
@@ -11668,7 +11697,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }).join('');
         }
 
-        // Helper: rende leggibile una lista di codici paese (es. "🇮🇹 Italia (IT), 🇺🇸 Stati Uniti (US)")
+        // Helper: makes a list of country codes readable (e.g. "🇮🇹 Italy (IT), 🇺🇸 United States (US)")
         function fwFormatCountryList(codes, maxShow) {
             if (!codes || codes.length === 0) return t('fw.none');
             const catalogMap = new Map();
@@ -11692,7 +11721,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             const mode = modeEl ? modeEl.value : 'replace';
 
             if (mode === 'add') {
-                // Modalita' AGGIUNGI
+                // ADD mode
                 const existing = new Set(__fwState.geo_countries || []);
                 const toAdd = grp.codes.filter(c => !existing.has(c));
                 if (toAdd.length === 0) {
@@ -11704,7 +11733,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (!await panelConfirm(msg)) return;
                 fwPost({ action: 'bulk_add_countries', countries: toAdd }, () => loadFirewall());
             } else {
-                // Modalita' SOSTITUISCI: dettagliamo chi viene aggiunto e chi rimosso
+                // REPLACE mode: we detail who is added and who is removed
                 const existing = new Set(__fwState.geo_countries || []);
                 const targetSet = new Set(grp.codes);
                 const toAdd = grp.codes.filter(c => !existing.has(c));
@@ -11725,7 +11754,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
         }
 
-        // ===== Bulk select/deselect dei paesi VISIBILI (rispetta filtro) =====
+        // ===== Bulk select/deselect of the VISIBLE countries (respects the filter) =====
         function fwGetVisibleCountryCodes() {
             const codes = [];
             document.querySelectorAll('.fw-country-item').forEach(el => {
@@ -11763,7 +11792,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             fwPost({ action: 'clear_countries' }, () => loadFirewall());
         }
 
-        // ===== Countries: SINGOLA GRIGLIA =====
+        // ===== Countries: SINGLE GRID =====
         function renderFwCountries() {
             const selected = new Set(__fwState.geo_countries || []);
             const detailMap = {};
@@ -11784,7 +11813,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 const nameHtml = isSelected
                     ? '<strong>' + escHtml(name) + '</strong>'
                     : escHtml(name);
-                // La ricerca trova il paese col nome della pagina e con quello del catalogo.
+                // The search finds the country by the page's name and by the catalogue's one.
                 const searchable = (name + ' ' + c.name).toLowerCase();
                 return '<label class="fw-country-item' + selClass + '" data-cc="' + escHtml(c.code) + '" data-name="' + escHtml(searchable) + '" data-common="' + (c.common ? '1' : '0') + '">' +
                        '<input type="checkbox" data-on-change="fwToggleCountry(this.closest(\\'label\\').dataset.cc, this.checked)"' + isChecked + '>' +
@@ -11795,17 +11824,17 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                        '</label>';
             };
 
-            // Lista UNICA in ordine alfabetico, nella lingua della pagina
+            // SINGLE list in alphabetical order, in the language of the page
             const all = __fwCatalog.slice().sort((a, b) => fwCountryName(a).localeCompare(fwCountryName(b), window.I18N_LANG));
             const grid = document.getElementById('fwCountriesGrid');
             grid.innerHTML = all.map(renderItem).join('');
 
-            // Aggiorna il counter selezionati nella header
+            // Update the selected counter in the header
             document.getElementById('fwCountriesCount').textContent = selected.size;
             fwFilterCountries();
         }
 
-        // Stato del toggle "solo selezionati"
+        // State of the "selected only" toggle
         let __fwOnlySelected = false;
 
         function fwToggleOnlySelected() {
@@ -11841,10 +11870,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (show) visible++;
             });
 
-            // Counter selezionati nella header card
+            // Selected counter in the header card
             document.getElementById('fwCountriesCount').textContent = selectedSet.size;
 
-            // Label sopra la griglia: mostra "X paesi (Y visibili)" se filtro attivo
+            // Label above the grid: shows "X countries (Y visible)" if a filter is active
             const labelEl = document.getElementById('fwGridLabel');
             const filterActive = q.length > 0 || __fwOnlySelected;
             if (labelEl && total > 0) {
@@ -11959,7 +11988,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 {{t:cf.intro.html}}
         </p>
 
-        <!-- ===== Form: aggiungi / modifica account ===== -->
+        <!-- ===== Form: add / edit account ===== -->
         <div class="card mb-4 cf-form-card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="fas fa-plus-circle me-2" aria-hidden="true"></i><span id="cfFormTitle">{{t:cf.addTitle}}</span></span>
@@ -12008,7 +12037,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
         </div>
 
-        <!-- ===== Lista account ===== -->
+        <!-- ===== Account list ===== -->
         <div class="card mb-4 cf-account-card">
             <div class="card-header"><i class="fas fa-key me-2" aria-hidden="true"></i>{{t:dns.cfConfigured}}</div>
             <div class="card-body">
@@ -12018,7 +12047,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             </div>
         </div>
 
-        <!-- ===== Certificato del server mail (Mail Hostname) ===== -->
+        <!-- ===== Mail server certificate (Mail Hostname) ===== -->
         <div class="card mb-4" data-style="border-left:4px solid #198754">
             <div class="card-header"><i class="fas fa-server me-2" aria-hidden="true"></i>{{t:cf.mailCert}}</div>
             <div class="card-body">
@@ -12032,7 +12061,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         </div>
 
 
-        <!-- ===== Aiuto: come creare il token ===== -->
+        <!-- ===== Help: how to create the token ===== -->
         <div class="card mb-4 cf-help">
             <div class="card-header"><i class="fas fa-circle-question me-2" aria-hidden="true"></i>{{t:cf.howToken}}</div>
             <div class="card-body small">
@@ -12057,8 +12086,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         let __cfCsrf = '';
         try { const el = document.getElementById('csrf_token'); if (el && el.value) __cfCsrf = el.value; } catch (e) {}
 
-        // Mail Hostname pre-compilato lato server (stesso meccanismo di /settings e /ssl)
-        // Dalla pagina, non scritto dal server dentro lo script: gli script sono file (reperto 178).
+        // Mail Hostname pre-filled server side (same mechanism as /settings and /ssl)
+        // From the page, not written by the server inside the script: the scripts are files (finding 178).
         const __cfMailHostname = document.getElementById('pageMailHostname').value;
 
         let cfState = { accounts: [], mailServer: null };
@@ -12120,7 +12149,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         function cfRenderMailServer() {
             const box = document.getElementById('cfMailServerBox');
             const ms = cfState.mailServer || {};
-            // Hostname: usa il valore pre-compilato lato server; fallback all'API
+            // Hostname: use the value pre-filled server side; fallback to the API
             let host = __cfMailHostname;
             if (!host || host === t('server.notConfigured') || host.indexOf('{{') === 0) host = ms.hostname || '';
             if (!host) {
@@ -12171,7 +12200,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         function cfAssignMailServer(accountId) {
             cfPost({ action: 'assign_mailserver', account_id: parseInt(accountId, 10) || 0 }, data => {
                 if (!data.success) { panelSay('danger', '✗ ' + (data.message || data.error || t('cf.assignFailed'))); }
-                else if (data.message) { /* feedback silenzioso, lo stato si aggiorna sotto */ }
+                else if (data.message) { /* silent feedback, the state updates below */ }
                 cfLoad();
             });
         }
@@ -12438,12 +12467,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         .upd-log { background:#1a1d21; color:#e9ecef; padding:10px; border-radius:6px;
                    max-height:420px; overflow:auto; white-space:pre-wrap; font-size:0.78rem; }
         .upd-cell { font-size:0.85rem; }
-        /* La tabella dei pacchetti dentro la sua scheda (reperto 185): le etichette lunghe della
-           sicurezza ("vulnerabile · fix non ancora nel tuo catalogo") vanno a capo invece di allargarla
-           fino a nascondere i pulsanti, a 1280 px. */
+        /*
+         * The packages table inside its card (finding 185): the long security labels
+         * ("vulnerable - fix not yet in your catalogue") wrap instead of widening it
+         * until the buttons are hidden, at 1280 px.
+         */
         .pk-table .badge { white-space: normal; text-align: start; }
-        /* Il testo di una riga di «Aggiorna il server» accanto alla sua icona, anche quando e' lungo: senza base zero
-           andava a capo sotto l'icona (reperto 207). */
+        /*
+         * The text of a row of "Update the server" next to its icon, even when it is long: without a zero flex
+         * basis it wrapped under the icon (finding 207).
+         */
         .uc-head > .flex-grow-1 { flex: 1 1 0; min-width: 0; }
         """;
     }
@@ -12507,8 +12540,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             <h2><i class="fas fa-stethoscope me-2" aria-hidden="true"></i>{{t:diag.title}}</h2>
             <p class="text-muted">{{t:diag.intro}}</p>
 
-            <!-- Controlla tutto (reperto 199): un pulsante, i controlli che leggono uno dopo l'altro, e l'elenco con prima
-                 quello da guardare, ognuno col suo passo dopo. Le schede qui sotto restano per i dettagli. -->
+            <!-- Check everything (finding 199): one button, the checks reading one after the other, and the list with
+                 first what needs looking at, each with its next step. The cards below remain for the details. -->
             <section class="card mb-4 border-primary" id="diag-all" aria-labelledby="diagAllTitle">
                 <div class="card-header">
                     <h3 class="h5 mb-0" id="diagAllTitle"><i class="fas fa-list-check me-2" aria-hidden="true"></i>{{t:diag.all.title}}</h3>
@@ -12541,7 +12574,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 </div>
             </div>
 
-            <!-- I registri su disco dei lavori guidati (reperto 196): restano dopo i riavvii, e dicono cosa e' successo. -->
+            <!-- The on-disk logs of the guided jobs (finding 196): they survive restarts, and say what happened. -->
             <div class="card mb-4" id="jr-card">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span><i class="fas fa-book me-2" aria-hidden="true"></i><strong>{{t:jr.title}}</strong>
@@ -12733,11 +12766,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     /** The packages table and the update window of a package. */
     private static String getUpdatesScriptPackages() {
         return """
-        // ================= il quadro dei pacchetti =================
-        // Una tabella sola: versione installata e del catalogo, vulnerabilita' con il verdetto
-        // sulla correzione, blocco, e su ogni riga i pulsanti per agire. Si carica da sola.
+        // ================= the packages overview =================
+        // A single table: installed and catalogue version, vulnerabilities with the verdict
+        // on the fix, lock, and on every row the buttons to act. It loads by itself.
 
-        /* Il verdetto sulla vulnerabilita', in una parola e un colore. */
+        /* The verdict on the vulnerability, in one word and a color. */
         function pkVulnBadge(v) {
             if (!v) return '<span class="text-muted small">' + escHtml(t('pkgs.noVuln')) + '</span>';
             const m = { 'fixed-by-upgrade': ['bg-warning text-dark', 'pkgs.v.fixable'],
@@ -12748,7 +12781,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return '<span class="badge ' + m[0] + '"><i class="fas fa-bug me-1" aria-hidden="true"></i>' + escHtml(t(m[1])) + '</span>';
         }
 
-        /* Il dettaglio di una riga: il perche' della vulnerabilita', le CVE, l'avvertenza. */
+        /* The details of a row: the reason for the vulnerability, the CVEs, the warning. */
         function pkDetails(p) {
             let h = '';
             if (p.vuln) {
@@ -12767,8 +12800,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return h;
         }
 
-        // Per impostazione si vedono solo i pacchetti che chiedono qualcosa: un aggiornamento, una vulnerabilita', un
-        // pacchetto del server di posta senza protezione (reperto 193). Gli altri, a richiesta.
+        // By default only the packages that ask for something are shown: an update, a vulnerability, a
+        // mail server package without protection (finding 193). The others, on request.
         let pkShowAll = false, pkLast = null;
 
         function pkNeedsAttention(p) { return p.update || !!p.vuln || (p.stack && !p.locked); }
@@ -12788,9 +12821,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             let r;
             try { r = await updApi('packages_overview'); }
             catch (e) { r = { success: false, error: t('common.networkError', { message: e.message }) }; }
-            // Un'altra lettura della pagina e' in corso: si riprova fra poco invece di mostrare un errore.
+            // Another read of the page is in progress: we retry shortly instead of showing an error.
             if (!r.success && r.error === t('up.busy')) { setTimeout(pkOverview, 1500); return; }
-            // «Aggiorna il server» usa questa lettura invece di rifarla (reperto 186): e' la piu' pesante.
+            // "Update the server" uses this read instead of redoing it (finding 186): it is the heaviest.
             document.dispatchEvent(new CustomEvent('upd:packages', { detail: r }));
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 small mb-0">' + escHtml(r.error || t('common.unknownError')) + '</div>'; return; }
             pkLast = r;
@@ -12821,9 +12854,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             shown.forEach((p, i) => {
                 const detailInfo = pkDetails(p);
                 let actionItems = '';
-                // Gli aggiornamenti si fanno dalla riga «Pacchetti» qui sopra, un passo alla volta (reperto 202): qui
-                // nessun pulsante che la ripeta. Si dice solo quando un pacchetto ha una procedura sua (Java del
-                // pannello, Roundcube: la loro riga in «Aggiorna il server») o e' trattenuto, col motivo nei dettagli.
+                // Updates are done from the "Packages" row above, one step at a time (finding 202): here
+                // no button that repeats it. We only say so when a package has its own procedure (the panel's
+                // Java, Roundcube: their row in "Update the server") or is held back, with the reason in the details.
                 const own = p.javaFlow || (proc.roundcube && p.name === proc.roundcubePackage);
                 if (p.update && own) {
                     actionItems += '<span class="badge bg-info text-dark me-1 mb-1">' + escHtml(t('pkgs.ownProcedure')) + '</span>';
@@ -12849,7 +12882,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             });
             h += '</tbody></table></div>';
             if (!shown.length) {
-                // Niente da fare: la tabella vuota non direbbe niente, la frase si'.
+                // Nothing to do: the empty table would say nothing, the sentence does.
                 h = h.substring(0, h.indexOf('<div class="table-responsive">'));
                 h += '<p class="small mb-2"><i class="fas fa-circle-check text-success me-1" aria-hidden="true"></i>'
                    + escHtml(tn('pkgs.allQuiet', (r.packages || []).length)) + '</p>';
@@ -12881,7 +12914,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pkOverview();
         }
 
-        // ---------- l'aggiornamento di un pacchetto, in una finestra ----------
+        // ---------- updating a package, in a dialog ----------
         let pkUpd = { name: '', signature: '', job: '' };
 
         function pkUpdModal() { return bootstrap.Modal.getOrCreateInstance(document.getElementById('pkUpdModal')); }
@@ -12975,8 +13008,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         document.addEventListener('DOMContentLoaded', () => { if (document.getElementById('pk-body')) pkOverview(); });
 
-        // Un lavoro sui pacchetti che non e' arrivato in fondo (pannello ucciso, riavvio, corrente
-        // mancata): l'avviso sta in cima finche' un amministratore non dice di aver controllato.
+        // A package job that did not get to the end (panel killed, restart, power
+        // outage): the notice stays at the top until an administrator says they have checked.
         async function updInterrupted() {
             const el = document.getElementById('upd-interrupted');
             if (!el) return;
@@ -12989,11 +13022,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + (r.retrying ? ' ' + escHtml(t('up.retrying')) : '') + '</div>';
             }
             if (r.notice) {
-                // Completato e verificato dal pannello: da leggere, non un allarme. Altrimenti resta l'avviso giallo.
+                // Completed and verified by the panel: to be read, not an alarm. Otherwise the yellow notice stays.
                 h += '<div class="alert ' + (r.notice.completed ? 'alert-success' : 'alert-warning') + '" role="alert"><strong>'
                    + escHtml(t(r.notice.completed ? 'up.interruptedCompletedTitle' : 'up.interruptedTitle')) + '</strong>'
                    + '<p class="mb-2">' + escHtml(r.notice.text) + '</p>';
-                // La reinstallazione interrotta: tornare al server di prima con un pulsante, non con bectl in una shell.
+                // The interrupted reinstallation: back to the previous server with a button, not with bectl in a shell.
                 if (r.notice.reinstall && r.notice.wayBack) {
                     h += '<button type="button" class="btn btn-sm btn-danger me-2" id="upd-way-back-btn" data-on-click="updWayBack(this.dataset.name)" data-name="'
                        + escHtml(r.notice.wayBack) + '">'
@@ -13006,7 +13039,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updWayBack(name) {
-            // La finestra del pannello, non quella del browser (reperto 197).
+            // The panel's dialog, not the browser's (finding 197).
             if (!await panelAsk({ title: t('gd.wayBackTitle'), text: t('up.wayBackConfirm', { name: name }), confirm: t('gd.wayBackGo') })) return;
             const el = document.getElementById('upd-interrupted');
             const r = await updApi('reinstall_way_back', { name: name, confirm: 'GO BACK' });
@@ -13036,8 +13069,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
     private static String getUpdatesScript1() {
         return """
-        // I verdetti arrivano come codici: il server e la pagina li confrontano cosi' come sono,
-        // e il testo da leggere si sceglie qui, nella lingua della pagina.
+        // The verdicts arrive as codes: the server and the page compare them as they are,
+        // and the text to read is chosen here, in the language of the page.
         function updVerdict(v) {
             return ({
                 "LEVEL_BEHIND": t('up.vLevelBehind'),
@@ -13066,16 +13099,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         function updBadge(level) {
             if (level === 'ok') return '<span class="badge upd-badge-ok">OK</span>';
-            // "NOTA" e' diverso da "VERIFICA": VERIFICA chiede qualcosa a chi legge, NOTA
-            // racconta soltanto cosa fara' la procedura. Messe sotto la stessa etichetta
-            // gialla, una riga puramente descrittiva sembra una cosa rimasta da fare.
+            // "NOTE" is different from "CHECK": CHECK asks something of the reader, NOTE
+            // only tells what the procedure will do. Put under the same yellow
+            // label, a purely descriptive line looks like something left to do.
             if (level === 'note') return '<span class="badge upd-badge-info">' + escHtml(t('up.bNote')) + '</span>';
             if (level === 'review') return '<span class="badge upd-badge-warn">' + escHtml(t('up.bCheck')) + '</span>';
             return '<span class="badge upd-badge-stop">' + escHtml(t('up.bWait')) + '</span>';
         }
 
 """ + resource("pages/standards-watch.js") + resource("pages/web-diagnostics.js") + resource("pages/service-users.js") + resource("pages/cf-ranges.js") + """
-        // ---------- compatibilita' ----------
+        // ---------- compatibility ----------
         async function updCompat() {
             const el = document.getElementById('upd-compat');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingConfig')) + '';
@@ -13108,8 +13141,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="alert alert-success py-2 small"><i class="fas fa-check me-1" aria-hidden="true"></i>'
                    + escHtml(t(d.on24 ? 'up.dvOn24' : 'up.dvCompatOk')) + '</div>';
             } else {
-                // La 2.4 come pacchetto a parte (dovecot24 nel ramo latest): niente ci passa da solo, e il pacchetto
-                // installato resta sulla 2.3. E' da preparare, non un guasto: giallo, e lo si dice (reperto 212).
+                // Version 2.4 as a separate package (dovecot24 in the latest branch): nothing moves to it by itself,
+                // and the installed package stays on 2.3. It is something to prepare, not a fault: yellow, and we
+                // say so (finding 212).
                 const sep = (d.repoPackages || []).find(p => /^dovecot2[4-9]$/.test(p.name));
                 if (!d.breakingUpgradeAvailable && sep) {
                     h += '<div class="alert alert-warning py-2 small mb-2">' + t('up.dvNotReady.html') + ' '
@@ -13136,7 +13170,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '<div id="where24-body" class="mt-2"></div>';
             }
 
-            // ---------- Postfix: non una rottura annunciata, ma la rete di sicurezza ----------
+            // ---------- Postfix: not an announced breakage, but the safety net ----------
             const pf = r.postfix || {};
             h += '<hr><h6 class="mb-1"><i class="fas fa-paper-plane me-1"></i>Postfix</h6>';
             if (!pf.present) {
@@ -13187,8 +13221,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     ap.forEach(x => { h += '<tr class="upd-cell"><td><code class="small">' + updEsc(x) + '</code></td></tr>'; });
                     h += '</tbody></table></div>';
                 }
-                // Doppia condizione di proposito: il campo puo' mancare (e' gia' successo),
-                // ma il contenuto vuoto e' un fatto che si vede sempre.
+                // Double condition on purpose: the field may be missing (it has happened already),
+                // but empty content is a fact that is always visible.
                 if (!pf.cleanCheck && pf.check) {
                     h += '<div class="small mb-1"><strong>postfix check:</strong></div>'
                        + '<pre class="upd-log mb-2">' + updEsc(pf.check) + '</pre>';
@@ -13198,7 +13232,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<div class="small text-muted mb-2"><strong>' + escHtml(t('up.source')) + '</strong> ' + updEsc(pf.source) + '</div>';
             }
 
-            // ---------- Rspamd: cambia il comportamento, non la sintassi ----------
+            // ---------- Rspamd: the behaviour changes, not the syntax ----------
             const rs = r.rspamd || {};
             h += '<hr><h6 class="mb-1"><i class="fas fa-shield-halved me-1"></i>Rspamd</h6>';
             if (!rs.present) {
@@ -13313,14 +13347,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             planPoll(r.jobId, el, pre);
         }
 
-        // ---------- coerenza con i predefiniti ----------
-        // ---------- riavvio del server ----------
-        // Il riavvio si fa dalla finestra del pannello (Layout, panel-reboot.js): la stessa della striscia
-        // in alto, con cosa si ferma e quando (reperto 185).
+        // ---------- consistency with the defaults ----------
+        // ---------- server restart ----------
+        // The restart is done from the panel's dialog (Layout, panel-reboot.js): the same one as the strip
+        // at the top, with what stops and when (finding 185).
         function rebPrev() { panelRebootOpen(); }
 
 
-        // ---------- avvio automatico del pannello (rc.d) ----------
+        // ---------- automatic start of the panel (rc.d) ----------
         async function rcPrev() {
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.preparingScript')) + '';
@@ -13338,19 +13372,19 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   + '</tbody></table></div>'
                   + '<div class="alert alert-info py-2">' + t('up.rcNotStarted.html') + '</div>'
                   + '<button class="btn btn-warning" data-on-click="rcGo()"><i class="fas fa-power-off me-1" aria-hidden="true"></i>' + escHtml(t('up.installEnable')) + '</button>'
-                  // La via d'uscita si mostra solo quando c'e' qualcosa da togliere: un
-                  // pulsante che, premuto, risponde "non c'e' niente da fare" e' un pulsante
-                  // che non andava mostrato.
+                  // The way out is shown only when there is something to remove: a
+                  // button that, when pressed, answers "there is nothing to do" is a button
+                  // that should not have been shown.
                   + ((r.exists || r.enabled)
                      ? ' <button class="btn btn-outline-danger ms-2" data-on-click="rcRemovePrev()"><i class="fas fa-trash me-1" aria-hidden="true"></i>' + escHtml(t('up.removeAutostart')) + '</button>'
                      : '');
             el.innerHTML = h;
         }
 
-        // ---------- togliere l'avvio automatico ----------
-        // Esiste perche' un pulsante che si puo' solo premere in un verso non e' una scelta:
-        // e' una porta a senso unico. Il pannello web ha la rimozione da stamattina, qui
-        // mancava.
+        // ---------- removing the automatic start ----------
+        // It exists because a button that can only be pressed one way is not a choice:
+        // it is a one-way door. The web panel has had the removal since this morning, here
+        // it was missing.
         async function rcRemovePrev() {
             const el = document.getElementById('os-body'), pre = document.getElementById('os-log');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingRemove')) + '';
@@ -13405,7 +13439,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 + updEsc(r.note) + '</div>';
         }
 
-        // ---------- sistema operativo ----------
+        // ---------- operating system ----------
         async function osState() {
             const el = document.getElementById('os-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingOs')) + '';
@@ -13427,13 +13461,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   + '</td></tr></tbody></table></div>'
                   + '<p class="small text-muted">' + escHtml(t('up.sourceIs', { source: r.supportSource })) + '</p>';
             if (r.updatableWithFreebsdUpdate) {
-                // Cosa c'e' di pronto e il pulsante che lo installa (reperto 185). Prima la scheda sapeva
-                // solo scaricare: le patch restavano li', e lo diceva una riga di freebsd-update.
+                // What is ready and the button that installs it (finding 185). Before, the card could only
+                // download: the patches stayed there, and a line of freebsd-update said so.
                 h += r.readyExist
                     ? '<div class="alert alert-warning py-2"><strong>' + escHtml(t('osp.ready', { target: r.readyTarget || '?' })) + '</strong>'
                       + (r.readyKernel ? ' ' + escHtml(t('osp.readyKernel')) : '') + '</div>'
                     : '<div class="alert alert-secondary py-2">' + escHtml(t('osp.nothingReady')) + '</div>';
-                // Qui solo lo stato: le patch si installano da Aggiornamenti, che guida un passo alla volta (reperto 196).
+                // Only the state here: the patches are installed from "Updates", which guides one step at a time
+                // (finding 196).
                 if (r.readyExist) h += '<p class="small mb-0">' + escHtml(t('osu.installFromUpdates')) + '</p>';
             } else {
                 h += '<div class="alert alert-info py-2 mb-0">' + updEsc(r.updatesNote) + '</div>';
@@ -13441,8 +13476,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // Le patch: una conferma, l'avanzamento in una riga, il registro chiuso sotto, e alla fine l'esito con il passo
-        // che resta (il riavvio, se il kernel e' cambiato) e il suo pulsante (reperto 196).
+        // The patches: a confirmation, the progress in one line, the log collapsed below, and at the end the
+        // outcome with the step that remains (the restart, if the kernel changed) and its button (finding 196).
         async function osInstall() {
             const yes = await panelAsk({ title: t('osp.askTitle'), text: t('osp.askText'), confirm: t('osp.askGo') });
             if (!yes) return;
@@ -13455,7 +13490,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             planPoll(r.jobId, el, pre, osPatchOutcome);
         }
 
-        // ---------- eliminazione di un ambiente di avvio ----------
+        // ---------- deleting a boot environment ----------
         async function beDelete(entryName) {
             if (!await updConfirm(t('up.confirmBeDelete', { name: entryName }), t('up.wDelete'))) return;
             const el = document.getElementById('up-body');
@@ -13483,8 +13518,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                   ? '<div class="alert alert-success py-2 mb-0">' + escHtml(t('up.allStillThere')) + '</div>'
                   : '<div class="alert alert-danger py-2 mb-0">' + escHtml(t('up.somethingOff')) + '</div>');
 
-            // Gli ambienti di avvio meritano una tabella loro: "bectl list" e' illeggibile
-            // per chi non sa gia' cosa sta guardando.
+            // Boot environments deserve a table of their own: "bectl list" is unreadable
+            // for those who do not already know what they are looking at.
             const be = r.environments;
             if (be && be.success) {
                 h += '<h6 class="mt-4 mb-1">' + escHtml(t('up.yourWaysBack')) + '</h6>'
@@ -13520,7 +13555,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         """
         + """
 
-        // ---------- rapporto del sistema ----------
+        // ---------- system report ----------
         async function repGen() {
             const st = document.getElementById('rep-state'), pre = document.getElementById('rep-text');
             st.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.collecting')) + '';
@@ -13540,7 +13575,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 await navigator.clipboard.writeText(textValue);
                 document.getElementById('rep-state').innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>' + escHtml(t('fw.copied')) + '</span>';
             } catch (e) {
-                // Senza HTTPS o senza permesso la clipboard non c&#39;e&#39;: si seleziona a mano.
+                // Without HTTPS or without permission there is no clipboard: the text is selected by hand.
                 const el = document.getElementById('rep-text');
                 const sel = window.getSelection(); const rg = document.createRange();
                 rg.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(rg);
@@ -13552,7 +13587,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
     private static String getUpdatesScript1b() {
         return """
-        // L'esito arriva come codice del server; qui il nome nella lingua della pagina.
+        // The outcome arrives as a server code; here the name in the language of the page.
         function updOutcome(v) {
             return ({ consistent: t('up.eConsistent'), DIVERGES: t('up.eDiverges'), MIXED: t('up.eMixed'), absent: t('up.eMissing'),
                       'port-beside-base': t('up.ePortBeside') })[v] || v;
@@ -13583,9 +13618,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 let dependentsHtml = '';
                 (x.dependents || []).forEach(d => {
                     const q = d.requiredBy || [];
-                    // "si puo' togliere" era una conclusione, non una misura: %rn dice solo chi lo
-                    // DICHIARA. Qui si dice esattamente questo, e per il port openssl si offre la
-                    // misura vera, che guarda cosa i processi vivi hanno davvero aperto.
+                    // "it can be removed" was a conclusion, not a measurement: %rn only says who
+                    // DECLARES it. Here we say exactly this, and for the openssl port we offer the
+                    // real measurement, which looks at what the live processes have really opened.
                     dependentsHtml += '<br><span class="small ' + (q.length ? 'text-muted' : 'text-muted') + '">'
                          + '<code>' + updEsc(d.pkgName) + '</code> '
                          + (q.length
@@ -13610,7 +13645,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // ---------- chi usa davvero il port openssl ----------
+        // ---------- who really uses the openssl port ----------
         async function sslUsage() {
             const el = document.getElementById('ssl-usage');
             el.innerHTML = '<div class="alert alert-secondary py-2 mb-0"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>'
@@ -13619,16 +13654,16 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; return; }
             const cls = r.verdict === 'NOBODY_USES' ? 'success'
                       : (r.verdict === 'IN_USE_NOW' || r.verdict === 'REQUIRED') ? 'danger' : 'warning';
-            // "COMMAND_IS_ITS" e "UNDETERMINED" restano gialli: non sono un divieto,
-            // ma nemmeno un via libera.
+            // "COMMAND_IS_ITS" and "UNDETERMINED" stay yellow: they are not a prohibition,
+            // but not a green light either.
             let h = '<div class="alert alert-' + cls + ' py-2 mb-2">'
                   + '<strong>' + updEsc(updVerdict(r.verdict)) + '</strong> &mdash; ' + updEsc(r.explanation) + '</div>'
                   + '<div class="alert alert-info py-2 small mb-2">' + updEsc(r.note) + '</div>'
                   + (r.whyItIsHere
                      ? '<div class="alert alert-secondary py-2 small mb-2"><strong>' + escHtml(t('up.whyHere')) + '</strong> '
                        + updEsc(r.whyItIsHere) + '</div>' : '');
-            // Le librerie sono meta' della domanda. L'altra meta' e' il comando: un "openssl x509"
-            // dura millisecondi e procstat non lo coglie mai, ma gira lo stesso.
+            // The libraries are half of the question. The other half is the command: an "openssl x509"
+            // lasts milliseconds and procstat never catches it, but it runs all the same.
             const bn = r.binaries || [];
             if (bn.length || r.commandInPath) {
                 h += '<h6 class="mt-2 mb-1">' + t('up.opensslCommand.html') + '</h6>'
@@ -13689,11 +13724,11 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // ---------- schede di procedura: chiuse finche' non servono ----------
-        // Le schede di DIAGNOSTICA restano sempre aperte: si leggono a colpo d'occhio.
-        // Le PROCEDURE no: hanno finito il loro lavoro e tornano utili solo quando ci sara'
-        // una nuova release, una nuova Roundcube, una nuova JVM. Tenerle spalancate significa
-        // scorrere ogni volta attraverso cose gia' fatte per arrivare a quelle da leggere.
+        // ---------- procedure cards: closed until they are needed ----------
+        // The DIAGNOSTICS cards always stay open: they are read at a glance.
+        // The PROCEDURES do not: they have finished their job and become useful again only when there is
+        // a new release, a new Roundcube, a new JVM. Keeping them wide open means
+        // scrolling every time through things already done to reach the ones to read.
         const PROCEDURE = ['proc-release', 'proc-python', 'proc-jvm',
                            'proc-roundcube', 'proc-mysql'];
 
@@ -13713,10 +13748,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (!c) return;
                 let wanted = null;
                 try { wanted = localStorage.getItem('mp-' + id); } catch (e) { }
-                // Chiuse per impostazione predefinita: si aprono se le hai aperte tu.
+                // Closed by default: they open if you opened them.
                 procOpen(id, wanted === 'open');
-                // E si aprono DA SOLE quando hanno qualcosa da dire: premere un pulsante
-                // dell'intestazione scrive nel corpo, e un corpo nascosto non si vedrebbe.
+                // And they open BY THEMSELVES when they have something to say: pressing a button
+                // in the header writes into the body, and a hidden body would not be seen.
                 try {
                     new MutationObserver(() => {
                         if (c.style.display === 'none') procOpen(id, true);
@@ -13731,7 +13766,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             procInit();
         }
 
-        // ---------- il tempo massimo di analisi: e' mai stato raggiunto? ----------
+        // ---------- the maximum analysis time: has it ever been reached? ----------
         async function rsTimeout() {
             const el = document.getElementById('rs-timeout');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.readingRspamdLog')) + '';
@@ -13777,7 +13812,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // ---------- alzare il livello di compatibilita' di Postfix ----------
+        // ---------- raising the Postfix compatibility level ----------
         async function pfRaise(levelValue, opened) {
             const noticeText = opened > 0 ? tn('up.paramsChange', opened) : t('up.paramsSame');
             if (!await updConfirm(t('up.confirmLevel', { level: levelValue, note: noticeText }), t('up.wRaise'))) return;
@@ -13795,9 +13830,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
             if (r.log) h += '<pre class="upd-log mt-1">' + updEsc(r.log) + '</pre>';
             el.innerHTML = h;
-            // La scheda sopra mostra ancora lo stato di PRIMA: lasciarla li' significa
-            // far leggere "il livello e' indietro, 3.6" sotto un esito che dice 3.11.
-            // Si rilegge tutto, e l'esito appena mostrato si riattacca in fondo.
+            // The card above still shows the state from BEFORE: leaving it there means
+            // having people read "the level is behind, 3.6" under an outcome that says 3.11.
+            // Everything is re-read, and the outcome just shown is attached again at the bottom.
             if (r.success) {
                 const outcomeValue = h;
                 await updCompat();
@@ -13806,7 +13841,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             }
         }
 
-        // ---------- anteprima della configurazione Dovecot 2.4 ----------
+        // ---------- preview of the Dovecot 2.4 configuration ----------
         async function where24() {
             const el = document.getElementById('where24-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.buildingPreview')) + '';
@@ -13840,7 +13875,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // ---------- ambiente del pannello ----------
+        // ---------- panel environment ----------
         async function envCheck() {
             const el = document.getElementById('env-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.checkingPath')) + '';
@@ -13875,7 +13910,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // ---------- prima di togliere un pacchetto ----------
+        // ---------- before removing a package ----------
         async function rmCandidates() {
             const el = document.getElementById('rim-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingUndeclared')) + '';
@@ -13913,7 +13948,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // Il riquadro che spiega l'esito, riusato sia qui sia dentro la scheda di openssl.
+        // The box that explains the outcome, reused both here and inside the openssl card.
         function rmBox(r) {
             const cls = r.verdict === 'PANEL_DOES_NOT_USE' ? 'success'
                       : r.verdict === "USES_NO_SPARE" ? 'danger'
@@ -13947,12 +13982,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 });
                 h += '</tbody></table></div>';
             }
-            // Il pulsante compare SOLO dove la misura dice che si puo': non si offre un'azione
-            // che il controllo appena fatto rifiuterebbe.
+            // The button appears ONLY where the measurement says it can be done: we do not offer an action
+            // that the check just made would refuse.
             if (r.pkgName && (r.verdict === 'PANEL_DOES_NOT_USE'
                              || r.verdict === 'NAMES_NOT_THEIRS')) {
-                // L'analisi approfondita viene PRIMA del pulsante che toglie, ed e' l'unica che
-                // guarda gli script su disco: quelli girano dopo, e il jar non li contiene.
+                // The in-depth analysis comes BEFORE the button that removes, and it is the only one that
+                // looks at the scripts on disk: those run later, and the jar does not contain them.
                 h += '<button class="btn btn-sm btn-outline-primary mb-1 me-1" data-pkg="' + escHtml(r.pkgName) + '" data-on-click="rmDeep(this.dataset.pkg)">'
                    + '<i class="fas fa-microscope me-1" aria-hidden="true"></i>' + escHtml(t('up.deepScan')) + '</button>'
                    + '<button class="btn btn-sm btn-outline-danger mb-1" data-pkg="' + escHtml(r.pkgName) + '" data-on-click="rmRemove(this.dataset.pkg)">'
@@ -13972,7 +14007,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                                      : '<span class="text-danger small">' + updEsc(r.error) + '</span>';
         }
 
-        // ---------- analisi approfondita: dove si nominano davvero i suoi file ----------
+        // ---------- in-depth analysis: where its files are really named ----------
         async function rmDeep(entryName) {
             const el = document.getElementById('rim-prof-' + entryName);
             el.innerHTML = '<div class="alert alert-secondary py-2 small mb-0">'
@@ -14022,7 +14057,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // ---------- togliere un pacchetto, dal pannello ----------
+        // ---------- removing a package, from the panel ----------
         async function rmRemove(entryName) {
             if (!await updConfirm(t('up.confirmRemovePkg', { pkg: entryName }), t('up.wRemove'))) return;
             const el = document.getElementById('rim-esec-' + entryName);
@@ -14046,7 +14081,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // ---------- librerie mancanti ----------
+        // ---------- missing libraries ----------
         async function libsCheck() {
             const el = document.getElementById('libs-body');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.checkingLibs')) + '';
@@ -14100,7 +14135,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 h += '<h6 class="small mt-2">' + escHtml(t('up.fileIntegrity')) + '</h6>'
                    + '<pre class="upd-log mt-1">' + updEsc(r.hasConflicts) + '</pre>';
             }
-            // Se ci sono due client e uno non serve a nessuno, si puo' ripulire.
+            // If there are two clients and one is of no use to anyone, it can be cleaned up.
             const cl = (r.mysqlPackages || []).filter(p => /-client$/.test(p.name)).map(p => p.name);
             if (cl.length > 1) {
                 const correct = cl.find(n => (r.dependents || []).some(d =>
@@ -14116,12 +14151,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             el.innerHTML = h;
         }
 
-        // La scheda del piano di manutenzione non c'e' piu': «Aggiorna il server» e' quella lista, e ogni riga fa la sua
-        // cosa sul posto (reperto 193). Resta planPoll, con cui le procedure seguono i loro lavori.
+        // The maintenance plan card is gone: "Update the server" is that list, and every row does its own
+        // thing in place (finding 193). What remains is planPoll, with which the procedures follow their jobs.
         async function planPoll(id, el, pre, after) {
             const s = await updApi('job_status', { jobId: id });
-            // Il pannello non conosce piu' il lavoro: si e' riavviato nel frattempo. Prima la pagina chiedeva per sempre;
-            // adesso lo dice, e dice dove sta il registro, che su disco resta (reperto 196).
+            // The panel no longer knows the job: it restarted in the meantime. Before, the page asked forever;
+            // now it says so, and says where the log is, which stays on disk (finding 196).
             if (s.unknown) {
                 el.innerHTML = '<div class="alert alert-warning py-2"><strong>' + escHtml(t('jr.lostTitle')) + '</strong> '
                     + escHtml(t('jr.lostText')) + '</div>'
@@ -14134,12 +14169,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 if (s.job.status === 'completed') {
                     el.innerHTML = '<span class="text-success"><i class="fas fa-check me-1" aria-hidden="true"></i>'
                                  + escHtml(t('up.stepDone', { s: s.job.elapsedSeconds })) + '</span>';
-                    // Chi aspetta riceve il lavoro: l'esito (job.result) e' suo, da mostrare (reperto 197).
+                    // Whoever waits receives the job: the outcome (job.result) is theirs, to show (finding 197).
                     setTimeout(() => (after || (() => ucLoad(true)))(s.job), 1500);
                     return;
                 }
                 if (s.job.status === 'error') {
-                    // Andato male: il messaggio resta a vista (rileggere la scheda lo coprirebbe).
+                    // It went wrong: the message stays in view (re-reading the card would cover it).
                     el.innerHTML = '<div class="alert alert-danger py-2"><strong>' + escHtml(t('up.stepFailed')) + '</strong> '
                                  + updEsc(s.job.errorMessage) + '<br>' + escHtml(t('up.readLogFirst')) + '</div>'
                                  + (document.getElementById('ucList') ? '<button type="button" class="btn btn-sm btn-outline-primary" data-on-click="ucLoad(true)">' + escHtml(t('uc.reread')) + '</button>' : '');
@@ -14154,8 +14189,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
     private static String getUpdatesScript1bb() {
         return """
 
-        // ---------- passaggio Python ----------
-        // ---------- resti della vecchia famiglia Python ----------
+        // ---------- Python migration ----------
+        // ---------- leftovers of the old Python family ----------
         async function pyLeftovers() {
             const el = document.getElementById('py-pre');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(t('up.lookingLeftovers')) + '';
@@ -14175,7 +14210,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + '</td></tr>';
             });
             h += '</tbody></table></div>';
-            // Chi nomina il vecchio interprete fra cio' che RESTA: e' cio' che pkg non sa.
+            // Who names the old interpreter among what REMAINS: it is what pkg does not know.
             const refEl = r.references || {};
             const prob = refEl.issues || [];
             h += '<h6 class="mt-3 mb-1">' + escHtml(t('up.whoRefsOld')) + '</h6>'
@@ -14224,7 +14259,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                 + ' py-2 mb-0">' + escHtml(tn('up.removedN', (r.removed || []).length)) + ' ' + escHtml(t('up.pressLeftoversAgain')) + '</div>';
         }
 
-        // L'impronta del piano letto nella scheda: il lavoro parte solo se il piano ricalcolato e' lo stesso.
+        // The fingerprint of the plan read in the card: the job starts only if the recomputed plan is the same.
         let pySignature = '';
 
         async function pyPre() {
@@ -14251,9 +14286,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             gdFollow('python', 'py-pre', 'py-log-box', 'py-log', r.jobId, t('up.runningKeepOpen'));
         }
 
-        // ---------- aggiornamento della JVM ----------
-        // L'impronta del piano letto nella scheda: l'aggiornamento parte solo se il piano ricalcolato e' lo stesso
-        // (reperto 195: prima pkg aggiornava anche librerie che la pagina non mostrava).
+        // ---------- JVM update ----------
+        // The fingerprint of the plan read in the card: the update starts only if the recomputed plan is the same
+        // (finding 195: before, pkg also updated libraries that the page did not show).
         let jvSignature = '';
 
         async function jvPre() {
@@ -14290,8 +14325,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             pre.textContent = r.text + (r.finished ? '' : '\\n\\n' + t('up.stillRunning'));
         }
 
-        // ---------- aggiornamento Roundcube ----------
-        // ---------- nginx: gli asset della 1.7 passano da static.php ----------
+        // ---------- Roundcube update ----------
+        // ---------- nginx: the 1.7 assets go through static.php ----------
         async function rcNginx() {
             const pre = document.getElementById('rc-log');
             const el = document.getElementById('rc-pre');
@@ -14361,7 +14396,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             gdFollow('roundcube', 'rc-pre', 'rc-log-box', 'rc-log', r.jobId, t('up.upgradingKeepOpen'));
         }
 
-        // ---------- migrazione MySQL 8.4: solo verifica ----------
+        // ---------- MySQL 8.4 migration: check only ----------
         let my84Signature = '';
 
         async function my84Pre() {
@@ -14391,14 +14426,14 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         async function my84Run() {
             if (!await panelAsk({ title: t('gd.myAskTitle'), text: t('up.migrationNote') + '\\n' + gdPlanLines(my84Plan), confirm: t('up.migrate84') })) return;
             const el = document.getElementById('my84-pre');
-            // Il registro nel riquadro DI QUESTA scheda, chiuso sotto: prima finiva in quello del piano, in un'altra
-            // parte della pagina. Un registro che esiste ma non e' dove lo cerchi e' un registro perduto.
+            // The log in the box OF THIS card, collapsed below: before it ended up in the plan's one, in another
+            // part of the page. A log that exists but is not where you look for it is a lost log.
             const r = await updApi('mysql84_migrate', { confirm: 'MIGRATE TO 8.4', signature: my84Signature });
             if (!r.success) { el.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + updEsc(r.error || t('common.failed')) + '</div>'; return; }
             gdFollow('mysql', 'my84-pre', 'my84-log-box', 'my84-log', r.jobId, t('up.migrating'));
         }
 
-        // ---------- passaggio a Dovecot 2.4 (reperto 213) ----------
+        // ---------- switch to Dovecot 2.4 (finding 213) ----------
         let dc24Signature = '', dc24Plan = null;
 
         async function dc24Pre() {
@@ -14421,10 +14456,12 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             gdFollow('dovecot', 'dc24-pre', 'dc24-log-box', 'dc24-log', r.jobId, t('up.dc24Running'));
         }
 
-        // ---------- aggiornamento guidato ----------
+        // ---------- guided update ----------
 
-        /* Le prove su ogni pacchetto che il piano toglie: una sostituzione innocua, o una rimozione
-           che il pannello non esegue (non c'e' modo di confermarla). */
+        /*
+         * The checks on every package the plan removes: a harmless replacement, or a removal
+         * that the panel does not carry out (there is no way to confirm it).
+         */
         function updReplacementsHtml(pn) {
             const rs = (pn && pn.replacements) || [];
             if (!rs.length) return '';
@@ -14446,7 +14483,7 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return h;
         }
 
-        /* Il piano esatto di pkg: ogni pacchetto che cambia, da quale versione a quale. */
+        /* The exact pkg plan: every package that changes, from which version to which. */
         function updPlanHtml(pn, signature) {
             if (!pn) return '';
             if (!pn.measured) {
@@ -14487,9 +14524,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             return h;
         }
 
-        // ---------- protezione pacchetti ----------
-        // La tabella dei pacchetti e' una sola, nell'elenco sotto la riga «Pacchetti» di «Aggiorna il server»
-        // (reperto 202): chi chiedeva di rileggere le protezioni rilegge quella.
+        // ---------- package protection ----------
+        // There is a single packages table, in the list under the "Packages" row of "Update the server"
+        // (finding 202): whoever asked to re-read the protections re-reads that one.
         function updPackages() { pkOverview(); }
 
         async function updLockOne(entryName, doLock) {
@@ -14500,22 +14537,24 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
 
         async function updLockAll(doLock) {
             if (!doLock && !await panelConfirm(t('up.confirmUnlockAll'))) return;
-            // Nel riquadro dell'esito della scheda dei pacchetti: 'upd-packages' non esisteva piu', e il pulsante si
-            // fermava alla prima riga senza dire niente (trovato col controllo degli id, reperto 193).
+            // In the outcome box of the packages card: 'upd-packages' no longer existed, and the button
+            // stopped at the first line without saying anything (found with the id check, finding 193).
             const el = document.getElementById('pk-result');
             el.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>' + escHtml(doLock ? t('up.locking') : t('up.unlocking'));
             const r = await updApi('packages_lock', { lock: doLock, package: '' });
-            // Il pulsante sta anche nella riga «Pacchetti», con l'elenco chiuso (reperto 202): l'errore si dice anche
-            // fuori dall'elenco, dove si vede.
+            // The button is also in the "Packages" row, with the list collapsed (finding 202): the error is also
+            // reported outside the list, where it can be seen.
             if (!r.success) { el.innerHTML = '<span class="text-danger">' + updEsc(r.error) + '</span>'; panelSay('danger', r.error || t('common.failed')); return; }
             el.textContent = '';
             updPackages();
         }
 
-        // ---------- aggiornamenti e vulnerabilita' ----------
-        /* La firma del piano letto nella scheda: si manda al via, e il server esegue quello
-           o niente. Senza, l'aggiornamento dei non protetti era l'unico che partiva alla
-           cieca. Vuota finche' la scheda non e' stata letta: il pulsante lo dice. */
+        // ---------- updates and vulnerabilities ----------
+        /*
+         * The signature of the plan read in the card: it is sent at the start, and the server runs that
+         * or nothing. Without it, the update of the unprotected ones was the only one that started
+         * blindly. Empty until the card has been read: the button says so.
+         */
         let updUnprotectedSignature = '';
         async function updStatus() {
             const el = document.getElementById('upd-status');
@@ -14538,9 +14577,9 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
             if (vuln.length) {
                 h += '<div class="alert alert-danger py-2 small"><strong>' + escHtml(tn('up.vulnPkgs', vuln.length)) + '</strong><ul class="mb-0 mt-1">';
                 vuln.forEach(v => {
-                    // L'intestazione dice lo stesso verdetto del dettaglio: quando c'e' il confronto
-                    // con VuXML, sa se l'aggiornamento basta o no. Il blocco e' un'informazione a
-                    // parte, non un verdetto: il pulsante aggiorna anche un pacchetto bloccato.
+                    // The header states the same verdict as the details: when there is the comparison
+                    // with VuXML, it knows whether the update is enough or not. The lock is a separate
+                    // piece of information, not a verdict: the button also updates a locked package.
                     const vc0 = v.fix;
                     const updatable = vc0 && (vc0.verdict === 'fixed-by-upgrade' || vc0.verdict === 'upgrade-not-enough');
                     h += '<li class="mb-2"><div class="d-flex flex-wrap align-items-center gap-1"><code>' + updEsc(v.name) + '</code>'
@@ -14564,8 +14603,8 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                     if (v.description) {
                         h += '<br><span class="text-muted">' + updEsc(v.description) + '</span>';
                     }
-                    // La domanda vera: la correzione c'e'? La dicono gli intervalli di VuXML
-                    // messi accanto alla versione che il catalogo offre.
+                    // The real question: is the fix there? The VuXML ranges say it,
+                    // placed next to the version the catalogue offers.
                     if (v.fix) h += '<br><span>' + updEsc(v.fix.explanation || '') + '</span>';
                     (v.references || []).forEach(u => {
                         h += '<br><a href="' + updEsc(u) + '" target="_blank" rel="noopener noreferrer" class="small">'
@@ -14612,8 +14651,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
                    + aff.map(p => updEsc(p.name) + (p.locked ? ' (' + escHtml(t('up.locked')) + ')' : '')).join(', ') + '</div>';
             }
 
-            /* Il piano esatto con la sua firma, come nelle altre due schede. L'uscita grezza
-               di pkg resta sotto, ripiegata: e' il dettaglio, non la decisione. */
+            /*
+             * The exact plan with its signature, as in the other two cards. The raw output
+             * of pkg stays below, folded: it is the detail, not the decision.
+             */
             if (r.plan) h += updPlanHtml(r.plan, r.signature);
             h += '<details class="mt-2"><summary class="small text-muted">' + escHtml(t('up.fullSim')) + '</summary>'
                + '<pre class="upd-log mt-2">' + updEsc(r.dryRun) + '</pre></details>';
@@ -14625,8 +14666,10 @@ MIIE...   ← (3) {{t:ssl.mgRoot}}
         }
 
         async function updApply() {
-            /* Senza la firma non si parte: vuol dire che la scheda non e' stata letta, cioe'
-               che nessuno ha visto il piano che si sta per eseguire. */
+            /*
+             * Without the signature nothing starts: it means the card has not been read, that is
+             * that nobody has seen the plan about to be executed.
+             */
             if (!updUnprotectedSignature) { panelSay('warning', t('up.readFirst')); return; }
             if (!await panelConfirm(t('up.confirmApply'))) return;
             const el = document.getElementById('upd-status');

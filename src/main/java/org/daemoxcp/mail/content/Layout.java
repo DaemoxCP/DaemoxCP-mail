@@ -389,7 +389,7 @@ document.querySelectorAll('[data-set-lang-select]').forEach(function (select) {
 (function () {
     var active = document.querySelector('.sidebar-link.active');
     var sidebar = document.getElementById('sidebar');
-    // Solo dove la barra e' fissa e visibile: sul telefono e' chiusa, e scorrere non serve.
+    // Only where the bar is fixed and visible: on the phone it is closed, and scrolling is not needed.
     if (active && sidebar && window.matchMedia('(min-width: 992px)').matches
             && active.offsetTop + active.offsetHeight > sidebar.clientHeight) {
         sidebar.scrollTop = active.offsetTop - sidebar.clientHeight / 2;

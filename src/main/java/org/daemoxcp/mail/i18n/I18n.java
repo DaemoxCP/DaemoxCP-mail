@@ -277,7 +277,7 @@ public final class I18n {
                 return Object.prototype.hasOwnProperty.call(params, name) && params[name] != null ? String(params[name]) : all;
             });
         }
-        // Un testo dentro dell'HTML costruito a mano (innerHTML, un attributo fra virgolette).
+        // A text inside hand-built HTML (innerHTML, an attribute in quotes).
         function escHtml(text) {
             return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -285,13 +285,13 @@ public final class I18n {
         function tn(key, count, params) {
             var values = Object.assign({ n: count }, params || {});
             var category = count === 1 ? 'one' : 'other';
-            try { category = new Intl.PluralRules(window.I18N_LANG).select(count); } catch (e) { /* il browser non lo sa */ }
+            try { category = new Intl.PluralRules(window.I18N_LANG).select(count); } catch (e) { /* the browser does not know it */ }
             var full = key + '.' + category;
             return t(Object.prototype.hasOwnProperty.call(window.I18N, full) ? full : key + '.other', values);
         }
-        // La frase tradotta come nodi: dove c'e' {nome} e params.nome e' un elemento (un <code>
-        // con un percorso, un badge), ci va quell'elemento; il resto e' testo. Cosi' la frase resta
-        // intera nella sua lingua e niente diventa HTML: el.append(...tNodes('chiave', { file: code })).
+        // The translated sentence as nodes: where there is `{nome}` and `params.nome` is an element (a <code>
+        // with a path, a badge), that element goes there; the rest is text. This way the sentence stays
+        // whole in its language and nothing becomes HTML: `el.append(...tNodes('chiave', { file: code }))`.
         function tNodes(key, params) {
             var text = Object.prototype.hasOwnProperty.call(window.I18N, key) ? window.I18N[key] : key;
             var nodes = [], re = /\\{([A-Za-z0-9_]{1,40})\\}/g, last = 0, m;
