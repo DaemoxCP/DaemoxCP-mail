@@ -21,10 +21,10 @@ public class RehearsalCurrentSetup {
         Main.dbManager = new org.daemoxcp.mail.sqli.dataBaseManager();
         String cert = Files.readString(Path.of("/usr/local/etc/ssl/mail/fullchain.pem"));
         String key = Files.readString(Path.of("/usr/local/etc/ssl/mail/privkey.pem"));
-        System.out.println("pannello: " + Main.dbManager.update_panel_config("127.0.0.1", "2096", cert, key, "", "mailpanel-"));
+        System.out.println("panel: " + Main.dbManager.update_panel_config("127.0.0.1", "2096", cert, key, "", "mailpanel-"));
         String err = Main.connectFromConfig();
         System.out.println("MySQL: " + (err == null ? "connesso" : err));
-        System.out.println("amministratore: " + Main.createFirstAdmin("rehearsal-admin", "admin@" + domain, System.out, System.err));
+        System.out.println("administrator: " + Main.createFirstAdmin("rehearsal-admin", "admin@" + domain, System.out, System.err));
         org.daemoxcp.mail.database.MailDatabase db = Main.mailDatabase;
         // The columns that the web panel adds at startup (SSLMailServer.ensureSchemaUpgrades):
         // without them, a mailbox cannot be created.
@@ -47,7 +47,7 @@ public class RehearsalCurrentSetup {
             try (java.sql.PreparedStatement q = db.getConnection().prepareStatement(org.daemoxcp.mail.database.SqlCatalog.UM_ACTIVE_MAILBOX_COUNT)) {
                 q.setString(1, b[0]);
                 try (java.sql.ResultSet rs = q.executeQuery()) {
-                    System.out.println("casella " + b[0] + ": " + (rs.next() && rs.getInt(1) > 0 ? "c'era gia'" : db.addMailbox(id, b[0], b[1], b[2], 1024)));
+                    System.out.println("mailbox " + b[0] + ": " + (rs.next() && rs.getInt(1) > 0 ? "already there" : db.addMailbox(id, b[0], b[1], b[2], 1024)));
                 }
             }
             list.append(b[0]).append(' ').append(b[1]).append('\n');
@@ -56,7 +56,7 @@ public class RehearsalCurrentSetup {
         Files.createDirectories(f.getParent());
         Files.writeString(f, list.toString());
         Files.setPosixFilePermissions(f, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
-        System.out.println("script di avvio: " + org.daemoxcp.mail.system.UpdateManager.panelRcScript(true));
+        System.out.println("start script: " + org.daemoxcp.mail.system.UpdateManager.panelRcScript(true));
         System.exit(0);
     }
 }

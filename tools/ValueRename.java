@@ -71,13 +71,13 @@ public class ValueRename {
             hs.sort(Comparator.comparingInt(Hit::pos).reversed());
             for (Hit h : hs) {
                 String lit = sb.substring(h.pos(), h.end());
-                if (!lit.equals("\"" + h.value() + "\"")) throw new IllegalStateException("testo inatteso " + e.getKey() + "@" + h.pos() + ": " + lit);
+                if (!lit.equals("\"" + h.value() + "\"")) throw new IllegalStateException("unexpected text " + e.getKey() + "@" + h.pos() + ": " + lit);
                 sb.replace(h.pos(), h.end(), "\"" + map.get(h.value()) + "\"");
                 n++;
             }
             Files.writeString(e.getKey(), sb.toString());
         }
-        System.out.println("valori cambiati: " + n + " in " + per.size() + " file");
+        System.out.println("values changed: " + n + " in " + per.size() + " file");
     }
 
     /** What the string is inside: it decides whether it is a code or a placeholder name. */
@@ -92,23 +92,23 @@ public class ValueRename {
                 if (leaf instanceof LiteralTree && mi.getArguments().contains(leaf)) {
                     String m = sel.substring(sel.lastIndexOf('.') + 1);
                     if (mi.getArguments().indexOf(leaf) == 0 && (m.equals("put") || m.startsWith("opt") || m.startsWith("get") || m.equals("has")))
-                        return "SKIP chiave JSON";
-                    if (m.equals("equals") || m.equals("equalsIgnoreCase")) return "confronto";
-                    if (m.equals("put")) return "valore JSON";
-                    return "argomento di " + m;
+                        return "SKIP JSON key";
+                    if (m.equals("equals") || m.equals("equalsIgnoreCase")) return "comparison";
+                    if (m.equals("put")) return "JSON value";
+                    return "argument of " + m;
                 }
                 if (mi.getMethodSelect() instanceof MemberSelectTree ms && ms.getExpression() == leaf
-                        && (ms.getIdentifier().contentEquals("equals") || ms.getIdentifier().contentEquals("equalsIgnoreCase"))) return "confronto";
+                        && (ms.getIdentifier().contentEquals("equals") || ms.getIdentifier().contentEquals("equalsIgnoreCase"))) return "comparison";
             }
             if (t instanceof CaseTree) return "case";
             if (t instanceof ReturnTree) return "return";
-            if (t instanceof VariableTree || t instanceof AssignmentTree) return "assegnazione";
+            if (t instanceof VariableTree || t instanceof AssignmentTree) return "assignment";
             if (t instanceof ConditionalExpressionTree) continue;
             if (t instanceof NewArrayTree) return "array";
-            if (t instanceof BinaryTree) return "concatenazione";
-            if (t instanceof NewClassTree) return "costruttore";
+            if (t instanceof BinaryTree) return "concatenation";
+            if (t instanceof NewClassTree) return "constructor";
             if (t instanceof MethodTree || t instanceof ClassTree) break;
         }
-        return "altro";
+        return "other";
     }
 }

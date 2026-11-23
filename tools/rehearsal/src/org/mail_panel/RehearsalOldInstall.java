@@ -40,15 +40,15 @@ public class RehearsalOldInstall {
             {"pkg install -y dovecot-mysql dovecot-pigeonhole\n", "pkg install -y dovecot-mysql dovecot-pigeonhole-mysql\n"}};
         String after = before;
         for (String[] f : fixes) {
-            if (!after.contains(f[0])) throw new IllegalStateException("riga non trovata nello script: " + f[0].trim());
+            if (!after.contains(f[0])) throw new IllegalStateException("line not found in the script: " + f[0].trim());
             after = after.replace(f[0], f[1]);
         }
         java.nio.file.Files.writeString(script, after);
-        System.out.println("script corretto: mysql84-server, dovecot-pigeonhole-mysql");
+        System.out.println("script corrected: mysql84-server, dovecot-pigeonhole-mysql");
         boolean ok = Main.executeScript("./install_scripts/install_mail_server.sh", "Mail server",
                 "127.0.0.1", "3306", "mailpanel", pwd.toString(), "mailserver", host, webmail, "8443", cert, key, "");
         if (ok) for (String s : new String[]{"postfix", "dovecot", "rspamd", "clamav"}) Main.dbManager.setServiceInstalled(s, true);
-        System.out.println(ok ? "INSTALLAZIONE RIUSCITA" : "INSTALLAZIONE FALLITA");
+        System.out.println(ok ? "INSTALLATION SUCCEEDED" : "INSTALLATION FAILED");
         System.exit(ok ? 0 : 1);
     }
 }

@@ -4825,6 +4825,7 @@
   "server.um.x.reloadedNo": "reloaded: NO",
   "server.um.x.reloadedYes": "reloaded: yes",
   "server.um.x.removalSection": "removal",
+  "server.um.x.relockSection": "locked again",
   "server.um.x.removedPkg": "(removed)",
   "server.um.x.removingPkg": "Removing {pkg}...",
   "server.um.x.repBe": "BOOT ENVIRONMENTS",

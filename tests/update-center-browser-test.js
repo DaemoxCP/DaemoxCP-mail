@@ -92,7 +92,7 @@ function replies(o, st) {
         web_diagnosis: { success: true, plainContents: false, verdict: 'nginx serves only what it should.' },
         defaults_check: { success: true, lines: [{ component: 'OpenSSL', outcome: 'consistent' }] },
         panel_env: { success: true, unreachable: false, absent: false, explanation: 'Every tool is reachable.', tools: [] },
-        // Outgoing port 25 open and the provider's firewall in step with Cloudflare (repertos 245, 246): both fine.
+        // Outgoing port 25 open and the provider's firewall in step with Cloudflare (findings 245, 246): both fine.
         smtp_out: { success: true, state: 'open' },
         provider_firewall: { success: true, state: 'current' },
         jump_continue: { success: true, jobId: 'jump-1' },
@@ -251,15 +251,15 @@ const allErrors = [], allDialogs = [];
     check('when not needed, it is not there', await none.page.$eval('#panelRebootBanner', b => b.hidden));
     await none.page.close();
 
-    console.log('\n== 2. Update the server: one button for everything, the state below (reperto 207) ==');
+    console.log('\n== 2. Update the server: one button for everything, the state below (finding 207) ==');
     await centerReady(page);
     const rows = await page.$$eval('#ucList > li:not([hidden])', lis => lis.map(li => li.querySelector('.uc-head').innerText.replace(/\s+/g, ' ').trim()));
     console.log('    ' + rows.join('\n    '));
     check('four rows: Update everything first, FreeBSD, the packages, restart', rows.length === 4 && /^Update everything/.test(rows[0]));
     check('  no rows of their own for Java and Roundcube: they are steps of Update everything', await page.$$eval('#uc-java, #uc-roundcube', l => l.every(x => x.hidden)));
-    check('  the branch in a card of its own under the card, not a row (reperto 205)', await page.$('#uc-branch') === null
+    check('  the branch in a card of its own under the card, not a row (finding 205)', await page.$('#uc-branch') === null
         && await page.$('section#branch.card #branch-body') !== null && /quarterly/.test(await page.innerText('#branch-body')));
-    check('  one row for the packages, with the list closed under it (reperto 202)', await page.$('#uc-stack') === null && await page.$('#packages') === null
+    check('  one row for the packages, with the list closed under it (finding 202)', await page.$('#uc-stack') === null && await page.$('#packages') === null
         && await page.$eval('#uc-packages #pk-list', d => !d.open));
     const steps = await page.$$eval('#uc-all .uc-head li', l => l.map(x => x.textContent));
     console.log('    steps: ' + steps.join(' | '));
@@ -273,7 +273,7 @@ const allErrors = [], allDialogs = [];
         && /2 security fixes/.test(rows[2]) && /1 package has a known vulnerability that the update does not fix yet/.test(rows[2]));
     check('  only the restart keeps its button, it is not an update', /needs a restart/.test(rows[3])
         && await page.$$eval('#ucList .uc-head button', b => b.map(x => x.getAttribute('data-on-click')).join(',')) === 'ucEverything(),panelRebootOpen()');
-    check('no newer release: nothing about moving to one, no button for it (reperto 196)', !/available|Move to/.test(rows[1])
+    check('no newer release: nothing about moving to one, no button for it (finding 196)', !/available|Move to/.test(rows[1])
         && await page.$('[data-on-click="ucRelease()"]') === null);
     check('one read each of packages and branch when the page opens (the card reuses the cards\' reads)',
         calls.filter(c => c.action === 'packages_overview').length === 1 && calls.filter(c => c.action === 'branch_status').length === 1);
@@ -384,7 +384,7 @@ const allErrors = [], allDialogs = [];
     check('  nothing started', !bl.calls.some(c => c.action === 'os_upgrade_prepare') && !await bl.page.$('#panelAskModal.show'));
     await bl.page.close();
 
-    console.log('\n== 4d. Roundcube is a step of Update everything (reperto 207) ==');
+    console.log('\n== 4d. Roundcube is a step of Update everything (finding 207) ==');
     const rc = await open(ctx, 'updates', 'en', { roundcube: true, noPatches: true, reboot: 'none' });
     allErrors.push(rc.errors); allDialogs.push(rc.dialogs);
     await centerReady(rc.page);
@@ -510,7 +510,7 @@ const allErrors = [], allDialogs = [];
     check('the failed job: its log, from the operation logs', dg.calls.some(c => c.action === 'journal_read' && c.name === '20261109-000000-os-patch__osp-1.log'));
     await dg.page.close();
 
-    console.log('\n== 10. A restart scheduled: the panel only reads (reperto 200) ==');
+    console.log('\n== 10. A restart scheduled: the panel only reads (finding 200) ==');
     const lk = await open(ctx, 'updates', 'en', { scheduled: true, rebootAt: Date.now() + 7 * 60000, noPatches: true });
     allErrors.push(lk.errors); allDialogs.push(lk.dialogs);
     await centerReady(lk.page);
@@ -552,7 +552,7 @@ const allErrors = [], allDialogs = [];
         /Package update \(dovecot\)/.test(await bz.page.innerText('#panelRebootBody')) && await bz.page.$eval('#panelRebootGo', b => b.hidden));
     await bz.page.close();
 
-    console.log('\n== 11. A job in progress, started elsewhere (reperto 206) ==');
+    console.log('\n== 11. A job in progress, started elsewhere (finding 206) ==');
     const busy = await open(ctx, 'updates', 'en', { turn: true });
     allErrors.push(busy.errors); allDialogs.push(busy.dialogs);
     await centerReady(busy.page);
@@ -572,7 +572,7 @@ const allErrors = [], allDialogs = [];
     check('  and the card reads itself again', busy.calls.filter(c => c.action === 'packages_overview').length > readsBefore);
     await busy.page.close();
 
-    console.log('\n== 12. The database restarting: the page waits and tries again (reperto 209) ==');
+    console.log('\n== 12. The database restarting: the page waits and tries again (finding 209) ==');
     // On the real server MySQL restarted inside "Update everything": for 9 seconds every request got 401, the card lost
     // the job in progress and filled with errors. Now the server says 503 "database", and the page waits.
     const db = await open(ctx, 'updates', 'en');
@@ -593,7 +593,7 @@ const allErrors = [], allDialogs = [];
         && /Lists updated/.test(await db.page.innerText('#ucOutcome')));
     await db.page.close();
 
-    console.log("\n== 13. The panel's Java being updated, the page reloaded meanwhile (reperto 210) ==");
+    console.log("\n== 13. The panel's Java being updated, the page reloaded meanwhile (finding 210) ==");
     // On the real server the page was reloaded while the Java script worked: it said "1 step to do: the Java" and a
     // warning about a job "that did not finish", and nothing of what was happening.
     const jv = await open(ctx, 'updates', 'en', { javaTurn: true });
@@ -614,7 +614,7 @@ const allErrors = [], allDialogs = [];
     if (shots) await jv.page.locator('#update-center').screenshot({ path: path.join(shots, 'update-center-java-running.png') });
     await jv.page.close();
 
-    console.log('\n== 14. The move to Dovecot 2.4, guided (reperto 213) ==');
+    console.log('\n== 14. The move to Dovecot 2.4, guided (finding 213) ==');
     // 2.4 is a separate package in the latest branch: nothing moves to it by itself. The row says so and prepares the move.
     const dc = await open(ctx, 'updates', 'en', { dovecot24: true, noPatches: true, reboot: 'none' });
     allErrors.push(dc.errors); allDialogs.push(dc.dialogs);

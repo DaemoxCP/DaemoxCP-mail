@@ -25,7 +25,7 @@ stat -f "%Sp %Su:%Sg" "$C"; sha256 -q "$C"
 line=$(grep -n "db_dsnw" "$C" | grep -v "^[0-9]*: *//")
 user=$(echo "$line" | sed -n "s#.*mysql://\([^:]*\):.*#\1#p")
 pass=$(echo "$line" | sed -n "s#.*mysql://[^:]*:\([^@]*\)@.*#\1#p")
-who="un'altra"; [ "$pass" = "$PANEL" ] && who="quella del pannello"; [ -n "$RC" ] && [ "$pass" = "$RC" ] && who="quella della webmail (roundcube_db_password)"
+who="another one"; [ "$pass" = "$PANEL" ] && who="the panel's"; [ -n "$RC" ] && [ "$pass" = "$RC" ] && who="the webmail's (roundcube_db_password)"
 echo "db_dsnw: user $user, password: $who"
 echo "== MySQL accounts"
 sql "SELECT CONCAT(user,'@',host) FROM mysql.user WHERE user IN ('mailpanel','roundcube') ORDER BY 1"

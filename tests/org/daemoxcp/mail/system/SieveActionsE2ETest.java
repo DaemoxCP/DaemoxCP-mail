@@ -131,10 +131,10 @@ public class SieveActionsE2ETest {
                 && countAll(ALICE, s) == 1);
         check("ManageSieve: the own script deactivated", manageSieve(ALICE, "own", null));
 
-        System.out.println("\n== 9. a move to a folder that is not there yet (reperto 229) ==");
+        System.out.println("\n== 9. a move to a folder that is not there yet (finding 229) ==");
         Rules fresh = new Rules().filter("new-" + RUN, "move", "SieveNew");
         String today = GENERATOR.generateSieveScript(0, fresh);
-        check("written as the panel wrote it before reperto 229 (fileinto without :create)",
+        check("written as the panel wrote it before finding 229 (fileinto without :create)",
                 GENERATOR.saveSieveScript(ALICE, SieveForcedKeepTest.before229(today)));
         s = deliver(CAROL, ALICE, "new-" + RUN + "-before");
         check("before: no folder made, the message stays in INBOX (the fault this fixes)",

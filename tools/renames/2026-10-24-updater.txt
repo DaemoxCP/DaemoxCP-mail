@@ -1,8 +1,8 @@
-# Mappa della rinomina r26 del 24/10/2026 (ramo mac/nomi-in-inglese). Calcolata e applicata
-# sull'albero di main a fffa43b, con:
+# Map of the r26 rename of 24/10/2026. Computed and applied
+# on the tree of main at fffa43b, with:
 #   java tools/JavaRename.java rename target/freebsd-mail-panel-1.0.jar tools/renames/2026-10-24-updater.txt
-# Le righe member: valgono su qualunque ramo. Le righe local: portano il numero di riga di
-# quell'albero: su un altro ramo vanno rigenerate.
+# The member: lines hold on any branch. The local: lines carry the line number of
+# that tree: on another branch they must be made again.
 member:org.mail_panel.system.AuditReportTest#cEPkg hasPkg
 member:org.mail_panel.system.AuditReportTest#problemiDichiarati declaredProblems
 member:org.mail_panel.system.AuditReportTest#salta skip

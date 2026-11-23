@@ -121,7 +121,7 @@ public class DovecotMoveTest {
         check("lmtp:inet:127.0.0.1:24", "127.0.0.1:24".equals(join(UpdateManager.lmtpTarget("lmtp:inet:127.0.0.1:24"))));
         check("lmtp:localhost:24 -> 127.0.0.1", "127.0.0.1:24".equals(join(UpdateManager.lmtpTarget("lmtp:localhost:24"))));
         check("lmtp:inet:[::1]:24", "::1:24".equals(join(UpdateManager.lmtpTarget("lmtp:inet:[::1]:24"))));
-        check("the panel's socket, relative to the queue (reperto 234)", java.nio.file.Path.of("/var/spool/postfix/private/dovecot-lmtp")
+        check("the panel's socket, relative to the queue (finding 234)", java.nio.file.Path.of("/var/spool/postfix/private/dovecot-lmtp")
                 .equals(UpdateManager.lmtpSocket("lmtp:unix:private/dovecot-lmtp", "/var/spool/postfix"))
                 && java.nio.file.Path.of("/var/run/x.sock").equals(UpdateManager.lmtpSocket("lmtp:unix:/var/run/x.sock", "/var/spool/postfix")));
         check("  not a socket, a path that climbs out, a queue that is not a path: none", UpdateManager.lmtpSocket("lmtp:inet:127.0.0.1:24", "/q") == null

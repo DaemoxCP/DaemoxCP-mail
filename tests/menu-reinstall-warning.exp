@@ -1,5 +1,5 @@
 #!/usr/bin/expect -f
-# The confirmation of menu item 4 says what gets deleted (reperto 177): the mail, the domains, the
+# The confirmation of menu item 4 says what gets deleted (finding 177): the mail, the domains, the
 # mailboxes, the aliases and the panel's accounts with passkeys and sessions. Then Cancel
 # (preselected) and leaving the menu: the reinstallation must not start. On a test clone, from a
 # copy of the panel.

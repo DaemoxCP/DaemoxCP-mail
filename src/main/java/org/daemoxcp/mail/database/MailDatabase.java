@@ -670,7 +670,7 @@ public class MailDatabase {
     /**
      * Ensure cloudflare_accounts table + domains.cloudflare_account_id column exist.
      * Also migrates the legacy token (panel_settings.cloudflare_api_token) by creating an
-     * account `Account principale` (main account) and linking it to all existing domains.
+     * account `Main account` and linking it to all existing domains.
      */
     public void ensureCloudflareAccountsSchema() {
         try (Statement stmt = getConnection().createStatement()) {
@@ -693,7 +693,7 @@ public class MailDatabase {
                 if (cnt.next() && cnt.getInt(1) == 0) {
                     try (PreparedStatement ins = getConnection().prepareStatement(SqlCatalog.MAIL_ENSURE_CLOUDFLARE_ACCOUNTS_SCHEMA_5,
                         Statement.RETURN_GENERATED_KEYS)) {
-                        ins.setString(1, "Account principale");
+                        ins.setString(1, "Main account");
                         ins.setString(2, org.daemoxcp.mail.security.CloudflareTokens.seal(legacyToken));
                         ins.executeUpdate();
                         ResultSet gk = ins.getGeneratedKeys();

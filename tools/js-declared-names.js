@@ -7,10 +7,10 @@ const decl = new Map();
 function add(n, k) { const key = n + '\t' + k; decl.set(key, (decl.get(key) || 0) + 1); }
 function walk(sf) {
   const visit = node => {
-    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) && node.name) add(node.name.text, 'funzione');
-    else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) add(node.name.text, 'variabile');
-    else if (ts.isParameter(node) && ts.isIdentifier(node.name)) add(node.name.text, 'parametro');
-    else if (ts.isBindingElement(node) && ts.isIdentifier(node.name)) add(node.name.text, 'variabile');
+    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) && node.name) add(node.name.text, 'function');
+    else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) add(node.name.text, 'variable');
+    else if (ts.isParameter(node) && ts.isIdentifier(node.name)) add(node.name.text, 'parameter');
+    else if (ts.isBindingElement(node) && ts.isIdentifier(node.name)) add(node.name.text, 'variable');
     ts.forEachChild(node, visit);
   };
   visit(sf);

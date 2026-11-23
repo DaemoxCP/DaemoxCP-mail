@@ -33,4 +33,4 @@ by = collections.Counter()
 for (f, v), c in counts.items(): by[v] += c
 for v in mp: print(f"  {by[v]:3}  {v!r} -> {mp[v]!r}   {', '.join(f'{f}:{c}' for (f, w), c in sorted(counts.items()) if w == v)}")
 missing = [v for v in mp if not by[v]]
-print(f"valori: {len(mp)}, cambiati: {sum(by.values())}{' (a secco)' if dry else ''}; mai trovati: {missing}")
+print(f"values: {len(mp)}, changed: {sum(by.values())}{' (dry run)' if dry else ''}; never found: {missing}")

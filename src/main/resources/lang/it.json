@@ -4825,6 +4825,7 @@
   "server.um.x.reloadedNo": "ricaricato: NO",
   "server.um.x.reloadedYes": "ricaricato: sì",
   "server.um.x.removalSection": "rimozione",
+  "server.um.x.relockSection": "riprotezione",
   "server.um.x.removedPkg": "(rimosso)",
   "server.um.x.removingPkg": "Rimuovo {pkg}...",
   "server.um.x.repBe": "AMBIENTI DI AVVIO",

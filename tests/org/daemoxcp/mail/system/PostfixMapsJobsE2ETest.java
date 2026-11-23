@@ -239,7 +239,7 @@ public class PostfixMapsJobsE2ETest {
         check(label + "the text is as it was" + (withExtra ? "" : " (that is, not there)"),
                 withExtra ? Files.readString(Path.of(SOURCE)).equals(TEXT) : !Files.exists(Path.of(SOURCE)));
         check(label + "the cache is deleted", !Files.exists(Path.of(CACHE + ".lmdb")));
-        check(label + "Postfix gira", sh("postfix status; echo $?").trim().endsWith("0"));
+        check(label + "Postfix runs", sh("postfix status; echo $?").trim().endsWith("0"));
         check(label + "fakeshadow protected again as before", flow.equals("unprotected") || locked().contains(FAKE));
     }
 

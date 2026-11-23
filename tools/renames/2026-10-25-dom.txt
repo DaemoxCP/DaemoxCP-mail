@@ -1,4 +1,4 @@
-# Id del DOM, classi CSS, id dei passi della manutenzione, nomi delle foto delle prove, 25/10/2026
+# DOM ids, CSS classes, ids of the maintenance steps, names of the tests' screenshots, 25/10/2026
 aAliasTitolo aAliasTitle
 aCasellaModal aMailboxModal
 aCasellaTitolo aMailboxTitle

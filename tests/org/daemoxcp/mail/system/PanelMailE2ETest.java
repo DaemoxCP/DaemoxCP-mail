@@ -72,7 +72,7 @@ public class PanelMailE2ETest {
             boolean sent;
             try { LoginCodes.mailer.send(to, m); sent = true; }
             catch (Exception e) { sent = false; System.out.println("  " + e.getMessage()); }
-            check(kind + ": Postfix l'ha accettato", sent);
+            check(kind + ": accepted by Postfix", sent);
             Path got = waitForSubject(maildir, m.subject(), before);
             check(kind + ": arrived in the mailbox", got != null);
             if (got == null) continue;

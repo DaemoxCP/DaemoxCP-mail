@@ -24,18 +24,18 @@ for lang in ("it", "en"):
     out = collections.OrderedDict()
     for k, v in d.items():
         nk = keys.get(k, k)
-        if nk != k: counts[f"chiavi {lang}"] += 1
+        if nk != k: counts[f"keys {lang}"] += 1
         if isinstance(v, str):
             names = PH.findall(v)
             finals = [ph.get(n, n) for n in names]
             if len(set(finals)) < len(set(names)):
-                problems.append(f"{lang}:{k}: due segnaposto sullo stesso nome {names}")
+                problems.append(f"{lang}:{k}: two placeholders on the same name {names}")
             def r(m):
                 n = m.group(1)
-                if n in ph: counts[f"segnaposto {lang}"] += 1; return "{" + ph[n] + "}"
+                if n in ph: counts[f"placeholders {lang}"] += 1; return "{" + ph[n] + "}"
                 return m.group(0)
             v = PH.sub(r, v)
-        if nk in out: problems.append(f"{lang}: chiave doppia {nk}")
+        if nk in out: problems.append(f"{lang}: duplicate key {nk}")
         out[nk] = v
     if not dry:
         with open(p, "w", encoding="utf-8") as f:
@@ -64,10 +64,10 @@ def js_placeholders(text, where):
         obj = text[m.end() - 1:i + 1]
         # only the first level: the objects nested inside the values stay
         def r_key(mm):
-            counts["segnaposto js " + where] += 1
+            counts["placeholders js " + where] += 1
             return mm.group(1) + ph[mm.group(2)] + mm.group(3)
         def r_short(mm):
-            counts["segnaposto js abbreviati " + where] += 1
+            counts["placeholders js abbreviated " + where] += 1
             return mm.group(1) + ph[mm.group(2)] + ": " + mm.group(2) + mm.group(3)
         new = OBJKEY.sub(r_key, obj)
         new = SHORT.sub(r_short, new)
@@ -82,17 +82,17 @@ for f in sorted(files):
     t = open(f, encoding="utf-8", errors="replace").read()
     def r_q(m):
         if m.group(1).lstrip("\\") != m.group(3).lstrip("\\"): return m.group(0)
-        counts["chiavi nel codice"] += 1
+        counts["keys in the code"] += 1
         return m.group(1) + keys[m.group(2)] + m.group(3)
     # with an empty key map the alternation is empty and would match the empty string
     t2 = QK.sub(r_q, t) if keys else t
-    t2 = t2 if not keys else TK.sub(lambda m: (counts.update(["chiavi {{t:}}"]) or "{{t:" + keys[m.group(1)] + "}}"), t2)
+    t2 = t2 if not keys else TK.sub(lambda m: (counts.update(["keys {{t:}}"]) or "{{t:" + keys[m.group(1)] + "}}"), t2)
     if f.endswith((".js", ".html")) or f.endswith(".java"):
-        t2 = js_placeholders(t2, "pagine" if not f.endswith(".java") else "nel java")
+        t2 = js_placeholders(t2, "pages" if not f.endswith(".java") else "in the java")
     if t2 != t:
         changed += 1
         if not dry: open(f, "w", encoding="utf-8").write(t2)
-print(f"file di codice cambiati: {changed}{' (a secco)' if dry else ''}")
+print(f"code files changed: {changed}{' (dry run)' if dry else ''}")
 for k, v in sorted(counts.items()): print(f"  {k}: {v}")
-for p in problems: print("  PROBLEMA", p)
+for p in problems: print("  PROBLEM", p)
 sys.exit(1 if problems else 0)

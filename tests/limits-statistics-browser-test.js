@@ -79,7 +79,7 @@ async function serve(route) {
             limits = limits.filter(x => x.id !== body.id);
             return json({ success: true });
         }
-        return json({ success: false, error: 'Azione sconosciuta.' });
+        return json({ success: false, error: 'Unknown action.' });
     }
     if (p === '/api/mailboxes') {
         return json({ success: true, mailboxes: [{ id: 11, email: 'info@example.com' }, { id: 12, email: XSS + '@example.com' }] });

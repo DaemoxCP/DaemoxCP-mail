@@ -1,4 +1,4 @@
-# Codici di stato (valori), 24/10/2026
+# Status codes (values), 24/10/2026
 aggiorna upgrade
 installa install
 rimuove remove
@@ -68,7 +68,7 @@ aggiornato updated
 attende-riavvio awaiting-restart
 attende-riavvio-finale awaiting-final-restart
 troppi-giri too-many-rounds
-# Azioni dell'API
+# API actions
 cf_intervalli cf_intervals
 configura_tutto configure_all
 confronto_pf pf_comparison
@@ -87,7 +87,7 @@ sorveglianza_cambi watch_changes
 ssl_uso ssl_usage
 verifica_filtro verify_filter
 web_diagnosi web_diagnosis
-# Gettoni di conferma
+# Confirmation tokens
 CREA CREATE
 ELIMINA DELETE
 CAMBIA CHANGE

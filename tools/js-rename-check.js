@@ -16,19 +16,19 @@ function tokens(code) {
 }
 function scripts(html) { const r = []; const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g; let m; while ((m = re.exec(html))) r.push(m[1]); return r; }
 let bad = 0, pages = 0, renamed = 0;
-const problem = s => { if (bad++ < 25) console.log('NON TORNA ' + s); };
+const problem = s => { if (bad++ < 25) console.log('DOES NOT MATCH ' + s); };
 // the two folders must have the same pages, and at least one: with nothing in front nothing is checked
 const listA = fs.readdirSync(before).filter(f => f.endsWith('.html')).sort(), listB = fs.readdirSync(after).filter(f => f.endsWith('.html')).sort();
-if (!listA.length) problem('nessuna pagina in ' + before);
-if (listA.join() !== listB.join()) problem('le pagine non sono le stesse: ' + listA.length + ' prima, ' + listB.length + ' dopo');
+if (!listA.length) problem('no page in ' + before);
+if (listA.join() !== listB.join()) problem('the pages are not the same: ' + listA.length + ' before, ' + listB.length + ' after');
 for (const f of listA.filter(f => listB.includes(f))) {
   const A = fs.readFileSync(path.join(before, f), 'utf8'), B = fs.readFileSync(path.join(after, f), 'utf8');
   pages++;
   const sa = scripts(A), sb = scripts(B);
-  if (sa.length !== sb.length) { problem(f + ': numero di script ' + sa.length + ' -> ' + sb.length); continue; }
+  if (sa.length !== sb.length) { problem(f + ': number of scripts ' + sa.length + ' -> ' + sb.length); continue; }
   // the markup outside the scripts
   const ma = A.replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '<script/>'), mb = B.replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, '<script/>');
-  if (onRename(ma) !== mb) problem(f + ': il markup e\' cambiato fuori dagli on*=');
+  if (onRename(ma) !== mb) problem(f + ': the markup changed outside the on*=');
   for (let i = 0; i < sa.length; i++) {
     const ta = tokens(sa[i]), tb = tokens(sb[i]);
     if (ta.length !== tb.length) { problem(f + '#' + i + ': token ' + ta.length + ' -> ' + tb.length); continue; }
@@ -39,19 +39,19 @@ for (const f of listA.filter(f => listB.includes(f))) {
     const oldIds = new Set(ta.filter(t => t[0] === ts.SyntaxKind.Identifier && !isPropKey(t[2], t[1])).map(t => t[1]));
     for (let k = 0; k < ta.length; k++) {
       const [ka, xa, pa] = ta[k], [kb, xb] = tb[k];
-      if (ka !== kb) { problem(f + '#' + i + ' token ' + k + ': tipo ' + ts.SyntaxKind[ka] + ' -> ' + ts.SyntaxKind[kb]); break; }
+      if (ka !== kb) { problem(f + '#' + i + ' token ' + k + ': kind ' + ts.SyntaxKind[ka] + ' -> ' + ts.SyntaxKind[kb]); break; }
       if (ka === ts.SyntaxKind.Identifier) {
         if (xa !== xb) {
           renamed++;
-          if (map.get(xa) !== xb) { problem(f + '#' + i + ': ' + xa + ' -> ' + xb + ' non e\' nella mappa'); break; }
-          if (oldIds.has(xb) && !map.has(xb)) { problem(f + '#' + i + ': ' + xa + ' -> ' + xb + ' cattura un nome che c\'era gia\''); break; }
+          if (map.get(xa) !== xb) { problem(f + '#' + i + ': ' + xa + ' -> ' + xb + ' is not in the map'); break; }
+          if (oldIds.has(xb) && !map.has(xb)) { problem(f + '#' + i + ': ' + xa + ' -> ' + xb + ' captures a name that already existed'); break; }
         } else if (map.has(xa)) {
           // left with the old name: it is fine only if it is a property key (data)
           const isProp = (ts.isPropertyAccessExpression(pa) && pa.name.getText() === xa) || ts.isPropertyAssignment(pa);
-          if (!isProp) { problem(f + '#' + i + ': ' + xa + ' rimasto col nome vecchio'); break; }
+          if (!isProp) { problem(f + '#' + i + ': ' + xa + ' left with the old name'); break; }
         }
         if (!isPropKey(pa, xa)) {
-          if (back.has(xb) && back.get(xb) !== xa) { problem(f + '#' + i + ': due nomi diversi diventano ' + xb); break; }
+          if (back.has(xb) && back.get(xb) !== xa) { problem(f + '#' + i + ': two different names become ' + xb); break; }
           back.set(xb, xa);
         }
       } else {
@@ -61,5 +61,5 @@ for (const f of listA.filter(f => listB.includes(f))) {
     }
   }
 }
-console.log((bad ? 'VERIFICA FALLITA: ' + bad + ' problemi' : 'VERIFICA: ' + pages + ' pagine, stesso JavaScript a meno di ' + renamed + ' identificatori rinominati'));
+console.log((bad ? 'CHECK FAILED: ' + bad + ' problems' : 'CHECK: ' + pages + ' pages, same JavaScript except for ' + renamed + ' identifiers renamed'));
 process.exit(bad ? 1 : 0);

@@ -1,4 +1,4 @@
-# Nomi Python delle reti e degli strumenti, 25/10/2026
+# Python names of the safety nets and the tools, 25/10/2026
 BUSTA ENVELOPE
 CAMEL_AMMESSI ALLOWED_CAMEL
 CASO CASE

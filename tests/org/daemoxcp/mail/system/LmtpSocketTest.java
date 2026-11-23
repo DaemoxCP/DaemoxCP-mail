@@ -216,7 +216,7 @@ public class LmtpSocketTest {
             check("  the next run: DONE (" + r.detail() + ")", r.outcome() == LmtpSocket.Outcome.DONE && k.moved() && k.mailFlows());
         }
 
-        System.out.println("\n== 7. A reload that takes effect late (reperto 240)");
+        System.out.println("\n== 7. A reload that takes effect late (finding 240)");
         for (String v : new String[]{"2.3", "2.4"}) {
             Machine s = "2.4".equals(v) ? new Machine(String.format(AROUND, LmtpSocket.OLD24), MAIN24)
                     : new Machine(String.format(AROUND, LmtpSocket.OLD23), MAIN23);

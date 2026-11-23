@@ -26,4 +26,4 @@ for f in sorted(files):
     # a hyphenated prefix before ' " ` $ : the lookahead above excludes it if a letter follows
     if t2 != t and not dry: open(f, "w", encoding="utf-8").write(t2)
 for k in mp: print(f"  {counts[k]:3} {k} -> {mp[k]}")
-print("mai trovati:", [k for k in mp if not counts[k]])
+print("never found:", [k for k in mp if not counts[k]])

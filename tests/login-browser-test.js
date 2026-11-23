@@ -28,6 +28,8 @@ const { chromium } = require('playwright');
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+// The Italian page is checked against the texts of it.json, never written here.
+const IT = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'resources', 'lang', 'it.json'), 'utf8'));
 const csp = require('./browser-csp');
 
 const dir = process.argv[2];
@@ -328,7 +330,7 @@ async function shot(page, name) {
         const small = await phone.newPage();
         await small.goto(BASE + '/index');
         check('on a phone, in Italian: no horizontal scroll', await small.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
-            && (await small.locator('#btnSendCode').innerText()).includes('Mandami un codice'));
+            && (await small.locator('#btnSendCode').innerText()).includes(IT['login.sendCode']));
         await shot(small, 'login-phone-it');
         check('no JavaScript errors on any page', errors.length === 0);
         if (errors.length) console.log(errors.join('\n'));
