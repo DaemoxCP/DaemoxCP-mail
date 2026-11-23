@@ -125,7 +125,8 @@ It is **careful**. The panel never changes anything it cannot check, and it says
 - Apple Mail configuration profiles (Mac, iPhone, iPad) and Thunderbird autoconfig: clients set themselves up.
   Tested with Apple Mail on macOS on a production server: the profile sets up the account, and mail is sent and
   received. An iPhone set up by hand with the settings in [Mail programs](#mail-programs) receives and sends too.
-  The profile on iPhone and iPad, and Thunderbird, have not been tried with a real client yet.
+  On a real iPhone the signed profile shows as verified, with the mail name as the signer. Thunderbird has not been
+  tried with a real client yet.
   The profile is signed with the mail server's certificate once that is the Let's Encrypt one, so Apple devices show
   it as verified; before, it is not signed, shows as not verified and installs all the same. The window says which.
 
@@ -672,7 +673,8 @@ settings:
   **Password**: the mailbox's password.
 - **Apple Mail** (Mac, iPhone, iPad): on *Mailboxes*, the mailbox's *Client configuration* button (the phone icon),
   tab *iPhone/Mac*, **Download the profile**. Open it on the device and the account sets itself up. Tested on macOS. It is signed with the mail
-  server's certificate when that is the Let's Encrypt one, and Apple devices show it as verified; with the
+  server's certificate when that is the Let's Encrypt one, and Apple devices show it as verified (seen on a real
+  iPhone); with the
   installation's own certificate it is not signed, shows as not verified and installs all the same. On an iPhone, the settings above entered by hand work
   too: tested, receiving and sending.
 - **Thunderbird** finds the settings by itself from the mail address, through the autoconfig records that *Set up
