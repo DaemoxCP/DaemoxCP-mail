@@ -89,14 +89,15 @@ check "the panel started separated ($STATE)" "$(is "$STATE" separated)"
 WARN=$(printf '%s' "$SEGMENT" | grep 'WARNING' | head -3)
 check "the start said nothing alarming ($WARN)" "$(is "$WARN" "")"
 ROOT_PID=$(cat /var/run/daemoxcp_mail.pid)
-WEB_PID=$(cat $RUN/web.pid 2>/dev/null)
-SUP_PID=$(cat $RUN/web-supervisor.pid 2>/dev/null)
+WEB_PID=$(cat $RUN/web/web.pid 2>/dev/null)
+SUP_PID=$(cat $RUN/web/web-supervisor.pid 2>/dev/null)
 check "the root part runs as root ($ROOT_PID)" "$(is "$(ps -o user= -p "$ROOT_PID" | tr -d ' ')" root)"
 check "the web part runs as daemoxcp_mail ($WEB_PID: $(ps -o user= -o command= -p "$WEB_PID"))" \
     "$(has "$(ps -o user= -o command= -p "$WEB_PID")" "daemoxcp_mail")"
 check "  and it is java --web-part" "$(has "$(ps -o command= -p "$WEB_PID")" "--web-part")"
-check "its supervisor is daemon(8), as root ($(ps -o user= -o command= -p "$SUP_PID"))" \
+check "its supervisor is daemon(8) ($(ps -o user= -o command= -p "$SUP_PID"))" \
     "$(has "$(ps -o user= -o command= -p "$SUP_PID")" "daemon: daemoxcp-mail-web[")"
+check "  and it runs as daemoxcp_mail, not root" "$(is "$(ps -o user= -p "$SUP_PID" | tr -d ' ')" daemoxcp_mail)"
 LISTEN=$(sockstat -46l -p $PORT | awk 'NR > 1 { print $1, $3 }' | sort -u)
 check "only the web part listens on $PORT ($LISTEN)" "$(is "$LISTEN" "daemoxcp_mail $WEB_PID")"
 ROOT_LISTEN=$(sockstat -46l | awk -v p="$ROOT_PID" '$3 == p')
@@ -106,7 +107,9 @@ echo
 echo "== 2. Files =="
 check "$RUN: $(mode $RUN)" "$(is "$(mode $RUN)" "drwxr-x--- root:daemoxcp_mail")"
 check "the socket: $(mode $RUN/root.sock)" "$(is "$(mode $RUN/root.sock)" "srw-rw---- root:daemoxcp_mail")"
-check "the pid files are the supervisor's: $(mode $RUN/web.pid)" "$(has "$(mode $RUN/web.pid)" "-rw------- root:")"
+check "the web part's run folder is its own: $(mode $RUN/web)" "$(is "$(mode $RUN/web)" "drwxr-x--- daemoxcp_mail:daemoxcp_mail")"
+check "the pid files are the supervisor's, daemoxcp_mail's: $(mode $RUN/web/web.pid)" "$(has "$(mode $RUN/web/web.pid)" "daemoxcp_mail:")"
+check "no pidfile left in root's folder" "$(is "$(ls $RUN/web.pid $RUN/web-supervisor.pid 2>/dev/null)" "")"
 E=/usr/local/etc/daemoxcp-mail
 check "$E: $(mode $E)" "$(is "$(mode $E)" "drwxr-x--- root:daemoxcp_mail")"
 check "panel-secrets.properties: $(mode $E/panel-secrets.properties)" "$(is "$(mode $E/panel-secrets.properties)" "-rw-r----- root:daemoxcp_mail")"
@@ -137,7 +140,7 @@ for f in $E/root-secrets.properties $E/master.key $E/firewall.json /var/db/daemo
     as_web /bin/test -r "$f"; r=$?
     check "daemoxcp_mail cannot read $f" "$(is $r 1)"
 done
-for f in $E/panel-secrets.properties $E/master.key $E $PANEL/database/daemoxcp-mail.db $PANEL/database $RUN $RUN/web.pid $JAR; do
+for f in $E/panel-secrets.properties $E/master.key $E $PANEL/database/daemoxcp-mail.db $PANEL/database $RUN $RUN/root.sock $JAR; do
     as_web /bin/test -w "$f"; r=$?
     check "daemoxcp_mail cannot write $f" "$(is $r 1)"
 done
@@ -340,7 +343,7 @@ echo
 echo "== 9. Planted: the root part killed with -9 =="
 restart
 check "separated ($STATE)" "$(is "$STATE" separated)"
-OLD_WEB=$(cat $RUN/web.pid)
+OLD_WEB=$(cat $RUN/web/web.pid)
 kill -9 "$(cat /var/run/daemoxcp_mail.pid)"
 sleep 2
 check "the web part is still there, alone ($OLD_WEB)" "$(has "$(ps -o command= -p "$OLD_WEB")" "--web-part")"

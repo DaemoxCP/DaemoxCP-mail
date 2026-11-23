@@ -64,8 +64,21 @@ public class PanelSeparationTest {
         System.out.println("\n== 2. The daemon(8) line ==");
         List<String> cmd = PanelSeparation.command("/usr/local/openjdk25/bin/java", "/home/panel/daemoxcp-mail-1.0.jar");
         String line = String.join(" ", cmd);
-        check("daemon runs the web part as daemoxcp_mail (" + line + ")", cmd.get(0).equals("/usr/sbin/daemon")
-                && line.contains(" -u daemoxcp_mail ") && line.contains(" -r ") && line.contains(" -H "));
+        check("daemon(8) itself is started as daemoxcp_mail, without a shell (" + line + ")",
+                line.startsWith("/usr/sbin/chroot -u daemoxcp_mail -g daemoxcp_mail -G daemoxcp_mail / /usr/bin/env HOME="
+                        + PanelSeparation.HOME + " USER=daemoxcp_mail SHELL=" + PanelSeparation.SHELL + " /usr/sbin/daemon ")
+                && line.contains(" -r ") && line.contains(" -H "));
+        check("  so it does not change user itself: no -u for daemon(8)", !line.substring(line.indexOf("/usr/sbin/daemon")).contains(" -u "));
+        check("its pidfiles are in the web part's own folder, not in root's",
+                PanelSeparation.supervisorPid().getParent().equals(PanelSeparation.webRunDir())
+                && PanelSeparation.webPid().getParent().equals(PanelSeparation.webRunDir())
+                && !PanelSeparation.webRunDir().equals(PanelSeparation.runDir));
+        String title = "daemon: " + PanelSeparation.TITLE + "[1234] (daemon)";
+        check("a supervisor is believed only from its owner and its title",
+                PanelSeparation.recognisedSupervisor(77, "daemoxcp_mail", title, "daemoxcp_mail") == 77
+                && PanelSeparation.recognisedSupervisor(77, "root", title, "daemoxcp_mail") == -1
+                && PanelSeparation.recognisedSupervisor(77, "daemoxcp_mail", "daemon: daemoxcp_mail[1234] (daemon)", "daemoxcp_mail") == -1
+                && PanelSeparation.recognisedSupervisor(77, "root", title, "root") == 77);
         check("the supervisor writes both pid files and the log", line.contains(" -P " + PanelSeparation.supervisorPid())
                 && line.contains(" -p " + PanelSeparation.webPid()) && line.contains(" -o " + PanelSeparation.webLog));
         check("its title is the one stop() looks for", line.contains(" -t " + PanelSeparation.TITLE + " "));

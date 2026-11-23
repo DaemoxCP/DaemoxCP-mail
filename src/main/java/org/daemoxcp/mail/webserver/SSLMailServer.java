@@ -1010,6 +1010,8 @@ public class SSLMailServer {
             // which goes over the owners again.
             org.daemoxcp.mail.system.PhpHardening.ensureAtBoot();
             org.daemoxcp.mail.system.RoundcubeUser.ensureAtBoot();
+            // php-fpm's master as roundcube, not root (after RoundcubeUser: the pool must be its own already).
+            org.daemoxcp.mail.system.PhpFpmMaster.ensureAtBoot();
 
             // The Dovecot master user with which "Open webmail" logs in: the installation scripts
             // left it without a hash (or in a file that Dovecot could not read). Before the SSO plugin

@@ -250,6 +250,12 @@ public final class ServiceUsers {
         Map<Integer, Proc> byPid = new LinkedHashMap<>();
         for (Proc p : procs) byPid.put(p.pid(), p);
 
+        // php-fpm's master needs root only to start pools as different users: with Roundcube's pool alone it runs as
+        // roundcube (PhpFpmMaster), and as root it is a warning; with other pools (added by hand) root stays right.
+        Map<String, String> poolTexts = new TreeMap<>();
+        for (Map.Entry<Path, String> f : poolFiles.entrySet()) poolTexts.put(f.getKey().toString(), f.getValue());
+        boolean fpmRootNeeded = !PhpFpmMaster.otherPools(poolTexts).isEmpty();
+
         for (Proc p : procs) {
             String name = null;
             boolean rootNeeded = false;
@@ -262,6 +268,7 @@ public final class ServiceUsers {
                 break;
             }
             if (dovecot24 && "dovecot".equals(name) && p.command().matches("dovecot/anvil( .*|$)")) rootNeeded = true;
+            if ("php-fpm".equals(name) && p.command().startsWith("php-fpm: master")) rootNeeded = fpmRootNeeded;
             // The children of the Postfix master are Postfix, whatever their name.
             Proc parent = byPid.get(p.ppid());
             if (name == null && parent != null && parent.command().matches(".*/libexec/postfix/master( .*|$)")) {
