@@ -250,7 +250,9 @@ All from FreeBSD packages, configured by the panel, started by `rc.d`.
 ## Security model: who runs as root, and why
 
 Nothing runs as root unless it has to, and where root stays the panel says why, on the *Diagnostics* page,
-in the *Service users* card.
+in the *Service users* card: for each service, read live from the running processes, which processes run as root,
+why, and links to the official documentation that says so (the projects' own manuals, FreeBSD's man pages, the
+PHP security advisory). It warns if a process runs as root without needing it.
 
 ### The processes
 

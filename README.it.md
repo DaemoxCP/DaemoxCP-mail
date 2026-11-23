@@ -250,7 +250,9 @@ Tutti dai pacchetti di FreeBSD, configurati dal pannello, avviati da `rc.d`.
 ## Sicurezza: chi gira da root, e perché
 
 Niente gira da root se non è indispensabile, e dove root resta il pannello dice perché, nella pagina
-*Diagnostica*, nella scheda *Gli utenti dei servizi*.
+*Diagnostica*, nella scheda *Gli utenti dei servizi*: per ogni servizio, letto dal vivo dai processi in esecuzione,
+quali processi girano da root, perché, e i link alla documentazione ufficiale che lo dice (i manuali dei progetti,
+le pagine di manuale di FreeBSD, l'avviso di sicurezza di PHP). Avvisa se un processo gira da root senza averne bisogno.
 
 ### I processi
 
