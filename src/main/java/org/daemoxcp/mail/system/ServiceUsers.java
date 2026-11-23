@@ -72,6 +72,11 @@ public final class ServiceUsers {
 
     /** In order: the first one that recognises the process wins. */
     static final List<Rule> RULES = List.of(
+            // The panel's two daemon(8) supervisors, by their titles: the rc script's runs the root part and writes its
+            // log, root like it; the web part's runs as daemoxcp_mail since 23/11/2026 (PanelSeparation): as root it
+            // is a warning.
+            new Rule(Product.SLUG, "^daemon: " + Pattern.quote(PanelSeparation.TITLE) + "\\[", false),
+            new Rule(Product.SLUG, "^daemon: " + Pattern.quote(Product.ID) + "\\[", true),
             // The web part of the separated panel (PanelSeparation) runs as its own user: as root it is a warning.
             // The jar is also recognised by its earlier name (section "jarNames"): until the restart the process
             // still shows it.
@@ -121,6 +126,7 @@ public final class ServiceUsers {
      */
     static String processName(String service, String command) {
         String c = command == null ? "" : command.trim();
+        if (Product.SLUG.equals(service) && c.startsWith("daemon: ")) return "daemon";
         if (Product.SLUG.equals(service))
             return c.matches(".*--web-part( .*|$)") ? "--web-part" : c.matches(".*--web( .*|$)") ? "--web" : "java";
         if (c.startsWith("nginx: ")) return c.replaceFirst("^nginx: (\\S+).*$", "$1");
@@ -250,6 +256,12 @@ public final class ServiceUsers {
         Map<Integer, Proc> byPid = new LinkedHashMap<>();
         for (Proc p : procs) byPid.put(p.pid(), p);
 
+        // php-fpm's master needs root only to start pools as different users: with Roundcube's pool alone it runs as
+        // roundcube (PhpFpmMaster), and as root it is a warning; with other pools (added by hand) root stays right.
+        Map<String, String> poolTexts = new TreeMap<>();
+        for (Map.Entry<Path, String> f : poolFiles.entrySet()) poolTexts.put(f.getKey().toString(), f.getValue());
+        boolean fpmRootNeeded = !PhpFpmMaster.otherPools(poolTexts).isEmpty();
+
         for (Proc p : procs) {
             String name = null;
             boolean rootNeeded = false;
@@ -262,6 +274,7 @@ public final class ServiceUsers {
                 break;
             }
             if (dovecot24 && "dovecot".equals(name) && p.command().matches("dovecot/anvil( .*|$)")) rootNeeded = true;
+            if ("php-fpm".equals(name) && p.command().startsWith("php-fpm: master")) rootNeeded = fpmRootNeeded;
             // The children of the Postfix master are Postfix, whatever their name.
             Proc parent = byPid.get(p.ppid());
             if (name == null && parent != null && parent.command().matches(".*/libexec/postfix/master( .*|$)")) {
@@ -285,9 +298,14 @@ public final class ServiceUsers {
         for (Service s : services.values())
             for (String u : s.users)
                 if (!"root".equals(u)) byUser.computeIfAbsent(u, k -> new java.util.TreeSet<>()).add(s.name);
-        for (Map.Entry<String, Set<String>> e : byUser.entrySet())
-            if (e.getValue().size() > 1)
-                problems.add(new Problem("shared", String.join(", ", e.getValue()), e.getKey(), String.join(" and ", e.getValue())));
+        for (Map.Entry<String, Set<String>> e : byUser.entrySet()) {
+            Set<String> names = new java.util.TreeSet<>(e.getValue());
+            // A php-fpm master that is not root runs its pools as its own user (www.conf.default: user and group "can be
+            // used only if the master process running user is root"): master and pool are one program, not two services.
+            if (names.contains("php-fpm") && names.stream().anyMatch(n -> n.startsWith("php-fpm pool "))) names.remove("php-fpm");
+            if (names.size() > 1)
+                problems.add(new Problem("shared", String.join(", ", names), e.getKey(), String.join(" and ", names)));
+        }
 
         // The configured pools, including those without processes at the moment.
         Set<String> webUsers = new LinkedHashSet<>(List.of(RoundcubeUser.WEB_GROUP));

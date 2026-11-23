@@ -68,7 +68,16 @@ public final class RoundcubeUser {
     /** The group of the nginx processes: it can open the pool's socket, and nothing else. */
     public static final String WEB_GROUP = "www";
     public static final String POOL = "roundcube";
-    public static final String SOCKET = "/var/run/php-fpm-roundcube.sock";
+    /**
+     * php-fpm's own folder, roundcube's: the master process runs as roundcube (PhpFpmMaster) and makes its socket
+     * and its pidfile here; in /var/run, root's, it could not.
+     */
+    public static final String FPM_RUN_DIR = "/var/run/php-fpm";
+    public static final String SOCKET = FPM_RUN_DIR + "/roundcube.sock";
+    /** The group that may open the socket: roundcube, which makes it, and nginx's www. Nobody else. */
+    public static final String SOCKET_GROUP = "roundcube_fpm";
+    /** The socket up to 1.0.1, in /var/run, made by a master process running as root. */
+    public static final String ROOT_MASTER_SOCKET = "/var/run/php-fpm-roundcube.sock";
     /** The www pool's socket, as the earlier installation scripts wrote it. */
     public static final String OLD_SOCKET = "/var/run/php-fpm.sock";
 
@@ -105,14 +114,15 @@ public final class RoundcubeUser {
         if (!rest.endsWith("\n")) rest += "\n";
         return "; " + PanelMarker.WRITTEN + "\n"
              + "; Roundcube's pool, with its own user: not nginx's (www), not root.\n"
-             + "; nginx opens the socket because it is in the www group (listen.group); only\n"
-             + "; roundcube reads the webmail's files.\n"
+             + "; nginx opens the socket because www is in the " + SOCKET_GROUP + " group (listen.group), with\n"
+             + "; roundcube alone: www gets the socket and nothing of roundcube's. Only roundcube reads the\n"
+             + "; webmail's files. php-fpm's master runs as roundcube too (php_fpm_user in rc.conf).\n"
              + "[" + POOL + "]\n"
              + "user = " + USER + "\n"
              + "group = " + GROUP + "\n"
              + "listen = " + SOCKET + "\n"
              + "listen.owner = " + USER + "\n"
-             + "listen.group = " + WEB_GROUP + "\n"
+             + "listen.group = " + SOCKET_GROUP + "\n"
              + "listen.mode = 0660\n"
              + PhpHardening.LIMIT_COMMENT + PhpHardening.LIMIT
              + rest;
@@ -149,7 +159,13 @@ public final class RoundcubeUser {
              + "pw usershow " + USER + " >/dev/null 2>&1 || pw useradd " + USER + " -g " + GROUP
              + " -d /nonexistent -s /usr/sbin/nologin -c \"Roundcube webmail\"\n"
              + "mkdir -p " + FPM_DIR + "\n"
+             + "# The socket's group: roundcube and nginx's www, nobody else; the socket's folder, roundcube's.\n"
+             + "pw groupshow " + SOCKET_GROUP + " >/dev/null 2>&1 || pw groupadd " + SOCKET_GROUP + "\n"
+             + "pw groupmod " + SOCKET_GROUP + " -M " + USER + "," + WEB_GROUP + "\n"
+             + "install -d -o " + USER + " -g " + SOCKET_GROUP + " -m 750 " + FPM_RUN_DIR + "\n"
              + "cat > " + FPM_DIR + "/" + POOL + ".conf << 'ROUNDCUBE_POOL'\n" + poolConf(null) + "ROUNDCUBE_POOL\n"
+             + "chown root:" + GROUP + " " + FPM_DIR + "/" + POOL + ".conf\n"
+             + "chmod 640 " + FPM_DIR + "/" + POOL + ".conf\n"
              + "cat > " + FPM_DIR + "/www.conf << 'WWW_PLACEHOLDER'\n" + wwwPlaceholder() + "WWW_PLACEHOLDER\n";
     }
 
@@ -753,7 +769,7 @@ public final class RoundcubeUser {
             if (!Shell.run(SHORT, "pw", "usershow", USER).success()
                     && !Shell.run(SHORT, "pw", "useradd", USER, "-g", GROUP, "-d", "/nonexistent",
                                   "-s", "/usr/sbin/nologin", "-c", "Roundcube webmail").success()) return false;
-            return Shell.run(SHORT, "pw", "usershow", USER).success();
+            return Shell.run(SHORT, "pw", "usershow", USER).success() && PhpFpmMaster.ensureSocketGroupAndDir();
         }
 
         @Override public Map<String, Set<String>> poolUsers() {

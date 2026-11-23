@@ -258,8 +258,8 @@ Misurati su un server in uso (`ps -ax -o user,command`):
 
 | Servizio | Processo | Utente | Perché |
 |---|---|---|---|
-| **DaemoxCP Mail** | parte root (`--web`) | `root` | Gestisce la macchina: pacchetti, servizi, firewall, configurazioni, boot environment. **Non apre nessuna porta**: risponde solo alla parte web, su un socket locale. |
-| | parte web (`--web-part`) | `daemoxcp_mail` | Tutto ciò che risponde in rete (porta 2096). Quello che chiede root lo passa alla parte root su `/var/run/daemoxcp-mail/root.sock`. |
+| **DaemoxCP Mail** | parte root (`--web`) e il `daemon(8)` dello script rc, che la avvia e ne scrive il registro | `root` | Gestisce la macchina: pacchetti, servizi, firewall, configurazioni, boot environment. **Non apre nessuna porta**: risponde solo alla parte web, su un socket locale. |
+| | parte web (`--web-part`) e il suo supervisore `daemon(8)` | `daemoxcp_mail` | Tutto ciò che risponde in rete (porta 2096). Quello che chiede root lo passa alla parte root su `/var/run/daemoxcp-mail/root.sock`. |
 | **Postfix** | `master` | `root` | Apre le porte della posta e consegna la posta di sistema. |
 | | `smtpd`, `qmgr`, `pickup`, … | `postfix` | Tutto ciò che parla con Internet. |
 | **Dovecot** | processo principale, `config`, `log`, `anvil` | `root` | Apre le porte IMAP/POP3, avvia ogni accesso e ogni casella con l'utente giusto; con Dovecot 2.4 `anvil` deve raggiungere il processo di ogni sessione per contare e chiudere le connessioni. |
@@ -268,7 +268,7 @@ Misurati su un server in uso (`ps -ax -o user,command`):
 | | IMAP, LMTP, caselle | `vmail` | La posta. |
 | **nginx** | master | `root` | Apre le porte web e legge le chiavi TLS. |
 | | worker | `www` | Servono le richieste. |
-| **PHP-FPM** | master | `root` | Non esegue pagine: crea il socket della webmail di `roundcube`, gruppo `www`. |
+| **PHP-FPM** | master | `roundcube` | Non esegue pagine: legge la configurazione e avvia il pool. Root serve solo per avviare pool con utenti diversi, e l'unico pool è quello di Roundcube. Un pool tuo con un altro utente vuole di nuovo il master da root: `sysrc -x php_fpm_user`, poi `service php_fpm restart`. |
 | | pool `roundcube` | `roundcube` | Le pagine di Roundcube. |
 | **fail2ban** | server | `root` | Comanda pf (`/dev/pf` è solo di root) e legge i registri della posta. |
 | **Rspamd** | tutti i processi | `rspamd` | |
@@ -291,13 +291,16 @@ Misurati su un server in uso (`ps -ax -o user,command`):
 | `/home/panel/daemoxcp-mail.jar` | `0644` | `root:wheel` | il programma: la parte web lo legge, solo root lo cambia |
 | `/home/panel/database/` | `0750` | `root:daemoxcp_mail` | la configurazione del pannello (SQLite) |
 | `/var/run/daemoxcp-mail/root.sock` | `0660` | `root:daemoxcp_mail` | il canale fra le due parti |
+| `/var/run/daemoxcp-mail/web/` | `0750` | `daemoxcp_mail:daemoxcp_mail` | i file pid della parte web, scritti dal suo supervisore |
 | `/var/db/daemoxcp-mail/` | `0755` | `root:wheel` | lo stato del pannello, i registri, i file pubblici di MTA-STS |
 | `/var/log/daemoxcp-mail-auth.log` | `0640` | `daemoxcp_mail:wheel` | gli accessi, letti da fail2ban |
 | `/var/vmail/` | `0770` | `vmail:vmail` | le caselle (Maildir) |
 | `/usr/local/etc/postfix/mysql-*.cf` | `0640` | `root:postfix` | le ricerche di Postfix in MySQL |
 | `/usr/local/etc/dovecot/conf.d/auth-sql.conf.ext` | `0600` | `root:dovecot` | la ricerca di Dovecot in MySQL |
 | `/usr/local/www/roundcube/config/config.inc.php` | `0640` | `root:roundcube` | la configurazione di Roundcube |
-| `/var/run/php-fpm-roundcube.sock` | `0660` | `roundcube:www` | lo usano solo nginx e Roundcube |
+| `/usr/local/etc/php-fpm.d/roundcube.conf` | `0640` | `root:roundcube` | il pool della webmail: il master di PHP-FPM lo legge come `roundcube`, solo root lo cambia |
+| `/var/run/php-fpm/` | `0750` | `roundcube:roundcube_fpm` | il socket e il file pid di PHP-FPM (`/var/run/php-fpm.pid` è un collegamento lì, per lo script rc) |
+| `/var/run/php-fpm/roundcube.sock` | `0660` | `roundcube:roundcube_fpm` | lo usano solo nginx e Roundcube: nel gruppo `roundcube_fpm` ci sono solo `roundcube` e `www` |
 | `/var/run/redis/redis.sock` | `0770` | `redis:redis` | Redis, solo per Rspamd |
 | `/usr/local/etc/ssl/mail/privkey.pem` | `0600` | `root:wheel` | la chiave del certificato della posta |
 

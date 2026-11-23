@@ -99,9 +99,20 @@ public final class PanelSeparation {
 
     public static Path socket() { return runDir.resolve("root.sock"); }
 
-    static Path supervisorPid() { return runDir.resolve("web-supervisor.pid"); }
+    /**
+     * The web part's own run folder, daemoxcp_mail's: its supervisor runs as daemoxcp_mail (2026-11-23) and writes its
+     * two pidfiles here. Up to 1.0.1 the supervisor ran as root and wrote them in {@link #runDir}, root's.
+     */
+    static Path webRunDir() { return runDir.resolve("web"); }
 
-    static Path webPid() { return runDir.resolve("web.pid"); }
+    static Path supervisorPid() { return webRunDir().resolve("web-supervisor.pid"); }
+
+    static Path webPid() { return webRunDir().resolve("web.pid"); }
+
+    /** Where versions up to 1.0.1 wrote them: read only to stop a supervisor one of them left running. */
+    static Path oldSupervisorPid() { return runDir.resolve("web-supervisor.pid"); }
+
+    static Path oldWebPid() { return runDir.resolve("web.pid"); }
 
     /** True if the web part runs as its own user and the root part has no ports. */
     public static boolean active() { return active; }
@@ -140,6 +151,7 @@ public final class PanelSeparation {
         if (setupRequired) return "the first installation is not finished (/setup runs as root)";
         if (!mysqlAvailable) return "MySQL does not answer";
         if (!Files.isExecutable(Path.of("/usr/sbin/daemon"))) return "/usr/sbin/daemon is missing";
+        if (!Files.isExecutable(Path.of("/usr/sbin/chroot"))) return "/usr/sbin/chroot is missing";
         try {
             stopLeftover();
             if (!portFree(port)) return "port " + port + " is in use";
@@ -148,6 +160,7 @@ public final class PanelSeparation {
             String jar = jarPath(), java = javaPath();
             if (jar == null || java == null) return "the panel's jar or java cannot be found";
             if (!asUser("/bin/test", "-r", jar)) return "the user " + USER + " cannot read " + jar;
+            if (!asUser("/bin/test", "-x", workDir())) return "the user " + USER + " cannot enter " + workDir();
             if (!asUser("/bin/test", "-x", java)) return "the user " + USER + " cannot run " + java;
             String files = prepareFiles();
             if (files != null) return files;
@@ -227,6 +240,12 @@ public final class PanelSeparation {
             Files.delete(run);
         Files.createDirectories(run);
         set(run, "root", GROUP, "rwxr-x---");
+        // The web part's supervisor runs as daemoxcp_mail: its pidfiles in a folder of its own, not in root's.
+        Path web = webRunDir();
+        if (Files.isSymbolicLink(web) || (Files.exists(web, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(web, LinkOption.NOFOLLOW_LINKS)))
+            Files.delete(web);
+        Files.createDirectories(web);
+        set(web, USER, GROUP, "rwxr-x---");
 
         Path secrets = Path.of(org.daemoxcp.mail.security.PanelSecrets.location()).getParent();
         String s = openToWeb(secrets, SECRETS_FOR_WEB);
@@ -353,6 +372,15 @@ public final class PanelSeparation {
         } catch (IOException e) {
             LOGGER.warning("[PanelSeparation] the web part's log could not be rotated: " + e.getMessage());
         }
+        // daemon(8) opens the log as daemoxcp_mail, and cannot create it in root's folder: it is prepared here,
+        // readable by its writer only, as daemon(8) creates it (0600).
+        try {
+            if (Files.isSymbolicLink(webLog)) return webLog + " is a symbolic link";
+            if (!Files.exists(webLog)) Files.createFile(webLog);
+            set(webLog, USER, "wheel", "rw-------");
+        } catch (IOException e) {
+            return "the web part's log " + webLog + " could not be prepared: " + e.getMessage();
+        }
         List<String> cmd = command(javaPath(), jarPath());
         Shell.Result r = Shell.run(Duration.ofSeconds(30), cmd.toArray(new String[0]));
         if (!r.success()) return "daemon(8) could not start the web part: " + r.outputTrim();
@@ -416,9 +444,25 @@ public final class PanelSeparation {
     /**
      * The daemon(8) line. From the root part's JVM only the memory and the panel's properties are passed on
      * (-Xm*, -Ddaemoxcp_mail.*), not daemoxcp.mail.separation: the web part does nothing with it.
+     *
+     * <p>daemon(8) itself runs as daemoxcp_mail, started through chroot(8) like {@link #asUser}: with "-u" only its
+     * child drops root, and the supervisor stays root for the life of the panel (measured on the production server on
+     * 2026-11-23). daemon(8) needs root only to change user (its manual: "-u" requires superuser privileges); a
+     * supervisor already running as daemoxcp_mail restarts its child as daemoxcp_mail without it.
      */
+    /** The root part's working directory (the rc script starts it in the panel's folder): the web part starts there too. */
+    static String workDir() {
+        return Path.of("").toAbsolutePath().toString();
+    }
+
     static List<String> command(String javaBin, String jar) {
-        List<String> cmd = new ArrayList<>(List.of("/usr/sbin/daemon", "-r", "-R", "5", "-u", USER,
+        // env(1) sets HOME, USER and SHELL as daemon(8) -u did ("Environment variables HOME, USER, and SHELL are set
+        // accordingly"), still without a shell. And -C goes back to the root part's folder: chroot(8) changes the
+        // working directory to the new root, /, and the web part finds its files from the folder it starts in
+        // (measured on the VM on 2026-11-23: "path to 'database/daemoxcp-mail.db': '/database' does not exist").
+        List<String> cmd = new ArrayList<>(List.of("/usr/sbin/chroot", "-u", USER, "-g", GROUP, "-G", GROUP, "/",
+                "/usr/bin/env", "-C", workDir(), "HOME=" + HOME, "USER=" + USER, "SHELL=" + SHELL,
+                "/usr/sbin/daemon", "-r", "-R", "5",
                 "-P", supervisorPid().toString(), "-p", webPid().toString(), "-o", webLog.toString(), "-H", "-t", TITLE, javaBin));
         for (String a : java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()) {
             if (a.startsWith("-Xm") || (a.startsWith("-Ddaemoxcp.mail.") && !a.startsWith("-Ddaemoxcp.mail.separation"))) cmd.add(a);
@@ -451,20 +495,50 @@ public final class PanelSeparation {
         }
     }
 
-    /** The pid of the web part's supervisor if it is alive and really is that one (daemon's title), otherwise -1. */
+    /** The pid of the web part's supervisor if it is alive and really is that one, otherwise -1. */
     static int supervisor() {
-        int pid = readPid(supervisorPid());
+        return supervisorIn(supervisorPid(), USER);
+    }
+
+    /**
+     * The pid written in the pidfile if it is a web part's supervisor (daemon's title) running as {@code owner}, otherwise
+     * -1. The owner matters: the pidfile is in daemoxcp_mail's folder, and the root part sends signals to that pid; a
+     * pid of another user's process (root's above all) is never taken for the supervisor.
+     */
+    static int supervisorIn(Path pidFile, String owner) {
+        int pid = readPid(pidFile);
         if (pid <= 1) return -1;
-        String cmd = Shell.run(Duration.ofSeconds(10), "ps", "-o", "command=", "-p", String.valueOf(pid)).outputTrim();
-        for (String t : titles()) if (cmd.startsWith("daemon: " + t + "[")) return pid;
+        String[] l = Shell.run(Duration.ofSeconds(10), "ps", "-o", "user=", "-o", "command=", "-p", String.valueOf(pid))
+                .outputTrim().split("\\s+", 2);
+        return l.length == 2 ? recognisedSupervisor(pid, l[0], l[1], owner) : -1;
+    }
+
+    /** The pid if user and command are those of a web part's supervisor run by {@code owner}, otherwise -1. Pure. */
+    static int recognisedSupervisor(int pid, String user, String command, String owner) {
+        if (!owner.equals(user)) return -1;
+        for (String t : titles()) if (command.startsWith("daemon: " + t + "[")) return pid;
         return -1;
     }
 
-    /** A web part left over from an earlier start (the root part killed without being able to stop it): it is stopped. */
+    /**
+     * A web part left over from an earlier start (the root part killed without being able to stop it): it is stopped.
+     * Also the one a version up to 1.0.1 left, with its supervisor as root and its pidfiles in root's folder.
+     */
     static void stopLeftover() {
         if (supervisor() > 0) {
             LOGGER.info("[PanelSeparation] a web part of a previous start was still running: stopped");
             stopSupervisor();
+        }
+        int old = supervisorIn(oldSupervisorPid(), "root");
+        if (old > 0) {
+            LOGGER.info("[PanelSeparation] the web part of a previous version (supervisor as root) was still running: stopped");
+            stopSupervisor(old, readPid(oldWebPid()));
+        }
+        try {
+            Files.deleteIfExists(oldSupervisorPid());
+            Files.deleteIfExists(oldWebPid());
+        } catch (IOException e) {
+            LOGGER.warning("[PanelSeparation] the old pidfiles could not be removed: " + e.getMessage());
         }
     }
 
@@ -480,15 +554,26 @@ public final class PanelSeparation {
     private static void stopSupervisor() {
         int pid = supervisor();
         if (pid <= 0) return;
-        int child = readPid(webPid());
+        stopSupervisor(pid, readPid(webPid()));
+    }
+
+    /** SIGTERM to a supervisor already recognised, then SIGKILL to it and its child if they are still there. */
+    private static void stopSupervisor(int pid, int child) {
         Shell.run(Duration.ofSeconds(10), "kill", "-TERM", String.valueOf(pid));
         for (int i = 0; i < 30; i++) {
-            if (supervisor() <= 0 && !alive(child)) return;
+            if (!running(pid) && !alive(child)) return;
             try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
         }
-        if (supervisor() > 0) Shell.run(Duration.ofSeconds(10), "kill", "-KILL", String.valueOf(pid));
+        if (running(pid)) Shell.run(Duration.ofSeconds(10), "kill", "-KILL", String.valueOf(pid));
         if (alive(child)) Shell.run(Duration.ofSeconds(10), "kill", "-KILL", String.valueOf(child));
         LOGGER.warning("[PanelSeparation] the web part did not stop within 15 seconds: killed");
+    }
+
+    /** True while the process with that pid is still a web part's supervisor (by its title, whoever runs it). */
+    private static boolean running(int pid) {
+        String cmd = Shell.run(Duration.ofSeconds(10), "ps", "-o", "command=", "-p", String.valueOf(pid)).outputTrim();
+        for (String t : titles()) if (cmd.startsWith("daemon: " + t + "[")) return true;
+        return false;
     }
 
     /** True if the pid is alive and is the web part (java ... --web-part of daemoxcp_mail). */

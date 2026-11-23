@@ -51,7 +51,9 @@ public class ServiceUsersTest {
             """;
     static final String AFTER = BEFORE.replace("www     33079 32645 php-fpm: pool www", "roundcube 33079 32645 php-fpm: pool roundcube")
             .replace("www     34440 32645 php-fpm: pool www", "roundcube 34440 32645 php-fpm: pool roundcube")
-            .replace("root    56502     1 rspamd: main process", "rspamd  56502     1 rspamd: main process");
+            .replace("root    56502     1 rspamd: main process", "rspamd  56502     1 rspamd: main process")
+            // Since 23/11/2026 php-fpm's master runs as roundcube too (PhpFpmMaster).
+            .replace("root    32645     1 php-fpm: master process", "roundcube 32645     1 php-fpm: master process");
     static final Map<Path, String> POOL_BEFORE = Map.of(Path.of("/usr/local/etc/php-fpm.d/www.conf"), "[www]\nuser = www\nlisten = /var/run/php-fpm.sock\n");
     static final Map<Path, String> POOL_AFTER = Map.of(Path.of("/usr/local/etc/php-fpm.d/roundcube.conf"), RoundcubeUser.poolConf(null),
             Path.of("/usr/local/etc/php-fpm.d/www.conf"), RoundcubeUser.wwwPlaceholder());
@@ -84,6 +86,21 @@ public class ServiceUsersTest {
         check("no warning (" + codes(f) + ")", f.problems().isEmpty());
         check("the roundcube pool runs as roundcube", f.services().get("php-fpm pool roundcube").users.equals(java.util.Set.of("roundcube")));
         check("the pools read from the files, www without a pool", f.pools().size() == 1 && "roundcube".equals(f.pools().get(0)[1]));
+        check("php-fpm's master runs as roundcube, with its pool: one program, not a shared user",
+                f.services().get("php-fpm").users.equals(java.util.Set.of("roundcube")) && !f.services().get("php-fpm").neededRoot);
+
+        OUT.println("\n== php-fpm's master: root only with other pools (23/11/2026)");
+        String rootMaster = AFTER.replace("roundcube 32645     1 php-fpm: master process", "root    32645     1 php-fpm: master process");
+        f = ex(rootMaster, POOL_AFTER, "", false);
+        check("master as root with Roundcube's pool alone: root warning (" + codes(f) + ")", codes(f).equals("root:php-fpm"));
+        Map<Path, String> twoPools = new java.util.TreeMap<>(POOL_AFTER);
+        twoPools.put(Path.of("/usr/local/etc/php-fpm.d/shop.conf"), "[shop]\nuser = shop\nlisten = /var/run/shop.sock\n");
+        f = ex(rootMaster, twoPools, "", false);
+        check("master as root with a pool added by hand: needed, no warning (" + codes(f) + ")",
+                f.problems().isEmpty() && f.services().get("php-fpm").neededRoot);
+        f = ex(AFTER.replace("redis   40133", "roundcube 40133"), POOL_AFTER, "", false);
+        check("redis with roundcube's user: still a shared user, the master aside (" + codes(f) + ")",
+                codes(f).equals("shared:php-fpm pool roundcube, redis"));
 
         OUT.println("\n== The planted faults: each its own warning");
         f = ex(AFTER.replace("mysql   26927", "root    26927"), POOL_AFTER, "", false);
@@ -166,6 +183,20 @@ public class ServiceUsersTest {
         check("  the jar with the name it had before the rename (until the restart) is still the panel",
                 java.util.regex.Pattern.compile(ServiceUsers.JAR).matcher("java -jar /home/panel/freebsd-mail-panel-1.0.jar --web").find()
                 && !java.util.regex.Pattern.compile(ServiceUsers.JAR).matcher("java -jar /home/panel/other-1.0.jar --web").find());
+        // The panel's two daemon(8) supervisors (23/11/2026): the rc script's, root like the root part it runs; the web
+        // part's, as daemoxcp_mail. The page shows them, so a supervisor left as root no longer goes unseen.
+        String supervised = full + "root    69990     1 daemon: daemoxcp_mail[70001] (daemon)\n"
+                + "daemoxcp_mail 70003     1 daemon: daemoxcp-mail-web[70002] (daemon)\n";
+        ServiceUsers.Findings sup = ex(supervised, POOL_AFTER, "", false);
+        Map<String, java.util.Set<String>> supRoles = sup.services().get("daemoxcp-mail").roles;
+        check("the supervisors are the panel's, with no warning (" + codes(sup) + "): " + supRoles, sup.problems().isEmpty()
+                && supRoles.get("root").equals(java.util.Set.of("--web", "daemon"))
+                && supRoles.get("daemoxcp_mail").equals(java.util.Set.of("--web-part", "daemon")));
+        sup = ex(full + "root    70003     1 daemon: daemoxcp-mail-web[70002] (daemon)\n", POOL_AFTER, "", false);
+        check("  the web part's supervisor as root: warning (" + codes(sup) + ")", codes(sup).equals("root:daemoxcp-mail"));
+        sup = ex(full + "root    70004     1 daemon: other-service[70005] (daemon)\n", POOL_AFTER, "", false);
+        check("  a daemon(8) of something else is not the panel's (" + sup.services().get("daemoxcp-mail").roles + ")",
+                !sup.services().get("daemoxcp-mail").roles.get("root").contains("daemon"));
         check("mysql: mysqld and mysqld_safe, not sh (" + f.services().get("mysql").roles + ")",
                 f.services().get("mysql").roles.get("mysql").equals(java.util.Set.of("mysqld", "mysqld_safe")));
         check("fail2ban: fail2ban-server, not python3.12; redis: redis-server; unbound: local-unbound",
@@ -176,7 +207,7 @@ public class ServiceUsersTest {
                 f.services().get("nginx").roles.get("root").equals(java.util.Set.of("master"))
                         && f.services().get("nginx").roles.get("www").equals(java.util.Set.of("worker"))
                         && f.services().get("rspamd").roles.get("rspamd").equals(java.util.Set.of("main", "rspamd_proxy"))
-                        && f.services().get("php-fpm").roles.get("root").equals(java.util.Set.of("master"))
+                        && f.services().get("php-fpm").roles.get("roundcube").equals(java.util.Set.of("master"))
                         && f.services().get("php-fpm pool roundcube").roles.get("roundcube").equals(java.util.Set.of("pool")));
         org.json.JSONArray roles = ServiceUsers.roles(f.services().get("dovecot"));
         check("on the page root comes first, then the others as ps listed them (" + roles + ")",

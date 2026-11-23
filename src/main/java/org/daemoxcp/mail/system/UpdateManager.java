@@ -6850,8 +6850,10 @@ public final class UpdateManager {
         line.accept("# running would keep the port and the old JVM. Its supervisor is recognised by its title.");
         line.accept("if [ -n \"$WEB_SUPERVISOR_PIDFILE\" ]; then");
         line.accept("  WEB_SUPERVISOR=$(cat \"$WEB_SUPERVISOR_PIDFILE\" 2>/dev/null)");
-        line.accept("  if [ -n \"$WEB_SUPERVISOR\" ] && ps -o command= -p \"$WEB_SUPERVISOR\" 2>/dev/null | grep -qE '^daemon: "
-                + title + "\\['; then");
+        // Its owner too: the pidfile is in daemoxcp_mail's folder, so a pid in it is believed only if the process is
+        // a supervisor run by daemoxcp_mail (never a process of root's).
+        line.accept("  if [ -n \"$WEB_SUPERVISOR\" ] && ps -o user= -o command= -p \"$WEB_SUPERVISOR\" 2>/dev/null | grep -qE '^"
+                + PanelSeparation.USER + " +daemon: " + title + "\\['; then");
         line.accept("    kill \"$WEB_SUPERVISOR\" 2>/dev/null");
         line.accept("    k=0; while kill -0 \"$WEB_SUPERVISOR\" 2>/dev/null && [ $k -lt 30 ]; do k=$((k+1)); sleep 1; done");
         line.accept("    kill -0 \"$WEB_SUPERVISOR\" 2>/dev/null && kill -9 \"$WEB_SUPERVISOR\" 2>/dev/null");

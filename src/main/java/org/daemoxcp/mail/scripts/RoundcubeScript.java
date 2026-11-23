@@ -83,6 +83,10 @@ EOCNF
 
             echo "[CLEANUP] Removing rc.conf entries..."
             sysrc -x php_fpm_enable 2>/dev/null || true
+            # php-fpm.conf is gone: the package's new one runs the master as root, with the pidfile the rc
+            # script reads (PhpFpmMaster moves it to roundcube again at the panel's next start).
+            sysrc -x php_fpm_user 2>/dev/null || true
+            if [ -L /var/run/php-fpm.pid ]; then rm -f /var/run/php-fpm.pid; fi
 
             echo ""
             echo "[CLEANUP] Complete! Starting fresh installation..."
@@ -238,7 +242,7 @@ server {
         fastcgi_split_path_info ^(.+\\.php)(/.+)$;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         fastcgi_param PATH_INFO $fastcgi_path_info;
-        fastcgi_pass unix:/var/run/php-fpm-roundcube.sock;
+        fastcgi_pass unix:/var/run/php-fpm/roundcube.sock;
     }
 
     location ~ /\\. {

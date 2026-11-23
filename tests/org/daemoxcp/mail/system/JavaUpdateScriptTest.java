@@ -40,6 +40,7 @@ public class JavaUpdateScriptTest {
             succeeded(root);
             fetchFails(root);
             createFails(root);
+            rootSupervisor(root);
             wrongListener(root);
             javaBroken(root);
         } finally {
@@ -144,6 +145,13 @@ public class JavaUpdateScriptTest {
         check("the report says pkg create failed", r.log.contains("pkg create failed"));
     }
 
+    static void rootSupervisor(Path root) throws Exception {
+        System.out.println("\n== the supervisor pidfile names a root process ==");
+        Run r = execute(root.resolve("rootsup"), "daemoxcp_mail", "rootsupervisor");
+        check("a root process with the supervisor's title is not signalled, and the report does not say it was",
+                !r.log.contains("the web part was still running: stopped"));
+    }
+
     static void wrongListener(Path root) throws Exception {
         System.out.println("\n== the panel comes back without the separation ==");
         Run r = execute(root.resolve("user"), "root", "");
@@ -183,8 +191,12 @@ public class JavaUpdateScriptTest {
         Process panel = new ProcessBuilder("sleep", "600").start();
         Process web = new ProcessBuilder("sleep", "600").start();
         Files.writeString(dir.resolve("web-supervisor.pid"), web.pid() + "\n");
-        // ps: the web part's supervisor is recognised by its daemon(8) title.
-        fake(dir.resolve("bin/ps"), "[ \"$4\" = " + web.pid() + " ] && echo 'daemon: " + PanelSeparation.TITLE + "[1000] (daemon)'\nexit 0\n");
+        // ps (-o user= -o command= -p PID): the web part's supervisor is recognised by its owner and its daemon(8)
+        // title. With fail "rootsupervisor" the pidfile names a root process with the right title, as a web part
+        // that wrote its pidfile could make it: the script must not take it for the supervisor.
+        String owner = "rootsupervisor".equals(fail) ? "root" : PanelSeparation.USER;
+        fake(dir.resolve("bin/ps"), "[ \"$6\" = " + web.pid() + " ] && echo '" + owner + "  daemon: " + PanelSeparation.TITLE
+                + "[1000] (daemon)'\nexit 0\n");
         // java: broken only between the upgrade and the way back, when asked to be.
         fake(dir.resolve("jdk/bin/java"), "if [ '" + fail + "' = java ] && grep -q '^upgrade -y' '" + calls + "' && ! grep -q '^add -f' '" + calls + "'; then exit 1; fi\n"
                 + "echo 'openjdk version \"25.0.5\"'\n");

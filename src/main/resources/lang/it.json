@@ -6669,7 +6669,7 @@
   "server.su.rootWhy.postfix": "Root solo per il processo master: apre le porte della posta (25, 465, 587) e consegna la posta di sistema. Chi parla con Internet (smtpd) gira come postfix.",
   "server.su.rootWhy.dovecot": "Root solo per il processo principale, la configurazione e il log: apre le porte di IMAP e POP3 e avvia gli accessi come dovenull e le caselle come vmail. Le password le cerca come dovecot. Con Dovecot 2.4 anche anvil, che raggiunge il processo di ogni sessione per contare e chiudere le connessioni.",
   "server.su.rootWhy.nginx": "Root solo per il processo master: apre le porte web e legge le chiavi TLS, che sono solo di root. Le richieste le servono i processi worker come www.",
-  "server.su.rootWhy.phpFpm": "Root solo per il processo master, che non esegue pagine: crea il socket della webmail di roundcube con gruppo www, così ci parlano solo nginx e Roundcube. Le pagine le esegue il pool come roundcube.",
+  "server.su.rootWhy.phpFpm": "Root solo per il processo master, che non esegue pagine, perché qui php-fpm ha pool diversi da quello di Roundcube: solo un master root può avviare ogni pool col suo utente. Con il solo pool di Roundcube il pannello fa girare il master come roundcube.",
   "server.su.rootWhy.fail2ban": "Root perché comanda il firewall pf (/dev/pf è solo di root) e legge i log della posta, che sono solo di root.",
   "server.su.rootWhy.daemoxcpMail": "Root solo per la parte che amministra la macchina (pacchetti, servizi, firewall, configurazioni, boot environment), che non apre porte. La parte web, quella che risponde in rete, gira con l'utente daemoxcp_mail e le passa le richieste su un socket locale.",
   "server.su.purpose.dovecot.root": "il processo principale e quelli che devono restare root: la configurazione, il registro e la consegna nelle caselle (lmtp)",
@@ -6683,8 +6683,8 @@
   "server.su.purpose.phpFpm.root": "il processo master: crea i socket dei pool e avvia i loro processi, non esegue pagine",
   "server.su.purpose.pool.roundcube.roundcube": "il PHP della webmail (Roundcube), con un utente suo che non legge i file di nginx",
   "server.su.purpose.pool.www.www": "il pool predefinito di php-fpm, con l'utente di nginx",
-  "server.su.purpose.daemoxcpMail.root": "la parte root del pannello: amministra la macchina, senza porte di rete",
-  "server.su.purpose.daemoxcpMail.daemoxcp_mail": "la parte web del pannello: risponde sulla 2096 e chiede alla parte root solo quello che serve",
+  "server.su.purpose.daemoxcpMail.root": "la parte root del pannello: amministra la macchina, senza porte di rete; daemon la avvia per lo script rc e ne scrive il registro",
+  "server.su.purpose.daemoxcpMail.daemoxcp_mail": "la parte web del pannello: risponde sulla 2096 e chiede alla parte root solo quello che serve; daemon la riavvia se si ferma e ne scrive il registro",
   "server.su.purpose.mysql.mysql": "il database: la posta, il pannello e la webmail",
   "server.su.purpose.redis.redis": "la memoria di rspamd: statistiche e limiti",
   "server.su.purpose.clamav.clamav": "l'antivirus (clamd) e i suoi aggiornamenti (freshclam)",
@@ -7589,5 +7589,6 @@
   "webmailCleanup.afterDays": "Dopo $n giorni",
   "webmailCleanup.help": "Spento finché non lo scegli. Il server cancella i messaggi che stanno nella cartella da più tempo di così.",
   "webmailCleanup.unavailable": "Lo svuotamento automatico adesso non si riesce a leggere. Riprova più tardi.",
-  "webmailCleanup.saveFailed": "Lo svuotamento automatico non si è potuto salvare. Riprova più tardi."
+  "webmailCleanup.saveFailed": "Lo svuotamento automatico non si è potuto salvare. Riprova più tardi.",
+  "server.su.purpose.phpFpm.roundcube": "il processo master, come roundcube: crea il socket della webmail e avvia i suoi processi; non esegue pagine e non ha bisogno di root"
 }
